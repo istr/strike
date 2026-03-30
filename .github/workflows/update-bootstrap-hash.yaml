@@ -1,0 +1,38 @@
+# .github/workflows/update-bootstrap-hash.yml
+name: Update bootstrap hash in README
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  update-readme:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Resolve commit hash from tag
+        id: resolve
+        run: |
+          TAG=${GITHUB_REF#refs/tags/}
+          HASH=$(git rev-parse ${TAG}^{commit})
+          echo "hash=${HASH}" >> $GITHUB_OUTPUT
+          echo "tag=${TAG}"   >> $GITHUB_OUTPUT
+
+      - name: Update README.md
+        run: |
+          sed -i "s|GIT_COMMIT=[0-9a-f]\{40\}|GIT_COMMIT=${{ steps.resolve.outputs.hash }}|g" README.md
+
+      - name: Commit and push
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add README.md
+          git commit -m "docs: update bootstrap hash for ${{ steps.resolve.outputs.tag }}"
+          git push
