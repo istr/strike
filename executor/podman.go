@@ -24,7 +24,11 @@ type Mount struct {
 }
 
 func (r Run) Execute() error {
-    args := []string{"run", "--rm", "--network=none"}
+    args := []string{"run", "--rm"}
+
+    if !r.Step.Network {
+        args = append(args, "--network=none")
+    }
 
     for _, m := range r.InputMounts {
         flag := fmt.Sprintf("%s:%s", m.Host, m.Container)

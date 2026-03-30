@@ -57,6 +57,7 @@ package lane
     sources:     [...#SourceRef] @go(Sources)
     outputs:     [...#OutputSpec] @go(Outputs)
     secrets:     [...#SecretRef] @go(Secrets)
+    network?:    bool @go(Network) // default false (--network=none)
     // constraint: exactly one of image or image_from — validated in Go
 }
 

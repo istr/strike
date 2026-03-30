@@ -16,7 +16,8 @@ steps:
 
   - name: build_binary
     image: cgr.dev/chainguard/go@sha256:4ec098b553c8d74d9f01925578660b2bfcdee4ef45e5ab082250cf9675a0e28b
-    args: [build, -C, /src, -trimpath, -ldflags=-s -w, -o, /out/strike, ./...]
+    args: [build, -C, /src, -trimpath, -ldflags=-s -w, -o, /out/strike, .]
+    network: true
     sources:
       - path: /src
         mount: /src
@@ -30,6 +31,7 @@ steps:
     args: [build, /src/melange.yaml,
            --signing-key, /run/key,
            --arch, x86_64]
+    network: true
     inputs:
       - name: signing_key
         from: keygen
@@ -48,6 +50,7 @@ steps:
   - name: build_image
     image: cgr.dev/chainguard/apko@sha256:b08db34494f3f8cc7a02b10f04546213a89321cd11b94ff2dcff892d44815b43
     args: [build, /src/apko.yaml, strike:stage_3, /out/image.tar]
+    network: true
     inputs:
       - name: packages
         from: build_package

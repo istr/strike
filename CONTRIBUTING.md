@@ -26,7 +26,8 @@ strike takes a different approach:
 
 - **Rootless container engine.** strike runs entirely under rootless podman.
   No privileged containers, no Docker socket, no DinD. Every step runs with
-  `--network=none` and digest-pinned images.
+  digest-pinned images and network disabled by default (`--network=none`).
+  Steps that need outbound access must explicitly opt in with `network: true`.
 
 - **Reproducible builds.** The bootstrap process proves reproducibility: the
   tool builds itself twice and compares the output. Cache keys are derived from

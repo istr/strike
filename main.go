@@ -151,7 +151,7 @@ func cmdRun(path string) {
         // Source hashes
         sourceHashes := map[string]string{}
         for _, src := range step.Sources {
-            h, err := registry.HashFile(src.Path)
+            h, err := registry.HashPath(src.Path)
             if err != nil {
                 log.Fatalf("error: %s: source hash %s: %v", stepName, src.Path, err)
             }
@@ -240,11 +240,22 @@ func cmdRun(path string) {
             fmt.Printf("       %s/%s -> %s\n", stepName, out.Name, digest)
         }
 
-        // Push outputs to registry
-        if err := registry.PushArtifact(outDir, tag); err != nil {
-            log.Fatalf("error: %s: push failed: %v", stepName, err)
+        // Push OCI artifacts to registry cache
+        pushed := false
+        for _, out := range step.Outputs {
+            if out.Type == "oci-tar" {
+                if err := registry.PushArtifact(outDir, tag); err != nil {
+                    log.Fatalf("error: %s: push failed: %v", stepName, err)
+                }
+                pushed = true
+                break
+            }
         }
-        fmt.Printf("OK     %s -> %s\n", stepName, tag)
+        if pushed {
+            fmt.Printf("OK     %s -> %s\n", stepName, tag)
+        } else {
+            fmt.Printf("OK     %s\n", stepName)
+        }
     }
 }
 

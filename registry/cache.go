@@ -52,6 +52,18 @@ func Tag(registry, stepName, hash string) string {
     return fmt.Sprintf("%s:%s-%s", registry, stepName, hash)
 }
 
+// HashPath computes SHA256 of a file or directory.
+func HashPath(path string) (string, error) {
+    info, err := os.Stat(path)
+    if err != nil {
+        return "", err
+    }
+    if info.IsDir() {
+        return HashDir(path)
+    }
+    return HashFile(path)
+}
+
 // HashFile computes SHA256 of a source file.
 func HashFile(path string) (string, error) {
     f, err := os.Open(path)

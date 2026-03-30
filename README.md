@@ -6,9 +6,9 @@ Reproducible, rootless CI/CD lanes. No shell. No root. No local toolchain.
 
 strike is a cloud-native lane executor that treats containers as the only
 unit of computation. Every step runs in a pinned, digest-verified OCI image
-with `--network=none`. There is no shell interpreter, no script block
-evaluation, no implicit host dependency beyond a working rootless container
-runtime.
+with network disabled by default. There is no shell interpreter, no script
+block evaluation, no implicit host dependency beyond a working rootless
+container runtime.
 
 Lanes are declared in YAML, validated against a CUE schema, and executed as
 a content-addressable DAG. Outputs are cached as OCI artifacts in any standard
@@ -72,7 +72,8 @@ external container image must be SHA-256 pinned:
 steps:
   - name: build
     image: cgr.dev/chainguard/go@sha256:abc123...
-    args: [build, -C, /src, -o, /out/binary, ./...]
+    args: [build, -C, /src, -o, /out/binary, .]
+    network: true
     sources:
       - path: .
         mount: /src
@@ -81,6 +82,9 @@ steps:
         type: file
         path: /out/binary
 ```
+
+Steps run with `--network=none` by default. Set `network: true` to allow
+outbound access (e.g. for fetching dependencies or pushing to a registry).
 
 ### Image references
 
