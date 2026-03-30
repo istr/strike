@@ -119,6 +119,8 @@ func cmdRun(path string) {
     outputDirs := map[string]string{}
     // Manifest digests of loaded OCI tar outputs: step/output -> "sha256:..."
     ociDigests := map[string]string{}
+    // Track which OCI tar outputs were signed
+    ociSigned := map[string]bool{}
 
     for _, stepName := range dag.Order {
         step := dag.Steps[stepName]
@@ -139,8 +141,8 @@ func cmdRun(path string) {
                     stepName, step.ImageFrom.Step, step.ImageFrom.Output)
             }
             imageDigest = digest
-            // Set image so executor uses the loaded image by digest
-            step.Image = step.ImageFrom.Step + "-" + step.ImageFrom.Output + "@" + digest
+            // Use the local tag that LoadOCITarByDigest stored the image under
+            step.Image = "localhost/strike:" + strings.TrimPrefix(digest, "sha256:")[:12]
         } else {
             var err error
             imageDigest, err = resolveDigest(step.Image)
@@ -183,6 +185,17 @@ func cmdRun(path string) {
             }
             outputDirs[stepName] = cachedOutputDir(tag)
             continue
+        }
+
+        // Guard: unsigned OCI images must not be used by network-enabled steps
+        if step.Network {
+            for _, inp := range step.Inputs {
+                if isOCITarOutput(inp, dag) && !ociSigned[inp.From+"/"+inp.Name] {
+                    log.Fatalf("error: %s: input %q/%q is an unsigned OCI image — "+
+                        "unsigned images must not leave the local store",
+                        stepName, inp.From, inp.Name)
+                }
+            }
         }
 
         // Execute
@@ -234,24 +247,27 @@ func cmdRun(path string) {
             }
 
             tarPath := filepath.Join(outDir, filepath.Base(step.Outputs[0].Path))
-            if err := executor.Pack(executor.PackOpts{
+            result, err := executor.Pack(executor.PackOpts{
                 Spec:        step.Pack,
                 InputPaths:  inputPaths,
                 OutputPath:  tarPath,
                 SigningKey:  signingKey,
                 KeyPassword: keyPassword,
-            }); err != nil {
+            })
+            if err != nil {
                 log.Fatalf("error: %s: pack failed: %v", stepName, err)
             }
 
             outputDirs[stepName] = outDir
+            outKey := stepName + "/" + step.Outputs[0].Name
+            ociDigests[outKey] = result.Digest
+            ociSigned[outKey] = signingKey != nil
 
-            digest, err := executor.LoadOCITar(tarPath)
-            if err != nil {
-                log.Fatalf("error: %s: oci-tar load: %v", stepName, err)
+            // Load the main image into the local container store for downstream steps
+            if err := registry.LoadOCITarByDigest(tarPath, result.Digest); err != nil {
+                log.Fatalf("error: %s: load image: %v", stepName, err)
             }
-            ociDigests[stepName+"/"+step.Outputs[0].Name] = digest
-            fmt.Printf("OK     %s -> %s\n", stepName, digest)
+            fmt.Printf("OK     %s -> %s\n", stepName, result.Digest)
             continue
         }
 
@@ -318,7 +334,7 @@ func cmdRun(path string) {
                 continue
             }
             tarPath := filepath.Join(outDir, filepath.Base(out.Path))
-            digest, err := executor.LoadOCITar(tarPath)
+            digest, err := registry.LoadOCITar(tarPath)
             if err != nil {
                 log.Fatalf("error: %s: oci-tar load %q: %v", stepName, out.Name, err)
             }
@@ -377,7 +393,7 @@ func resolveDigest(imageRef string) (string, error) {
     }
 
     // Local image without digest (e.g. bootstrap root) - resolve via podman inspect
-    return executor.InspectDigest(imageRef)
+    return registry.InspectDigest(imageRef)
 }
 
 func cachedOutputDir(tag string) string {
@@ -408,8 +424,8 @@ func resolveSecrets(
 func readSecret(source string) (string, error) {
     switch {
     case len(source) > 6 && source[:6] == "env://":
-        val := os.Getenv(source[6:])
-        if val == "" {
+        val, ok := os.LookupEnv(source[6:])
+        if !ok {
             return "", fmt.Errorf("env variable %q not set", source[6:])
         }
         return val, nil
@@ -419,6 +435,20 @@ func readSecret(source string) (string, error) {
     default:
         return "", fmt.Errorf("unknown secret source: %q (supported: env://, file://)", source)
     }
+}
+
+// isOCITarOutput checks if an input references an oci-tar output in the DAG.
+func isOCITarOutput(inp lane.InputRef, dag *lane.DAG) bool {
+    fromStep, ok := dag.Steps[inp.From]
+    if !ok {
+        return false
+    }
+    for _, out := range fromStep.Outputs {
+        if out.Name == inp.Name {
+            return out.Type == "oci-tar"
+        }
+    }
+    return false
 }
 
 func sanitize(s string) string {

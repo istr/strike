@@ -32,15 +32,20 @@ type PackOpts struct {
 	KeyPassword []byte            // passphrase for encrypted key; empty if unencrypted
 }
 
-func Pack(opts PackOpts) error {
+// PackResult holds the outputs of a successful pack operation.
+type PackResult struct {
+	Digest string // "sha256:..." manifest digest of the main image
+}
+
+func Pack(opts PackOpts) (*PackResult, error) {
 	if opts.SigningKey == nil {
-		return fmt.Errorf("pack: signing key is required; keyless signing is not yet implemented")
+		return nil, fmt.Errorf("pack: signing key is required; keyless signing is not yet implemented")
 	}
 
 	// 1. Pull and verify the base image
 	img, err := pullVerified(string(opts.Spec.Base))
 	if err != nil {
-		return fmt.Errorf("pack: pull base image: %w", err)
+		return nil, fmt.Errorf("pack: pull base image: %w", err)
 	}
 
 	// Track the first binary path for SBOM generation
@@ -50,33 +55,33 @@ func Pack(opts PackOpts) error {
 	for _, f := range opts.Spec.Files {
 		hostPath, ok := opts.InputPaths[f.From]
 		if !ok {
-			return fmt.Errorf("pack: file from %q: host path not resolved", f.From)
+			return nil, fmt.Errorf("pack: file from %q: host path not resolved", f.From)
 		}
 		if binaryPath == "" {
 			binaryPath = hostPath
 		}
 		layer, err := fileLayer(hostPath, f.Dest, fs.FileMode(f.Mode))
 		if err != nil {
-			return fmt.Errorf("pack: add file %q: %w", f.Dest, err)
+			return nil, fmt.Errorf("pack: add file %q: %w", f.Dest, err)
 		}
 		img, err = mutate.AppendLayers(img, layer)
 		if err != nil {
-			return fmt.Errorf("pack: append layer: %w", err)
+			return nil, fmt.Errorf("pack: append layer: %w", err)
 		}
 	}
 
 	// Compute image digest for referrer relationships
 	imgDigest, err := img.Digest()
 	if err != nil {
-		return fmt.Errorf("pack: image digest: %w", err)
+		return nil, fmt.Errorf("pack: image digest: %w", err)
 	}
 	imgSize, err := img.Size()
 	if err != nil {
-		return fmt.Errorf("pack: image size: %w", err)
+		return nil, fmt.Errorf("pack: image size: %w", err)
 	}
 	imgMediaType, err := img.MediaType()
 	if err != nil {
-		return fmt.Errorf("pack: image media type: %w", err)
+		return nil, fmt.Errorf("pack: image media type: %w", err)
 	}
 	subject := v1.Descriptor{
 		MediaType: imgMediaType,
@@ -87,78 +92,76 @@ func Pack(opts PackOpts) error {
 	// 3. Generate SBOM
 	sbomBytes, err := GenerateSBOM(binaryPath, imgDigest.String(), string(opts.Spec.Base))
 	if err != nil {
-		return fmt.Errorf("pack: sbom: %w", err)
+		return nil, fmt.Errorf("pack: sbom: %w", err)
 	}
 	sbomImage, err := artifactImage(sbomBytes, "application/vnd.cyclonedx+json", subject)
 	if err != nil {
-		return fmt.Errorf("pack: SBOM artifact: %w", err)
+		return nil, fmt.Errorf("pack: SBOM artifact: %w", err)
 	}
 
 	// 4. Sign the image manifest digest
 	sigImage, err := SignManifest(imgDigest.String(), opts.SigningKey, opts.KeyPassword)
 	if err != nil {
-		return fmt.Errorf("pack: sign: %w", err)
+		return nil, fmt.Errorf("pack: sign: %w", err)
 	}
 
 	// 5. Write OCI layout with all three manifests
 	layoutDir, err := os.MkdirTemp("", "strike-pack-layout-")
 	if err != nil {
-		return fmt.Errorf("pack: temp dir: %w", err)
+		return nil, fmt.Errorf("pack: temp dir: %w", err)
 	}
 	defer os.RemoveAll(layoutDir)
 
 	lp, err := layout.Write(layoutDir, empty.Index)
 	if err != nil {
-		return fmt.Errorf("pack: write layout: %w", err)
+		return nil, fmt.Errorf("pack: write layout: %w", err)
 	}
-	if err := lp.AppendImage(img); err != nil {
-		return fmt.Errorf("pack: append main image: %w", err)
+	if err := lp.AppendImage(img, layout.WithAnnotations(map[string]string{
+		"org.opencontainers.image.ref.name": imgDigest.String(),
+	})); err != nil {
+		return nil, fmt.Errorf("pack: append main image: %w", err)
 	}
 	if err := lp.AppendImage(sbomImage); err != nil {
-		return fmt.Errorf("pack: append SBOM: %w", err)
+		return nil, fmt.Errorf("pack: append SBOM: %w", err)
 	}
 	if err := lp.AppendImage(sigImage); err != nil {
-		return fmt.Errorf("pack: append signature: %w", err)
+		return nil, fmt.Errorf("pack: append signature: %w", err)
 	}
 
 	// 6. Tar the OCI layout to the output path
 	if err := tarDirectory(layoutDir, opts.OutputPath); err != nil {
-		return fmt.Errorf("pack: tar layout: %w", err)
+		return nil, fmt.Errorf("pack: tar layout: %w", err)
 	}
 
-	return nil
+	return &PackResult{Digest: imgDigest.String()}, nil
 }
 
-// pullVerified pulls a remote image and verifies the digest matches the ref.
+// pullVerified pulls a remote image by digest-pinned reference.
+// For multi-arch images the ref digest pins the index; go-containerregistry
+// verifies the index digest on fetch, then resolves to the platform image.
 func pullVerified(ref string) (v1.Image, error) {
 	nameRef, err := name.ParseReference(ref)
 	if err != nil {
 		return nil, fmt.Errorf("parse ref %q: %w", ref, err)
 	}
 
-	img, err := remote.Image(nameRef)
+	// Require a digest reference — tags are not allowed.
+	if _, ok := nameRef.(name.Digest); !ok {
+		return nil, fmt.Errorf("ref %q must be pinned by digest", ref)
+	}
+
+	desc, err := remote.Get(nameRef)
 	if err != nil {
 		return nil, fmt.Errorf("pull %q: %w", ref, err)
 	}
 
-	gotDigest, err := img.Digest()
+	// If the ref points to an index, resolve to the platform image.
+	img, err := desc.Image()
 	if err != nil {
-		return nil, fmt.Errorf("digest %q: %w", ref, err)
+		return nil, fmt.Errorf("resolve image %q: %w", ref, err)
 	}
 
-	// Extract expected digest from ref (after @)
-	for i, c := range ref {
-		if c == '@' {
-			expected := ref[i+1:]
-			if gotDigest.String() != expected {
-				return nil, fmt.Errorf("digest mismatch for %q: got %s, want %s",
-					ref, gotDigest.String(), expected)
-			}
-			return img, nil
-		}
-	}
-
-	return nil, fmt.Errorf("no digest in ref %q", ref)
+	return img, nil
 }
 
 // fileLayer creates a single-file OCI layer as a tar archive.

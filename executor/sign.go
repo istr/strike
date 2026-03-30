@@ -108,7 +108,7 @@ func loadCosignKey(pemBytes, password []byte) (*ecdsa.PrivateKey, error) {
 	}
 
 	switch block.Type {
-	case "ENCRYPTED COSIGN PRIVATE KEY":
+	case "ENCRYPTED COSIGN PRIVATE KEY", "ENCRYPTED SIGSTORE PRIVATE KEY":
 		return decryptCosignKey(block.Bytes, password)
 	case "PRIVATE KEY":
 		return parsePKCS8(block.Bytes)

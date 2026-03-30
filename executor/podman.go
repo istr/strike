@@ -4,7 +4,6 @@ import (
     "fmt"
     "os"
     "os/exec"
-    "strings"
 
     "github.com/istr/strike/lane"
 )
@@ -46,6 +45,11 @@ func (r Run) Execute() error {
     // Output directory
     args = append(args, "-v", r.OutputDir+":/out")
 
+    // Non-sensitive environment variables (inline values)
+    for k, v := range r.Step.Env {
+        args = append(args, "--env", k+"="+v)
+    }
+
     // Pass secret env names only - values via process environment,
     // never written to args (no ps aux leak)
     for envName, val := range r.Secrets {
@@ -62,30 +66,3 @@ func (r Run) Execute() error {
     return cmd.Run()
 }
 
-// LoadOCITar loads an OCI tar archive into the local container store
-// and returns the manifest digest.
-func LoadOCITar(tarPath string) (string, error) {
-    cmd := exec.Command("podman", "load", "-i", tarPath, "--quiet")
-    out, err := cmd.Output()
-    if err != nil {
-        return "", fmt.Errorf("podman load: %w", err)
-    }
-
-    imageID := strings.TrimSpace(string(out))
-    return InspectDigest(imageID)
-}
-
-// InspectDigest returns the manifest digest of a local image.
-func InspectDigest(imageRef string) (string, error) {
-    cmd := exec.Command("podman", "inspect", "--format", "{{.Digest}}", imageRef)
-    out, err := cmd.Output()
-    if err != nil {
-        return "", fmt.Errorf("podman inspect %q: %w", imageRef, err)
-    }
-
-    digest := strings.TrimSpace(string(out))
-    if !strings.HasPrefix(digest, "sha256:") {
-        return "", fmt.Errorf("unexpected digest format for %q: %q", imageRef, digest)
-    }
-    return digest, nil
-}

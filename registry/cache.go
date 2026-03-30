@@ -30,6 +30,12 @@ func SpecHash(
         h.Write([]byte(a))
     }
 
+    // Env vars sorted by key for determinism
+    envKeys := sortedKeys(step.Env)
+    for _, k := range envKeys {
+        h.Write([]byte(k + "=" + step.Env[k]))
+    }
+
     // Input hashes sorted by name for determinism
     names := sortedKeys(inputHashes)
     for _, n := range names {
@@ -83,11 +89,20 @@ func HashFile(path string) (string, error) {
 func HashDir(dir string) (string, error) {
     h := sha256.New()
     err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
-        if err != nil || d.IsDir() {
+        if err != nil {
+            if os.IsPermission(err) {
+                return nil // skip unreadable files — they can't affect the build
+            }
             return err
+        }
+        if d.IsDir() {
+            return nil
         }
         content, err := os.ReadFile(path)
         if err != nil {
+            if os.IsPermission(err) {
+                return nil
+            }
             return err
         }
         h.Write([]byte(path))
