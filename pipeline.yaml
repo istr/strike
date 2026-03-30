@@ -1,0 +1,80 @@
+registry: ghcr.io/istr/strike-cache
+
+secrets:
+  ghcr-token: env://GHCR_TOKEN
+
+steps:
+  # Stage 1: dirty strike führt sich selbst aus im stage-1 container
+  - name: stage-1
+    image: strike:stage-1           # ← kein digest: lokal gebaut, kein registry
+    args: [run, /src/pipeline-stage1.yaml]
+    sources:
+      - path: .
+        mount: /src
+    outputs:
+      - name: stage2-image
+        type: oci-tar
+        path: /out/image.tar        # strike:stage-2
+
+  # Stage 2: strike:stage-2 baut strike:stage-3
+  - name: stage-2
+    image: strike:stage-2           # ← Output von stage-1
+    args: [run, /src/pipeline-stage2.yaml]
+    sources:
+      - path: .
+        mount: /src
+    inputs:
+      - name: stage2-image
+        from: stage-1
+        mount: /run/stage2.tar      # wird vorher geladen
+    outputs:
+      - name: stage3-image
+        type: oci-tar
+        path: /out/image.tar        # strike:stage-3
+
+  # Vergleich: stage-2 == stage-3 → reproduzierbar
+  - name: compare
+    image: cgr.dev/chainguard/wolfi-base@sha256:<digest>
+    args:
+      - sh
+      - -c
+      - |
+        s2=$(sha256sum /run/stage2.tar | cut -d' ' -f1)
+        s3=$(sha256sum /run/stage3.tar | cut -d' ' -f1)
+        echo "stage-2: $s2"
+        echo "stage-3: $s3"
+        [ "$s2" = "$s3" ] || { echo "❌ nicht reproduzierbar"; exit 1; }
+        echo "✅ reproduzierbar"
+    inputs:
+      - name: stage2-image
+        from: stage-1
+        mount: /run/stage2.tar
+      - name: stage3-image
+        from: stage-2
+        mount: /run/stage3.tar
+    outputs:
+      - name: result
+        type: file
+        path: /out/compare.txt
+
+  # Publish: stage-2 image (nach positivem Vergleich)
+  - name: publish
+    image: cgr.dev/chainguard/skopeo@sha256:<digest>
+    args:
+      - copy
+      - oci-archive:/run/stage2.tar
+      - docker://ghcr.io/istr/strike:latest
+    inputs:
+      - name: stage2-image
+        from: stage-1
+        mount: /run/stage2.tar
+      - name: compare-ok
+        from: compare
+        mount: /run/compare.txt     # DAG-Kante: publish erst nach compare
+    secrets:
+      - name: ghcr-token
+        env: REGISTRY_AUTH_FILE
+    outputs:
+      - name: published-ref
+        type: file
+        path: /out/ref.txt

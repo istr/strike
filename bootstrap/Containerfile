@@ -1,0 +1,14 @@
+# Bootstrap the strike ci/cd tool.
+#
+# Prerequisite: you have podman installed on your host.
+#
+# podman build -t strike:stage-1 https://github.com/istr/strike/bootstrap/Containerfile
+# podman run strike:stage-1
+#
+FROM docker.io/library/golang:1.25-alpine@sha256:450ce2460f20b2f581cf1ac4f36606f88817e63f907f489d9a3b1c14ba821979
+RUN apk add --no-cache git podman 
+RUN git clone https://github.com/istr/strike /build/strike
+WORKDIR /build/strike
+RUN go build -trimpath -ldflags="-s -w" -o /out/strike .
+COPY pipeline.yaml /out/
+ENTRYPOINT ["/out/strike"]

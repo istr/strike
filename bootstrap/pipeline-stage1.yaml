@@ -1,0 +1,64 @@
+# Führt "strike run pipeline-stage2.yaml" aus
+# Input: Quellcode, Output: strike:stage-2
+registry: localhost/strike-bootstrap   # nur lokal, kein push
+
+steps:
+  - name: keygen
+    image: cgr.dev/chainguard/melange@sha256:<digest>
+    args: [keygen, --output, /out/melange.rsa]
+    outputs:
+      - name: signing-key
+        type: file
+        path: /out/melange.rsa
+      - name: signing-key-pub
+        type: file
+        path: /out/melange.rsa.pub
+
+  - name: build-binary
+    image: cgr.dev/chainguard/go@sha256:<digest>
+    args: [build, -trimpath, -ldflags=-s -w, -o, /out/strike, ./...]
+    sources:
+      - path: .
+        mount: /src
+    outputs:
+      - name: binary
+        type: file
+        path: /out/strike
+
+  - name: build-package
+    image: cgr.dev/chainguard/melange@sha256:<digest>
+    args: [build, /src/melange.yaml,
+           --signing-key, /run/key,
+           --arch, x86_64]
+    inputs:
+      - name: signing-key
+        from: keygen
+        mount: /run/key
+      - name: binary
+        from: build-binary
+        mount: /run/strike-binary
+    sources:
+      - path: ./melange.yaml
+        mount: /src/melange.yaml
+    outputs:
+      - name: packages
+        type: directory
+        path: /out/packages
+
+  - name: build-image-stage2
+    image: cgr.dev/chainguard/apko@sha256:<digest>
+    args: [build, /src/apko.yaml, strike:stage-2, /out/image.tar]
+    inputs:
+      - name: packages
+        from: build-package
+        mount: /run/packages
+      - name: signing-key-pub
+        from: keygen
+        mount: /run/key.pub
+    sources:
+      - path: ./apko.yaml
+        mount: /src/apko.yaml
+    outputs:
+      - name: image
+        type: oci-tar
+        path: /out/image.tar
