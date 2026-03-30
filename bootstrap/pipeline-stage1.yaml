@@ -7,14 +7,14 @@ steps:
     image: cgr.dev/chainguard/melange@sha256:b45739a7d174386d8746774ee0bb9ed70a6ae42e6403088d9ecfa1a31473dcd8
     args: [keygen, --output, /out/melange.rsa]
     outputs:
-      - name: signing-key
+      - name: signing_key
         type: file
         path: /out/melange.rsa
-      - name: signing-key-pub
+      - name: signing_key-pub
         type: file
         path: /out/melange.rsa.pub
 
-  - name: build-binary
+  - name: build_binary
     image: cgr.dev/chainguard/go@sha256:4ec098b553c8d74d9f01925578660b2bfcdee4ef45e5ab082250cf9675a0e28b
     args: [build, -trimpath, -ldflags=-s -w, -o, /out/strike, ./...]
     sources:
@@ -25,18 +25,18 @@ steps:
         type: file
         path: /out/strike
 
-  - name: build-package
+  - name: build_package
     image: cgr.dev/chainguard/melange@sha256:b45739a7d174386d8746774ee0bb9ed70a6ae42e6403088d9ecfa1a31473dcd8
     args: [build, /src/melange.yaml,
-           --signing-key, /run/key,
+           --signing_key, /run/key,
            --arch, x86_64]
     inputs:
-      - name: signing-key
+      - name: signing_key
         from: keygen
         mount: /run/key
       - name: binary
-        from: build-binary
-        mount: /run/strike-binary
+        from: build_binary
+        mount: /run/strike_binary
     sources:
       - path: ./melange.yaml
         mount: /src/melange.yaml
@@ -45,14 +45,14 @@ steps:
         type: directory
         path: /out/packages
 
-  - name: build-image-stage2
+  - name: build_image_stage2
     image: cgr.dev/chainguard/apko@sha256:b08db34494f3f8cc7a02b10f04546213a89321cd11b94ff2dcff892d44815b43
     args: [build, /src/apko.yaml, strike:stage-2, /out/image.tar]
     inputs:
       - name: packages
-        from: build-package
+        from: build_package
         mount: /run/packages
-      - name: signing-key-pub
+      - name: signing_key-pub
         from: keygen
         mount: /run/key.pub
     sources:
