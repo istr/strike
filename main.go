@@ -195,8 +195,20 @@ func cmdRun(path string) {
         // Input mounts from previous output directories
         inputMounts := []executor.Mount{}
         for _, inp := range step.Inputs {
+            // Resolve the output path from the producing step
+            fromStep := dag.Steps[inp.From]
+            var hostPath string
+            for _, out := range fromStep.Outputs {
+                if out.Name == inp.Name {
+                    hostPath = filepath.Join(outputDirs[inp.From], filepath.Base(out.Path))
+                    break
+                }
+            }
+            if hostPath == "" {
+                log.Fatalf("error: %s: input %q not found in outputs of %q", stepName, inp.Name, inp.From)
+            }
             inputMounts = append(inputMounts, executor.Mount{
-                Host:      filepath.Join(outputDirs[inp.From], inp.Name),
+                Host:      hostPath,
                 Container: inp.Mount,
                 ReadOnly:  true,
             })
