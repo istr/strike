@@ -23,7 +23,12 @@ type Mount struct {
 }
 
 func (r Run) Execute() error {
-    args := []string{"run", "--rm"}
+    args := []string{
+        "run", "--rm",
+        "--userns=keep-id",
+        "--env", "XDG_RUNTIME_DIR=/tmp/run",
+        "--env", "XDG_DATA_HOME=/tmp/data",
+    }
 
     if !r.Step.Network {
         args = append(args, "--network=none")

@@ -40,3 +40,22 @@ strike is designed with a minimal attack surface:
   manifest digest.
 - **Secrets via environment only** -- never written to process arguments or
   persisted to disk.
+
+## User namespace mapping (`--userns=keep-id`)
+
+All container steps run with `--userns=keep-id`. This maps the host user's UID
+into the container as-is and passes the host's subuid/subgid range, enabling
+nested rootless podman execution (e.g. for the stage_2 bootstrap step).
+
+This does **not** grant additional capabilities. Seccomp and AppArmor profiles
+remain active. An attacker who escapes an inner container reaches only
+unprivileged host UIDs from the subuid range -- the same UIDs that rootless
+podman already maps for any unprivileged user.
+
+## Container storage paths (`XDG_RUNTIME_DIR`, `XDG_DATA_HOME`)
+
+The executor injects `XDG_RUNTIME_DIR=/tmp/run` and `XDG_DATA_HOME=/tmp/data`
+into every container step. Container images that invoke podman internally will
+automatically use `/tmp`-based storage paths, writable for any UID. This is
+intentional and part of the execution model -- it ensures nested rootless podman
+works regardless of the container image's default user or home directory layout.

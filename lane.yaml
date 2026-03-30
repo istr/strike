@@ -41,7 +41,7 @@ steps:
 
   - name: stage_2
     image: strike:stage_1
-    args: [/usr/bin/strike, run, /src/bootstrap/lace.yaml]
+    args: [run, /src/bootstrap/lace.yaml]
     network: true
     inputs:
       - name: binary

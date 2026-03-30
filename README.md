@@ -22,6 +22,16 @@ You need exactly two things:
 2. **A git-capable IDE** (e.g. VS Code, JetBrains) -- for cloning and editing
    the repository. You do not need a local `git` CLI; your IDE handles that.
 
+Your host must satisfy the standard rootless podman requirements:
+
+- **subuid/subgid** configured for the calling user (minimum 65 536 entries).
+  Check with `cat /etc/subuid` -- you should see a line like
+  `youruser:100000:65536`.
+- **`kernel.unprivileged_userns_clone=1`** on Linux (most distributions set
+  this by default).
+
+These are prerequisites for rootless podman generally, not specific to strike.
+
 That's it. No Go toolchain, no `make`, no `npm`, no CI agent. The entire build
 happens inside containers.
 
@@ -46,20 +56,20 @@ a self-contained executor image.
 Then run the bootstrap lane:
 
 ```sh
-podman run strike:stage_1
+podman run --userns=keep-id strike:stage_1
 ```
 
 This executes the bootstrap lane (`lane.yaml`):
 
-1. **keygen, build_binary, build_package, build_image** -- strike builds itself
-   from source using pinned Chainguard tooling (go, melange, apko), producing
-   the `strike:stage_2` image.
-2. **stage_2** -- `strike:stage_2` rebuilds itself into `strike:stage_3` by
-   running `bootstrap/lace.yaml`. The stage_2 image is resolved via
-   `image_from`, pinned by the manifest digest extracted at runtime.
-3. **compare** -- verifies that stage_2 and stage_3 produce identical images,
+1. **build_binary** -- compiles the strike binary from source using a pinned
+   Chainguard Go image with `CGO_ENABLED=0`.
+2. **build_image** -- packs the binary into a signed OCI image based on
+   `chainguard/static`.
+3. **stage_2** -- runs `bootstrap/lace.yaml` inside `strike:stage_1` to rebuild
+   the image from source, producing `stage_3`.
+4. **compare** -- verifies that stage_2 and stage_3 produce identical images,
    proving the build is reproducible.
-4. **publish** -- pushes the verified image to the registry.
+5. **publish** -- pushes the verified image to the registry.
 
 ## How it works
 

@@ -3,13 +3,16 @@
 # Prerequisite: you have podman installed on your host.
 #
 # GIT_COMMIT=<commit-sha> ; podman build -t strike:stage_1 --build-arg GIT_COMMIT=${GIT_COMMIT} https://raw.githubusercontent.com/istr/strike/${GIT_COMMIT}/bootstrap/Containerfile
-# podman run strike:stage-1
+# podman run --userns=keep-id strike:stage_1
 #
 FROM docker.io/library/golang:1.26-alpine@sha256:d337ecb3075f0ec76d81652b3fa52af47c3eba6c8ba9f93b835752df7ce62946
 ARG GIT_COMMIT
-RUN apk add --no-cache cue-cli git podman
+RUN apk add --no-cache cue-cli git podman fuse-overlayfs
 RUN mkdir -p /etc/containers
-RUN printf '[storage]\ndriver = "vfs"\n' > /etc/containers/storage.conf
+RUN printf '[storage]\ndriver = "overlay"\n[storage.options.overlay]\nmount_program = "/usr/bin/fuse-overlayfs"\n' \
+    > /etc/containers/storage.conf
+ENV XDG_RUNTIME_DIR=/tmp/run
+ENV XDG_DATA_HOME=/tmp/data
 WORKDIR /build/strike
 RUN git init \
  && git fetch --depth 1 https://github.com/istr/strike ${GIT_COMMIT} \
