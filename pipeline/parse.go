@@ -40,9 +40,10 @@ func Parse(path string) (*Pipeline, error) {
         return nil, fmt.Errorf("validation:\n%w", err)
     }
 
-    // Deserialize into typed Pipeline struct
+    // Deserialize from JSON into typed Pipeline struct.
+    // Using JSON (not YAML) because gengotypes only emits json struct tags.
     var p Pipeline
-    if err := yaml.Unmarshal(raw, &p); err != nil {
+    if err := json.Unmarshal(asJSON, &p); err != nil {
         return nil, fmt.Errorf("deserialize: %w", err)
     }
 
