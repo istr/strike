@@ -11,8 +11,6 @@ RUN apk add --no-cache cue-cli git podman fuse-overlayfs
 RUN mkdir -p /etc/containers
 RUN printf '[storage]\ndriver = "overlay"\n[storage.options.overlay]\nmount_program = "/usr/bin/fuse-overlayfs"\n' \
     > /etc/containers/storage.conf
-ENV XDG_RUNTIME_DIR=/tmp/run
-ENV XDG_DATA_HOME=/tmp/data
 WORKDIR /build/strike
 RUN git init \
  && git fetch --depth 1 https://github.com/istr/strike ${GIT_COMMIT} \
@@ -20,5 +18,10 @@ RUN git init \
 RUN cue exp gengotypes ./lane/
 RUN go get
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o strike .
+RUN mkdir -p /tmp/run /tmp/data # /tmp/home
+RUN chmod 1777 /tmp/run /tmp/data # /tmp/home
+ENV HOME=/tmp/home
+ENV XDG_RUNTIME_DIR=/tmp/run
+ENV XDG_DATA_HOME=/tmp/data
 ENTRYPOINT ["/build/strike/strike"]
 CMD ["run"]

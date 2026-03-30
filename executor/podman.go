@@ -23,11 +23,23 @@ type Mount struct {
 }
 
 func (r Run) Execute() error {
+    tmpHome, _ := os.MkdirTemp("", "strike-home-"+r.Step.Name+"-")
+    defer os.RemoveAll(tmpHome)
+
+    tmpRun, _ := os.MkdirTemp("", "strike-run-"+r.Step.Name+"-")
+    defer os.RemoveAll(tmpRun)
+
+    tmpData, _ := os.MkdirTemp("", "strike-data-"+r.Step.Name+"-")
+    defer os.RemoveAll(tmpData)
+
     args := []string{
         "run", "--rm",
         "--userns=keep-id",
         "--env", "XDG_RUNTIME_DIR=/tmp/run",
         "--env", "XDG_DATA_HOME=/tmp/data",
+        "-v", tmpHome+":/tmp/strike-home:U",
+        "-v", tmpRun+":/tmp/strike-run:U",
+        "-v", tmpData+":/tmp/strike-data:U",
     }
 
     if !r.Step.Network {
