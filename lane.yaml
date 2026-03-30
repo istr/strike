@@ -40,11 +40,13 @@ steps:
         path: /out/image.tar
 
   - name: stage_2
-    image_from:
-      step: build_image
-      output: image
+    image: strike:stage_1
     args: [/usr/bin/strike, run, /src/bootstrap/lace.yaml]
     network: true
+    inputs:
+      - name: binary
+        from: build_binary
+        mount: /usr/bin/strike
     sources:
       - path: .
         mount: /src
