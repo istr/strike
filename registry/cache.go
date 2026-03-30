@@ -11,14 +11,14 @@ import (
     "github.com/istr/strike/pipeline"
 )
 
-// SpecHash berechnet den Spec-Hash eines Steps (Merkle-Tree über DAG).
-// Inputs sind die SpecHashes der produzierenden Steps, nicht deren Inhalte —
-// vollständig berechenbar vor der Ausführung.
+// SpecHash computes the spec hash of a step (Merkle tree over the DAG).
+// Inputs are the spec hashes of producing steps, not their contents -
+// fully computable before execution.
 func SpecHash(
     step *pipeline.Step,
-    imageDigest string,                    // sha256-Digest des Images
-    inputHashes map[string]string,         // step-name → spec-hash des produzierenden steps
-    sourceHashes map[string]string,        // mount-pfad → sha256 der Quelldatei
+    imageDigest string,                    // sha256 digest of the image
+    inputHashes map[string]string,         // step-name -> spec hash of producing step
+    sourceHashes map[string]string,        // mount-path -> sha256 of source file
 ) string {
     h := sha256.New()
 
@@ -30,13 +30,13 @@ func SpecHash(
         h.Write([]byte(a))
     }
 
-    // Input-Hashes sortiert nach Name für Determinismus
+    // Input hashes sorted by name for determinism
     names := sortedKeys(inputHashes)
     for _, n := range names {
         h.Write([]byte(n + "=" + inputHashes[n]))
     }
 
-    // Source-Hashes sortiert nach Pfad
+    // Source hashes sorted by path
     paths := sortedKeys(sourceHashes)
     for _, p := range paths {
         h.Write([]byte(p + "=" + sourceHashes[p]))
@@ -45,14 +45,14 @@ func SpecHash(
     return fmt.Sprintf("%x", h.Sum(nil))[:16]
 }
 
-// Tag bildet den Registry-Tag aus Step-Name und Hash.
+// Tag builds the registry tag from step name and hash.
 // Format: registry:step-name-hash16
-// Beispiel: ghcr.io/ingo-struck/cache:build-package-a3f9c2b1d4e7f801
+// Example: ghcr.io/istr/strike-cache:build-package-a3f9c2b1d4e7f801
 func Tag(registry, stepName, hash string) string {
     return fmt.Sprintf("%s:%s-%s", registry, stepName, hash)
 }
 
-// HashFile berechnet SHA256 einer Quelldatei
+// HashFile computes SHA256 of a source file.
 func HashFile(path string) (string, error) {
     f, err := os.Open(path)
     if err != nil {
@@ -67,7 +67,7 @@ func HashFile(path string) (string, error) {
     return fmt.Sprintf("%x", h.Sum(nil)), nil
 }
 
-// HashDir berechnet SHA256 aller Dateien in einem Verzeichnis (rekursiv, sortiert)
+// HashDir computes SHA256 of all files in a directory (recursive, sorted).
 func HashDir(dir string) (string, error) {
     h := sha256.New()
     err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {

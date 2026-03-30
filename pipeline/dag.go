@@ -1,4 +1,3 @@
-// pipeline/dag.go
 package pipeline
 
 import (
@@ -8,8 +7,8 @@ import (
 
 type DAG struct {
 	Steps   map[string]*Step
-	edges   map[string][]string // step → []dependencies
-	reverse map[string][]string // dep → []dependents
+	edges   map[string][]string // step -> []dependencies
+	reverse map[string][]string // dep -> []dependents
 	Order   []string
 }
 
@@ -23,17 +22,46 @@ func Build(p *Pipeline) (*DAG, error) {
 	for i := range p.Steps {
 		s := &p.Steps[i]
 		if _, exists := d.Steps[string(s.Name)]; exists {
-			return nil, fmt.Errorf("doppelter step-name: %q", s.Name)
+			return nil, fmt.Errorf("duplicate step name: %q", s.Name)
 		}
 		d.Steps[string(s.Name)] = s
 	}
 
 	for _, s := range p.Steps {
 		name := string(s.Name)
+
+		// image_from creates an implicit DAG edge
+		if s.ImageFrom != nil {
+			from := s.ImageFrom.Step
+			if _, ok := d.Steps[from]; !ok {
+				return nil, fmt.Errorf("step %q: image_from references unknown step %q",
+					name, from)
+			}
+			// Validate that the referenced output exists and is oci-tar
+			fromStep := d.Steps[from]
+			found := false
+			for _, out := range fromStep.Outputs {
+				if out.Name == s.ImageFrom.Output {
+					if out.Type != "oci-tar" {
+						return nil, fmt.Errorf("step %q: image_from output %q in step %q is %q, not oci-tar",
+							name, out.Name, from, out.Type)
+					}
+					found = true
+					break
+				}
+			}
+			if !found {
+				return nil, fmt.Errorf("step %q: image_from output %q not found in step %q",
+					name, s.ImageFrom.Output, from)
+			}
+			d.edges[name] = append(d.edges[name], from)
+			d.reverse[from] = append(d.reverse[from], name)
+		}
+
 		for _, inp := range s.Inputs {
 			from := string(inp.From)
 			if _, ok := d.Steps[from]; !ok {
-				return nil, fmt.Errorf("step %q: input %q referenziert unbekannten step %q",
+				return nil, fmt.Errorf("step %q: input %q references unknown step %q",
 					name, inp.Name, from)
 			}
 			d.edges[name] = append(d.edges[name], from)
@@ -50,13 +78,12 @@ func Build(p *Pipeline) (*DAG, error) {
 }
 
 func kahnSort(d *DAG) ([]string, error) {
-	// inDegree[step] = Anzahl der Abhängigkeiten die step noch braucht
 	inDegree := make(map[string]int, len(d.Steps))
 	for name := range d.Steps {
 		inDegree[name] = len(d.edges[name])
 	}
 
-	// Wurzeln: Steps ohne Abhängigkeiten
+	// Roots: steps without dependencies
 	queue := []string{}
 	for name, deg := range inDegree {
 		if deg == 0 {
@@ -70,7 +97,7 @@ func kahnSort(d *DAG) ([]string, error) {
 		queue = queue[1:]
 		order = append(order, node)
 
-		// Abhängige dieses Nodes freischalten
+		// Unlock dependents of this node
 		for _, dependent := range d.reverse[node] {
 			inDegree[dependent]--
 			if inDegree[dependent] == 0 {
@@ -80,16 +107,16 @@ func kahnSort(d *DAG) ([]string, error) {
 	}
 
 	if len(order) != len(d.Steps) {
-		return nil, fmt.Errorf("zyklische abhängigkeit im pipeline-graph")
+		return nil, fmt.Errorf("cyclic dependency in pipeline graph")
 	}
 	return order, nil
 }
 
-// Tree gibt den DAG als Baumstruktur aus
+// Tree renders the DAG as a tree structure.
 func (d *DAG) Tree() string {
 	var sb strings.Builder
 
-	// Wurzeln: Steps ohne Abhängigkeiten
+	// Roots: steps without dependencies
 	roots := []string{}
 	for name := range d.Steps {
 		if len(d.edges[name]) == 0 {
@@ -100,9 +127,9 @@ func (d *DAG) Tree() string {
 	for i, root := range roots {
 		last := i == len(roots)-1
 		prefix := ""
-		connector := "├── "
+		connector := "+-- "
 		if last {
-			connector = "└── "
+			connector = "`-- "
 		}
 		sb.WriteString(connector + root + "\n")
 		d.treeNode(&sb, root, prefix, last)
@@ -117,16 +144,16 @@ func (d *DAG) treeNode(sb *strings.Builder, node, prefix string, lastParent bool
 	if lastParent {
 		childPrefix += "    "
 	} else {
-		childPrefix += "│   "
+		childPrefix += "|   "
 	}
 
 	for i, dep := range dependents {
 		last := i == len(dependents)-1
-		connector := "├── "
+		connector := "+-- "
 		if last {
-			connector = "└── "
+			connector = "`-- "
 		}
-		// Abhängigkeiten anzeigen wenn mehr als eine
+		// Show dependencies when more than one
 		deps := d.edges[dep]
 		annotation := ""
 		if len(deps) > 1 {

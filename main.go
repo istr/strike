@@ -11,18 +11,18 @@ import (
     "github.com/istr/strike/registry"
 )
 
-const usage = `strike — reproduzierbare, rootless CI/CD-Pipelines
+const usage = `strike - reproducible, rootless CI/CD pipelines
 
-Verwendung:
-  strike run      [pipeline.yaml]   Pipeline ausführen
-  strike validate [pipeline.yaml]   Pipeline validieren ohne Ausführung
-  strike dag      [pipeline.yaml]   DAG anzeigen und beenden
+Usage:
+  strike run      [pipeline.yaml]   Run a pipeline
+  strike validate [pipeline.yaml]   Validate without running
+  strike dag      [pipeline.yaml]   Show DAG and exit
 
-Standarddatei: pipeline.yaml im aktuellen Verzeichnis
+Default file: pipeline.yaml in the current directory
 `
 
 func main() {
-    log.SetFlags(0) // kein Timestamp in Fehlermeldungen
+    log.SetFlags(0)
 
     if len(os.Args) < 2 {
         fmt.Print(usage)
@@ -52,12 +52,12 @@ func main() {
 func cmdValidate(path string) {
     p, err := pipeline.Parse(path)
     if err != nil {
-        log.Fatalf("❌ %v", err)
+        log.Fatalf("error: %v", err)
     }
     if _, err := pipeline.Build(p); err != nil {
-        log.Fatalf("❌ DAG: %v", err)
+        log.Fatalf("error: DAG: %v", err)
     }
-    fmt.Printf("✅ %s ist gültig (%d steps)\n", path, len(p.Steps))
+    fmt.Printf("ok: %s is valid (%d steps)\n", path, len(p.Steps))
 }
 
 // --- dag --------------------------------------------------------------------
@@ -65,14 +65,14 @@ func cmdValidate(path string) {
 func cmdDAG(path string) {
     p, err := pipeline.Parse(path)
     if err != nil {
-        log.Fatalf("❌ %v", err)
+        log.Fatalf("error: %v", err)
     }
     dag, err := pipeline.Build(p)
     if err != nil {
-        log.Fatalf("❌ %v", err)
+        log.Fatalf("error: %v", err)
     }
 
-    fmt.Println("Ausführungsreihenfolge:")
+    fmt.Println("Execution order:")
     for i, name := range dag.Order {
         step := dag.Steps[name]
         deps := []string{}
@@ -80,14 +80,14 @@ func cmdDAG(path string) {
             deps = append(deps, inp.From)
         }
         if len(deps) > 0 {
-            fmt.Printf("  %d. %s ← %v\n", i+1, name, deps)
+            fmt.Printf("  %d. %s <- %v\n", i+1, name, deps)
         } else {
             fmt.Printf("  %d. %s\n", i+1, name)
         }
     }
 
     fmt.Println("\nDependency graph:")
-    fmt.Print(dag.Tree());
+    fmt.Print(dag.Tree())
 }
 
 // --- run --------------------------------------------------------------------
@@ -95,39 +95,56 @@ func cmdDAG(path string) {
 func cmdRun(path string) {
     p, err := pipeline.Parse(path)
     if err != nil {
-        log.Fatalf("❌ %v", err)
+        log.Fatalf("error: %v", err)
     }
     dag, err := pipeline.Build(p)
     if err != nil {
-        log.Fatalf("❌ %v", err)
+        log.Fatalf("error: %v", err)
     }
 
-    // Gesammelte Spec-Hashes pro Step — für nachfolgende Cache-Keys
+    // Collected spec hashes per step for downstream cache keys
     specHashes := map[string]string{}
-    // Gesammelte Output-Verzeichnisse pro Step
+    // Collected output directories per step
     outputDirs := map[string]string{}
+    // Manifest digests of loaded OCI tar outputs: step/output -> "sha256:..."
+    ociDigests := map[string]string{}
 
     for _, stepName := range dag.Order {
         step := dag.Steps[stepName]
 
-        // Image-Digest auflösen (einmalig pro Step)
-        imageDigest, err := resolveDigest(string(step.Image))
-        if err != nil {
-            log.Fatalf("❌ %s: image digest: %v", stepName, err)
+        // Resolve image digest: from pinned ref or from a previous step
+        var imageDigest string
+        if step.ImageFrom != nil {
+            key := step.ImageFrom.Step + "/" + step.ImageFrom.Output
+            digest, ok := ociDigests[key]
+            if !ok {
+                log.Fatalf("error: %s: image_from %s/%s: digest not available",
+                    stepName, step.ImageFrom.Step, step.ImageFrom.Output)
+            }
+            imageDigest = digest
+            // Set image so executor uses the loaded image by digest
+            step.Image = pipeline.ImageRef(
+                step.ImageFrom.Step + "-" + step.ImageFrom.Output + "@" + digest)
+        } else {
+            var err error
+            imageDigest, err = resolveDigest(string(step.Image))
+            if err != nil {
+                log.Fatalf("error: %s: image digest: %v", stepName, err)
+            }
         }
 
-        // Input-Hashes aus vorherigen Spec-Hashes
+        // Input hashes from previous spec hashes
         inputHashes := map[string]string{}
         for _, inp := range step.Inputs {
             inputHashes[inp.Name] = specHashes[inp.From]
         }
 
-        // Source-Hashes
+        // Source hashes
         sourceHashes := map[string]string{}
         for _, src := range step.Sources {
             h, err := registry.HashFile(src.Path)
             if err != nil {
-                log.Fatalf("❌ %s: source hash %s: %v", stepName, src.Path, err)
+                log.Fatalf("error: %s: source hash %s: %v", stepName, src.Path, err)
             }
             sourceHashes[src.Mount] = h
         }
@@ -136,37 +153,37 @@ func cmdRun(path string) {
         tag := registry.Tag(p.Registry, stepName, key)
         specHashes[stepName] = key
 
-        // Cache-Check: local-first, dann remote
+        // Cache check: local first, then remote
         local, remote := registry.Find(tag)
         switch {
         case local:
-            fmt.Printf("⏭  %s (lokal gecacht: %s)\n", stepName, tag)
+            fmt.Printf("CACHED %s (local: %s)\n", stepName, tag)
             outputDirs[stepName] = cachedOutputDir(tag)
             continue
         case remote:
-            fmt.Printf("⬇  %s (remote gecacht: %s)\n", stepName, tag)
+            fmt.Printf("PULL   %s (remote: %s)\n", stepName, tag)
             if err := registry.Pull(tag); err != nil {
-                log.Fatalf("❌ %s: pull fehlgeschlagen: %v", stepName, err)
+                log.Fatalf("error: %s: pull failed: %v", stepName, err)
             }
             outputDirs[stepName] = cachedOutputDir(tag)
             continue
         }
 
-        // Ausführen
-        fmt.Printf("▶  %s\n", stepName)
+        // Execute
+        fmt.Printf("RUN    %s\n", stepName)
 
         outDir, err := os.MkdirTemp("", "strike-"+stepName+"-")
         if err != nil {
             log.Fatal(err)
         }
 
-        // Secrets auflösen
+        // Resolve secrets
         secrets, err := resolveSecrets(step.Secrets, p.Secrets)
         if err != nil {
-            log.Fatalf("❌ %s: secrets: %v", stepName, err)
+            log.Fatalf("error: %s: secrets: %v", stepName, err)
         }
 
-        // Input-Mounts aus vorherigen Output-Verzeichnissen
+        // Input mounts from previous output directories
         inputMounts := []executor.Mount{}
         for _, inp := range step.Inputs {
             inputMounts = append(inputMounts, executor.Mount{
@@ -176,7 +193,7 @@ func cmdRun(path string) {
             })
         }
 
-        // Source-Mounts
+        // Source mounts
         sourceMounts := []executor.Mount{}
         for _, src := range step.Sources {
             sourceMounts = append(sourceMounts, executor.Mount{
@@ -194,35 +211,51 @@ func cmdRun(path string) {
             Secrets:      secrets,
         }
         if err := run.Execute(); err != nil {
-            log.Fatalf("❌ %s: ausführung fehlgeschlagen: %v", stepName, err)
+            log.Fatalf("error: %s: execution failed: %v", stepName, err)
         }
 
         outputDirs[stepName] = outDir
 
-        // Outputs in Registry pushen
-        if err := registry.PushArtifact(outDir, tag); err != nil {
-            log.Fatalf("❌ %s: push fehlgeschlagen: %v", stepName, err)
+        // Load OCI tar outputs and extract digests
+        for _, out := range step.Outputs {
+            if out.Type != "oci-tar" {
+                continue
+            }
+            tarPath := filepath.Join(outDir, filepath.Base(out.Path))
+            digest, err := executor.LoadOCITar(tarPath)
+            if err != nil {
+                log.Fatalf("error: %s: oci-tar load %q: %v", stepName, out.Name, err)
+            }
+            key := stepName + "/" + out.Name
+            ociDigests[key] = digest
+            fmt.Printf("       %s/%s -> %s\n", stepName, out.Name, digest)
         }
-        fmt.Printf("✅ %s → %s\n", stepName, tag)
+
+        // Push outputs to registry
+        if err := registry.PushArtifact(outDir, tag); err != nil {
+            log.Fatalf("error: %s: push failed: %v", stepName, err)
+        }
+        fmt.Printf("OK     %s -> %s\n", stepName, tag)
     }
 }
 
-// --- Hilfsfunktionen --------------------------------------------------------
+// --- helpers ----------------------------------------------------------------
 
 func resolveDigest(imageRef string) (string, error) {
-    // Image-Ref enthält bereits @sha256: — der Digest ist der Ref selbst
-    // Für den Hash nutzen wir den Teil nach dem @
+    // Image ref already contains @sha256: - extract the digest
     for i, c := range imageRef {
         if c == '@' {
             return imageRef[i+1:], nil
         }
     }
-    return "", fmt.Errorf("kein digest in image-ref %q — @sha256:... erforderlich", imageRef)
+
+    // Local image without digest (e.g. bootstrap root) - resolve via podman inspect
+    return executor.InspectDigest(imageRef)
 }
 
 func cachedOutputDir(tag string) string {
-    // Lokaler Output wird aus dem Container Store gemountet
-    // (vereinfacht — in der Praxis: skopeo copy containers-storage → lokales Dir)
+    // Local output mounted from container store
+    // (simplified - in practice: skopeo copy containers-storage -> local dir)
     return "/tmp/strike-cache/" + sanitize(tag)
 }
 
@@ -234,7 +267,7 @@ func resolveSecrets(
     for _, ref := range refs {
         source, ok := sources[ref.Name]
         if !ok {
-            return nil, fmt.Errorf("secret %q nicht in pipeline.secrets definiert", ref.Name)
+            return nil, fmt.Errorf("secret %q not defined in pipeline.secrets", ref.Name)
         }
         val, err := readSecret(string(source))
         if err != nil {
@@ -250,14 +283,14 @@ func readSecret(source string) (string, error) {
     case len(source) > 6 && source[:6] == "env://":
         val := os.Getenv(source[6:])
         if val == "" {
-            return "", fmt.Errorf("env-variable %q nicht gesetzt", source[6:])
+            return "", fmt.Errorf("env variable %q not set", source[6:])
         }
         return val, nil
     case len(source) > 7 && source[:7] == "file://":
         data, err := os.ReadFile(source[7:])
         return string(data), err
     default:
-        return "", fmt.Errorf("unbekannte secret-quelle: %q (unterstützt: env://, file://)", source)
+        return "", fmt.Errorf("unknown secret source: %q (supported: env://, file://)", source)
     }
 }
 

@@ -4,7 +4,7 @@ import (
     "os/exec"
 )
 
-// ExistsLocal prüft ob ein Image im lokalen Container Store liegt — kein Netzwerk
+// ExistsLocal checks if an image exists in the local container store (no network).
 func ExistsLocal(tag string) bool {
     err := exec.Command("skopeo", "inspect",
         "--raw",
@@ -13,7 +13,7 @@ func ExistsLocal(tag string) bool {
     return err == nil
 }
 
-// ExistsRemote prüft ob ein Image in der Remote-Registry existiert — ein Roundtrip
+// ExistsRemote checks if an image exists in a remote registry (one roundtrip).
 func ExistsRemote(tag string) bool {
     err := exec.Command("skopeo", "inspect",
         "--raw",
@@ -22,27 +22,27 @@ func ExistsRemote(tag string) bool {
     return err == nil
 }
 
-// Pull holt ein Image vom Remote in den lokalen Store
+// Pull fetches an image from a remote registry into the local store.
 func Pull(tag string) error {
     return exec.Command("podman", "pull", tag).Run()
 }
 
-// PushArtifact pushed ein lokales Verzeichnis oder File als OCI-Image in die Registry.
-// Nutzt oras für nicht-container Artefakte, podman push für OCI-Images.
+// PushArtifact pushes a local directory or file as an OCI image to the registry.
+// Uses oras for non-container artifacts, podman push for OCI images.
 func PushArtifact(localPath, tag string) error {
-    // für oci-tar: podman load + podman push
-    // für directory/file: oras push
-    // hier vereinfacht:
+    // For oci-tar: podman load + podman push
+    // For directory/file: oras push
+    // Simplified:
     return exec.Command("podman", "push", tag).Run()
 }
 
-// Find implementiert Local-first mit Remote-Fallback
+// Find implements local-first lookup with remote fallback.
 func Find(tag string) (bool, bool) {
     if ExistsLocal(tag) {
-        return true, false   // local=true, remote=false
+        return true, false
     }
     if ExistsRemote(tag) {
-        return false, true   // local=false, remote=true
+        return false, true
     }
     return false, false
 }

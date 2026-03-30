@@ -18,15 +18,13 @@ steps:
 
   # Stage 2: strike:stage-2 baut strike:stage-3
   - name: stage-2
-    image: strike:stage-2           # ← Output von stage-1
+    image_from:                     # ← Image aus stage-1 Output, digest-pinned at runtime
+      step: stage-1
+      output: stage2-image
     args: [run, /src/pipeline-stage2.yaml]
     sources:
       - path: .
         mount: /src
-    inputs:
-      - name: stage2-image
-        from: stage-1
-        mount: /run/stage2.tar      # wird vorher geladen
     outputs:
       - name: stage3-image
         type: oci-tar
