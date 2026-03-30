@@ -47,12 +47,15 @@ func Parse(path string) (*Lane, error) {
         return nil, fmt.Errorf("deserialize: %w", err)
     }
 
-    // Validate: exactly one of image or image_from per step
+    // Validate: exactly one of image, image_from, or pack per step
     for _, s := range p.Steps {
-        hasImage := s.Image != ""
-        hasImageFrom := s.ImageFrom != nil
-        if hasImage == hasImageFrom {
-            return nil, fmt.Errorf("step %q: exactly one of image or image_from required", s.Name)
+        count := 0
+        if s.Image != ""    { count++ }
+        if s.ImageFrom != nil { count++ }
+        if s.Pack != nil    { count++ }
+        if count != 1 {
+            return nil, fmt.Errorf(
+                "step %q: exactly one of image, image_from, or pack required", s.Name)
         }
     }
 

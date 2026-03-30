@@ -3,25 +3,14 @@
 registry: ghcr.io/istr/strike-cache
 
 secrets:
-  ghcr_token: env://GHCR_TOKEN
+  cosign_key:      env://COSIGN_PRIVATE_KEY
+  cosign_password: env://COSIGN_PASSWORD
+  ghcr_token:      env://GHCR_TOKEN
 
 steps:
-  # --- Stage 1: build strike from source using pinned Chainguard tooling ---
-
-  - name: keygen
-    image: cgr.dev/chainguard/melange@sha256:b45739a7d174386d8746774ee0bb9ed70a6ae42e6403088d9ecfa1a31473dcd8
-    args: [keygen, /out/melange.rsa]
-    outputs:
-      - name: signing_key
-        type: file
-        path: /out/melange.rsa
-      - name: signing_key_pub
-        type: file
-        path: /out/melange.rsa.pub
-
   - name: build_binary
     image: cgr.dev/chainguard/go@sha256:4ec098b553c8d74d9f01925578660b2bfcdee4ef45e5ab082250cf9675a0e28b
-    args: [build, -C, /src, -trimpath, -ldflags=-s -w, -o, /out/strike, .]
+    args: [build, -C, /src, -trimpath, "-ldflags=-s -w", -o, /out/strike, .]
     network: true
     sources:
       - path: .
@@ -31,47 +20,22 @@ steps:
         type: file
         path: /out/strike
 
-  - name: build_package
-    image: cgr.dev/chainguard/melange@sha256:b45739a7d174386d8746774ee0bb9ed70a6ae42e6403088d9ecfa1a31473dcd8
-    args: [build, /src/melange.yaml,
-           --signing-key, /run/key,
-           --arch, x86_64]
-    network: true
-    inputs:
-      - name: signing_key
-        from: keygen
-        mount: /run/key
-      - name: binary
-        from: build_binary
-        mount: /run/strike_binary
-    sources:
-      - path: ./melange.yaml
-        mount: /src/melange.yaml
-    outputs:
-      - name: packages
-        type: directory
-        path: /out/packages
-
   - name: build_image
-    image: cgr.dev/chainguard/apko@sha256:b08db34494f3f8cc7a02b10f04546213a89321cd11b94ff2dcff892d44815b43
-    args: [build, /src/apko.yaml, strike:stage_2, /out/image.tar]
-    network: true
-    inputs:
-      - name: packages
-        from: build_package
-        mount: /run/packages
-      - name: signing_key_pub
-        from: keygen
-        mount: /run/key.pub
-    sources:
-      - path: ./apko.yaml
-        mount: /src/apko.yaml
+    pack:
+      base: cgr.dev/chainguard/static@sha256:2fdfacc8d61164aa9e20909dceec7cc28b9feb66580e8e1a65b9f2443c53b61b
+      files:
+        - from: build_binary/binary
+          dest: /usr/bin/strike
+          mode: 0o755
+    secrets:
+      - name: cosign_key
+        env: COSIGN_PRIVATE_KEY
+      - name: cosign_password
+        env: COSIGN_PASSWORD
     outputs:
       - name: image
         type: oci-tar
         path: /out/image.tar
-
-  # --- Stage 2: built strike rebuilds itself to prove reproducibility ---
 
   - name: stage_2
     image_from:
@@ -86,8 +50,6 @@ steps:
       - name: stage_3_image
         type: oci-tar
         path: /out/image.tar
-
-  # --- Verify and publish ---
 
   - name: compare
     image_from:

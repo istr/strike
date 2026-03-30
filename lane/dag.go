@@ -67,6 +67,35 @@ func Build(p *Lane) (*DAG, error) {
 			d.edges[name] = append(d.edges[name], from)
 			d.reverse[from] = append(d.reverse[from], name)
 		}
+
+		// pack.files create DAG edges via "stepname/outputname" references
+		if s.Pack != nil {
+			for _, f := range s.Pack.Files {
+				parts := strings.SplitN(f.From, "/", 2)
+				if len(parts) != 2 {
+					return nil, fmt.Errorf("step %q: pack file from %q: expected stepname/outputname",
+						name, f.From)
+				}
+				fromStep, ok := d.Steps[parts[0]]
+				if !ok {
+					return nil, fmt.Errorf("step %q: pack file from %q: unknown step %q",
+						name, f.From, parts[0])
+				}
+				found := false
+				for _, out := range fromStep.Outputs {
+					if out.Name == parts[1] {
+						found = true
+						break
+					}
+				}
+				if !found {
+					return nil, fmt.Errorf("step %q: pack file from %q: output %q not found in step %q",
+						name, f.From, parts[1], parts[0])
+				}
+				d.edges[name] = append(d.edges[name], parts[0])
+				d.reverse[parts[0]] = append(d.reverse[parts[0]], name)
+			}
+		}
 	}
 
 	order, err := kahnSort(d)

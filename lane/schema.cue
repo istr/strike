@@ -47,18 +47,32 @@ package lane
     env:  string @go(Env)  // environment variable in the container
 }
 
+#PackFile: {
+    @go(PackFile)
+    from:  string @go(From)           // "stepname/outputname"
+    dest:  string & =~"^/" @go(Dest)  // absolute path inside the image
+    mode:  uint32 @go(Mode)           // e.g. 0o755
+}
+
+#PackSpec: {
+    @go(PackSpec)
+    base:  #ImageRef @go(Base)        // digest-pinned base image
+    files: [#PackFile, ...#PackFile] @go(Files)
+}
+
 #Step: {
     @go(Step)
     name:        string @go(Name)
     image?:      (#ImageRef | #LocalImageRef) @go(Image)  // pinned or local image
     image_from?: #ImageFrom @go(ImageFrom,optional=nillable) // image from previous step output
+    pack?:       #PackSpec @go(Pack,optional=nillable)     // native OCI image build
     args:        [...string] @go(Args)
     inputs:      [...#InputRef] @go(Inputs)
     sources:     [...#SourceRef] @go(Sources)
     outputs:     [...#OutputSpec] @go(Outputs)
     secrets:     [...#SecretRef] @go(Secrets)
     network?:    bool @go(Network) // default false (--network=none)
-    // constraint: exactly one of image or image_from — validated in Go
+    // constraint: exactly one of image, image_from, or pack — validated in Go
 }
 
 #Lane: {

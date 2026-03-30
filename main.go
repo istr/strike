@@ -5,6 +5,7 @@ import (
     "log"
     "os"
     "path/filepath"
+    "strings"
 
     "github.com/istr/strike/executor"
     "github.com/istr/strike/lane"
@@ -122,9 +123,15 @@ func cmdRun(path string) {
     for _, stepName := range dag.Order {
         step := dag.Steps[stepName]
 
-        // Resolve image digest: from pinned ref or from a previous step
+        // Resolve image digest: from pinned ref, previous step, or pack base
         var imageDigest string
-        if step.ImageFrom != nil {
+        if step.Pack != nil {
+            var err error
+            imageDigest, err = resolveDigest(string(step.Pack.Base))
+            if err != nil {
+                log.Fatalf("error: %s: pack base digest: %v", stepName, err)
+            }
+        } else if step.ImageFrom != nil {
             key := step.ImageFrom.Step + "/" + step.ImageFrom.Output
             digest, ok := ociDigests[key]
             if !ok {
@@ -181,6 +188,74 @@ func cmdRun(path string) {
         // Execute
         fmt.Printf("RUN    %s\n", stepName)
 
+        // --- pack steps: native Go, no container ---
+        if step.Pack != nil {
+            inputPaths := map[string]string{}
+            for _, f := range step.Pack.Files {
+                parts := strings.SplitN(f.From, "/", 2)
+                fromStep := dag.Steps[parts[0]]
+                var hostPath string
+                for _, out := range fromStep.Outputs {
+                    if out.Name == parts[1] {
+                        hostPath = filepath.Join(outputDirs[parts[0]], filepath.Base(out.Path))
+                        break
+                    }
+                }
+                if hostPath == "" {
+                    log.Fatalf("error: %s: pack file from %q: output not found", stepName, f.From)
+                }
+                inputPaths[f.From] = hostPath
+            }
+
+            var signingKey, keyPassword []byte
+            for _, ref := range step.Secrets {
+                source, ok := p.Secrets[ref.Name]
+                if !ok {
+                    log.Fatalf("error: %s: secret %q not defined", stepName, ref.Name)
+                }
+                val, err := readSecret(string(source))
+                if ref.Name == "cosign_key" {
+                    if err != nil {
+                        log.Fatalf("error: %s: secret cosign_key: %v", stepName, err)
+                    }
+                    signingKey = []byte(val)
+                }
+                if ref.Name == "cosign_password" {
+                    if err != nil {
+                        log.Fatalf("error: %s: secret cosign_password: %v", stepName, err)
+                    }
+                    keyPassword = []byte(val)
+                }
+            }
+
+            outDir, err := os.MkdirTemp("", "strike-"+stepName+"-")
+            if err != nil {
+                log.Fatal(err)
+            }
+
+            tarPath := filepath.Join(outDir, filepath.Base(step.Outputs[0].Path))
+            if err := executor.Pack(executor.PackOpts{
+                Spec:        step.Pack,
+                InputPaths:  inputPaths,
+                OutputPath:  tarPath,
+                SigningKey:  signingKey,
+                KeyPassword: keyPassword,
+            }); err != nil {
+                log.Fatalf("error: %s: pack failed: %v", stepName, err)
+            }
+
+            outputDirs[stepName] = outDir
+
+            digest, err := executor.LoadOCITar(tarPath)
+            if err != nil {
+                log.Fatalf("error: %s: oci-tar load: %v", stepName, err)
+            }
+            ociDigests[stepName+"/"+step.Outputs[0].Name] = digest
+            fmt.Printf("OK     %s -> %s\n", stepName, digest)
+            continue
+        }
+
+        // --- container steps ---
         outDir, err := os.MkdirTemp("", "strike-"+stepName+"-")
         if err != nil {
             log.Fatal(err)
