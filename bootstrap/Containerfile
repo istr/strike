@@ -7,9 +7,7 @@
 #
 FROM docker.io/library/golang:1.26-alpine@sha256:d337ecb3075f0ec76d81652b3fa52af47c3eba6c8ba9f93b835752df7ce62946
 ARG GIT_COMMIT
-RUN printf 'root:100000:65536' >> /etc/subuid
-RUN printf 'root:100000:65536' >> /etc/subgid
-RUN apk add --no-cache cue-cli git podman fuse-overlayfs shadow-subids
+RUN apk add --no-cache cue-cli git podman fuse-overlayfs
 RUN mkdir -p /etc/containers
 RUN printf '[storage]\ndriver = "overlay"\n[storage.options.overlay]\nmount_program = "/usr/bin/fuse-overlayfs"\n' > /etc/containers/storage.conf
 WORKDIR /build/strike
