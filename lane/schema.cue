@@ -67,6 +67,7 @@ package lane
     image_from?: #ImageFrom @go(ImageFrom,optional=nillable) // image from previous step output
     pack?:       #PackSpec @go(Pack,optional=nillable)     // native OCI image build
     args:        [...string] @go(Args)
+    env:         [string]: string @go(Env)
     inputs:      [...#InputRef] @go(Inputs)
     sources:     [...#SourceRef] @go(Sources)
     outputs:     [...#OutputSpec] @go(Outputs)
