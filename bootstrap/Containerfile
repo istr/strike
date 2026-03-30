@@ -2,15 +2,18 @@
 #
 # Prerequisite: you have podman installed on your host.
 #
-# podman build -t strike:stage-1 https://raw.githubusercontent.com/istr/strike/<commit-sha>/bootstrap/Containerfile
+# GIT_COMMIT=<commit-sha> ; podman build -t strike:stage-1 --build-arg GIT_COMMIT=${GIT_COMMIT} https://raw.githubusercontent.com/istr/strike/${GIT_COMMIT}/bootstrap/Containerfile
 # podman run strike:stage-1
 #
 FROM docker.io/library/golang:1.26-alpine@sha256:d337ecb3075f0ec76d81652b3fa52af47c3eba6c8ba9f93b835752df7ce62946
-RUN apk add --no-cache cue-cli git podman 
-RUN git clone https://github.com/istr/strike /build/strike
+ARG GIT_COMMIT
+RUN apk add --no-cache cue-cli git podman
 WORKDIR /build/strike
+RUN git init \
+ && git fetch --depth 1 https://github.com/istr/strike ${GIT_COMMIT} \
+ && git checkout FETCH_HEAD
 RUN cue exp gengotypes ./pipeline/
 RUN go get
-RUN go build -trimpath -ldflags="-s -w" -o strike .
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o strike .
 ENTRYPOINT ["/build/strike/strike"]
 CMD ["run"]
