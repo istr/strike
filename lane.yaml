@@ -11,6 +11,8 @@ steps:
   - name: build_binary
     image: cgr.dev/chainguard/go@sha256:4ec098b553c8d74d9f01925578660b2bfcdee4ef45e5ab082250cf9675a0e28b
     args: [build, -C, /src, -trimpath, "-ldflags=-s -w", -o, /out/strike, .]
+    env:
+      CGO_ENABLED: "0"
     network: true
     sources:
       - path: .
@@ -41,7 +43,7 @@ steps:
     image_from:
       step: build_image
       output: image
-    args: [run, /src/bootstrap/lace.yaml]
+    args: [/usr/bin/strike, run, /src/bootstrap/lace.yaml]
     network: true
     sources:
       - path: .
