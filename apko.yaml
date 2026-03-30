@@ -1,0 +1,13 @@
+contents:
+  repositories:
+    - /run/packages
+  keyring:
+    - /run/key.pub
+  packages:
+    - strike
+
+entrypoint:
+  command: /usr/bin/strike
+
+archs:
+  - x86_64

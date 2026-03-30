@@ -1,0 +1,11 @@
+package:
+  name: strike
+  version: 0.1.0
+  epoch: 0
+  description: Reproducible rootless CI/CD lane executor
+  copyright:
+    - license: MIT
+
+pipeline:
+  - runs: |
+      install -Dm755 /run/strike_binary "${{targets.destdir}}"/usr/bin/strike
