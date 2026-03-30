@@ -123,11 +123,10 @@ func cmdRun(path string) {
             }
             imageDigest = digest
             // Set image so executor uses the loaded image by digest
-            step.Image = pipeline.ImageRef(
-                step.ImageFrom.Step + "-" + step.ImageFrom.Output + "@" + digest)
+            step.Image = step.ImageFrom.Step + "-" + step.ImageFrom.Output + "@" + digest
         } else {
             var err error
-            imageDigest, err = resolveDigest(string(step.Image))
+            imageDigest, err = resolveDigest(step.Image)
             if err != nil {
                 log.Fatalf("error: %s: image digest: %v", stepName, err)
             }

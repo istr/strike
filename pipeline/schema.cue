@@ -51,7 +51,7 @@ package pipeline
     @go(Step)
     name:        string @go(Name)
     image?:      (#ImageRef | #LocalImageRef) @go(Image)  // pinned or local image
-    image_from?: #ImageFrom @go(ImageFrom)               // image from previous step output
+    image_from?: #ImageFrom @go(ImageFrom,optional=nillable) // image from previous step output
     args:        [...string] @go(Args)
     inputs:      [...#InputRef] @go(Inputs)
     sources:     [...#SourceRef] @go(Sources)

@@ -49,7 +49,7 @@ func (r Run) Execute() error {
         os.Setenv(envName, val)
     }
 
-    args = append(args, string(r.Step.Image))
+    args = append(args, r.Step.Image)
     args = append(args, r.Step.Args...)
 
     cmd := exec.Command("podman", args...)
