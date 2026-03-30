@@ -23,7 +23,7 @@ or mitigation plan within 14 days of confirmation.
 
 The following are in scope for security reports:
 
-- Container escape or privilege escalation via strike pipelines
+- Container escape or privilege escalation via strike lanes
 - Bypass of `--network=none` isolation
 - Secret leakage through process arguments, logs, or cache artifacts
 - Digest verification bypass (image pinning, spec hash integrity)

@@ -1,4 +1,4 @@
-package pipeline
+package lane
 
 import (
     _ "embed"
@@ -15,9 +15,9 @@ import (
 //go:embed schema.cue
 var schema string
 
-// Parse reads a pipeline YAML file, validates it against the embedded CUE schema,
-// and returns a typed Pipeline instance.
-func Parse(path string) (*Pipeline, error) {
+// Parse reads a lane YAML file, validates it against the embedded CUE schema,
+// and returns a typed Lane instance.
+func Parse(path string) (*Lane, error) {
     raw, err := os.ReadFile(path)
     if err != nil {
         return nil, fmt.Errorf("read: %w", err)
@@ -40,9 +40,9 @@ func Parse(path string) (*Pipeline, error) {
         return nil, fmt.Errorf("validation:\n%w", err)
     }
 
-    // Deserialize from JSON into typed Pipeline struct.
+    // Deserialize from JSON into typed Lane struct.
     // Using JSON (not YAML) because gengotypes only emits json struct tags.
-    var p Pipeline
+    var p Lane
     if err := json.Unmarshal(asJSON, &p); err != nil {
         return nil, fmt.Errorf("deserialize: %w", err)
     }
@@ -63,9 +63,9 @@ func validate(data []byte) error {
     ctx := cuecontext.New()
 
     compiledSchema := ctx.CompileString(schema).
-        LookupPath(cue.ParsePath("#Pipeline"))
+        LookupPath(cue.ParsePath("#Lane"))
 
-    expr, err := cuejson.Extract("pipeline.yaml", data)
+    expr, err := cuejson.Extract("lane.yaml", data)
     if err != nil {
         return err
     }

@@ -14,12 +14,12 @@ expensive to maintain, and hostile to reproducibility.
 strike takes a different approach:
 
 - **Small footprint.** The entire executor is a single static binary, a few
-  hundred lines of Go. The pipeline schema is defined in CUE. There is no
+  hundred lines of Go. The lane schema is defined in CUE. There is no
   daemon, no database, no sidecar. We actively resist growth in lines of code
   and will push back on contributions that add complexity without clear
   justification.
 
-- **No shell.** Pipelines do not use shell interpreters. Steps are an image
+- **No shell.** Lanes are flat. They do not use shell interpreters. Steps are an image
   reference and an args array. There are no `run:` blocks, no `bash -c`, no
   string interpolation, no template engines. This is a core invariant, not a
   missing feature.
@@ -56,7 +56,7 @@ discuss the approach.
 ## What we will not accept
 
 **Shell execution.** No `sh -c`, no embedded scripts, no template expansion
-in pipeline definitions. This is the line we will not cross.
+in lane definitions. This is the line we will not cross.
 
 **Secondary state.** strike does not maintain state beyond what is in the
 container store and the OCI registry. No local databases, no lock files, no

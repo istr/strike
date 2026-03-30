@@ -1,7 +1,7 @@
-// pipeline/schema.cue
-package pipeline
+// lane/schema.cue
+package lane
 
-@go(pipeline) // generated go package name
+@go(lane) // generated go package name
 
 // Enforce digest format - no tag alias possible
 #ImageRef: =~"^.+@sha256:[a-f0-9]{64}$"
@@ -43,7 +43,7 @@ package pipeline
 
 #SecretRef: {
     @go(SecretRef)
-    name: string @go(Name) // references pipeline.secrets
+    name: string @go(Name) // references lane.secrets
     env:  string @go(Env)  // environment variable in the container
 }
 
@@ -60,8 +60,8 @@ package pipeline
     // constraint: exactly one of image or image_from — validated in Go
 }
 
-#Pipeline: {
-    @go(Pipeline)
+#Lane: {
+    @go(Lane)
     registry: string & =~"^[a-z0-9./-]+" @go(Registry)
     secrets:  [string]: #SecretSource @go(Secrets)
     steps:    [#Step, ...#Step] @go(Steps) // at least one step

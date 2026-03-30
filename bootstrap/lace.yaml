@@ -1,24 +1,24 @@
-# Builds strike:stage-2 from source using Chainguard tooling.
-# Input: source code, Output: strike:stage-2 OCI tar
+# Rebuild strike from source to prove reproducibility.
+# Run by stage_2 inside the built strike image with source at /src.
 registry: localhost/strike-bootstrap
 
 steps:
   - name: keygen
     image: cgr.dev/chainguard/melange@sha256:b45739a7d174386d8746774ee0bb9ed70a6ae42e6403088d9ecfa1a31473dcd8
-    args: [keygen, --output, /out/melange.rsa]
+    args: [keygen, /out/melange.rsa]
     outputs:
       - name: signing_key
         type: file
         path: /out/melange.rsa
-      - name: signing_key-pub
+      - name: signing_key_pub
         type: file
         path: /out/melange.rsa.pub
 
   - name: build_binary
     image: cgr.dev/chainguard/go@sha256:4ec098b553c8d74d9f01925578660b2bfcdee4ef45e5ab082250cf9675a0e28b
-    args: [build, -trimpath, -ldflags=-s -w, -o, /out/strike, ./...]
+    args: [build, -C, /src, -trimpath, -ldflags=-s -w, -o, /out/strike, ./...]
     sources:
-      - path: .
+      - path: /src
         mount: /src
     outputs:
       - name: binary
@@ -28,7 +28,7 @@ steps:
   - name: build_package
     image: cgr.dev/chainguard/melange@sha256:b45739a7d174386d8746774ee0bb9ed70a6ae42e6403088d9ecfa1a31473dcd8
     args: [build, /src/melange.yaml,
-           --signing_key, /run/key,
+           --signing-key, /run/key,
            --arch, x86_64]
     inputs:
       - name: signing_key
@@ -38,25 +38,25 @@ steps:
         from: build_binary
         mount: /run/strike_binary
     sources:
-      - path: ./melange.yaml
+      - path: /src/melange.yaml
         mount: /src/melange.yaml
     outputs:
       - name: packages
         type: directory
         path: /out/packages
 
-  - name: build_image_stage2
+  - name: build_image
     image: cgr.dev/chainguard/apko@sha256:b08db34494f3f8cc7a02b10f04546213a89321cd11b94ff2dcff892d44815b43
-    args: [build, /src/apko.yaml, strike:stage-2, /out/image.tar]
+    args: [build, /src/apko.yaml, strike:stage_3, /out/image.tar]
     inputs:
       - name: packages
         from: build_package
         mount: /run/packages
-      - name: signing_key-pub
+      - name: signing_key_pub
         from: keygen
         mount: /run/key.pub
     sources:
-      - path: ./apko.yaml
+      - path: /src/apko.yaml
         mount: /src/apko.yaml
     outputs:
       - name: image

@@ -8,14 +8,14 @@ import (
     "path/filepath"
     "sort"
 
-    "github.com/istr/strike/pipeline"
+    "github.com/istr/strike/lane"
 )
 
 // SpecHash computes the spec hash of a step (Merkle tree over the DAG).
 // Inputs are the spec hashes of producing steps, not their contents -
 // fully computable before execution.
 func SpecHash(
-    step *pipeline.Step,
+    step *lane.Step,
     imageDigest string,                    // sha256 digest of the image
     inputHashes map[string]string,         // step-name -> spec hash of producing step
     sourceHashes map[string]string,        // mount-path -> sha256 of source file

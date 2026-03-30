@@ -1,3 +1,3 @@
 strike
-pipeline/cue_types_pipeline_gen.go
+lane/cue_types_lane_gen.go
 .vscode

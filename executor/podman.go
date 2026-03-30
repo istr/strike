@@ -6,11 +6,11 @@ import (
     "os/exec"
     "strings"
 
-    "github.com/istr/strike/pipeline"
+    "github.com/istr/strike/lane"
 )
 
 type Run struct {
-    Step        *pipeline.Step
+    Step        *lane.Step
     InputMounts []Mount
     SourceMounts []Mount
     OutputDir   string

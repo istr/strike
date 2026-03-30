@@ -7,19 +7,19 @@ import (
     "path/filepath"
 
     "github.com/istr/strike/executor"
-    "github.com/istr/strike/pipeline"
+    "github.com/istr/strike/lane"
     "github.com/istr/strike/registry"
 )
 
-const usage = `strike - reproducible, rootless CI/CD pipelines
+const usage = `strike - reproducible, rootless CI/CD lanes
 
 Usage:
-  strike run      [pipeline.yaml]   Run a pipeline
-  strike validate [pipeline.yaml]   Validate without running
-  strike dag      [pipeline.yaml]   Show DAG and exit
+  strike run      [lane.yaml]   Run a lane
+  strike validate [lane.yaml]   Validate without running
+  strike dag      [lane.yaml]   Show DAG and exit
   strike compare  <file1> <file2> <output>   Compare two files by SHA-256
 
-Default file: pipeline.yaml in the current directory
+Default file: lane.yaml in the current directory
 `
 
 func main() {
@@ -39,18 +39,18 @@ func main() {
         return
     }
 
-    pipelineFile := "pipeline.yaml"
+    laneFile := "lane.yaml"
     if len(os.Args) >= 3 {
-        pipelineFile = os.Args[2]
+        laneFile = os.Args[2]
     }
 
     switch os.Args[1] {
     case "validate":
-        cmdValidate(pipelineFile)
+        cmdValidate(laneFile)
     case "dag":
-        cmdDAG(pipelineFile)
+        cmdDAG(laneFile)
     case "run":
-        cmdRun(pipelineFile)
+        cmdRun(laneFile)
     default:
         fmt.Print(usage)
         os.Exit(1)
@@ -60,11 +60,11 @@ func main() {
 // --- validate ---------------------------------------------------------------
 
 func cmdValidate(path string) {
-    p, err := pipeline.Parse(path)
+    p, err := lane.Parse(path)
     if err != nil {
         log.Fatalf("error: %v", err)
     }
-    if _, err := pipeline.Build(p); err != nil {
+    if _, err := lane.Build(p); err != nil {
         log.Fatalf("error: DAG: %v", err)
     }
     fmt.Printf("ok: %s is valid (%d steps)\n", path, len(p.Steps))
@@ -73,11 +73,11 @@ func cmdValidate(path string) {
 // --- dag --------------------------------------------------------------------
 
 func cmdDAG(path string) {
-    p, err := pipeline.Parse(path)
+    p, err := lane.Parse(path)
     if err != nil {
         log.Fatalf("error: %v", err)
     }
-    dag, err := pipeline.Build(p)
+    dag, err := lane.Build(p)
     if err != nil {
         log.Fatalf("error: %v", err)
     }
@@ -103,11 +103,11 @@ func cmdDAG(path string) {
 // --- run --------------------------------------------------------------------
 
 func cmdRun(path string) {
-    p, err := pipeline.Parse(path)
+    p, err := lane.Parse(path)
     if err != nil {
         log.Fatalf("error: %v", err)
     }
-    dag, err := pipeline.Build(p)
+    dag, err := lane.Build(p)
     if err != nil {
         log.Fatalf("error: %v", err)
     }
@@ -289,14 +289,14 @@ func cachedOutputDir(tag string) string {
 }
 
 func resolveSecrets(
-    refs []pipeline.SecretRef,
-    sources map[string]pipeline.SecretSource,
+    refs []lane.SecretRef,
+    sources map[string]lane.SecretSource,
 ) (map[string]string, error) {
     result := map[string]string{}
     for _, ref := range refs {
         source, ok := sources[ref.Name]
         if !ok {
-            return nil, fmt.Errorf("secret %q not defined in pipeline.secrets", ref.Name)
+            return nil, fmt.Errorf("secret %q not defined in lane.secrets", ref.Name)
         }
         val, err := readSecret(string(source))
         if err != nil {

@@ -1,4 +1,4 @@
-package pipeline
+package lane
 
 import (
 	"fmt"
@@ -12,7 +12,7 @@ type DAG struct {
 	Order   []string
 }
 
-func Build(p *Pipeline) (*DAG, error) {
+func Build(p *Lane) (*DAG, error) {
 	d := &DAG{
 		Steps:   make(map[string]*Step),
 		edges:   make(map[string][]string),
@@ -107,7 +107,7 @@ func kahnSort(d *DAG) ([]string, error) {
 	}
 
 	if len(order) != len(d.Steps) {
-		return nil, fmt.Errorf("cyclic dependency in pipeline graph")
+		return nil, fmt.Errorf("cyclic dependency in lane graph")
 	}
 	return order, nil
 }

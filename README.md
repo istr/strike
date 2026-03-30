@@ -1,16 +1,16 @@
 # strike
 
-Reproducible, rootless CI/CD pipelines. No shell. No root. No local toolchain.
+Reproducible, rootless CI/CD lanes. No shell. No root. No local toolchain.
 
 ## What is strike?
 
-strike is a cloud-native pipeline executor that treats containers as the only
+strike is a cloud-native lane executor that treats containers as the only
 unit of computation. Every step runs in a pinned, digest-verified OCI image
 with `--network=none`. There is no shell interpreter, no script block
 evaluation, no implicit host dependency beyond a working rootless container
 runtime.
 
-Pipelines are declared in YAML, validated against a CUE schema, and executed as
+Lanes are declared in YAML, validated against a CUE schema, and executed as
 a content-addressable DAG. Outputs are cached as OCI artifacts in any standard
 registry.
 
@@ -33,46 +33,46 @@ fetched by pinned commit hash from GitHub -- no local clone required.
 ```sh
 GIT_COMMIT=810b8812549187da2c73b0ac142f46db5d8b036c
 
-podman build -t strike:stage-1 \
+podman build -t strike:stage_1 \
   --build-arg GIT_COMMIT=${GIT_COMMIT} \
   https://raw.githubusercontent.com/istr/strike/${GIT_COMMIT}/bootstrap/Containerfile
 ```
 
-This builds the stage-1 image from a fully pinned source: the Containerfile is
+This builds the stage_1 image from a fully pinned source: the Containerfile is
 fetched by commit SHA, and the base image is pinned by digest. Inside the
 container, git fetches the exact commit, builds the strike binary, and produces
 a self-contained executor image.
 
-Then run the bootstrap pipeline:
+Then run the bootstrap lane:
 
 ```sh
-podman run strike:stage-1
+podman run strike:stage_1
 ```
 
-This executes the multi-stage bootstrap pipeline:
+This executes the bootstrap lane (`lane.yaml`):
 
-1. **stage-1** -- the freshly built strike runs `pipeline-stage1.yaml` to
-   produce a clean `strike:stage-2` image using Chainguard tooling (melange,
-   apko).
-2. **stage-2** -- `strike:stage-2` rebuilds itself into `strike:stage-3` using
-   `pipeline-stage2.yaml`. The stage-2 image is resolved via `image_from`,
-   which pins it by the manifest digest extracted at runtime.
-3. **compare** -- verifies that stage-2 and stage-3 produce identical images,
+1. **keygen, build_binary, build_package, build_image** -- strike builds itself
+   from source using pinned Chainguard tooling (go, melange, apko), producing
+   the `strike:stage_2` image.
+2. **stage_2** -- `strike:stage_2` rebuilds itself into `strike:stage_3` by
+   running `bootstrap/lace.yaml`. The stage_2 image is resolved via
+   `image_from`, pinned by the manifest digest extracted at runtime.
+3. **compare** -- verifies that stage_2 and stage_3 produce identical images,
    proving the build is reproducible.
 4. **publish** -- pushes the verified image to the registry.
 
 ## How it works
 
-### Pipeline schema
+### Lane schema
 
-Pipelines are YAML files validated against an embedded CUE schema. Every
+Lanes are YAML files validated against an embedded CUE schema. Every
 external container image must be SHA-256 pinned:
 
 ```yaml
 steps:
   - name: build
     image: cgr.dev/chainguard/go@sha256:abc123...
-    args: [build, -o, /out/binary, ./...]
+    args: [build, -C, /src, -o, /out/binary, ./...]
     sources:
       - path: .
         mount: /src
@@ -97,11 +97,11 @@ executor loads the tar into the local container store and pins the image by its
 manifest digest, creating an implicit DAG edge:
 
 ```yaml
-  - name: stage-2
+  - name: stage_2
     image_from:
-      step: stage-1
-      output: stage2-image
-    args: [run, /src/pipeline-stage2.yaml]
+      step: build_image
+      output: image
+    args: [run, /src/bootstrap/lace.yaml]
 ```
 
 ### Content-addressable caching
@@ -117,23 +117,23 @@ images in any standard registry.
 
 ### No shell
 
-strike pipelines do not use shell interpreters. Steps specify an image and an
+strike lanes do not use shell interpreters. Steps specify an image and an
 args array. There are no `run:` blocks, no `bash -c`, no string interpolation.
 Secrets are passed as environment variables, never written to process arguments.
 
 ## Project structure
 
 ```
-main.go                   CLI entry point (run, validate, dag)
-executor/podman.go        Container execution via podman
-pipeline/schema.cue       CUE schema (source of truth)
-pipeline/parse.go         YAML parsing + CUE validation
-pipeline/dag.go           DAG construction + topological sort
-registry/cache.go         Spec hashing + cache tagging
-registry/client.go        Registry operations (skopeo, podman)
-bootstrap/Containerfile   Self-contained bootstrap image
-bootstrap/pipeline-*.yaml Stage pipelines for bootstrap
-pipeline.yaml             Top-level bootstrap orchestration
+main.go                 CLI entry point (run, validate, dag, compare)
+executor/podman.go      Container execution via podman
+lane/schema.cue         CUE schema (source of truth)
+lane/parse.go           YAML parsing + CUE validation
+lane/dag.go             DAG construction + topological sort
+registry/cache.go       Spec hashing + cache tagging
+registry/client.go      Registry operations (skopeo, podman)
+bootstrap/Containerfile Self-contained bootstrap image
+bootstrap/lace.yaml     Rebuild lane for reproducibility proof
+lane.yaml               Top-level bootstrap lane
 ```
 
 ## License

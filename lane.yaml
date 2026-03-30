@@ -1,0 +1,124 @@
+# Build strike, prove reproducibility, publish.
+# Run: strike run lane.yaml
+registry: ghcr.io/istr/strike-cache
+
+secrets:
+  ghcr_token: env://GHCR_TOKEN
+
+steps:
+  # --- Stage 1: build strike from source using pinned Chainguard tooling ---
+
+  - name: keygen
+    image: cgr.dev/chainguard/melange@sha256:b45739a7d174386d8746774ee0bb9ed70a6ae42e6403088d9ecfa1a31473dcd8
+    args: [keygen, /out/melange.rsa]
+    outputs:
+      - name: signing_key
+        type: file
+        path: /out/melange.rsa
+      - name: signing_key_pub
+        type: file
+        path: /out/melange.rsa.pub
+
+  - name: build_binary
+    image: cgr.dev/chainguard/go@sha256:4ec098b553c8d74d9f01925578660b2bfcdee4ef45e5ab082250cf9675a0e28b
+    args: [build, -C, /src, -trimpath, -ldflags=-s -w, -o, /out/strike, ./...]
+    sources:
+      - path: .
+        mount: /src
+    outputs:
+      - name: binary
+        type: file
+        path: /out/strike
+
+  - name: build_package
+    image: cgr.dev/chainguard/melange@sha256:b45739a7d174386d8746774ee0bb9ed70a6ae42e6403088d9ecfa1a31473dcd8
+    args: [build, /src/melange.yaml,
+           --signing-key, /run/key,
+           --arch, x86_64]
+    inputs:
+      - name: signing_key
+        from: keygen
+        mount: /run/key
+      - name: binary
+        from: build_binary
+        mount: /run/strike_binary
+    sources:
+      - path: ./melange.yaml
+        mount: /src/melange.yaml
+    outputs:
+      - name: packages
+        type: directory
+        path: /out/packages
+
+  - name: build_image
+    image: cgr.dev/chainguard/apko@sha256:b08db34494f3f8cc7a02b10f04546213a89321cd11b94ff2dcff892d44815b43
+    args: [build, /src/apko.yaml, strike:stage_2, /out/image.tar]
+    inputs:
+      - name: packages
+        from: build_package
+        mount: /run/packages
+      - name: signing_key_pub
+        from: keygen
+        mount: /run/key.pub
+    sources:
+      - path: ./apko.yaml
+        mount: /src/apko.yaml
+    outputs:
+      - name: image
+        type: oci-tar
+        path: /out/image.tar
+
+  # --- Stage 2: built strike rebuilds itself to prove reproducibility ---
+
+  - name: stage_2
+    image_from:
+      step: build_image
+      output: image
+    args: [run, /src/bootstrap/lace.yaml]
+    sources:
+      - path: .
+        mount: /src
+    outputs:
+      - name: stage_3_image
+        type: oci-tar
+        path: /out/image.tar
+
+  # --- Verify and publish ---
+
+  - name: compare
+    image_from:
+      step: build_image
+      output: image
+    args: [compare, /run/stage_2.tar, /run/stage_3.tar, /out/result]
+    inputs:
+      - name: image
+        from: build_image
+        mount: /run/stage_2.tar
+      - name: stage_3_image
+        from: stage_2
+        mount: /run/stage_3.tar
+    outputs:
+      - name: result
+        type: file
+        path: /out/result
+
+  - name: publish
+    image: quay.io/skopeo/stable@sha256:3ee9454e356fdda4ebd10157b5692b84537131109c4996782bb02957041ac000
+    args:
+      - copy
+      - oci-archive:/run/stage_2.tar
+      - docker://ghcr.io/istr/strike:latest
+    inputs:
+      - name: image
+        from: build_image
+        mount: /run/stage_2.tar
+      - name: result
+        from: compare
+        mount: /run/compare_result
+    secrets:
+      - name: ghcr_token
+        env: REGISTRY_AUTH_FILE
+    outputs:
+      - name: published_ref
+        type: file
+        path: /out/ref.txt

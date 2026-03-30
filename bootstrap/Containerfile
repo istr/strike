@@ -14,7 +14,7 @@ WORKDIR /build/strike
 RUN git init \
  && git fetch --depth 1 https://github.com/istr/strike ${GIT_COMMIT} \
  && git checkout FETCH_HEAD
-RUN cue exp gengotypes ./pipeline/
+RUN cue exp gengotypes ./lane/
 RUN go get
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o strike .
 ENTRYPOINT ["/build/strike/strike"]
