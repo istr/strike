@@ -1,10 +1,10 @@
-# Führt "strike run pipeline-stage2.yaml" aus
-# Input: Quellcode, Output: strike:stage-2
-registry: localhost/strike-bootstrap   # nur lokal, kein push
+# Rebuilds strike from stage-2 to prove reproducibility.
+# Input: source code, Output: strike:stage-3 OCI tar
+registry: localhost/strike-bootstrap
 
 steps:
   - name: keygen
-    image: cgr.dev/chainguard/melange@sha256:<digest>
+    image: cgr.dev/chainguard/melange@sha256:b45739a7d174386d8746774ee0bb9ed70a6ae42e6403088d9ecfa1a31473dcd8
     args: [keygen, --output, /out/melange.rsa]
     outputs:
       - name: signing-key
@@ -15,7 +15,7 @@ steps:
         path: /out/melange.rsa.pub
 
   - name: build-binary
-    image: cgr.dev/chainguard/go@sha256:<digest>
+    image: cgr.dev/chainguard/go@sha256:4ec098b553c8d74d9f01925578660b2bfcdee4ef45e5ab082250cf9675a0e28b
     args: [build, -trimpath, -ldflags=-s -w, -o, /out/strike, ./...]
     sources:
       - path: .
@@ -26,7 +26,7 @@ steps:
         path: /out/strike
 
   - name: build-package
-    image: cgr.dev/chainguard/melange@sha256:<digest>
+    image: cgr.dev/chainguard/melange@sha256:b45739a7d174386d8746774ee0bb9ed70a6ae42e6403088d9ecfa1a31473dcd8
     args: [build, /src/melange.yaml,
            --signing-key, /run/key,
            --arch, x86_64]
@@ -46,7 +46,7 @@ steps:
         path: /out/packages
 
   - name: build-image-stage3
-    image: cgr.dev/chainguard/apko@sha256:<digest>
+    image: cgr.dev/chainguard/apko@sha256:b08db34494f3f8cc7a02b10f04546213a89321cd11b94ff2dcff892d44815b43
     args: [build, /src/apko.yaml, strike:stage-3, /out/image.tar]
     inputs:
       - name: packages

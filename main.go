@@ -17,6 +17,7 @@ Usage:
   strike run      [pipeline.yaml]   Run a pipeline
   strike validate [pipeline.yaml]   Validate without running
   strike dag      [pipeline.yaml]   Show DAG and exit
+  strike compare  <file1> <file2> <output>   Compare two files by SHA-256
 
 Default file: pipeline.yaml in the current directory
 `
@@ -27,6 +28,15 @@ func main() {
     if len(os.Args) < 2 {
         fmt.Print(usage)
         os.Exit(1)
+    }
+
+    // compare has its own arg layout
+    if os.Args[1] == "compare" {
+        if len(os.Args) != 5 {
+            log.Fatal("usage: strike compare <file1> <file2> <output>")
+        }
+        cmdCompare(os.Args[2], os.Args[3], os.Args[4])
+        return
     }
 
     pipelineFile := "pipeline.yaml"
@@ -236,6 +246,26 @@ func cmdRun(path string) {
         }
         fmt.Printf("OK     %s -> %s\n", stepName, tag)
     }
+}
+
+// --- compare ----------------------------------------------------------------
+
+func cmdCompare(file1, file2, output string) {
+    h1, err := registry.HashFile(file1)
+    if err != nil {
+        log.Fatalf("error: %s: %v", file1, err)
+    }
+    h2, err := registry.HashFile(file2)
+    if err != nil {
+        log.Fatalf("error: %s: %v", file2, err)
+    }
+    if h1 != h2 {
+        log.Fatalf("error: files differ\n  %s: %s\n  %s: %s", file1, h1, file2, h2)
+    }
+    if err := os.WriteFile(output, []byte(h1+"\n"), 0644); err != nil {
+        log.Fatalf("error: write %s: %v", output, err)
+    }
+    fmt.Printf("ok: %s\n", h1)
 }
 
 // --- helpers ----------------------------------------------------------------

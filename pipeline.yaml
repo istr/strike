@@ -4,45 +4,36 @@ secrets:
   ghcr-token: env://GHCR_TOKEN
 
 steps:
-  # Stage 1: dirty strike führt sich selbst aus im stage-1 container
+  # Stage 1: bootstrap strike runs itself inside the stage-1 container
   - name: stage-1
-    image: strike:stage-1           # ← kein digest: lokal gebaut, kein registry
-    args: [run, /src/pipeline-stage1.yaml]
+    image: strike:stage-1
+    args: [run, /src/bootstrap/pipeline-stage1.yaml]
     sources:
       - path: .
         mount: /src
     outputs:
       - name: stage2-image
         type: oci-tar
-        path: /out/image.tar        # strike:stage-2
+        path: /out/image.tar
 
-  # Stage 2: strike:stage-2 baut strike:stage-3
+  # Stage 2: strike:stage-2 rebuilds itself into strike:stage-3
   - name: stage-2
-    image_from:                     # ← Image aus stage-1 Output, digest-pinned at runtime
+    image_from:
       step: stage-1
       output: stage2-image
-    args: [run, /src/pipeline-stage2.yaml]
+    args: [run, /src/bootstrap/pipeline-stage2.yaml]
     sources:
       - path: .
         mount: /src
     outputs:
       - name: stage3-image
         type: oci-tar
-        path: /out/image.tar        # strike:stage-3
+        path: /out/image.tar
 
-  # Vergleich: stage-2 == stage-3 → reproduzierbar
+  # Compare: stage-2 == stage-3 proves reproducibility
   - name: compare
-    image: cgr.dev/chainguard/wolfi-base@sha256:<digest>
-    args:
-      - sh
-      - -c
-      - |
-        s2=$(sha256sum /run/stage2.tar | cut -d' ' -f1)
-        s3=$(sha256sum /run/stage3.tar | cut -d' ' -f1)
-        echo "stage-2: $s2"
-        echo "stage-3: $s3"
-        [ "$s2" = "$s3" ] || { echo "❌ nicht reproduzierbar"; exit 1; }
-        echo "✅ reproduzierbar"
+    image: strike:stage-1
+    args: [compare, /run/stage2.tar, /run/stage3.tar, /out/result]
     inputs:
       - name: stage2-image
         from: stage-1
@@ -53,11 +44,11 @@ steps:
     outputs:
       - name: result
         type: file
-        path: /out/compare.txt
+        path: /out/result
 
-  # Publish: stage-2 image (nach positivem Vergleich)
+  # Publish: stage-2 image (after successful comparison)
   - name: publish
-    image: cgr.dev/chainguard/skopeo@sha256:<digest>
+    image: quay.io/skopeo/stable@sha256:3ee9454e356fdda4ebd10157b5692b84537131109c4996782bb02957041ac000
     args:
       - copy
       - oci-archive:/run/stage2.tar
@@ -66,9 +57,9 @@ steps:
       - name: stage2-image
         from: stage-1
         mount: /run/stage2.tar
-      - name: compare-ok
+      - name: result
         from: compare
-        mount: /run/compare.txt     # DAG-Kante: publish erst nach compare
+        mount: /run/compare-result
     secrets:
       - name: ghcr-token
         env: REGISTRY_AUTH_FILE
