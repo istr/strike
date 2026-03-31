@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/istr/strike/lane"
+	"github.com/istr/strike/registry"
 )
 
 // Attestation is the signed record produced by every deploy step.
@@ -264,13 +265,11 @@ func executeMethod(ctx context.Context, spec *lane.DeploySpec) error {
 	}
 }
 
-func executeRegistryDeploy(ctx context.Context, m lane.DeployMethod) error {
-	cmd := exec.CommandContext(ctx, "skopeo", "copy",
-		"docker://"+m.Source(),
-		"docker://"+m.MethodTarget())
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+func executeRegistryDeploy(_ context.Context, m lane.DeployMethod) error {
+	if err := registry.CopyImage(m.Source(), m.MethodTarget()); err != nil {
+		return fmt.Errorf("registry deploy: %w", err)
+	}
+	return nil
 }
 
 func executeKubernetesDeploy(ctx context.Context, m lane.DeployMethod) error {

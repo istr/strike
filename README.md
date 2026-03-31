@@ -144,7 +144,7 @@ lane/schema.cue         CUE schema (source of truth)
 lane/parse.go           YAML parsing + CUE validation
 lane/dag.go             DAG construction + topological sort
 registry/cache.go       Spec hashing + cache tagging
-registry/client.go      Registry operations (skopeo, podman)
+registry/client.go      Registry operations (go-containerregistry, podman)
 bootstrap/Containerfile Self-contained bootstrap image
 bootstrap/lace.yaml     Rebuild lane for reproducibility proof
 lane.yaml               Top-level bootstrap lane

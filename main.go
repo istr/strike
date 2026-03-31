@@ -401,7 +401,6 @@ func resolveDigest(imageRef string) (string, error) {
 
 func cachedOutputDir(tag string) string {
     // Local output mounted from container store
-    // (simplified - in practice: skopeo copy containers-storage -> local dir)
     return "/tmp/strike-cache/" + sanitize(tag)
 }
 
