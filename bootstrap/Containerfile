@@ -13,7 +13,7 @@
 # Prerequisite: you have podman installed on your host.
 #
 # GIT_COMMIT=<commit-sha> ; podman build -t strike:stage_1 --build-arg GIT_COMMIT=${GIT_COMMIT} https://raw.githubusercontent.com/istr/strike/${GIT_COMMIT}/bootstrap/Containerfile
-# podman run --security-opt unmask=/proc/* --mount type=tmpfs,dst=/podman/.local/share/containers/storage,U --userns=keep-id strike:stage_1
+# podman run --env COSIGN_PRIVATE_KEY --env COSIGN_PASSWORD --security-opt unmask=/proc/* --mount type=tmpfs,dst=/podman/.local/share/containers/storage,U --userns=keep-id strike:stage_1
 #
 FROM docker.io/library/golang:1.26-alpine@sha256:d337ecb3075f0ec76d81652b3fa52af47c3eba6c8ba9f93b835752df7ce62946 AS builder
 ARG GIT_COMMIT
@@ -29,11 +29,11 @@ ENV CGO_ENABLED=0
 RUN ["go", "build", "-trimpath", "-ldflags=-s -w", "-o", "strike", "."]
 
 FROM docker.io/mgoltzsche/podman@sha256:53e4c6d0597bd01afca2355b83d993c4254efce0e64afa0beb3026d38ee27a9d
-COPY --from=builder /src /stage1
+COPY --from=builder /src /src
 
 RUN rm -f /usr/bin/fuse-overlayfs /usr/bin/libfuse* /usr/local/bin/*fuse*
 RUN printf "[storage]\ndriver = \"overlay\"\n" > /etc/containers/storage.conf
 
 WORKDIR /src
-ENTRYPOINT ["/stage1/strike"]
+ENTRYPOINT ["/src/strike"]
 CMD ["run"]
