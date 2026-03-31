@@ -205,12 +205,15 @@ func cmdRun(path string) {
         if step.Pack != nil {
             inputPaths := map[string]string{}
             for _, f := range step.Pack.Files {
-                parts := strings.SplitN(f.From, "/", 2)
-                fromStep := dag.Steps[parts[0]]
+                refStep, refOutput, err := lane.ParseRef(f.From)
+                if err != nil {
+                    log.Fatalf("error: %s: pack file: %v", stepName, err)
+                }
+                fromStep := dag.Steps[refStep]
                 var hostPath string
                 for _, out := range fromStep.Outputs {
-                    if out.Name == parts[1] {
-                        hostPath = filepath.Join(outputDirs[parts[0]], filepath.Base(out.Path))
+                    if out.Name == refOutput {
+                        hostPath = filepath.Join(outputDirs[refStep], filepath.Base(out.Path))
                         break
                     }
                 }
@@ -330,7 +333,7 @@ func cmdRun(path string) {
 
         // Load OCI tar outputs and extract digests
         for _, out := range step.Outputs {
-            if out.Type != "oci-tar" {
+            if out.Type != "image" {
                 continue
             }
             tarPath := filepath.Join(outDir, filepath.Base(out.Path))
@@ -346,7 +349,7 @@ func cmdRun(path string) {
         // Push OCI artifacts to registry cache
         pushed := false
         for _, out := range step.Outputs {
-            if out.Type == "oci-tar" {
+            if out.Type == "image" {
                 if err := registry.PushArtifact(outDir, tag); err != nil {
                     log.Fatalf("error: %s: push failed: %v", stepName, err)
                 }
@@ -445,7 +448,7 @@ func isOCITarOutput(inp lane.InputRef, dag *lane.DAG) bool {
     }
     for _, out := range fromStep.Outputs {
         if out.Name == inp.Name {
-            return out.Type == "oci-tar"
+            return out.Type == "image"
         }
     }
     return false

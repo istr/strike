@@ -5,8 +5,10 @@ import (
     "fmt"
     "io"
     "os"
+    "os/exec"
     "path/filepath"
     "sort"
+    "strings"
 
     "github.com/istr/strike/lane"
 )
@@ -119,4 +121,75 @@ func sortedKeys(m map[string]string) []string {
     }
     sort.Strings(keys)
     return keys
+}
+
+// RegistryCache stores and retrieves step outputs as OCI artifacts.
+// Cache entries are content-addressed: the cache key maps to an OCI
+// manifest. Tag: cache-<first-12-of-cache-key>.
+// Annotation: full cache key for collision detection.
+type RegistryCache struct {
+    Registry string
+}
+
+// CacheTag builds the OCI tag for a cache entry.
+// Format: registry/strike-cache:cache-<first12>
+func (c *RegistryCache) CacheTag(key string) string {
+    // Strip "sha256:" prefix if present
+    k := key
+    if len(k) > 7 && k[:7] == "sha256:" {
+        k = k[7:]
+    }
+    short := k
+    if len(short) > 12 {
+        short = short[:12]
+    }
+    return fmt.Sprintf("%s/strike-cache:cache-%s", c.Registry, short)
+}
+
+const cacheKeyAnnotation = "dev.strike.cache-key"
+
+// Lookup checks local and remote for a cached step result.
+// Returns the list of cached artifacts and true if found.
+func (c *RegistryCache) Lookup(key string) ([]lane.Artifact, bool) {
+    tag := c.CacheTag(key)
+
+    local, remote := Find(tag)
+    if !local && !remote {
+        return nil, false
+    }
+
+    if remote && !local {
+        if err := Pull(tag); err != nil {
+            return nil, false
+        }
+    }
+
+    // Verify the full cache key annotation matches (collision detection)
+    fullKey, err := inspectAnnotation(tag, cacheKeyAnnotation)
+    if err != nil || fullKey != key {
+        return nil, false
+    }
+
+    return nil, true // artifacts retrieved via the tag
+}
+
+// Store pushes step outputs to the registry as a cache entry.
+func (c *RegistryCache) Store(key string, outputDir string) error {
+    tag := c.CacheTag(key)
+    if err := PushArtifact(outputDir, tag); err != nil {
+        return fmt.Errorf("cache store %q: %w", tag, err)
+    }
+    return nil
+}
+
+// inspectAnnotation retrieves an annotation from a local image.
+func inspectAnnotation(tag, annotation string) (string, error) {
+    cmd := exec.Command("podman", "inspect",
+        "--format", fmt.Sprintf(`{{index .Annotations "%s"}}`, annotation),
+        tag)
+    out, err := cmd.Output()
+    if err != nil {
+        return "", err
+    }
+    return strings.TrimSpace(string(out)), nil
 }

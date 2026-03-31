@@ -5,6 +5,15 @@ import (
 	"strings"
 )
 
+// ParseRef splits a "step_name.output_name" reference into its parts.
+func ParseRef(ref string) (step, output string, err error) {
+	parts := strings.SplitN(ref, ".", 2)
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return "", "", fmt.Errorf("invalid reference %q: expected step_name.output_name", ref)
+	}
+	return parts[0], parts[1], nil
+}
+
 type DAG struct {
 	Steps   map[string]*Step
 	edges   map[string][]string // step -> []dependencies
@@ -42,8 +51,8 @@ func Build(p *Lane) (*DAG, error) {
 			found := false
 			for _, out := range fromStep.Outputs {
 				if out.Name == s.ImageFrom.Output {
-					if out.Type != "oci-tar" {
-						return nil, fmt.Errorf("step %q: image_from output %q in step %q is %q, not oci-tar",
+					if out.Type != "image" {
+						return nil, fmt.Errorf("step %q: image_from output %q in step %q is %q, not image",
 							name, out.Name, from, out.Type)
 					}
 					found = true
@@ -59,41 +68,60 @@ func Build(p *Lane) (*DAG, error) {
 		}
 
 		for _, inp := range s.Inputs {
-			from := string(inp.From)
-			if _, ok := d.Steps[from]; !ok {
-				return nil, fmt.Errorf("step %q: input %q references unknown step %q",
-					name, inp.Name, from)
+			fromStep, _, err := ParseRef(inp.From)
+			if err != nil {
+				return nil, fmt.Errorf("step %q: input %q: %w", name, inp.Name, err)
 			}
-			d.edges[name] = append(d.edges[name], from)
-			d.reverse[from] = append(d.reverse[from], name)
+			if _, ok := d.Steps[fromStep]; !ok {
+				return nil, fmt.Errorf("step %q: input %q references unknown step %q",
+					name, inp.Name, fromStep)
+			}
+			d.edges[name] = append(d.edges[name], fromStep)
+			d.reverse[fromStep] = append(d.reverse[fromStep], name)
 		}
 
-		// pack.files create DAG edges via "stepname/outputname" references
+		// pack.files create DAG edges via "step_name.output_name" references
 		if s.Pack != nil {
 			for _, f := range s.Pack.Files {
-				parts := strings.SplitN(f.From, "/", 2)
-				if len(parts) != 2 {
-					return nil, fmt.Errorf("step %q: pack file from %q: expected stepname/outputname",
-						name, f.From)
+				stepName, outputName, err := ParseRef(f.From)
+				if err != nil {
+					return nil, fmt.Errorf("step %q: pack file: %w", name, err)
 				}
-				fromStep, ok := d.Steps[parts[0]]
+				fromStep, ok := d.Steps[stepName]
 				if !ok {
 					return nil, fmt.Errorf("step %q: pack file from %q: unknown step %q",
-						name, f.From, parts[0])
+						name, f.From, stepName)
 				}
 				found := false
 				for _, out := range fromStep.Outputs {
-					if out.Name == parts[1] {
+					if out.Name == outputName {
 						found = true
 						break
 					}
 				}
 				if !found {
 					return nil, fmt.Errorf("step %q: pack file from %q: output %q not found in step %q",
-						name, f.From, parts[1], parts[0])
+						name, f.From, outputName, stepName)
 				}
-				d.edges[name] = append(d.edges[name], parts[0])
-				d.reverse[parts[0]] = append(d.reverse[parts[0]], name)
+				d.edges[name] = append(d.edges[name], stepName)
+				d.reverse[stepName] = append(d.reverse[stepName], name)
+			}
+		}
+
+		// deploy.artifacts create DAG edges
+		if s.Deploy != nil {
+			for artName, artRef := range s.Deploy.Artifacts {
+				stepName, _, err := ParseRef(artRef.From)
+				if err != nil {
+					// Allow bare step name for pack outputs
+					stepName = artRef.From
+				}
+				if _, ok := d.Steps[stepName]; !ok {
+					return nil, fmt.Errorf("step %q: deploy artifact %q references unknown step %q",
+						name, artName, stepName)
+				}
+				d.edges[name] = append(d.edges[name], stepName)
+				d.reverse[stepName] = append(d.reverse[stepName], name)
 			}
 		}
 	}

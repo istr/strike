@@ -26,10 +26,11 @@ import (
 // PackOpts is everything pack needs; callers in main.go assemble this.
 type PackOpts struct {
 	Spec        *lane.PackSpec
-	InputPaths  map[string]string // "stepname/outputname" -> host path
+	InputPaths  map[string]string // "step_name.output_name" -> host path
 	OutputPath  string            // path to write the oci-tar
 	SigningKey  []byte            // PEM-encoded ECDSA P-256 private key
 	KeyPassword []byte            // passphrase for encrypted key; empty if unencrypted
+	State       *lane.State       // lane state for artifact provenance
 }
 
 // PackResult holds the outputs of a successful pack operation.
@@ -68,6 +69,71 @@ func Pack(opts PackOpts) (*PackResult, error) {
 		if err != nil {
 			return nil, fmt.Errorf("pack: append layer: %w", err)
 		}
+	}
+
+	// 2b. Add config file layers (literal content)
+	if opts.Spec.Config_files != nil {
+		for path, entry := range opts.Spec.Config_files {
+			layer, cfErr := fileLayerFromContent(
+				[]byte(entry.Content),
+				path,
+				fs.FileMode(entry.Mode),
+				int(entry.UID),
+				int(entry.GID),
+			)
+			if cfErr != nil {
+				return nil, fmt.Errorf("pack: config file %q: %w", path, cfErr)
+			}
+			img, err = mutate.AppendLayers(img, layer)
+			if err != nil {
+				return nil, fmt.Errorf("pack: append config file layer: %w", err)
+			}
+		}
+	}
+
+	// 3. Apply image configuration
+	if opts.Spec.Config != nil {
+		cfg, cfgErr := img.ConfigFile()
+		if cfgErr != nil {
+			return nil, fmt.Errorf("pack: read config: %w", cfgErr)
+		}
+		cfg = cfg.DeepCopy()
+
+		if opts.Spec.Config.Env != nil {
+			for k, v := range opts.Spec.Config.Env {
+				cfg.Config.Env = appendEnv(cfg.Config.Env, k, v)
+			}
+		}
+		if opts.Spec.Config.Entrypoint != nil {
+			cfg.Config.Entrypoint = opts.Spec.Config.Entrypoint
+		}
+		if opts.Spec.Config.Cmd != nil {
+			cfg.Config.Cmd = opts.Spec.Config.Cmd
+		}
+		if opts.Spec.Config.Workdir != "" {
+			cfg.Config.WorkingDir = opts.Spec.Config.Workdir
+		}
+		if opts.Spec.Config.User != "" {
+			cfg.Config.User = opts.Spec.Config.User
+		}
+		if opts.Spec.Config.Labels != nil {
+			if cfg.Config.Labels == nil {
+				cfg.Config.Labels = make(map[string]string)
+			}
+			for k, v := range opts.Spec.Config.Labels {
+				cfg.Config.Labels[k] = v
+			}
+		}
+
+		img, err = mutate.ConfigFile(img, cfg)
+		if err != nil {
+			return nil, fmt.Errorf("pack: apply config: %w", err)
+		}
+	}
+
+	// 4. Apply annotations
+	if opts.Spec.Annotations != nil {
+		img = mutate.Annotations(img, opts.Spec.Annotations).(v1.Image)
 	}
 
 	// Compute image digest for referrer relationships
@@ -219,6 +285,56 @@ func parentDirs(absPath string) []string {
 		dirs = append([]string{d}, dirs...)
 	}
 	return dirs
+}
+
+// fileLayerFromContent creates a single-file OCI layer from in-memory content.
+func fileLayerFromContent(content []byte, destPath string, mode fs.FileMode, uid, gid int) (v1.Layer, error) {
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+
+	for _, dir := range parentDirs(destPath) {
+		if err := tw.WriteHeader(&tar.Header{
+			Typeflag: tar.TypeDir,
+			Name:     dir + "/",
+			Mode:     0o755,
+		}); err != nil {
+			return nil, err
+		}
+	}
+
+	if err := tw.WriteHeader(&tar.Header{
+		Typeflag: tar.TypeReg,
+		Name:     destPath[1:], // strip leading /
+		Size:     int64(len(content)),
+		Mode:     int64(mode),
+		Uid:      uid,
+		Gid:      gid,
+	}); err != nil {
+		return nil, err
+	}
+	if _, err := tw.Write(content); err != nil {
+		return nil, err
+	}
+	if err := tw.Close(); err != nil {
+		return nil, err
+	}
+
+	opener := func() (io.ReadCloser, error) {
+		return io.NopCloser(bytes.NewReader(buf.Bytes())), nil
+	}
+	return tarball.LayerFromOpener(opener, tarball.WithMediaType(types.OCILayer))
+}
+
+// appendEnv adds or replaces an environment variable in a list of KEY=VALUE strings.
+func appendEnv(env []string, key, value string) []string {
+	entry := key + "=" + value
+	for i, e := range env {
+		if len(e) > len(key) && e[:len(key)+1] == key+"=" {
+			env[i] = entry
+			return env
+		}
+	}
+	return append(env, entry)
 }
 
 // artifactImage creates a single-layer OCI artifact image with subject

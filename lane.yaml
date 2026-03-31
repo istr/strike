@@ -1,5 +1,6 @@
 # Rebuild strike from source to prove reproducibility.
 # Run by stage_2 inside the built strike image with source at /src.
+name: strike-bootstrap
 registry: localhost/strike-bootstrap
 
 secrets:
@@ -25,7 +26,7 @@ steps:
     pack:
       base: cgr.dev/chainguard/static@sha256:2fdfacc8d61164aa9e20909dceec7cc28b9feb66580e8e1a65b9f2443c53b61b
       files:
-        - from: build_binary/binary
+        - from: build_binary.binary
           dest: /usr/bin/strike
           mode: 0o755
     secrets:
@@ -35,5 +36,5 @@ steps:
         env: COSIGN_PASSWORD
     outputs:
       - name: image
-        type: oci-tar
+        type: image
         path: /out/image.tar

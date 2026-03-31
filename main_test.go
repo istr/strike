@@ -13,7 +13,7 @@ func TestIsOCITarOutput(t *testing.T) {
 				Name: "builder",
 				Outputs: []lane.OutputSpec{
 					{Name: "binary", Type: "file", Path: "/out/strike"},
-					{Name: "image", Type: "oci-tar", Path: "/out/image.tar"},
+					{Name: "image", Type: "image", Path: "/out/image.tar"},
 				},
 			},
 		},
@@ -46,13 +46,13 @@ func TestUnsignedOCIInputBlocksNetworkStep(t *testing.T) {
 			"pack_unsigned": {
 				Name: "pack_unsigned",
 				Outputs: []lane.OutputSpec{
-					{Name: "image", Type: "oci-tar", Path: "/out/image.tar"},
+					{Name: "image", Type: "image", Path: "/out/image.tar"},
 				},
 			},
 			"pack_signed": {
 				Name: "pack_signed",
 				Outputs: []lane.OutputSpec{
-					{Name: "image", Type: "oci-tar", Path: "/out/image.tar"},
+					{Name: "image", Type: "image", Path: "/out/image.tar"},
 				},
 			},
 			"publish": {
@@ -94,7 +94,7 @@ func TestSignedOCIInputAllowsNetworkStep(t *testing.T) {
 			"pack_signed": {
 				Name: "pack_signed",
 				Outputs: []lane.OutputSpec{
-					{Name: "image", Type: "oci-tar", Path: "/out/image.tar"},
+					{Name: "image", Type: "image", Path: "/out/image.tar"},
 				},
 			},
 			"publish": {
