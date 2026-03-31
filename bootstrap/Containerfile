@@ -1,27 +1,39 @@
 # Bootstrap the strike ci/cd tool.
 #
+# Stage 0 is "dirty" in two aspects:
+# - it uses a legacy Containerfile
+# - it still needs an implicit shell expansion in one of the Containerfile steps
+#
+# Stage 0 creates a "dirty" stage 1 container with podman and strike in it.
+# This stage 1 container then uses the "dirty" strike to:
+# - build a stage 2 container
+# - use the stage 2 container to build a stage 3 container
+# - release the stage 2 container if it is identical to stage 3
+#
 # Prerequisite: you have podman installed on your host.
 #
 # GIT_COMMIT=<commit-sha> ; podman build -t strike:stage_1 --build-arg GIT_COMMIT=${GIT_COMMIT} https://raw.githubusercontent.com/istr/strike/${GIT_COMMIT}/bootstrap/Containerfile
-# podman run --userns=keep-id strike:stage_1
+# podman run --security-opt unmask=/proc/* --mount type=tmpfs,dst=/podman/.local/share/containers/storage,U --userns=keep-id strike:stage_1
 #
-FROM docker.io/library/golang:1.26-alpine@sha256:d337ecb3075f0ec76d81652b3fa52af47c3eba6c8ba9f93b835752df7ce62946
+FROM docker.io/library/golang:1.26-alpine@sha256:d337ecb3075f0ec76d81652b3fa52af47c3eba6c8ba9f93b835752df7ce62946 AS builder
 ARG GIT_COMMIT
-RUN apk add --no-cache cue-cli git podman fuse-overlayfs
-RUN mkdir -p /etc/containers
-RUN printf '[storage]\ndriver = "overlay"\n[storage.options.overlay]\nmount_program = "/usr/bin/fuse-overlayfs"\n' \
-    > /etc/containers/storage.conf
-WORKDIR /build/strike
-RUN git init \
- && git fetch --depth 1 https://github.com/istr/strike ${GIT_COMMIT} \
- && git checkout FETCH_HEAD
-RUN cue exp gengotypes ./lane/
-RUN go get
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o strike .
-RUN mkdir -p /tmp/run /tmp/data # /tmp/home
-RUN chmod 1777 /tmp/run /tmp/data # /tmp/home
-ENV HOME=/tmp/home
-ENV XDG_RUNTIME_DIR=/tmp/run
-ENV XDG_DATA_HOME=/tmp/data
-ENTRYPOINT ["/build/strike/strike"]
+RUN ["apk", "add", "--no-cache", "cue-cli", "git"]
+WORKDIR /src
+RUN ["git", "init"]
+# We want no-sh. However, we cannot pass GIT_COMMIT to git using ARG/ENV combination.
+RUN git fetch --depth 1 https://github.com/istr/strike ${GIT_COMMIT}
+RUN ["git", "checkout", "FETCH_HEAD"]
+RUN ["cue", "exp", "gengotypes", "./lane/"]
+RUN ["go", "get"]
+ENV CGO_ENABLED=0
+RUN ["go", "build", "-trimpath", "-ldflags=-s -w", "-o", "strike", "."]
+
+FROM docker.io/mgoltzsche/podman@sha256:53e4c6d0597bd01afca2355b83d993c4254efce0e64afa0beb3026d38ee27a9d
+COPY --from=builder /src /stage1
+
+RUN rm -f /usr/bin/fuse-overlayfs /usr/bin/libfuse* /usr/local/bin/*fuse*
+RUN printf "[storage]\ndriver = \"overlay\"\n" > /etc/containers/storage.conf
+
+WORKDIR /src
+ENTRYPOINT ["/stage1/strike"]
 CMD ["run"]

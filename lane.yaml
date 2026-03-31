@@ -1,11 +1,10 @@
-# Build strike, prove reproducibility, publish.
-# Run: strike run lane.yaml
-registry: ghcr.io/istr/strike-cache
+# Rebuild strike from source to prove reproducibility.
+# Run by stage_2 inside the built strike image with source at /src.
+registry: localhost/strike-bootstrap
 
 secrets:
   cosign_key:      env://COSIGN_PRIVATE_KEY
   cosign_password: env://COSIGN_PASSWORD
-  ghcr_token:      env://GHCR_TOKEN
 
 steps:
   - name: build_binary
@@ -15,7 +14,7 @@ steps:
       CGO_ENABLED: "0"
     network: true
     sources:
-      - path: .
+      - path: /src
         mount: /src
     outputs:
       - name: binary
@@ -38,58 +37,3 @@ steps:
       - name: image
         type: oci-tar
         path: /out/image.tar
-
-  - name: stage_2
-    image: strike:stage_1
-    args: [run, /src/bootstrap/lace.yaml]
-    network: true
-    inputs:
-      - name: binary
-        from: build_binary
-        mount: /usr/bin/strike
-    sources:
-      - path: .
-        mount: /src
-    outputs:
-      - name: stage_3_image
-        type: oci-tar
-        path: /out/image.tar
-
-  - name: compare
-    image_from:
-      step: build_image
-      output: image
-    args: [compare, /run/stage_2.tar, /run/stage_3.tar, /out/result]
-    inputs:
-      - name: image
-        from: build_image
-        mount: /run/stage_2.tar
-      - name: stage_3_image
-        from: stage_2
-        mount: /run/stage_3.tar
-    outputs:
-      - name: result
-        type: file
-        path: /out/result
-
-  - name: publish
-    image: quay.io/skopeo/stable@sha256:3ee9454e356fdda4ebd10157b5692b84537131109c4996782bb02957041ac000
-    network: true
-    args:
-      - copy
-      - oci-archive:/run/stage_2.tar
-      - docker://ghcr.io/istr/strike:latest
-    inputs:
-      - name: image
-        from: build_image
-        mount: /run/stage_2.tar
-      - name: result
-        from: compare
-        mount: /run/compare_result
-    secrets:
-      - name: ghcr_token
-        env: REGISTRY_AUTH_FILE
-    outputs:
-      - name: published_ref
-        type: file
-        path: /out/ref.txt
