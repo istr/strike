@@ -11,6 +11,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"time"
@@ -190,9 +192,7 @@ func captureOne(ctx context.Context, cap lane.StateCapture) (StateSnap, error) {
 		if cap.URL == "" {
 			return snap, fmt.Errorf("http capture %q: no URL specified", cap.Name)
 		}
-		// Use curl to avoid importing net/http in the deploy path
-		cmd := exec.CommandContext(ctx, "curl", "-sf", cap.URL)
-		out, err := cmd.Output()
+		out, err := httpGet(ctx, cap.URL)
 		if err != nil {
 			return snap, fmt.Errorf("http GET %q: %w", cap.URL, err)
 		}
@@ -312,4 +312,22 @@ func generateDeployID(stepName string) string {
 func sha256Sum(data []byte) []byte {
 	h := sha256.Sum256(data)
 	return h[:]
+}
+
+// httpGet performs an HTTP GET with context and returns the response body.
+// Returns an error for non-2xx status codes.
+func httpGet(ctx context.Context, url string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("status %d", resp.StatusCode)
+	}
+	return io.ReadAll(resp.Body)
 }
