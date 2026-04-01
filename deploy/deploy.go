@@ -21,14 +21,14 @@ import (
 
 // Attestation is the signed record produced by every deploy step.
 type Attestation struct {
-	DeployID  string                `json:"deploy_id"`
-	Timestamp time.Time             `json:"timestamp"`
-	Target    lane.DeployTarget     `json:"target"`
-	Artifacts map[string]string     `json:"artifacts"` // name -> digest deployed
-	PreState  map[string]StateSnap  `json:"pre_state"`
-	PostState map[string]StateSnap  `json:"post_state"`
-	Drift     *DriftReport          `json:"drift,omitempty"`
-	LaneRef   string                `json:"lane_ref"` // digest of lane definition
+	DeployID  string               `json:"deploy_id"`
+	Timestamp time.Time            `json:"timestamp"`
+	Target    lane.DeployTarget    `json:"target"`
+	Artifacts map[string]string    `json:"artifacts"` // name -> digest deployed
+	PreState  map[string]StateSnap `json:"pre_state"`
+	PostState map[string]StateSnap `json:"post_state"`
+	Drift     *DriftReport         `json:"drift,omitempty"`
+	LaneRef   string               `json:"lane_ref"` // digest of lane definition
 }
 
 // StateSnap is a point-in-time capture of one state dimension.

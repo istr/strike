@@ -3,12 +3,12 @@ package lane
 // DeployMethod accessor helpers — the generated type is map[string]any
 // because CUE unions produce open structs.
 
-func (m DeployMethod) Type() string      { return mstr(m, "type") }
-func (m DeployMethod) Namespace() string { return mstr(m, "namespace") }
-func (m DeployMethod) Strategy() string  { return mstr(m, "strategy") }
-func (m DeployMethod) Source() string    { return mstr(m, "source") }
+func (m DeployMethod) Type() string         { return mstr(m, "type") }
+func (m DeployMethod) Namespace() string    { return mstr(m, "namespace") }
+func (m DeployMethod) Strategy() string     { return mstr(m, "strategy") }
+func (m DeployMethod) Source() string       { return mstr(m, "source") }
 func (m DeployMethod) MethodTarget() string { return mstr(m, "target") }
-func (m DeployMethod) Image() string     { return mstr(m, "image") }
+func (m DeployMethod) Image() string        { return mstr(m, "image") }
 
 func (m DeployMethod) Args() []string {
 	v, ok := m["args"]

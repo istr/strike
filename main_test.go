@@ -6,38 +6,6 @@ import (
 	"github.com/istr/strike/lane"
 )
 
-func TestIsOCITarOutput(t *testing.T) {
-	dag := &lane.DAG{
-		Steps: map[string]*lane.Step{
-			"builder": {
-				Name: "builder",
-				Outputs: []lane.OutputSpec{
-					{Name: "binary", Type: "file", Path: "/out/strike"},
-					{Name: "image", Type: "image", Path: "/out/image.tar"},
-				},
-			},
-		},
-	}
-
-	tests := []struct {
-		inp  lane.InputRef
-		want bool
-	}{
-		{lane.InputRef{Name: "image", From: "builder"}, true},
-		{lane.InputRef{Name: "binary", From: "builder"}, false},
-		{lane.InputRef{Name: "missing", From: "builder"}, false},
-		{lane.InputRef{Name: "image", From: "unknown"}, false},
-	}
-
-	for _, tt := range tests {
-		got := isOCITarOutput(tt.inp, dag)
-		if got != tt.want {
-			t.Errorf("isOCITarOutput(%s/%s) = %v, want %v",
-				tt.inp.From, tt.inp.Name, got, tt.want)
-		}
-	}
-}
-
 func TestUnsignedOCIInputBlocksNetworkStep(t *testing.T) {
 	// Simulate the check logic from cmdRun: a network-enabled step
 	// with an unsigned oci-tar input must be rejected.
@@ -80,7 +48,7 @@ func TestUnsignedOCIInputBlocksNetworkStep(t *testing.T) {
 	// Unsigned input + network step → must be blocked
 	step := dag.Steps["publish"]
 	for _, inp := range step.Inputs {
-		if isOCITarOutput(inp, dag) && !ociSigned[inp.From+"/"+inp.Name] {
+		if dag.IsOCITarOutput(inp) && !ociSigned[inp.From+"/"+inp.Name] {
 			// Expected: this path is taken
 			return
 		}
@@ -113,7 +81,7 @@ func TestSignedOCIInputAllowsNetworkStep(t *testing.T) {
 
 	step := dag.Steps["publish"]
 	for _, inp := range step.Inputs {
-		if isOCITarOutput(inp, dag) && !ociSigned[inp.From+"/"+inp.Name] {
+		if dag.IsOCITarOutput(inp) && !ociSigned[inp.From+"/"+inp.Name] {
 			t.Fatalf("signed OCI input %s/%s should not be blocked", inp.From, inp.Name)
 		}
 	}
