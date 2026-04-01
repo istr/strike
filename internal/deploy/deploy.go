@@ -2,10 +2,11 @@
 //
 // Every deploy produces a signed record of: what was running before,
 // what changed, and what is running after. The attestation record
-// IS the deploy output — there is no deploy without state capture.
+// IS the deploy output -- there is no deploy without state capture.
 package deploy
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -18,6 +19,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/registry"
 )
@@ -53,6 +55,7 @@ type DriftReport struct {
 
 // Deployer executes deploy steps and produces attestations.
 type Deployer struct {
+	Engine   container.Engine
 	LaneRoot string
 }
 
@@ -68,7 +71,7 @@ func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.Sta
 	started := time.Now()
 
 	// 1. Capture pre-state
-	preState, err := captureState(ctx, spec.Attestation.PreState)
+	preState, err := d.captureState(ctx, spec.Attestation.PreState)
 	if err != nil {
 		if spec.Attestation.PreState.Required {
 			return nil, fmt.Errorf("step %q: pre-state capture failed: %w", step.Name, err)
@@ -103,12 +106,12 @@ func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.Sta
 	}
 
 	// 4. Execute deploy action
-	if err := executeMethod(ctx, spec); err != nil {
+	if err := d.executeMethod(ctx, spec); err != nil {
 		return nil, fmt.Errorf("step %q: deploy action failed: %w", step.Name, err)
 	}
 
 	// 5. Capture post-state
-	postState, err := captureState(ctx, spec.Attestation.PostState)
+	postState, err := d.captureState(ctx, spec.Attestation.PostState)
 	if err != nil {
 		if spec.Attestation.PostState.Required {
 			return nil, fmt.Errorf("step %q: post-state capture failed: %w", step.Name, err)
@@ -157,10 +160,10 @@ func (a *Attestation) JSON() ([]byte, error) {
 }
 
 // captureState runs all state capture commands and collects snapshots.
-func captureState(ctx context.Context, spec lane.StateCaptureSpec) (map[string]StateSnap, error) {
+func (d *Deployer) captureState(ctx context.Context, spec lane.StateCaptureSpec) (map[string]StateSnap, error) {
 	snaps := make(map[string]StateSnap)
 	for _, cap := range spec.Capture {
-		snap, err := captureOne(ctx, cap)
+		snap, err := d.captureOne(ctx, cap)
 		if err != nil {
 			return snaps, fmt.Errorf("capture %q: %w", cap.Name, err)
 		}
@@ -169,7 +172,7 @@ func captureState(ctx context.Context, spec lane.StateCaptureSpec) (map[string]S
 	return snaps, nil
 }
 
-func captureOne(ctx context.Context, cap lane.StateCapture) (StateSnap, error) {
+func (d *Deployer) captureOne(ctx context.Context, cap lane.StateCapture) (StateSnap, error) {
 	snap := StateSnap{
 		Name:      cap.Name,
 		Type:      cap.Type,
@@ -181,6 +184,7 @@ func captureOne(ctx context.Context, cap lane.StateCapture) (StateSnap, error) {
 		if len(cap.Command) == 0 {
 			return snap, fmt.Errorf("command capture %q: no command specified", cap.Name)
 		}
+		//nolint:gosec // G204: intentional execution of user-defined state capture command
 		cmd := exec.CommandContext(ctx, cap.Command[0], cap.Command[1:]...)
 		out, err := cmd.Output()
 		if err != nil {
@@ -221,18 +225,26 @@ func captureOne(ctx context.Context, cap lane.StateCapture) (StateSnap, error) {
 			kubectlArgs = append(kubectlArgs, "-o", fmt.Sprintf("jsonpath=%s", cap.Resource.JSONPath))
 		}
 
-		podmanArgs := []string{
-			"run", "--rm", "--network=host",
-			"-v", kubeconfig + ":/root/.kube/config:ro",
-			string(cap.Image),
-		}
-		podmanArgs = append(podmanArgs, kubectlArgs...)
-
-		cmd := exec.CommandContext(ctx, "podman", podmanArgs...) //nolint:gosec // G204: intentional podman invocation
-		out, err := cmd.Output()
+		var stdout bytes.Buffer
+		var stderr bytes.Buffer
+		exitCode, err := d.Engine.ContainerRun(ctx, container.RunOpts{
+			Image:   string(cap.Image),
+			Cmd:     kubectlArgs,
+			Network: "host",
+			Mounts: []container.Mount{
+				{Source: kubeconfig, Target: "/root/.kube/config", ReadOnly: true},
+			},
+			Remove: true,
+			Stdout: &stdout,
+			Stderr: &stderr,
+		})
 		if err != nil {
 			return snap, fmt.Errorf("kubernetes capture %q: %w", cap.Name, err)
 		}
+		if exitCode != 0 {
+			return snap, fmt.Errorf("kubernetes capture %q: exit code %d: %s", cap.Name, exitCode, stderr.String())
+		}
+		out := stdout.Bytes()
 		snap.Output = out
 		snap.Digest = "sha256:" + hex.EncodeToString(sha256Sum(out))
 
@@ -269,28 +281,28 @@ func detectDrift(preState map[string]StateSnap, previousAtt *Attestation) *Drift
 }
 
 // executeMethod dispatches to the appropriate deploy method.
-func executeMethod(ctx context.Context, spec *lane.DeploySpec) error {
+func (d *Deployer) executeMethod(ctx context.Context, spec *lane.DeploySpec) error {
 	m := spec.Method
 	switch m.Type() {
 	case "registry":
-		return executeRegistryDeploy(ctx, m)
+		return executeRegistryDeploy(m)
 	case "kubernetes":
-		return executeKubernetesDeploy(ctx, m)
+		return d.executeKubernetesDeploy(ctx, m)
 	case "custom":
-		return executeCustomDeploy(ctx, m)
+		return d.executeCustomDeploy(ctx, m)
 	default:
 		return fmt.Errorf("unknown deploy method type %q", m.Type())
 	}
 }
 
-func executeRegistryDeploy(_ context.Context, m lane.DeployMethod) error {
+func executeRegistryDeploy(m lane.DeployMethod) error {
 	if err := registry.CopyImage(m.Source(), m.MethodTarget()); err != nil {
 		return fmt.Errorf("registry deploy: %w", err)
 	}
 	return nil
 }
 
-func executeKubernetesDeploy(ctx context.Context, m lane.DeployMethod) error {
+func (d *Deployer) executeKubernetesDeploy(ctx context.Context, m lane.DeployMethod) error {
 	image := m.Image()
 	if image == "" {
 		return fmt.Errorf("kubernetes deploy: image required (digest-pinned kubectl image)")
@@ -311,36 +323,48 @@ func executeKubernetesDeploy(ctx context.Context, m lane.DeployMethod) error {
 		kubectlArgs = append(kubectlArgs, "-n", m.Namespace())
 	}
 
-	podmanArgs := []string{
-		"run", "--rm", "--network=host",
-		"-v", kubeconfig + ":/root/.kube/config:ro",
-		"-i",
-		image,
+	exitCode, err := d.Engine.ContainerRun(ctx, container.RunOpts{
+		Image:   image,
+		Cmd:     kubectlArgs,
+		Network: "host",
+		Mounts: []container.Mount{
+			{Source: kubeconfig, Target: "/root/.kube/config", ReadOnly: true},
+		},
+		Stdin:  os.Stdin,
+		Stdout: os.Stdout,
+		Stderr: os.Stderr,
+		Remove: true,
+	})
+	if err != nil {
+		return fmt.Errorf("kubernetes deploy: %w", err)
 	}
-	podmanArgs = append(podmanArgs, kubectlArgs...)
-
-	cmd := exec.CommandContext(ctx, "podman", podmanArgs...) //nolint:gosec // G204: intentional podman invocation
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	if exitCode != 0 {
+		return fmt.Errorf("kubernetes deploy: exit code %d", exitCode)
+	}
+	return nil
 }
 
-func executeCustomDeploy(ctx context.Context, m lane.DeployMethod) error {
+func (d *Deployer) executeCustomDeploy(ctx context.Context, m lane.DeployMethod) error {
 	if m.Image() == "" {
 		return fmt.Errorf("custom deploy: image required")
 	}
-	args := []string{"run", "--rm", "--network=host"}
-	for k, v := range m.Env() {
-		args = append(args, "--env", k+"="+v)
-	}
-	args = append(args, m.Image())
-	args = append(args, m.Args()...)
 
-	cmd := exec.CommandContext(ctx, "podman", args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	exitCode, err := d.Engine.ContainerRun(ctx, container.RunOpts{
+		Image:   m.Image(),
+		Cmd:     m.Args(),
+		Env:     m.Env(),
+		Network: "host",
+		Remove:  true,
+		Stdout:  os.Stdout,
+		Stderr:  os.Stderr,
+	})
+	if err != nil {
+		return err
+	}
+	if exitCode != 0 {
+		return fmt.Errorf("custom deploy: exit code %d", exitCode)
+	}
+	return nil
 }
 
 // resolveKubeconfig returns the host path to the kubeconfig file.

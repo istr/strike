@@ -71,8 +71,9 @@ round-trips. If registry cost is a concern, use a pull-through cache at the
 infrastructure level -- that is not strike's problem to solve.
 
 **Large dependencies or engine containers.** strike is a static binary that
-shells out to podman. We will not embed container runtimes, add gRPC services,
-bundle web UIs, or introduce daemon processes.
+communicates with the container engine via REST API over Unix socket. We will
+not embed container runtimes, add gRPC services, bundle web UIs, or introduce
+daemon processes.
 
 ## How to contribute
 
@@ -114,8 +115,8 @@ Requirements:
 - Tests must pass with the race detector enabled.
 - Coverage must not decrease. Target: 100% statement coverage for all packages
   except generated code (`cue_types_lane_gen.go`).
-- External binary calls (podman, kubectl) must be tested via interfaces,
-  not by invoking real binaries. Unit tests must not require podman.
+- Container operations are tested via `httptest` mock servers against the
+  `container.Engine` interface. Unit tests must not require podman.
 
 ### Vulnerability scan
 
@@ -149,7 +150,8 @@ essential rules:
   Use `fmt.Errorf("signing image %s: %w", ref, err)`.
 - Doc comments on all exported names. Start with the name of the element.
 - No `os/exec.Command("sh", "-c", ...)` anywhere. This is a security invariant.
-- All external binary invocations go through the `CommandRunner` interface.
+- All container operations go through the `container.Engine` interface (REST API
+  over Unix socket).
 - Path operations on untrusted input must use `filepath.IsLocal` and
   prefix validation.
 - Secrets must never appear in error messages, logs, or process arguments.

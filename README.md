@@ -18,7 +18,8 @@ registry.
 
 You need exactly two things:
 
-1. **Podman (rootless)** -- the only host binary strike depends on at runtime.
+1. **Podman (rootless) with socket enabled** -- the only host dependency.
+   Enable the socket: `systemctl --user enable --now podman.socket`
 2. **A git-capable IDE** (e.g. VS Code, JetBrains) -- for cloning and editing
    the repository. You do not need a local `git` CLI; your IDE handles that.
 
@@ -140,6 +141,10 @@ Secrets are passed as environment variables, never written to process arguments.
 ```
 cmd/strike/main.go               CLI entry point (run, validate, dag, compare)
 internal/
+  container/
+    engine.go                     Engine interface, types, socket detection
+    transport.go                  Unix socket and TCP HTTP transport
+    podman.go                     Podman libpod REST API implementation
   lane/
     schema.cue                    CUE schema (source of truth)
     cue_types_lane_gen.go         Generated Go types (do not edit)
@@ -150,15 +155,14 @@ internal/
     deploy_method.go              DeployMethod accessor helpers
     secret.go                     Secret resolution
   executor/
-    podman.go                     Container execution via podman
+    podman.go                     Container execution via Engine API
     validate.go                   Output validation (magic bytes, size bounds)
-    step_security_profile.go      Podman security flags
     pack.go                       OCI image assembly (native Go, no container)
     sign.go                       ECDSA P-256 cosign-compatible signing
     sbom.go                       CycloneDX 1.6 SBOM generation
   registry/
     cache.go                      Spec hashing and cache tagging
-    client.go                     Registry operations (go-containerregistry, podman)
+    client.go                     Registry operations (Engine API, go-containerregistry)
   deploy/
     deploy.go                     Deploy with mandatory state attestation
 bootstrap/Containerfile           Self-contained bootstrap image
@@ -179,7 +183,7 @@ govulncheck ./...                                                # vulnerability
 See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for the complete code quality,
 security, and style guidelines.
 
-AI coding agents should read [AGENTS.md](CLAUDE.md) before making changes.
+AI coding agents should read [AGENTS.md](AGENTS.md) before making changes.
 
 ## Security
 

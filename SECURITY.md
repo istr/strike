@@ -57,11 +57,11 @@ unverified artifact types.
 
 The highest-risk categories for a CI/CD executor like strike:
 
-**A03 Injection** -- The primary risk. strike invokes podman
-as an external process. All invocations use `exec.Command` with separate
-arguments (no shell interpretation). Lane definitions cannot inject shell
-metacharacters because there is no shell. The command allowlist in the executor
-restricts which binaries can be called.
+**A03 Injection** -- The primary risk. strike communicates with the container
+engine via REST API over a Unix socket (no subprocess spawning for container
+operations). The only remaining `exec.Command` is for user-defined state
+capture commands in deploy. Lane definitions cannot inject shell metacharacters
+because there is no shell.
 
 **A08 Software and Data Integrity Failures** -- strike's core mission.
 Unsigned container images must not leave the local store (enforced by the
@@ -79,10 +79,10 @@ operations. No TLS configuration overrides.
 default. Output directories are mounted with `noexec,nosuid`. Inputs are
 read-only.
 
-**A05 Security Misconfiguration** -- The hardened security profile in
-`internal/executor/step_security_profile.go` is not configurable by lane definitions.
-Steps control only the image, arguments, environment, network flag, and
-declared inputs and outputs.
+**A05 Security Misconfiguration** -- The hardened security profile is
+expressed as `container.RunOpts` fields in `internal/executor/podman.go`
+and is not configurable by lane definitions. Steps control only the image,
+arguments, environment, network flag, and declared inputs and outputs.
 
 **A06 Vulnerable and Outdated Components** -- `govulncheck` runs in CI and
 reports only actually-reachable vulnerable functions. Dependencies are minimal
@@ -92,14 +92,15 @@ reports only actually-reachable vulnerable functions. Dependencies are minimal
 
 strike is designed with a minimal attack surface:
 
-- **No shell execution** -- steps are exec'd directly, no interpreter involved.
+- **No shell execution** -- container operations use REST API over Unix socket, no subprocess spawning.
 - **No root** -- runs entirely under rootless podman.
 - **No network by default** -- steps run with `--network=none` unless
   explicitly opted in with `network: true`.
 - **Digest pinning** -- all external images must be referenced by SHA-256
   manifest digest.
-- **Secrets via environment only** -- never written to process arguments or
-  persisted to disk.
+- **Secrets via API request body** -- passed as JSON over Unix socket in the
+  container create request, never via process arguments or strike's own
+  environment.
 - **Unsigned images cannot leave the local store** -- a network-enabled step
   that receives an unsigned OCI image input is rejected before execution.
 - **Read-only root filesystem** -- step containers cannot modify their image.
@@ -111,8 +112,8 @@ strike is designed with a minimal attack surface:
 
 ## Container security profile
 
-All step containers run with these flags (defined in
-`internal/executor/step_security_profile.go`):
+All step containers run with these settings (expressed as
+`container.RunOpts` fields in `internal/executor/podman.go`):
 
 ```
 podman run \
@@ -152,10 +153,10 @@ Secrets flow through the system as follows:
    (`env://VAR_NAME` or `file:///path`).
 2. At execution time, strike resolves the source and holds the value in process
    memory only.
-3. Secrets are passed to step containers as environment variables, injected via
-   `--env NAME` with the value set in strike's process environment. This avoids
-   the value appearing in `podman` command-line arguments (visible in
-   `ps aux`).
+3. Secrets are passed to step containers as environment variables via the
+   container engine REST API request body (JSON over Unix socket). Secrets
+   never enter strike's own process environment and never appear in process
+   arguments.
 4. Secrets are never written to disk, never included in cache artifacts, and
    never logged.
 

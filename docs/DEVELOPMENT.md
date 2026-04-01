@@ -12,39 +12,33 @@ every design decision.
 
 ### 1.1 Command injection prevention
 
-strike invokes podman as an external binary. Command injection
-is the highest-severity vulnerability class.
+strike communicates with the container engine via REST API over a Unix
+socket (`internal/container/`). There are no `exec.Command` calls for
+container operations. This eliminates command injection as an attack
+vector for container operations entirely.
 
-**Rule: never invoke a shell.** Go's `exec.Command` passes arguments directly
-to the process, bypassing shell interpretation. Every invocation must use
-separate arguments:
+The only remaining `exec.Command` is in `internal/deploy/deploy.go` for
+user-defined state capture commands (the "command" capture type). This is
+intentional and annotated with `//nolint:gosec`.
+
+**Rule: never invoke a shell.** No `exec.Command("sh", "-c", ...)` anywhere.
 
 ```go
-// Correct: each argument is a separate string
-exec.CommandContext(ctx, "podman", "push", imageRef)
+// Correct: use the container.Engine interface
+exitCode, err := engine.ContainerRun(ctx, container.RunOpts{
+    Image: imageRef,
+    Cmd:   []string{"build", "-o", "/out/bin"},
+})
 
-// Prohibited: shell interpretation enables injection
+// Prohibited: exec.Command for container operations
+exec.Command("podman", "run", imageRef)
+
+// Prohibited: shell interpretation
 exec.Command("sh", "-c", "podman push "+imageRef)
 ```
 
-gosec rule G204 and golangci-lint enforce this. Any `exec.Command` call with a
-variable first argument will be flagged.
-
-**Command allowlist.** All external binary calls should go through a wrapper
-that restricts which commands can be invoked:
-
-```go
-var allowedCommands = map[string]bool{
-    "podman": true,
-}
-
-func runCommand(ctx context.Context, name string, args ...string) ([]byte, error) {
-    if !allowedCommands[name] {
-        return nil, fmt.Errorf("disallowed command: %s", name)
-    }
-    return exec.CommandContext(ctx, name, args...).CombinedOutput()
-}
-```
+gosec rule G204 and golangci-lint enforce this. The architecture eliminates
+G204 findings by design rather than by `//nolint` directives.
 
 ### 1.2 Path traversal prevention
 

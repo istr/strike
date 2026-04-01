@@ -1,8 +1,10 @@
 package registry
 
 import (
+	"context"
 	"testing"
 
+	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/lane"
 )
 
@@ -28,8 +30,9 @@ func TestCacheTagShortKey(t *testing.T) {
 
 func TestCacheLookupMiss(t *testing.T) {
 	c := &RegistryCache{Registry: "localhost:5555/nonexistent"}
+	client := &Client{Engine: &fakeEngine{existsLocal: false}}
 
-	_, found := c.Lookup("sha256:0000000000000000000000000000000000000000000000000000000000000000")
+	_, found := c.Lookup(context.Background(), "sha256:0000000000000000000000000000000000000000000000000000000000000000", client)
 	if found {
 		t.Fatal("expected cache miss for nonexistent registry")
 	}
@@ -65,4 +68,14 @@ func TestSpecHashChangesOnInput(t *testing.T) {
 	if h1 == h2 {
 		t.Fatal("different images should produce different hashes")
 	}
+}
+
+// fakeEngine is a minimal Engine mock for cache tests.
+type fakeEngine struct {
+	container.Engine
+	existsLocal bool
+}
+
+func (f *fakeEngine) ImageExists(_ context.Context, _ string) (bool, error) {
+	return f.existsLocal, nil
 }

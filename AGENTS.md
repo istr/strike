@@ -18,9 +18,10 @@ Build: `CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o strike ./cmd/strike
 ## Hard invariants -- never violate these
 
 1. **No shell execution.** Never use `exec.Command("sh", "-c", ...)`,
-   `exec.Command("bash", ...)`, or any shell interpreter anywhere. All
-   external commands use `exec.Command("binary", "arg1", "arg2")` with
-   separate arguments. This is a security invariant, not a style preference.
+   `exec.Command("bash", ...)`, or any shell interpreter anywhere. Container
+   operations use the `container.Engine` REST API over Unix socket. The only
+   remaining `exec.Command` is for user-defined state capture commands in
+   deploy. This is a security invariant, not a style preference.
 
 2. **No new dependencies without justification.** The project has ~28
    transitive dependencies. Do not add dependencies. If you need functionality
@@ -45,8 +46,9 @@ Build: `CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o strike ./cmd/strike
 ```
 cmd/strike/main.go   CLI entry, dependency wiring, lane execution orchestration
 internal/
+  container/         Container engine REST API client (Engine interface, podman impl)
   lane/              Pipeline definitions, CUE schema, DAG, state, digests
-  executor/          Container execution, OCI pack, signing, SBOM, security profile
+  executor/          Container execution, OCI pack, signing, SBOM
   registry/          OCI registry operations, caching, spec hashing
   deploy/            Deployment with mandatory state attestation
 ```
@@ -61,9 +63,9 @@ packages.
   definitions. After editing, run `cue exp gengotypes ./internal/lane/` to
   regenerate `internal/lane/cue_types_lane_gen.go`. Never edit the generated
   file by hand.
-- `internal/executor/step_security_profile.go` -- Hardened podman flags. These
-  are constants, not configurable by lane definitions. Treat changes here as
-  security-critical.
+- `internal/container/engine.go` -- Engine interface and types. All container
+  operations go through this interface.
+- `internal/container/podman.go` -- Podman libpod REST API implementation.
 - `internal/executor/sign.go` -- ECDSA P-256 signing. Uses `crypto/rand`, never
   `math/rand`.
 - `cmd/strike/main.go` -- Orchestrates lane execution. Long but intentionally
@@ -71,23 +73,25 @@ packages.
 
 ## Security rules
 
-### Command execution
+### Container operations
 
-All external binary calls must:
-- Use `exec.Command` or `exec.CommandContext` with separate arguments.
-- Reference binaries by known name (podman).
-- Never interpolate untrusted input into command strings.
-- Propagate `context.Context` for cancellation and timeout.
+All container operations use the `container.Engine` interface, which
+communicates via REST API over Unix socket. There are no `exec.Command`
+calls for container operations.
+
+The only remaining `exec.Command` is in `internal/deploy/deploy.go` for
+user-defined state capture commands (the "command" capture type). This is
+intentional and annotated with `//nolint:gosec`.
 
 ```go
-// CORRECT
-cmd := exec.CommandContext(ctx, "podman", "inspect", "--format", "{{.Digest}}", imageRef)
+// CORRECT -- use the Engine interface
+exitCode, err := engine.ContainerRun(ctx, container.RunOpts{
+    Image: "image@sha256:...",
+    Cmd:   []string{"build"},
+})
 
-// WRONG -- shell injection risk
-cmd := exec.Command("sh", "-c", "podman inspect " + imageRef)
-
-// WRONG -- no context propagation
-cmd := exec.Command("podman", "inspect", imageRef)
+// WRONG -- exec.Command bypasses the Engine
+cmd := exec.Command("podman", "run", imageRef)
 ```
 
 ### Path handling
@@ -204,28 +208,22 @@ return fmt.Errorf("Failed to sign image: %s. Error: %v", ref, err)
 - Use `t.TempDir()` for file system tests (auto-cleaned).
 - Use `t.Helper()` in test helper functions.
 
-### Testing external commands
+### Testing container operations
 
-Do not invoke real external binaries in unit tests. Use one of:
-1. **Interface mocks** (preferred) -- define a `CommandRunner` interface,
-   production code uses the real implementation, tests use a mock.
-2. **TestHelperProcess pattern** -- only at the thinnest boundary layer where
-   the interface is implemented.
+Container operations are tested against `httptest` mock servers that
+simulate the podman libpod REST API. Use `container.NewFromAddress` with
+`tcp://` pointing to the test server.
 
 ```go
-// Interface for testing
-type CommandRunner interface {
-    Run(ctx context.Context, name string, args ...string) ([]byte, error)
-}
-
-// Mock for tests
-type mockRunner struct {
-    output []byte
-    err    error
-}
-
-func (m *mockRunner) Run(_ context.Context, _ string, _ ...string) ([]byte, error) {
-    return m.output, m.err
+func newTestEngine(t *testing.T, handler http.Handler) container.Engine {
+    t.Helper()
+    srv := httptest.NewServer(handler)
+    t.Cleanup(srv.Close)
+    eng, err := container.NewFromAddress("tcp://" + srv.Listener.Addr().String())
+    if err != nil {
+        t.Fatal(err)
+    }
+    return eng
 }
 ```
 

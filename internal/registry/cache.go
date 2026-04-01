@@ -1,14 +1,13 @@
 package registry
 
 import (
+	"context"
 	"crypto/sha256"
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
-	"strings"
 
 	"github.com/istr/strike/internal/lane"
 )
@@ -93,7 +92,7 @@ func HashDir(dir string) (string, error) {
 	err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			if os.IsPermission(err) {
-				return nil // skip unreadable files — they can't affect the build
+				return nil // skip unreadable files -- they can't affect the build
 			}
 			return err
 		}
@@ -150,22 +149,22 @@ const cacheKeyAnnotation = "dev.strike.cache-key"
 
 // Lookup checks local and remote for a cached step result.
 // Returns the list of cached artifacts and true if found.
-func (c *RegistryCache) Lookup(key string) ([]lane.Artifact, bool) {
+func (c *RegistryCache) Lookup(ctx context.Context, key string, client *Client) ([]lane.Artifact, bool) {
 	tag := c.CacheTag(key)
 
-	local, remote := Find(tag)
+	local, remote := client.Find(ctx, tag)
 	if !local && !remote {
 		return nil, false
 	}
 
 	if remote && !local {
-		if err := Pull(tag); err != nil {
+		if err := client.Pull(ctx, tag); err != nil {
 			return nil, false
 		}
 	}
 
 	// Verify the full cache key annotation matches (collision detection)
-	fullKey, err := inspectAnnotation(tag, cacheKeyAnnotation)
+	fullKey, err := client.InspectAnnotation(ctx, tag, cacheKeyAnnotation)
 	if err != nil || fullKey != key {
 		return nil, false
 	}
@@ -174,22 +173,9 @@ func (c *RegistryCache) Lookup(key string) ([]lane.Artifact, bool) {
 }
 
 // Store pushes step outputs to the registry as a cache entry.
-func (c *RegistryCache) Store(key string, outputDir string) error {
-	tag := c.CacheTag(key)
-	if err := PushArtifact(outputDir, tag); err != nil {
+func (c *RegistryCache) Store(ctx context.Context, key string, client *Client, tag string) error {
+	if err := client.PushArtifact(ctx, tag); err != nil {
 		return fmt.Errorf("cache store %q: %w", tag, err)
 	}
 	return nil
-}
-
-// inspectAnnotation retrieves an annotation from a local image.
-func inspectAnnotation(tag, annotation string) (string, error) {
-	cmd := exec.Command("podman", "inspect",
-		"--format", fmt.Sprintf(`{{index .Annotations "%s"}}`, annotation),
-		tag)
-	out, err := cmd.Output()
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(string(out)), nil
 }

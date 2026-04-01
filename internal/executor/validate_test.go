@@ -114,41 +114,21 @@ func TestValidateContentType_InvalidELF(t *testing.T) {
 	}
 }
 
-func TestBaseFlagsPresent(t *testing.T) {
-	// Verify the hardened profile flags are present
-	expected := map[string]bool{
-		"--cap-drop=ALL":                   false,
-		"--read-only":                      false,
-		"--rm":                             false,
-		"--security-opt=no-new-privileges": false,
+func TestNetworkMode(t *testing.T) {
+	tests := []struct {
+		name    string
+		enabled bool
+		want    string
+	}{
+		{"disabled", false, "none"},
+		{"enabled", true, ""},
 	}
-	for _, f := range baseFlags {
-		if _, ok := expected[f]; ok {
-			expected[f] = true
-		}
-	}
-	for flag, found := range expected {
-		if !found {
-			t.Errorf("missing base flag: %s", flag)
-		}
-	}
-}
-
-func TestNetworkFlag(t *testing.T) {
-	disabled := networkFlag(false)
-	if len(disabled) != 1 || disabled[0] != "--network=none" {
-		t.Errorf("network disabled: %v", disabled)
-	}
-
-	enabled := networkFlag(true)
-	if len(enabled) != 0 {
-		t.Errorf("network enabled should return nil, got: %v", enabled)
-	}
-}
-
-func TestOutputMount(t *testing.T) {
-	m := outputMount("/tmp/abc123")
-	if len(m) != 2 || m[0] != "-v" || m[1] != "/tmp/abc123:/out:rw,noexec,nosuid" {
-		t.Errorf("unexpected output mount: %v", m)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := networkMode(tt.enabled)
+			if got != tt.want {
+				t.Errorf("networkMode(%v) = %q, want %q", tt.enabled, got, tt.want)
+			}
+		})
 	}
 }

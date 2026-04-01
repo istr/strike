@@ -1,20 +1,27 @@
 package registry
 
 import (
+	"context"
 	"fmt"
-	"os/exec"
+	"os"
 	"strings"
 
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/crane"
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
+	"github.com/istr/strike/internal/container"
 )
 
-// ExistsLocal checks if an image exists in the local container store (no network).
-func ExistsLocal(tag string) bool {
-	err := exec.Command("podman", "image", "exists", tag).Run()
-	return err == nil
+// Client wraps container engine operations for registry interaction.
+type Client struct {
+	Engine container.Engine
+}
+
+// ExistsLocal checks if an image exists in the local container store.
+func (c *Client) ExistsLocal(ctx context.Context, tag string) bool {
+	exists, _ := c.Engine.ImageExists(ctx, tag)
+	return exists
 }
 
 // ExistsRemote checks if an image exists in a remote registry (one roundtrip).
@@ -28,75 +35,83 @@ func ExistsRemote(tag string) bool {
 }
 
 // Pull fetches an image from a remote registry into the local store.
-func Pull(tag string) error {
-	return exec.Command("podman", "pull", tag).Run()
+func (c *Client) Pull(ctx context.Context, tag string) error {
+	return c.Engine.ImagePull(ctx, tag)
 }
 
-// PushArtifact pushes a local directory or file as an OCI image to the registry.
-func PushArtifact(localPath, tag string) error {
-	return exec.Command("podman", "push", tag).Run()
+// PushArtifact pushes a local image to the registry.
+func (c *Client) PushArtifact(ctx context.Context, tag string) error {
+	return c.Engine.ImagePush(ctx, tag)
 }
 
 // CopyImage copies an image between registries using go-containerregistry.
 func CopyImage(src, dst string) error {
 	if err := crane.Copy(src, dst,
 		crane.WithAuthFromKeychain(authn.DefaultKeychain)); err != nil {
-		return fmt.Errorf("copy %s → %s: %w", src, dst, err)
+		return fmt.Errorf("copy %s -> %s: %w", src, dst, err)
 	}
 	return nil
 }
 
 // LoadOCITar loads a single-image OCI tar archive into the local container
 // store and returns the manifest digest.
-func LoadOCITar(tarPath string) (string, error) {
-	cmd := exec.Command("podman", "load", "-i", tarPath, "--quiet")
-	out, err := cmd.Output()
+func (c *Client) LoadOCITar(ctx context.Context, tarPath string) (string, error) {
+	f, err := os.Open(tarPath)
 	if err != nil {
-		return "", fmt.Errorf("podman load: %w", err)
+		return "", err
+	}
+	defer func() { _ = f.Close() }()
+
+	id, err := c.Engine.ImageLoad(ctx, f)
+	if err != nil {
+		return "", err
 	}
 
-	imageID := strings.TrimSpace(string(out))
-	return InspectDigest(imageID)
+	return c.InspectDigest(ctx, id)
 }
 
-// LoadOCITarByDigest loads a specific image from a multi-manifest OCI tar
-// archive into the local container store, selecting it by digest.
-func LoadOCITarByDigest(tarPath, digest string) error {
+// LoadOCITarByDigest loads an image from an OCI tar archive into the local
+// container store, selecting it by digest, and tags it for downstream reference.
+func (c *Client) LoadOCITarByDigest(ctx context.Context, tarPath, digest string) error {
+	f, err := os.Open(tarPath)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = f.Close() }()
+
+	id, err := c.Engine.ImageLoad(ctx, f)
+	if err != nil {
+		return err
+	}
+
 	localTag := "localhost/strike:" + strings.TrimPrefix(digest, "sha256:")[:12]
-
-	cmd := exec.Command("podman", "load", "-i", tarPath, "--quiet")
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("podman load: %s: %w", strings.TrimSpace(string(out)), err)
-	}
-
-	// Tag the loaded image with our local tag for downstream reference
-	cmd = exec.Command("podman", "tag", digest, localTag)
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("podman tag %s → %s: %s: %w",
-			digest, localTag, strings.TrimSpace(string(out)), err)
-	}
-
-	return nil
+	return c.Engine.ImageTag(ctx, id, localTag)
 }
 
-// InspectDigest returns the manifest digest of a local image via podman.
-func InspectDigest(imageRef string) (string, error) {
-	cmd := exec.Command("podman", "inspect", "--format", "{{.Digest}}", imageRef)
-	out, err := cmd.Output()
+// InspectDigest returns the manifest digest of a local image.
+func (c *Client) InspectDigest(ctx context.Context, ref string) (string, error) {
+	info, err := c.Engine.ImageInspect(ctx, ref)
 	if err != nil {
-		return "", fmt.Errorf("podman inspect %q: %w", imageRef, err)
+		return "", err
 	}
+	if info.Digest == "" {
+		return "", fmt.Errorf("no digest for %s", ref)
+	}
+	return info.Digest, nil
+}
 
-	digest := strings.TrimSpace(string(out))
-	if !strings.HasPrefix(digest, "sha256:") {
-		return "", fmt.Errorf("unexpected digest format for %q: %q", imageRef, digest)
+// InspectAnnotation retrieves an annotation value from a local image.
+func (c *Client) InspectAnnotation(ctx context.Context, tag, annotation string) (string, error) {
+	info, err := c.Engine.ImageInspect(ctx, tag)
+	if err != nil {
+		return "", err
 	}
-	return digest, nil
+	return info.Annotations[annotation], nil
 }
 
 // Find implements local-first lookup with remote fallback.
-func Find(tag string) (bool, bool) {
-	if ExistsLocal(tag) {
+func (c *Client) Find(ctx context.Context, tag string) (bool, bool) {
+	if c.ExistsLocal(ctx, tag) {
 		return true, false
 	}
 	if ExistsRemote(tag) {

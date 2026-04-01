@@ -1,14 +1,17 @@
 package executor
 
 import (
+	"context"
 	"fmt"
 	"os"
-	"os/exec"
 
+	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/lane"
 )
 
+// Run holds the configuration for executing a step container.
 type Run struct {
+	Engine       container.Engine
 	Step         *lane.Step
 	InputMounts  []Mount
 	SourceMounts []Mount
@@ -16,69 +19,74 @@ type Run struct {
 	Secrets      map[string]string // env-name -> plaintext
 }
 
+// Mount describes a bind mount from host to container.
 type Mount struct {
 	Host      string
 	Container string
 	ReadOnly  bool
 }
 
-func (r Run) Execute() error {
-	tmpHome, _ := os.MkdirTemp("", "strike-home-"+r.Step.Name+"-")
-	defer os.RemoveAll(tmpHome)
-
-	tmpRun, _ := os.MkdirTemp("", "strike-run-"+r.Step.Name+"-")
-	defer os.RemoveAll(tmpRun)
-
-	tmpData, _ := os.MkdirTemp("", "strike-data-"+r.Step.Name+"-")
-	defer os.RemoveAll(tmpData)
-
-	args := []string{
-		"run", "--rm",
-		"--userns=keep-id",
-		"--env", "XDG_RUNTIME_DIR=/tmp/run",
-		"--env", "XDG_DATA_HOME=/tmp/data",
-		"-v", tmpHome + ":/tmp/strike-home:U",
-		"-v", tmpRun + ":/tmp/strike-run:U",
-		"-v", tmpData + ":/tmp/strike-data:U",
-	}
-
-	if !r.Step.Network {
-		args = append(args, "--network=none")
-	}
-
-	for _, m := range r.InputMounts {
-		flag := fmt.Sprintf("%s:%s", m.Host, m.Container)
-		if m.ReadOnly {
-			flag += ":ro"
-		}
-		args = append(args, "-v", flag)
-	}
-
-	for _, m := range r.SourceMounts {
-		args = append(args, "-v",
-			fmt.Sprintf("%s:%s:ro", m.Host, m.Container))
-	}
-
-	// Output directory
-	args = append(args, "-v", r.OutputDir+":/out")
-
-	// Non-sensitive environment variables (inline values)
+// Execute runs the step container via the container engine API.
+// Secrets are passed as env vars in the API request body (JSON over Unix
+// socket), never via os.Setenv or process arguments.
+func (r Run) Execute(ctx context.Context) error {
+	// Build environment (non-sensitive + secrets)
+	env := make(map[string]string, len(r.Step.Env)+len(r.Secrets)+2)
 	for k, v := range r.Step.Env {
-		args = append(args, "--env", k+"="+v)
+		env[k] = v
 	}
-
-	// Pass secret env names only - values via process environment,
-	// never written to args (no ps aux leak)
-	for envName, val := range r.Secrets {
-		args = append(args, "--env", envName)
-		os.Setenv(envName, val)
+	for k, v := range r.Secrets {
+		env[k] = v
 	}
+	env["XDG_RUNTIME_DIR"] = "/tmp/run"
+	env["XDG_DATA_HOME"] = "/tmp/data"
 
-	args = append(args, r.Step.Image)
-	args = append(args, r.Step.Args...)
+	// Build mounts
+	var mounts []container.Mount
+	for _, m := range r.InputMounts {
+		mounts = append(mounts, container.Mount{
+			Source: m.Host, Target: m.Container, ReadOnly: m.ReadOnly,
+		})
+	}
+	for _, m := range r.SourceMounts {
+		mounts = append(mounts, container.Mount{
+			Source: m.Host, Target: m.Container, ReadOnly: true,
+		})
+	}
+	// Output directory
+	mounts = append(mounts, container.Mount{
+		Source:  r.OutputDir,
+		Target:  "/out",
+		Options: []string{"noexec", "nosuid"},
+	})
 
-	cmd := exec.Command("podman", args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	exitCode, err := r.Engine.ContainerRun(ctx, container.RunOpts{
+		Image:       r.Step.Image,
+		Cmd:         r.Step.Args,
+		Env:         env,
+		Mounts:      mounts,
+		Network:     networkMode(r.Step.Network),
+		CapDrop:     []string{"ALL"},
+		ReadOnly:    true,
+		SecurityOpt: []string{"no-new-privileges"},
+		Tmpfs:       map[string]string{"/tmp": "rw,noexec,nosuid,size=512m"},
+		UsernsMode:  "keep-id",
+		Stdout:      os.Stdout,
+		Stderr:      os.Stderr,
+		Remove:      true,
+	})
+	if err != nil {
+		return fmt.Errorf("container execution: %w", err)
+	}
+	if exitCode != 0 {
+		return fmt.Errorf("container exited with code %d", exitCode)
+	}
+	return nil
+}
+
+func networkMode(enabled bool) string {
+	if enabled {
+		return "" // default bridge
+	}
+	return "none"
 }
