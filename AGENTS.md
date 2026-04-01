@@ -75,7 +75,7 @@ packages.
 
 All external binary calls must:
 - Use `exec.Command` or `exec.CommandContext` with separate arguments.
-- Reference binaries by known name (podman, kubectl).
+- Reference binaries by known name (podman).
 - Never interpolate untrusted input into command strings.
 - Propagate `context.Context` for cancellation and timeout.
 

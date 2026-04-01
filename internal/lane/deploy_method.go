@@ -9,6 +9,7 @@ func (m DeployMethod) Strategy() string     { return mstr(m, "strategy") }
 func (m DeployMethod) Source() string       { return mstr(m, "source") }
 func (m DeployMethod) MethodTarget() string { return mstr(m, "target") }
 func (m DeployMethod) Image() string        { return mstr(m, "image") }
+func (m DeployMethod) Kubeconfig() string   { return mstr(m, "kubeconfig") }
 
 func (m DeployMethod) Args() []string {
 	v, ok := m["args"]

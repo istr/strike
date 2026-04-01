@@ -2,6 +2,8 @@ package deploy
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/istr/strike/internal/lane"
@@ -96,5 +98,80 @@ func TestGenerateDeployID(t *testing.T) {
 	}
 	if len(id1) != 16 {
 		t.Fatalf("deploy ID length = %d, want 16", len(id1))
+	}
+}
+
+func TestResolveKubeconfig_ExplicitExists(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "kubeconfig")
+	os.WriteFile(path, []byte("test"), 0o600)
+
+	got, err := resolveKubeconfig(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != path {
+		t.Fatalf("got %q, want %q", got, path)
+	}
+}
+
+func TestResolveKubeconfig_ExplicitMissing(t *testing.T) {
+	_, err := resolveKubeconfig("/nonexistent/kubeconfig")
+	if err == nil {
+		t.Fatal("expected error for missing explicit path")
+	}
+}
+
+func TestResolveKubeconfig_EnvSet(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "kubeconfig")
+	os.WriteFile(path, []byte("test"), 0o600)
+	t.Setenv("KUBECONFIG", path)
+
+	got, err := resolveKubeconfig("")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != path {
+		t.Fatalf("got %q, want %q", got, path)
+	}
+}
+
+func TestResolveKubeconfig_EnvMissing(t *testing.T) {
+	t.Setenv("KUBECONFIG", "/nonexistent/kubeconfig")
+
+	_, err := resolveKubeconfig("")
+	if err == nil {
+		t.Fatal("expected error for missing $KUBECONFIG path")
+	}
+}
+
+func TestResolveKubeconfig_DefaultExists(t *testing.T) {
+	dir := t.TempDir()
+	kubeDir := filepath.Join(dir, ".kube")
+	os.MkdirAll(kubeDir, 0o755)
+	path := filepath.Join(kubeDir, "config")
+	os.WriteFile(path, []byte("test"), 0o600)
+
+	t.Setenv("KUBECONFIG", "")
+	t.Setenv("HOME", dir)
+
+	got, err := resolveKubeconfig("")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != path {
+		t.Fatalf("got %q, want %q", got, path)
+	}
+}
+
+func TestResolveKubeconfig_NoneFound(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("KUBECONFIG", "")
+	t.Setenv("HOME", dir)
+
+	_, err := resolveKubeconfig("")
+	if err == nil {
+		t.Fatal("expected error when no kubeconfig found")
 	}
 }

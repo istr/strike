@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"time"
 
 	"github.com/istr/strike/internal/lane"
@@ -203,17 +204,34 @@ func captureOne(ctx context.Context, cap lane.StateCapture) (StateSnap, error) {
 		if cap.Resource == nil {
 			return snap, fmt.Errorf("kubernetes capture %q: no resource specified", cap.Name)
 		}
-		args := []string{"get", cap.Resource.Kind, cap.Resource.Name, "-o", "json"}
+		if cap.Image == "" {
+			return snap, fmt.Errorf("kubernetes capture %q: image required (digest-pinned kubectl image)", cap.Name)
+		}
+
+		kubeconfig, kcErr := resolveKubeconfig("")
+		if kcErr != nil {
+			return snap, fmt.Errorf("kubernetes capture %q: %w", cap.Name, kcErr)
+		}
+
+		kubectlArgs := []string{"get", cap.Resource.Kind, cap.Resource.Name, "-o", "json"}
 		if cap.Resource.Namespace != "" {
-			args = append(args, "-n", cap.Resource.Namespace)
+			kubectlArgs = append(kubectlArgs, "-n", cap.Resource.Namespace)
 		}
 		if cap.Resource.JSONPath != "" {
-			args = append(args, "-o", fmt.Sprintf("jsonpath=%s", cap.Resource.JSONPath))
+			kubectlArgs = append(kubectlArgs, "-o", fmt.Sprintf("jsonpath=%s", cap.Resource.JSONPath))
 		}
-		cmd := exec.CommandContext(ctx, "kubectl", args...)
+
+		podmanArgs := []string{
+			"run", "--rm", "--network=host",
+			"-v", kubeconfig + ":/root/.kube/config:ro",
+			string(cap.Image),
+		}
+		podmanArgs = append(podmanArgs, kubectlArgs...)
+
+		cmd := exec.CommandContext(ctx, "podman", podmanArgs...) //nolint:gosec // G204: intentional podman invocation
 		out, err := cmd.Output()
 		if err != nil {
-			return snap, fmt.Errorf("kubectl: %w", err)
+			return snap, fmt.Errorf("kubernetes capture %q: %w", cap.Name, err)
 		}
 		snap.Output = out
 		snap.Digest = "sha256:" + hex.EncodeToString(sha256Sum(out))
@@ -273,15 +291,36 @@ func executeRegistryDeploy(_ context.Context, m lane.DeployMethod) error {
 }
 
 func executeKubernetesDeploy(ctx context.Context, m lane.DeployMethod) error {
+	image := m.Image()
+	if image == "" {
+		return fmt.Errorf("kubernetes deploy: image required (digest-pinned kubectl image)")
+	}
+
+	kubeconfig, err := resolveKubeconfig(m.Kubeconfig())
+	if err != nil {
+		return fmt.Errorf("kubernetes deploy: %w", err)
+	}
+
 	strategy := m.Strategy()
 	if strategy == "" {
 		strategy = "apply"
 	}
-	args := []string{strategy, "-f", "-"}
+
+	kubectlArgs := []string{strategy, "-f", "-"}
 	if m.Namespace() != "" {
-		args = append(args, "-n", m.Namespace())
+		kubectlArgs = append(kubectlArgs, "-n", m.Namespace())
 	}
-	cmd := exec.CommandContext(ctx, "kubectl", args...)
+
+	podmanArgs := []string{
+		"run", "--rm", "--network=host",
+		"-v", kubeconfig + ":/root/.kube/config:ro",
+		"-i",
+		image,
+	}
+	podmanArgs = append(podmanArgs, kubectlArgs...)
+
+	cmd := exec.CommandContext(ctx, "podman", podmanArgs...) //nolint:gosec // G204: intentional podman invocation
+	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
@@ -302,6 +341,32 @@ func executeCustomDeploy(ctx context.Context, m lane.DeployMethod) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
+}
+
+// resolveKubeconfig returns the host path to the kubeconfig file.
+// Priority: explicit override, $KUBECONFIG, default path.
+func resolveKubeconfig(override string) (string, error) {
+	if override != "" {
+		if _, err := os.Stat(override); err != nil {
+			return "", fmt.Errorf("kubeconfig %q: %w", override, err)
+		}
+		return override, nil
+	}
+	if env := os.Getenv("KUBECONFIG"); env != "" {
+		if _, err := os.Stat(env); err != nil {
+			return "", fmt.Errorf("$KUBECONFIG %q: %w", env, err)
+		}
+		return env, nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve home dir: %w", err)
+	}
+	path := filepath.Join(home, ".kube", "config")
+	if _, err := os.Stat(path); err != nil {
+		return "", fmt.Errorf("default kubeconfig %q: %w", path, err)
+	}
+	return path, nil
 }
 
 func generateDeployID(stepName string) string {

@@ -57,8 +57,8 @@ unverified artifact types.
 
 The highest-risk categories for a CI/CD executor like strike:
 
-**A03 Injection** -- The primary risk. strike invokes podman and kubectl
-as external processes. All invocations use `exec.Command` with separate
+**A03 Injection** -- The primary risk. strike invokes podman
+as an external process. All invocations use `exec.Command` with separate
 arguments (no shell interpretation). Lane definitions cannot inject shell
 metacharacters because there is no shell. The command allowlist in the executor
 restricts which binaries can be called.

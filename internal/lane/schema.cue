@@ -182,9 +182,11 @@ package lane
 
 #DeployKubernetes: {
 	@go(DeployKubernetes)
-	type:      "kubernetes" @go(Type)
-	namespace: string @go(Namespace)
-	strategy:  *"apply" | "replace" | "rollout" @go(Strategy)
+	type:        "kubernetes" @go(Type)
+	image:       #ImageRef @go(Image)
+	namespace:   string @go(Namespace)
+	strategy:    *"apply" | "replace" | "rollout" @go(Strategy)
+	kubeconfig?: string @go(Kubeconfig)
 }
 
 #DeployRegistry: {
@@ -245,6 +247,7 @@ package lane
 	command?:  [...string] @go(Command)
 	resource?: #KubeResource @go(Resource,optional=nillable)
 	url?:      string @go(URL)
+	image?:    #ImageRef @go(Image)
 }
 
 #KubeResource: {

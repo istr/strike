@@ -12,7 +12,7 @@ every design decision.
 
 ### 1.1 Command injection prevention
 
-strike invokes external binaries (podman, kubectl). Command injection
+strike invokes podman as an external binary. Command injection
 is the highest-severity vulnerability class.
 
 **Rule: never invoke a shell.** Go's `exec.Command` passes arguments directly
@@ -35,8 +35,7 @@ that restricts which commands can be invoked:
 
 ```go
 var allowedCommands = map[string]bool{
-    "podman":  true,
-    "kubectl": true,
+    "podman": true,
 }
 
 func runCommand(ctx context.Context, name string, args ...string) ([]byte, error) {
