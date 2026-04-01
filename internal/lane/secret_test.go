@@ -1,6 +1,8 @@
 package lane_test
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"os"
 	"path/filepath"
 	"testing"
@@ -8,14 +10,24 @@ import (
 	"github.com/istr/strike/internal/lane"
 )
 
+func randomHex(t *testing.T) string {
+	t.Helper()
+	var buf [8]byte
+	if _, err := rand.Read(buf[:]); err != nil {
+		t.Fatal(err)
+	}
+	return hex.EncodeToString(buf[:])
+}
+
 func TestReadSecret_EnvSet(t *testing.T) {
-	t.Setenv("STRIKE_TEST_SECRET", "hunter2")
-	val, err := lane.ReadSecret("env://STRIKE_TEST_SECRET")
+	val := randomHex(t)
+	t.Setenv("STRIKE_TEST_SECRET", val)
+	got, err := lane.ReadSecret("env://STRIKE_TEST_SECRET")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if val != "hunter2" {
-		t.Fatalf("got %q, want %q", val, "hunter2")
+	if got != val {
+		t.Fatalf("got %q, want %q", got, val)
 	}
 }
 
@@ -27,18 +39,19 @@ func TestReadSecret_EnvUnset(t *testing.T) {
 }
 
 func TestReadSecret_FileExists(t *testing.T) {
+	want := randomHex(t)
 	dir := t.TempDir()
 	path := filepath.Join(dir, "secret.txt")
-	if err := os.WriteFile(path, []byte("file-secret"), 0o600); err != nil {
+	if err := os.WriteFile(path, []byte(want), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
-	val, err := lane.ReadSecret(lane.SecretSource("file://" + path))
+	got, err := lane.ReadSecret(lane.SecretSource("file://" + path))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if val != "file-secret" {
-		t.Fatalf("got %q, want %q", val, "file-secret")
+	if got != want {
+		t.Fatalf("got %q, want %q", got, want)
 	}
 }
 
@@ -67,26 +80,31 @@ func TestResolveSecrets_MissingDefinition(t *testing.T) {
 }
 
 func TestResolveSecrets_Valid(t *testing.T) {
-	t.Setenv("STRIKE_TEST_A", "value-a")
-	t.Setenv("STRIKE_TEST_B", "value-b")
+	valA := randomHex(t)
+	valB := randomHex(t)
+	t.Setenv("STRIKE_TEST_A", valA)
+	t.Setenv("STRIKE_TEST_B", valB)
+
+	nameA := "s_" + randomHex(t)
+	nameB := "s_" + randomHex(t)
 
 	refs := []lane.SecretRef{
-		{Name: "secret_a", Env: "SECRET_A"},
-		{Name: "secret_b", Env: "SECRET_B"},
+		{Name: nameA, Env: "OUT_A"},
+		{Name: nameB, Env: "OUT_B"},
 	}
-	sources := map[string]lane.SecretSource{ //nolint:gosec // G101: test fixture, not real credentials
-		"secret_a": "env://STRIKE_TEST_A",
-		"secret_b": "env://STRIKE_TEST_B",
+	defs := map[string]lane.SecretSource{
+		nameA: "env://STRIKE_TEST_A",
+		nameB: "env://STRIKE_TEST_B",
 	}
 
-	result, err := lane.ResolveSecrets(refs, sources)
+	result, err := lane.ResolveSecrets(refs, defs)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result["SECRET_A"] != "value-a" {
-		t.Errorf("SECRET_A = %q, want %q", result["SECRET_A"], "value-a")
+	if result["OUT_A"] != valA {
+		t.Errorf("OUT_A = %q, want %q", result["OUT_A"], valA)
 	}
-	if result["SECRET_B"] != "value-b" {
-		t.Errorf("SECRET_B = %q, want %q", result["SECRET_B"], "value-b")
+	if result["OUT_B"] != valB {
+		t.Errorf("OUT_B = %q, want %q", result["OUT_B"], valB)
 	}
 }
