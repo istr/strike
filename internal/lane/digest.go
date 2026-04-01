@@ -124,31 +124,3 @@ func CacheKey(step *Step, imageDigest string, inputDigests map[string]string) st
 
 	return "sha256:" + hex.EncodeToString(h.Sum(nil))
 }
-
-// ResolveInputDigests resolves all input digests for a step from the lane state,
-// and computes source digests for source mounts. Returns the combined map.
-func ResolveInputDigests(step *Step, state *State, laneRoot string) (map[string]string, error) {
-	digests := make(map[string]string)
-
-	for _, inp := range step.Inputs {
-		d, err := InputDigest(inp, state)
-		if err != nil {
-			return nil, err
-		}
-		digests["input:"+inp.Name] = d
-	}
-
-	for _, src := range step.Sources {
-		path := src.Path
-		if !filepath.IsAbs(path) {
-			path = filepath.Join(laneRoot, path)
-		}
-		d, err := SourceDigest(path)
-		if err != nil {
-			return nil, err
-		}
-		digests["source:"+src.Mount] = d
-	}
-
-	return digests, nil
-}

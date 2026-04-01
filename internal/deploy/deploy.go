@@ -52,8 +52,7 @@ type DriftReport struct {
 
 // Deployer executes deploy steps and produces attestations.
 type Deployer struct {
-	Engine   container.Engine
-	LaneRoot string
+	Engine container.Engine
 }
 
 // Execute runs a deploy step: capture pre-state, detect drift, execute

@@ -177,11 +177,3 @@ func (c *Cache) Lookup(ctx context.Context, key string, client *Client) ([]lane.
 
 	return nil, true // artifacts retrieved via the tag
 }
-
-// Store pushes step outputs to the registry as a cache entry.
-func (c *Cache) Store(ctx context.Context, _ string, client *Client, tag string) error {
-	if err := client.PushArtifact(ctx, tag); err != nil {
-		return fmt.Errorf("cache store %q: %w", tag, err)
-	}
-	return nil
-}
