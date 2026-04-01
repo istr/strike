@@ -3,7 +3,7 @@ package registry
 import (
 	"testing"
 
-	"github.com/istr/strike/lane"
+	"github.com/istr/strike/internal/lane"
 )
 
 func TestCacheTag(t *testing.T) {

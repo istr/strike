@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/istr/strike/lane"
+	"github.com/istr/strike/internal/lane"
 )
 
 func TestDetectDrift_NoPrevious(t *testing.T) {

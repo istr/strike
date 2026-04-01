@@ -20,7 +20,7 @@ import (
 
 	"github.com/google/go-containerregistry/pkg/name"
 
-	"github.com/istr/strike/lane"
+	"github.com/istr/strike/internal/lane"
 )
 
 // PackOpts is everything pack needs; callers in main.go assemble this.

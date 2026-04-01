@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/istr/strike/lane"
+	"github.com/istr/strike/internal/lane"
 )
 
 func TestValidateELFAmd64(t *testing.T) {

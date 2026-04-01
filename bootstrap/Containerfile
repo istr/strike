@@ -23,10 +23,10 @@ RUN ["git", "init"]
 # We want no-sh. However, we cannot pass GIT_COMMIT to git using ARG/ENV combination.
 RUN git fetch --depth 1 https://github.com/istr/strike ${GIT_COMMIT}
 RUN ["git", "checkout", "FETCH_HEAD"]
-RUN ["cue", "exp", "gengotypes", "./lane/"]
+RUN ["cue", "exp", "gengotypes", "./internal/lane/"]
 RUN ["go", "get"]
 ENV CGO_ENABLED=0
-RUN ["go", "build", "-trimpath", "-ldflags=-s -w", "-o", "strike", "."]
+RUN ["go", "build", "-trimpath", "-ldflags=-s -w", "-o", "strike", "./cmd/strike"]
 
 FROM docker.io/mgoltzsche/podman@sha256:53e4c6d0597bd01afca2355b83d993c4254efce0e64afa0beb3026d38ee27a9d
 COPY --from=builder /src /src

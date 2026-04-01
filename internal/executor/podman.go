@@ -5,7 +5,7 @@ import (
 	"os"
 	"os/exec"
 
-	"github.com/istr/strike/lane"
+	"github.com/istr/strike/internal/lane"
 )
 
 type Run struct {

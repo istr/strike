@@ -10,7 +10,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/istr/strike/lane"
+	"github.com/istr/strike/internal/lane"
 )
 
 // SpecHash computes the spec hash of a step (Merkle tree over the DAG).

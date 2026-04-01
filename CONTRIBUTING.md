@@ -129,7 +129,7 @@ strike actually calls, either upgrade the dependency or remove it.
 ### Build
 
 ```sh
-CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o strike .
+CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o strike ./cmd/strike
 ```
 
 The binary must build as a static, pure-Go executable.
@@ -158,10 +158,10 @@ essential rules:
 
 Changes touching these areas require extra scrutiny:
 
-- `executor/` -- container security profile, signing, SBOM generation
-- `registry/` -- OCI registry interaction, cache integrity
-- `deploy/` -- command execution, state capture
-- `main.go` -- secret handling, digest verification
+- `internal/executor/` -- container security profile, signing, SBOM generation
+- `internal/registry/` -- OCI registry interaction, cache integrity
+- `internal/deploy/` -- command execution, state capture
+- `cmd/strike/main.go` -- secret handling, digest verification
 
 If your change modifies how external commands are invoked, how paths are
 constructed from user input, how secrets flow through the system, or how

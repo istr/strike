@@ -80,7 +80,7 @@ default. Output directories are mounted with `noexec,nosuid`. Inputs are
 read-only.
 
 **A05 Security Misconfiguration** -- The hardened security profile in
-`executor/step_security_profile.go` is not configurable by lane definitions.
+`internal/executor/step_security_profile.go` is not configurable by lane definitions.
 Steps control only the image, arguments, environment, network flag, and
 declared inputs and outputs.
 
@@ -112,7 +112,7 @@ strike is designed with a minimal attack surface:
 ## Container security profile
 
 All step containers run with these flags (defined in
-`executor/step_security_profile.go`):
+`internal/executor/step_security_profile.go`):
 
 ```
 podman run \

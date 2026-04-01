@@ -138,30 +138,31 @@ Secrets are passed as environment variables, never written to process arguments.
 ## Project structure
 
 ```
-main.go                          CLI entry point (run, validate, dag, compare)
-lane/
-  schema.cue                     CUE schema (source of truth)
-  cue_types_lane_gen.go          Generated Go types (do not edit)
-  parse.go                       YAML parsing and CUE validation
-  dag.go                         DAG construction and topological sort
-  state.go                       Artifact and step result tracking
-  digest.go                      Content hashing and cache key computation
-  deploy_method.go               DeployMethod accessor helpers
-executor/
-  podman.go                      Container execution via podman
-  run.go                         Step runner with hardened security profile
-  step_security_profile.go       Podman security flags (cap-drop, read-only, etc.)
-  pack.go                        OCI image assembly (native Go, no container)
-  sign.go                        ECDSA P-256 cosign-compatible signing
-  sbom.go                        CycloneDX 1.6 SBOM generation
-registry/
-  cache.go                       Spec hashing and cache tagging
-  client.go                      Registry operations (go-containerregistry, podman)
-deploy/
-  deploy.go                      Deploy with mandatory state attestation
-bootstrap/
-  Containerfile                  Self-contained bootstrap image
-lane.yaml                        Top-level bootstrap lane
+cmd/strike/main.go               CLI entry point (run, validate, dag, compare)
+internal/
+  lane/
+    schema.cue                    CUE schema (source of truth)
+    cue_types_lane_gen.go         Generated Go types (do not edit)
+    parse.go                      YAML parsing and CUE validation
+    dag.go                        DAG construction and topological sort
+    state.go                      Artifact and step result tracking
+    digest.go                     Content hashing and cache key computation
+    deploy_method.go              DeployMethod accessor helpers
+    secret.go                     Secret resolution
+  executor/
+    podman.go                     Container execution via podman
+    validate.go                   Output validation (magic bytes, size bounds)
+    step_security_profile.go      Podman security flags
+    pack.go                       OCI image assembly (native Go, no container)
+    sign.go                       ECDSA P-256 cosign-compatible signing
+    sbom.go                       CycloneDX 1.6 SBOM generation
+  registry/
+    cache.go                      Spec hashing and cache tagging
+    client.go                     Registry operations (go-containerregistry, podman)
+  deploy/
+    deploy.go                     Deploy with mandatory state attestation
+bootstrap/Containerfile           Self-contained bootstrap image
+lane.yaml                         Top-level bootstrap lane
 ```
 
 ## Development

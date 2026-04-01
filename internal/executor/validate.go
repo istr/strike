@@ -6,7 +6,7 @@ import (
 	"io/fs"
 	"os"
 
-	"github.com/istr/strike/lane"
+	"github.com/istr/strike/internal/lane"
 )
 
 // ValidateOutput checks that an extracted output matches its expected properties.

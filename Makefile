@@ -1,17 +1,17 @@
 .PHONY: build generate schema lint test vuln check
 
 build: generate
-	CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o strike ./main.go
+	CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o strike ./cmd/strike
 
 # Go-Structs aus CUE generieren
-generate: lane/schema.cue
-	cue exp gengotypes ./lane/
+generate: internal/lane/schema.cue
+	cue exp gengotypes ./internal/lane/
 
 # Export JSON schema for IDE support
 schema:
-	cue export ./lane/schema.cue \
-	    --out openapi                 \
-	    -o lane/schema.json
+	cue export ./internal/lane/schema.cue \
+	    --out openapi                      \
+	    -o internal/lane/schema.json
 
 # --- Quality gates ---
 

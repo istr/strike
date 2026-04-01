@@ -13,7 +13,7 @@ and must stay small. Every line of code is a liability.
 
 Module path: `github.com/istr/strike`
 Go version: 1.26+
-Build: `CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o strike .`
+Build: `CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o strike ./cmd/strike`
 
 ## Hard invariants -- never violate these
 
@@ -43,29 +43,31 @@ Build: `CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o strike .`
 ## Package structure
 
 ```
-main.go              CLI entry, dependency wiring, lane execution orchestration
-lane/                Pipeline definitions, CUE schema, DAG, state, digests
-executor/            Container execution, OCI pack, signing, SBOM, security profile
-registry/            OCI registry operations, caching, spec hashing
-deploy/              Deployment with mandatory state attestation
+cmd/strike/main.go   CLI entry, dependency wiring, lane execution orchestration
+internal/
+  lane/              Pipeline definitions, CUE schema, DAG, state, digests
+  executor/          Container execution, OCI pack, signing, SBOM, security profile
+  registry/          OCI registry operations, caching, spec hashing
+  deploy/            Deployment with mandatory state attestation
 ```
 
-Do not create new top-level packages without discussion. Do not create
-`internal/`, `pkg/`, `cmd/`, `util/`, `common/`, `helper/`, `models/`, or
-`types/` packages.
+Do not create new packages under internal/ without discussion. Do not create
+`pkg/`, `util/`, `common/`, `helper/`, `models/`, `types/`, or `interfaces/`
+packages.
 
 ### Key files
 
-- `lane/schema.cue` -- The CUE schema is the source of truth for lane
-  definitions. After editing, run `cue exp gengotypes ./lane/` to regenerate
-  `lane/cue_types_lane_gen.go`. Never edit the generated file by hand.
-- `executor/step_security_profile.go` -- Hardened podman flags. These are
-  constants, not configurable by lane definitions. Treat changes here as
+- `internal/lane/schema.cue` -- The CUE schema is the source of truth for lane
+  definitions. After editing, run `cue exp gengotypes ./internal/lane/` to
+  regenerate `internal/lane/cue_types_lane_gen.go`. Never edit the generated
+  file by hand.
+- `internal/executor/step_security_profile.go` -- Hardened podman flags. These
+  are constants, not configurable by lane definitions. Treat changes here as
   security-critical.
-- `executor/sign.go` -- ECDSA P-256 signing. Uses `crypto/rand`, never
+- `internal/executor/sign.go` -- ECDSA P-256 signing. Uses `crypto/rand`, never
   `math/rand`.
-- `main.go` -- Orchestrates lane execution. Long but intentionally procedural.
-  Do not abstract it into a framework.
+- `cmd/strike/main.go` -- Orchestrates lane execution. Long but intentionally
+  procedural. Do not abstract it into a framework.
 
 ## Security rules
 
@@ -253,8 +255,8 @@ func FuzzParseRef(f *testing.F) {
 ## Makefile targets
 
 ```sh
-make build      # CGO_ENABLED=0 go build
-make generate   # cue exp gengotypes ./lane/
+make build      # CGO_ENABLED=0 go build ./cmd/strike
+make generate   # cue exp gengotypes ./internal/lane/
 make schema     # cue export to OpenAPI JSON
 ```
 
@@ -287,7 +289,7 @@ Run the full quality gate:
 golangci-lint run ./...
 go test -race -coverprofile=coverage.out -covermode=atomic ./...
 govulncheck ./...
-CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o strike .
+CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o strike ./cmd/strike
 ```
 
 All four commands must succeed with zero warnings and zero findings.

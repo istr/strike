@@ -15,8 +15,8 @@ import (
 	"os/exec"
 	"time"
 
-	"github.com/istr/strike/lane"
-	"github.com/istr/strike/registry"
+	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/registry"
 )
 
 // Attestation is the signed record produced by every deploy step.
