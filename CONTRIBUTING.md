@@ -14,14 +14,14 @@ expensive to maintain, and hostile to reproducibility.
 strike takes a different approach:
 
 - **Small footprint.** The entire executor is a single static binary, a few
-  hundred lines of Go. The lane schema is defined in CUE. There is no
+  thousand lines of Go. The lane schema is defined in CUE. There is no
   daemon, no database, no sidecar. We actively resist growth in lines of code
   and will push back on contributions that add complexity without clear
   justification.
 
-- **No shell.** Lanes are flat. They do not use shell interpreters. Steps are an image
-  reference and an args array. There are no `run:` blocks, no `bash -c`, no
-  string interpolation, no template engines. This is a core invariant, not a
+- **No shell.** Lanes are flat. They do not use shell interpreters. Steps are an
+  image reference and an args array. There are no `run:` blocks, no `bash -c`,
+  no string interpolation, no template engines. This is a core invariant, not a
   missing feature.
 
 - **Rootless container engine.** strike runs entirely under rootless podman.
@@ -79,20 +79,94 @@ bundle web UIs, or introduce daemon processes.
 1. Fork the repository.
 2. Create a branch from `main`.
 3. Make your changes. Keep diffs small and focused.
-4. Run `go vet ./...` to verify the build.
+4. Ensure all quality gates pass (see below).
 5. Open a merge request with a clear description of what and why.
 
 For larger changes, please open an issue first to discuss the approach. This
 saves time for everyone.
 
+## Quality gates
+
+Every merge request must pass these checks. CI enforces them; save yourself
+the round-trip by running them locally first.
+
+### Lint and static analysis
+
+```sh
+golangci-lint run ./...
+```
+
+The project uses a strict `.golangci.yml` configuration that includes gosec for
+security scanning. All findings must be resolved -- do not add `//nolint`
+without a written justification in a code comment explaining why the finding is
+a false positive.
+
+### Tests
+
+```sh
+go test -race -coverprofile=coverage.out -covermode=atomic ./...
+```
+
+Requirements:
+
+- All new code must have unit tests.
+- All new tests must use table-driven subtests with `t.Run`.
+- Tests must pass with the race detector enabled.
+- Coverage must not decrease. Target: 100% statement coverage for all packages
+  except generated code (`cue_types_lane_gen.go`).
+- External binary calls (podman, kubectl) must be tested via interfaces,
+  not by invoking real binaries. Unit tests must not require podman.
+
+### Vulnerability scan
+
+```sh
+govulncheck ./...
+```
+
+Zero findings required. If a dependency has a known vulnerability in code paths
+strike actually calls, either upgrade the dependency or remove it.
+
+### Build
+
+```sh
+CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o strike .
+```
+
+The binary must build as a static, pure-Go executable.
+
 ## Code style
+
+The complete style guide is in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md). The
+essential rules:
 
 - English for all comments, error messages, and documentation.
 - ASCII only in source files.
 - No unnecessary abstractions. Three similar lines are better than a premature
   helper function.
-- If you add a feature, it should work without shell. If you cannot express it
+- If you add a feature, it must work without shell. If you cannot express it
   without shell, it is out of scope.
+- Error strings: lowercase, no trailing punctuation, no "failed to" prefix.
+  Use `fmt.Errorf("signing image %s: %w", ref, err)`.
+- Doc comments on all exported names. Start with the name of the element.
+- No `os/exec.Command("sh", "-c", ...)` anywhere. This is a security invariant.
+- All external binary invocations go through the `CommandRunner` interface.
+- Path operations on untrusted input must use `filepath.IsLocal` and
+  prefix validation.
+- Secrets must never appear in error messages, logs, or process arguments.
+
+## Security review
+
+Changes touching these areas require extra scrutiny:
+
+- `executor/` -- container security profile, signing, SBOM generation
+- `registry/` -- OCI registry interaction, cache integrity
+- `deploy/` -- command execution, state capture
+- `main.go` -- secret handling, digest verification
+
+If your change modifies how external commands are invoked, how paths are
+constructed from user input, how secrets flow through the system, or how
+cryptographic operations are performed, call this out explicitly in the merge
+request description.
 
 ## License
 

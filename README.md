@@ -138,17 +138,56 @@ Secrets are passed as environment variables, never written to process arguments.
 ## Project structure
 
 ```
-main.go                 CLI entry point (run, validate, dag, compare)
-executor/podman.go      Container execution via podman
-lane/schema.cue         CUE schema (source of truth)
-lane/parse.go           YAML parsing + CUE validation
-lane/dag.go             DAG construction + topological sort
-registry/cache.go       Spec hashing + cache tagging
-registry/client.go      Registry operations (go-containerregistry, podman)
-bootstrap/Containerfile Self-contained bootstrap image
-bootstrap/lace.yaml     Rebuild lane for reproducibility proof
-lane.yaml               Top-level bootstrap lane
+main.go                          CLI entry point (run, validate, dag, compare)
+lane/
+  schema.cue                     CUE schema (source of truth)
+  cue_types_lane_gen.go          Generated Go types (do not edit)
+  parse.go                       YAML parsing and CUE validation
+  dag.go                         DAG construction and topological sort
+  state.go                       Artifact and step result tracking
+  digest.go                      Content hashing and cache key computation
+  deploy_method.go               DeployMethod accessor helpers
+executor/
+  podman.go                      Container execution via podman
+  run.go                         Step runner with hardened security profile
+  step_security_profile.go       Podman security flags (cap-drop, read-only, etc.)
+  pack.go                        OCI image assembly (native Go, no container)
+  sign.go                        ECDSA P-256 cosign-compatible signing
+  sbom.go                        CycloneDX 1.6 SBOM generation
+registry/
+  cache.go                       Spec hashing and cache tagging
+  client.go                      Registry operations (go-containerregistry, podman)
+deploy/
+  deploy.go                      Deploy with mandatory state attestation
+bootstrap/
+  Containerfile                  Self-contained bootstrap image
+lane.yaml                        Top-level bootstrap lane
 ```
+
+## Development
+
+For working on strike itself (not for using it), you need Go 1.26+,
+golangci-lint 2.x, and govulncheck. Every change must pass before merge:
+
+```sh
+golangci-lint run ./...                                         # lint and security
+go test -race -coverprofile=coverage.out -covermode=atomic ./...  # tests
+govulncheck ./...                                                # vulnerability scan
+```
+
+See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for the complete code quality,
+security, and style guidelines.
+
+AI coding agents should read [AGENTS.md](CLAUDE.md) before making changes.
+
+## Security
+
+See [SECURITY.md](SECURITY.md) for the threat model, vulnerability reporting,
+and design principles.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 

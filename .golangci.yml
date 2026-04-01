@@ -1,0 +1,95 @@
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+
+formatters:
+  enable:
+    - goimports
+    - gofumpt
+
+linters:
+  enable:
+    # Bug detection
+    - govet
+    - staticcheck
+    - errcheck
+    - ineffassign
+    - unused
+    - bodyclose
+    - noctx
+    - nilerr
+
+    # Security
+    - gosec
+    - bidichk
+
+    # Style and correctness
+    - revive
+    - goconst
+    - misspell
+    - errname
+    - godot
+    - errorlint
+
+    # Complexity
+    - gocyclo
+    - gocognit
+    - funlen
+    - nestif
+
+    # Modern Go
+    - copyloopvar
+    - intrange
+    - usestdlibvars
+
+    # Code hygiene
+    - dupl
+    - nakedret
+    - asciicheck
+    - testpackage
+    - nolintlint
+    - predeclared
+
+  settings:
+    errcheck:
+      check-type-assertions: true
+      check-blank: true
+    govet:
+      enable-all: true
+    gocyclo:
+      min-complexity: 15
+    gocognit:
+      min-complexity: 20
+    funlen:
+      lines: 80
+      statements: 50
+    gosec:
+      excludes: []
+    nestif:
+      min-complexity: 5
+    godot:
+      scope: toplevel
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+
+issues:
+  exclude-use-default: false
+  max-issues-per-linter: 0
+  max-same-issues: 50
+  exclude-rules:
+    # Test files: relax complexity limits (table-driven tests are long)
+    - path: _test\.go
+      linters:
+        - funlen
+        - gocyclo
+        - gocognit
+        - dupl
+    # Generated code: skip all linters
+    - path: cue_types_lane_gen\.go
+      linters:
+        - godot
+        - revive
+        - govet
