@@ -64,10 +64,10 @@ func TestAttestationJSON(t *testing.T) {
 		Target:    lane.DeployTarget{Type: "registry", Description: "test"},
 		Artifacts: map[string]string{"image": "sha256:abc"},
 		PreState: map[string]deploy.StateSnap{
-			"version": {Name: "version", Type: "command", Digest: "sha256:aaa"},
+			"version": {Name: "version", Image: "img@sha256:aaa", Digest: "sha256:aaa"},
 		},
 		PostState: map[string]deploy.StateSnap{
-			"version": {Name: "version", Type: "command", Digest: "sha256:bbb"},
+			"version": {Name: "version", Image: "img@sha256:aaa", Digest: "sha256:bbb"},
 		},
 	}
 

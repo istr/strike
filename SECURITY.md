@@ -58,10 +58,11 @@ unverified artifact types.
 The highest-risk categories for a CI/CD executor like strike:
 
 **A03 Injection** -- The primary risk. strike communicates with the container
-engine via REST API over a Unix socket (no subprocess spawning for container
-operations). The only remaining `exec.Command` is for user-defined state
-capture commands in deploy. Lane definitions cannot inject shell metacharacters
-because there is no shell.
+engine via REST API over a Unix socket. There are zero `exec.Command` calls
+and zero `os/exec` imports in the entire codebase. State capture, kubectl,
+and HTTP probes all run inside containers via the Engine API. Lane definitions
+cannot inject shell metacharacters because there is no shell and no subprocess
+spawning.
 
 **A08 Software and Data Integrity Failures** -- strike's core mission.
 Unsigned container images must not leave the local store (enforced by the
@@ -92,7 +93,7 @@ reports only actually-reachable vulnerable functions. Dependencies are minimal
 
 strike is designed with a minimal attack surface:
 
-- **No shell execution** -- container operations use REST API over Unix socket, no subprocess spawning.
+- **No subprocess execution** -- zero `exec.Command` calls, zero `os/exec` imports. All operations use the container Engine REST API over Unix socket.
 - **No root** -- runs entirely under rootless podman.
 - **No network by default** -- steps run with `--network=none` unless
   explicitly opted in with `network: true`.

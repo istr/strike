@@ -12,10 +12,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"time"
 
@@ -40,7 +37,7 @@ type Attestation struct {
 type StateSnap struct {
 	Timestamp time.Time `json:"timestamp"`
 	Name      string    `json:"name"`
-	Type      string    `json:"type"`
+	Image     string    `json:"image"`
 	Digest    string    `json:"digest"`
 	Output    []byte    `json:"output"`
 }
@@ -199,95 +196,58 @@ func (d *Deployer) captureState(ctx context.Context, spec lane.StateCaptureSpec)
 	return snaps, nil
 }
 
+// captureOne runs a state capture command inside a container and
+// returns the output as a snapshot.
 func (d *Deployer) captureOne(ctx context.Context, sc lane.StateCapture) (StateSnap, error) {
 	snap := StateSnap{
 		Name:      sc.Name,
-		Type:      sc.Type,
+		Image:     string(sc.Image),
 		Timestamp: time.Now(),
 	}
-	switch sc.Type {
-	case "command":
-		return d.captureCommand(ctx, snap, sc)
-	case "http":
-		return d.captureHTTP(ctx, snap, sc)
-	case "kubernetes":
-		return d.captureKubernetes(ctx, snap, sc)
-	default:
-		return snap, fmt.Errorf("unknown capture type %q", sc.Type)
-	}
-}
 
-func (d *Deployer) captureCommand(ctx context.Context, snap StateSnap, sc lane.StateCapture) (StateSnap, error) {
-	if len(sc.Command) == 0 {
-		return snap, fmt.Errorf("command capture %q: no command specified", sc.Name)
-	}
-	//nolint:gosec // G204: intentional execution of user-defined state capture command
-	cmd := exec.CommandContext(ctx, sc.Command[0], sc.Command[1:]...)
-	out, err := cmd.Output()
-	if err != nil {
-		return snap, fmt.Errorf("command %q: %w", sc.Command[0], err)
-	}
-	snap.Output = out
-	snap.Digest = "sha256:" + hex.EncodeToString(sha256Sum(out))
-	return snap, nil
-}
-
-func (d *Deployer) captureHTTP(ctx context.Context, snap StateSnap, sc lane.StateCapture) (StateSnap, error) {
-	if sc.URL == "" {
-		return snap, fmt.Errorf("http capture %q: no URL specified", sc.Name)
-	}
-	out, err := httpGet(ctx, sc.URL)
-	if err != nil {
-		return snap, fmt.Errorf("http GET %q: %w", sc.URL, err)
-	}
-	snap.Output = out
-	snap.Digest = "sha256:" + hex.EncodeToString(sha256Sum(out))
-	return snap, nil
-}
-
-func (d *Deployer) captureKubernetes(ctx context.Context, snap StateSnap, sc lane.StateCapture) (StateSnap, error) {
-	if sc.Resource == nil {
-		return snap, fmt.Errorf("kubernetes capture %q: no resource specified", sc.Name)
-	}
 	if sc.Image == "" {
-		return snap, fmt.Errorf("kubernetes capture %q: image required (digest-pinned kubectl image)", sc.Name)
+		return snap, fmt.Errorf("capture %q: image is required", sc.Name)
 	}
-
-	kubeconfig, kcErr := ResolveKubeconfig("")
-	if kcErr != nil {
-		return snap, fmt.Errorf("kubernetes capture %q: %w", sc.Name, kcErr)
-	}
-
-	kubectlArgs := []string{"get", sc.Resource.Kind, sc.Resource.Name, "-o", "json"}
-	if sc.Resource.Namespace != "" {
-		kubectlArgs = append(kubectlArgs, "-n", sc.Resource.Namespace)
-	}
-	if sc.Resource.JSONPath != "" {
-		kubectlArgs = append(kubectlArgs, "-o", fmt.Sprintf("jsonpath=%s", sc.Resource.JSONPath))
+	if len(sc.Command) == 0 {
+		return snap, fmt.Errorf("capture %q: command is required", sc.Name)
 	}
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
+
+	network := "host"
+	if !sc.Network {
+		network = "none"
+	}
+
+	var mounts []container.Mount
+	for _, m := range sc.Mounts {
+		mounts = append(mounts, container.Mount{
+			Source:   m.Source,
+			Target:   m.Target,
+			ReadOnly: true,
+		})
+	}
+
 	exitCode, err := d.Engine.ContainerRun(ctx, container.RunOpts{
 		Image:   string(sc.Image),
-		Cmd:     kubectlArgs,
-		Network: "host",
-		Mounts: []container.Mount{
-			{Source: kubeconfig, Target: "/root/.kube/config", ReadOnly: true},
-		},
-		Remove: true,
-		Stdout: &stdout,
-		Stderr: &stderr,
+		Cmd:     sc.Command,
+		Mounts:  mounts,
+		Network: network,
+		Stdout:  &stdout,
+		Stderr:  &stderr,
+		Remove:  true,
 	})
 	if err != nil {
-		return snap, fmt.Errorf("kubernetes capture %q: %w", sc.Name, err)
+		return snap, fmt.Errorf("capture %q: %w", sc.Name, err)
 	}
 	if exitCode != 0 {
-		return snap, fmt.Errorf("kubernetes capture %q: exit code %d: %s", sc.Name, exitCode, stderr.String())
+		return snap, fmt.Errorf("capture %q: exit code %d: %s",
+			sc.Name, exitCode, stderr.String())
 	}
-	out := stdout.Bytes()
-	snap.Output = out
-	snap.Digest = "sha256:" + hex.EncodeToString(sha256Sum(out))
+
+	snap.Output = stdout.Bytes()
+	snap.Digest = "sha256:" + hex.EncodeToString(sha256Sum(snap.Output))
 	return snap, nil
 }
 
@@ -403,6 +363,17 @@ func (d *Deployer) executeCustomDeploy(ctx context.Context, m lane.DeployMethod)
 	return nil
 }
 
+// GenerateDeployID creates a unique deploy identifier from a step name.
+func GenerateDeployID(stepName string) string {
+	data := fmt.Sprintf("%s-%d", stepName, time.Now().UnixNano())
+	return hex.EncodeToString(sha256Sum([]byte(data)))[:16]
+}
+
+func sha256Sum(data []byte) []byte {
+	h := sha256.Sum256(data)
+	return h[:]
+}
+
 // ResolveKubeconfig returns the host path to the kubeconfig file.
 // Priority: explicit override, $KUBECONFIG, default path.
 func ResolveKubeconfig(override string) (string, error) {
@@ -413,7 +384,7 @@ func ResolveKubeconfig(override string) (string, error) {
 		return override, nil
 	}
 	if env := os.Getenv("KUBECONFIG"); env != "" {
-		if _, err := os.Stat(env); err != nil { //nolint:gosec // G703: path from $KUBECONFIG env
+		if _, err := os.Stat(env); err != nil { //nolint:gosec // G304: path from $KUBECONFIG env
 			return "", fmt.Errorf("$KUBECONFIG %q: %w", env, err)
 		}
 		return env, nil
@@ -427,33 +398,4 @@ func ResolveKubeconfig(override string) (string, error) {
 		return "", fmt.Errorf("default kubeconfig %q: %w", path, err)
 	}
 	return path, nil
-}
-
-// GenerateDeployID creates a unique deploy identifier from a step name.
-func GenerateDeployID(stepName string) string {
-	data := fmt.Sprintf("%s-%d", stepName, time.Now().UnixNano())
-	return hex.EncodeToString(sha256Sum([]byte(data)))[:16]
-}
-
-func sha256Sum(data []byte) []byte {
-	h := sha256.Sum256(data)
-	return h[:]
-}
-
-// httpGet performs an HTTP GET with context and returns the response body.
-// Returns an error for non-2xx status codes.
-func httpGet(ctx context.Context, url string) ([]byte, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = resp.Body.Close() }() //nolint:errcheck // best-effort HTTP body close
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("status %d", resp.StatusCode)
-	}
-	return io.ReadAll(resp.Body)
 }

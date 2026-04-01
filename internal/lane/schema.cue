@@ -242,20 +242,17 @@ package lane
 
 #StateCapture: {
 	@go(StateCapture)
-	name:      string @go(Name)
-	type:      "command" | "kubernetes" | "http" @go(Type)
-	command?:  [...string] @go(Command)
-	resource?: #KubeResource @go(Resource,optional=nillable)
-	url?:      string @go(URL)
-	image?:    #ImageRef @go(Image)
+	name:     string @go(Name)
+	image:    #ImageRef @go(Image)
+	command:  [...string] @go(Command)
+	network?: bool @go(Network)
+	mounts?:  [...#CaptureMount] @go(Mounts)
 }
 
-#KubeResource: {
-	@go(KubeResource)
-	kind:       string @go(Kind)
-	name:       string @go(Name)
-	namespace?: string @go(Namespace)
-	jsonpath?:  string @go(JSONPath)
+#CaptureMount: {
+	@go(CaptureMount)
+	source: string @go(Source)
+	target: string & =~"^/" @go(Target)
 }
 
 // ---------------------------------------------------------------------------

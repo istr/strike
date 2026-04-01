@@ -12,16 +12,14 @@ every design decision.
 
 ### 1.1 Command injection prevention
 
-strike communicates with the container engine via REST API over a Unix
-socket (`internal/container/`). There are no `exec.Command` calls for
-container operations. This eliminates command injection as an attack
-vector for container operations entirely.
+strike has zero `exec.Command` calls and zero `os/exec` imports. All
+external operations -- container execution, state capture, kubectl, HTTP
+probes -- use the `container.Engine` REST API over a Unix socket
+(`internal/container/`). This eliminates command injection and subprocess
+spawning as attack vectors entirely.
 
-The only remaining `exec.Command` is in `internal/deploy/deploy.go` for
-user-defined state capture commands (the "command" capture type). This is
-intentional and annotated with `//nolint:gosec`.
-
-**Rule: never invoke a shell.** No `exec.Command("sh", "-c", ...)` anywhere.
+**Rule: never use `os/exec`.** No `exec.Command`, no `exec.CommandContext`,
+no subprocess spawning of any kind, anywhere in the codebase.
 
 ```go
 // Correct: use the container.Engine interface
@@ -30,15 +28,14 @@ exitCode, err := engine.ContainerRun(ctx, container.RunOpts{
     Cmd:   []string{"build", "-o", "/out/bin"},
 })
 
-// Prohibited: exec.Command for container operations
-exec.Command("podman", "run", imageRef)
-
-// Prohibited: shell interpretation
-exec.Command("sh", "-c", "podman push "+imageRef)
+// Prohibited: any use of os/exec
+exec.Command("podman", "run", imageRef)          // NEVER
+exec.CommandContext(ctx, "curl", url)             // NEVER
+exec.Command("sh", "-c", "podman push "+imageRef) // NEVER
 ```
 
 gosec rule G204 and golangci-lint enforce this. The architecture eliminates
-G204 findings by design rather than by `//nolint` directives.
+G204 findings by design -- there are no `//nolint:gosec` directives for G204.
 
 ### 1.2 Path traversal prevention
 
@@ -156,7 +153,7 @@ gosec rules to watch for:
 - G101: Hardcoded credentials
 - G107: SSRF via variable URL
 - G110: Decompression bomb (`io.Copy` without limit)
-- G204: Subprocess with variable command
+- G204: Subprocess with variable command (eliminated by design -- zero `os/exec` usage)
 - G304: File path from variable (path traversal)
 - G401: Weak hash (MD5, SHA-1)
 - G402: TLS InsecureSkipVerify
@@ -210,62 +207,30 @@ Rules:
 
 ### 2.2 Testing external commands
 
-Unit tests must not require podman, kubectl, or any external binary. Two
-approaches, in order of preference:
+Unit tests must not require podman, kubectl, or any external binary.
 
-**Approach 1: Interface-based mocking (preferred)**
+**Approach: httptest mock servers**
 
-Define a small interface at the consumer side. Production code uses the real
-implementation. Tests use a hand-written mock.
-
-```go
-// Consumer defines what it needs
-type ContainerRunner interface {
-    Run(ctx context.Context, image string, args []string, mounts []Mount) error
-    Inspect(ctx context.Context, ref string) (string, error)
-}
-
-// Production implementation
-type PodmanRunner struct{}
-
-func (p *PodmanRunner) Run(ctx context.Context, image string, args []string, mounts []Mount) error {
-    cmdArgs := buildPodmanArgs(image, args, mounts)
-    return exec.CommandContext(ctx, "podman", cmdArgs...).Run()
-}
-
-// Test mock
-type fakeRunner struct {
-    runErr     error
-    inspectOut string
-    inspectErr error
-}
-
-func (f *fakeRunner) Run(_ context.Context, _ string, _ []string, _ []Mount) error {
-    return f.runErr
-}
-
-func (f *fakeRunner) Inspect(_ context.Context, _ string) (string, error) {
-    return f.inspectOut, f.inspectErr
-}
-```
-
-**Approach 2: TestHelperProcess pattern (boundary layer only)**
-
-For the thinnest layer where `exec.Command` is actually called, use the Go
-standard library's own pattern:
+Container operations are tested against `httptest` mock servers that simulate
+the podman libpod REST API. Use `container.NewFromAddress` with `tcp://`
+pointing to the test server. See `internal/container/podman_test.go` for
+examples.
 
 ```go
-func TestHelperProcess(t *testing.T) {
-    if os.Getenv("GO_WANT_HELPER_PROCESS") != "1" {
-        return
+func newTestEngine(t *testing.T, handler http.Handler) container.Engine {
+    t.Helper()
+    srv := httptest.NewServer(handler)
+    t.Cleanup(srv.Close)
+    eng, err := container.NewFromAddress("tcp://" + srv.Listener.Addr().String())
+    if err != nil {
+        t.Fatal(err)
     }
-    defer os.Exit(0)
-    // Parse args after "--" and produce expected output
+    return eng
 }
 ```
 
-Use this only where interface mocking is not feasible (e.g. testing the
-`PodmanRunner` implementation itself).
+Since strike has zero `os/exec` usage, there is no need for
+`TestHelperProcess` patterns or subprocess mocking.
 
 ### 2.3 File system testing
 

@@ -17,11 +17,12 @@ Build: `CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o strike ./cmd/strike
 
 ## Hard invariants -- never violate these
 
-1. **No shell execution.** Never use `exec.Command("sh", "-c", ...)`,
-   `exec.Command("bash", ...)`, or any shell interpreter anywhere. Container
-   operations use the `container.Engine` REST API over Unix socket. The only
-   remaining `exec.Command` is for user-defined state capture commands in
-   deploy. This is a security invariant, not a style preference.
+1. **No subprocess execution.** Never use `exec.Command`, `exec.CommandContext`,
+   `os/exec`, or any subprocess spawning anywhere. All external operations --
+   container execution, state capture, kubectl, HTTP probes -- use the
+   `container.Engine` REST API over Unix socket. There are zero `os/exec`
+   imports in the codebase. This is a security invariant, not a style
+   preference.
 
 2. **No new dependencies without justification.** The project has ~28
    transitive dependencies. Do not add dependencies. If you need functionality
@@ -75,13 +76,11 @@ packages.
 
 ### Container operations
 
-All container operations use the `container.Engine` interface, which
-communicates via REST API over Unix socket. There are no `exec.Command`
-calls for container operations.
-
-The only remaining `exec.Command` is in `internal/deploy/deploy.go` for
-user-defined state capture commands (the "command" capture type). This is
-intentional and annotated with `//nolint:gosec`.
+All operations use the `container.Engine` interface, which communicates
+via REST API over Unix socket. There are zero `exec.Command` calls and
+zero `os/exec` imports in the entire codebase. State capture commands,
+kubectl operations, and HTTP probes all run inside containers via the
+Engine API.
 
 ```go
 // CORRECT -- use the Engine interface
@@ -90,8 +89,9 @@ exitCode, err := engine.ContainerRun(ctx, container.RunOpts{
     Cmd:   []string{"build"},
 })
 
-// WRONG -- exec.Command bypasses the Engine
-cmd := exec.Command("podman", "run", imageRef)
+// PROHIBITED -- exec.Command, exec.CommandContext, os/exec
+cmd := exec.Command("podman", "run", imageRef)   // NEVER
+cmd := exec.CommandContext(ctx, "curl", url)      // NEVER
 ```
 
 ### Path handling

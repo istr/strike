@@ -1,6 +1,6 @@
 // Package container provides a thin client for container engine REST APIs.
-// It eliminates exec.Command as an attack vector by communicating over
-// Unix socket or TCP instead of spawning subprocesses.
+// All container and external operations go through this interface,
+// eliminating os/exec as an attack vector entirely.
 package container
 
 import (
