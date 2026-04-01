@@ -1,4 +1,4 @@
-package registry
+package registry_test
 
 import (
 	"context"
@@ -6,10 +6,11 @@ import (
 
 	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/registry"
 )
 
 func TestCacheTag(t *testing.T) {
-	c := &RegistryCache{Registry: "ghcr.io/istr"}
+	c := &registry.Cache{Registry: "ghcr.io/istr"}
 
 	tag := c.CacheTag("sha256:abcdef1234567890abcdef")
 	want := "ghcr.io/istr/strike-cache:cache-abcdef123456"
@@ -19,7 +20,7 @@ func TestCacheTag(t *testing.T) {
 }
 
 func TestCacheTagShortKey(t *testing.T) {
-	c := &RegistryCache{Registry: "ghcr.io/istr"}
+	c := &registry.Cache{Registry: "ghcr.io/istr"}
 
 	tag := c.CacheTag("sha256:abc")
 	want := "ghcr.io/istr/strike-cache:cache-abc"
@@ -29,8 +30,8 @@ func TestCacheTagShortKey(t *testing.T) {
 }
 
 func TestCacheLookupMiss(t *testing.T) {
-	c := &RegistryCache{Registry: "localhost:5555/nonexistent"}
-	client := &Client{Engine: &fakeEngine{existsLocal: false}}
+	c := &registry.Cache{Registry: "localhost:5555/nonexistent"}
+	client := &registry.Client{Engine: &fakeEngine{existsLocal: false}}
 
 	_, found := c.Lookup(context.Background(), "sha256:0000000000000000000000000000000000000000000000000000000000000000", client)
 	if found {
@@ -48,8 +49,8 @@ func TestSpecHashDeterministic(t *testing.T) {
 	inputHashes := map[string]string{"src": "deadbeef"}
 	sourceHashes := map[string]string{"/src": "cafebabe"}
 
-	h1 := SpecHash(step, "sha256:img", inputHashes, sourceHashes)
-	h2 := SpecHash(step, "sha256:img", inputHashes, sourceHashes)
+	h1 := registry.SpecHash(step, "sha256:img", inputHashes, sourceHashes)
+	h2 := registry.SpecHash(step, "sha256:img", inputHashes, sourceHashes)
 	if h1 != h2 {
 		t.Fatalf("not deterministic: %q vs %q", h1, h2)
 	}
@@ -63,8 +64,8 @@ func TestSpecHashChangesOnInput(t *testing.T) {
 		Env:   map[string]string{},
 	}
 
-	h1 := SpecHash(step, "sha256:img1", map[string]string{}, map[string]string{})
-	h2 := SpecHash(step, "sha256:img2", map[string]string{}, map[string]string{})
+	h1 := registry.SpecHash(step, "sha256:img1", map[string]string{}, map[string]string{})
+	h2 := registry.SpecHash(step, "sha256:img2", map[string]string{}, map[string]string{})
 	if h1 == h2 {
 		t.Fatal("different images should produce different hashes")
 	}

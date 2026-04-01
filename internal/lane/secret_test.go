@@ -1,14 +1,16 @@
-package lane
+package lane_test
 
 import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/istr/strike/internal/lane"
 )
 
 func TestReadSecret_EnvSet(t *testing.T) {
 	t.Setenv("STRIKE_TEST_SECRET", "hunter2")
-	val, err := ReadSecret("env://STRIKE_TEST_SECRET")
+	val, err := lane.ReadSecret("env://STRIKE_TEST_SECRET")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -18,7 +20,7 @@ func TestReadSecret_EnvSet(t *testing.T) {
 }
 
 func TestReadSecret_EnvUnset(t *testing.T) {
-	_, err := ReadSecret("env://STRIKE_TEST_UNSET_VAR_XYZ")
+	_, err := lane.ReadSecret("env://STRIKE_TEST_UNSET_VAR_XYZ")
 	if err == nil {
 		t.Fatal("expected error for unset env variable")
 	}
@@ -27,9 +29,11 @@ func TestReadSecret_EnvUnset(t *testing.T) {
 func TestReadSecret_FileExists(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "secret.txt")
-	os.WriteFile(path, []byte("file-secret"), 0o600)
+	if err := os.WriteFile(path, []byte("file-secret"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
-	val, err := ReadSecret(SecretSource("file://" + path))
+	val, err := lane.ReadSecret(lane.SecretSource("file://" + path))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -39,24 +43,24 @@ func TestReadSecret_FileExists(t *testing.T) {
 }
 
 func TestReadSecret_FileMissing(t *testing.T) {
-	_, err := ReadSecret("file:///nonexistent/path/secret.txt")
+	_, err := lane.ReadSecret("file:///nonexistent/path/secret.txt")
 	if err == nil {
 		t.Fatal("expected error for missing file")
 	}
 }
 
 func TestReadSecret_UnknownScheme(t *testing.T) {
-	_, err := ReadSecret("ftp://example.com/secret")
+	_, err := lane.ReadSecret("ftp://example.com/secret")
 	if err == nil {
 		t.Fatal("expected error for unknown scheme")
 	}
 }
 
 func TestResolveSecrets_MissingDefinition(t *testing.T) {
-	refs := []SecretRef{{Name: "missing", Env: "MISSING"}}
-	sources := map[string]SecretSource{}
+	refs := []lane.SecretRef{{Name: "missing", Env: "MISSING"}}
+	sources := map[string]lane.SecretSource{}
 
-	_, err := ResolveSecrets(refs, sources)
+	_, err := lane.ResolveSecrets(refs, sources)
 	if err == nil {
 		t.Fatal("expected error for missing secret definition")
 	}
@@ -66,16 +70,16 @@ func TestResolveSecrets_Valid(t *testing.T) {
 	t.Setenv("STRIKE_TEST_A", "value-a")
 	t.Setenv("STRIKE_TEST_B", "value-b")
 
-	refs := []SecretRef{
+	refs := []lane.SecretRef{
 		{Name: "secret_a", Env: "SECRET_A"},
 		{Name: "secret_b", Env: "SECRET_B"},
 	}
-	sources := map[string]SecretSource{
+	sources := map[string]lane.SecretSource{ //nolint:gosec // G101: test fixture, not real credentials
 		"secret_a": "env://STRIKE_TEST_A",
 		"secret_b": "env://STRIKE_TEST_B",
 	}
 
-	result, err := ResolveSecrets(refs, sources)
+	result, err := lane.ResolveSecrets(refs, sources)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

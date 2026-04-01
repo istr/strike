@@ -1,15 +1,17 @@
-package lane
+package lane_test
 
 import (
 	"encoding/json"
 	"testing"
 	"time"
+
+	"github.com/istr/strike/internal/lane"
 )
 
 func TestRegisterAndResolve(t *testing.T) {
-	s := NewState()
+	s := lane.NewState()
 
-	a := Artifact{
+	a := lane.Artifact{
 		Type:      "file",
 		Digest:    "sha256:abc123",
 		Size:      1024,
@@ -33,8 +35,8 @@ func TestRegisterAndResolve(t *testing.T) {
 }
 
 func TestRegisterDuplicate(t *testing.T) {
-	s := NewState()
-	a := Artifact{Digest: "sha256:abc123", Type: "file"}
+	s := lane.NewState()
+	a := lane.Artifact{Digest: "sha256:abc123", Type: "file"}
 
 	if err := s.Register("build", "binary", a); err != nil {
 		t.Fatal(err)
@@ -45,8 +47,8 @@ func TestRegisterDuplicate(t *testing.T) {
 }
 
 func TestRegisterMissingDigest(t *testing.T) {
-	s := NewState()
-	a := Artifact{Type: "file"}
+	s := lane.NewState()
+	a := lane.Artifact{Type: "file"}
 
 	if err := s.Register("build", "binary", a); err == nil {
 		t.Fatal("expected error on missing digest")
@@ -54,7 +56,7 @@ func TestRegisterMissingDigest(t *testing.T) {
 }
 
 func TestResolveMissing(t *testing.T) {
-	s := NewState()
+	s := lane.NewState()
 	_, err := s.Resolve("nonexistent.output")
 	if err == nil {
 		t.Fatal("expected error on missing reference")
@@ -62,8 +64,8 @@ func TestResolveMissing(t *testing.T) {
 }
 
 func TestRecordStep(t *testing.T) {
-	s := NewState()
-	r := StepResult{
+	s := lane.NewState()
+	r := lane.StepResult{
 		Name:      "build",
 		StepType:  "run",
 		StartedAt: time.Now(),
@@ -84,13 +86,15 @@ func TestRecordStep(t *testing.T) {
 }
 
 func TestStateJSON(t *testing.T) {
-	s := NewState()
-	_ = s.Register("build", "binary", Artifact{
+	s := lane.NewState()
+	if err := s.Register("build", "binary", lane.Artifact{
 		Type:   "file",
 		Digest: "sha256:abc123",
 		Size:   1024,
-	})
-	s.RecordStep(StepResult{
+	}); err != nil {
+		t.Fatal(err)
+	}
+	s.RecordStep(lane.StepResult{
 		Name:     "build",
 		StepType: "run",
 		Outputs:  map[string]string{"binary": "sha256:abc123"},

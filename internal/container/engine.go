@@ -45,37 +45,37 @@ type Engine interface {
 
 // ImageInfo holds metadata from image inspection.
 type ImageInfo struct {
-	ID          string
-	Digest      string // "sha256:..."
-	RepoDigests []string
 	Annotations map[string]string
+	ID          string
+	Digest      string
+	RepoDigests []string
 	Size        int64
 }
 
 // RunOpts configures a container execution.
 type RunOpts struct {
-	Image       string
-	Cmd         []string
-	Env         map[string]string // all env vars including secrets
-	Mounts      []Mount
-	Network     string // "none", "host", or "" (default bridge)
-	CapDrop     []string
-	ReadOnly    bool
-	SecurityOpt []string
-	Tmpfs       map[string]string // path -> options
-	UsernsMode  string            // "keep-id" for rootless
-	Stdout      io.Writer
-	Stderr      io.Writer
 	Stdin       io.Reader
-	Remove      bool // auto-remove after exit
+	Stderr      io.Writer
+	Stdout      io.Writer
+	Env         map[string]string
+	Tmpfs       map[string]string
+	Image       string
+	Network     string
+	UsernsMode  string
+	Mounts      []Mount
+	SecurityOpt []string
+	CapDrop     []string
+	Cmd         []string
+	ReadOnly    bool
+	Remove      bool
 }
 
 // Mount describes a bind mount.
 type Mount struct {
 	Source   string
-	Target  string
+	Target   string
+	Options  []string
 	ReadOnly bool
-	Options []string // e.g. "U" for podman UID mapping, "noexec", "nosuid"
 }
 
 // New creates an Engine connected to the container runtime.
@@ -105,7 +105,7 @@ func detectSocket() (string, error) {
 	// 2. Standard rootless socket
 	if xdg := os.Getenv("XDG_RUNTIME_DIR"); xdg != "" {
 		sock := filepath.Join(xdg, "podman", "podman.sock")
-		if _, err := os.Stat(sock); err == nil {
+		if _, err := os.Stat(sock); err == nil { //nolint:gosec // G703: socket path from known locations or $CONTAINER_HOST
 			return "unix://" + sock, nil
 		}
 	}

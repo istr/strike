@@ -1,3 +1,5 @@
+// Package lane defines the pipeline schema, DAG construction,
+// and execution state for strike lanes.
 package lane
 
 import (
@@ -14,6 +16,7 @@ func ParseRef(ref string) (step, output string, err error) {
 	return parts[0], parts[1], nil
 }
 
+// DAG is the directed acyclic graph of step dependencies in a lane.
 type DAG struct {
 	Steps   map[string]*Step
 	edges   map[string][]string // step -> []dependencies
@@ -21,6 +24,7 @@ type DAG struct {
 	Order   []string
 }
 
+// Build constructs a DAG from a Lane definition, resolving all inter-step edges.
 func Build(p *Lane) (*DAG, error) {
 	d := &DAG{
 		Steps:   make(map[string]*Step),
@@ -36,94 +40,17 @@ func Build(p *Lane) (*DAG, error) {
 		d.Steps[string(s.Name)] = s
 	}
 
-	for _, s := range p.Steps {
-		name := string(s.Name)
-
-		// image_from creates an implicit DAG edge
-		if s.ImageFrom != nil {
-			from := s.ImageFrom.Step
-			if _, ok := d.Steps[from]; !ok {
-				return nil, fmt.Errorf("step %q: image_from references unknown step %q",
-					name, from)
-			}
-			// Validate that the referenced output exists and is oci-tar
-			fromStep := d.Steps[from]
-			found := false
-			for _, out := range fromStep.Outputs {
-				if out.Name == s.ImageFrom.Output {
-					if out.Type != "image" {
-						return nil, fmt.Errorf("step %q: image_from output %q in step %q is %q, not image",
-							name, out.Name, from, out.Type)
-					}
-					found = true
-					break
-				}
-			}
-			if !found {
-				return nil, fmt.Errorf("step %q: image_from output %q not found in step %q",
-					name, s.ImageFrom.Output, from)
-			}
-			d.edges[name] = append(d.edges[name], from)
-			d.reverse[from] = append(d.reverse[from], name)
-		}
-
-		for _, inp := range s.Inputs {
-			fromStep, _, err := ParseRef(inp.From)
-			if err != nil {
-				return nil, fmt.Errorf("step %q: input %q: %w", name, inp.Name, err)
-			}
-			if _, ok := d.Steps[fromStep]; !ok {
-				return nil, fmt.Errorf("step %q: input %q references unknown step %q",
-					name, inp.Name, fromStep)
-			}
-			d.edges[name] = append(d.edges[name], fromStep)
-			d.reverse[fromStep] = append(d.reverse[fromStep], name)
-		}
-
-		// pack.files create DAG edges via "step_name.output_name" references
-		if s.Pack != nil {
-			for _, f := range s.Pack.Files {
-				stepName, outputName, err := ParseRef(f.From)
-				if err != nil {
-					return nil, fmt.Errorf("step %q: pack file: %w", name, err)
-				}
-				fromStep, ok := d.Steps[stepName]
-				if !ok {
-					return nil, fmt.Errorf("step %q: pack file from %q: unknown step %q",
-						name, f.From, stepName)
-				}
-				found := false
-				for _, out := range fromStep.Outputs {
-					if out.Name == outputName {
-						found = true
-						break
-					}
-				}
-				if !found {
-					return nil, fmt.Errorf("step %q: pack file from %q: output %q not found in step %q",
-						name, f.From, outputName, stepName)
-				}
-				d.edges[name] = append(d.edges[name], stepName)
-				d.reverse[stepName] = append(d.reverse[stepName], name)
-			}
-		}
-
-		// deploy.artifacts create DAG edges
-		if s.Deploy != nil {
-			for artName, artRef := range s.Deploy.Artifacts {
-				stepName, _, err := ParseRef(artRef.From)
-				if err != nil {
-					// Allow bare step name for pack outputs
-					stepName = artRef.From
-				}
-				if _, ok := d.Steps[stepName]; !ok {
-					return nil, fmt.Errorf("step %q: deploy artifact %q references unknown step %q",
-						name, artName, stepName)
-				}
-				d.edges[name] = append(d.edges[name], stepName)
-				d.reverse[stepName] = append(d.reverse[stepName], name)
-			}
-		}
+	if err := d.resolveImageFromEdges(p); err != nil {
+		return nil, err
+	}
+	if err := d.resolveInputEdges(p); err != nil {
+		return nil, err
+	}
+	if err := d.resolvePackEdges(p); err != nil {
+		return nil, err
+	}
+	if err := d.resolveDeployEdges(p); err != nil {
+		return nil, err
 	}
 
 	order, err := kahnSort(d)
@@ -132,6 +59,122 @@ func Build(p *Lane) (*DAG, error) {
 	}
 	d.Order = order
 	return d, nil
+}
+
+func (d *DAG) resolveImageFromEdges(p *Lane) error {
+	for _, s := range p.Steps {
+		name := string(s.Name)
+		if s.ImageFrom == nil {
+			continue
+		}
+		from := s.ImageFrom.Step
+		fromStep, ok := d.Steps[from]
+		if !ok {
+			return fmt.Errorf("step %q: image_from references unknown step %q", name, from)
+		}
+		found := false
+		for _, out := range fromStep.Outputs {
+			if out.Name == s.ImageFrom.Output {
+				if out.Type != "image" {
+					return fmt.Errorf("step %q: image_from output %q in step %q is %q, not image",
+						name, out.Name, from, out.Type)
+				}
+				found = true
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("step %q: image_from output %q not found in step %q",
+				name, s.ImageFrom.Output, from)
+		}
+		d.addEdge(name, from)
+	}
+	return nil
+}
+
+func (d *DAG) resolveInputEdges(p *Lane) error {
+	for _, s := range p.Steps {
+		name := string(s.Name)
+		for _, inp := range s.Inputs {
+			fromStep, _, err := ParseRef(inp.From)
+			if err != nil {
+				return fmt.Errorf("step %q: input %q: %w", name, inp.Name, err)
+			}
+			if _, ok := d.Steps[fromStep]; !ok {
+				return fmt.Errorf("step %q: input %q references unknown step %q", name, inp.Name, fromStep)
+			}
+			d.addEdge(name, fromStep)
+		}
+	}
+	return nil
+}
+
+func (d *DAG) resolvePackEdges(p *Lane) error {
+	for _, s := range p.Steps {
+		name := string(s.Name)
+		if s.Pack == nil {
+			continue
+		}
+		for _, f := range s.Pack.Files {
+			if err := d.resolvePackFileEdge(name, f); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (d *DAG) resolvePackFileEdge(name string, f PackFile) error {
+	stepName, outputName, err := ParseRef(f.From)
+	if err != nil {
+		return fmt.Errorf("step %q: pack file: %w", name, err)
+	}
+	fromStep, ok := d.Steps[stepName]
+	if !ok {
+		return fmt.Errorf("step %q: pack file from %q: unknown step %q", name, f.From, stepName)
+	}
+	if !hasOutput(fromStep, outputName) {
+		return fmt.Errorf("step %q: pack file from %q: output %q not found in step %q",
+			name, f.From, outputName, stepName)
+	}
+	d.addEdge(name, stepName)
+	return nil
+}
+
+func hasOutput(step *Step, outputName string) bool {
+	for _, out := range step.Outputs {
+		if out.Name == outputName {
+			return true
+		}
+	}
+	return false
+}
+
+func (d *DAG) resolveDeployEdges(p *Lane) error {
+	for _, s := range p.Steps {
+		name := string(s.Name)
+		if s.Deploy == nil {
+			continue
+		}
+		for artName, artRef := range s.Deploy.Artifacts {
+			stepName, _, err := ParseRef(artRef.From)
+			if err != nil {
+				// Allow bare step name for pack outputs
+				stepName = artRef.From
+			}
+			if _, ok := d.Steps[stepName]; !ok {
+				return fmt.Errorf("step %q: deploy artifact %q references unknown step %q",
+					name, artName, stepName)
+			}
+			d.addEdge(name, stepName)
+		}
+	}
+	return nil
+}
+
+func (d *DAG) addEdge(from, to string) {
+	d.edges[from] = append(d.edges[from], to)
+	d.reverse[to] = append(d.reverse[to], from)
 }
 
 func kahnSort(d *DAG) ([]string, error) {

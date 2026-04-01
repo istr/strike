@@ -18,15 +18,15 @@ var schema string
 // Parse reads a lane YAML file, validates it against the embedded CUE schema,
 // and returns a typed Lane instance.
 func Parse(path string) (*Lane, error) {
-	raw, err := os.ReadFile(path)
+	raw, err := os.ReadFile(path) //nolint:gosec // G304: lane file path from CLI argument
 	if err != nil {
 		return nil, fmt.Errorf("read: %w", err)
 	}
 
 	// YAML to generic map (for CUE validation)
 	var asMap any
-	if err := yaml.Unmarshal(raw, &asMap); err != nil {
-		return nil, fmt.Errorf("yaml parse: %w", err)
+	if yamlErr := yaml.Unmarshal(raw, &asMap); yamlErr != nil {
+		return nil, fmt.Errorf("yaml parse: %w", yamlErr)
 	}
 
 	// Convert to JSON (CUE is a superset of JSON)

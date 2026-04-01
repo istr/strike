@@ -23,12 +23,16 @@ func SourceDigest(path string) (string, error) {
 	return fileDigest(path)
 }
 
-func fileDigest(path string) (string, error) {
-	f, err := os.Open(path)
+func fileDigest(path string) (digest string, err error) {
+	f, err := os.Open(path) //nolint:gosec // G304: path from validated lane definition
 	if err != nil {
 		return "", err
 	}
-	defer f.Close()
+	defer func() {
+		if cerr := f.Close(); cerr != nil && err == nil {
+			err = cerr
+		}
+	}()
 
 	h := sha256.New()
 	if _, err := io.Copy(h, f); err != nil {
@@ -56,7 +60,7 @@ func dirDigest(dir string) (string, error) {
 			return err
 		}
 		h.Write([]byte(rel))
-		content, err := os.ReadFile(path)
+		content, err := os.ReadFile(path) //nolint:gosec // G304: path from WalkDir of validated sources
 		if err != nil {
 			if os.IsPermission(err) {
 				return nil
@@ -89,7 +93,7 @@ func CacheKey(step *Step, imageDigest string, inputDigests map[string]string) st
 	// Image identity
 	h.Write([]byte(imageDigest))
 
-	// Args (in order — order matters for commands)
+	// Args (in order -- order matters for commands)
 	for _, arg := range step.Args {
 		h.Write([]byte(arg))
 	}

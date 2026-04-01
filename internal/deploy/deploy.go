@@ -38,11 +38,11 @@ type Attestation struct {
 
 // StateSnap is a point-in-time capture of one state dimension.
 type StateSnap struct {
-	Name      string    `json:"name"`
-	Type      string    `json:"type"` // "command", "kubernetes", "http"
-	Output    []byte    `json:"output"`
-	Digest    string    `json:"digest"`
 	Timestamp time.Time `json:"timestamp"`
+	Name      string    `json:"name"`
+	Type      string    `json:"type"`
+	Digest    string    `json:"digest"`
+	Output    []byte    `json:"output"`
 }
 
 // DriftReport compares current pre-state with previous post-state.
@@ -67,7 +67,7 @@ func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.Sta
 		return nil, fmt.Errorf("step %q: not a deploy step", step.Name)
 	}
 
-	deployID := generateDeployID(step.Name)
+	deployID := GenerateDeployID(step.Name)
 	started := time.Now()
 
 	// 1. Capture pre-state
@@ -80,34 +80,20 @@ func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.Sta
 	}
 
 	// 2. Detect drift (compare with previous attestation if available)
-	var drift *DriftReport
-	if spec.Attestation.Drift.Detect {
-		drift = detectDrift(preState, nil) // previous attestation loaded from registry
-		if drift != nil && len(drift.Drifted) > 0 {
-			switch spec.Attestation.Drift.OnDrift {
-			case "fail":
-				return nil, fmt.Errorf("step %q: drift detected in %v", step.Name, drift.Drifted)
-			case "warn":
-				fmt.Fprintf(os.Stderr, "WARN   deploy %s: drift detected in %v\n", step.Name, drift.Drifted)
-			case "record":
-				// just record, no action
-			}
-		}
+	drift, err := d.detectAndHandleDrift(step.Name, spec, preState)
+	if err != nil {
+		return nil, err
 	}
 
 	// 3. Resolve artifact digests
-	artifactDigests := make(map[string]string)
-	for artName, artRef := range spec.Artifacts {
-		a, resolveErr := state.Resolve(artRef.From)
-		if resolveErr != nil {
-			return nil, fmt.Errorf("step %q: artifact %q: %w", step.Name, artName, resolveErr)
-		}
-		artifactDigests[artName] = a.Digest
+	artifactDigests, err := resolveArtifactDigests(step.Name, spec, state)
+	if err != nil {
+		return nil, err
 	}
 
 	// 4. Execute deploy action
-	if err := d.executeMethod(ctx, spec); err != nil {
-		return nil, fmt.Errorf("step %q: deploy action failed: %w", step.Name, err)
+	if execErr := d.executeMethod(ctx, spec); execErr != nil {
+		return nil, fmt.Errorf("step %q: deploy action failed: %w", step.Name, execErr)
 	}
 
 	// 5. Capture post-state
@@ -131,16 +117,58 @@ func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.Sta
 	}
 
 	// 7. Record in lane state
-	attJSON, _ := json.Marshal(att)
+	if err := d.recordAttestation(att, step, state, started); err != nil {
+		return nil, fmt.Errorf("step %q: %w", step.Name, err)
+	}
+
+	return att, nil
+}
+
+// detectAndHandleDrift checks for drift between pre-state and previous post-state.
+func (d *Deployer) detectAndHandleDrift(stepName string, spec *lane.DeploySpec, preState map[string]StateSnap) (*DriftReport, error) {
+	if !spec.Attestation.Drift.Detect {
+		return nil, nil
+	}
+	drift := DetectDrift(preState, nil) // previous attestation loaded from registry
+	if drift != nil && len(drift.Drifted) > 0 {
+		switch spec.Attestation.Drift.OnDrift {
+		case "fail":
+			return nil, fmt.Errorf("step %q: drift detected in %v", stepName, drift.Drifted)
+		case "warn":
+			fmt.Fprintf(os.Stderr, "WARN   deploy %s: drift detected in %v\n", stepName, drift.Drifted)
+		}
+	}
+	return drift, nil
+}
+
+// resolveArtifactDigests resolves all artifact references to their digests.
+func resolveArtifactDigests(stepName string, spec *lane.DeploySpec, state *lane.State) (map[string]string, error) {
+	artifactDigests := make(map[string]string)
+	for artName, artRef := range spec.Artifacts {
+		a, resolveErr := state.Resolve(artRef.From)
+		if resolveErr != nil {
+			return nil, fmt.Errorf("step %q: artifact %q: %w", stepName, artName, resolveErr)
+		}
+		artifactDigests[artName] = a.Digest
+	}
+	return artifactDigests, nil
+}
+
+// recordAttestation marshals and records the attestation in lane state.
+func (d *Deployer) recordAttestation(att *Attestation, step *lane.Step, state *lane.State, started time.Time) error {
+	attJSON, err := json.Marshal(att)
+	if err != nil {
+		return fmt.Errorf("marshal attestation: %w", err)
+	}
 	attDigest := "sha256:" + hex.EncodeToString(sha256Sum(attJSON))
 
-	if regErr := state.Register(step.Name, "attestation", lane.Artifact{
+	if err := state.Register(step.Name, "attestation", lane.Artifact{
 		Type:        "file",
 		Digest:      attDigest,
 		Size:        int64(len(attJSON)),
 		ContentType: "application/vnd.strike.attestation+json",
-	}); regErr != nil {
-		return nil, fmt.Errorf("step %q: register attestation: %w", step.Name, regErr)
+	}); err != nil {
+		return fmt.Errorf("register attestation: %w", err)
 	}
 
 	state.RecordStep(lane.StepResult{
@@ -150,8 +178,7 @@ func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.Sta
 		Duration:  time.Since(started),
 		Outputs:   map[string]string{"attestation": attDigest},
 	})
-
-	return att, nil
+	return nil
 }
 
 // JSON serializes an attestation for storage or signing.
@@ -162,101 +189,110 @@ func (a *Attestation) JSON() ([]byte, error) {
 // captureState runs all state capture commands and collects snapshots.
 func (d *Deployer) captureState(ctx context.Context, spec lane.StateCaptureSpec) (map[string]StateSnap, error) {
 	snaps := make(map[string]StateSnap)
-	for _, cap := range spec.Capture {
-		snap, err := d.captureOne(ctx, cap)
+	for _, sc := range spec.Capture {
+		snap, err := d.captureOne(ctx, sc)
 		if err != nil {
-			return snaps, fmt.Errorf("capture %q: %w", cap.Name, err)
+			return snaps, fmt.Errorf("capture %q: %w", sc.Name, err)
 		}
-		snaps[cap.Name] = snap
+		snaps[sc.Name] = snap
 	}
 	return snaps, nil
 }
 
-func (d *Deployer) captureOne(ctx context.Context, cap lane.StateCapture) (StateSnap, error) {
+func (d *Deployer) captureOne(ctx context.Context, sc lane.StateCapture) (StateSnap, error) {
 	snap := StateSnap{
-		Name:      cap.Name,
-		Type:      cap.Type,
+		Name:      sc.Name,
+		Type:      sc.Type,
 		Timestamp: time.Now(),
 	}
-
-	switch cap.Type {
+	switch sc.Type {
 	case "command":
-		if len(cap.Command) == 0 {
-			return snap, fmt.Errorf("command capture %q: no command specified", cap.Name)
-		}
-		//nolint:gosec // G204: intentional execution of user-defined state capture command
-		cmd := exec.CommandContext(ctx, cap.Command[0], cap.Command[1:]...)
-		out, err := cmd.Output()
-		if err != nil {
-			return snap, fmt.Errorf("command %q: %w", cap.Command[0], err)
-		}
-		snap.Output = out
-		snap.Digest = "sha256:" + hex.EncodeToString(sha256Sum(out))
-
+		return d.captureCommand(ctx, snap, sc)
 	case "http":
-		if cap.URL == "" {
-			return snap, fmt.Errorf("http capture %q: no URL specified", cap.Name)
-		}
-		out, err := httpGet(ctx, cap.URL)
-		if err != nil {
-			return snap, fmt.Errorf("http GET %q: %w", cap.URL, err)
-		}
-		snap.Output = out
-		snap.Digest = "sha256:" + hex.EncodeToString(sha256Sum(out))
-
+		return d.captureHTTP(ctx, snap, sc)
 	case "kubernetes":
-		if cap.Resource == nil {
-			return snap, fmt.Errorf("kubernetes capture %q: no resource specified", cap.Name)
-		}
-		if cap.Image == "" {
-			return snap, fmt.Errorf("kubernetes capture %q: image required (digest-pinned kubectl image)", cap.Name)
-		}
-
-		kubeconfig, kcErr := resolveKubeconfig("")
-		if kcErr != nil {
-			return snap, fmt.Errorf("kubernetes capture %q: %w", cap.Name, kcErr)
-		}
-
-		kubectlArgs := []string{"get", cap.Resource.Kind, cap.Resource.Name, "-o", "json"}
-		if cap.Resource.Namespace != "" {
-			kubectlArgs = append(kubectlArgs, "-n", cap.Resource.Namespace)
-		}
-		if cap.Resource.JSONPath != "" {
-			kubectlArgs = append(kubectlArgs, "-o", fmt.Sprintf("jsonpath=%s", cap.Resource.JSONPath))
-		}
-
-		var stdout bytes.Buffer
-		var stderr bytes.Buffer
-		exitCode, err := d.Engine.ContainerRun(ctx, container.RunOpts{
-			Image:   string(cap.Image),
-			Cmd:     kubectlArgs,
-			Network: "host",
-			Mounts: []container.Mount{
-				{Source: kubeconfig, Target: "/root/.kube/config", ReadOnly: true},
-			},
-			Remove: true,
-			Stdout: &stdout,
-			Stderr: &stderr,
-		})
-		if err != nil {
-			return snap, fmt.Errorf("kubernetes capture %q: %w", cap.Name, err)
-		}
-		if exitCode != 0 {
-			return snap, fmt.Errorf("kubernetes capture %q: exit code %d: %s", cap.Name, exitCode, stderr.String())
-		}
-		out := stdout.Bytes()
-		snap.Output = out
-		snap.Digest = "sha256:" + hex.EncodeToString(sha256Sum(out))
-
+		return d.captureKubernetes(ctx, snap, sc)
 	default:
-		return snap, fmt.Errorf("unknown capture type %q", cap.Type)
+		return snap, fmt.Errorf("unknown capture type %q", sc.Type)
 	}
+}
 
+func (d *Deployer) captureCommand(ctx context.Context, snap StateSnap, sc lane.StateCapture) (StateSnap, error) {
+	if len(sc.Command) == 0 {
+		return snap, fmt.Errorf("command capture %q: no command specified", sc.Name)
+	}
+	//nolint:gosec // G204: intentional execution of user-defined state capture command
+	cmd := exec.CommandContext(ctx, sc.Command[0], sc.Command[1:]...)
+	out, err := cmd.Output()
+	if err != nil {
+		return snap, fmt.Errorf("command %q: %w", sc.Command[0], err)
+	}
+	snap.Output = out
+	snap.Digest = "sha256:" + hex.EncodeToString(sha256Sum(out))
 	return snap, nil
 }
 
-// detectDrift compares current pre-state with previous post-state.
-func detectDrift(preState map[string]StateSnap, previousAtt *Attestation) *DriftReport {
+func (d *Deployer) captureHTTP(ctx context.Context, snap StateSnap, sc lane.StateCapture) (StateSnap, error) {
+	if sc.URL == "" {
+		return snap, fmt.Errorf("http capture %q: no URL specified", sc.Name)
+	}
+	out, err := httpGet(ctx, sc.URL)
+	if err != nil {
+		return snap, fmt.Errorf("http GET %q: %w", sc.URL, err)
+	}
+	snap.Output = out
+	snap.Digest = "sha256:" + hex.EncodeToString(sha256Sum(out))
+	return snap, nil
+}
+
+func (d *Deployer) captureKubernetes(ctx context.Context, snap StateSnap, sc lane.StateCapture) (StateSnap, error) {
+	if sc.Resource == nil {
+		return snap, fmt.Errorf("kubernetes capture %q: no resource specified", sc.Name)
+	}
+	if sc.Image == "" {
+		return snap, fmt.Errorf("kubernetes capture %q: image required (digest-pinned kubectl image)", sc.Name)
+	}
+
+	kubeconfig, kcErr := ResolveKubeconfig("")
+	if kcErr != nil {
+		return snap, fmt.Errorf("kubernetes capture %q: %w", sc.Name, kcErr)
+	}
+
+	kubectlArgs := []string{"get", sc.Resource.Kind, sc.Resource.Name, "-o", "json"}
+	if sc.Resource.Namespace != "" {
+		kubectlArgs = append(kubectlArgs, "-n", sc.Resource.Namespace)
+	}
+	if sc.Resource.JSONPath != "" {
+		kubectlArgs = append(kubectlArgs, "-o", fmt.Sprintf("jsonpath=%s", sc.Resource.JSONPath))
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	exitCode, err := d.Engine.ContainerRun(ctx, container.RunOpts{
+		Image:   string(sc.Image),
+		Cmd:     kubectlArgs,
+		Network: "host",
+		Mounts: []container.Mount{
+			{Source: kubeconfig, Target: "/root/.kube/config", ReadOnly: true},
+		},
+		Remove: true,
+		Stdout: &stdout,
+		Stderr: &stderr,
+	})
+	if err != nil {
+		return snap, fmt.Errorf("kubernetes capture %q: %w", sc.Name, err)
+	}
+	if exitCode != 0 {
+		return snap, fmt.Errorf("kubernetes capture %q: exit code %d: %s", sc.Name, exitCode, stderr.String())
+	}
+	out := stdout.Bytes()
+	snap.Output = out
+	snap.Digest = "sha256:" + hex.EncodeToString(sha256Sum(out))
+	return snap, nil
+}
+
+// DetectDrift compares current pre-state with previous post-state.
+func DetectDrift(preState map[string]StateSnap, previousAtt *Attestation) *DriftReport {
 	if previousAtt == nil {
 		return nil // first deploy, no drift possible
 	}
@@ -308,7 +344,7 @@ func (d *Deployer) executeKubernetesDeploy(ctx context.Context, m lane.DeployMet
 		return fmt.Errorf("kubernetes deploy: image required (digest-pinned kubectl image)")
 	}
 
-	kubeconfig, err := resolveKubeconfig(m.Kubeconfig())
+	kubeconfig, err := ResolveKubeconfig(m.Kubeconfig())
 	if err != nil {
 		return fmt.Errorf("kubernetes deploy: %w", err)
 	}
@@ -367,9 +403,9 @@ func (d *Deployer) executeCustomDeploy(ctx context.Context, m lane.DeployMethod)
 	return nil
 }
 
-// resolveKubeconfig returns the host path to the kubeconfig file.
+// ResolveKubeconfig returns the host path to the kubeconfig file.
 // Priority: explicit override, $KUBECONFIG, default path.
-func resolveKubeconfig(override string) (string, error) {
+func ResolveKubeconfig(override string) (string, error) {
 	if override != "" {
 		if _, err := os.Stat(override); err != nil {
 			return "", fmt.Errorf("kubeconfig %q: %w", override, err)
@@ -377,7 +413,7 @@ func resolveKubeconfig(override string) (string, error) {
 		return override, nil
 	}
 	if env := os.Getenv("KUBECONFIG"); env != "" {
-		if _, err := os.Stat(env); err != nil {
+		if _, err := os.Stat(env); err != nil { //nolint:gosec // G703: path from $KUBECONFIG env
 			return "", fmt.Errorf("$KUBECONFIG %q: %w", env, err)
 		}
 		return env, nil
@@ -393,7 +429,8 @@ func resolveKubeconfig(override string) (string, error) {
 	return path, nil
 }
 
-func generateDeployID(stepName string) string {
+// GenerateDeployID creates a unique deploy identifier from a step name.
+func GenerateDeployID(stepName string) string {
 	data := fmt.Sprintf("%s-%d", stepName, time.Now().UnixNano())
 	return hex.EncodeToString(sha256Sum([]byte(data)))[:16]
 }
@@ -414,7 +451,7 @@ func httpGet(ctx context.Context, url string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer func() { _ = resp.Body.Close() }() //nolint:errcheck // best-effort HTTP body close
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("status %d", resp.StatusCode)
 	}

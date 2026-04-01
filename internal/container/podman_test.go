@@ -109,39 +109,39 @@ func TestImagePull(t *testing.T) {
 
 func TestImageInspect(t *testing.T) {
 	tests := []struct {
-		name        string
-		statusCode  int
-		response    map[string]any
-		wantDigest  string
-		wantErr     bool
+		response   map[string]any
+		name       string
+		wantDigest string
+		statusCode int
+		wantErr    bool
 	}{
 		{
-			"success",
-			http.StatusOK,
-			map[string]any{
+			response: map[string]any{
 				"Id":          "abc123",
 				"Digest":      "sha256:deadbeef",
 				"RepoDigests": []string{"alpine@sha256:deadbeef"},
 				"Size":        int64(1024),
 				"Annotations": map[string]string{"org.example": "test"},
 			},
-			"sha256:deadbeef",
-			false,
+			name:       "success",
+			wantDigest: "sha256:deadbeef",
+			statusCode: http.StatusOK,
+			wantErr:    false,
 		},
 		{
-			"not found",
-			http.StatusNotFound,
-			nil,
-			"",
-			true,
+			response:   nil,
+			name:       "not found",
+			wantDigest: "",
+			statusCode: http.StatusNotFound,
+			wantErr:    true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			eng := newTestEngine(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			eng := newTestEngine(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(tt.statusCode)
 				if tt.response != nil {
-					json.NewEncoder(w).Encode(tt.response)
+					json.NewEncoder(w).Encode(tt.response) //nolint:errcheck,gosec // test HTTP handler
 				}
 			}))
 			info, err := eng.ImageInspect(context.Background(), "alpine:latest")
@@ -184,7 +184,7 @@ func TestImageLoad(t *testing.T) {
 				if r.Header.Get("Content-Type") != "application/x-tar" {
 					t.Errorf("Content-Type = %q, want application/x-tar", r.Header.Get("Content-Type"))
 				}
-				json.NewEncoder(w).Encode(tt.response)
+				json.NewEncoder(w).Encode(tt.response) //nolint:errcheck,gosec // test HTTP handler
 			}))
 			id, err := eng.ImageLoad(context.Background(), strings.NewReader("fake-tar-data"))
 			if (err != nil) != tt.wantErr {
@@ -271,9 +271,9 @@ func TestContainerRun(t *testing.T) {
 
 		switch {
 		case strings.HasSuffix(path, "/containers/create"):
-			body, _ := io.ReadAll(r.Body)
-			json.Unmarshal(body, &capturedSpec)
-			json.NewEncoder(w).Encode(map[string]string{"Id": "test-container-123"})
+			body, _ := io.ReadAll(r.Body)                                            //nolint:errcheck // test HTTP handler
+			_ = json.Unmarshal(body, &capturedSpec)                                  //nolint:errcheck // test HTTP handler
+			json.NewEncoder(w).Encode(map[string]string{"Id": "test-container-123"}) //nolint:errcheck,gosec // test HTTP handler
 
 		case strings.HasSuffix(path, "/start"):
 			w.WriteHeader(http.StatusNoContent)
@@ -283,15 +283,15 @@ func TestContainerRun(t *testing.T) {
 			header := make([]byte, 8)
 			header[0] = 1 // stdout
 			binary.BigEndian.PutUint32(header[4:], 6)
-			w.Write(header)
-			w.Write([]byte("hello\n"))
+			w.Write(header)            //nolint:errcheck,gosec // test HTTP handler
+			w.Write([]byte("hello\n")) //nolint:errcheck,gosec // test HTTP handler
 
 		case strings.HasSuffix(path, "/wait"):
-			json.NewEncoder(w).Encode(map[string]int{"StatusCode": 0})
+			json.NewEncoder(w).Encode(map[string]int{"StatusCode": 0}) //nolint:errcheck,gosec // test HTTP handler
 
 		case r.Method == http.MethodDelete && strings.Contains(path, "/containers/"):
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode([]map[string]any{})
+			json.NewEncoder(w).Encode([]map[string]any{}) //nolint:errcheck,gosec // test HTTP handler
 
 		default:
 			step++
@@ -303,23 +303,22 @@ func TestContainerRun(t *testing.T) {
 	var stderr bytes.Buffer
 
 	exitCode, err := eng.ContainerRun(context.Background(), container.RunOpts{
-		Image:       "test:latest",
-		Cmd:         []string{"echo", "hello"},
 		Env:         map[string]string{"FOO": "bar"},
-		Network:     "none",
-		CapDrop:     []string{"ALL"},
-		ReadOnly:    true,
-		SecurityOpt: []string{"no-new-privileges"},
 		Tmpfs:       map[string]string{"/tmp": "rw,noexec,nosuid,size=512m"},
-		UsernsMode:  "keep-id",
-		Stdout:      &stdout,
-		Stderr:      &stderr,
-		Remove:      true,
+		Cmd:         []string{"echo", "hello"},
+		CapDrop:     []string{"ALL"},
+		SecurityOpt: []string{"no-new-privileges"},
 		Mounts: []container.Mount{
 			{Source: "/host/src", Target: "/src", ReadOnly: true},
 		},
+		Image:      "test:latest",
+		Network:    "none",
+		UsernsMode: "keep-id",
+		Stdout:     &stdout,
+		Stderr:     &stderr,
+		ReadOnly:   true,
+		Remove:     true,
 	})
-
 	if err != nil {
 		t.Fatalf("ContainerRun() error = %v", err)
 	}
@@ -330,22 +329,36 @@ func TestContainerRun(t *testing.T) {
 		t.Errorf("stdout = %q, want %q", stdout.String(), "hello\n")
 	}
 
-	// Verify spec generator fields
+	verifySpecGenerator(t, capturedSpec)
+}
+
+func verifySpecGenerator(t *testing.T, capturedSpec map[string]any) {
+	t.Helper()
+
 	if capturedSpec["image"] != "test:latest" {
 		t.Errorf("spec image = %v, want test:latest", capturedSpec["image"])
 	}
 	if capturedSpec["read_only_filesystem"] != true {
 		t.Errorf("spec read_only_filesystem = %v, want true", capturedSpec["read_only_filesystem"])
 	}
-	env, _ := capturedSpec["env"].(map[string]any)
+	env, ok := capturedSpec["env"].(map[string]any)
+	if !ok {
+		t.Fatal("expected env in spec")
+	}
 	if env["FOO"] != "bar" {
 		t.Errorf("spec env FOO = %v, want bar", env["FOO"])
 	}
-	netns, _ := capturedSpec["netns"].(map[string]any)
+	netns, ok := capturedSpec["netns"].(map[string]any)
+	if !ok {
+		t.Fatal("expected netns in spec")
+	}
 	if netns["nsmode"] != "none" {
 		t.Errorf("spec netns nsmode = %v, want none", netns["nsmode"])
 	}
-	userns, _ := capturedSpec["userns"].(map[string]any)
+	userns, ok := capturedSpec["userns"].(map[string]any)
+	if !ok {
+		t.Fatal("expected userns in spec")
+	}
 	if userns["nsmode"] != "keep-id" {
 		t.Errorf("spec userns nsmode = %v, want keep-id", userns["nsmode"])
 	}
@@ -356,16 +369,16 @@ func TestContainerRunExitCode(t *testing.T) {
 		path := r.URL.Path
 		switch {
 		case strings.HasSuffix(path, "/containers/create"):
-			json.NewEncoder(w).Encode(map[string]string{"Id": "fail-container"})
+			json.NewEncoder(w).Encode(map[string]string{"Id": "fail-container"}) //nolint:errcheck,gosec // test HTTP handler
 		case strings.HasSuffix(path, "/start"):
 			w.WriteHeader(http.StatusNoContent)
 		case strings.HasSuffix(path, "/logs"):
 			// empty log stream
 		case strings.HasSuffix(path, "/wait"):
-			json.NewEncoder(w).Encode(map[string]int{"StatusCode": 42})
+			json.NewEncoder(w).Encode(map[string]int{"StatusCode": 42}) //nolint:errcheck,gosec // test HTTP handler
 		case r.Method == http.MethodDelete:
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode([]map[string]any{})
+			json.NewEncoder(w).Encode([]map[string]any{}) //nolint:errcheck,gosec // test HTTP handler
 		}
 	}))
 

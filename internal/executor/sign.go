@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
-	"math/big"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/empty"
@@ -75,9 +74,13 @@ func SignManifest(manifestDigest string, keyPEM, password []byte) (v1.Image, err
 		types.MediaType("application/vnd.dev.cosign.simplesigning.v1+json"))
 
 	img := mutate.MediaType(empty.Image, types.OCIManifestSchema1)
-	img = mutate.Annotations(img, map[string]string{
+	annotated, ok := mutate.Annotations(img, map[string]string{
 		"dev.cosigstore.cosign/signature": b64sig,
 	}).(v1.Image)
+	if !ok {
+		return nil, fmt.Errorf("unexpected type from mutate.Annotations")
+	}
+	img = annotated
 
 	img, err = mutate.AppendLayers(img, layer)
 	if err != nil {
@@ -89,10 +92,14 @@ func SignManifest(manifestDigest string, keyPEM, password []byte) (v1.Image, err
 	if err != nil {
 		return nil, fmt.Errorf("parse manifest digest: %w", err)
 	}
-	img = mutate.Subject(img, v1.Descriptor{
+	withSubject, ok := mutate.Subject(img, v1.Descriptor{
 		MediaType: types.OCIManifestSchema1,
 		Digest:    h,
 	}).(v1.Image)
+	if !ok {
+		return nil, fmt.Errorf("unexpected type from mutate.Subject")
+	}
+	img = withSubject
 
 	return img, nil
 }
@@ -135,18 +142,17 @@ func parsePKCS8(der []byte) (*ecdsa.PrivateKey, error) {
 	return ecKey, nil
 }
 
-// cosign encrypted key format
+// cosign encrypted key format.
 type cosignEncryptedKey struct {
-	KDF    cosignKDF    `json:"kdf"`
-	Cipher cosignCipher `json:"cipher"`
-	// base64-encoded ciphertext
-	Ciphertext string `json:"ciphertext"`
+	Cipher     cosignCipher `json:"cipher"`
+	Ciphertext string       `json:"ciphertext"`
+	KDF        cosignKDF    `json:"kdf"`
 }
 
 type cosignKDF struct {
 	Name   string         `json:"name"`
+	Salt   string         `json:"salt"`
 	Params cosignScryptKP `json:"params"`
-	Salt   string         `json:"salt"` // base64
 }
 
 type cosignScryptKP struct {
@@ -211,10 +217,10 @@ func decryptCosignKey(data, password []byte) (*ecdsa.PrivateKey, error) {
 	return parsePKCS8(plaintext)
 }
 
-// Cosign simple signing payload types
+// Cosign simple signing payload types.
 type simpleSigning struct {
-	Critical criticalSection `json:"critical"`
 	Optional interface{}     `json:"optional"`
+	Critical criticalSection `json:"critical"`
 }
 
 type criticalSection struct {
@@ -230,6 +236,3 @@ type identitySection struct {
 type imageSection struct {
 	DockerManifestDigest string `json:"docker-manifest-digest"`
 }
-
-// Ensure big.Int is used (for zero-padding r/s values)
-var _ = new(big.Int)

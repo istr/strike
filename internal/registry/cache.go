@@ -1,3 +1,5 @@
+// Package registry implements OCI registry operations, content-addressed
+// caching, and spec hashing for strike lane artifacts.
 package registry
 
 import (
@@ -54,7 +56,7 @@ func SpecHash(
 
 // Tag builds the registry tag from step name and hash.
 // Format: registry:step-name-hash16
-// Example: ghcr.io/istr/strike-cache:build-package-a3f9c2b1d4e7f801
+// Example: ghcr.io/istr/strike-cache:build-package-a3f9c2b1d4e7f801.
 func Tag(registry, stepName, hash string) string {
 	return fmt.Sprintf("%s:%s-%s", registry, stepName, hash)
 }
@@ -72,12 +74,16 @@ func HashPath(path string) (string, error) {
 }
 
 // HashFile computes SHA256 of a source file.
-func HashFile(path string) (string, error) {
-	f, err := os.Open(path)
+func HashFile(path string) (hash string, err error) {
+	f, err := os.Open(path) //nolint:gosec // G304: source path from validated lane definition
 	if err != nil {
 		return "", err
 	}
-	defer f.Close()
+	defer func() {
+		if cerr := f.Close(); cerr != nil && err == nil {
+			err = cerr
+		}
+	}()
 
 	h := sha256.New()
 	if _, err := io.Copy(h, f); err != nil {
@@ -99,7 +105,7 @@ func HashDir(dir string) (string, error) {
 		if d.IsDir() {
 			return nil
 		}
-		content, err := os.ReadFile(path)
+		content, err := os.ReadFile(path) //nolint:gosec // G304: path from WalkDir of validated sources
 		if err != nil {
 			if os.IsPermission(err) {
 				return nil
@@ -122,17 +128,17 @@ func sortedKeys(m map[string]string) []string {
 	return keys
 }
 
-// RegistryCache stores and retrieves step outputs as OCI artifacts.
+// Cache stores and retrieves step outputs as OCI artifacts.
 // Cache entries are content-addressed: the cache key maps to an OCI
 // manifest. Tag: cache-<first-12-of-cache-key>.
 // Annotation: full cache key for collision detection.
-type RegistryCache struct {
+type Cache struct {
 	Registry string
 }
 
 // CacheTag builds the OCI tag for a cache entry.
-// Format: registry/strike-cache:cache-<first12>
-func (c *RegistryCache) CacheTag(key string) string {
+// Format: registry/strike-cache:cache-<first12>.
+func (c *Cache) CacheTag(key string) string {
 	// Strip "sha256:" prefix if present
 	k := key
 	if len(k) > 7 && k[:7] == "sha256:" {
@@ -149,7 +155,7 @@ const cacheKeyAnnotation = "dev.strike.cache-key"
 
 // Lookup checks local and remote for a cached step result.
 // Returns the list of cached artifacts and true if found.
-func (c *RegistryCache) Lookup(ctx context.Context, key string, client *Client) ([]lane.Artifact, bool) {
+func (c *Cache) Lookup(ctx context.Context, key string, client *Client) ([]lane.Artifact, bool) {
 	tag := c.CacheTag(key)
 
 	local, remote := client.Find(ctx, tag)
@@ -173,7 +179,7 @@ func (c *RegistryCache) Lookup(ctx context.Context, key string, client *Client) 
 }
 
 // Store pushes step outputs to the registry as a cache entry.
-func (c *RegistryCache) Store(ctx context.Context, key string, client *Client, tag string) error {
+func (c *Cache) Store(ctx context.Context, _ string, client *Client, tag string) error {
 	if err := client.PushArtifact(ctx, tag); err != nil {
 		return fmt.Errorf("cache store %q: %w", tag, err)
 	}

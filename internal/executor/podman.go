@@ -12,11 +12,11 @@ import (
 // Run holds the configuration for executing a step container.
 type Run struct {
 	Engine       container.Engine
+	Secrets      map[string]string
 	Step         *lane.Step
+	OutputDir    string
 	InputMounts  []Mount
 	SourceMounts []Mount
-	OutputDir    string
-	Secrets      map[string]string // env-name -> plaintext
 }
 
 // Mount describes a bind mount from host to container.
@@ -65,7 +65,7 @@ func (r Run) Execute(ctx context.Context) error {
 		Cmd:         r.Step.Args,
 		Env:         env,
 		Mounts:      mounts,
-		Network:     networkMode(r.Step.Network),
+		Network:     NetworkMode(r.Step.Network),
 		CapDrop:     []string{"ALL"},
 		ReadOnly:    true,
 		SecurityOpt: []string{"no-new-privileges"},
@@ -84,7 +84,8 @@ func (r Run) Execute(ctx context.Context) error {
 	return nil
 }
 
-func networkMode(enabled bool) string {
+// NetworkMode returns the container network mode string for the given setting.
+func NetworkMode(enabled bool) string {
 	if enabled {
 		return "" // default bridge
 	}

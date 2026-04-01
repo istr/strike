@@ -10,29 +10,29 @@ import (
 // State tracks artifacts and step results across lane execution.
 // All artifact references use "step_name.output_name" keys.
 type State struct {
-	mu        sync.RWMutex
 	Artifacts map[string]Artifact   `json:"artifacts"`
 	Steps     map[string]StepResult `json:"steps"`
+	mu        sync.RWMutex
 }
 
 // Artifact is a content-addressed output from a step.
 type Artifact struct {
+	Metadata    map[string]string `json:"metadata,omitempty"`
 	Type        ArtifactType      `json:"type"`
 	Digest      string            `json:"digest"` // "sha256:..."
-	Size        int64             `json:"size"`
 	LocalPath   string            `json:"local_path"`
 	ContentType string            `json:"content_type,omitempty"`
-	Metadata    map[string]string `json:"metadata,omitempty"`
+	Size        int64             `json:"size"`
 }
 
 // StepResult records execution metadata for a completed step.
 type StepResult struct {
-	Name      string            `json:"name"`
-	StepType  string            `json:"step_type"` // "run", "pack", "deploy"
 	StartedAt time.Time         `json:"started_at"`
+	Inputs    map[string]string `json:"inputs"`
+	Outputs   map[string]string `json:"outputs"`
+	Name      string            `json:"name"`
+	StepType  string            `json:"step_type"`
 	Duration  time.Duration     `json:"duration"`
-	Inputs    map[string]string `json:"inputs"`  // name -> digest at execution time
-	Outputs   map[string]string `json:"outputs"` // name -> digest after execution
 	ExitCode  int               `json:"exit_code"`
 }
 

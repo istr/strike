@@ -16,8 +16,6 @@ type podmanEngine struct {
 	base   string // e.g. "http://d/v5.0.0/libpod"
 }
 
-// --- Ping ---
-
 // Ping verifies the engine is reachable.
 func (e *podmanEngine) Ping(ctx context.Context) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, e.base+"/_ping", nil)
@@ -28,14 +26,12 @@ func (e *podmanEngine) Ping(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("engine ping: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer func() { _ = resp.Body.Close() }() //nolint:errcheck // best-effort HTTP body close
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("engine ping: status %d", resp.StatusCode)
 	}
 	return nil
 }
-
-// --- ImageExists ---
 
 // ImageExists checks if an image exists in the local store.
 func (e *podmanEngine) ImageExists(ctx context.Context, ref string) (bool, error) {
@@ -48,11 +44,9 @@ func (e *podmanEngine) ImageExists(ctx context.Context, ref string) (bool, error
 	if err != nil {
 		return false, err
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer func() { _ = resp.Body.Close() }() //nolint:errcheck // best-effort HTTP body close
 	return resp.StatusCode == http.StatusNoContent, nil
 }
-
-// --- ImagePull ---
 
 // ImagePull fetches an image from a remote registry.
 func (e *podmanEngine) ImagePull(ctx context.Context, ref string) error {
@@ -65,7 +59,7 @@ func (e *podmanEngine) ImagePull(ctx context.Context, ref string) error {
 	if err != nil {
 		return fmt.Errorf("image pull %s: %w", ref, err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer func() { _ = resp.Body.Close() }() //nolint:errcheck // best-effort HTTP body close
 	// The pull response is a stream of JSON objects. Read to completion.
 	if _, err := io.Copy(io.Discard, resp.Body); err != nil {
 		return fmt.Errorf("image pull %s: read response: %w", ref, err)
@@ -75,8 +69,6 @@ func (e *podmanEngine) ImagePull(ctx context.Context, ref string) error {
 	}
 	return nil
 }
-
-// --- ImagePush ---
 
 // ImagePush pushes a local image to a remote registry.
 func (e *podmanEngine) ImagePush(ctx context.Context, name string) error {
@@ -92,7 +84,7 @@ func (e *podmanEngine) ImagePush(ctx context.Context, name string) error {
 	if err != nil {
 		return fmt.Errorf("image push %s: %w", name, err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer func() { _ = resp.Body.Close() }() //nolint:errcheck // best-effort HTTP body close
 	if _, err := io.Copy(io.Discard, resp.Body); err != nil {
 		return err
 	}
@@ -101,8 +93,6 @@ func (e *podmanEngine) ImagePush(ctx context.Context, name string) error {
 	}
 	return nil
 }
-
-// --- ImageLoad ---
 
 // ImageLoad loads an OCI tar archive into the local store.
 func (e *podmanEngine) ImageLoad(ctx context.Context, input io.Reader) (string, error) {
@@ -115,7 +105,7 @@ func (e *podmanEngine) ImageLoad(ctx context.Context, input io.Reader) (string, 
 	if err != nil {
 		return "", fmt.Errorf("image load: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer func() { _ = resp.Body.Close() }() //nolint:errcheck // best-effort HTTP body close
 	var result struct {
 		Names []string `json:"Names"`
 	}
@@ -128,8 +118,6 @@ func (e *podmanEngine) ImageLoad(ctx context.Context, input io.Reader) (string, 
 	return result.Names[0], nil
 }
 
-// --- ImageInspect ---
-
 // ImageInspect returns metadata for a local image.
 func (e *podmanEngine) ImageInspect(ctx context.Context, ref string) (*ImageInfo, error) {
 	u := e.base + "/images/" + url.PathEscape(ref) + "/json"
@@ -141,17 +129,17 @@ func (e *podmanEngine) ImageInspect(ctx context.Context, ref string) (*ImageInfo
 	if err != nil {
 		return nil, fmt.Errorf("image inspect %s: %w", ref, err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer func() { _ = resp.Body.Close() }() //nolint:errcheck // best-effort HTTP body close
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, fmt.Errorf("image %s not found", ref)
 	}
 	// Libpod inspect response
 	var raw struct {
+		Annotations map[string]string `json:"Annotations"`
 		ID          string            `json:"Id"`
 		Digest      string            `json:"Digest"`
 		RepoDigests []string          `json:"RepoDigests"`
 		Size        int64             `json:"Size"`
-		Annotations map[string]string `json:"Annotations"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
 		return nil, fmt.Errorf("image inspect %s: decode: %w", ref, err)
@@ -164,8 +152,6 @@ func (e *podmanEngine) ImageInspect(ctx context.Context, ref string) (*ImageInfo
 		Size:        raw.Size,
 	}, nil
 }
-
-// --- ImageTag ---
 
 // ImageTag adds a tag to an existing image.
 func (e *podmanEngine) ImageTag(ctx context.Context, source, target string) error {
@@ -181,14 +167,12 @@ func (e *podmanEngine) ImageTag(ctx context.Context, source, target string) erro
 	if err != nil {
 		return fmt.Errorf("image tag %s -> %s: %w", source, target, err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer func() { _ = resp.Body.Close() }() //nolint:errcheck // best-effort HTTP body close
 	if resp.StatusCode != http.StatusCreated {
 		return fmt.Errorf("image tag: status %d", resp.StatusCode)
 	}
 	return nil
 }
-
-// --- ContainerRun ---
 
 // ContainerRun creates, starts, waits for, and removes a container.
 func (e *podmanEngine) ContainerRun(ctx context.Context, opts RunOpts) (int, error) {
@@ -199,8 +183,8 @@ func (e *podmanEngine) ContainerRun(ctx context.Context, opts RunOpts) (int, err
 	}
 
 	// 2. Start
-	if err := e.containerStart(ctx, id); err != nil {
-		return -1, fmt.Errorf("container start: %w", err)
+	if startErr := e.containerStart(ctx, id); startErr != nil {
+		return -1, fmt.Errorf("container start: %w", startErr)
 	}
 
 	// 3. Stream logs (stdout/stderr) in background
@@ -219,7 +203,7 @@ func (e *podmanEngine) ContainerRun(ctx context.Context, opts RunOpts) (int, err
 	if logErr := <-done; logErr != nil {
 		// Log streaming errors are non-fatal
 		if opts.Stderr != nil {
-			fmt.Fprintf(opts.Stderr, "warning: log streaming: %v\n", logErr)
+			fmt.Fprintf(opts.Stderr, "warning: log streaming: %v\n", logErr) //nolint:errcheck // best-effort warning
 		}
 	}
 
@@ -249,7 +233,7 @@ func (e *podmanEngine) containerCreate(ctx context.Context, opts RunOpts) (strin
 	if err != nil {
 		return "", err
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer func() { _ = resp.Body.Close() }() //nolint:errcheck // best-effort HTTP body close
 	var result struct {
 		ID string `json:"Id"`
 	}
@@ -269,9 +253,12 @@ func (e *podmanEngine) containerStart(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer func() { _ = resp.Body.Close() }() //nolint:errcheck // best-effort HTTP body close
 	if resp.StatusCode != http.StatusNoContent {
-		body, _ := io.ReadAll(resp.Body)
+		body, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			return fmt.Errorf("start: status %d: (body read failed)", resp.StatusCode)
+		}
 		return fmt.Errorf("start: status %d: %s", resp.StatusCode, body)
 	}
 	return nil
@@ -287,12 +274,12 @@ func (e *podmanEngine) containerWait(ctx context.Context, id string) (int, error
 	if err != nil {
 		return -1, err
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer func() { _ = resp.Body.Close() }() //nolint:errcheck // best-effort HTTP body close
 	var result struct {
-		StatusCode int `json:"StatusCode"`
-		Error      *struct {
+		Error *struct {
 			Message string
 		} `json:"Error"`
+		StatusCode int `json:"StatusCode"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return -1, err
@@ -313,7 +300,7 @@ func (e *podmanEngine) containerLogs(ctx context.Context, id string, stdout, std
 	if err != nil {
 		return err
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer func() { _ = resp.Body.Close() }() //nolint:errcheck // best-effort HTTP body close
 	// Libpod log stream: each frame has an 8-byte header (stream type + size),
 	// followed by the payload. Stream type: 0=stdin, 1=stdout, 2=stderr.
 	return demuxLogStream(resp.Body, stdout, stderr)
@@ -329,11 +316,9 @@ func (e *podmanEngine) containerRemove(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer func() { _ = resp.Body.Close() }() //nolint:errcheck // best-effort HTTP body close
 	return nil
 }
-
-// --- Helpers ---
 
 // buildSpecGenerator constructs the libpod SpecGenerator JSON from RunOpts.
 func buildSpecGenerator(opts RunOpts) map[string]any {

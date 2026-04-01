@@ -1,4 +1,4 @@
-package deploy
+package deploy_test
 
 import (
 	"encoding/json"
@@ -6,30 +6,31 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/istr/strike/internal/deploy"
 	"github.com/istr/strike/internal/lane"
 )
 
 func TestDetectDrift_NoPrevious(t *testing.T) {
-	pre := map[string]StateSnap{
+	pre := map[string]deploy.StateSnap{
 		"version": {Name: "version", Digest: "sha256:aaa"},
 	}
-	report := detectDrift(pre, nil)
+	report := deploy.DetectDrift(pre, nil)
 	if report != nil {
 		t.Fatal("expected nil drift report for first deploy")
 	}
 }
 
 func TestDetectDrift_NoDrift(t *testing.T) {
-	pre := map[string]StateSnap{
+	pre := map[string]deploy.StateSnap{
 		"version": {Name: "version", Digest: "sha256:aaa"},
 	}
-	prev := &Attestation{
+	prev := &deploy.Attestation{
 		DeployID: "prev-001",
-		PostState: map[string]StateSnap{
+		PostState: map[string]deploy.StateSnap{
 			"version": {Name: "version", Digest: "sha256:aaa"},
 		},
 	}
-	report := detectDrift(pre, prev)
+	report := deploy.DetectDrift(pre, prev)
 	if report == nil {
 		t.Fatal("expected non-nil drift report")
 	}
@@ -39,16 +40,16 @@ func TestDetectDrift_NoDrift(t *testing.T) {
 }
 
 func TestDetectDrift_WithDrift(t *testing.T) {
-	pre := map[string]StateSnap{
+	pre := map[string]deploy.StateSnap{
 		"version": {Name: "version", Digest: "sha256:bbb"},
 	}
-	prev := &Attestation{
+	prev := &deploy.Attestation{
 		DeployID: "prev-001",
-		PostState: map[string]StateSnap{
+		PostState: map[string]deploy.StateSnap{
 			"version": {Name: "version", Digest: "sha256:aaa"},
 		},
 	}
-	report := detectDrift(pre, prev)
+	report := deploy.DetectDrift(pre, prev)
 	if report == nil {
 		t.Fatal("expected drift report")
 	}
@@ -58,14 +59,14 @@ func TestDetectDrift_WithDrift(t *testing.T) {
 }
 
 func TestAttestationJSON(t *testing.T) {
-	att := &Attestation{
+	att := &deploy.Attestation{
 		DeployID:  "test-001",
 		Target:    lane.DeployTarget{Type: "registry", Description: "test"},
 		Artifacts: map[string]string{"image": "sha256:abc"},
-		PreState: map[string]StateSnap{
+		PreState: map[string]deploy.StateSnap{
 			"version": {Name: "version", Type: "command", Digest: "sha256:aaa"},
 		},
-		PostState: map[string]StateSnap{
+		PostState: map[string]deploy.StateSnap{
 			"version": {Name: "version", Type: "command", Digest: "sha256:bbb"},
 		},
 	}
@@ -91,8 +92,8 @@ func TestAttestationJSON(t *testing.T) {
 }
 
 func TestGenerateDeployID(t *testing.T) {
-	id1 := generateDeployID("test")
-	id2 := generateDeployID("test")
+	id1 := deploy.GenerateDeployID("test")
+	id2 := deploy.GenerateDeployID("test")
 	if id1 == id2 {
 		t.Fatal("deploy IDs should be unique")
 	}
@@ -104,9 +105,11 @@ func TestGenerateDeployID(t *testing.T) {
 func TestResolveKubeconfig_ExplicitExists(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "kubeconfig")
-	os.WriteFile(path, []byte("test"), 0o600)
+	if err := os.WriteFile(path, []byte("test"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
-	got, err := resolveKubeconfig(path)
+	got, err := deploy.ResolveKubeconfig(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -116,7 +119,7 @@ func TestResolveKubeconfig_ExplicitExists(t *testing.T) {
 }
 
 func TestResolveKubeconfig_ExplicitMissing(t *testing.T) {
-	_, err := resolveKubeconfig("/nonexistent/kubeconfig")
+	_, err := deploy.ResolveKubeconfig("/nonexistent/kubeconfig")
 	if err == nil {
 		t.Fatal("expected error for missing explicit path")
 	}
@@ -125,10 +128,12 @@ func TestResolveKubeconfig_ExplicitMissing(t *testing.T) {
 func TestResolveKubeconfig_EnvSet(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "kubeconfig")
-	os.WriteFile(path, []byte("test"), 0o600)
+	if err := os.WriteFile(path, []byte("test"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	t.Setenv("KUBECONFIG", path)
 
-	got, err := resolveKubeconfig("")
+	got, err := deploy.ResolveKubeconfig("")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -140,7 +145,7 @@ func TestResolveKubeconfig_EnvSet(t *testing.T) {
 func TestResolveKubeconfig_EnvMissing(t *testing.T) {
 	t.Setenv("KUBECONFIG", "/nonexistent/kubeconfig")
 
-	_, err := resolveKubeconfig("")
+	_, err := deploy.ResolveKubeconfig("")
 	if err == nil {
 		t.Fatal("expected error for missing $KUBECONFIG path")
 	}
@@ -149,14 +154,18 @@ func TestResolveKubeconfig_EnvMissing(t *testing.T) {
 func TestResolveKubeconfig_DefaultExists(t *testing.T) {
 	dir := t.TempDir()
 	kubeDir := filepath.Join(dir, ".kube")
-	os.MkdirAll(kubeDir, 0o755)
+	if err := os.MkdirAll(kubeDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
 	path := filepath.Join(kubeDir, "config")
-	os.WriteFile(path, []byte("test"), 0o600)
+	if err := os.WriteFile(path, []byte("test"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
 	t.Setenv("KUBECONFIG", "")
 	t.Setenv("HOME", dir)
 
-	got, err := resolveKubeconfig("")
+	got, err := deploy.ResolveKubeconfig("")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -170,7 +179,7 @@ func TestResolveKubeconfig_NoneFound(t *testing.T) {
 	t.Setenv("KUBECONFIG", "")
 	t.Setenv("HOME", dir)
 
-	_, err := resolveKubeconfig("")
+	_, err := deploy.ResolveKubeconfig("")
 	if err == nil {
 		t.Fatal("expected error when no kubeconfig found")
 	}

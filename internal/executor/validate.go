@@ -1,6 +1,7 @@
 package executor
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -30,16 +31,20 @@ func ValidateOutput(path string, info fs.FileInfo, expected *lane.OutputValidati
 }
 
 // ValidateContentType checks magic bytes against the declared content type.
-func ValidateContentType(path string, contentType string) error {
-	f, err := os.Open(path)
+func ValidateContentType(path string, contentType string) (err error) {
+	f, err := os.Open(path) //nolint:gosec // G304: output file path from step execution
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() {
+		if cerr := f.Close(); cerr != nil && err == nil {
+			err = cerr
+		}
+	}()
 
 	header := make([]byte, 20)
 	n, err := f.Read(header)
-	if err != nil && err != io.EOF {
+	if err != nil && !errors.Is(err, io.EOF) {
 		return fmt.Errorf("read header: %w", err)
 	}
 	header = header[:n]

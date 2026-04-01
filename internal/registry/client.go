@@ -20,7 +20,10 @@ type Client struct {
 
 // ExistsLocal checks if an image exists in the local container store.
 func (c *Client) ExistsLocal(ctx context.Context, tag string) bool {
-	exists, _ := c.Engine.ImageExists(ctx, tag)
+	exists, err := c.Engine.ImageExists(ctx, tag)
+	if err != nil {
+		return false
+	}
 	return exists
 }
 
@@ -55,12 +58,16 @@ func CopyImage(src, dst string) error {
 
 // LoadOCITar loads a single-image OCI tar archive into the local container
 // store and returns the manifest digest.
-func (c *Client) LoadOCITar(ctx context.Context, tarPath string) (string, error) {
-	f, err := os.Open(tarPath)
+func (c *Client) LoadOCITar(ctx context.Context, tarPath string) (digest string, err error) {
+	f, err := os.Open(tarPath) //nolint:gosec // G304: OCI tar path from step output
 	if err != nil {
 		return "", err
 	}
-	defer func() { _ = f.Close() }()
+	defer func() {
+		if cerr := f.Close(); cerr != nil && err == nil {
+			err = cerr
+		}
+	}()
 
 	id, err := c.Engine.ImageLoad(ctx, f)
 	if err != nil {
@@ -72,12 +79,16 @@ func (c *Client) LoadOCITar(ctx context.Context, tarPath string) (string, error)
 
 // LoadOCITarByDigest loads an image from an OCI tar archive into the local
 // container store, selecting it by digest, and tags it for downstream reference.
-func (c *Client) LoadOCITarByDigest(ctx context.Context, tarPath, digest string) error {
-	f, err := os.Open(tarPath)
+func (c *Client) LoadOCITarByDigest(ctx context.Context, tarPath, digest string) (err error) {
+	f, err := os.Open(tarPath) //nolint:gosec // G304: OCI tar path from step output
 	if err != nil {
 		return err
 	}
-	defer func() { _ = f.Close() }()
+	defer func() {
+		if cerr := f.Close(); cerr != nil && err == nil {
+			err = cerr
+		}
+	}()
 
 	id, err := c.Engine.ImageLoad(ctx, f)
 	if err != nil {

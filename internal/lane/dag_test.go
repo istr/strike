@@ -1,13 +1,17 @@
-package lane
+package lane_test
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/istr/strike/internal/lane"
+)
 
 func TestIsOCITarOutput(t *testing.T) {
-	dag := &DAG{
-		Steps: map[string]*Step{
+	dag := &lane.DAG{
+		Steps: map[string]*lane.Step{
 			"builder": {
 				Name: "builder",
-				Outputs: []OutputSpec{
+				Outputs: []lane.OutputSpec{
 					{Name: "binary", Type: "file", Path: "/out/strike"},
 					{Name: "image", Type: "image", Path: "/out/image.tar"},
 				},
@@ -16,13 +20,13 @@ func TestIsOCITarOutput(t *testing.T) {
 	}
 
 	tests := []struct {
-		inp  InputRef
+		inp  lane.InputRef
 		want bool
 	}{
-		{InputRef{Name: "image", From: "builder"}, true},
-		{InputRef{Name: "binary", From: "builder"}, false},
-		{InputRef{Name: "missing", From: "builder"}, false},
-		{InputRef{Name: "image", From: "unknown"}, false},
+		{lane.InputRef{Name: "image", From: "builder"}, true},
+		{lane.InputRef{Name: "binary", From: "builder"}, false},
+		{lane.InputRef{Name: "missing", From: "builder"}, false},
+		{lane.InputRef{Name: "image", From: "unknown"}, false},
 	}
 
 	for _, tt := range tests {

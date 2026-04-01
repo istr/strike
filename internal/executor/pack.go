@@ -1,3 +1,5 @@
+// Package executor implements container execution, OCI image assembly,
+// signing, and SBOM generation for strike lane steps.
 package executor
 
 import (
@@ -25,12 +27,12 @@ import (
 
 // PackOpts is everything pack needs; callers in main.go assemble this.
 type PackOpts struct {
+	InputPaths  map[string]string
 	Spec        *lane.PackSpec
-	InputPaths  map[string]string // "step_name.output_name" -> host path
-	OutputPath  string            // path to write the oci-tar
-	SigningKey  []byte            // PEM-encoded ECDSA P-256 private key
-	KeyPassword []byte            // passphrase for encrypted key; empty if unencrypted
-	State       *lane.State       // lane state for artifact provenance
+	State       *lane.State
+	OutputPath  string
+	SigningKey  []byte
+	KeyPassword []byte
 }
 
 // PackResult holds the outputs of a successful pack operation.
@@ -38,6 +40,8 @@ type PackResult struct {
 	Digest string // "sha256:..." manifest digest of the main image
 }
 
+// Pack assembles an OCI image from the given options, generates an SBOM,
+// signs the manifest, and writes the result as an OCI layout tar.
 func Pack(opts PackOpts) (*PackResult, error) {
 	if opts.SigningKey == nil {
 		return nil, fmt.Errorf("pack: signing key is required; keyless signing is not yet implemented")
@@ -49,91 +53,31 @@ func Pack(opts PackOpts) (*PackResult, error) {
 		return nil, fmt.Errorf("pack: pull base image: %w", err)
 	}
 
-	// Track the first binary path for SBOM generation
-	var binaryPath string
-
 	// 2. Add file layers
-	for _, f := range opts.Spec.Files {
-		hostPath, ok := opts.InputPaths[f.From]
-		if !ok {
-			return nil, fmt.Errorf("pack: file from %q: host path not resolved", f.From)
-		}
-		if binaryPath == "" {
-			binaryPath = hostPath
-		}
-		layer, err := fileLayer(hostPath, f.Dest, fs.FileMode(f.Mode))
-		if err != nil {
-			return nil, fmt.Errorf("pack: add file %q: %w", f.Dest, err)
-		}
-		img, err = mutate.AppendLayers(img, layer)
-		if err != nil {
-			return nil, fmt.Errorf("pack: append layer: %w", err)
-		}
+	img, binaryPath, err := addFileLayers(img, opts.Spec.Files, opts.InputPaths)
+	if err != nil {
+		return nil, err
 	}
 
 	// 2b. Add config file layers (literal content)
-	if opts.Spec.Config_files != nil {
-		for path, entry := range opts.Spec.Config_files {
-			layer, cfErr := fileLayerFromContent(
-				[]byte(entry.Content),
-				path,
-				fs.FileMode(entry.Mode),
-				int(entry.UID),
-				int(entry.GID),
-			)
-			if cfErr != nil {
-				return nil, fmt.Errorf("pack: config file %q: %w", path, cfErr)
-			}
-			img, err = mutate.AppendLayers(img, layer)
-			if err != nil {
-				return nil, fmt.Errorf("pack: append config file layer: %w", err)
-			}
-		}
+	img, err = addConfigFileLayers(img, opts.Spec.Config_files)
+	if err != nil {
+		return nil, err
 	}
 
 	// 3. Apply image configuration
-	if opts.Spec.Config != nil {
-		cfg, cfgErr := img.ConfigFile()
-		if cfgErr != nil {
-			return nil, fmt.Errorf("pack: read config: %w", cfgErr)
-		}
-		cfg = cfg.DeepCopy()
-
-		if opts.Spec.Config.Env != nil {
-			for k, v := range opts.Spec.Config.Env {
-				cfg.Config.Env = appendEnv(cfg.Config.Env, k, v)
-			}
-		}
-		if opts.Spec.Config.Entrypoint != nil {
-			cfg.Config.Entrypoint = opts.Spec.Config.Entrypoint
-		}
-		if opts.Spec.Config.Cmd != nil {
-			cfg.Config.Cmd = opts.Spec.Config.Cmd
-		}
-		if opts.Spec.Config.Workdir != "" {
-			cfg.Config.WorkingDir = opts.Spec.Config.Workdir
-		}
-		if opts.Spec.Config.User != "" {
-			cfg.Config.User = opts.Spec.Config.User
-		}
-		if opts.Spec.Config.Labels != nil {
-			if cfg.Config.Labels == nil {
-				cfg.Config.Labels = make(map[string]string)
-			}
-			for k, v := range opts.Spec.Config.Labels {
-				cfg.Config.Labels[k] = v
-			}
-		}
-
-		img, err = mutate.ConfigFile(img, cfg)
-		if err != nil {
-			return nil, fmt.Errorf("pack: apply config: %w", err)
-		}
+	img, err = applyConfig(img, opts.Spec)
+	if err != nil {
+		return nil, err
 	}
 
 	// 4. Apply annotations
 	if opts.Spec.Annotations != nil {
-		img = mutate.Annotations(img, opts.Spec.Annotations).(v1.Image)
+		annotated, ok := mutate.Annotations(img, opts.Spec.Annotations).(v1.Image)
+		if !ok {
+			return nil, fmt.Errorf("pack: unexpected type from mutate.Annotations")
+		}
+		img = annotated
 	}
 
 	// Compute image digest for referrer relationships
@@ -155,7 +99,7 @@ func Pack(opts PackOpts) (*PackResult, error) {
 		Size:      imgSize,
 	}
 
-	// 3. Generate SBOM
+	// 5. Generate SBOM
 	sbomBytes, err := GenerateSBOM(binaryPath, imgDigest.String(), string(opts.Spec.Base))
 	if err != nil {
 		return nil, fmt.Errorf("pack: sbom: %w", err)
@@ -165,41 +109,148 @@ func Pack(opts PackOpts) (*PackResult, error) {
 		return nil, fmt.Errorf("pack: SBOM artifact: %w", err)
 	}
 
-	// 4. Sign the image manifest digest
+	// 6. Sign the image manifest digest
 	sigImage, err := SignManifest(imgDigest.String(), opts.SigningKey, opts.KeyPassword)
 	if err != nil {
 		return nil, fmt.Errorf("pack: sign: %w", err)
 	}
 
-	// 5. Write OCI layout with all three manifests
-	layoutDir, err := os.MkdirTemp("", "strike-pack-layout-")
-	if err != nil {
-		return nil, fmt.Errorf("pack: temp dir: %w", err)
-	}
-	defer os.RemoveAll(layoutDir)
-
-	lp, err := layout.Write(layoutDir, empty.Index)
-	if err != nil {
-		return nil, fmt.Errorf("pack: write layout: %w", err)
-	}
-	if err := lp.AppendImage(img, layout.WithAnnotations(map[string]string{
-		"org.opencontainers.image.ref.name": imgDigest.String(),
-	})); err != nil {
-		return nil, fmt.Errorf("pack: append main image: %w", err)
-	}
-	if err := lp.AppendImage(sbomImage); err != nil {
-		return nil, fmt.Errorf("pack: append SBOM: %w", err)
-	}
-	if err := lp.AppendImage(sigImage); err != nil {
-		return nil, fmt.Errorf("pack: append signature: %w", err)
-	}
-
-	// 6. Tar the OCI layout to the output path
-	if err := tarDirectory(layoutDir, opts.OutputPath); err != nil {
-		return nil, fmt.Errorf("pack: tar layout: %w", err)
+	// 7. Write OCI layout with all three manifests
+	if err := writeOCILayout(img, sbomImage, sigImage, opts.OutputPath, imgDigest.String()); err != nil {
+		return nil, err
 	}
 
 	return &PackResult{Digest: imgDigest.String()}, nil
+}
+
+// addFileLayers appends a layer for each file entry, returning the updated
+// image and the host path of the first binary (used for SBOM generation).
+func addFileLayers(img v1.Image, files []lane.PackFile, inputPaths map[string]string) (v1.Image, string, error) {
+	var binaryPath string
+	for _, f := range files {
+		hostPath, ok := inputPaths[f.From]
+		if !ok {
+			return nil, "", fmt.Errorf("pack: file from %q: host path not resolved", f.From)
+		}
+		if binaryPath == "" {
+			binaryPath = hostPath
+		}
+		if f.Mode < 0 || f.Mode > 0o7777 {
+			return nil, "", fmt.Errorf("pack: file %q: invalid mode %#o", f.Dest, f.Mode)
+		}
+		layer, err := fileLayer(hostPath, f.Dest, fs.FileMode(f.Mode))
+		if err != nil {
+			return nil, "", fmt.Errorf("pack: add file %q: %w", f.Dest, err)
+		}
+		img, err = mutate.AppendLayers(img, layer)
+		if err != nil {
+			return nil, "", fmt.Errorf("pack: append layer: %w", err)
+		}
+	}
+	return img, binaryPath, nil
+}
+
+// addConfigFileLayers appends a layer for each config file entry with literal content.
+func addConfigFileLayers(img v1.Image, configFiles map[string]lane.FileEntry) (v1.Image, error) {
+	if configFiles == nil {
+		return img, nil
+	}
+	for path, entry := range configFiles {
+		if entry.Mode < 0 || entry.Mode > 0o7777 {
+			return nil, fmt.Errorf("pack: config file %q: invalid mode %#o", path, entry.Mode)
+		}
+		layer, cfErr := fileLayerFromContent(
+			[]byte(entry.Content),
+			path,
+			fs.FileMode(entry.Mode),
+			int(entry.UID),
+			int(entry.GID),
+		)
+		if cfErr != nil {
+			return nil, fmt.Errorf("pack: config file %q: %w", path, cfErr)
+		}
+		var err error
+		img, err = mutate.AppendLayers(img, layer)
+		if err != nil {
+			return nil, fmt.Errorf("pack: append config file layer: %w", err)
+		}
+	}
+	return img, nil
+}
+
+// applyConfig applies image configuration (env, entrypoint, cmd, etc.) to the image.
+func applyConfig(img v1.Image, spec *lane.PackSpec) (v1.Image, error) {
+	if spec.Config == nil {
+		return img, nil
+	}
+	cfg, cfgErr := img.ConfigFile()
+	if cfgErr != nil {
+		return nil, fmt.Errorf("pack: read config: %w", cfgErr)
+	}
+	cfg = cfg.DeepCopy()
+
+	if spec.Config.Env != nil {
+		for k, v := range spec.Config.Env {
+			cfg.Config.Env = appendEnv(cfg.Config.Env, k, v)
+		}
+	}
+	if spec.Config.Entrypoint != nil {
+		cfg.Config.Entrypoint = spec.Config.Entrypoint
+	}
+	if spec.Config.Cmd != nil {
+		cfg.Config.Cmd = spec.Config.Cmd
+	}
+	if spec.Config.Workdir != "" {
+		cfg.Config.WorkingDir = spec.Config.Workdir
+	}
+	if spec.Config.User != "" {
+		cfg.Config.User = spec.Config.User
+	}
+	if spec.Config.Labels != nil {
+		if cfg.Config.Labels == nil {
+			cfg.Config.Labels = make(map[string]string)
+		}
+		for k, v := range spec.Config.Labels {
+			cfg.Config.Labels[k] = v
+		}
+	}
+
+	img, err := mutate.ConfigFile(img, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("pack: apply config: %w", err)
+	}
+	return img, nil
+}
+
+// writeOCILayout writes the main image, SBOM, and signature to an OCI layout
+// tar at the given output path.
+func writeOCILayout(img, sbomImage, sigImage v1.Image, outputPath, imgDigest string) error {
+	layoutDir, err := os.MkdirTemp("", "strike-pack-layout-")
+	if err != nil {
+		return fmt.Errorf("pack: temp dir: %w", err)
+	}
+	defer func() { _ = os.RemoveAll(layoutDir) }() //nolint:errcheck // best-effort cleanup
+
+	lp, err := layout.Write(layoutDir, empty.Index)
+	if err != nil {
+		return fmt.Errorf("pack: write layout: %w", err)
+	}
+	if err := lp.AppendImage(img, layout.WithAnnotations(map[string]string{
+		"org.opencontainers.image.ref.name": imgDigest,
+	})); err != nil {
+		return fmt.Errorf("pack: append main image: %w", err)
+	}
+	if err := lp.AppendImage(sbomImage); err != nil {
+		return fmt.Errorf("pack: append SBOM: %w", err)
+	}
+	if err := lp.AppendImage(sigImage); err != nil {
+		return fmt.Errorf("pack: append signature: %w", err)
+	}
+
+	if err := tarDirectory(layoutDir, outputPath); err != nil {
+		return fmt.Errorf("pack: tar layout: %w", err)
+	}
+	return nil
 }
 
 // pullVerified pulls a remote image by digest-pinned reference.
@@ -232,7 +283,7 @@ func pullVerified(ref string) (v1.Image, error) {
 
 // fileLayer creates a single-file OCI layer as a tar archive.
 func fileLayer(hostPath, destPath string, mode fs.FileMode) (v1.Layer, error) {
-	data, err := os.ReadFile(hostPath)
+	data, err := os.ReadFile(hostPath) //nolint:gosec // G304: host path resolved from DAG outputs
 	if err != nil {
 		return nil, err
 	}
@@ -273,7 +324,7 @@ func fileLayer(hostPath, destPath string, mode fs.FileMode) (v1.Layer, error) {
 }
 
 // parentDirs returns all parent directory paths for an absolute path.
-// e.g. "/usr/bin/strike" -> ["usr", "usr/bin"]
+// e.g. "/usr/bin/strike" -> ["usr", "usr/bin"].
 func parentDirs(absPath string) []string {
 	clean := filepath.Clean(absPath[1:]) // strip leading /
 	dir := filepath.Dir(clean)
@@ -343,9 +394,13 @@ func artifactImage(content []byte, artifactType string, subject v1.Descriptor) (
 	layer := static.NewLayer(content, types.MediaType(artifactType))
 
 	img := mutate.MediaType(empty.Image, types.OCIManifestSchema1)
-	img = mutate.Annotations(img, map[string]string{
+	annotated, ok := mutate.Annotations(img, map[string]string{
 		"org.opencontainers.image.created": "1970-01-01T00:00:00Z",
 	}).(v1.Image)
+	if !ok {
+		return nil, fmt.Errorf("unexpected type from mutate.Annotations")
+	}
+	img = annotated
 
 	var err error
 	img, err = mutate.AppendLayers(img, layer)
@@ -353,62 +408,78 @@ func artifactImage(content []byte, artifactType string, subject v1.Descriptor) (
 		return nil, err
 	}
 
-	img = mutate.Subject(img, subject).(v1.Image)
+	withSubject, ok := mutate.Subject(img, subject).(v1.Image)
+	if !ok {
+		return nil, fmt.Errorf("unexpected type from mutate.Subject")
+	}
+	img = withSubject
 	return img, nil
 }
 
 // tarDirectory tars a directory to the given output path.
-func tarDirectory(srcDir, outputPath string) error {
-	if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil {
+func tarDirectory(srcDir, outputPath string) (err error) {
+	if err = os.MkdirAll(filepath.Dir(outputPath), 0o750); err != nil {
 		return err
 	}
 
-	f, err := os.Create(outputPath)
+	f, err := os.Create(outputPath) //nolint:gosec // G304: output path constructed by strike
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() {
+		if cerr := f.Close(); cerr != nil && err == nil {
+			err = cerr
+		}
+	}()
 
 	tw := tar.NewWriter(f)
-	defer tw.Close()
-
-	return filepath.WalkDir(srcDir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
+	defer func() {
+		if cerr := tw.Close(); cerr != nil && err == nil {
+			err = cerr
 		}
+	}()
 
-		rel, err := filepath.Rel(srcDir, path)
-		if err != nil {
-			return err
+	return filepath.WalkDir(srcDir, tarWalkFunc(srcDir, tw))
+}
+
+// tarWalkFunc returns a WalkDir callback that writes each entry to tw.
+func tarWalkFunc(srcDir string, tw *tar.Writer) fs.WalkDirFunc {
+	return func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		rel, relErr := filepath.Rel(srcDir, path)
+		if relErr != nil {
+			return relErr
 		}
 		if rel == "." {
 			return nil
 		}
+		return tarEntry(tw, path, rel, d)
+	}
+}
 
-		info, err := d.Info()
-		if err != nil {
-			return err
-		}
-
-		header, err := tar.FileInfoHeader(info, "")
-		if err != nil {
-			return err
-		}
-		header.Name = rel
-
-		if err := tw.WriteHeader(header); err != nil {
-			return err
-		}
-
-		if d.IsDir() {
-			return nil
-		}
-
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		_, err = tw.Write(data)
+// tarEntry writes a single file or directory entry to the tar writer.
+func tarEntry(tw *tar.Writer, path, rel string, d fs.DirEntry) error {
+	info, err := d.Info()
+	if err != nil {
 		return err
-	})
+	}
+	header, err := tar.FileInfoHeader(info, "")
+	if err != nil {
+		return err
+	}
+	header.Name = rel
+	if whErr := tw.WriteHeader(header); whErr != nil {
+		return whErr
+	}
+	if d.IsDir() {
+		return nil
+	}
+	data, err := os.ReadFile(path) //nolint:gosec // G304: path from WalkDir of strike output
+	if err != nil {
+		return err
+	}
+	_, err = tw.Write(data)
+	return err
 }

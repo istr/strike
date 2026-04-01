@@ -17,10 +17,13 @@ import (
 // SBOMSource describes where base image SBOM data was found.
 type SBOMSource int
 
+// SBOMSourceReferrer indicates the SBOM was found via OCI 1.1 referrers.
+// SBOMSourceFallback indicates the cosign tag convention was used.
+// SBOMSourceNone indicates no SBOM was found on the base image.
 const (
-	SBOMSourceReferrer SBOMSource = iota // OCI 1.1 referrer attachment
-	SBOMSourceFallback                   // cosign sha256-<digest>.att tag convention
-	SBOMSourceNone                       // no SBOM found
+	SBOMSourceReferrer SBOMSource = iota
+	SBOMSourceFallback
+	SBOMSourceNone
 )
 
 var sbomArtifactTypes = []string{
@@ -48,10 +51,7 @@ func GenerateSBOM(binaryPath, imageDigest, baseRef string) ([]byte, error) {
 	// Build component list from Go module dependencies
 	components := make([]cdx.Component, 0, len(info.Deps))
 	for _, dep := range info.Deps {
-		h := dep.Sum
-		if strings.HasPrefix(h, "h1:") {
-			h = h[3:]
-		}
+		h := strings.TrimPrefix(dep.Sum, "h1:")
 		comp := cdx.Component{
 			Type:    cdx.ComponentTypeLibrary,
 			Name:    dep.Path,
@@ -75,6 +75,7 @@ func GenerateSBOM(binaryPath, imageDigest, baseRef string) ([]byte, error) {
 	}
 
 	var baseComponents []cdx.Component
+	var fetchErr error
 	switch sbomSource {
 	case SBOMSourceNone:
 		fmt.Fprintf(os.Stderr,
@@ -84,12 +85,18 @@ func GenerateSBOM(binaryPath, imageDigest, baseRef string) ([]byte, error) {
 				"         cgr.dev/chainguard/static  (Chainguard, full SBOM)\n"+
 				"         gcr.io/distroless/static   (Google, partial)\n")
 	case SBOMSourceReferrer:
-		baseComponents, _ = fetchBaseComponents(baseRef)
+		baseComponents, fetchErr = fetchBaseComponents(baseRef)
+		if fetchErr != nil {
+			fmt.Fprintf(os.Stderr, "WARN   sbom: base component fetch failed: %v\n", fetchErr)
+		}
 	case SBOMSourceFallback:
 		fmt.Fprintf(os.Stderr,
 			"INFO   sbom: base image SBOM found via tag convention (%s)\n",
 			description)
-		baseComponents, _ = fetchBaseComponents(baseRef)
+		baseComponents, fetchErr = fetchBaseComponents(baseRef)
+		if fetchErr != nil {
+			fmt.Fprintf(os.Stderr, "WARN   sbom: base component fetch failed: %v\n", fetchErr)
+		}
 	}
 
 	// Append base components with "base:" BOMRef prefix
@@ -105,6 +112,7 @@ func GenerateSBOM(binaryPath, imageDigest, baseRef string) ([]byte, error) {
 			Type:    cdx.ComponentTypeContainer,
 			Name:    "strike",
 			Version: info.Main.Version,
+			BOMRef:  imageDigest,
 		},
 	}
 	bom.Components = &components
@@ -133,35 +141,54 @@ func ProbeBaseImageSBOM(baseRef string) (SBOMSource, string, error) {
 	}
 
 	// Try OCI 1.1 Referrers API
-	idx, err := remote.Referrers(digestRef)
-	if err == nil {
-		manifest, err := idx.IndexManifest()
-		if err == nil {
-			for _, desc := range manifest.Manifests {
-				for _, at := range sbomArtifactTypes {
-					if string(desc.ArtifactType) == at {
-						return SBOMSourceReferrer,
-							fmt.Sprintf("referrer: %s", at), nil
-					}
-				}
-			}
-		}
+	if source, desc, found := probeReferrers(digestRef); found {
+		return source, desc, nil
 	}
 
 	// Fallback: check cosign tag convention sha256-<hex>.att
-	digestStr := digestRef.DigestStr() // "sha256:abc..."
-	if strings.HasPrefix(digestStr, "sha256:") {
-		hex := digestStr[7:]
-		attTag := fmt.Sprintf("%s:sha256-%s.att", digestRef.Context().Name(), hex)
-		attRef, err := name.ParseReference(attTag)
-		if err == nil {
-			if _, err := remote.Head(attRef); err == nil {
-				return SBOMSourceFallback, attTag, nil
-			}
-		}
+	if source, desc, found := probeFallbackTag(digestRef); found {
+		return source, desc, nil
 	}
 
 	return SBOMSourceNone, "", nil
+}
+
+// probeReferrers checks the OCI 1.1 Referrers API for an SBOM attachment.
+func probeReferrers(digestRef name.Digest) (SBOMSource, string, bool) {
+	idx, err := remote.Referrers(digestRef)
+	if err != nil {
+		return SBOMSourceNone, "", false
+	}
+	manifest, err := idx.IndexManifest()
+	if err != nil {
+		return SBOMSourceNone, "", false
+	}
+	for _, desc := range manifest.Manifests {
+		for _, at := range sbomArtifactTypes {
+			if string(desc.ArtifactType) == at {
+				return SBOMSourceReferrer, fmt.Sprintf("referrer: %s", at), true
+			}
+		}
+	}
+	return SBOMSourceNone, "", false
+}
+
+// probeFallbackTag checks the cosign sha256-<hex>.att tag convention.
+func probeFallbackTag(digestRef name.Digest) (SBOMSource, string, bool) {
+	digestStr := digestRef.DigestStr() // "sha256:abc..."
+	if !strings.HasPrefix(digestStr, "sha256:") {
+		return SBOMSourceNone, "", false
+	}
+	hex := digestStr[7:]
+	attTag := fmt.Sprintf("%s:sha256-%s.att", digestRef.Context().Name(), hex)
+	attRef, err := name.ParseReference(attTag)
+	if err != nil {
+		return SBOMSourceNone, "", false
+	}
+	if _, err := remote.Head(attRef); err != nil {
+		return SBOMSourceNone, "", false
+	}
+	return SBOMSourceFallback, attTag, true
 }
 
 // fetchBaseComponents downloads the SBOM artefact for the base image and
@@ -188,24 +215,28 @@ func fetchBaseComponents(baseRef string) ([]cdx.Component, error) {
 		return nil, err
 	}
 
-	// Find first SBOM referrer
-	var sbomDesc *v1.Descriptor
-	for i, desc := range manifest.Manifests {
-		for _, at := range sbomArtifactTypes {
-			if string(desc.ArtifactType) == at {
-				sbomDesc = &manifest.Manifests[i]
-				break
-			}
-		}
-		if sbomDesc != nil {
-			break
-		}
-	}
+	sbomDesc := findSBOMDescriptor(manifest)
 	if sbomDesc == nil {
 		return nil, fmt.Errorf("no SBOM referrer found")
 	}
 
-	// Fetch the SBOM image and extract layer content
+	return fetchAndDecodeSBOM(digestRef, sbomDesc)
+}
+
+// findSBOMDescriptor searches an index manifest for the first SBOM referrer descriptor.
+func findSBOMDescriptor(manifest *v1.IndexManifest) *v1.Descriptor {
+	for i, desc := range manifest.Manifests {
+		for _, at := range sbomArtifactTypes {
+			if string(desc.ArtifactType) == at {
+				return &manifest.Manifests[i]
+			}
+		}
+	}
+	return nil
+}
+
+// fetchAndDecodeSBOM fetches an SBOM image by descriptor and decodes its CycloneDX components.
+func fetchAndDecodeSBOM(digestRef name.Digest, sbomDesc *v1.Descriptor) ([]cdx.Component, error) {
 	sbomDigestRef := digestRef.Context().Digest(sbomDesc.Digest.String())
 	sbomImg, err := remote.Image(sbomDigestRef)
 	if err != nil {
@@ -221,7 +252,7 @@ func fetchBaseComponents(baseRef string) ([]cdx.Component, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rc.Close()
+	defer func() { _ = rc.Close() }() //nolint:errcheck // best-effort close
 
 	// Parse as CycloneDX JSON
 	bom := &cdx.BOM{}
