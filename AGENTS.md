@@ -150,9 +150,15 @@ return fmt.Errorf("Failed to sign image: %s. Error: %v", ref, err)
 
 ### General
 
-- Language: English for all code, comments, error messages, documentation.
-- No ampersand in generated text -- use "and" (English) or "und" (German).
-- ASCII only in source files.
+- **ASCII only.** All generated code, comments, error messages, documentation,
+  and commit messages must contain only printable ASCII characters (U+0000 to
+  U+007F). No em dashes, en dashes, curly quotes, Unicode arrows, box-drawing
+  characters, or other non-ASCII codepoints. Use `--` instead of em dash,
+  `-` instead of en dash, `->` instead of arrows, `"` instead of curly quotes.
+- **English (US) only.** All code, comments, error messages, log output, and
+  documentation must be written in US English. Use US spellings (e.g.,
+  "initialize" not "initialise", "color" not "colour").
+- No ampersand in generated text -- use "and".
 - Run `gofmt` (or `gofumpt`). No deviations.
 - Maximum function length: 80 lines, 50 statements. If a function is longer,
   split it into focused helpers.
