@@ -42,6 +42,13 @@ Build: `CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o strike ./cmd/strike
 6. **Unsigned OCI images must not be used by network-enabled steps.** This
    guard prevents exfiltration of tampered images.
 
+7. **TCP connections require TLS.** Unencrypted TCP to the container
+   engine is rejected at startup. Server-side TLS (TLS 1.3 minimum) is
+   mandatory. Set `CONTAINER_TLS_CA` to pin a specific CA, or omit it to
+   use the system CA store. Set `CONTAINER_TLS_CERT` and
+   `CONTAINER_TLS_KEY` for optional mutual TLS. Unix socket connections
+   are not affected.
+
 ## Package structure
 
 ```
@@ -137,6 +144,13 @@ return fmt.Errorf("signing image %s: %w", ref, err)
 // WRONG
 return fmt.Errorf("Failed to sign image: %s. Error: %v", ref, err)
 ```
+
+### Reproducible builds
+
+Pack steps produce deterministic OCI images. All timestamps use
+`SOURCE_DATE_EPOCH` (per https://reproducible-builds.org/specs/) when
+set, otherwise Unix epoch 0. Never use `time.Now()` in any code path
+that affects image content, SBOM data, or attestation payloads.
 
 ### Cryptography
 
@@ -243,6 +257,24 @@ eng := newMTLSTestEngine(t, http.HandlerFunc(func(w http.ResponseWriter, r *http
 Never use plaintext `httptest.NewServer` with `tcp://` -- `newHTTPClient`
 rejects unencrypted TCP connections.
 
+### Testing container connections
+
+All container engine tests use TLS with ephemeral PKI generated via
+Go's `crypto/x509`. The test helper `newTLSTestEngine` in
+`internal/container/testpki_test.go` generates a CA and server cert per
+test. `newMTLSTestEngine` adds a client cert for mutual TLS tests.
+There is no plaintext HTTP fallback.
+
+For integration tests against a real podman socket over TCP, use caddy
+as a TLS-terminating reverse proxy:
+
+    caddy reverse-proxy \
+        --from 127.0.0.1.sslip.io:8443 \
+        --to unix//run/user/1000/podman/podman.sock \
+        --internal-certs
+
+Set `STRIKE_INTEGRATION=1` to enable integration tests.
+
 ### Coverage targets
 
 - Target: 100% statement coverage for all packages except generated code.
@@ -273,6 +305,16 @@ make build      # CGO_ENABLED=0 go build ./cmd/strike
 make generate   # cue exp gengotypes ./internal/lane/
 make schema     # cue export to OpenAPI JSON
 ```
+
+### Environment variables
+
+- `CONTAINER_HOST` -- container engine address (`unix://` or `tcp://`)
+- `CONTAINER_TLS_CERT` -- client certificate PEM path (enables mTLS for TCP)
+- `CONTAINER_TLS_KEY` -- client key PEM path (enables mTLS for TCP)
+- `CONTAINER_TLS_CA` -- CA certificate PEM path (pins CA for TCP; system store if unset)
+- `SOURCE_DATE_EPOCH` -- Unix timestamp for reproducible builds
+- `STRIKE_AUDIT` -- enable request audit logging to stderr
+- `STRIKE_INTEGRATION` -- enable integration tests
 
 ## What not to do
 

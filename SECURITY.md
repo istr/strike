@@ -110,6 +110,15 @@ strike is designed with a minimal attack surface:
   setuid and setgid.
 - **Output validation** -- declared outputs are validated against expected
   content types and size bounds.
+- **Mandatory TLS for TCP connections** -- when connecting to a remote
+  container engine over TCP, strike requires server-side TLS (TLS 1.3
+  minimum). Unencrypted TCP is rejected at startup. When a pinned CA is
+  set via `CONTAINER_TLS_CA`, only that CA is trusted. Otherwise the
+  system CA store is used. Mutual TLS is supported when client cert and
+  key are provided via `CONTAINER_TLS_CERT` and `CONTAINER_TLS_KEY`.
+- **Audit logging** -- when `STRIKE_AUDIT=1` is set, every API request
+  to the container engine is logged with method, path, response status,
+  and duration. Request bodies are never logged (they may contain secrets).
 
 ## Container security profile
 
@@ -134,6 +143,11 @@ What a step container **cannot** do: start nested containers, modify its own
 image, execute from /out or /tmp, create setuid binaries, access the network
 (unless explicitly granted), write anywhere except /out and /tmp, survive past
 its own exit, or escalate privileges.
+
+Steps have a configurable timeout (default: 10 minutes). When a step
+exceeds its timeout, the context is cancelled and the container is
+forcibly removed. Set per-step via `timeout: "30s"` in the lane
+definition.
 
 ## User namespace mapping
 
@@ -161,10 +175,11 @@ Secrets flow through the system as follows:
 4. Secrets are never written to disk, never included in cache artifacts, and
    never logged.
 
-Future enhancement: secrets should be wrapped in a `SecretString` type that
-overrides `String()`, `GoString()`, `Format()`, `MarshalText()`, and
-`MarshalJSON()` to return `[REDACTED]`, providing type-level leakage
-prevention.
+Secrets are wrapped in a `SecretString` type that overrides `String()`,
+`GoString()`, `Format()`, `MarshalText()`, and `MarshalJSON()` to return
+`[REDACTED]`. This provides type-level leakage prevention -- accidental
+logging, fmt.Printf, or JSON serialization of a secret value always
+produces `[REDACTED]` instead of the plaintext.
 
 ## Security toolchain
 

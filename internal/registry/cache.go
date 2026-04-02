@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/istr/strike/internal/lane"
 )
@@ -61,15 +61,14 @@ func Tag(registry, stepName, hash string) string {
 }
 
 // HashPath computes SHA256 of a file or directory within the given root scope.
+// Delegates to lane.SourceDigest and strips the "sha256:" prefix to return
+// bare hex, matching the convention used by SpecHash and Tag.
 func HashPath(root *os.Root, laneDir, path string) (string, error) {
-	info, err := root.Stat(path)
+	digest, err := lane.SourceDigest(root, laneDir, path)
 	if err != nil {
 		return "", err
 	}
-	if info.IsDir() {
-		return hashDir(root, laneDir, path)
-	}
-	return HashFile(root, path)
+	return strings.TrimPrefix(digest, "sha256:"), nil
 }
 
 // HashFile computes SHA256 of a file within the given root scope.
@@ -108,50 +107,6 @@ func HashFileAbs(path string) (hash string, err error) {
 		return "", err
 	}
 	return fmt.Sprintf("%x", h.Sum(nil)), nil
-}
-
-// hashDir computes SHA256 of all files in a directory (recursive, sorted).
-// WalkDir enumerates via the absolute path; file reads go through root.Open
-// for TOCTOU safety.
-func hashDir(root *os.Root, laneDir, dir string) (string, error) {
-	absDir := filepath.Join(laneDir, dir)
-	h := sha256.New()
-	err := filepath.WalkDir(absDir, func(path string, d os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			if os.IsPermission(walkErr) {
-				return nil // skip unreadable files -- they can't affect the build
-			}
-			return walkErr
-		}
-		if d.IsDir() {
-			return nil
-		}
-		rel, relErr := filepath.Rel(absDir, path)
-		if relErr != nil {
-			return relErr
-		}
-
-		relToRoot := filepath.Join(dir, rel)
-		f, openErr := root.Open(relToRoot)
-		if openErr != nil {
-			if os.IsPermission(openErr) {
-				return nil
-			}
-			return openErr
-		}
-		content, readErr := io.ReadAll(f)
-		closeErr := f.Close()
-		if readErr != nil {
-			return readErr
-		}
-		if closeErr != nil {
-			return closeErr
-		}
-		h.Write([]byte(rel))
-		h.Write(content)
-		return nil
-	})
-	return fmt.Sprintf("%x", h.Sum(nil)), err
 }
 
 func sortedKeys(m map[string]string) []string {
