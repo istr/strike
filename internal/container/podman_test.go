@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -679,5 +680,40 @@ func TestInfoPopulatesRuntime(t *testing.T) {
 	}
 	if id.Runtime.SELinux {
 		t.Error("expected SELinux=false")
+	}
+}
+
+func TestAuditLogging(t *testing.T) {
+	t.Setenv("STRIKE_AUDIT", "1")
+
+	old := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	os.Stderr = w
+
+	eng := newTLSTestEngine(t, http.HandlerFunc(func(rw http.ResponseWriter, _ *http.Request) {
+		rw.WriteHeader(http.StatusOK)
+	}))
+	if err := eng.Ping(context.Background()); err != nil {
+		t.Fatalf("Ping: %v", err)
+	}
+
+	if err := w.Close(); err != nil {
+		t.Fatalf("w.Close: %v", err)
+	}
+	os.Stderr = old
+
+	var buf bytes.Buffer
+	if _, err := io.Copy(&buf, r); err != nil {
+		t.Fatalf("io.Copy: %v", err)
+	}
+	if err := r.Close(); err != nil {
+		t.Fatalf("r.Close: %v", err)
+	}
+
+	if !strings.Contains(buf.String(), "AUDIT") {
+		t.Errorf("expected AUDIT line in stderr, got: %q", buf.String())
 	}
 }

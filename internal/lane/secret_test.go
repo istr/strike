@@ -3,6 +3,7 @@ package lane_test
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -27,8 +28,8 @@ func TestReadSecret_EnvSet(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if got != val {
-		t.Fatalf("got %q, want %q", got, val)
+	if got.Expose() != val {
+		t.Fatalf("got %q, want %q", got.Expose(), val)
 	}
 }
 
@@ -52,8 +53,8 @@ func TestReadSecret_FileExists(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if got != want {
-		t.Fatalf("got %q, want %q", got, want)
+	if got.Expose() != want {
+		t.Fatalf("got %q, want %q", got.Expose(), want)
 	}
 }
 
@@ -107,10 +108,47 @@ func TestResolveSecrets_Valid(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result["OUT_A"] != valA {
-		t.Errorf("OUT_A = %q, want %q", result["OUT_A"], valA)
+	if result["OUT_A"].Expose() != valA {
+		t.Errorf("OUT_A = %q, want %q", result["OUT_A"].Expose(), valA)
 	}
-	if result["OUT_B"] != valB {
-		t.Errorf("OUT_B = %q, want %q", result["OUT_B"], valB)
+	if result["OUT_B"].Expose() != valB {
+		t.Errorf("OUT_B = %q, want %q", result["OUT_B"].Expose(), valB)
+	}
+}
+
+func TestSecretStringRedacted(t *testing.T) {
+	const redacted = "[REDACTED]"
+	s := lane.NewSecretString("hunter2")
+
+	if s.String() != redacted {
+		t.Errorf("String() = %q, want %s", s.String(), redacted)
+	}
+	if got := s.String(); got != redacted {
+		t.Errorf("String() via var = %q, want %s", got, redacted)
+	}
+	if fmt.Sprintf("%v", s) != redacted {
+		t.Error("Sprintf with value verb leaks secret")
+	}
+	if fmt.Sprintf("%#v", s) != redacted {
+		t.Error("Sprintf with GoString verb leaks secret")
+	}
+	if s.Expose() != "hunter2" {
+		t.Errorf("Expose() = %q, want hunter2", s.Expose())
+	}
+
+	j, err := s.MarshalJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(j) != `"`+redacted+`"` {
+		t.Errorf("MarshalJSON = %s, want %s", j, redacted)
+	}
+
+	txt, err := s.MarshalText()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(txt) != redacted {
+		t.Errorf("MarshalText = %s, want %s", txt, redacted)
 	}
 }

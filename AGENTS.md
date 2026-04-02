@@ -295,6 +295,14 @@ make schema     # cue export to OpenAPI JSON
 - Examples: `fix path traversal in tar extraction`, `add fuzz test for ParseRef`,
   `remove unused hashDir size buffer allocation`.
 
+## After each implementation step
+
+Run `make lint` (or `golangci-lint run ./...`) after every code change and
+fix all findings before moving on. Do not batch lint fixes at the end --
+catching issues immediately prevents them from compounding. The linter
+enforces `errcheck`, `goconst`, `staticcheck`, and other rules that are
+easy to miss during development.
+
 ## Before submitting
 
 Run the full quality gate:

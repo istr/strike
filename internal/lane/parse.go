@@ -6,12 +6,22 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"cuelang.org/go/cue"
 	"cuelang.org/go/cue/cuecontext"
 	cuejson "cuelang.org/go/encoding/json"
 	"gopkg.in/yaml.v3"
 )
+
+// ParseDuration converts a lane duration string ("30s", "5m", "1h") to
+// time.Duration. Returns defaultVal if d is empty.
+func ParseDuration(d Duration, defaultVal time.Duration) (time.Duration, error) {
+	if d == "" {
+		return defaultVal, nil
+	}
+	return time.ParseDuration(string(d))
+}
 
 //go:embed schema.cue
 var schema string

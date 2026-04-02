@@ -12,7 +12,7 @@ import (
 // Run holds the configuration for executing a step container.
 type Run struct {
 	Engine       container.Engine
-	Secrets      map[string]string
+	Secrets      map[string]lane.SecretString
 	Step         *lane.Step
 	OutputDir    string
 	InputMounts  []Mount
@@ -36,7 +36,7 @@ func (r Run) Execute(ctx context.Context) error {
 		env[k] = v
 	}
 	for k, v := range r.Secrets {
-		env[k] = v
+		env[k] = v.Expose()
 	}
 	env["XDG_RUNTIME_DIR"] = "/tmp/run"
 	env["XDG_DATA_HOME"] = "/tmp/data"
