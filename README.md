@@ -14,6 +14,9 @@ Lanes are declared in YAML, validated against a CUE schema, and executed as
 a content-addressable DAG. Outputs are cached as OCI artifacts in any standard
 registry.
 
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the security architecture, SLSA 3
+compliance analysis, and trust boundary model.
+
 ## Prerequisites
 
 You need exactly two things:
