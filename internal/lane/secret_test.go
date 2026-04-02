@@ -22,7 +22,8 @@ func randomHex(t *testing.T) string {
 func TestReadSecret_EnvSet(t *testing.T) {
 	val := randomHex(t)
 	t.Setenv("STRIKE_TEST_SECRET", val)
-	got, err := lane.ReadSecret("env://STRIKE_TEST_SECRET")
+	root := openTestRoot(t, t.TempDir())
+	got, err := lane.ReadSecret("env://STRIKE_TEST_SECRET", root)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -32,7 +33,8 @@ func TestReadSecret_EnvSet(t *testing.T) {
 }
 
 func TestReadSecret_EnvUnset(t *testing.T) {
-	_, err := lane.ReadSecret("env://STRIKE_TEST_UNSET_VAR_XYZ")
+	root := openTestRoot(t, t.TempDir())
+	_, err := lane.ReadSecret("env://STRIKE_TEST_UNSET_VAR_XYZ", root)
 	if err == nil {
 		t.Fatal("expected error for unset env variable")
 	}
@@ -41,12 +43,12 @@ func TestReadSecret_EnvUnset(t *testing.T) {
 func TestReadSecret_FileExists(t *testing.T) {
 	want := randomHex(t)
 	dir := t.TempDir()
-	path := filepath.Join(dir, "secret.txt")
-	if err := os.WriteFile(path, []byte(want), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "secret.txt"), []byte(want), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
-	got, err := lane.ReadSecret(lane.SecretSource("file://" + path))
+	root := openTestRoot(t, dir)
+	got, err := lane.ReadSecret(lane.SecretSource("file://secret.txt"), root)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -56,14 +58,16 @@ func TestReadSecret_FileExists(t *testing.T) {
 }
 
 func TestReadSecret_FileMissing(t *testing.T) {
-	_, err := lane.ReadSecret("file:///nonexistent/path/secret.txt")
+	root := openTestRoot(t, t.TempDir())
+	_, err := lane.ReadSecret("file://nonexistent.txt", root)
 	if err == nil {
 		t.Fatal("expected error for missing file")
 	}
 }
 
 func TestReadSecret_UnknownScheme(t *testing.T) {
-	_, err := lane.ReadSecret("ftp://example.com/secret")
+	root := openTestRoot(t, t.TempDir())
+	_, err := lane.ReadSecret("ftp://example.com/secret", root)
 	if err == nil {
 		t.Fatal("expected error for unknown scheme")
 	}
@@ -72,8 +76,9 @@ func TestReadSecret_UnknownScheme(t *testing.T) {
 func TestResolveSecrets_MissingDefinition(t *testing.T) {
 	refs := []lane.SecretRef{{Name: "missing", Env: "MISSING"}}
 	sources := map[string]lane.SecretSource{}
+	root := openTestRoot(t, t.TempDir())
 
-	_, err := lane.ResolveSecrets(refs, sources)
+	_, err := lane.ResolveSecrets(refs, sources, root)
 	if err == nil {
 		t.Fatal("expected error for missing secret definition")
 	}
@@ -97,7 +102,8 @@ func TestResolveSecrets_Valid(t *testing.T) {
 		nameB: "env://STRIKE_TEST_B",
 	}
 
-	result, err := lane.ResolveSecrets(refs, defs)
+	root := openTestRoot(t, t.TempDir())
+	result, err := lane.ResolveSecrets(refs, defs, root)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

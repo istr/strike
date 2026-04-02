@@ -383,7 +383,7 @@ func ResolveKubeconfig(override string) (string, error) {
 		return override, nil
 	}
 	if env := os.Getenv("KUBECONFIG"); env != "" {
-		if _, err := os.Stat(env); err != nil { //nolint:gosec // G304: path from $KUBECONFIG env
+		if _, err := os.Stat(env); err != nil { //nolint:gosec // G703: KUBECONFIG is a user-configured absolute path
 			return "", fmt.Errorf("$KUBECONFIG %q: %w", env, err)
 		}
 		return env, nil

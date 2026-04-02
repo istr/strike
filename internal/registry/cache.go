@@ -61,21 +61,21 @@ func Tag(registry, stepName, hash string) string {
 	return fmt.Sprintf("%s:%s-%s", registry, stepName, hash)
 }
 
-// HashPath computes SHA256 of a file or directory.
-func HashPath(path string) (string, error) {
-	info, err := os.Stat(path)
+// HashPath computes SHA256 of a file or directory within the given root scope.
+func HashPath(root *os.Root, laneDir, path string) (string, error) {
+	info, err := root.Stat(path)
 	if err != nil {
 		return "", err
 	}
 	if info.IsDir() {
-		return HashDir(path)
+		return hashDir(root, laneDir, path)
 	}
-	return HashFile(path)
+	return HashFile(root, path)
 }
 
-// HashFile computes SHA256 of a source file.
-func HashFile(path string) (hash string, err error) {
-	f, err := os.Open(path) //nolint:gosec // G304: source path from validated lane definition
+// HashFile computes SHA256 of a file within the given root scope.
+func HashFile(root *os.Root, path string) (hash string, err error) {
+	f, err := root.Open(path)
 	if err != nil {
 		return "", err
 	}
@@ -92,25 +92,61 @@ func HashFile(path string) (hash string, err error) {
 	return fmt.Sprintf("%x", h.Sum(nil)), nil
 }
 
-// HashDir computes SHA256 of all files in a directory (recursive, sorted).
-func HashDir(dir string) (string, error) {
+// HashFileAbs hashes a file given as an absolute path from CLI args.
+func HashFileAbs(path string) (hash string, err error) {
+	f, err := os.Open(path) //nolint:gosec // G304: absolute path from CLI argument, intentional
+	if err != nil {
+		return "", err
+	}
+	defer func() {
+		if cerr := f.Close(); cerr != nil && err == nil {
+			err = cerr
+		}
+	}()
+
 	h := sha256.New()
-	err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			if os.IsPermission(err) {
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%x", h.Sum(nil)), nil
+}
+
+// hashDir computes SHA256 of all files in a directory (recursive, sorted).
+// WalkDir enumerates via the absolute path; file reads go through root.Open
+// for TOCTOU safety.
+func hashDir(root *os.Root, laneDir, dir string) (string, error) {
+	absDir := filepath.Join(laneDir, dir)
+	h := sha256.New()
+	err := filepath.WalkDir(absDir, func(path string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			if os.IsPermission(walkErr) {
 				return nil // skip unreadable files -- they can't affect the build
 			}
-			return err
+			return walkErr
 		}
 		if d.IsDir() {
 			return nil
 		}
-		content, err := os.ReadFile(path) //nolint:gosec // G304: path from WalkDir of validated sources
-		if err != nil {
-			if os.IsPermission(err) {
+		rel, relErr := filepath.Rel(absDir, path)
+		if relErr != nil {
+			return relErr
+		}
+
+		relToRoot := filepath.Join(dir, rel)
+		f, openErr := root.Open(relToRoot)
+		if openErr != nil {
+			if os.IsPermission(openErr) {
 				return nil
 			}
-			return err
+			return openErr
+		}
+		content, readErr := io.ReadAll(f)
+		closeErr := f.Close()
+		if readErr != nil {
+			return readErr
+		}
+		if closeErr != nil {
+			return closeErr
 		}
 		h.Write([]byte(path))
 		h.Write(content)

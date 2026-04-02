@@ -30,7 +30,8 @@ type PackOpts struct {
 	InputPaths  map[string]string
 	Spec        *lane.PackSpec
 	State       *lane.State
-	OutputPath  string
+	OutputRoot  *os.Root // root-scoped output directory
+	OutputName  string   // filename within OutputRoot
 	SigningKey  []byte
 	KeyPassword []byte
 }
@@ -116,7 +117,7 @@ func Pack(opts PackOpts) (*PackResult, error) {
 	}
 
 	// 7. Write OCI layout with all three manifests
-	if err := writeOCILayout(img, sbomImage, sigImage, opts.OutputPath, imgDigest.String()); err != nil {
+	if err := writeOCILayout(img, sbomImage, sigImage, opts.OutputRoot, opts.OutputName, imgDigest.String()); err != nil {
 		return nil, err
 	}
 
@@ -223,8 +224,8 @@ func applyConfig(img v1.Image, spec *lane.PackSpec) (v1.Image, error) {
 }
 
 // writeOCILayout writes the main image, SBOM, and signature to an OCI layout
-// tar at the given output path.
-func writeOCILayout(img, sbomImage, sigImage v1.Image, outputPath, imgDigest string) error {
+// tar in the given output root.
+func writeOCILayout(img, sbomImage, sigImage v1.Image, outputRoot *os.Root, outputName, imgDigest string) error {
 	layoutDir, err := os.MkdirTemp("", "strike-pack-layout-")
 	if err != nil {
 		return fmt.Errorf("pack: temp dir: %w", err)
@@ -247,7 +248,7 @@ func writeOCILayout(img, sbomImage, sigImage v1.Image, outputPath, imgDigest str
 		return fmt.Errorf("pack: append signature: %w", err)
 	}
 
-	if err := tarDirectory(layoutDir, outputPath); err != nil {
+	if err := tarDirectoryToRoot(layoutDir, outputRoot, outputName); err != nil {
 		return fmt.Errorf("pack: tar layout: %w", err)
 	}
 	return nil
@@ -282,8 +283,9 @@ func pullVerified(ref string) (v1.Image, error) {
 }
 
 // fileLayer creates a single-file OCI layer as a tar archive.
+// hostPath is an absolute path from a MkdirTemp output directory.
 func fileLayer(hostPath, destPath string, mode fs.FileMode) (v1.Layer, error) {
-	data, err := os.ReadFile(hostPath) //nolint:gosec // G304: host path resolved from DAG outputs
+	data, err := os.ReadFile(hostPath) //nolint:gosec // G304: absolute path from MkdirTemp output directory
 	if err != nil {
 		return nil, err
 	}
@@ -416,13 +418,9 @@ func artifactImage(content []byte, artifactType string, subject v1.Descriptor) (
 	return img, nil
 }
 
-// tarDirectory tars a directory to the given output path.
-func tarDirectory(srcDir, outputPath string) (err error) {
-	if err = os.MkdirAll(filepath.Dir(outputPath), 0o750); err != nil {
-		return err
-	}
-
-	f, err := os.Create(outputPath) //nolint:gosec // G304: output path constructed by strike
+// tarDirectoryToRoot tars a directory and writes the output through root.
+func tarDirectoryToRoot(srcDir string, outputRoot *os.Root, outputName string) (err error) {
+	f, err := outputRoot.Create(outputName)
 	if err != nil {
 		return err
 	}
@@ -460,6 +458,7 @@ func tarWalkFunc(srcDir string, tw *tar.Writer) fs.WalkDirFunc {
 }
 
 // tarEntry writes a single file or directory entry to the tar writer.
+// path is an absolute path within a MkdirTemp layout directory.
 func tarEntry(tw *tar.Writer, path, rel string, d fs.DirEntry) error {
 	info, err := d.Info()
 	if err != nil {
@@ -476,7 +475,7 @@ func tarEntry(tw *tar.Writer, path, rel string, d fs.DirEntry) error {
 	if d.IsDir() {
 		return nil
 	}
-	data, err := os.ReadFile(path) //nolint:gosec // G304: path from WalkDir of strike output
+	data, err := os.ReadFile(path) //nolint:gosec // G304: absolute path from MkdirTemp layout directory
 	if err != nil {
 		return err
 	}

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"cuelang.org/go/cue"
 	"cuelang.org/go/cue/cuecontext"
@@ -68,7 +69,37 @@ func Parse(path string) (*Lane, error) {
 		}
 	}
 
+	if err := validatePaths(&p); err != nil {
+		return nil, err
+	}
+
 	return &p, nil
+}
+
+// validatePaths rejects non-local paths in sources, outputs, and pack dests.
+// Defense-in-depth -- os.Root enforces at runtime, but rejecting early
+// produces better error messages.
+func validatePaths(p *Lane) error {
+	for _, s := range p.Steps {
+		for _, src := range s.Sources {
+			if !filepath.IsLocal(src.Path) {
+				return fmt.Errorf("step %q: source path %q must be relative to lane root", s.Name, src.Path)
+			}
+		}
+		for _, out := range s.Outputs {
+			if !filepath.IsLocal(out.Path) {
+				return fmt.Errorf("step %q: output path %q must be a local filename", s.Name, out.Path)
+			}
+		}
+		if s.Pack != nil {
+			for _, f := range s.Pack.Files {
+				if !filepath.IsLocal(f.Dest) {
+					return fmt.Errorf("step %q: pack dest %q must be a local path", s.Name, f.Dest)
+				}
+			}
+		}
+	}
+	return nil
 }
 
 func validate(data []byte) error {

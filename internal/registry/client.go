@@ -10,6 +10,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/crane"
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
+
 	"github.com/istr/strike/internal/container"
 )
 
@@ -57,9 +58,9 @@ func CopyImage(src, dst string) error {
 }
 
 // LoadOCITar loads a single-image OCI tar archive into the local container
-// store and returns the manifest digest.
-func (c *Client) LoadOCITar(ctx context.Context, tarPath string) (digest string, err error) {
-	f, err := os.Open(tarPath) //nolint:gosec // G304: OCI tar path from step output
+// store and returns the manifest digest. The tar file is opened through root.
+func (c *Client) LoadOCITar(ctx context.Context, root *os.Root, relPath string) (digest string, err error) {
+	f, err := root.Open(relPath)
 	if err != nil {
 		return "", err
 	}
@@ -79,8 +80,8 @@ func (c *Client) LoadOCITar(ctx context.Context, tarPath string) (digest string,
 
 // LoadOCITarByDigest loads an image from an OCI tar archive into the local
 // container store, selecting it by digest, and tags it for downstream reference.
-func (c *Client) LoadOCITarByDigest(ctx context.Context, tarPath, digest string) (err error) {
-	f, err := os.Open(tarPath) //nolint:gosec // G304: OCI tar path from step output
+func (c *Client) LoadOCITarByDigest(ctx context.Context, root *os.Root, relPath, digest string) (err error) {
+	f, err := root.Open(relPath)
 	if err != nil {
 		return err
 	}
