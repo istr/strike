@@ -149,17 +149,7 @@ func New() (Engine, error) {
 	if err != nil {
 		return nil, fmt.Errorf("container engine: %w", err)
 	}
-	tlsCfg := LoadTLSConfig()
-	client, err := newHTTPClient(addr, tlsCfg)
-	if err != nil {
-		return nil, fmt.Errorf("container engine: %w", err)
-	}
-	return &podmanEngine{
-		client: client,
-		base:   apiBase(addr),
-		tlsCfg: tlsCfg,
-		isUnix: strings.HasPrefix(addr, "unix://"),
-	}, nil
+	return NewFromAddress(addr)
 }
 
 // NewFromAddress creates an Engine connected to a specific address.

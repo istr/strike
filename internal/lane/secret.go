@@ -1,6 +1,8 @@
 package lane
 
 import (
+	"encoding"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -13,6 +15,15 @@ import (
 type SecretString struct {
 	value string
 }
+
+// Compile-time interface satisfaction checks. These ensure SecretString
+// always implements the interfaces that prevent accidental leakage.
+var (
+	_ fmt.Stringer           = SecretString{}
+	_ fmt.GoStringer         = SecretString{}
+	_ encoding.TextMarshaler = SecretString{}
+	_ json.Marshaler         = SecretString{}
+)
 
 // NewSecretString wraps a plaintext value.
 func NewSecretString(value string) SecretString {

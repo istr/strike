@@ -77,7 +77,7 @@ func (s *State) RecordStep(r StepResult) {
 	s.Steps[r.Name] = r
 }
 
-// JSON serializes the state for debugging.
+// JSON serializes the state for debugging and attestation round-trips.
 func (s *State) JSON() ([]byte, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

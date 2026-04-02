@@ -36,6 +36,9 @@ func (r Run) Execute(ctx context.Context) error {
 		env[k] = v
 	}
 	for k, v := range r.Secrets {
+		// Log secret key with redacted value for audit trail.
+		// SecretString.String() returns "[REDACTED]", preventing leakage.
+		fmt.Fprintf(os.Stderr, "SECRET %s=%s\n", k, v)
 		env[k] = v.Expose()
 	}
 	env["XDG_RUNTIME_DIR"] = "/tmp/run"

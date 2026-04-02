@@ -22,6 +22,7 @@ import (
 
 	"github.com/istr/strike/internal/executor"
 	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/registry"
 )
 
 var update = flag.Bool("update", false, "update golden files")
@@ -298,21 +299,24 @@ func TestAssembleImage_Golden(t *testing.T) {
 }
 
 // --------------------------------------------------------------------------.
-// Golden test: digest computation
+// Golden test: spec hash computation
 // --------------------------------------------------------------------------.
 
-func TestCacheKey_Golden(t *testing.T) {
+func TestSpecHash_Golden(t *testing.T) {
 	step := &lane.Step{
 		Args: []string{"go", "build", "-o", "/out/binary", "./cmd/strike"},
 		Env:  map[string]string{"CGO_ENABLED": "0", "GOOS": "linux"},
 	}
 	imageDigest := "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-	inputDigests := map[string]string{
+	inputHashes := map[string]string{
 		"src": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 	}
+	sourceHashes := map[string]string{
+		"go.sum": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+	}
 
-	key := lane.CacheKey(step, imageDigest, inputDigests)
-	assertGolden(t, "cache_key.txt", []byte(key))
+	key := registry.SpecHash(step, imageDigest, inputHashes, sourceHashes)
+	assertGolden(t, "spec_hash.txt", []byte(key))
 }
 
 // --------------------------------------------------------------------------.

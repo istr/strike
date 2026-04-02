@@ -4,42 +4,13 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/registry"
 )
-
-func TestCacheTag(t *testing.T) {
-	c := &registry.Cache{Registry: "ghcr.io/istr"}
-
-	tag := c.CacheTag("sha256:abcdef1234567890abcdef")
-	want := "ghcr.io/istr/strike-cache:cache-abcdef123456"
-	if tag != want {
-		t.Errorf("CacheTag = %q, want %q", tag, want)
-	}
-}
-
-func TestCacheTagShortKey(t *testing.T) {
-	c := &registry.Cache{Registry: "ghcr.io/istr"}
-
-	tag := c.CacheTag("sha256:abc")
-	want := "ghcr.io/istr/strike-cache:cache-abc"
-	if tag != want {
-		t.Errorf("CacheTag = %q, want %q", tag, want)
-	}
-}
-
-func TestCacheLookupMiss(t *testing.T) {
-	c := &registry.Cache{Registry: "localhost:5555/nonexistent"}
-	client := &registry.Client{Engine: &fakeEngine{existsLocal: false}}
-
-	_, found := c.Lookup(context.Background(), "sha256:0000000000000000000000000000000000000000000000000000000000000000", client)
-	if found {
-		t.Fatal("expected cache miss for nonexistent registry")
-	}
-}
 
 func TestSpecHashDeterministic(t *testing.T) {
 	step := &lane.Step{
@@ -48,13 +19,16 @@ func TestSpecHashDeterministic(t *testing.T) {
 		Args:  []string{"build", "-o", "/out/bin"},
 		Env:   map[string]string{"CGO_ENABLED": "0"},
 	}
-	inputHashes := map[string]string{"src": "deadbeef"}
-	sourceHashes := map[string]string{"/src": "cafebabe"}
+	inputHashes := map[string]string{"src": "sha256:deadbeef"}
+	sourceHashes := map[string]string{"/src": "sha256:cafebabe"}
 
 	h1 := registry.SpecHash(step, "sha256:img", inputHashes, sourceHashes)
 	h2 := registry.SpecHash(step, "sha256:img", inputHashes, sourceHashes)
 	if h1 != h2 {
 		t.Fatalf("not deterministic: %q vs %q", h1, h2)
+	}
+	if !strings.HasPrefix(h1, "sha256:") {
+		t.Fatalf("expected sha256: prefix, got %q", h1)
 	}
 }
 
@@ -129,9 +103,12 @@ func TestHashPathMachineIndependent(t *testing.T) {
 	if h1 != h2 {
 		t.Fatalf("same content in different dirs produced different hashes: %q vs %q", h1, h2)
 	}
+	if !strings.HasPrefix(h1, "sha256:") {
+		t.Fatalf("expected sha256: prefix, got %q", h1)
+	}
 }
 
-// fakeEngine is a minimal Engine mock for cache tests.
+// fakeEngine is a minimal Engine mock for cache lookup tests.
 type fakeEngine struct {
 	container.Engine
 	existsLocal bool
@@ -139,4 +116,17 @@ type fakeEngine struct {
 
 func (f *fakeEngine) ImageExists(_ context.Context, _ string) (bool, error) {
 	return f.existsLocal, nil
+}
+
+func TestLookupMiss(t *testing.T) {
+	client := &registry.Client{Engine: &fakeEngine{existsLocal: false}}
+
+	found := registry.Lookup(
+		context.Background(), client,
+		"localhost:5555/nonexistent:tag-abc",
+		"sha256:0000000000000000000000000000000000000000000000000000000000000000",
+	)
+	if found {
+		t.Fatal("expected cache miss for nonexistent registry")
+	}
 }
