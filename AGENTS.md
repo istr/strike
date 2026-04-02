@@ -355,8 +355,12 @@ Run the full quality gate:
 ```sh
 golangci-lint run ./...
 go test -race -coverprofile=coverage.out -covermode=atomic ./...
+deadcode ./...
 govulncheck ./...
 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o strike ./cmd/strike
 ```
 
-All four commands must succeed with zero warnings and zero findings.
+All five commands must succeed with zero warnings and zero findings.
+`deadcode` reports functions unreachable from `main()`. All exported
+functions must be reachable from `main` or wired through interface
+dispatch. Do not add dead code -- wire it in or do not write it.
