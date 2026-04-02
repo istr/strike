@@ -2,27 +2,107 @@ package deploy_test
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/binary"
 	"encoding/json"
+	"encoding/pem"
+	"math/big"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/deploy"
 	"github.com/istr/strike/internal/lane"
 )
 
-func newTestEngine(t *testing.T, handler http.Handler) container.Engine {
+func newTLSTestEngine(t *testing.T, handler http.Handler) container.Engine {
 	t.Helper()
-	srv := httptest.NewServer(handler)
-	t.Cleanup(srv.Close)
-	eng, err := container.NewFromAddress("tcp://" + srv.Listener.Addr().String())
+
+	// Ephemeral CA
+	caKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("generate CA key: %v", err)
+	}
+	caTemplate := &x509.Certificate{
+		SerialNumber:          big.NewInt(1),
+		Subject:               pkix.Name{CommonName: "deploy-test-ca"},
+		NotBefore:             time.Now().Add(-time.Minute),
+		NotAfter:              time.Now().Add(time.Hour),
+		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
+		BasicConstraintsValid: true,
+		IsCA:                  true,
+	}
+	caCertDER, err := x509.CreateCertificate(rand.Reader, caTemplate, caTemplate, &caKey.PublicKey, caKey)
+	if err != nil {
+		t.Fatalf("create CA cert: %v", err)
+	}
+	caCert, err := x509.ParseCertificate(caCertDER)
+	if err != nil {
+		t.Fatalf("parse CA cert: %v", err)
+	}
+	caCertPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caCertDER})
+
+	// Server cert for 127.0.0.1
+	serverKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("generate server key: %v", err)
+	}
+	serverTemplate := &x509.Certificate{
+		SerialNumber: big.NewInt(2),
+		Subject:      pkix.Name{CommonName: "deploy-test-engine"},
+		NotBefore:    time.Now().Add(-time.Minute),
+		NotAfter:     time.Now().Add(time.Hour),
+		KeyUsage:     x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		IPAddresses:  []net.IP{net.IPv4(127, 0, 0, 1)},
+	}
+	serverCertDER, err := x509.CreateCertificate(rand.Reader, serverTemplate, caCert, &serverKey.PublicKey, caKey)
+	if err != nil {
+		t.Fatalf("create server cert: %v", err)
+	}
+	serverCertPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: serverCertDER})
+	serverKeyDER, err := x509.MarshalECPrivateKey(serverKey)
+	if err != nil {
+		t.Fatalf("marshal server key: %v", err)
+	}
+	serverKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: serverKeyDER})
+	serverTLSCert, err := tls.X509KeyPair(serverCertPEM, serverKeyPEM)
+	if err != nil {
+		t.Fatalf("server TLS keypair: %v", err)
+	}
+
+	srv := httptest.NewUnstartedServer(handler)
+	srv.TLS = &tls.Config{
+		Certificates: []tls.Certificate{serverTLSCert},
+		MinVersion:   tls.VersionTLS13,
+	}
+	srv.StartTLS()
+	t.Cleanup(srv.Close)
+
+	dir := t.TempDir()
+	if writeErr := os.WriteFile(filepath.Join(dir, "ca.crt"), caCertPEM, 0o600); writeErr != nil {
+		t.Fatalf("write CA cert: %v", writeErr)
+	}
+
+	t.Setenv("CONTAINER_TLS_CA", filepath.Join(dir, "ca.crt"))
+	t.Setenv("CONTAINER_TLS_CERT", "")
+	t.Setenv("CONTAINER_TLS_KEY", "")
+
+	addr := strings.Replace(srv.URL, "https://", "tcp://", 1)
+	eng, engErr := container.NewFromAddress(addr)
+	if engErr != nil {
+		t.Fatalf("NewFromAddress(%s): %v", addr, engErr)
 	}
 	return eng
 }
@@ -227,7 +307,7 @@ func containerMock(stdout string) http.HandlerFunc {
 }
 
 func TestDeployerExecute(t *testing.T) {
-	eng := newTestEngine(t, containerMock("v1.2.3"))
+	eng := newTLSTestEngine(t, containerMock("v1.2.3"))
 
 	state := lane.NewState()
 	if err := state.Register("build", "image", lane.Artifact{
@@ -292,7 +372,7 @@ func TestDeployerExecute(t *testing.T) {
 }
 
 func TestDeployerExecute_MissingArtifact(t *testing.T) {
-	eng := newTestEngine(t, containerMock(""))
+	eng := newTLSTestEngine(t, containerMock(""))
 	state := lane.NewState() // empty -- no artifacts registered
 
 	step := &lane.Step{
@@ -324,5 +404,114 @@ func TestRunStepDispatchesDeploy(t *testing.T) {
 	}
 	if step.Pack != nil || step.Image != "" {
 		t.Fatal("deploy step must not have pack or image")
+	}
+}
+
+func TestHardenedRunOpts(t *testing.T) {
+	opts := deploy.HardenedRunOpts()
+
+	if len(opts.CapDrop) != 1 || opts.CapDrop[0] != "ALL" {
+		t.Errorf("CapDrop = %v, want [ALL]", opts.CapDrop)
+	}
+	if !opts.ReadOnly {
+		t.Error("expected ReadOnly=true")
+	}
+	if len(opts.SecurityOpt) != 1 || opts.SecurityOpt[0] != "no-new-privileges" {
+		t.Errorf("SecurityOpt = %v, want [no-new-privileges]", opts.SecurityOpt)
+	}
+	tmpOpts, ok := opts.Tmpfs["/tmp"]
+	if !ok {
+		t.Fatal("expected /tmp in Tmpfs")
+	}
+	if !strings.Contains(tmpOpts, "noexec") {
+		t.Errorf("Tmpfs /tmp = %q, want noexec", tmpOpts)
+	}
+	if opts.UsernsMode != "keep-id" {
+		t.Errorf("UsernsMode = %q, want keep-id", opts.UsernsMode)
+	}
+	if !opts.Remove {
+		t.Error("expected Remove=true")
+	}
+}
+
+func TestAttestationContainsEngineRecord(t *testing.T) {
+	eng := newTLSTestEngine(t, containerMock("v1.2.3"))
+
+	// Ping to populate identity
+	if err := eng.Ping(context.Background()); err != nil {
+		t.Fatalf("Ping: %v", err)
+	}
+
+	state := lane.NewState()
+	if err := state.Register("build", "image", lane.Artifact{
+		Type:   "image",
+		Digest: "sha256:abc123",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	step := &lane.Step{
+		Name: "deploy-prod",
+		Deploy: &lane.DeploySpec{
+			Method: lane.DeployMethod{
+				"type":  "custom",
+				"image": "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+			},
+			Artifacts: map[string]lane.ArtifactRef{
+				"image": {From: "build.image"},
+			},
+			Target: lane.DeployTarget{Type: "registry", Description: "production"},
+			Attestation: lane.AttestationSpec{
+				PreState: lane.StateCaptureSpec{
+					Capture: []lane.StateCapture{{
+						Name:    "version",
+						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+						Command: []string{"cat", "/version"},
+						Network: true,
+					}},
+				},
+				PostState: lane.StateCaptureSpec{
+					Capture: []lane.StateCapture{{
+						Name:    "version",
+						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+						Command: []string{"cat", "/version"},
+						Network: true,
+					}},
+				},
+			},
+		},
+	}
+
+	d := &deploy.Deployer{Engine: eng, EngineID: eng.Identity()}
+	att, err := d.Execute(context.Background(), step, state)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	if att.Engine == nil {
+		t.Fatal("expected non-nil Engine record in attestation")
+	}
+	if att.Engine.ConnectionType != "tls" {
+		t.Errorf("Engine.ConnectionType = %q, want tls", att.Engine.ConnectionType)
+	}
+	if !strings.HasPrefix(att.Engine.ServerCertFingerprint, "sha256:") {
+		t.Errorf("Engine.ServerCertFingerprint = %q, want sha256: prefix", att.Engine.ServerCertFingerprint)
+	}
+
+	// Verify it round-trips through JSON
+	data, err := att.JSON()
+	if err != nil {
+		t.Fatalf("JSON: %v", err)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(data, &m); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	engMap, ok := m["engine"].(map[string]any)
+	if !ok {
+		t.Fatal("expected engine object in JSON")
+	}
+	if engMap["connection_type"] != "tls" {
+		t.Errorf("JSON engine.connection_type = %v, want tls", engMap["connection_type"])
 	}
 }

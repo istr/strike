@@ -216,22 +216,32 @@ return fmt.Errorf("Failed to sign image: %s. Error: %v", ref, err)
 
 ### Testing container operations
 
-Container operations are tested against `httptest` mock servers that
-simulate the podman libpod REST API. Use `container.NewFromAddress` with
-`tcp://` pointing to the test server.
+Container operations are tested against `httptest.TLS` mock servers that
+simulate the podman libpod REST API over TLS. TCP connections always
+require server-TLS (unencrypted TCP is rejected), so all test engines
+must use ephemeral PKI certificates.
+
+The PKI helpers live in `internal/container/testpki_test.go` and provide:
+- `newTLSTestEngine(t, handler)` -- server-only TLS (server cert verified).
+- `newMTLSTestEngine(t, handler)` -- mutual TLS (both sides present certs).
+
+For packages outside `internal/container/` (e.g., `deploy_test`), copy
+the PKI generation inline or factor a shared test helper.
 
 ```go
-func newTestEngine(t *testing.T, handler http.Handler) container.Engine {
-    t.Helper()
-    srv := httptest.NewServer(handler)
-    t.Cleanup(srv.Close)
-    eng, err := container.NewFromAddress("tcp://" + srv.Listener.Addr().String())
-    if err != nil {
-        t.Fatal(err)
-    }
-    return eng
-}
+// Server-only TLS (most tests)
+eng := newTLSTestEngine(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+    w.WriteHeader(http.StatusOK)
+}))
+
+// Mutual TLS (identity and attestation tests)
+eng := newMTLSTestEngine(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+    w.WriteHeader(http.StatusOK)
+}))
 ```
+
+Never use plaintext `httptest.NewServer` with `tcp://` -- `newHTTPClient`
+rejects unencrypted TCP connections.
 
 ### Coverage targets
 

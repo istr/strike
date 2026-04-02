@@ -7,23 +7,11 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/istr/strike/internal/container"
 )
-
-func newTestEngine(t *testing.T, handler http.Handler) container.Engine {
-	t.Helper()
-	srv := httptest.NewServer(handler)
-	t.Cleanup(srv.Close)
-	eng, err := container.NewFromAddress("tcp://" + srv.Listener.Addr().String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	return eng
-}
 
 func TestPing(t *testing.T) {
 	tests := []struct {
@@ -36,7 +24,7 @@ func TestPing(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			eng := newTestEngine(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			eng := newTLSTestEngine(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if !strings.HasSuffix(r.URL.Path, "/_ping") {
 					t.Errorf("unexpected path: %s", r.URL.Path)
 				}
@@ -61,7 +49,7 @@ func TestImageExists(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			eng := newTestEngine(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			eng := newTLSTestEngine(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if !strings.Contains(r.URL.Path, "/images/") || !strings.HasSuffix(r.URL.Path, "/exists") {
 					t.Errorf("unexpected path: %s", r.URL.Path)
 				}
@@ -89,7 +77,7 @@ func TestImagePull(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			eng := newTestEngine(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			eng := newTLSTestEngine(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if r.Method != http.MethodPost {
 					t.Errorf("expected POST, got %s", r.Method)
 				}
@@ -138,7 +126,7 @@ func TestImageInspect(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			eng := newTestEngine(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			eng := newTLSTestEngine(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(tt.statusCode)
 				if tt.response != nil {
 					json.NewEncoder(w).Encode(tt.response) //nolint:errcheck,gosec // test HTTP handler
@@ -177,7 +165,7 @@ func TestImageLoad(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			eng := newTestEngine(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			eng := newTLSTestEngine(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if r.Method != http.MethodPost {
 					t.Errorf("expected POST, got %s", r.Method)
 				}
@@ -212,7 +200,7 @@ func TestImageTag(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			eng := newTestEngine(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			eng := newTLSTestEngine(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				repo := r.URL.Query().Get("repo")
 				tag := r.URL.Query().Get("tag")
 				if repo != tt.wantRepo {
@@ -242,7 +230,7 @@ func TestImagePush(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			eng := newTestEngine(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			eng := newTLSTestEngine(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if !strings.Contains(r.URL.Path, "/images/") || !strings.HasSuffix(r.URL.Path, "/push") {
 					t.Errorf("unexpected path: %s", r.URL.Path)
 				}
@@ -266,7 +254,7 @@ func TestContainerRun(t *testing.T) {
 	var capturedSpec map[string]any
 	step := 0
 
-	eng := newTestEngine(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	eng := newTLSTestEngine(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
 
 		switch {
@@ -365,7 +353,7 @@ func verifySpecGenerator(t *testing.T, capturedSpec map[string]any) {
 }
 
 func TestContainerRunExitCode(t *testing.T) {
-	eng := newTestEngine(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	eng := newTLSTestEngine(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
 		switch {
 		case strings.HasSuffix(path, "/containers/create"):
@@ -405,10 +393,10 @@ func TestDetectSocket(t *testing.T) {
 		wantErr       bool
 	}{
 		{
-			"explicit container host",
+			"tcp without CA",
 			"tcp://ci-host:8080",
 			"tcp://",
-			false,
+			true,
 		},
 		{
 			"explicit unix socket",
@@ -420,6 +408,9 @@ func TestDetectSocket(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Setenv("CONTAINER_HOST", tt.containerHost)
+			t.Setenv("CONTAINER_TLS_CA", "")
+			t.Setenv("CONTAINER_TLS_CERT", "")
+			t.Setenv("CONTAINER_TLS_KEY", "")
 			eng, err := container.New()
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("New() error = %v, wantErr %v", err, tt.wantErr)
@@ -428,5 +419,195 @@ func TestDetectSocket(t *testing.T) {
 				t.Fatal("expected non-nil engine")
 			}
 		})
+	}
+}
+
+func TestTCPRequiresCA(t *testing.T) {
+	t.Setenv("CONTAINER_TLS_CA", "")
+	t.Setenv("CONTAINER_TLS_CERT", "")
+	t.Setenv("CONTAINER_TLS_KEY", "")
+
+	_, err := container.NewFromAddress("tcp://127.0.0.1:9999")
+	if err == nil {
+		t.Fatal("expected error for TCP without CA")
+	}
+	if !strings.Contains(err.Error(), "CONTAINER_TLS_CA") {
+		t.Fatalf("error should mention CONTAINER_TLS_CA, got: %v", err)
+	}
+}
+
+func TestServerTLSCapturesFingerprint(t *testing.T) {
+	eng := newTLSTestEngine(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	if err := eng.Ping(context.Background()); err != nil {
+		t.Fatalf("Ping: %v", err)
+	}
+
+	tlsID := eng.TLSIdentity()
+	if tlsID == nil {
+		t.Fatal("expected non-nil TLSIdentity after TLS ping")
+	}
+	if !strings.HasPrefix(tlsID.ServerFingerprint, "sha256:") {
+		t.Errorf("ServerFingerprint = %q, want sha256: prefix", tlsID.ServerFingerprint)
+	}
+	if tlsID.ServerSubject != "strike-test-engine" {
+		t.Errorf("ServerSubject = %q, want strike-test-engine", tlsID.ServerSubject)
+	}
+	if tlsID.Mutual {
+		t.Error("expected Mutual=false for server-only TLS")
+	}
+}
+
+func TestMTLSCapturesBothFingerprints(t *testing.T) {
+	eng := newMTLSTestEngine(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	if err := eng.Ping(context.Background()); err != nil {
+		t.Fatalf("Ping: %v", err)
+	}
+
+	tlsID := eng.TLSIdentity()
+	if tlsID == nil {
+		t.Fatal("expected non-nil TLSIdentity after mTLS ping")
+	}
+	if !strings.HasPrefix(tlsID.ServerFingerprint, "sha256:") {
+		t.Errorf("ServerFingerprint = %q, want sha256: prefix", tlsID.ServerFingerprint)
+	}
+	if !strings.HasPrefix(tlsID.ClientFingerprint, "sha256:") {
+		t.Errorf("ClientFingerprint = %q, want sha256: prefix", tlsID.ClientFingerprint)
+	}
+	if !tlsID.Mutual {
+		t.Error("expected Mutual=true for mTLS")
+	}
+}
+
+func TestTLSIdentityNilForUnixSocket(t *testing.T) {
+	// We cannot easily construct a real Unix socket test engine here,
+	// but we can verify that a freshly-created engine has nil TLSIdentity
+	// before Ping is called. The identity is populated only after Ping.
+	eng := newTLSTestEngine(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	// Before Ping, TLSIdentity should be nil.
+	if eng.TLSIdentity() != nil {
+		t.Error("expected nil TLSIdentity before Ping")
+	}
+}
+
+func TestIdentityAfterPing_ServerTLS(t *testing.T) {
+	eng := newTLSTestEngine(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	if err := eng.Ping(context.Background()); err != nil {
+		t.Fatalf("Ping: %v", err)
+	}
+
+	id := eng.Identity()
+	if id == nil {
+		t.Fatal("expected non-nil Identity after Ping")
+	}
+	if id.Connection.Type != "tls" {
+		t.Errorf("Connection.Type = %q, want tls", id.Connection.Type)
+	}
+	if !strings.HasPrefix(id.Connection.ServerCertFingerprint, "sha256:") {
+		t.Errorf("ServerCertFingerprint = %q, want sha256: prefix", id.Connection.ServerCertFingerprint)
+	}
+	if id.Connection.ServerCertSubject != "strike-test-engine" {
+		t.Errorf("ServerCertSubject = %q, want strike-test-engine", id.Connection.ServerCertSubject)
+	}
+	if id.Connection.ClientCertFingerprint != "" {
+		t.Errorf("ClientCertFingerprint should be empty for server-only TLS, got %q", id.Connection.ClientCertFingerprint)
+	}
+}
+
+func TestIdentityAfterPing_MTLS(t *testing.T) {
+	eng := newMTLSTestEngine(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	if err := eng.Ping(context.Background()); err != nil {
+		t.Fatalf("Ping: %v", err)
+	}
+
+	id := eng.Identity()
+	if id == nil {
+		t.Fatal("expected non-nil Identity after Ping")
+	}
+	if id.Connection.Type != "mtls" {
+		t.Errorf("Connection.Type = %q, want mtls", id.Connection.Type)
+	}
+	if !strings.HasPrefix(id.Connection.ServerCertFingerprint, "sha256:") {
+		t.Errorf("ServerCertFingerprint = %q, want sha256: prefix", id.Connection.ServerCertFingerprint)
+	}
+	if !strings.HasPrefix(id.Connection.ClientCertFingerprint, "sha256:") {
+		t.Errorf("ClientCertFingerprint = %q, want sha256: prefix", id.Connection.ClientCertFingerprint)
+	}
+	if id.Connection.ClientCertSubject != "strike-test-controller" {
+		t.Errorf("ClientCertSubject = %q, want strike-test-controller", id.Connection.ClientCertSubject)
+	}
+}
+
+func TestInfoPopulatesRuntime(t *testing.T) {
+	infoResp := map[string]any{
+		"host": map[string]any{
+			"rootless": true,
+			"security": map[string]any{
+				"selinuxEnabled":  false,
+				"apparmorEnabled": true,
+			},
+		},
+		"version": map[string]any{
+			"APIVersion": "5.0.0",
+			"Version":    "5.2.1",
+		},
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+		switch {
+		case strings.HasSuffix(path, "/_ping"):
+			w.WriteHeader(http.StatusOK)
+		case strings.HasSuffix(path, "/info"):
+			json.NewEncoder(w).Encode(infoResp) //nolint:errcheck,gosec // test HTTP handler
+		default:
+			w.WriteHeader(http.StatusOK)
+		}
+	})
+
+	eng := newTLSTestEngine(t, mux)
+
+	if err := eng.Ping(context.Background()); err != nil {
+		t.Fatalf("Ping: %v", err)
+	}
+	if err := eng.Info(context.Background()); err != nil {
+		t.Fatalf("Info: %v", err)
+	}
+
+	id := eng.Identity()
+	if id == nil {
+		t.Fatal("expected non-nil Identity")
+	}
+	if id.Runtime == nil {
+		t.Fatal("expected non-nil Runtime after Info")
+	}
+	if id.Runtime.Version != "5.2.1" {
+		t.Errorf("Version = %q, want 5.2.1", id.Runtime.Version)
+	}
+	if id.Runtime.APIVersion != "5.0.0" {
+		t.Errorf("APIVersion = %q, want 5.0.0", id.Runtime.APIVersion)
+	}
+	if !id.Runtime.Rootless {
+		t.Error("expected Rootless=true")
+	}
+	if !id.Runtime.AppArmor {
+		t.Error("expected AppArmor=true")
+	}
+	if id.Runtime.SELinux {
+		t.Error("expected SELinux=false")
 	}
 }

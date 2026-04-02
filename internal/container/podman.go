@@ -3,6 +3,8 @@ package container
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,8 +14,23 @@ import (
 )
 
 type podmanEngine struct {
-	client *http.Client
-	base   string // e.g. "http://d/v5.0.0/libpod"
+	client   *http.Client
+	tlsCfg   *TLSConfig
+	tlsID    *TLSIdentity
+	identity *EngineIdentity
+	base     string
+	isUnix   bool
+}
+
+// TLSIdentity returns the TLS certificate fingerprints captured from the
+// engine connection. Returns nil for Unix socket connections.
+func (e *podmanEngine) TLSIdentity() *TLSIdentity {
+	return e.tlsID
+}
+
+// Identity returns the engine's combined transport and runtime identity.
+func (e *podmanEngine) Identity() *EngineIdentity {
+	return e.identity
 }
 
 // Ping verifies the engine is reachable.
@@ -27,8 +44,101 @@ func (e *podmanEngine) Ping(ctx context.Context) error {
 		return fmt.Errorf("engine ping: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }() //nolint:errcheck // best-effort HTTP body close
+
+	e.captureTLSIdentity(resp)
+
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("engine ping: status %d", resp.StatusCode)
+	}
+	return nil
+}
+
+// captureTLSIdentity extracts certificate fingerprints from the TLS
+// connection state. Called once after the first successful API call.
+func (e *podmanEngine) captureTLSIdentity(resp *http.Response) {
+	if e.identity != nil {
+		return // already captured
+	}
+
+	e.identity = &EngineIdentity{}
+
+	if e.isUnix {
+		e.identity.Connection.Type = "unix"
+		return
+	}
+
+	if resp.TLS == nil || len(resp.TLS.PeerCertificates) == 0 {
+		e.identity.Connection.Type = "tls"
+		return
+	}
+
+	serverCert := resp.TLS.PeerCertificates[0]
+	e.identity.Connection.ServerCertFingerprint = CertFingerprint(serverCert)
+	e.identity.Connection.ServerCertSubject = serverCert.Subject.CommonName
+	e.identity.Connection.ServerCertIssuer = serverCert.Issuer.CommonName
+
+	if e.tlsCfg.HasClientCert() {
+		e.identity.Connection.Type = "mtls"
+		clientPair, loadErr := tls.LoadX509KeyPair(e.tlsCfg.CertFile, e.tlsCfg.KeyFile)
+		if loadErr == nil && len(clientPair.Certificate) > 0 {
+			clientCert, parseErr := x509.ParseCertificate(clientPair.Certificate[0])
+			if parseErr == nil {
+				e.identity.Connection.ClientCertFingerprint = CertFingerprint(clientCert)
+				e.identity.Connection.ClientCertSubject = clientCert.Subject.CommonName
+			}
+		}
+	} else {
+		e.identity.Connection.Type = "tls"
+	}
+
+	e.tlsID = &TLSIdentity{
+		ServerFingerprint: e.identity.Connection.ServerCertFingerprint,
+		ServerSubject:     e.identity.Connection.ServerCertSubject,
+		ServerIssuer:      e.identity.Connection.ServerCertIssuer,
+		ClientFingerprint: e.identity.Connection.ClientCertFingerprint,
+		ClientSubject:     e.identity.Connection.ClientCertSubject,
+		Mutual:            e.identity.Connection.Type == "mtls",
+	}
+}
+
+// Info fetches runtime metadata from the engine.
+func (e *podmanEngine) Info(ctx context.Context) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, e.base+"/info", nil)
+	if err != nil {
+		return err
+	}
+	resp, err := e.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("engine info: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }() //nolint:errcheck // best-effort HTTP body close
+
+	var raw struct { //nolint:govet // fieldalignment: JSON decode struct, field order matches API
+		Host struct {
+			Security struct {
+				SELinuxEnabled  bool `json:"selinuxEnabled"`
+				AppArmorEnabled bool `json:"apparmorEnabled"`
+			} `json:"security"`
+			Rootless bool `json:"rootless"`
+		} `json:"host"`
+		Version struct {
+			Version    string `json:"Version"`
+			APIVersion string `json:"APIVersion"`
+		} `json:"version"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+		return fmt.Errorf("engine info: decode: %w", err)
+	}
+
+	if e.identity == nil {
+		e.identity = &EngineIdentity{}
+	}
+	e.identity.Runtime = &RuntimeInfo{
+		Version:    raw.Version.Version,
+		APIVersion: raw.Version.APIVersion,
+		Rootless:   raw.Host.Rootless,
+		SELinux:    raw.Host.Security.SELinuxEnabled,
+		AppArmor:   raw.Host.Security.AppArmorEnabled,
 	}
 	return nil
 }

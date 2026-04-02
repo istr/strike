@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 )
 
 // Engine is the interface for container engine operations.
@@ -41,6 +42,19 @@ type Engine interface {
 
 	// Ping verifies the engine is reachable.
 	Ping(ctx context.Context) error
+
+	// TLSIdentity returns the TLS certificate fingerprints captured from the
+	// engine connection. Returns nil for Unix socket connections.
+	TLSIdentity() *TLSIdentity
+
+	// Identity returns the engine's combined transport and runtime identity.
+	// Populated after Ping (transport) and Info (runtime). Returns non-nil
+	// even if Info fails -- the connection info is always available after Ping.
+	Identity() *EngineIdentity
+
+	// Info fetches runtime metadata from the engine. Call after Ping.
+	// Failures are non-fatal: Identity().Runtime will be nil.
+	Info(ctx context.Context) error
 }
 
 // ImageInfo holds metadata from image inspection.
@@ -78,6 +92,50 @@ type Mount struct {
 	ReadOnly bool
 }
 
+// EngineIdentity holds everything strike knows about the container engine
+// it is connected to. Populated after Ping and Info calls. Embedded in
+// deploy attestations for supply chain traceability.
+type EngineIdentity struct {
+	// Runtime describes the engine's self-reported properties.
+	// Populated from the /info API. Nil if the call failed.
+	Runtime *RuntimeInfo `json:"runtime,omitempty"`
+
+	// Connection describes how strike connects to the engine.
+	Connection ConnectionInfo `json:"connection"`
+}
+
+// ConnectionInfo describes the transport between strike and the engine.
+type ConnectionInfo struct {
+	// Type is "unix", "tls", or "mtls".
+	Type string `json:"type"`
+
+	// ServerCertFingerprint is the SHA-256 of the engine's leaf certificate.
+	// Empty for Unix socket connections.
+	ServerCertFingerprint string `json:"server_cert_fingerprint,omitempty"`
+
+	// ServerCertSubject is the Subject CN of the engine's certificate.
+	ServerCertSubject string `json:"server_cert_subject,omitempty"`
+
+	// ServerCertIssuer is the Issuer CN of the engine's certificate.
+	ServerCertIssuer string `json:"server_cert_issuer,omitempty"`
+
+	// ClientCertFingerprint is the SHA-256 of the controller's certificate.
+	// Empty unless mTLS is configured.
+	ClientCertFingerprint string `json:"client_cert_fingerprint,omitempty"`
+
+	// ClientCertSubject is the Subject CN of the controller's certificate.
+	ClientCertSubject string `json:"client_cert_subject,omitempty"`
+}
+
+// RuntimeInfo holds the engine's self-reported metadata from /info.
+type RuntimeInfo struct {
+	Version    string `json:"version"`
+	APIVersion string `json:"api_version"`
+	Rootless   bool   `json:"rootless"`
+	SELinux    bool   `json:"selinux"`
+	AppArmor   bool   `json:"apparmor"`
+}
+
 // New creates an Engine connected to the container runtime.
 // It auto-detects the socket path unless $CONTAINER_HOST is set.
 func New() (Engine, error) {
@@ -85,15 +143,33 @@ func New() (Engine, error) {
 	if err != nil {
 		return nil, fmt.Errorf("container engine: %w", err)
 	}
-	client := newHTTPClient(addr)
-	return &podmanEngine{client: client, base: apiBase(addr)}, nil
+	tlsCfg := LoadTLSConfig()
+	client, err := newHTTPClient(addr, tlsCfg)
+	if err != nil {
+		return nil, fmt.Errorf("container engine: %w", err)
+	}
+	return &podmanEngine{
+		client: client,
+		base:   apiBase(addr),
+		tlsCfg: tlsCfg,
+		isUnix: strings.HasPrefix(addr, "unix://"),
+	}, nil
 }
 
 // NewFromAddress creates an Engine connected to a specific address.
 // Supports "unix:///path/to/socket" and "tcp://host:port".
 func NewFromAddress(addr string) (Engine, error) {
-	client := newHTTPClient(addr)
-	return &podmanEngine{client: client, base: apiBase(addr)}, nil
+	tlsCfg := LoadTLSConfig()
+	client, err := newHTTPClient(addr, tlsCfg)
+	if err != nil {
+		return nil, fmt.Errorf("container engine %s: %w", addr, err)
+	}
+	return &podmanEngine{
+		client: client,
+		base:   apiBase(addr),
+		tlsCfg: tlsCfg,
+		isUnix: strings.HasPrefix(addr, "unix://"),
+	}, nil
 }
 
 func detectSocket() (string, error) {

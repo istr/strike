@@ -21,16 +21,40 @@ import (
 	"github.com/istr/strike/internal/registry"
 )
 
+const networkHost = "host"
+
 // Attestation is the signed record produced by every deploy step.
 type Attestation struct {
-	DeployID  string               `json:"deploy_id"`
 	Timestamp time.Time            `json:"timestamp"`
 	Target    lane.DeployTarget    `json:"target"`
 	Artifacts map[string]string    `json:"artifacts"` // name -> digest deployed
 	PreState  map[string]StateSnap `json:"pre_state"`
 	PostState map[string]StateSnap `json:"post_state"`
 	Drift     *DriftReport         `json:"drift,omitempty"`
+	Engine    *EngineRecord        `json:"engine,omitempty"`
+	DeployID  string               `json:"deploy_id"`
 	LaneRef   string               `json:"lane_ref"` // digest of lane definition
+}
+
+// EngineRecord captures the engine's identity at deploy time.
+// Verifiers use this to assess the trust level of the build environment.
+type EngineRecord struct {
+	// ConnectionType is "unix", "tls", or "mtls".
+	ConnectionType string `json:"connection_type"`
+
+	// ServerCertFingerprint is sha256:<hex> of the engine's certificate.
+	// Empty for Unix socket connections.
+	ServerCertFingerprint string `json:"server_cert_fingerprint,omitempty"`
+
+	// ClientCertFingerprint is sha256:<hex> of the controller's certificate.
+	// Empty unless mTLS is configured.
+	ClientCertFingerprint string `json:"client_cert_fingerprint,omitempty"`
+
+	// Rootless is true if the engine reported rootless mode.
+	Rootless *bool `json:"rootless,omitempty"`
+
+	// Version is the engine's self-reported version string.
+	Version string `json:"version,omitempty"`
 }
 
 // StateSnap is a point-in-time capture of one state dimension.
@@ -50,9 +74,23 @@ type DriftReport struct {
 	Drifted           []string          `json:"drifted"` // names where digests differ
 }
 
+// HardenedRunOpts returns a RunOpts with the standard security profile.
+// Callers override specific fields (Image, Cmd, Network, Mounts) as needed.
+func HardenedRunOpts() container.RunOpts {
+	return container.RunOpts{
+		CapDrop:     []string{"ALL"},
+		ReadOnly:    true,
+		SecurityOpt: []string{"no-new-privileges"},
+		Tmpfs:       map[string]string{"/tmp": "rw,noexec,nosuid,size=512m"},
+		UsernsMode:  "keep-id",
+		Remove:      true,
+	}
+}
+
 // Deployer executes deploy steps and produces attestations.
 type Deployer struct {
-	Engine container.Engine
+	Engine   container.Engine
+	EngineID *container.EngineIdentity
 }
 
 // Execute runs a deploy step: capture pre-state, detect drift, execute
@@ -110,6 +148,7 @@ func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.Sta
 		PreState:  preState,
 		PostState: postState,
 		Drift:     drift,
+		Engine:    d.engineRecord(),
 	}
 
 	// 7. Record in lane state
@@ -214,7 +253,7 @@ func (d *Deployer) captureOne(ctx context.Context, sc lane.StateCapture) (StateS
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	network := "host"
+	network := networkHost
 	if !sc.Network {
 		network = "none"
 	}
@@ -228,15 +267,15 @@ func (d *Deployer) captureOne(ctx context.Context, sc lane.StateCapture) (StateS
 		})
 	}
 
-	exitCode, err := d.Engine.ContainerRun(ctx, container.RunOpts{
-		Image:   string(sc.Image),
-		Cmd:     sc.Command,
-		Mounts:  mounts,
-		Network: network,
-		Stdout:  &stdout,
-		Stderr:  &stderr,
-		Remove:  true,
-	})
+	opts := HardenedRunOpts()
+	opts.Image = string(sc.Image)
+	opts.Cmd = sc.Command
+	opts.Mounts = mounts
+	opts.Network = network
+	opts.Stdout = &stdout
+	opts.Stderr = &stderr
+
+	exitCode, err := d.Engine.ContainerRun(ctx, opts)
 	if err != nil {
 		return snap, fmt.Errorf("capture %q: %w", sc.Name, err)
 	}
@@ -318,18 +357,18 @@ func (d *Deployer) executeKubernetesDeploy(ctx context.Context, m lane.DeployMet
 		kubectlArgs = append(kubectlArgs, "-n", m.Namespace())
 	}
 
-	exitCode, err := d.Engine.ContainerRun(ctx, container.RunOpts{
-		Image:   image,
-		Cmd:     kubectlArgs,
-		Network: "host",
-		Mounts: []container.Mount{
-			{Source: kubeconfig, Target: "/root/.kube/config", ReadOnly: true},
-		},
-		Stdin:  os.Stdin,
-		Stdout: os.Stdout,
-		Stderr: os.Stderr,
-		Remove: true,
-	})
+	opts := HardenedRunOpts()
+	opts.Image = image
+	opts.Cmd = kubectlArgs
+	opts.Network = networkHost
+	opts.Mounts = []container.Mount{
+		{Source: kubeconfig, Target: "/root/.kube/config", ReadOnly: true},
+	}
+	opts.Stdin = os.Stdin
+	opts.Stdout = os.Stdout
+	opts.Stderr = os.Stderr
+
+	exitCode, err := d.Engine.ContainerRun(ctx, opts)
 	if err != nil {
 		return fmt.Errorf("kubernetes deploy: %w", err)
 	}
@@ -344,15 +383,15 @@ func (d *Deployer) executeCustomDeploy(ctx context.Context, m lane.DeployMethod)
 		return fmt.Errorf("custom deploy: image required")
 	}
 
-	exitCode, err := d.Engine.ContainerRun(ctx, container.RunOpts{
-		Image:   m.Image(),
-		Cmd:     m.Args(),
-		Env:     m.Env(),
-		Network: "host",
-		Remove:  true,
-		Stdout:  os.Stdout,
-		Stderr:  os.Stderr,
-	})
+	opts := HardenedRunOpts()
+	opts.Image = m.Image()
+	opts.Cmd = m.Args()
+	opts.Env = m.Env()
+	opts.Network = networkHost
+	opts.Stdout = os.Stdout
+	opts.Stderr = os.Stderr
+
+	exitCode, err := d.Engine.ContainerRun(ctx, opts)
 	if err != nil {
 		return err
 	}
@@ -397,4 +436,20 @@ func ResolveKubeconfig(override string) (string, error) {
 		return "", fmt.Errorf("default kubeconfig %q: %w", path, err)
 	}
 	return path, nil
+}
+
+func (d *Deployer) engineRecord() *EngineRecord {
+	if d.EngineID == nil {
+		return nil
+	}
+	rec := &EngineRecord{
+		ConnectionType:        d.EngineID.Connection.Type,
+		ServerCertFingerprint: d.EngineID.Connection.ServerCertFingerprint,
+		ClientCertFingerprint: d.EngineID.Connection.ClientCertFingerprint,
+	}
+	if d.EngineID.Runtime != nil {
+		rec.Rootless = &d.EngineID.Runtime.Rootless
+		rec.Version = d.EngineID.Runtime.Version
+	}
+	return rec
 }
