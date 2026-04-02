@@ -155,7 +155,15 @@ func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.Sta
 		Engine:    d.engineRecord(),
 	}
 
-	// 7. Record in lane state
+	// 7. Validate attestation against CUE schema.
+	// This is the output-side equivalent of lane.Parse's input validation:
+	// the attestation carries the supply chain trust chain and must
+	// conform to the formal specification.
+	if err := ValidateAttestation(att); err != nil {
+		return nil, fmt.Errorf("step %q: attestation invalid: %w", step.Name, err)
+	}
+
+	// 8. Record in lane state
 	if err := d.recordAttestation(att, step, state, started); err != nil {
 		return nil, fmt.Errorf("step %q: %w", step.Name, err)
 	}

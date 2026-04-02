@@ -67,10 +67,11 @@ packages.
 
 ### Key files
 
-- `internal/lane/schema.cue` -- The CUE schema is the source of truth for lane
-  definitions. After editing, run `cue exp gengotypes ./internal/lane/` to
-  regenerate `internal/lane/cue_types_lane_gen.go`. Never edit the generated
-  file by hand.
+- `specs/lane.cue` -- CUE schema for lane definitions (source of truth).
+  `specs/attestation.cue` -- CUE schema for deploy attestations.
+  After editing, run `make generate` to re-export JSON Schema and
+  regenerate `internal/lane/cue_types_lane_gen.go`. Never edit the
+  generated file by hand.
 - `internal/container/engine.go` -- Engine interface and types. All container
   operations go through this interface.
 - `internal/container/podman.go` -- Podman libpod REST API implementation.
@@ -301,9 +302,11 @@ func FuzzParseRef(f *testing.F) {
 ## Makefile targets
 
 ```sh
-make build      # CGO_ENABLED=0 go build ./cmd/strike
-make generate   # cue exp gengotypes ./internal/lane/
-make schema     # cue export to OpenAPI JSON
+make build      # CGO_ENABLED=0 go build ./cmd/strike (runs generate first)
+make specs      # CUE -> JSON Schema (specs/lane.schema.json, specs/attestation.schema.json)
+make generate   # specs + gengotypes -> internal/lane/cue_types_lane_gen.go
+make golden     # update golden test fixtures
+make check      # lint + test + vuln + build (CI entry point)
 ```
 
 ### Environment variables
@@ -321,7 +324,7 @@ make schema     # cue export to OpenAPI JSON
 - Do not add a `go:generate` directive for anything other than CUE codegen.
 - Do not introduce build tags. Tests must work with plain `go test ./...`.
 - Do not add `//nolint` without a written justification in a code comment.
-- Do not embed configuration files other than `schema.cue`.
+- Do not embed configuration files other than the CUE schemas in `specs/`.
 - Do not use `init()` functions.
 - Do not use global mutable state (package-level `var` with mutation).
 - Do not add logging frameworks. Use `fmt.Printf` for user output, `log.Fatal`

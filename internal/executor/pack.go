@@ -41,88 +41,123 @@ type PackResult struct {
 	Digest string // "sha256:..." manifest digest of the main image
 }
 
-// Pack assembles an OCI image from the given options, generates an SBOM,
-// signs the manifest, and writes the result as an OCI layout tar.
-func Pack(opts PackOpts) (*PackResult, error) {
-	if opts.SigningKey == nil {
-		return nil, fmt.Errorf("pack: signing key is required; keyless signing is not yet implemented")
-	}
+// AssembleResult holds the outputs of the pure image assembly step.
+// This is the cross-validation boundary: given the same base image, spec,
+// and input files, any implementation (Go, Rust, ...) must produce an
+// AssembleResult with identical Digest.
+type AssembleResult struct {
+	Image      v1.Image      // assembled OCI image
+	Digest     v1.Hash       // manifest digest
+	Subject    v1.Descriptor // descriptor for referrer relationships
+	BinaryPath string        // host path of first binary (for SBOM)
+}
 
-	// 1. Pull and verify the base image
-	img, err := pullVerified(string(opts.Spec.Base))
-	if err != nil {
-		return nil, fmt.Errorf("pack: pull base image: %w", err)
-	}
-
-	// 2. Add file layers
-	img, binaryPath, err := addFileLayers(img, opts.Spec.Files, opts.InputPaths)
+// AssembleImage is the pure computational core of OCI image construction.
+// It takes an already-resolved base image and applies layers, config,
+// and annotations — no network I/O, no filesystem writes.
+//
+// This function defines the cross-validation surface for a Rust verifier:
+// given identical (base, spec, inputPaths), the output Digest must match.
+func AssembleImage(base v1.Image, spec *lane.PackSpec, inputPaths map[string]string) (*AssembleResult, error) {
+	// 1. Add file layers
+	img, binaryPath, err := addFileLayers(base, spec.Files, inputPaths)
 	if err != nil {
 		return nil, err
 	}
 
-	// 2b. Add config file layers (literal content)
-	img, err = addConfigFileLayers(img, opts.Spec.Config_files)
+	// 2. Add config file layers (literal content)
+	img, err = addConfigFileLayers(img, spec.Config_files)
 	if err != nil {
 		return nil, err
 	}
 
 	// 3. Apply image configuration
-	img, err = applyConfig(img, opts.Spec)
+	img, err = applyConfig(img, spec)
 	if err != nil {
 		return nil, err
 	}
 
 	// 4. Apply annotations
-	if opts.Spec.Annotations != nil {
-		annotated, ok := mutate.Annotations(img, opts.Spec.Annotations).(v1.Image)
+	if spec.Annotations != nil {
+		annotated, ok := mutate.Annotations(img, spec.Annotations).(v1.Image)
 		if !ok {
-			return nil, fmt.Errorf("pack: unexpected type from mutate.Annotations")
+			return nil, fmt.Errorf("assemble: unexpected type from mutate.Annotations")
 		}
 		img = annotated
 	}
 
-	// Compute image digest for referrer relationships
+	// 5. Compute digest — the cross-validation anchor
 	imgDigest, err := img.Digest()
 	if err != nil {
-		return nil, fmt.Errorf("pack: image digest: %w", err)
+		return nil, fmt.Errorf("assemble: image digest: %w", err)
 	}
 	imgSize, err := img.Size()
 	if err != nil {
-		return nil, fmt.Errorf("pack: image size: %w", err)
+		return nil, fmt.Errorf("assemble: image size: %w", err)
 	}
 	imgMediaType, err := img.MediaType()
 	if err != nil {
-		return nil, fmt.Errorf("pack: image media type: %w", err)
-	}
-	subject := v1.Descriptor{
-		MediaType: imgMediaType,
-		Digest:    imgDigest,
-		Size:      imgSize,
+		return nil, fmt.Errorf("assemble: image media type: %w", err)
 	}
 
-	// 5. Generate SBOM
+	return &AssembleResult{
+		Image:      img,
+		Digest:     imgDigest,
+		BinaryPath: binaryPath,
+		Subject: v1.Descriptor{
+			MediaType: imgMediaType,
+			Digest:    imgDigest,
+			Size:      imgSize,
+		},
+	}, nil
+}
+
+// Pack assembles an OCI image from the given options, generates an SBOM,
+// signs the manifest, and writes the result as an OCI layout tar.
+//
+// Pack is the orchestrator: it handles I/O (pull, write) and delegates
+// to pure functions (AssembleImage, SignManifest, GenerateSBOM) for the
+// security-critical computations.
+func Pack(opts PackOpts) (*PackResult, error) {
+	if opts.SigningKey == nil {
+		return nil, fmt.Errorf("pack: signing key is required; keyless signing is not yet implemented")
+	}
+
+	// 1. Pull and verify the base image (network I/O)
+	base, err := pullVerified(string(opts.Spec.Base))
+	if err != nil {
+		return nil, fmt.Errorf("pack: pull base image: %w", err)
+	}
+
+	// 2. Assemble image — pure computation, no I/O
+	assembled, err := AssembleImage(base, opts.Spec, opts.InputPaths)
+	if err != nil {
+		return nil, fmt.Errorf("pack: %w", err)
+	}
+
+	// 3. Generate SBOM (reads binary buildinfo + probes remote registry)
 	buildTime := ReproducibleTimestamp()
-	sbomBytes, err := GenerateSBOM(binaryPath, imgDigest.String(), string(opts.Spec.Base), buildTime)
+	sbomBytes, err := GenerateSBOM(assembled.BinaryPath, assembled.Digest.String(), string(opts.Spec.Base), buildTime)
 	if err != nil {
 		return nil, fmt.Errorf("pack: sbom: %w", err)
 	}
-	sbomImage, err := artifactImage(sbomBytes, "application/vnd.cyclonedx+json", subject)
+	sbomImage, err := artifactImage(sbomBytes, "application/vnd.cyclonedx+json", assembled.Subject)
 	if err != nil {
 		return nil, fmt.Errorf("pack: SBOM artifact: %w", err)
 	}
 
-	// 6. Sign the image manifest digest
-	sigImage, err := SignManifest(imgDigest.String(), opts.SigningKey, opts.KeyPassword)
+	// 4. Sign the image manifest digest — pure crypto
+	sigImage, err := SignManifest(assembled.Digest.String(), opts.SigningKey, opts.KeyPassword)
 	if err != nil {
 		return nil, fmt.Errorf("pack: sign: %w", err)
 	}
 
-	// 7. Write OCI layout with all three manifests
-	if err := writeOCILayout(img, sbomImage, sigImage, opts.OutputRoot, opts.OutputName, imgDigest.String()); err != nil {
+	// 5. Write OCI layout with all three manifests (filesystem I/O)
+	if err := writeOCILayout(assembled.Image, sbomImage, sigImage, opts.OutputRoot, opts.OutputName, assembled.Digest.String()); err != nil {
 		return nil, err
 	}
 
-	return &PackResult{Digest: imgDigest.String()}, nil
+	return &PackResult{Digest: assembled.Digest.String()}, nil
 }
 
 // addFileLayers appends a layer for each file entry, returning the updated

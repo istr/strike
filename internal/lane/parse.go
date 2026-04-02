@@ -1,7 +1,6 @@
 package lane
 
 import (
-	_ "embed"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -11,6 +10,7 @@ import (
 	"cuelang.org/go/cue"
 	"cuelang.org/go/cue/cuecontext"
 	cuejson "cuelang.org/go/encoding/json"
+	"github.com/istr/strike/specs"
 	"gopkg.in/yaml.v3"
 )
 
@@ -23,8 +23,7 @@ func ParseDuration(d Duration, defaultVal time.Duration) (time.Duration, error) 
 	return time.ParseDuration(string(d))
 }
 
-//go:embed schema.cue
-var schema string
+var schema = specs.LaneSchema
 
 // Parse reads a lane YAML file, validates it against the embedded CUE schema,
 // and returns a typed Lane instance.
