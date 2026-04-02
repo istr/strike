@@ -263,7 +263,7 @@ func pullVerified(ref string) (v1.Image, error) {
 		return nil, fmt.Errorf("parse ref %q: %w", ref, err)
 	}
 
-	// Require a digest reference — tags are not allowed.
+	// Require a digest reference -- tags are not allowed.
 	if _, ok := nameRef.(name.Digest); !ok {
 		return nil, fmt.Errorf("ref %q must be pinned by digest", ref)
 	}

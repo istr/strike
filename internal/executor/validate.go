@@ -55,7 +55,7 @@ func ValidateContentType(path string, contentType string) (err error) {
 	case "application/tar+gzip":
 		return ValidateGzip(header)
 	default:
-		// Unknown content type — no validation
+		// Unknown content type -- no validation
 		return nil
 	}
 }

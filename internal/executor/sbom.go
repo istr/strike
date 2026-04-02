@@ -70,7 +70,7 @@ func GenerateSBOM(binaryPath, imageDigest, baseRef string) ([]byte, error) {
 	sbomSource, description, probeErr := ProbeBaseImageSBOM(baseRef)
 	if probeErr != nil {
 		fmt.Fprintf(os.Stderr,
-			"WARN   sbom: base image probe failed (%v) — "+
+			"WARN   sbom: base image probe failed (%v) -- "+
 				"OS-level packages will be absent from SBOM\n", probeErr)
 	}
 
@@ -79,7 +79,7 @@ func GenerateSBOM(binaryPath, imageDigest, baseRef string) ([]byte, error) {
 	switch sbomSource {
 	case SBOMSourceNone:
 		fmt.Fprintf(os.Stderr,
-			"WARN   sbom: base image has no attached SBOM — "+
+			"WARN   sbom: base image has no attached SBOM -- "+
 				"OS-level packages will be absent from this build's SBOM.\n"+
 				"       Recommended base images with SBOM support:\n"+
 				"         cgr.dev/chainguard/static  (Chainguard, full SBOM)\n"+
@@ -193,7 +193,7 @@ func probeFallbackTag(digestRef name.Digest) (SBOMSource, string, bool) {
 
 // fetchBaseComponents downloads the SBOM artefact for the base image and
 // parses it as CycloneDX JSON, returning the component list.
-// Errors are non-fatal — returns nil on failure.
+// Errors are non-fatal -- returns nil on failure.
 func fetchBaseComponents(baseRef string) ([]cdx.Component, error) {
 	ref, err := name.ParseReference(baseRef)
 	if err != nil {
