@@ -75,7 +75,7 @@ func SignManifest(manifestDigest string, keyPEM, password []byte) (v1.Image, err
 
 	img := mutate.MediaType(empty.Image, types.OCIManifestSchema1)
 	annotated, ok := mutate.Annotations(img, map[string]string{
-		"dev.cosigstore.cosign/signature": b64sig,
+		"dev.sigstore.cosign/signature": b64sig,
 	}).(v1.Image)
 	if !ok {
 		return nil, fmt.Errorf("unexpected type from mutate.Annotations")

@@ -101,7 +101,8 @@ func Pack(opts PackOpts) (*PackResult, error) {
 	}
 
 	// 5. Generate SBOM
-	sbomBytes, err := GenerateSBOM(binaryPath, imgDigest.String(), string(opts.Spec.Base))
+	buildTime := ReproducibleTimestamp()
+	sbomBytes, err := GenerateSBOM(binaryPath, imgDigest.String(), string(opts.Spec.Base), buildTime)
 	if err != nil {
 		return nil, fmt.Errorf("pack: sbom: %w", err)
 	}

@@ -28,7 +28,6 @@ func SpecHash(
 	h.Write([]byte(imageDigest))
 
 	args := append([]string{}, step.Args...)
-	sort.Strings(args)
 	for _, a := range args {
 		h.Write([]byte(a))
 	}
@@ -148,7 +147,7 @@ func hashDir(root *os.Root, laneDir, dir string) (string, error) {
 		if closeErr != nil {
 			return closeErr
 		}
-		h.Write([]byte(path))
+		h.Write([]byte(rel))
 		h.Write(content)
 		return nil
 	})

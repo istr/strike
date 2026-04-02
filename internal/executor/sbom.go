@@ -5,6 +5,7 @@ import (
 	"debug/buildinfo"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -33,6 +34,18 @@ var sbomArtifactTypes = []string{
 	"application/vnd.syft+json",
 }
 
+// ReproducibleTimestamp returns the build timestamp for reproducible builds.
+// Uses SOURCE_DATE_EPOCH if set (per https://reproducible-builds.org/specs/),
+// otherwise returns the Unix epoch.
+func ReproducibleTimestamp() time.Time {
+	if epoch := os.Getenv("SOURCE_DATE_EPOCH"); epoch != "" {
+		if secs, err := strconv.ParseInt(epoch, 10, 64); err == nil {
+			return time.Unix(secs, 0).UTC()
+		}
+	}
+	return time.Unix(0, 0).UTC()
+}
+
 // GenerateSBOM produces a CycloneDX 1.6 JSON SBOM for a packed image.
 //
 // binaryPath is the host path of the compiled Go binary being packaged.
@@ -42,7 +55,7 @@ var sbomArtifactTypes = []string{
 // (e.g. "cgr.dev/chainguard/static@sha256:...").
 //
 // Returns the SBOM as a JSON byte slice ready to attach as an OCI artefact.
-func GenerateSBOM(binaryPath, imageDigest, baseRef string) ([]byte, error) {
+func GenerateSBOM(binaryPath, imageDigest, baseRef string, buildTime time.Time) ([]byte, error) {
 	info, err := buildinfo.ReadFile(binaryPath)
 	if err != nil {
 		return nil, fmt.Errorf("read build info from %q: %w", binaryPath, err)
@@ -107,7 +120,7 @@ func GenerateSBOM(binaryPath, imageDigest, baseRef string) ([]byte, error) {
 
 	bom := cdx.NewBOM()
 	bom.Metadata = &cdx.Metadata{
-		Timestamp: time.Now().UTC().Format(time.RFC3339),
+		Timestamp: buildTime.Format(time.RFC3339),
 		Component: &cdx.Component{
 			Type:    cdx.ComponentTypeContainer,
 			Name:    "strike",
