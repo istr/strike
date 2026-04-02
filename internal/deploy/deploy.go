@@ -42,6 +42,10 @@ type EngineRecord struct {
 	// ConnectionType is "unix", "tls", or "mtls".
 	ConnectionType string `json:"connection_type"`
 
+	// CATrustMode is "pinned" (explicit CA) or "system" (OS trust store).
+	// Empty for Unix socket connections.
+	CATrustMode string `json:"ca_trust_mode,omitempty"`
+
 	// ServerCertFingerprint is sha256:<hex> of the engine's certificate.
 	// Empty for Unix socket connections.
 	ServerCertFingerprint string `json:"server_cert_fingerprint,omitempty"`
@@ -444,6 +448,7 @@ func (d *Deployer) engineRecord() *EngineRecord {
 	}
 	rec := &EngineRecord{
 		ConnectionType:        d.EngineID.Connection.Type,
+		CATrustMode:           d.EngineID.Connection.CATrustMode,
 		ServerCertFingerprint: d.EngineID.Connection.ServerCertFingerprint,
 		ClientCertFingerprint: d.EngineID.Connection.ClientCertFingerprint,
 	}

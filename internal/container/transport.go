@@ -13,7 +13,8 @@ import (
 // newHTTPClient creates an HTTP client for the given address.
 //
 // Unix sockets use plain HTTP (kernel-enforced access control).
-// TCP requires server-TLS at minimum -- unencrypted TCP is rejected.
+// TCP always uses TLS. If an explicit CA is configured, only that CA is
+// trusted (pinned mode). Otherwise the system CA store is used.
 // mTLS is used when client cert and key are provided.
 func newHTTPClient(addr string, tlsCfg *TLSConfig) (*http.Client, error) {
 	transport := &http.Transport{
@@ -31,10 +32,8 @@ func newHTTPClient(addr string, tlsCfg *TLSConfig) (*http.Client, error) {
 		}
 
 	case strings.HasPrefix(addr, "tcp://"):
-		if !tlsCfg.HasCA() {
-			return nil, fmt.Errorf(
-				"tcp:// connections require server TLS; set CONTAINER_TLS_CA " +
-					"(and optionally CONTAINER_TLS_CERT + CONTAINER_TLS_KEY for mTLS)")
+		if !tlsCfg.IsReady() {
+			return nil, fmt.Errorf("tcp:// connections require TLS configuration")
 		}
 		tc, err := tlsCfg.Build()
 		if err != nil {

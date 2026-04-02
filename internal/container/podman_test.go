@@ -3,10 +3,12 @@ package container_test
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/binary"
 	"encoding/json"
 	"io"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -393,10 +395,10 @@ func TestDetectSocket(t *testing.T) {
 		wantErr       bool
 	}{
 		{
-			"tcp without CA",
+			"tcp without CA uses system store",
 			"tcp://ci-host:8080",
 			"tcp://",
-			true,
+			false,
 		},
 		{
 			"explicit unix socket",
@@ -422,17 +424,85 @@ func TestDetectSocket(t *testing.T) {
 	}
 }
 
-func TestTCPRequiresCA(t *testing.T) {
+func TestSystemCAStoreUsedWhenNoPinnedCA(t *testing.T) {
 	t.Setenv("CONTAINER_TLS_CA", "")
 	t.Setenv("CONTAINER_TLS_CERT", "")
 	t.Setenv("CONTAINER_TLS_KEY", "")
 
-	_, err := container.NewFromAddress("tcp://127.0.0.1:9999")
-	if err == nil {
-		t.Fatal("expected error for TCP without CA")
+	cfg := container.LoadTLSConfig()
+	if cfg.IsPinned() {
+		t.Error("expected IsPinned() = false when CA is empty")
 	}
-	if !strings.Contains(err.Error(), "CONTAINER_TLS_CA") {
-		t.Fatalf("error should mention CONTAINER_TLS_CA, got: %v", err)
+	if !cfg.IsReady() {
+		t.Error("expected IsReady() = true even without explicit CA")
+	}
+
+	// Build should succeed -- produces a config with nil RootCAs (= system store).
+	tlsCfg, err := cfg.Build()
+	if err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+	if tlsCfg.RootCAs != nil {
+		t.Error("expected nil RootCAs (system store fallback)")
+	}
+	if tlsCfg.MinVersion != tls.VersionTLS13 {
+		t.Error("expected TLS 1.3 minimum")
+	}
+}
+
+func TestPinnedCAProducesExclusivePool(t *testing.T) {
+	pki := generateTestPKI(t)
+	dir := t.TempDir()
+	writePEM(t, filepath.Join(dir, "ca.crt"), pki.caCertPEM)
+
+	t.Setenv("CONTAINER_TLS_CA", filepath.Join(dir, "ca.crt"))
+	t.Setenv("CONTAINER_TLS_CERT", "")
+	t.Setenv("CONTAINER_TLS_KEY", "")
+
+	cfg := container.LoadTLSConfig()
+	if !cfg.IsPinned() {
+		t.Error("expected IsPinned() = true when CA is set")
+	}
+
+	tlsCfg, err := cfg.Build()
+	if err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+	if tlsCfg.RootCAs == nil {
+		t.Error("expected non-nil RootCAs (pinned CA pool)")
+	}
+}
+
+func TestCATrustModeInIdentity_Pinned(t *testing.T) {
+	eng := newTLSTestEngine(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	if err := eng.Ping(context.Background()); err != nil {
+		t.Fatalf("Ping: %v", err)
+	}
+
+	id := eng.Identity()
+	if id == nil {
+		t.Fatal("expected identity")
+	}
+	if id.Connection.CATrustMode != "pinned" {
+		t.Errorf("CATrustMode = %q, want pinned", id.Connection.CATrustMode)
+	}
+}
+
+func TestTCPWithoutCAUsesSystemStore(t *testing.T) {
+	// Without explicit CA, NewFromAddress should succeed (system store fallback).
+	t.Setenv("CONTAINER_TLS_CA", "")
+	t.Setenv("CONTAINER_TLS_CERT", "")
+	t.Setenv("CONTAINER_TLS_KEY", "")
+
+	eng, err := container.NewFromAddress("tcp://127.0.0.1:9999")
+	if err != nil {
+		t.Fatalf("NewFromAddress should succeed with system store fallback, got: %v", err)
+	}
+	if eng == nil {
+		t.Fatal("expected non-nil engine")
 	}
 }
 

@@ -11,12 +11,13 @@ import (
 
 // TLSConfig holds paths for TLS configuration.
 //
-// For TCP connections, CAFile is required (server verification).
+// For TCP connections, if CAFile is set the specified CA is used exclusively
+// (pinned mode). If CAFile is empty, the system CA store is used as fallback.
 // CertFile and KeyFile are optional (mutual TLS).
 //
 // Environment variables (following Docker/Podman convention):
 //
-//	CONTAINER_TLS_CA    path to CA certificate PEM (required for TCP)
+//	CONTAINER_TLS_CA    path to CA certificate PEM (optional; system store if unset)
 //	CONTAINER_TLS_CERT  path to client certificate PEM (optional, enables mTLS)
 //	CONTAINER_TLS_KEY   path to client private key PEM (optional, enables mTLS)
 type TLSConfig struct {
@@ -34,8 +35,16 @@ func LoadTLSConfig() *TLSConfig {
 	}
 }
 
-// HasCA returns true if a CA certificate path is configured.
-func (c *TLSConfig) HasCA() bool {
+// IsReady returns true if the TLS config can produce a working tls.Config.
+// This is always true: either an explicit CA is set, or the system pool
+// will be used as fallback.
+func (c *TLSConfig) IsReady() bool {
+	return c != nil
+}
+
+// IsPinned returns true if an explicit CA file is configured.
+// When false, the system CA store is used.
+func (c *TLSConfig) IsPinned() bool {
 	return c != nil && c.CAFile != ""
 }
 
@@ -45,23 +54,27 @@ func (c *TLSConfig) HasClientCert() bool {
 }
 
 // Build constructs a tls.Config. TLS 1.3 is the minimum version.
-// Server verification is always enabled. Client authentication is added
-// only if CertFile and KeyFile are both set.
+// If CAFile is set, only that CA is trusted (pinned mode). Otherwise the
+// system CA store is used. Client authentication is added only if CertFile
+// and KeyFile are both set.
 func (c *TLSConfig) Build() (*tls.Config, error) {
-	caCert, err := os.ReadFile(c.CAFile)
-	if err != nil {
-		return nil, fmt.Errorf("read CA certificate: %w", err)
-	}
-
-	caPool := x509.NewCertPool()
-	if !caPool.AppendCertsFromPEM(caCert) {
-		return nil, fmt.Errorf("no valid certificates found in %s", c.CAFile)
-	}
-
 	cfg := &tls.Config{
-		RootCAs:    caPool,
 		MinVersion: tls.VersionTLS13,
 	}
+
+	if c.CAFile != "" {
+		// Explicit CA -- exclusive pool (pinned mode).
+		caCert, err := os.ReadFile(c.CAFile)
+		if err != nil {
+			return nil, fmt.Errorf("read CA certificate: %w", err)
+		}
+		caPool := x509.NewCertPool()
+		if !caPool.AppendCertsFromPEM(caCert) {
+			return nil, fmt.Errorf("no valid certificates found in %s", c.CAFile)
+		}
+		cfg.RootCAs = caPool
+	}
+	// else: cfg.RootCAs remains nil -- Go uses system CA store.
 
 	if c.HasClientCert() {
 		cert, certErr := tls.LoadX509KeyPair(c.CertFile, c.KeyFile)

@@ -91,6 +91,12 @@ func (e *podmanEngine) captureTLSIdentity(resp *http.Response) {
 		e.identity.Connection.Type = "tls"
 	}
 
+	if e.tlsCfg.IsPinned() {
+		e.identity.Connection.CATrustMode = "pinned"
+	} else {
+		e.identity.Connection.CATrustMode = "system"
+	}
+
 	e.tlsID = &TLSIdentity{
 		ServerFingerprint: e.identity.Connection.ServerCertFingerprint,
 		ServerSubject:     e.identity.Connection.ServerCertSubject,
