@@ -364,3 +364,5 @@ All five commands must succeed with zero warnings and zero findings.
 `deadcode` reports functions unreachable from `main()`. All exported
 functions must be reachable from `main` or wired through interface
 dispatch. Do not add dead code -- wire it in or do not write it.
+If you find existing dead code, first look if it could or should be
+wired. Then remove the rest. If in doubt, ask the operator.
