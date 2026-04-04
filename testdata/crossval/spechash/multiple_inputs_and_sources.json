@@ -1,0 +1,28 @@
+{
+  "boundary": "SpecHash",
+  "description": "three input hashes and two source hashes to verify concatenation order",
+  "expected": {
+    "hash": "sha256:64b27b31a3da2d32bab3c6f8d355c737fa3aa4d6ffca92615d57631fa97e0b47"
+  },
+  "inputs": {
+    "step": {
+      "args": [
+        "make",
+        "all"
+      ],
+      "env": {
+        "CC": "gcc"
+      }
+    },
+    "image_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "input_hashes": {
+      "alpha": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      "beta": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+      "gamma": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+    },
+    "source_hashes": {
+      "Makefile": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+      "src/main.c": "sha256:5555555555555555555555555555555555555555555555555555555555555555"
+    }
+  }
+}

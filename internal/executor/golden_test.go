@@ -1,16 +1,13 @@
 package executor_test
 
 import (
-	"crypto/ecdh"
 	"crypto/ecdsa"
 	"crypto/sha256"
 	"crypto/x509"
-	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
-	"encoding/pem"
 	"flag"
 	"io"
+	"io/fs"
 	"math/big"
 	"os"
 	"path/filepath"
@@ -25,118 +22,140 @@ import (
 	"github.com/istr/strike/internal/registry"
 )
 
-var update = flag.Bool("update", false, "update golden files")
+var update = flag.Bool("update", false, "update cross-validation vector expected fields")
 
-// goldenPath returns the path to a golden file in testdata/golden/.
-func goldenPath(t *testing.T, name string) string {
-	t.Helper()
-	return filepath.Join("testdata", "golden", name)
-}
+// --------------------------------------------------------------------------.
+// Golden test: AssembleImage (crossval vector).
+// --------------------------------------------------------------------------.
 
-// assertGolden compares got against a golden file. When -update is set,
-// it writes got as the new golden value instead.
-//
-// This is the foundation for cross-validation: the golden files define
-// the expected output that any implementation (Go, Rust) must produce
-// for the same inputs.
-func assertGolden(t *testing.T, name string, got []byte) {
-	t.Helper()
-	path := goldenPath(t, name)
+func TestAssembleImage_Golden(t *testing.T) {
+	vec := loadVector[assembleVector](t, "assemble", "empty_base_single_file.json")
+
+	if vec.Inputs.Base != "oci:empty" {
+		t.Fatalf("unsupported base type: %q", vec.Inputs.Base)
+	}
+
+	// Decode file content from vector and write to temp dir.
+	tmp := t.TempDir()
+	inputPaths := make(map[string]string)
+	for ref, f := range vec.Inputs.Files {
+		content := decodeBase64(t, f.ContentBase64)
+		hostPath := filepath.Join(tmp, filepath.Base(ref))
+		if err := os.WriteFile(hostPath, content, fs.FileMode(f.Mode)); err != nil { //nolint:gosec // G306: test binary must be executable
+			t.Fatalf("write test file %s: %v", ref, err)
+		}
+		inputPaths[ref] = hostPath
+	}
+
+	// Unmarshal spec from the vector.
+	var spec lane.PackSpec
+	if err := json.Unmarshal(vec.Inputs.Spec, &spec); err != nil {
+		t.Fatalf("unmarshal spec: %v", err)
+	}
+
+	result, err := executor.AssembleImage(empty.Image, &spec, inputPaths)
+	if err != nil {
+		t.Fatalf("AssembleImage: %v", err)
+	}
+
+	layers, err := result.Image.Layers()
+	if err != nil {
+		t.Fatalf("layers: %v", err)
+	}
+
+	cfg, err := result.Image.ConfigFile()
+	if err != nil {
+		t.Fatalf("config: %v", err)
+	}
+	cfgDigest, err := result.Image.ConfigName()
+	if err != nil {
+		t.Fatalf("config digest: %v", err)
+	}
+
+	// Verify config was applied.
+	if cfg.Config.User != "65534:65534" {
+		t.Errorf("user = %q, want 65534:65534", cfg.Config.User)
+	}
+
+	got := struct {
+		ManifestDigest string `json:"manifest_digest"`
+		ConfigDigest   string `json:"config_digest"`
+		LayerCount     int    `json:"layer_count"`
+	}{
+		ManifestDigest: result.Digest.String(),
+		ConfigDigest:   cfgDigest.String(),
+		LayerCount:     len(layers),
+	}
 
 	if *update {
-		dir := filepath.Dir(path)
-		if err := os.MkdirAll(dir, 0o750); err != nil {
-			t.Fatalf("create golden dir: %v", err)
-		}
-		if err := os.WriteFile(path, got, 0o600); err != nil {
-			t.Fatalf("update golden file %s: %v", name, err)
-		}
-		t.Logf("updated golden file: %s", path)
+		updateVectorExpected(t, "assemble", "empty_base_single_file.json", got)
 		return
 	}
 
-	want, err := os.ReadFile(path) //nolint:gosec // G304: test fixture path
-	if err != nil {
-		t.Fatalf("read golden file %s: %v\n  run with -update to generate", name, err)
+	if got.ManifestDigest != vec.Expected.ManifestDigest {
+		t.Errorf("manifest_digest mismatch:\n  got:  %s\n  want: %s", got.ManifestDigest, vec.Expected.ManifestDigest)
 	}
-	if string(got) != string(want) {
-		t.Errorf("golden mismatch: %s\n  got:  %s\n  want: %s\n  run with -update to regenerate",
-			name, got, want)
+	if got.ConfigDigest != vec.Expected.ConfigDigest {
+		t.Errorf("config_digest mismatch:\n  got:  %s\n  want: %s", got.ConfigDigest, vec.Expected.ConfigDigest)
+	}
+	if got.LayerCount != vec.Expected.LayerCount {
+		t.Errorf("layer_count mismatch: got %d, want %d", got.LayerCount, vec.Expected.LayerCount)
 	}
 }
 
 // --------------------------------------------------------------------------.
-// Deterministic test key
+// Golden test: SpecHash (crossval vectors).
 // --------------------------------------------------------------------------.
 
-// testKey returns a deterministic ECDSA P-256 private key for golden tests.
-// The key is derived from a fixed scalar, NOT from crypto/rand. This means
-// SignManifest (which uses RFC 6979 deterministic nonces since Go 1.20)
-// produces identical signatures across runs, platforms, and Go versions.
-//
-// NEVER use this key for anything other than tests.
-func testKey(t *testing.T) (pemBytes []byte) {
-	t.Helper()
-
-	// Fixed scalar for deterministic key generation.
-	// This is a valid P-256 private key scalar (32 bytes, < curve order).
-	scalar, err := hex.DecodeString("c6ef4a1b3e84f72d9b0c5a8e7f123456789abcdef0123456789abcdef0123456")
+func TestSpecHash_Golden(t *testing.T) {
+	files, err := filepath.Glob(filepath.Join(crossvalDir, "spechash", "*.json"))
 	if err != nil {
-		t.Fatalf("decode scalar: %v", err)
+		t.Fatal(err)
+	}
+	if len(files) == 0 {
+		t.Fatal("no spechash vectors found")
 	}
 
-	ecdhKey, err := ecdh.P256().NewPrivateKey(scalar)
-	if err != nil {
-		t.Fatalf("new private key: %v", err)
-	}
+	for _, f := range files {
+		name := filepath.Base(f)
+		t.Run(name, func(t *testing.T) {
+			vec := loadVector[specHashVector](t, "spechash", name)
 
-	// Convert ecdh key to ecdsa key via PKCS8 round-trip.
-	ecdhDER, err := x509.MarshalPKCS8PrivateKey(ecdhKey)
-	if err != nil {
-		t.Fatalf("marshal ecdh key: %v", err)
-	}
-	parsed, err := x509.ParsePKCS8PrivateKey(ecdhDER)
-	if err != nil {
-		t.Fatalf("parse ecdh key: %v", err)
-	}
-	priv, ok := parsed.(*ecdsa.PrivateKey)
-	if !ok {
-		t.Fatal("expected *ecdsa.PrivateKey")
-	}
-	der, err := x509.MarshalPKCS8PrivateKey(priv)
-	if err != nil {
-		t.Fatalf("marshal test key: %v", err)
-	}
+			step := &lane.Step{
+				Args: vec.Inputs.Step.Args,
+				Env:  vec.Inputs.Step.Env,
+			}
 
-	return pem.EncodeToMemory(&pem.Block{
-		Type:  "PRIVATE KEY",
-		Bytes: der,
-	})
+			got := registry.SpecHash(step, vec.Inputs.ImageDigest, vec.Inputs.InputHashes, vec.Inputs.SourceHashes)
+
+			if *update {
+				updateVectorExpected(t, "spechash", name, struct {
+					Hash string `json:"hash"`
+				}{Hash: got})
+				return
+			}
+
+			if got != vec.Expected.Hash {
+				t.Errorf("hash mismatch:\n  got:  %s\n  want: %s", got, vec.Expected.Hash)
+			}
+		})
+	}
 }
 
 // --------------------------------------------------------------------------.
-// Golden test: SignManifest
+// Golden test: SignManifest (crossval vector).
 // --------------------------------------------------------------------------.
-
-// signGoldenResult is the JSON structure stored in golden files for signing.
-// It captures the payload and key so a Rust verifier can reproduce the
-// exact computation. The signature itself is verified cryptographically
-// rather than by byte comparison because Go's ecdsa.Sign uses hedged
-// nonces (RFC 6979 + crypto/rand), producing valid but non-deterministic
-// signatures.
-type signGoldenResult struct {
-	ManifestDigest string `json:"manifest_digest"`
-	Payload        string `json:"payload"` // simple signing JSON
-	KeyPEM         string `json:"key_pem"` // the test key used
-}
 
 func TestSignManifest_Golden(t *testing.T) {
-	keyPEM := testKey(t)
+	vec := loadVector[signVector](t, "sign", "ecdsa_p256_pkcs8.json")
 
-	// Fixed digest -- the input to signing.
-	digest := "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+	keyPEM := []byte(vec.Inputs.KeyPEM)
+	var password []byte
+	if vec.Inputs.Password != nil {
+		password = []byte(*vec.Inputs.Password)
+	}
 
-	sigImage, err := executor.SignManifest(digest, keyPEM, nil)
+	sigImage, err := executor.SignManifest(vec.Inputs.ManifestDigest, keyPEM, password)
 	if err != nil {
 		t.Fatalf("SignManifest: %v", err)
 	}
@@ -168,48 +187,50 @@ func TestSignManifest_Golden(t *testing.T) {
 		t.Fatalf("read payload: %v", err)
 	}
 
-	// Verify signature cryptographically instead of comparing bytes.
-	// Go's ecdsa.Sign uses hedged nonces (RFC 6979 XORed with
-	// crypto/rand), so signatures are valid but non-deterministic.
-	verifySigP256(t, keyPEM, payload, sig)
+	// Verify signature cryptographically using the public key from the vector.
+	verifySigP256DER(t, vec.Expected.Verify.PublicKeyDERBase64, payload, sig)
 
-	// Golden-test the deterministic parts: payload and key.
-	result := signGoldenResult{
-		ManifestDigest: digest,
-		Payload:        string(payload),
-		KeyPEM:         string(keyPEM),
+	if *update {
+		updateVectorExpected(t, "sign", "ecdsa_p256_pkcs8.json", struct {
+			Payload string `json:"payload"`
+			Verify  struct {
+				Algorithm          string `json:"algorithm"`
+				PublicKeyDERBase64 string `json:"public_key_der_base64"`
+			} `json:"verify"`
+		}{
+			Payload: string(payload),
+			Verify: struct {
+				Algorithm          string `json:"algorithm"`
+				PublicKeyDERBase64 string `json:"public_key_der_base64"`
+			}{
+				Algorithm:          "ECDSA-P256-SHA256",
+				PublicKeyDERBase64: vec.Expected.Verify.PublicKeyDERBase64,
+			},
+		})
+		return
 	}
 
-	got, err := json.MarshalIndent(result, "", "  ")
-	if err != nil {
-		t.Fatal(err)
+	if string(payload) != vec.Expected.Payload {
+		t.Errorf("payload mismatch:\n  got:  %s\n  want: %s", payload, vec.Expected.Payload)
 	}
-
-	assertGolden(t, "sign_manifest.json", got)
 }
 
-// verifySigP256 verifies a base64-encoded raw (r||s) ECDSA P-256 signature
-// against the given payload using the public key from keyPEM.
-func verifySigP256(t *testing.T, keyPEM, payload []byte, b64sig string) {
+// verifySigP256DER verifies a base64-encoded raw (r||s) ECDSA P-256 signature
+// against the given payload using a DER-encoded public key (base64).
+func verifySigP256DER(t *testing.T, pubKeyDERBase64 string, payload []byte, b64sig string) {
 	t.Helper()
 
-	block, _ := pem.Decode(keyPEM)
-	if block == nil {
-		t.Fatal("no PEM block in test key")
-	}
-	parsed, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+	pubDER := decodeBase64(t, pubKeyDERBase64)
+	pub, err := x509.ParsePKIXPublicKey(pubDER)
 	if err != nil {
-		t.Fatalf("parse test key: %v", err)
+		t.Fatalf("parse public key: %v", err)
 	}
-	priv, ok := parsed.(*ecdsa.PrivateKey)
+	ecPub, ok := pub.(*ecdsa.PublicKey)
 	if !ok {
-		t.Fatal("test key is not ECDSA")
+		t.Fatal("public key is not ECDSA")
 	}
 
-	sigBytes, err := base64.StdEncoding.DecodeString(b64sig)
-	if err != nil {
-		t.Fatalf("decode signature: %v", err)
-	}
+	sigBytes := decodeBase64(t, b64sig)
 	if len(sigBytes) != 64 {
 		t.Fatalf("signature length = %d, want 64", len(sigBytes))
 	}
@@ -218,113 +239,17 @@ func verifySigP256(t *testing.T, keyPEM, payload []byte, b64sig string) {
 	s := new(big.Int).SetBytes(sigBytes[32:])
 	hash := sha256.Sum256(payload)
 
-	if !ecdsa.Verify(&priv.PublicKey, hash[:], r, s) {
+	if !ecdsa.Verify(ecPub, hash[:], r, s) {
 		t.Error("signature verification failed")
 	}
 }
 
 // --------------------------------------------------------------------------.
-// Golden test: AssembleImage
-// --------------------------------------------------------------------------.
-
-// assembleGoldenResult captures the deterministic outputs of image assembly.
-type assembleGoldenResult struct {
-	ManifestDigest string `json:"manifest_digest"`
-	ConfigDigest   string `json:"config_digest"`
-	LayerCount     int    `json:"layer_count"`
-}
-
-func TestAssembleImage_Golden(t *testing.T) {
-	// Create a minimal file to add as a layer
-	tmp := t.TempDir()
-	binPath := filepath.Join(tmp, "hello")
-	if err := os.WriteFile(binPath, []byte("#!/bin/sh\necho hello\n"), 0o755); err != nil { //nolint:gosec // G306: test binary must be executable
-		t.Fatal(err)
-	}
-
-	spec := &lane.PackSpec{
-		Files: []lane.PackFile{
-			{From: "build.binary", Dest: "/usr/bin/hello", Mode: 0o755},
-		},
-		Config: &lane.ImageConfig{
-			Entrypoint: []string{"/usr/bin/hello"},
-			User:       "65534:65534",
-		},
-		Annotations: map[string]string{
-			"org.opencontainers.image.source": "https://github.com/istr/strike",
-		},
-	}
-
-	inputPaths := map[string]string{
-		"build.binary": binPath,
-	}
-
-	// Use empty.Image as base — deterministic, no network
-	result, err := executor.AssembleImage(empty.Image, spec, inputPaths)
-	if err != nil {
-		t.Fatalf("AssembleImage: %v", err)
-	}
-
-	layers, err := result.Image.Layers()
-	if err != nil {
-		t.Fatalf("layers: %v", err)
-	}
-
-	cfg, err := result.Image.ConfigFile()
-	if err != nil {
-		t.Fatalf("config: %v", err)
-	}
-	cfgDigest, err := result.Image.ConfigName()
-	if err != nil {
-		t.Fatalf("config digest: %v", err)
-	}
-
-	// Verify config was applied
-	if cfg.Config.User != "65534:65534" {
-		t.Errorf("user = %q, want 65534:65534", cfg.Config.User)
-	}
-
-	golden := assembleGoldenResult{
-		ManifestDigest: result.Digest.String(),
-		ConfigDigest:   cfgDigest.String(),
-		LayerCount:     len(layers),
-	}
-
-	got, err := json.MarshalIndent(golden, "", "  ")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	assertGolden(t, "assemble_image.json", got)
-}
-
-// --------------------------------------------------------------------------.
-// Golden test: spec hash computation
-// --------------------------------------------------------------------------.
-
-func TestSpecHash_Golden(t *testing.T) {
-	step := &lane.Step{
-		Args: []string{"go", "build", "-o", "/out/binary", "./cmd/strike"},
-		Env:  map[string]string{"CGO_ENABLED": "0", "GOOS": "linux"},
-	}
-	imageDigest := "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-	inputHashes := map[string]string{
-		"src": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-	}
-	sourceHashes := map[string]string{
-		"go.sum": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-	}
-
-	key := registry.SpecHash(step, imageDigest, inputHashes, sourceHashes)
-	assertGolden(t, "spec_hash.txt", []byte(key))
-}
-
-// --------------------------------------------------------------------------.
-// Helpers
+// Non-golden tests (kept as-is, no vector files needed).
 // --------------------------------------------------------------------------.
 
 // TestAssembleImage_Deterministic verifies that two identical assemblies
-// produce the same manifest digest — the fundamental reproducibility
+// produce the same manifest digest -- the fundamental reproducibility
 // property that cross-validation depends on.
 func TestAssembleImage_Deterministic(t *testing.T) {
 	tmp := t.TempDir()
@@ -340,7 +265,6 @@ func TestAssembleImage_Deterministic(t *testing.T) {
 	}
 	inputs := map[string]string{"step.out": binPath}
 
-	// Assemble twice with identical inputs
 	r1, err := executor.AssembleImage(empty.Image, spec, inputs)
 	if err != nil {
 		t.Fatal(err)
@@ -356,7 +280,7 @@ func TestAssembleImage_Deterministic(t *testing.T) {
 }
 
 // TestAssembleImage_WithMutatedBase verifies assembly produces a DIFFERENT
-// digest with a different base — catching accidental base-image independence.
+// digest with a different base -- catching accidental base-image independence.
 func TestAssembleImage_WithMutatedBase(t *testing.T) {
 	tmp := t.TempDir()
 	binPath := filepath.Join(tmp, "app")
@@ -371,13 +295,11 @@ func TestAssembleImage_WithMutatedBase(t *testing.T) {
 	}
 	inputs := map[string]string{"step.out": binPath}
 
-	// Assembly with empty base
 	r1, err := executor.AssembleImage(empty.Image, spec, inputs)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// Assembly with a base that has a label (different config)
 	altBase, err := mutate.ConfigFile(empty.Image, &v1.ConfigFile{
 		Config: v1.Config{Labels: map[string]string{"base": "alt"}},
 	})

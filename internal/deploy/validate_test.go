@@ -2,6 +2,9 @@ package deploy_test
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -151,5 +154,70 @@ func TestValidateAttestation_EmptyStatesAllowed(t *testing.T) {
 
 	if err := deploy.ValidateAttestation(att); err != nil {
 		t.Fatalf("empty states should be valid: %v", err)
+	}
+}
+
+// crossvalDir is the path to cross-validation test vectors.
+const crossvalDir = "../../testdata/crossval"
+
+// attestationVector is the Go representation of a ValidateAttestation test vector.
+type attestationInputs struct {
+	Attestation json.RawMessage `json:"attestation"`
+}
+
+type attestationExpected struct {
+	ErrorContains string `json:"error_contains"`
+	Valid         bool   `json:"valid"`
+}
+
+type attestationVector struct {
+	Boundary    string              `json:"boundary"`
+	Description string              `json:"description"`
+	Inputs      attestationInputs   `json:"inputs"`
+	Expected    attestationExpected `json:"expected"`
+}
+
+func TestValidateAttestation_Crossval(t *testing.T) {
+	files, err := filepath.Glob(filepath.Join(crossvalDir, "attestation", "*.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) == 0 {
+		t.Fatal("no attestation vectors found")
+	}
+
+	for _, f := range files {
+		name := filepath.Base(f)
+		t.Run(name, func(t *testing.T) {
+			runAttestationVector(t, f)
+		})
+	}
+}
+
+func runAttestationVector(t *testing.T, path string) {
+	t.Helper()
+
+	data, err := os.ReadFile(path) //nolint:gosec // G304: test fixture path
+	if err != nil {
+		t.Fatalf("read vector: %v", err)
+	}
+	var vec attestationVector
+	if err := json.Unmarshal(data, &vec); err != nil {
+		t.Fatalf("unmarshal vector: %v", err)
+	}
+
+	valErr := deploy.ValidateAttestationJSON(vec.Inputs.Attestation)
+
+	if vec.Expected.Valid {
+		if valErr != nil {
+			t.Fatalf("expected valid, got error: %v", valErr)
+		}
+		return
+	}
+	if valErr == nil {
+		t.Fatal("expected validation error, got nil")
+	}
+	if vec.Expected.ErrorContains != "" && !strings.Contains(valErr.Error(), vec.Expected.ErrorContains) {
+		t.Errorf("error %q does not contain %q", valErr.Error(), vec.Expected.ErrorContains)
 	}
 }

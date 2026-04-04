@@ -25,10 +25,13 @@ func ValidateAttestation(att *Attestation) error {
 	if err != nil {
 		return fmt.Errorf("marshal attestation for validation: %w", err)
 	}
-	return validateAttestationJSON(data)
+	return ValidateAttestationJSON(data)
 }
 
-func validateAttestationJSON(data []byte) error {
+// ValidateAttestationJSON validates raw JSON bytes against the attestation
+// CUE schema. This is the cross-validation boundary: any implementation
+// can serialize an attestation to JSON and validate it against the same schema.
+func ValidateAttestationJSON(data []byte) error {
 	ctx := cuecontext.New()
 
 	compiled := ctx.CompileString(attestationSchema).

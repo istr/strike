@@ -1,0 +1,23 @@
+{
+  "boundary": "ValidateAttestation",
+  "description": "minimal valid attestation with required fields",
+  "inputs": {
+    "attestation": {
+      "deploy_id": "a1b2c3d4e5f67890",
+      "timestamp": "2024-01-01T00:00:00Z",
+      "target": {
+        "type": "registry",
+        "description": "production registry"
+      },
+      "artifacts": {
+        "app": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "pre_state": {},
+      "post_state": {},
+      "lane_ref": "sha256:def456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0"
+    }
+  },
+  "expected": {
+    "valid": true
+  }
+}

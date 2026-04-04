@@ -1,5 +1,0 @@
-{
-  "manifest_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-  "payload": "{\"optional\":null,\"critical\":{\"identity\":{\"docker-reference\":\"\"},\"image\":{\"docker-manifest-digest\":\"sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\"},\"type\":\"cosign container image signature\"}}",
-  "key_pem": "-----BEGIN PRIVATE KEY-----\nMIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgxu9KGz6E9y2bDFqO\nfxI0VniavN7wEjRWeJq83vASNFahRANCAATnBzsXi1H+HaWxMPju9FaLVL4Lubmb\nmkc3ibNDvZKx6fVx+HbKa4UjNJgA/Tff4j4JBjNTTUpFN1qvBgsj+FgP\n-----END PRIVATE KEY-----\n"
-}
