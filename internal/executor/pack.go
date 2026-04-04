@@ -196,7 +196,7 @@ func addConfigFileLayers(img v1.Image, configFiles map[string]lane.FileEntry) (v
 		if entry.Mode < 0 || entry.Mode > 0o7777 {
 			return nil, fmt.Errorf("pack: config file %q: invalid mode %#o", path, entry.Mode)
 		}
-		layer, cfErr := fileLayerFromContent(
+		layer, cfErr := buildTarLayer(
 			[]byte(entry.Content),
 			path,
 			fs.FileMode(entry.Mode),
@@ -318,66 +318,8 @@ func pullVerified(ref string) (v1.Image, error) {
 	return img, nil
 }
 
-// fileLayer creates a single-file OCI layer as a tar archive.
-// hostPath is an absolute path from a MkdirTemp output directory.
-func fileLayer(hostPath, destPath string, mode fs.FileMode) (v1.Layer, error) {
-	data, err := os.ReadFile(hostPath) //nolint:gosec // G304: absolute path from MkdirTemp output directory
-	if err != nil {
-		return nil, err
-	}
-
-	var buf bytes.Buffer
-	tw := tar.NewWriter(&buf)
-
-	// Add parent directories
-	for _, dir := range parentDirs(destPath) {
-		if err := tw.WriteHeader(&tar.Header{
-			Typeflag: tar.TypeDir,
-			Name:     dir + "/",
-			Mode:     0o755,
-		}); err != nil {
-			return nil, err
-		}
-	}
-
-	if err := tw.WriteHeader(&tar.Header{
-		Typeflag: tar.TypeReg,
-		Name:     destPath[1:], // strip leading /
-		Size:     int64(len(data)),
-		Mode:     int64(mode),
-	}); err != nil {
-		return nil, err
-	}
-	if _, err := tw.Write(data); err != nil {
-		return nil, err
-	}
-	if err := tw.Close(); err != nil {
-		return nil, err
-	}
-
-	opener := func() (io.ReadCloser, error) {
-		return io.NopCloser(bytes.NewReader(buf.Bytes())), nil
-	}
-	return tarball.LayerFromOpener(opener, tarball.WithMediaType(types.OCILayer))
-}
-
-// parentDirs returns all parent directory paths for an absolute path.
-// e.g. "/usr/bin/strike" -> ["usr", "usr/bin"].
-func parentDirs(absPath string) []string {
-	clean := filepath.Clean(absPath[1:]) // strip leading /
-	dir := filepath.Dir(clean)
-	if dir == "." {
-		return nil
-	}
-	var dirs []string
-	for d := dir; d != "."; d = filepath.Dir(d) {
-		dirs = append([]string{d}, dirs...)
-	}
-	return dirs
-}
-
-// fileLayerFromContent creates a single-file OCI layer from in-memory content.
-func fileLayerFromContent(content []byte, destPath string, mode fs.FileMode, uid, gid int) (v1.Layer, error) {
+// buildTarLayer creates a single-file OCI layer from in-memory content.
+func buildTarLayer(content []byte, destPath string, mode fs.FileMode, uid, gid int) (v1.Layer, error) {
 	var buf bytes.Buffer
 	tw := tar.NewWriter(&buf)
 
@@ -412,6 +354,30 @@ func fileLayerFromContent(content []byte, destPath string, mode fs.FileMode, uid
 		return io.NopCloser(bytes.NewReader(buf.Bytes())), nil
 	}
 	return tarball.LayerFromOpener(opener, tarball.WithMediaType(types.OCILayer))
+}
+
+// fileLayer reads a file from disk and creates an OCI layer.
+func fileLayer(hostPath, destPath string, mode fs.FileMode) (v1.Layer, error) {
+	data, err := os.ReadFile(hostPath) //nolint:gosec // G304: absolute path from MkdirTemp output directory
+	if err != nil {
+		return nil, err
+	}
+	return buildTarLayer(data, destPath, mode, 0, 0)
+}
+
+// parentDirs returns all parent directory paths for an absolute path.
+// e.g. "/usr/bin/strike" -> ["usr", "usr/bin"].
+func parentDirs(absPath string) []string {
+	clean := filepath.Clean(absPath[1:]) // strip leading /
+	dir := filepath.Dir(clean)
+	if dir == "." {
+		return nil
+	}
+	var dirs []string
+	for d := dir; d != "."; d = filepath.Dir(d) {
+		dirs = append([]string{d}, dirs...)
+	}
+	return dirs
 }
 
 // appendEnv adds or replaces an environment variable in a list of KEY=VALUE strings.

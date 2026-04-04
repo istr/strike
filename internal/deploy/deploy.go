@@ -81,14 +81,7 @@ type DriftReport struct {
 // HardenedRunOpts returns a RunOpts with the standard security profile.
 // Callers override specific fields (Image, Cmd, Network, Mounts) as needed.
 func HardenedRunOpts() container.RunOpts {
-	return container.RunOpts{
-		CapDrop:     []string{"ALL"},
-		ReadOnly:    true,
-		SecurityOpt: []string{"no-new-privileges"},
-		Tmpfs:       map[string]string{"/tmp": "rw,noexec,nosuid,size=512m"},
-		UsernsMode:  "keep-id",
-		Remove:      true,
-	}
+	return container.DefaultSecureOpts()
 }
 
 // Deployer executes deploy steps and produces attestations.

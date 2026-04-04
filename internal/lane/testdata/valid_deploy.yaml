@@ -1,0 +1,43 @@
+name: deploy-lane
+registry: localhost:5555/test
+secrets: {}
+steps:
+  - name: build
+    image: golang:1.22
+    args: ["go", "build"]
+    env: {}
+    inputs: []
+    sources: []
+    secrets: []
+    outputs:
+      - name: binary
+        type: file
+        path: binary
+  - name: deploy
+    deploy:
+      method:
+        type: registry
+        source: localhost:5555/test/image:latest
+        target: registry.example.com/app:latest
+      artifacts:
+        binary:
+          from: build
+      target:
+        type: registry
+        description: push to registry
+      attestation:
+        pre_state:
+          required: false
+          capture: []
+        post_state:
+          required: false
+          capture: []
+        drift:
+          detect: false
+          on_drift: warn
+    args: []
+    env: {}
+    inputs: []
+    sources: []
+    secrets: []
+    outputs: []

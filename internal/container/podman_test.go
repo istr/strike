@@ -683,6 +683,177 @@ func TestInfoPopulatesRuntime(t *testing.T) {
 	}
 }
 
+// --------------------------------------------------------------------------.
+// DefaultSecureOpts and detectSocket.
+// --------------------------------------------------------------------------.
+
+func TestDefaultSecureOpts(t *testing.T) {
+	opts := container.DefaultSecureOpts()
+
+	if len(opts.CapDrop) != 1 || opts.CapDrop[0] != "ALL" {
+		t.Errorf("CapDrop = %v, want [ALL]", opts.CapDrop)
+	}
+	if !opts.ReadOnly {
+		t.Error("expected ReadOnly=true")
+	}
+	if len(opts.SecurityOpt) != 1 || opts.SecurityOpt[0] != "no-new-privileges" {
+		t.Errorf("SecurityOpt = %v, want [no-new-privileges]", opts.SecurityOpt)
+	}
+	tmpOpts, ok := opts.Tmpfs["/tmp"]
+	if !ok {
+		t.Fatal("expected /tmp in Tmpfs")
+	}
+	if !strings.Contains(tmpOpts, "noexec") {
+		t.Errorf("Tmpfs[/tmp] = %q, want noexec", tmpOpts)
+	}
+	if opts.UsernsMode != "keep-id" {
+		t.Errorf("UsernsMode = %q, want keep-id", opts.UsernsMode)
+	}
+	if !opts.Remove {
+		t.Error("expected Remove=true")
+	}
+}
+
+func TestDetectSocket_XDGRuntime(t *testing.T) {
+	dir := t.TempDir()
+	sockDir := filepath.Join(dir, "podman")
+	if err := os.MkdirAll(sockDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	sockPath := filepath.Join(sockDir, "podman.sock")
+	if err := os.WriteFile(sockPath, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("CONTAINER_HOST", "")
+	t.Setenv("XDG_RUNTIME_DIR", dir)
+	t.Setenv("CONTAINER_TLS_CA", "")
+	t.Setenv("CONTAINER_TLS_CERT", "")
+	t.Setenv("CONTAINER_TLS_KEY", "")
+
+	eng, err := container.New()
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	if eng == nil {
+		t.Fatal("expected non-nil engine")
+	}
+}
+
+func TestDetectSocket_ContainerHostOverride(t *testing.T) {
+	t.Setenv("CONTAINER_HOST", "tcp://custom-host:9999")
+	t.Setenv("CONTAINER_TLS_CA", "")
+	t.Setenv("CONTAINER_TLS_CERT", "")
+	t.Setenv("CONTAINER_TLS_KEY", "")
+
+	eng, err := container.New()
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	if eng == nil {
+		t.Fatal("expected non-nil engine")
+	}
+}
+
+// --------------------------------------------------------------------------.
+// demuxLogStream edge cases.
+// --------------------------------------------------------------------------.
+
+func TestDemuxLogStream_StderrStream(t *testing.T) {
+	// Build a frame with stream type 2 (stderr).
+	msg := []byte("error output")
+	var buf bytes.Buffer
+	header := make([]byte, 8)
+	header[0] = 2                                            // stderr
+	binary.BigEndian.PutUint32(header[4:], uint32(len(msg))) //nolint:gosec // G115: test data is small
+	buf.Write(header)
+	buf.Write(msg)
+
+	var stdout, stderr bytes.Buffer
+	eng := newTLSTestEngine(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+		switch {
+		case strings.HasSuffix(path, "/containers/create"):
+			json.NewEncoder(w).Encode(map[string]string{"Id": "test-stderr"}) //nolint:errcheck,gosec // test
+		case strings.HasSuffix(path, "/start"):
+			w.WriteHeader(http.StatusNoContent)
+		case strings.HasSuffix(path, "/logs"):
+			w.Write(header) //nolint:errcheck,gosec // test
+			w.Write(msg)    //nolint:errcheck,gosec // test
+		case strings.HasSuffix(path, "/wait"):
+			json.NewEncoder(w).Encode(map[string]int{"StatusCode": 0}) //nolint:errcheck,gosec // test
+		case r.Method == http.MethodDelete:
+			json.NewEncoder(w).Encode([]map[string]any{}) //nolint:errcheck,gosec // test
+		}
+	}))
+
+	exitCode, err := eng.ContainerRun(context.Background(), container.RunOpts{
+		Image:  "test:latest",
+		Cmd:    []string{"fail"},
+		Remove: true,
+		Stdout: &stdout,
+		Stderr: &stderr,
+	})
+	if err != nil {
+		t.Fatalf("ContainerRun() error = %v", err)
+	}
+	if exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0", exitCode)
+	}
+	if stderr.String() != "error output" {
+		t.Errorf("stderr = %q, want %q", stderr.String(), "error output")
+	}
+	if stdout.String() != "" {
+		t.Errorf("stdout = %q, want empty", stdout.String())
+	}
+}
+
+func TestDemuxLogStream_UnknownStreamType(t *testing.T) {
+	// Stream type 3 (unknown) should be discarded.
+	msg := []byte("discard me")
+	header := make([]byte, 8)
+	header[0] = 3                                            // unknown
+	binary.BigEndian.PutUint32(header[4:], uint32(len(msg))) //nolint:gosec // G115: test data is small
+
+	eng := newTLSTestEngine(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+		switch {
+		case strings.HasSuffix(path, "/containers/create"):
+			json.NewEncoder(w).Encode(map[string]string{"Id": "test-unknown"}) //nolint:errcheck,gosec // test
+		case strings.HasSuffix(path, "/start"):
+			w.WriteHeader(http.StatusNoContent)
+		case strings.HasSuffix(path, "/logs"):
+			w.Write(header) //nolint:errcheck,gosec // test
+			w.Write(msg)    //nolint:errcheck,gosec // test
+		case strings.HasSuffix(path, "/wait"):
+			json.NewEncoder(w).Encode(map[string]int{"StatusCode": 0}) //nolint:errcheck,gosec // test
+		case r.Method == http.MethodDelete:
+			json.NewEncoder(w).Encode([]map[string]any{}) //nolint:errcheck,gosec // test
+		}
+	}))
+
+	var stdout, stderr bytes.Buffer
+	exitCode, err := eng.ContainerRun(context.Background(), container.RunOpts{
+		Image:  "test:latest",
+		Cmd:    []string{"echo"},
+		Remove: true,
+		Stdout: &stdout,
+		Stderr: &stderr,
+	})
+	if err != nil {
+		t.Fatalf("ContainerRun() error = %v", err)
+	}
+	if exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0", exitCode)
+	}
+	if stdout.String() != "" {
+		t.Errorf("stdout should be empty, got %q", stdout.String())
+	}
+	if stderr.String() != "" {
+		t.Errorf("stderr should be empty, got %q", stderr.String())
+	}
+}
+
 func TestAuditLogging(t *testing.T) {
 	t.Setenv("STRIKE_AUDIT", "1")
 

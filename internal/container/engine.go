@@ -92,6 +92,19 @@ type Mount struct {
 	ReadOnly bool
 }
 
+// DefaultSecureOpts returns a RunOpts with the standard hardened security
+// profile. Callers override specific fields (Image, Cmd, Network, Mounts).
+func DefaultSecureOpts() RunOpts {
+	return RunOpts{
+		CapDrop:     []string{"ALL"},
+		ReadOnly:    true,
+		SecurityOpt: []string{"no-new-privileges"},
+		Tmpfs:       map[string]string{"/tmp": "rw,noexec,nosuid,size=512m"},
+		UsernsMode:  "keep-id",
+		Remove:      true,
+	}
+}
+
 // EngineIdentity holds everything strike knows about the container engine
 // it is connected to. Populated after Ping and Info calls. Embedded in
 // deploy attestations for supply chain traceability.

@@ -63,21 +63,16 @@ func (r Run) Execute(ctx context.Context) error {
 		Options: []string{"noexec", "nosuid"},
 	})
 
-	exitCode, err := r.Engine.ContainerRun(ctx, container.RunOpts{
-		Image:       r.Step.Image,
-		Cmd:         r.Step.Args,
-		Env:         env,
-		Mounts:      mounts,
-		Network:     NetworkMode(r.Step.Network),
-		CapDrop:     []string{"ALL"},
-		ReadOnly:    true,
-		SecurityOpt: []string{"no-new-privileges"},
-		Tmpfs:       map[string]string{"/tmp": "rw,noexec,nosuid,size=512m"},
-		UsernsMode:  "keep-id",
-		Stdout:      os.Stdout,
-		Stderr:      os.Stderr,
-		Remove:      true,
-	})
+	opts := container.DefaultSecureOpts()
+	opts.Image = r.Step.Image
+	opts.Cmd = r.Step.Args
+	opts.Env = env
+	opts.Mounts = mounts
+	opts.Network = NetworkMode(r.Step.Network)
+	opts.Stdout = os.Stdout
+	opts.Stderr = os.Stderr
+
+	exitCode, err := r.Engine.ContainerRun(ctx, opts)
 	if err != nil {
 		return fmt.Errorf("container execution: %w", err)
 	}

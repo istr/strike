@@ -1,6 +1,7 @@
 package lane_test
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -31,5 +32,102 @@ func TestParseDuration(t *testing.T) {
 				t.Errorf("ParseDuration(%q) = %v, want %v", tt.input, got, tt.want)
 			}
 		})
+	}
+}
+
+// --------------------------------------------------------------------------.
+// TestParse -- success cases.
+// --------------------------------------------------------------------------.
+
+func TestParse_ValidMinimal(t *testing.T) {
+	p, err := lane.Parse("testdata/valid_minimal.yaml")
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if p.Name != "test-lane" {
+		t.Errorf("name = %q, want test-lane", p.Name)
+	}
+	if len(p.Steps) != 1 {
+		t.Fatalf("step count = %d, want 1", len(p.Steps))
+	}
+	if p.Steps[0].Name != "build" {
+		t.Errorf("step name = %q, want build", p.Steps[0].Name)
+	}
+	if p.Steps[0].Image != "golang:1.22" {
+		t.Errorf("image = %q, want golang:1.22", p.Steps[0].Image)
+	}
+	if len(p.Steps[0].Outputs) != 1 {
+		t.Errorf("output count = %d, want 1", len(p.Steps[0].Outputs))
+	}
+}
+
+func TestParse_ValidDeploy(t *testing.T) {
+	p, err := lane.Parse("testdata/valid_deploy.yaml")
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if len(p.Steps) != 2 {
+		t.Fatalf("step count = %d, want 2", len(p.Steps))
+	}
+	deployStep := p.Steps[1]
+	if deployStep.Deploy == nil {
+		t.Fatal("deploy spec should be non-nil")
+	}
+	if deployStep.Deploy.Method.Type() != "registry" {
+		t.Errorf("deploy method type = %q, want registry", deployStep.Deploy.Method.Type())
+	}
+}
+
+// --------------------------------------------------------------------------.
+// TestParse -- error cases.
+// --------------------------------------------------------------------------.
+
+func TestParse_Nonexistent(t *testing.T) {
+	_, err := lane.Parse("testdata/nonexistent.yaml")
+	if err == nil {
+		t.Fatal("expected error for nonexistent file")
+	}
+	if !strings.Contains(err.Error(), "read:") && !strings.Contains(err.Error(), "no such file") {
+		t.Errorf("error should mention read failure: %v", err)
+	}
+}
+
+func TestParse_InvalidYAML(t *testing.T) {
+	_, err := lane.Parse("testdata/invalid_yaml.yaml")
+	if err == nil {
+		t.Fatal("expected error for invalid YAML")
+	}
+	if !strings.Contains(err.Error(), "yaml parse") {
+		t.Errorf("error should mention yaml parse: %v", err)
+	}
+}
+
+func TestParse_InvalidSchema(t *testing.T) {
+	_, err := lane.Parse("testdata/invalid_schema.yaml")
+	if err == nil {
+		t.Fatal("expected error for schema violation")
+	}
+	if !strings.Contains(err.Error(), "validation") {
+		t.Errorf("error should mention validation: %v", err)
+	}
+}
+
+func TestParse_StepMultiImage(t *testing.T) {
+	_, err := lane.Parse("testdata/invalid_step_multi.yaml")
+	if err == nil {
+		t.Fatal("expected error for step with both image and pack")
+	}
+	if !strings.Contains(err.Error(), "exactly one") {
+		t.Errorf("error should mention 'exactly one': %v", err)
+	}
+}
+
+func TestParse_PathTraversal(t *testing.T) {
+	_, err := lane.Parse("testdata/invalid_path_traversal.yaml")
+	if err == nil {
+		t.Fatal("expected error for path traversal")
+	}
+	if !strings.Contains(err.Error(), "relative to lane root") {
+		t.Errorf("error should mention path constraint: %v", err)
 	}
 }

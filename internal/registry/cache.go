@@ -71,6 +71,15 @@ func HashPath(root *os.Root, laneDir, path string) (string, error) {
 	return lane.SourceDigest(root, laneDir, path)
 }
 
+// hashReader computes SHA256 of the data from r.
+func hashReader(r io.Reader) (string, error) {
+	h := sha256.New()
+	if _, err := io.Copy(h, r); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("sha256:%x", h.Sum(nil)), nil
+}
+
 // HashFile computes SHA256 of a file within the given root scope.
 // Returns a typed digest in "sha256:<hex>" format.
 func HashFile(root *os.Root, path string) (hash string, err error) {
@@ -83,12 +92,7 @@ func HashFile(root *os.Root, path string) (hash string, err error) {
 			err = cerr
 		}
 	}()
-
-	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
-		return "", err
-	}
-	return fmt.Sprintf("sha256:%x", h.Sum(nil)), nil
+	return hashReader(f)
 }
 
 // HashFileAbs hashes a file given as an absolute path from CLI args.
@@ -103,12 +107,7 @@ func HashFileAbs(path string) (hash string, err error) {
 			err = cerr
 		}
 	}()
-
-	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
-		return "", err
-	}
-	return fmt.Sprintf("sha256:%x", h.Sum(nil)), nil
+	return hashReader(f)
 }
 
 func sortedKeys(m map[string]string) []string {

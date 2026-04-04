@@ -118,6 +118,108 @@ func (f *fakeEngine) ImageExists(_ context.Context, _ string) (bool, error) {
 	return f.existsLocal, nil
 }
 
+// --------------------------------------------------------------------------.
+// Tag.
+// --------------------------------------------------------------------------.
+
+func TestTag(t *testing.T) {
+	tests := []struct {
+		registry string
+		step     string
+		hash     string
+		want     string
+		name     string
+	}{
+		{"ghcr.io/cache", "build", "sha256:abcdef0123456789abcdef0123456789", "ghcr.io/cache:build-abcdef0123456789", "full hash"},
+		{"r.io/c", "pack", "sha256:0123", "r.io/c:pack-0123", "short hash"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := registry.Tag(tt.registry, tt.step, tt.hash)
+			if got != tt.want {
+				t.Errorf("Tag() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// --------------------------------------------------------------------------.
+// HashFile and HashFileAbs.
+// --------------------------------------------------------------------------.
+
+func TestHashFile(t *testing.T) {
+	dir := t.TempDir()
+	content := []byte("test file content")
+	if err := os.WriteFile(filepath.Join(dir, "test.txt"), content, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer root.Close() //nolint:errcheck // test cleanup
+
+	h, err := registry.HashFile(root, "test.txt")
+	if err != nil {
+		t.Fatalf("HashFile: %v", err)
+	}
+	if !strings.HasPrefix(h, "sha256:") {
+		t.Fatalf("expected sha256: prefix, got %q", h)
+	}
+
+	// Same content should produce same hash.
+	h2, err := registry.HashFile(root, "test.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h != h2 {
+		t.Fatalf("same file, different hashes: %q vs %q", h, h2)
+	}
+}
+
+func TestHashFileAbs(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "test.txt")
+	content := []byte("test file content")
+	if err := os.WriteFile(path, content, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	h, err := registry.HashFileAbs(path)
+	if err != nil {
+		t.Fatalf("HashFileAbs: %v", err)
+	}
+	if !strings.HasPrefix(h, "sha256:") {
+		t.Fatalf("expected sha256: prefix, got %q", h)
+	}
+
+	// Should match HashFile for same content.
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer root.Close() //nolint:errcheck // test cleanup
+
+	h2, err := registry.HashFile(root, "test.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h != h2 {
+		t.Fatalf("HashFileAbs and HashFile differ: %q vs %q", h, h2)
+	}
+}
+
+func TestHashFileAbs_Nonexistent(t *testing.T) {
+	_, err := registry.HashFileAbs("/nonexistent/path/file.txt")
+	if err == nil {
+		t.Fatal("expected error for nonexistent file")
+	}
+}
+
+// --------------------------------------------------------------------------.
+// Lookup.
+// --------------------------------------------------------------------------.
+
 func TestLookupMiss(t *testing.T) {
 	client := &registry.Client{Engine: &fakeEngine{existsLocal: false}}
 
