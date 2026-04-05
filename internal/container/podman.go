@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -43,7 +44,7 @@ func (e *podmanEngine) Ping(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("engine ping: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }() //nolint:errcheck // best-effort HTTP body close
+	defer warnClose(resp.Body, "engine ping")
 
 	e.captureTLSIdentity(resp)
 
@@ -117,9 +118,9 @@ func (e *podmanEngine) Info(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("engine info: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }() //nolint:errcheck // best-effort HTTP body close
+	defer warnClose(resp.Body, "engine info")
 
-	var raw struct { //nolint:govet // fieldalignment: JSON decode struct, field order matches API
+	var raw struct { //nolint:govet // fieldalignment: field order matches Podman API response, not optimized for alignment
 		Host struct {
 			Security struct {
 				SELinuxEnabled  bool `json:"selinuxEnabled"`
@@ -160,7 +161,7 @@ func (e *podmanEngine) ImageExists(ctx context.Context, ref string) (bool, error
 	if err != nil {
 		return false, err
 	}
-	defer func() { _ = resp.Body.Close() }() //nolint:errcheck // best-effort HTTP body close
+	defer warnClose(resp.Body, "image exists")
 	return resp.StatusCode == http.StatusNoContent, nil
 }
 
@@ -175,7 +176,7 @@ func (e *podmanEngine) ImagePull(ctx context.Context, ref string) error {
 	if err != nil {
 		return fmt.Errorf("image pull %s: %w", ref, err)
 	}
-	defer func() { _ = resp.Body.Close() }() //nolint:errcheck // best-effort HTTP body close
+	defer warnClose(resp.Body, "image pull")
 	// The pull response is a stream of JSON objects. Read to completion.
 	if _, err := io.Copy(io.Discard, resp.Body); err != nil {
 		return fmt.Errorf("image pull %s: read response: %w", ref, err)
@@ -200,7 +201,7 @@ func (e *podmanEngine) ImagePush(ctx context.Context, name string) error {
 	if err != nil {
 		return fmt.Errorf("image push %s: %w", name, err)
 	}
-	defer func() { _ = resp.Body.Close() }() //nolint:errcheck // best-effort HTTP body close
+	defer warnClose(resp.Body, "image push")
 	if _, err := io.Copy(io.Discard, resp.Body); err != nil {
 		return err
 	}
@@ -221,17 +222,40 @@ func (e *podmanEngine) ImageLoad(ctx context.Context, input io.Reader) (string, 
 	if err != nil {
 		return "", fmt.Errorf("image load: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }() //nolint:errcheck // best-effort HTTP body close
-	var result struct {
+	defer warnClose(resp.Body, "image load")
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("image load: read response: %w", err)
+	}
+
+	// Podman native: {"Names": ["sha256:..."]}
+	var native struct {
 		Names []string `json:"Names"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", fmt.Errorf("image load: decode response: %w", err)
+	if json.Unmarshal(body, &native) == nil && len(native.Names) > 0 {
+		return native.Names[0], nil
 	}
-	if len(result.Names) == 0 {
-		return "", fmt.Errorf("image load: no image ID in response")
+
+	// Compat (Docker-style): {"stream": "Loaded image: sha256:abc123\n"}
+	var compat struct {
+		Stream string `json:"stream"`
 	}
-	return result.Names[0], nil
+	if json.Unmarshal(body, &compat) == nil && compat.Stream != "" {
+		return parseLoadedImageID(compat.Stream), nil
+	}
+
+	return "", fmt.Errorf("image load: unexpected response: %s", body)
+}
+
+// parseLoadedImageID extracts the image ID from a Docker-style load response.
+func parseLoadedImageID(stream string) string {
+	// "Loaded image: sha256:abc123\n" or "Loaded image(s): sha256:abc123\n"
+	stream = strings.TrimSpace(stream)
+	if idx := strings.LastIndex(stream, ": "); idx >= 0 {
+		return strings.TrimSpace(stream[idx+2:])
+	}
+	return stream
 }
 
 // ImageInspect returns metadata for a local image.
@@ -245,7 +269,7 @@ func (e *podmanEngine) ImageInspect(ctx context.Context, ref string) (*ImageInfo
 	if err != nil {
 		return nil, fmt.Errorf("image inspect %s: %w", ref, err)
 	}
-	defer func() { _ = resp.Body.Close() }() //nolint:errcheck // best-effort HTTP body close
+	defer warnClose(resp.Body, "image inspect")
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, fmt.Errorf("image %s not found", ref)
 	}
@@ -283,7 +307,7 @@ func (e *podmanEngine) ImageTag(ctx context.Context, source, target string) erro
 	if err != nil {
 		return fmt.Errorf("image tag %s -> %s: %w", source, target, err)
 	}
-	defer func() { _ = resp.Body.Close() }() //nolint:errcheck // best-effort HTTP body close
+	defer warnClose(resp.Body, "image tag")
 	if resp.StatusCode != http.StatusCreated {
 		return fmt.Errorf("image tag: status %d", resp.StatusCode)
 	}
@@ -317,10 +341,7 @@ func (e *podmanEngine) ContainerRun(ctx context.Context, opts RunOpts) (int, err
 
 	// 5. Wait for log streaming to finish
 	if logErr := <-done; logErr != nil {
-		// Log streaming errors are non-fatal
-		if opts.Stderr != nil {
-			fmt.Fprintf(opts.Stderr, "warning: log streaming: %v\n", logErr) //nolint:errcheck // best-effort warning
-		}
+		log.Printf("WARN log streaming: %v", logErr)
 	}
 
 	// 6. Remove
@@ -349,7 +370,7 @@ func (e *podmanEngine) containerCreate(ctx context.Context, opts RunOpts) (strin
 	if err != nil {
 		return "", err
 	}
-	defer func() { _ = resp.Body.Close() }() //nolint:errcheck // best-effort HTTP body close
+	defer warnClose(resp.Body, "container create")
 	var result struct {
 		ID string `json:"Id"`
 	}
@@ -369,7 +390,7 @@ func (e *podmanEngine) containerStart(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	defer func() { _ = resp.Body.Close() }() //nolint:errcheck // best-effort HTTP body close
+	defer warnClose(resp.Body, "container start")
 	if resp.StatusCode != http.StatusNoContent {
 		body, readErr := io.ReadAll(resp.Body)
 		if readErr != nil {
@@ -390,20 +411,35 @@ func (e *podmanEngine) containerWait(ctx context.Context, id string) (int, error
 	if err != nil {
 		return -1, err
 	}
-	defer func() { _ = resp.Body.Close() }() //nolint:errcheck // best-effort HTTP body close
+	defer warnClose(resp.Body, "container wait")
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return -1, err
+	}
+
+	// Podman native API returns {"Error":...,"StatusCode":N}.
+	// Podman compat API may return just the integer exit code.
 	var result struct {
 		Error *struct {
 			Message string
 		} `json:"Error"`
 		StatusCode int `json:"StatusCode"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return -1, err
+	if json.Unmarshal(body, &result) == nil {
+		if result.Error != nil && result.Error.Message != "" {
+			return result.StatusCode, fmt.Errorf("wait: %s", result.Error.Message)
+		}
+		return result.StatusCode, nil
 	}
-	if result.Error != nil && result.Error.Message != "" {
-		return result.StatusCode, fmt.Errorf("wait: %s", result.Error.Message)
+
+	// Fallback: bare integer (compat endpoint).
+	var exitCode int
+	if json.Unmarshal(body, &exitCode) == nil {
+		return exitCode, nil
 	}
-	return result.StatusCode, nil
+
+	return -1, fmt.Errorf("unexpected wait response: %s", body)
 }
 
 func (e *podmanEngine) containerLogs(ctx context.Context, id string, stdout, stderr io.Writer) error {
@@ -416,7 +452,7 @@ func (e *podmanEngine) containerLogs(ctx context.Context, id string, stdout, std
 	if err != nil {
 		return err
 	}
-	defer func() { _ = resp.Body.Close() }() //nolint:errcheck // best-effort HTTP body close
+	defer warnClose(resp.Body, "container logs")
 	// Libpod log stream: each frame has an 8-byte header (stream type + size),
 	// followed by the payload. Stream type: 0=stdin, 1=stdout, 2=stderr.
 	return demuxLogStream(resp.Body, stdout, stderr)
@@ -432,7 +468,7 @@ func (e *podmanEngine) containerRemove(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	defer func() { _ = resp.Body.Close() }() //nolint:errcheck // best-effort HTTP body close
+	defer warnClose(resp.Body, "container remove")
 	return nil
 }
 
@@ -442,6 +478,11 @@ func buildSpecGenerator(opts RunOpts) map[string]any {
 		"image":   opts.Image,
 		"command": opts.Cmd,
 		"remove":  opts.Remove,
+	}
+
+	// Entrypoint override
+	if len(opts.Entrypoint) > 0 {
+		spec["entrypoint"] = opts.Entrypoint
 	}
 
 	// Environment

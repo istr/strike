@@ -1,0 +1,15 @@
+name: multi-lane
+registry: localhost:5555/test
+secrets: {}
+steps:
+  - name: both
+    image: golang:1.22
+    pack:
+      base: "docker.io/library/scratch@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      files: []
+    args: []
+    env: {}
+    inputs: []
+    sources: []
+    secrets: []
+    outputs: []

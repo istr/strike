@@ -8,7 +8,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"encoding/binary"
 	"encoding/json"
 	"encoding/pem"
 	"math/big"
@@ -25,6 +24,8 @@ import (
 	"github.com/istr/strike/internal/deploy"
 	"github.com/istr/strike/internal/lane"
 )
+
+const connTypeTLS = "tls"
 
 func newTLSTestEngine(t *testing.T, handler http.Handler) container.Engine {
 	t.Helper()
@@ -284,30 +285,27 @@ func TestResolveKubeconfig_NoneFound(t *testing.T) {
 
 // containerMock returns an HTTP handler that simulates podman container
 // lifecycle (create, start, logs, wait, delete) for state capture tests.
-func containerMock(stdout string) http.HandlerFunc {
+func containerMock(t *testing.T, stdout string) http.HandlerFunc {
+	t.Helper()
 	return func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
 		switch {
 		case strings.HasSuffix(path, "/containers/create"):
-			json.NewEncoder(w).Encode(map[string]string{"Id": "capture-ctr"}) //nolint:errcheck,gosec // test HTTP handler
+			writeJSON(t, w, map[string]string{"Id": "capture-ctr"})
 		case strings.HasSuffix(path, "/start"):
 			w.WriteHeader(http.StatusNoContent)
 		case strings.HasSuffix(path, "/logs"):
-			header := make([]byte, 8)
-			header[0] = 1                                               // stdout stream
-			binary.BigEndian.PutUint32(header[4:], uint32(len(stdout))) //nolint:gosec // G115: test data is small
-			w.Write(header)                                             //nolint:errcheck,gosec // test HTTP handler
-			w.Write([]byte(stdout))                                     //nolint:errcheck,gosec // test HTTP handler
+			mustWrite(t, w, streamFrame(1, []byte(stdout)))
 		case strings.HasSuffix(path, "/wait"):
-			json.NewEncoder(w).Encode(map[string]int{"StatusCode": 0}) //nolint:errcheck,gosec // test HTTP handler
+			writeJSON(t, w, map[string]int{"StatusCode": 0})
 		case r.Method == http.MethodDelete && strings.Contains(path, "/containers/"):
-			json.NewEncoder(w).Encode([]map[string]any{}) //nolint:errcheck,gosec // test HTTP handler
+			writeJSON(t, w, []map[string]any{})
 		}
 	}
 }
 
 func TestDeployerExecute(t *testing.T) {
-	eng := newTLSTestEngine(t, containerMock("v1.2.3"))
+	eng := newTLSTestEngine(t, containerMock(t, "v1.2.3"))
 
 	state := lane.NewState()
 	if err := state.Register("build", "image", lane.Artifact{
@@ -372,7 +370,7 @@ func TestDeployerExecute(t *testing.T) {
 }
 
 func TestDeployerExecute_MissingArtifact(t *testing.T) {
-	eng := newTLSTestEngine(t, containerMock(""))
+	eng := newTLSTestEngine(t, containerMock(t, ""))
 	state := lane.NewState() // empty -- no artifacts registered
 
 	step := &lane.Step{
@@ -435,7 +433,7 @@ func TestHardenedRunOpts(t *testing.T) {
 }
 
 func TestAttestationContainsEngineRecord(t *testing.T) {
-	eng := newTLSTestEngine(t, containerMock("v1.2.3"))
+	eng := newTLSTestEngine(t, containerMock(t, "v1.2.3"))
 
 	// Ping to populate identity
 	if err := eng.Ping(context.Background()); err != nil {
@@ -491,7 +489,7 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 	if att.Engine == nil {
 		t.Fatal("expected non-nil Engine record in attestation")
 	}
-	if att.Engine.ConnectionType != "tls" {
+	if att.Engine.ConnectionType != connTypeTLS {
 		t.Errorf("Engine.ConnectionType = %q, want tls", att.Engine.ConnectionType)
 	}
 	if !strings.HasPrefix(att.Engine.ServerCertFingerprint, "sha256:") {
@@ -511,7 +509,330 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 	if !ok {
 		t.Fatal("expected engine object in JSON")
 	}
-	if engMap["connection_type"] != "tls" {
+	if engMap["connection_type"] != connTypeTLS {
 		t.Errorf("JSON engine.connection_type = %v, want tls", engMap["connection_type"])
+	}
+}
+
+// --------------------------------------------------------------------------.
+// engineRecord tests.
+// --------------------------------------------------------------------------.
+
+func TestEngineRecord_NilEngineID(t *testing.T) {
+	eng := newTLSTestEngine(t, containerMock(t, "v1.0"))
+	state := lane.NewState()
+	if err := state.Register("build", "image", lane.Artifact{
+		Type:   "image",
+		Digest: "sha256:abc123",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	step := &lane.Step{
+		Name: "deploy-nil-engine",
+		Deploy: &lane.DeploySpec{
+			Method: lane.DeployMethod{
+				"type":  "custom",
+				"image": "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+			},
+			Artifacts: map[string]lane.ArtifactRef{
+				"image": {From: "build.image"},
+			},
+			Target:      lane.DeployTarget{Type: "registry", Description: "test"},
+			Attestation: lane.AttestationSpec{},
+		},
+	}
+
+	// EngineID is nil -- engineRecord should return nil.
+	d := &deploy.Deployer{Engine: eng, EngineID: nil}
+	att, err := d.Execute(context.Background(), step, state)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if att.Engine != nil {
+		t.Error("expected nil Engine record when EngineID is nil")
+	}
+}
+
+func TestEngineRecord_WithRuntime(t *testing.T) {
+	id := &container.EngineIdentity{
+		Connection: container.ConnectionInfo{
+			Type:                  connTypeTLS,
+			CATrustMode:           "pinned",
+			ServerCertFingerprint: "sha256:abc",
+			ClientCertFingerprint: "sha256:def",
+		},
+		Runtime: &container.RuntimeInfo{
+			Version:  "5.2.1",
+			Rootless: true,
+		},
+	}
+
+	eng := newTLSTestEngine(t, containerMock(t, "v1.0"))
+	state := lane.NewState()
+	if err := state.Register("build", "image", lane.Artifact{
+		Type:   "image",
+		Digest: "sha256:abc123",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	step := &lane.Step{
+		Name: "deploy-runtime",
+		Deploy: &lane.DeploySpec{
+			Method: lane.DeployMethod{
+				"type":  "custom",
+				"image": "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+			},
+			Artifacts: map[string]lane.ArtifactRef{
+				"image": {From: "build.image"},
+			},
+			Target:      lane.DeployTarget{Type: "registry", Description: "test"},
+			Attestation: lane.AttestationSpec{},
+		},
+	}
+
+	d := &deploy.Deployer{Engine: eng, EngineID: id}
+	att, err := d.Execute(context.Background(), step, state)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if att.Engine == nil {
+		t.Fatal("expected non-nil Engine record")
+	}
+	if att.Engine.Version != "5.2.1" {
+		t.Errorf("Engine.Version = %q, want 5.2.1", att.Engine.Version)
+	}
+	if att.Engine.Rootless == nil || !*att.Engine.Rootless {
+		t.Error("expected Rootless=true")
+	}
+	if att.Engine.ConnectionType != connTypeTLS {
+		t.Errorf("ConnectionType = %q, want tls", att.Engine.ConnectionType)
+	}
+	if att.Engine.ServerCertFingerprint != "sha256:abc" {
+		t.Errorf("ServerCertFingerprint = %q, want sha256:abc", att.Engine.ServerCertFingerprint)
+	}
+	if att.Engine.ClientCertFingerprint != "sha256:def" {
+		t.Errorf("ClientCertFingerprint = %q, want sha256:def", att.Engine.ClientCertFingerprint)
+	}
+}
+
+func TestEngineRecord_WithoutRuntime(t *testing.T) {
+	id := &container.EngineIdentity{
+		Connection: container.ConnectionInfo{
+			Type: "unix",
+		},
+	}
+
+	eng := newTLSTestEngine(t, containerMock(t, "v1.0"))
+	state := lane.NewState()
+	if err := state.Register("build", "image", lane.Artifact{
+		Type:   "image",
+		Digest: "sha256:abc123",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	step := &lane.Step{
+		Name: "deploy-no-runtime",
+		Deploy: &lane.DeploySpec{
+			Method: lane.DeployMethod{
+				"type":  "custom",
+				"image": "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+			},
+			Artifacts: map[string]lane.ArtifactRef{
+				"image": {From: "build.image"},
+			},
+			Target:      lane.DeployTarget{Type: "registry", Description: "test"},
+			Attestation: lane.AttestationSpec{},
+		},
+	}
+
+	d := &deploy.Deployer{Engine: eng, EngineID: id}
+	att, err := d.Execute(context.Background(), step, state)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if att.Engine == nil {
+		t.Fatal("expected non-nil Engine record")
+	}
+	if att.Engine.ConnectionType != "unix" {
+		t.Errorf("ConnectionType = %q, want unix", att.Engine.ConnectionType)
+	}
+	if att.Engine.Rootless != nil {
+		t.Error("expected nil Rootless when Runtime is nil")
+	}
+	if att.Engine.Version != "" {
+		t.Errorf("Version = %q, want empty", att.Engine.Version)
+	}
+}
+
+// --------------------------------------------------------------------------.
+// DetectDrift additional cases.
+// --------------------------------------------------------------------------.
+
+func TestDetectDrift_NewDimension(t *testing.T) {
+	pre := map[string]deploy.StateSnap{
+		"version": {Name: "version", Digest: "sha256:aaa"},
+		"config":  {Name: "config", Digest: "sha256:bbb"},
+	}
+	prev := &deploy.Attestation{
+		DeployID: "prev-001",
+		PostState: map[string]deploy.StateSnap{
+			"version": {Name: "version", Digest: "sha256:aaa"},
+		},
+	}
+	report := deploy.DetectDrift(pre, prev)
+	if report == nil {
+		t.Fatal("expected non-nil drift report")
+	}
+	// "config" is new, should not be in Drifted.
+	if len(report.Drifted) != 0 {
+		t.Fatalf("expected no drift for new dimensions, got %v", report.Drifted)
+	}
+}
+
+// --------------------------------------------------------------------------.
+// Execute edge cases.
+// --------------------------------------------------------------------------.
+
+func TestDeployerExecute_NotDeployStep(t *testing.T) {
+	eng := newTLSTestEngine(t, containerMock(t, ""))
+	state := lane.NewState()
+	step := &lane.Step{Name: "build", Deploy: nil}
+	d := &deploy.Deployer{Engine: eng}
+	_, err := d.Execute(context.Background(), step, state)
+	if err == nil {
+		t.Fatal("expected error for non-deploy step")
+	}
+	if !strings.Contains(err.Error(), "not a deploy step") {
+		t.Errorf("error = %q, want 'not a deploy step'", err.Error())
+	}
+}
+
+func TestDeployerExecute_RequiredPreStateFails(t *testing.T) {
+	// Use a handler that returns exit code 1 for state capture.
+	failMock := func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+		switch {
+		case strings.HasSuffix(path, "/containers/create"):
+			writeJSON(t, w, map[string]string{"Id": "fail-ctr"})
+		case strings.HasSuffix(path, "/start"):
+			w.WriteHeader(http.StatusNoContent)
+		case strings.HasSuffix(path, "/logs"):
+			mustWrite(t, w, streamFrame(2, []byte("failed")))
+		case strings.HasSuffix(path, "/wait"):
+			writeJSON(t, w, map[string]int{"StatusCode": 1})
+		case r.Method == http.MethodDelete:
+			writeJSON(t, w, []map[string]any{})
+		}
+	}
+
+	eng := newTLSTestEngine(t, http.HandlerFunc(failMock))
+	state := lane.NewState()
+
+	step := &lane.Step{
+		Name: "deploy-fail-pre",
+		Deploy: &lane.DeploySpec{
+			Method: lane.DeployMethod{
+				"type":  "custom",
+				"image": "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+			},
+			Artifacts: map[string]lane.ArtifactRef{},
+			Target:    lane.DeployTarget{Type: "registry", Description: "test"},
+			Attestation: lane.AttestationSpec{
+				PreState: lane.StateCaptureSpec{
+					Required: true,
+					Capture: []lane.StateCapture{{
+						Name:    "version",
+						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+						Command: []string{"cat", "/version"},
+					}},
+				},
+			},
+		},
+	}
+
+	d := &deploy.Deployer{Engine: eng}
+	_, err := d.Execute(context.Background(), step, state)
+	if err == nil {
+		t.Fatal("expected error for required pre-state failure")
+	}
+	if !strings.Contains(err.Error(), "pre-state capture failed") {
+		t.Errorf("error = %q, want 'pre-state capture failed'", err.Error())
+	}
+}
+
+func TestDeployerExecute_DriftDetectFail(t *testing.T) {
+	eng := newTLSTestEngine(t, containerMock(t, "v1.0"))
+	state := lane.NewState()
+	if err := state.Register("build", "image", lane.Artifact{
+		Type:   "image",
+		Digest: "sha256:abc123",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	step := &lane.Step{
+		Name: "deploy-drift-fail",
+		Deploy: &lane.DeploySpec{
+			Method: lane.DeployMethod{
+				"type":  "custom",
+				"image": "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+			},
+			Artifacts: map[string]lane.ArtifactRef{
+				"image": {From: "build.image"},
+			},
+			Target: lane.DeployTarget{Type: "registry", Description: "test"},
+			Attestation: lane.AttestationSpec{
+				Drift: lane.DriftSpec{
+					Detect:  true,
+					OnDrift: "fail",
+				},
+				PreState: lane.StateCaptureSpec{
+					Capture: []lane.StateCapture{{
+						Name:    "version",
+						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+						Command: []string{"cat", "/version"},
+						Network: true,
+					}},
+				},
+				PostState: lane.StateCaptureSpec{
+					Capture: []lane.StateCapture{{
+						Name:    "version",
+						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+						Command: []string{"cat", "/version"},
+						Network: true,
+					}},
+				},
+			},
+		},
+	}
+
+	// Drift detection is enabled but previous attestation is nil (first deploy).
+	// So no actual drift occurs. Just test the code path is exercised.
+	d := &deploy.Deployer{Engine: eng}
+	att, err := d.Execute(context.Background(), step, state)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	// First deploy -- drift should be nil (no previous attestation).
+	if att.Drift != nil {
+		t.Error("expected nil drift for first deploy")
+	}
+}
+
+func TestExecuteMethod_UnknownType(t *testing.T) {
+	eng := newTLSTestEngine(t, http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	d := &deploy.Deployer{Engine: eng}
+	spec := &lane.DeploySpec{
+		Method: lane.DeployMethod{"type": "unknown"},
+	}
+	err := d.ExecuteMethod(context.Background(), spec)
+	if err == nil {
+		t.Fatal("expected error for unknown method type")
+	}
+	if !strings.Contains(err.Error(), "unknown deploy method") {
+		t.Errorf("unexpected error: %v", err)
 	}
 }

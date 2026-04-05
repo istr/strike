@@ -1,0 +1,16 @@
+name: test-lane
+registry: localhost:5555/test
+secrets: {}
+steps:
+  - name: build
+    image: golang:1.22
+    args: ["go", "build", "-o", "/out/binary"]
+    env:
+      CGO_ENABLED: "0"
+    inputs: []
+    sources: []
+    secrets: []
+    outputs:
+      - name: binary
+        type: file
+        path: binary

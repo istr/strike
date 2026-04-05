@@ -1,0 +1,36 @@
+{
+  "boundary": "AssembleImage",
+  "description": "single binary on empty base with entrypoint and user",
+  "expected": {
+    "manifest_digest": "sha256:8edbc04f38efc5cec7db09b115f79edd18ec9436d5a09a9016880f94cbfeceb3",
+    "config_digest": "sha256:930628e6fd6bdbd0e07b2e818d531fbc201d4aa409915cf7e1224a5c5dd1c703",
+    "layer_count": 1
+  },
+  "inputs": {
+    "base": "oci:empty",
+    "spec": {
+      "files": [
+        {
+          "from": "build.binary",
+          "dest": "/usr/bin/hello",
+          "mode": 493
+        }
+      ],
+      "config": {
+        "entrypoint": [
+          "/usr/bin/hello"
+        ],
+        "user": "65534:65534"
+      },
+      "annotations": {
+        "org.opencontainers.image.source": "https://github.com/istr/strike"
+      }
+    },
+    "files": {
+      "build.binary": {
+        "content_base64": "IyEvYmluL3NoCmVjaG8gaGVsbG8K",
+        "mode": 493
+      }
+    }
+  }
+}

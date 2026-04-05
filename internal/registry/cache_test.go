@@ -4,42 +4,13 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/registry"
 )
-
-func TestCacheTag(t *testing.T) {
-	c := &registry.Cache{Registry: "ghcr.io/istr"}
-
-	tag := c.CacheTag("sha256:abcdef1234567890abcdef")
-	want := "ghcr.io/istr/strike-cache:cache-abcdef123456"
-	if tag != want {
-		t.Errorf("CacheTag = %q, want %q", tag, want)
-	}
-}
-
-func TestCacheTagShortKey(t *testing.T) {
-	c := &registry.Cache{Registry: "ghcr.io/istr"}
-
-	tag := c.CacheTag("sha256:abc")
-	want := "ghcr.io/istr/strike-cache:cache-abc"
-	if tag != want {
-		t.Errorf("CacheTag = %q, want %q", tag, want)
-	}
-}
-
-func TestCacheLookupMiss(t *testing.T) {
-	c := &registry.Cache{Registry: "localhost:5555/nonexistent"}
-	client := &registry.Client{Engine: &fakeEngine{existsLocal: false}}
-
-	_, found := c.Lookup(context.Background(), "sha256:0000000000000000000000000000000000000000000000000000000000000000", client)
-	if found {
-		t.Fatal("expected cache miss for nonexistent registry")
-	}
-}
 
 func TestSpecHashDeterministic(t *testing.T) {
 	step := &lane.Step{
@@ -48,13 +19,16 @@ func TestSpecHashDeterministic(t *testing.T) {
 		Args:  []string{"build", "-o", "/out/bin"},
 		Env:   map[string]string{"CGO_ENABLED": "0"},
 	}
-	inputHashes := map[string]string{"src": "deadbeef"}
-	sourceHashes := map[string]string{"/src": "cafebabe"}
+	inputHashes := map[string]string{"src": "sha256:deadbeef"}
+	sourceHashes := map[string]string{"/src": "sha256:cafebabe"}
 
 	h1 := registry.SpecHash(step, "sha256:img", inputHashes, sourceHashes)
 	h2 := registry.SpecHash(step, "sha256:img", inputHashes, sourceHashes)
 	if h1 != h2 {
 		t.Fatalf("not deterministic: %q vs %q", h1, h2)
+	}
+	if !strings.HasPrefix(h1, "sha256:") {
+		t.Fatalf("expected sha256: prefix, got %q", h1)
 	}
 }
 
@@ -110,13 +84,13 @@ func TestHashPathMachineIndependent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer root1.Close() //nolint:errcheck // test cleanup
+	defer root1.Close() //nolint:errcheck // os.Root.Close on read-only temp dir; error is not actionable
 
 	root2, err := os.OpenRoot(dir2)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer root2.Close() //nolint:errcheck // test cleanup
+	defer root2.Close() //nolint:errcheck // os.Root.Close on read-only temp dir; error is not actionable
 
 	h1, err := registry.HashPath(root1, dir1, "src")
 	if err != nil {
@@ -129,9 +103,12 @@ func TestHashPathMachineIndependent(t *testing.T) {
 	if h1 != h2 {
 		t.Fatalf("same content in different dirs produced different hashes: %q vs %q", h1, h2)
 	}
+	if !strings.HasPrefix(h1, "sha256:") {
+		t.Fatalf("expected sha256: prefix, got %q", h1)
+	}
 }
 
-// fakeEngine is a minimal Engine mock for cache tests.
+// fakeEngine is a minimal Engine mock for cache lookup tests.
 type fakeEngine struct {
 	container.Engine
 	existsLocal bool
@@ -139,4 +116,119 @@ type fakeEngine struct {
 
 func (f *fakeEngine) ImageExists(_ context.Context, _ string) (bool, error) {
 	return f.existsLocal, nil
+}
+
+// --------------------------------------------------------------------------.
+// Tag.
+// --------------------------------------------------------------------------.
+
+func TestTag(t *testing.T) {
+	tests := []struct {
+		registry string
+		step     string
+		hash     string
+		want     string
+		name     string
+	}{
+		{"ghcr.io/cache", "build", "sha256:abcdef0123456789abcdef0123456789", "ghcr.io/cache:build-abcdef0123456789", "full hash"},
+		{"r.io/c", "pack", "sha256:0123", "r.io/c:pack-0123", "short hash"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := registry.Tag(tt.registry, tt.step, tt.hash)
+			if got != tt.want {
+				t.Errorf("Tag() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// --------------------------------------------------------------------------.
+// HashFile and HashFileAbs.
+// --------------------------------------------------------------------------.
+
+func TestHashFile(t *testing.T) {
+	dir := t.TempDir()
+	content := []byte("test file content")
+	if err := os.WriteFile(filepath.Join(dir, "test.txt"), content, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer root.Close() //nolint:errcheck // os.Root.Close on read-only temp dir; error is not actionable
+
+	h, err := registry.HashFile(root, "test.txt")
+	if err != nil {
+		t.Fatalf("HashFile: %v", err)
+	}
+	if !strings.HasPrefix(h, "sha256:") {
+		t.Fatalf("expected sha256: prefix, got %q", h)
+	}
+
+	// Same content should produce same hash.
+	h2, err := registry.HashFile(root, "test.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h != h2 {
+		t.Fatalf("same file, different hashes: %q vs %q", h, h2)
+	}
+}
+
+func TestHashFileAbs(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "test.txt")
+	content := []byte("test file content")
+	if err := os.WriteFile(path, content, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	h, err := registry.HashFileAbs(path)
+	if err != nil {
+		t.Fatalf("HashFileAbs: %v", err)
+	}
+	if !strings.HasPrefix(h, "sha256:") {
+		t.Fatalf("expected sha256: prefix, got %q", h)
+	}
+
+	// Should match HashFile for same content.
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer root.Close() //nolint:errcheck // os.Root.Close on read-only temp dir; error is not actionable
+
+	h2, err := registry.HashFile(root, "test.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h != h2 {
+		t.Fatalf("HashFileAbs and HashFile differ: %q vs %q", h, h2)
+	}
+}
+
+func TestHashFileAbs_Nonexistent(t *testing.T) {
+	_, err := registry.HashFileAbs("/nonexistent/path/file.txt")
+	if err == nil {
+		t.Fatal("expected error for nonexistent file")
+	}
+}
+
+// --------------------------------------------------------------------------.
+// Lookup.
+// --------------------------------------------------------------------------.
+
+func TestLookupMiss(t *testing.T) {
+	client := &registry.Client{Engine: &fakeEngine{existsLocal: false}}
+
+	found := registry.Lookup(
+		context.Background(), client,
+		"localhost:5555/nonexistent:tag-abc",
+		"sha256:0000000000000000000000000000000000000000000000000000000000000000",
+	)
+	if found {
+		t.Fatal("expected cache miss for nonexistent registry")
+	}
 }

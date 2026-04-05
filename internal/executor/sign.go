@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
@@ -20,6 +21,43 @@ import (
 	"golang.org/x/crypto/scrypt"
 )
 
+// SignPayload signs arbitrary data with an ECDSA P-256 key.
+// Returns a base64-encoded raw (r||s) signature and the public key
+// fingerprint (sha256:<hex> of the DER-encoded SubjectPublicKeyInfo).
+//
+// keyPEM is the PEM-encoded private key (PKCS#8, EC, or encrypted cosign).
+// password is the key passphrase; nil for unencrypted keys.
+func SignPayload(data, keyPEM, password []byte) (b64sig, keyID string, err error) {
+	privKey, loadErr := loadCosignKey(keyPEM, password)
+	if loadErr != nil {
+		return "", "", fmt.Errorf("load key: %w", loadErr)
+	}
+
+	digest := sha256.Sum256(data)
+	r, s, signErr := ecdsa.Sign(rand.Reader, privKey, digest[:])
+	if signErr != nil {
+		return "", "", fmt.Errorf("ecdsa sign: %w", signErr)
+	}
+
+	// Zero-pad r and s to 32 bytes each for P-256.
+	sig := make([]byte, 64)
+	rBytes := r.Bytes()
+	sBytes := s.Bytes()
+	copy(sig[32-len(rBytes):32], rBytes)
+	copy(sig[64-len(sBytes):64], sBytes)
+
+	// Compute key fingerprint from the public key's SPKI encoding.
+	pubDER, marshalErr := x509.MarshalPKIXPublicKey(&privKey.PublicKey)
+	if marshalErr != nil {
+		return "", "", fmt.Errorf("marshal public key: %w", marshalErr)
+	}
+	fingerprint := sha256.Sum256(pubDER)
+
+	return base64.StdEncoding.EncodeToString(sig),
+		"sha256:" + hex.EncodeToString(fingerprint[:]),
+		nil
+}
+
 // SignManifest produces a cosign-compatible OCI signature artefact for
 // the given manifest digest.
 //
@@ -30,12 +68,7 @@ import (
 // Returns the signature as a go-containerregistry v1.Image ready to be
 // appended to an OCI Image Index as a referrer.
 func SignManifest(manifestDigest string, keyPEM, password []byte) (v1.Image, error) {
-	privKey, err := loadCosignKey(keyPEM, password)
-	if err != nil {
-		return nil, fmt.Errorf("load key: %w", err)
-	}
-
-	// Construct cosign simple signing payload
+	// Construct cosign simple signing payload.
 	payload, err := json.Marshal(simpleSigning{
 		Critical: criticalSection{
 			Identity: identitySection{DockerReference: ""},
@@ -48,20 +81,10 @@ func SignManifest(manifestDigest string, keyPEM, password []byte) (v1.Image, err
 		return nil, fmt.Errorf("marshal payload: %w", err)
 	}
 
-	// Sign with ECDSA P-256 using raw (r||s) encoding
-	digest := sha256.Sum256(payload)
-	r, s, err := ecdsa.Sign(rand.Reader, privKey, digest[:])
+	b64sig, _, err := SignPayload(payload, keyPEM, password)
 	if err != nil {
-		return nil, fmt.Errorf("ecdsa sign: %w", err)
+		return nil, err
 	}
-
-	// Zero-pad r and s to 32 bytes each for P-256
-	sig := make([]byte, 64)
-	rBytes := r.Bytes()
-	sBytes := s.Bytes()
-	copy(sig[32-len(rBytes):32], rBytes)
-	copy(sig[64-len(sBytes):64], sBytes)
-	b64sig := base64.StdEncoding.EncodeToString(sig)
 
 	// TODO(rekor): submit payload + b64sig to Rekor transparency log.
 	// On success, attach the returned tlog entry as an annotation on the
@@ -69,7 +92,7 @@ func SignManifest(manifestDigest string, keyPEM, password []byte) (v1.Image, err
 	//   "dev.sigstore.cosign/bundle": <rekor bundle JSON>
 	// Required dependency: github.com/sigstore/rekor (client only, not cosign/v2).
 
-	// Build OCI signature artefact
+	// Build OCI signature artefact.
 	layer := static.NewLayer(payload,
 		types.MediaType("application/vnd.dev.cosign.simplesigning.v1+json"))
 

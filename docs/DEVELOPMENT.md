@@ -261,15 +261,24 @@ Focus coverage investment on:
 
 ### 2.5 Integration tests
 
-Integration tests that require external dependencies (podman, a registry) are
-guarded by an environment variable:
+Integration tests that require external dependencies (podman, a registry)
+auto-detect the podman socket at runtime. If no engine is available, the tests
+skip automatically via `t.Skip`. Set `STRIKE_INTEGRATION=0` to force-skip them:
 
 ```go
-func requireIntegration(t *testing.T) {
+func needsEngine(t *testing.T) container.Engine {
     t.Helper()
-    if os.Getenv("STRIKE_INTEGRATION") == "" {
-        t.Skip("set STRIKE_INTEGRATION=1 to run integration tests")
+    if os.Getenv("STRIKE_INTEGRATION") == "0" {
+        t.Skip("integration tests disabled (STRIKE_INTEGRATION=0)")
     }
+    engine, err := container.New()
+    if err != nil {
+        t.Skipf("no container engine: %v", err)
+    }
+    if err := engine.Ping(context.Background()); err != nil {
+        t.Skipf("container engine not responding: %v", err)
+    }
+    return engine
 }
 ```
 

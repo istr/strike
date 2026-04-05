@@ -41,88 +41,123 @@ type PackResult struct {
 	Digest string // "sha256:..." manifest digest of the main image
 }
 
-// Pack assembles an OCI image from the given options, generates an SBOM,
-// signs the manifest, and writes the result as an OCI layout tar.
-func Pack(opts PackOpts) (*PackResult, error) {
-	if opts.SigningKey == nil {
-		return nil, fmt.Errorf("pack: signing key is required; keyless signing is not yet implemented")
-	}
+// AssembleResult holds the outputs of the pure image assembly step.
+// This is the cross-validation boundary: given the same base image, spec,
+// and input files, any implementation (Go, Rust, ...) must produce an
+// AssembleResult with identical Digest.
+type AssembleResult struct {
+	Image      v1.Image      // assembled OCI image
+	Digest     v1.Hash       // manifest digest
+	Subject    v1.Descriptor // descriptor for referrer relationships
+	BinaryPath string        // host path of first binary (for SBOM)
+}
 
-	// 1. Pull and verify the base image
-	img, err := pullVerified(string(opts.Spec.Base))
-	if err != nil {
-		return nil, fmt.Errorf("pack: pull base image: %w", err)
-	}
-
-	// 2. Add file layers
-	img, binaryPath, err := addFileLayers(img, opts.Spec.Files, opts.InputPaths)
+// AssembleImage is the pure computational core of OCI image construction.
+// It takes an already-resolved base image and applies layers, config,
+// and annotations — no network I/O, no filesystem writes.
+//
+// This function defines the cross-validation surface for a Rust verifier:
+// given identical (base, spec, inputPaths), the output Digest must match.
+func AssembleImage(base v1.Image, spec *lane.PackSpec, inputPaths map[string]string) (*AssembleResult, error) {
+	// 1. Add file layers
+	img, binaryPath, err := addFileLayers(base, spec.Files, inputPaths)
 	if err != nil {
 		return nil, err
 	}
 
-	// 2b. Add config file layers (literal content)
-	img, err = addConfigFileLayers(img, opts.Spec.Config_files)
+	// 2. Add config file layers (literal content)
+	img, err = addConfigFileLayers(img, spec.Config_files)
 	if err != nil {
 		return nil, err
 	}
 
 	// 3. Apply image configuration
-	img, err = applyConfig(img, opts.Spec)
+	img, err = applyConfig(img, spec)
 	if err != nil {
 		return nil, err
 	}
 
 	// 4. Apply annotations
-	if opts.Spec.Annotations != nil {
-		annotated, ok := mutate.Annotations(img, opts.Spec.Annotations).(v1.Image)
+	if spec.Annotations != nil {
+		annotated, ok := mutate.Annotations(img, spec.Annotations).(v1.Image)
 		if !ok {
-			return nil, fmt.Errorf("pack: unexpected type from mutate.Annotations")
+			return nil, fmt.Errorf("assemble: unexpected type from mutate.Annotations")
 		}
 		img = annotated
 	}
 
-	// Compute image digest for referrer relationships
+	// 5. Compute digest — the cross-validation anchor
 	imgDigest, err := img.Digest()
 	if err != nil {
-		return nil, fmt.Errorf("pack: image digest: %w", err)
+		return nil, fmt.Errorf("assemble: image digest: %w", err)
 	}
 	imgSize, err := img.Size()
 	if err != nil {
-		return nil, fmt.Errorf("pack: image size: %w", err)
+		return nil, fmt.Errorf("assemble: image size: %w", err)
 	}
 	imgMediaType, err := img.MediaType()
 	if err != nil {
-		return nil, fmt.Errorf("pack: image media type: %w", err)
-	}
-	subject := v1.Descriptor{
-		MediaType: imgMediaType,
-		Digest:    imgDigest,
-		Size:      imgSize,
+		return nil, fmt.Errorf("assemble: image media type: %w", err)
 	}
 
-	// 5. Generate SBOM
+	return &AssembleResult{
+		Image:      img,
+		Digest:     imgDigest,
+		BinaryPath: binaryPath,
+		Subject: v1.Descriptor{
+			MediaType: imgMediaType,
+			Digest:    imgDigest,
+			Size:      imgSize,
+		},
+	}, nil
+}
+
+// Pack assembles an OCI image from the given options, generates an SBOM,
+// signs the manifest, and writes the result as an OCI layout tar.
+//
+// Pack is the orchestrator: it handles I/O (pull, write) and delegates
+// to pure functions (AssembleImage, SignManifest, GenerateSBOM) for the
+// security-critical computations.
+func Pack(opts PackOpts) (*PackResult, error) {
+	if opts.SigningKey == nil {
+		return nil, fmt.Errorf("pack: signing key is required; keyless signing is not yet implemented")
+	}
+
+	// 1. Pull and verify the base image (network I/O)
+	base, err := pullVerified(string(opts.Spec.Base))
+	if err != nil {
+		return nil, fmt.Errorf("pack: pull base image: %w", err)
+	}
+
+	// 2. Assemble image — pure computation, no I/O
+	assembled, err := AssembleImage(base, opts.Spec, opts.InputPaths)
+	if err != nil {
+		return nil, fmt.Errorf("pack: %w", err)
+	}
+
+	// 3. Generate SBOM (reads binary buildinfo + probes remote registry)
 	buildTime := ReproducibleTimestamp()
-	sbomBytes, err := GenerateSBOM(binaryPath, imgDigest.String(), string(opts.Spec.Base), buildTime)
+	sbomBytes, err := GenerateSBOM(assembled.BinaryPath, assembled.Digest.String(), string(opts.Spec.Base), buildTime)
 	if err != nil {
 		return nil, fmt.Errorf("pack: sbom: %w", err)
 	}
-	sbomImage, err := artifactImage(sbomBytes, "application/vnd.cyclonedx+json", subject)
+	sbomImage, err := artifactImage(sbomBytes, "application/vnd.cyclonedx+json", assembled.Subject)
 	if err != nil {
 		return nil, fmt.Errorf("pack: SBOM artifact: %w", err)
 	}
 
-	// 6. Sign the image manifest digest
-	sigImage, err := SignManifest(imgDigest.String(), opts.SigningKey, opts.KeyPassword)
+	// 4. Sign the image manifest digest — pure crypto
+	sigImage, err := SignManifest(assembled.Digest.String(), opts.SigningKey, opts.KeyPassword)
 	if err != nil {
 		return nil, fmt.Errorf("pack: sign: %w", err)
 	}
 
-	// 7. Write OCI layout with all three manifests
-	if err := writeOCILayout(img, sbomImage, sigImage, opts.OutputRoot, opts.OutputName, imgDigest.String()); err != nil {
+	// 5. Write OCI layout with all three manifests (filesystem I/O)
+	if err := writeOCILayout(assembled.Image, sbomImage, sigImage, opts.OutputRoot, opts.OutputName, assembled.Digest.String()); err != nil {
 		return nil, err
 	}
 
-	return &PackResult{Digest: imgDigest.String()}, nil
+	return &PackResult{Digest: assembled.Digest.String()}, nil
 }
 
 // addFileLayers appends a layer for each file entry, returning the updated
@@ -161,7 +196,7 @@ func addConfigFileLayers(img v1.Image, configFiles map[string]lane.FileEntry) (v
 		if entry.Mode < 0 || entry.Mode > 0o7777 {
 			return nil, fmt.Errorf("pack: config file %q: invalid mode %#o", path, entry.Mode)
 		}
-		layer, cfErr := fileLayerFromContent(
+		layer, cfErr := buildTarLayer(
 			[]byte(entry.Content),
 			path,
 			fs.FileMode(entry.Mode),
@@ -231,7 +266,7 @@ func writeOCILayout(img, sbomImage, sigImage v1.Image, outputRoot *os.Root, outp
 	if err != nil {
 		return fmt.Errorf("pack: temp dir: %w", err)
 	}
-	defer func() { _ = os.RemoveAll(layoutDir) }() //nolint:errcheck // best-effort cleanup
+	defer warnRemoveAll(layoutDir, "pack layout")
 
 	lp, err := layout.Write(layoutDir, empty.Index)
 	if err != nil {
@@ -283,66 +318,8 @@ func pullVerified(ref string) (v1.Image, error) {
 	return img, nil
 }
 
-// fileLayer creates a single-file OCI layer as a tar archive.
-// hostPath is an absolute path from a MkdirTemp output directory.
-func fileLayer(hostPath, destPath string, mode fs.FileMode) (v1.Layer, error) {
-	data, err := os.ReadFile(hostPath) //nolint:gosec // G304: absolute path from MkdirTemp output directory
-	if err != nil {
-		return nil, err
-	}
-
-	var buf bytes.Buffer
-	tw := tar.NewWriter(&buf)
-
-	// Add parent directories
-	for _, dir := range parentDirs(destPath) {
-		if err := tw.WriteHeader(&tar.Header{
-			Typeflag: tar.TypeDir,
-			Name:     dir + "/",
-			Mode:     0o755,
-		}); err != nil {
-			return nil, err
-		}
-	}
-
-	if err := tw.WriteHeader(&tar.Header{
-		Typeflag: tar.TypeReg,
-		Name:     destPath[1:], // strip leading /
-		Size:     int64(len(data)),
-		Mode:     int64(mode),
-	}); err != nil {
-		return nil, err
-	}
-	if _, err := tw.Write(data); err != nil {
-		return nil, err
-	}
-	if err := tw.Close(); err != nil {
-		return nil, err
-	}
-
-	opener := func() (io.ReadCloser, error) {
-		return io.NopCloser(bytes.NewReader(buf.Bytes())), nil
-	}
-	return tarball.LayerFromOpener(opener, tarball.WithMediaType(types.OCILayer))
-}
-
-// parentDirs returns all parent directory paths for an absolute path.
-// e.g. "/usr/bin/strike" -> ["usr", "usr/bin"].
-func parentDirs(absPath string) []string {
-	clean := filepath.Clean(absPath[1:]) // strip leading /
-	dir := filepath.Dir(clean)
-	if dir == "." {
-		return nil
-	}
-	var dirs []string
-	for d := dir; d != "."; d = filepath.Dir(d) {
-		dirs = append([]string{d}, dirs...)
-	}
-	return dirs
-}
-
-// fileLayerFromContent creates a single-file OCI layer from in-memory content.
-func fileLayerFromContent(content []byte, destPath string, mode fs.FileMode, uid, gid int) (v1.Layer, error) {
+// buildTarLayer creates a single-file OCI layer from in-memory content.
+func buildTarLayer(content []byte, destPath string, mode fs.FileMode, uid, gid int) (v1.Layer, error) {
 	var buf bytes.Buffer
 	tw := tar.NewWriter(&buf)
 
@@ -377,6 +354,30 @@ func fileLayerFromContent(content []byte, destPath string, mode fs.FileMode, uid
 		return io.NopCloser(bytes.NewReader(buf.Bytes())), nil
 	}
 	return tarball.LayerFromOpener(opener, tarball.WithMediaType(types.OCILayer))
+}
+
+// fileLayer reads a file from disk and creates an OCI layer.
+func fileLayer(hostPath, destPath string, mode fs.FileMode) (v1.Layer, error) {
+	data, err := os.ReadFile(hostPath) //nolint:gosec // G304: absolute path from MkdirTemp output directory
+	if err != nil {
+		return nil, err
+	}
+	return buildTarLayer(data, destPath, mode, 0, 0)
+}
+
+// parentDirs returns all parent directory paths for an absolute path.
+// e.g. "/usr/bin/strike" -> ["usr", "usr/bin"].
+func parentDirs(absPath string) []string {
+	clean := filepath.Clean(absPath[1:]) // strip leading /
+	dir := filepath.Dir(clean)
+	if dir == "." {
+		return nil
+	}
+	var dirs []string
+	for d := dir; d != "."; d = filepath.Dir(d) {
+		dirs = append([]string{d}, dirs...)
+	}
+	return dirs
 }
 
 // appendEnv adds or replaces an environment variable in a list of KEY=VALUE strings.

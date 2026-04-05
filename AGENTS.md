@@ -67,10 +67,11 @@ packages.
 
 ### Key files
 
-- `internal/lane/schema.cue` -- The CUE schema is the source of truth for lane
-  definitions. After editing, run `cue exp gengotypes ./internal/lane/` to
-  regenerate `internal/lane/cue_types_lane_gen.go`. Never edit the generated
-  file by hand.
+- `specs/lane.cue` -- CUE schema for lane definitions (source of truth).
+  `specs/attestation.cue` -- CUE schema for deploy attestations.
+  After editing, run `make generate` to re-export JSON Schema and
+  regenerate `internal/lane/cue_types_lane_gen.go`. Never edit the
+  generated file by hand.
 - `internal/container/engine.go` -- Engine interface and types. All container
   operations go through this interface.
 - `internal/container/podman.go` -- Podman libpod REST API implementation.
@@ -159,6 +160,17 @@ that affects image content, SBOM data, or attestation payloads.
 - Use ECDSA P-256 for signing (the only supported curve).
 - Do not configure TLS cipher suites -- Go's defaults are correct.
 - Do not set `InsecureSkipVerify: true` anywhere.
+
+### Secrets and key material
+
+- **No secrets in git.** Private keys, tokens, passwords, and other secret
+  material must never be committed to the repository -- not even for testing.
+  This includes "well-known" test keys, PEM-encoded private keys in fixture
+  files, and hardcoded key material in Go constants.
+- **Tests use ephemeral keys.** Generate key pairs on the fly with
+  `ecdsa.GenerateKey(elliptic.P256(), crypto/rand.Reader)` per test or
+  test run. Never load pre-generated keys from testdata or fixture files.
+
 
 ## Code style
 
@@ -273,7 +285,17 @@ as a TLS-terminating reverse proxy:
         --to unix//run/user/1000/podman/podman.sock \
         --internal-certs
 
-Set `STRIKE_INTEGRATION=1` to enable integration tests.
+Integration tests auto-detect the podman socket. Set `STRIKE_INTEGRATION=0` to skip them.
+
+### Cryptographic test material
+
+All cryptographic test material -- signing keys, TLS certificates, CA
+chains -- must be ephemeral, generated at test time via Go's `crypto`
+stdlib. The TLS test helpers (`newTLSTestEngine`, `newMTLSTestEngine`)
+already follow this pattern. Signing tests must do the same: generate a
+fresh `*ecdsa.PrivateKey` per test, sign, and verify against the
+corresponding public key. Never commit private key material to the
+repository, not even as test fixtures.
 
 ### Coverage targets
 
@@ -301,9 +323,11 @@ func FuzzParseRef(f *testing.F) {
 ## Makefile targets
 
 ```sh
-make build      # CGO_ENABLED=0 go build ./cmd/strike
-make generate   # cue exp gengotypes ./internal/lane/
-make schema     # cue export to OpenAPI JSON
+make build      # CGO_ENABLED=0 go build ./cmd/strike (runs generate first)
+make specs      # CUE -> JSON Schema (specs/lane.schema.json, specs/attestation.schema.json)
+make generate   # specs + gengotypes -> internal/lane/cue_types_lane_gen.go
+make golden     # update golden test fixtures
+make check      # lint + test + vuln + build (CI entry point)
 ```
 
 ### Environment variables
@@ -314,18 +338,21 @@ make schema     # cue export to OpenAPI JSON
 - `CONTAINER_TLS_CA` -- CA certificate PEM path (pins CA for TCP; system store if unset)
 - `SOURCE_DATE_EPOCH` -- Unix timestamp for reproducible builds
 - `STRIKE_AUDIT` -- enable request audit logging to stderr
-- `STRIKE_INTEGRATION` -- enable integration tests
+- `STRIKE_INTEGRATION` -- set to `0` to skip integration tests (auto-detected by default)
 
 ## What not to do
 
 - Do not add a `go:generate` directive for anything other than CUE codegen.
 - Do not introduce build tags. Tests must work with plain `go test ./...`.
 - Do not add `//nolint` without a written justification in a code comment.
-- Do not embed configuration files other than `schema.cue`.
+- Do not embed configuration files other than the CUE schemas in `specs/`.
 - Do not use `init()` functions.
 - Do not use global mutable state (package-level `var` with mutation).
-- Do not add logging frameworks. Use `fmt.Printf` for user output, `log.Fatal`
-  for fatal errors, `fmt.Fprintf(os.Stderr, ...)` for warnings.
+- Do not add logging frameworks. All output goes through `log.*`
+  (`Printf`, `Fatalf`, `Print`). Never write directly to `os.Stdout` or
+  `os.Stderr`. The logger is backed by a `fatalWriter` that terminates
+  the process if the write fails. A non-writable output means the audit
+  trail is broken.
 - Do not refactor main.go into a "framework" or "engine" -- the procedural
   orchestration is intentional and auditable.
 - Do not create wrapper types around standard library types without clear need.
@@ -352,8 +379,14 @@ Run the full quality gate:
 ```sh
 golangci-lint run ./...
 go test -race -coverprofile=coverage.out -covermode=atomic ./...
+deadcode ./...
 govulncheck ./...
 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o strike ./cmd/strike
 ```
 
-All four commands must succeed with zero warnings and zero findings.
+All five commands must succeed with zero warnings and zero findings.
+`deadcode` reports functions unreachable from `main()`. All exported
+functions must be reachable from `main` or wired through interface
+dispatch. Do not add dead code -- wire it in or do not write it.
+If you find existing dead code, first look if it could or should be
+wired. Then remove the rest. If in doubt, ask the operator.

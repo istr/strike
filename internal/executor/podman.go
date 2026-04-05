@@ -3,6 +3,7 @@ package executor
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 
 	"github.com/istr/strike/internal/container"
@@ -36,6 +37,9 @@ func (r Run) Execute(ctx context.Context) error {
 		env[k] = v
 	}
 	for k, v := range r.Secrets {
+		// Log secret key with redacted value for audit trail.
+		// SecretString.String() returns "[REDACTED]", preventing leakage.
+		log.Printf("SECRET %s=%s", k, v)
 		env[k] = v.Expose()
 	}
 	env["XDG_RUNTIME_DIR"] = "/tmp/run"
@@ -60,21 +64,16 @@ func (r Run) Execute(ctx context.Context) error {
 		Options: []string{"noexec", "nosuid"},
 	})
 
-	exitCode, err := r.Engine.ContainerRun(ctx, container.RunOpts{
-		Image:       r.Step.Image,
-		Cmd:         r.Step.Args,
-		Env:         env,
-		Mounts:      mounts,
-		Network:     NetworkMode(r.Step.Network),
-		CapDrop:     []string{"ALL"},
-		ReadOnly:    true,
-		SecurityOpt: []string{"no-new-privileges"},
-		Tmpfs:       map[string]string{"/tmp": "rw,noexec,nosuid,size=512m"},
-		UsernsMode:  "keep-id",
-		Stdout:      os.Stdout,
-		Stderr:      os.Stderr,
-		Remove:      true,
-	})
+	opts := container.DefaultSecureOpts()
+	opts.Image = r.Step.Image
+	opts.Cmd = r.Step.Args
+	opts.Env = env
+	opts.Mounts = mounts
+	opts.Network = NetworkMode(r.Step.Network)
+	opts.Stdout = os.Stdout
+	opts.Stderr = os.Stderr
+
+	exitCode, err := r.Engine.ContainerRun(ctx, opts)
 	if err != nil {
 		return fmt.Errorf("container execution: %w", err)
 	}

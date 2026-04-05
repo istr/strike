@@ -1,0 +1,16 @@
+{
+  "boundary": "SpecHash",
+  "description": "degenerate case: no args, no env, no inputs, no sources",
+  "expected": {
+    "hash": "sha256:0364e78be895cef9249b83b20cdb6362cd3c317f55240669624258bc449a86fc"
+  },
+  "inputs": {
+    "step": {
+      "args": [],
+      "env": {}
+    },
+    "image_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "input_hashes": {},
+    "source_hashes": {}
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "boundary": "ValidateAttestation",
+  "description": "missing deploy_id fails validation",
+  "inputs": {
+    "attestation": {
+      "timestamp": "2024-01-01T00:00:00Z",
+      "target": {
+        "type": "registry",
+        "description": "test"
+      },
+      "artifacts": {},
+      "pre_state": {},
+      "post_state": {},
+      "lane_ref": "sha256:abc0000000000000000000000000000000000000000000000000000000000000"
+    }
+  },
+  "expected": {
+    "valid": false,
+    "error_contains": "deploy_id"
+  }
+}

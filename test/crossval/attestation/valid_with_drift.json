@@ -1,0 +1,27 @@
+{
+  "boundary": "ValidateAttestation",
+  "description": "valid attestation including drift report",
+  "inputs": {
+    "attestation": {
+      "deploy_id": "abcdef0123456789",
+      "timestamp": "2025-01-15T10:30:00Z",
+      "target": {
+        "type": "registry",
+        "description": "production"
+      },
+      "artifacts": {},
+      "pre_state": {},
+      "post_state": {},
+      "drift": {
+        "previous_deploy_id": "9876543210fedcba",
+        "previous_post_state": {"version": "sha256:aaa"},
+        "current_pre_state": {"version": "sha256:bbb"},
+        "drifted": ["version"]
+      },
+      "lane_ref": ""
+    }
+  },
+  "expected": {
+    "valid": true
+  }
+}

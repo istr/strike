@@ -1,7 +1,6 @@
 package lane
 
 import (
-	_ "embed"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -11,6 +10,7 @@ import (
 	"cuelang.org/go/cue"
 	"cuelang.org/go/cue/cuecontext"
 	cuejson "cuelang.org/go/encoding/json"
+	"github.com/istr/strike/specs"
 	"gopkg.in/yaml.v3"
 )
 
@@ -23,8 +23,7 @@ func ParseDuration(d Duration, defaultVal time.Duration) (time.Duration, error) 
 	return time.ParseDuration(string(d))
 }
 
-//go:embed schema.cue
-var schema string
+var schema = specs.LaneSchema
 
 // Parse reads a lane YAML file, validates it against the embedded CUE schema,
 // and returns a typed Lane instance.
@@ -86,26 +85,40 @@ func Parse(path string) (*Lane, error) {
 	return &p, nil
 }
 
-// validatePaths rejects non-local paths in sources, outputs, and pack dests.
+// validatePaths rejects non-local paths in sources and outputs.
 // Defense-in-depth -- os.Root enforces at runtime, but rejecting early
 // produces better error messages.
+//
+// Pack file destinations are container image paths (e.g., /usr/bin/strike),
+// not host paths. They must be absolute and canonical (no ".." components).
 func validatePaths(p *Lane) error {
 	for _, s := range p.Steps {
-		for _, src := range s.Sources {
-			if !filepath.IsLocal(src.Path) {
-				return fmt.Errorf("step %q: source path %q must be relative to lane root", s.Name, src.Path)
-			}
+		if err := validateStepPaths(s); err != nil {
+			return err
 		}
-		for _, out := range s.Outputs {
-			if !filepath.IsLocal(out.Path) {
-				return fmt.Errorf("step %q: output path %q must be a local filename", s.Name, out.Path)
-			}
+	}
+	return nil
+}
+
+// validateStepPaths checks one step's source, output, and pack-dest paths.
+func validateStepPaths(s Step) error {
+	for _, src := range s.Sources {
+		if !filepath.IsLocal(src.Path) {
+			return fmt.Errorf("step %q: source path %q must be relative to lane root", s.Name, src.Path)
 		}
-		if s.Pack != nil {
-			for _, f := range s.Pack.Files {
-				if !filepath.IsLocal(f.Dest) {
-					return fmt.Errorf("step %q: pack dest %q must be a local path", s.Name, f.Dest)
-				}
+	}
+	for _, out := range s.Outputs {
+		if !filepath.IsLocal(out.Path) {
+			return fmt.Errorf("step %q: output path %q must be a local filename", s.Name, out.Path)
+		}
+	}
+	if s.Pack != nil {
+		for _, f := range s.Pack.Files {
+			if !filepath.IsAbs(f.Dest) {
+				return fmt.Errorf("step %q: pack dest %q must be an absolute container path", s.Name, f.Dest)
+			}
+			if filepath.Clean(f.Dest) != f.Dest {
+				return fmt.Errorf("step %q: pack dest %q is not canonical", s.Name, f.Dest)
 			}
 		}
 	}

@@ -1,0 +1,14 @@
+{
+  "boundary": "SignManifest",
+  "description": "ECDSA P-256 PKCS#8 key, cosign simplesigning payload",
+  "inputs": {
+    "manifest_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "password": null
+  },
+  "expected": {
+    "payload": "{\"optional\":null,\"critical\":{\"identity\":{\"docker-reference\":\"\"},\"image\":{\"docker-manifest-digest\":\"sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\"},\"type\":\"cosign container image signature\"}}",
+    "verify": {
+      "algorithm": "ECDSA-P256-SHA256"
+    }
+  }
+}

@@ -176,6 +176,9 @@ package lane
 	artifacts:   [Name=string]: #ArtifactRef @go(Artifacts)
 	target:      #DeployTarget @go(Target)
 	attestation: #AttestationSpec @go(Attestation)
+	source?: {
+		git_image: #ImageRef
+	} @go(Source,optional=nillable)
 }
 
 #DeployMethod: #DeployKubernetes | #DeployRegistry | #DeployCustom
@@ -198,10 +201,11 @@ package lane
 
 #DeployCustom: {
 	@go(DeployCustom)
-	type:  "custom" @go(Type)
-	image: #ImageRef @go(Image)
-	args:  [...string] @go(Args)
-	env:   [string]: string @go(Env)
+	type:        "custom" @go(Type)
+	image:       #ImageRef @go(Image)
+	args:        [...string] @go(Args)
+	env:         [string]: string @go(Env)
+	entrypoint?: [...string] @go(Entrypoint)
 }
 
 #ArtifactRef: {

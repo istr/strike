@@ -3,6 +3,7 @@ package container
 import (
 	"context"
 	"fmt"
+	"log"
 	"net"
 	"net/http"
 	"os"
@@ -82,7 +83,7 @@ func (a *auditTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	if resp != nil {
 		status = resp.StatusCode
 	}
-	fmt.Fprintf(os.Stderr, "AUDIT  %s %s -> %d (%s)\n",
+	log.Printf("AUDIT  %s %s -> %d (%s)", // #nosec G706 -- internal engine HTTP request, not user input
 		req.Method, req.URL.Path, status, duration.Round(time.Millisecond))
 
 	return resp, err

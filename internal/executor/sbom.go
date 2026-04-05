@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"debug/buildinfo"
 	"fmt"
+	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -82,33 +83,30 @@ func GenerateSBOM(binaryPath, imageDigest, baseRef string, buildTime time.Time) 
 	// Probe base image for existing SBOM (best-effort)
 	sbomSource, description, probeErr := ProbeBaseImageSBOM(baseRef)
 	if probeErr != nil {
-		fmt.Fprintf(os.Stderr,
-			"WARN   sbom: base image probe failed (%v) -- "+
-				"OS-level packages will be absent from SBOM\n", probeErr)
+		log.Printf("WARN   sbom: base image probe failed (%v) -- "+
+			"OS-level packages will be absent from SBOM", probeErr)
 	}
 
 	var baseComponents []cdx.Component
 	var fetchErr error
 	switch sbomSource {
 	case SBOMSourceNone:
-		fmt.Fprintf(os.Stderr,
-			"WARN   sbom: base image has no attached SBOM -- "+
-				"OS-level packages will be absent from this build's SBOM.\n"+
-				"       Recommended base images with SBOM support:\n"+
-				"         cgr.dev/chainguard/static  (Chainguard, full SBOM)\n"+
-				"         gcr.io/distroless/static   (Google, partial)\n")
+		log.Print("WARN   sbom: base image has no attached SBOM -- " +
+			"OS-level packages will be absent from this build's SBOM.\n" +
+			"       Recommended base images with SBOM support:\n" +
+			"         cgr.dev/chainguard/static  (Chainguard, full SBOM)\n" +
+			"         gcr.io/distroless/static   (Google, partial)")
 	case SBOMSourceReferrer:
 		baseComponents, fetchErr = fetchBaseComponents(baseRef)
 		if fetchErr != nil {
-			fmt.Fprintf(os.Stderr, "WARN   sbom: base component fetch failed: %v\n", fetchErr)
+			log.Printf("WARN   sbom: base component fetch failed: %v", fetchErr)
 		}
 	case SBOMSourceFallback:
-		fmt.Fprintf(os.Stderr,
-			"INFO   sbom: base image SBOM found via tag convention (%s)\n",
+		log.Printf("INFO   sbom: base image SBOM found via tag convention (%s)",
 			description)
 		baseComponents, fetchErr = fetchBaseComponents(baseRef)
 		if fetchErr != nil {
-			fmt.Fprintf(os.Stderr, "WARN   sbom: base component fetch failed: %v\n", fetchErr)
+			log.Printf("WARN   sbom: base component fetch failed: %v", fetchErr)
 		}
 	}
 
@@ -265,7 +263,7 @@ func fetchAndDecodeSBOM(digestRef name.Digest, sbomDesc *v1.Descriptor) ([]cdx.C
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rc.Close() }() //nolint:errcheck // best-effort close
+	defer warnClose(rc, "sbom layer")
 
 	// Parse as CycloneDX JSON
 	bom := &cdx.BOM{}

@@ -52,6 +52,10 @@ linters:
     - nolintlint
     - predeclared
 
+    # Code security invariants
+    - forbidigo
+    - depguard
+
   settings:
     errcheck:
       check-type-assertions: true
@@ -74,6 +78,31 @@ linters:
     nolintlint:
       require-explanation: true
       require-specific: true
+    forbidigo:
+      forbid:
+        # All output goes through log.* backed by fatalWriter.
+        # fmt.Errorf and fmt.Sprintf are not matched (different prefix).
+        - pattern: 'fmt\.Print(ln|f)?'
+          msg: "use log.Printf -- all output through log.* (AGENTS.md)"
+        - pattern: 'fmt\.Fprint(ln|f)?'
+          msg: "use log.Printf -- all output through log.* (AGENTS.md)"
+        # Zero subprocess execution. Belt-and-suspenders with depguard.
+        - pattern: 'exec\.(Command|LookPath)'
+          msg: "use container.Engine API -- no subprocess execution (AGENTS.md invariant 1)"
+    depguard:
+      rules:
+        all:
+          deny:
+            - pkg: os/exec
+              desc: "no subprocess execution -- use container.Engine API"
+            - pkg: math/rand
+              desc: "use crypto/rand -- math/rand is not cryptographically secure"
+            - pkg: math/rand/v2
+              desc: "use crypto/rand -- math/rand/v2 is not cryptographically secure"
+            - pkg: crypto/md5
+              desc: "use crypto/sha256 -- MD5 is not collision resistant"
+            - pkg: crypto/sha1
+              desc: "use crypto/sha256 -- SHA-1 is not collision resistant"
 
 issues:
   exclude-use-default: false

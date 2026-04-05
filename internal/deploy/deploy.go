@@ -12,6 +12,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"time"
@@ -21,19 +22,24 @@ import (
 	"github.com/istr/strike/internal/registry"
 )
 
-const networkHost = "host"
+const (
+	networkHost = "host"
+	networkNone = "none"
+)
 
 // Attestation is the signed record produced by every deploy step.
 type Attestation struct {
-	Timestamp time.Time            `json:"timestamp"`
-	Target    lane.DeployTarget    `json:"target"`
-	Artifacts map[string]string    `json:"artifacts"` // name -> digest deployed
-	PreState  map[string]StateSnap `json:"pre_state"`
-	PostState map[string]StateSnap `json:"post_state"`
-	Drift     *DriftReport         `json:"drift,omitempty"`
-	Engine    *EngineRecord        `json:"engine,omitempty"`
-	DeployID  string               `json:"deploy_id"`
-	LaneRef   string               `json:"lane_ref"` // digest of lane definition
+	Timestamp      time.Time            `json:"timestamp"`
+	Target         lane.DeployTarget    `json:"target"`
+	Artifacts      map[string]string    `json:"artifacts"` // name -> digest deployed
+	PreState       map[string]StateSnap `json:"pre_state"`
+	PostState      map[string]StateSnap `json:"post_state"`
+	Drift          *DriftReport         `json:"drift,omitempty"`
+	Engine         *EngineRecord        `json:"engine,omitempty"`
+	Source         *SourceProvenance    `json:"source,omitempty"`
+	DeployID       string               `json:"deploy_id"`
+	LaneRef        string               `json:"lane_ref"` // digest of lane definition
+	SignedEnvelope []byte               `json:"-"`        // DSSE envelope, not part of attestation JSON
 }
 
 // EngineRecord captures the engine's identity at deploy time.
@@ -81,20 +87,16 @@ type DriftReport struct {
 // HardenedRunOpts returns a RunOpts with the standard security profile.
 // Callers override specific fields (Image, Cmd, Network, Mounts) as needed.
 func HardenedRunOpts() container.RunOpts {
-	return container.RunOpts{
-		CapDrop:     []string{"ALL"},
-		ReadOnly:    true,
-		SecurityOpt: []string{"no-new-privileges"},
-		Tmpfs:       map[string]string{"/tmp": "rw,noexec,nosuid,size=512m"},
-		UsernsMode:  "keep-id",
-		Remove:      true,
-	}
+	return container.DefaultSecureOpts()
 }
 
 // Deployer executes deploy steps and produces attestations.
 type Deployer struct {
-	Engine   container.Engine
-	EngineID *container.EngineIdentity
+	Engine      container.Engine
+	EngineID    *container.EngineIdentity
+	SigningKey  []byte
+	KeyPassword []byte
+	SourceDirs  []string // host paths with source mounts (for git provenance)
 }
 
 // Execute runs a deploy step: capture pre-state, detect drift, execute
@@ -114,7 +116,7 @@ func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.Sta
 		if spec.Attestation.PreState.Required {
 			return nil, fmt.Errorf("step %q: pre-state capture failed: %w", step.Name, err)
 		}
-		fmt.Fprintf(os.Stderr, "WARN   deploy %s: pre-state capture failed: %v\n", step.Name, err)
+		log.Printf("WARN   deploy %s: pre-state capture failed: %v", step.Name, err)
 	}
 
 	// 2. Detect drift (compare with previous attestation if available)
@@ -129,6 +131,12 @@ func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.Sta
 		return nil, err
 	}
 
+	// 3.5. Capture source provenance (best-effort)
+	var sourceProv *SourceProvenance
+	if len(d.SourceDirs) > 0 && spec.Source != nil && spec.Source.Git_image != "" {
+		sourceProv = d.captureSourceProvenance(ctx, d.SourceDirs, string(spec.Source.Git_image))
+	}
+
 	// 4. Execute deploy action
 	if execErr := d.executeMethod(ctx, spec); execErr != nil {
 		return nil, fmt.Errorf("step %q: deploy action failed: %w", step.Name, execErr)
@@ -140,7 +148,7 @@ func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.Sta
 		if spec.Attestation.PostState.Required {
 			return nil, fmt.Errorf("step %q: post-state capture failed: %w", step.Name, err)
 		}
-		fmt.Fprintf(os.Stderr, "WARN   deploy %s: post-state capture failed: %v\n", step.Name, err)
+		log.Printf("WARN   deploy %s: post-state capture failed: %v", step.Name, err)
 	}
 
 	// 6. Build attestation
@@ -153,14 +161,46 @@ func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.Sta
 		PostState: postState,
 		Drift:     drift,
 		Engine:    d.engineRecord(),
+		Source:    sourceProv,
 	}
 
-	// 7. Record in lane state
+	// 7. Validate attestation against CUE schema.
+	// This is the output-side equivalent of lane.Parse's input validation:
+	// the attestation carries the supply chain trust chain and must
+	// conform to the formal specification.
+	if err := ValidateAttestation(att); err != nil {
+		return nil, fmt.Errorf("step %q: attestation invalid: %w", step.Name, err)
+	}
+
+	// 7.5. Sign attestation (optional, key-dependent).
+	if err := d.signAttestation(att, step.Name); err != nil {
+		return nil, err
+	}
+
+	// 8. Record in lane state
 	if err := d.recordAttestation(att, step, state, started); err != nil {
 		return nil, fmt.Errorf("step %q: %w", step.Name, err)
 	}
 
 	return att, nil
+}
+
+// signAttestation wraps the attestation in a signed DSSE envelope if a key is configured.
+func (d *Deployer) signAttestation(att *Attestation, stepName string) error {
+	if d.SigningKey == nil {
+		log.Printf("WARN   deploy %s: attestation unsigned (no signing key configured)", stepName)
+		return nil
+	}
+	attJSON, err := json.Marshal(att)
+	if err != nil {
+		return fmt.Errorf("step %q: marshal attestation for signing: %w", stepName, err)
+	}
+	envelope, err := SignAttestation(attJSON, d.SigningKey, d.KeyPassword)
+	if err != nil {
+		return fmt.Errorf("step %q: sign attestation: %w", stepName, err)
+	}
+	att.SignedEnvelope = envelope
+	return nil
 }
 
 // detectAndHandleDrift checks for drift between pre-state and previous post-state.
@@ -174,7 +214,7 @@ func (d *Deployer) detectAndHandleDrift(stepName string, spec *lane.DeploySpec, 
 		case "fail":
 			return nil, fmt.Errorf("step %q: drift detected in %v", stepName, drift.Drifted)
 		case "warn":
-			fmt.Fprintf(os.Stderr, "WARN   deploy %s: drift detected in %v\n", stepName, drift.Drifted)
+			log.Printf("WARN   deploy %s: drift detected in %v", stepName, drift.Drifted)
 		}
 	}
 	return drift, nil
@@ -259,7 +299,7 @@ func (d *Deployer) captureOne(ctx context.Context, sc lane.StateCapture) (StateS
 
 	network := networkHost
 	if !sc.Network {
-		network = "none"
+		network = networkNone
 	}
 
 	var mounts []container.Mount
@@ -389,6 +429,7 @@ func (d *Deployer) executeCustomDeploy(ctx context.Context, m lane.DeployMethod)
 
 	opts := HardenedRunOpts()
 	opts.Image = m.Image()
+	opts.Entrypoint = m.Entrypoint()
 	opts.Cmd = m.Args()
 	opts.Env = m.Env()
 	opts.Network = networkHost
@@ -426,7 +467,7 @@ func ResolveKubeconfig(override string) (string, error) {
 		return override, nil
 	}
 	if env := os.Getenv("KUBECONFIG"); env != "" {
-		if _, err := os.Stat(env); err != nil { //nolint:gosec // G703: KUBECONFIG is a user-configured absolute path
+		if _, err := os.Stat(env); err != nil { //nolint:gosec // G703 false positive: err is checked on next line; path from $KUBECONFIG env
 			return "", fmt.Errorf("$KUBECONFIG %q: %w", env, err)
 		}
 		return env, nil

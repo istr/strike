@@ -50,28 +50,38 @@ func SpecHash(
 		h.Write([]byte(p + "=" + sourceHashes[p]))
 	}
 
-	return fmt.Sprintf("%x", h.Sum(nil))[:16]
+	return "sha256:" + fmt.Sprintf("%x", h.Sum(nil))
 }
 
-// Tag builds the registry tag from step name and hash.
-// Format: registry:step-name-hash16
+// Tag builds the registry tag from step name and spec hash.
+// The hash is truncated to 16 hex characters for OCI tag length constraints.
+// Format: registry:step-name-<first16hex>
 // Example: ghcr.io/istr/strike-cache:build-package-a3f9c2b1d4e7f801.
 func Tag(registry, stepName, hash string) string {
-	return fmt.Sprintf("%s:%s-%s", registry, stepName, hash)
+	short := strings.TrimPrefix(hash, "sha256:")
+	if len(short) > 16 {
+		short = short[:16]
+	}
+	return fmt.Sprintf("%s:%s-%s", registry, stepName, short)
 }
 
 // HashPath computes SHA256 of a file or directory within the given root scope.
-// Delegates to lane.SourceDigest and strips the "sha256:" prefix to return
-// bare hex, matching the convention used by SpecHash and Tag.
+// Returns a typed digest in "sha256:<hex>" format.
 func HashPath(root *os.Root, laneDir, path string) (string, error) {
-	digest, err := lane.SourceDigest(root, laneDir, path)
-	if err != nil {
+	return lane.SourceDigest(root, laneDir, path)
+}
+
+// hashReader computes SHA256 of the data from r.
+func hashReader(r io.Reader) (string, error) {
+	h := sha256.New()
+	if _, err := io.Copy(h, r); err != nil {
 		return "", err
 	}
-	return strings.TrimPrefix(digest, "sha256:"), nil
+	return fmt.Sprintf("sha256:%x", h.Sum(nil)), nil
 }
 
 // HashFile computes SHA256 of a file within the given root scope.
+// Returns a typed digest in "sha256:<hex>" format.
 func HashFile(root *os.Root, path string) (hash string, err error) {
 	f, err := root.Open(path)
 	if err != nil {
@@ -82,17 +92,13 @@ func HashFile(root *os.Root, path string) (hash string, err error) {
 			err = cerr
 		}
 	}()
-
-	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
-		return "", err
-	}
-	return fmt.Sprintf("%x", h.Sum(nil)), nil
+	return hashReader(f)
 }
 
 // HashFileAbs hashes a file given as an absolute path from CLI args.
+// Returns a typed digest in "sha256:<hex>" format.
 func HashFileAbs(path string) (hash string, err error) {
-	f, err := os.Open(path) //nolint:gosec // G304: absolute path from CLI argument, intentional
+	f, err := os.Open(path) //nolint:gosec // G304: path is an absolute file path from step execution, not web input
 	if err != nil {
 		return "", err
 	}
@@ -101,12 +107,7 @@ func HashFileAbs(path string) (hash string, err error) {
 			err = cerr
 		}
 	}()
-
-	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
-		return "", err
-	}
-	return fmt.Sprintf("%x", h.Sum(nil)), nil
+	return hashReader(f)
 }
 
 func sortedKeys(m map[string]string) []string {
@@ -118,52 +119,32 @@ func sortedKeys(m map[string]string) []string {
 	return keys
 }
 
-// Cache stores and retrieves step outputs as OCI artifacts.
-// Cache entries are content-addressed: the cache key maps to an OCI
-// manifest. Tag: cache-<first-12-of-cache-key>.
-// Annotation: full cache key for collision detection.
-type Cache struct {
-	Registry string
-}
-
-// CacheTag builds the OCI tag for a cache entry.
-// Format: registry/strike-cache:cache-<first12>.
-func (c *Cache) CacheTag(key string) string {
-	// Strip "sha256:" prefix if present
-	k := key
-	if len(k) > 7 && k[:7] == "sha256:" {
-		k = k[7:]
-	}
-	short := k
-	if len(short) > 12 {
-		short = short[:12]
-	}
-	return fmt.Sprintf("%s/strike-cache:cache-%s", c.Registry, short)
-}
-
-const cacheKeyAnnotation = "dev.strike.cache-key"
+// CacheKeyAnnotation is the OCI annotation key that stores the full spec
+// hash for collision detection. Tags are truncated to 16 hex chars, so
+// the annotation carries the full hash to verify exact matches.
+const CacheKeyAnnotation = "dev.strike.cache-key"
 
 // Lookup checks local and remote for a cached step result.
-// Returns the list of cached artifacts and true if found.
-func (c *Cache) Lookup(ctx context.Context, key string, client *Client) ([]lane.Artifact, bool) {
-	tag := c.CacheTag(key)
-
+// After finding a cached image by tag, it verifies the full spec hash
+// annotation to prevent collisions from tag truncation.
+// Returns true if a verified cache hit was found.
+func Lookup(ctx context.Context, client *Client, tag, specHash string) bool {
 	local, remote := client.Find(ctx, tag)
 	if !local && !remote {
-		return nil, false
+		return false
 	}
 
 	if remote && !local {
 		if err := client.Pull(ctx, tag); err != nil {
-			return nil, false
+			return false
 		}
 	}
 
-	// Verify the full cache key annotation matches (collision detection)
-	fullKey, err := client.InspectAnnotation(ctx, tag, cacheKeyAnnotation)
-	if err != nil || fullKey != key {
-		return nil, false
+	// Verify the full spec hash annotation matches (collision detection).
+	fullKey, err := client.InspectAnnotation(ctx, tag, CacheKeyAnnotation)
+	if err != nil || fullKey != specHash {
+		return false
 	}
 
-	return nil, true // artifacts retrieved via the tag
+	return true
 }

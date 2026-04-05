@@ -80,6 +80,7 @@ type RunOpts struct {
 	SecurityOpt []string
 	CapDrop     []string
 	Cmd         []string
+	Entrypoint  []string
 	ReadOnly    bool
 	Remove      bool
 }
@@ -90,6 +91,19 @@ type Mount struct {
 	Target   string
 	Options  []string
 	ReadOnly bool
+}
+
+// DefaultSecureOpts returns a RunOpts with the standard hardened security
+// profile. Callers override specific fields (Image, Cmd, Network, Mounts).
+func DefaultSecureOpts() RunOpts {
+	return RunOpts{
+		CapDrop:     []string{"ALL"},
+		ReadOnly:    true,
+		SecurityOpt: []string{"no-new-privileges"},
+		Tmpfs:       map[string]string{"/tmp": "rw,noexec,nosuid,size=512m"},
+		UsernsMode:  "keep-id",
+		Remove:      true,
+	}
 }
 
 // EngineIdentity holds everything strike knows about the container engine
@@ -149,17 +163,7 @@ func New() (Engine, error) {
 	if err != nil {
 		return nil, fmt.Errorf("container engine: %w", err)
 	}
-	tlsCfg := LoadTLSConfig()
-	client, err := newHTTPClient(addr, tlsCfg)
-	if err != nil {
-		return nil, fmt.Errorf("container engine: %w", err)
-	}
-	return &podmanEngine{
-		client: client,
-		base:   apiBase(addr),
-		tlsCfg: tlsCfg,
-		isUnix: strings.HasPrefix(addr, "unix://"),
-	}, nil
+	return NewFromAddress(addr)
 }
 
 // NewFromAddress creates an Engine connected to a specific address.
@@ -187,7 +191,7 @@ func detectSocket() (string, error) {
 	// 2. Standard rootless socket
 	if xdg := os.Getenv("XDG_RUNTIME_DIR"); xdg != "" {
 		sock := filepath.Join(xdg, "podman", "podman.sock")
-		if _, err := os.Stat(sock); err == nil { //nolint:gosec // G703: socket path from known locations or $CONTAINER_HOST
+		if _, err := os.Stat(sock); err == nil { //nolint:gosec // G703 false positive: err is checked (err == nil probe for socket existence)
 			return "unix://" + sock, nil
 		}
 	}

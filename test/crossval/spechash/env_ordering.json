@@ -1,0 +1,22 @@
+{
+  "boundary": "SpecHash",
+  "description": "env keys that sort differently in naive vs lexicographic byte order",
+  "expected": {
+    "hash": "sha256:8d3ce7905ea61b3a36bb0a56ea574d532593d65480e733d6546d9bdd9430e643"
+  },
+  "inputs": {
+    "step": {
+      "args": [
+        "echo"
+      ],
+      "env": {
+        "A": "1",
+        "B": "2",
+        "a": "3"
+      }
+    },
+    "image_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "input_hashes": {},
+    "source_hashes": {}
+  }
+}

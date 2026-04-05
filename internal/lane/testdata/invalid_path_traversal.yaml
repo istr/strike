@@ -1,0 +1,14 @@
+name: traversal-lane
+registry: localhost:5555/test
+secrets: {}
+steps:
+  - name: build
+    image: golang:1.22
+    args: ["build"]
+    env: {}
+    inputs: []
+    sources:
+      - path: "../secret"
+        mount: /src
+    secrets: []
+    outputs: []

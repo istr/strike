@@ -3,69 +3,77 @@ package lane
 // DeployMethod accessor helpers -- the generated type is map[string]any
 // because CUE unions produce open structs.
 
+// mval safely extracts a typed value from a map[string]any.
+func mval[T any](m map[string]any, key string) (T, bool) {
+	v, ok := m[key].(T)
+	return v, ok
+}
+
 // Type returns the deploy method type ("registry", "kubernetes", "custom").
-func (m DeployMethod) Type() string { return mstr(m, "type") }
+func (m DeployMethod) Type() string { v, _ := mval[string](m, "type"); return v }
 
 // Namespace returns the target Kubernetes namespace.
-func (m DeployMethod) Namespace() string { return mstr(m, "namespace") }
+func (m DeployMethod) Namespace() string { v, _ := mval[string](m, "namespace"); return v }
 
 // Strategy returns the Kubernetes apply strategy.
-func (m DeployMethod) Strategy() string { return mstr(m, "strategy") }
+func (m DeployMethod) Strategy() string { v, _ := mval[string](m, "strategy"); return v }
 
 // Source returns the source image reference for registry deploys.
-func (m DeployMethod) Source() string { return mstr(m, "source") }
+func (m DeployMethod) Source() string { v, _ := mval[string](m, "source"); return v }
 
 // MethodTarget returns the target image reference for registry deploys.
-func (m DeployMethod) MethodTarget() string { return mstr(m, "target") }
+func (m DeployMethod) MethodTarget() string { v, _ := mval[string](m, "target"); return v }
 
 // Image returns the container image for custom deploys.
-func (m DeployMethod) Image() string { return mstr(m, "image") }
+func (m DeployMethod) Image() string { v, _ := mval[string](m, "image"); return v }
 
 // Kubeconfig returns the kubeconfig path.
-func (m DeployMethod) Kubeconfig() string { return mstr(m, "kubeconfig") }
+func (m DeployMethod) Kubeconfig() string { v, _ := mval[string](m, "kubeconfig"); return v }
 
-// Args returns the command arguments for custom deploys.
-func (m DeployMethod) Args() []string {
-	v, ok := m["args"]
+// Entrypoint returns the entrypoint override for custom deploys.
+func (m DeployMethod) Entrypoint() []string {
+	sl, ok := mval[[]any](m, "entrypoint")
 	if !ok {
 		return nil
 	}
-	if sl, ok := v.([]any); ok {
-		out := make([]string, len(sl))
-		for i, s := range sl {
-			str, ok := s.(string)
-			if ok {
-				out[i] = str
-			}
+	out := make([]string, len(sl))
+	for i, s := range sl {
+		str, ok := s.(string)
+		if ok {
+			out[i] = str
 		}
-		return out
 	}
-	return nil
+	return out
+}
+
+// Args returns the command arguments for custom deploys.
+func (m DeployMethod) Args() []string {
+	sl, ok := mval[[]any](m, "args")
+	if !ok {
+		return nil
+	}
+	out := make([]string, len(sl))
+	for i, s := range sl {
+		str, ok := s.(string)
+		if ok {
+			out[i] = str
+		}
+	}
+	return out
 }
 
 // Env returns the environment variables for custom deploys.
 func (m DeployMethod) Env() map[string]string {
-	v, ok := m["env"]
+	mp, ok := mval[map[string]any](m, "env")
 	if !ok {
 		return nil
 	}
-	if mp, ok := v.(map[string]any); ok {
-		out := make(map[string]string, len(mp))
-		for k, v := range mp {
-			str, ok := v.(string)
-			if ok {
-				out[k] = str
-			}
+	out := make(map[string]string, len(mp))
+	for k, v := range mp {
+		str, ok := v.(string)
+		if ok {
+			out[k] = str
 		}
-		return out
 	}
-	return nil
-}
-
-func mstr(m map[string]any, key string) string {
-	v, ok := m[key].(string)
-	if !ok {
-		return ""
-	}
-	return v
+	return out
 }

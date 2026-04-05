@@ -193,3 +193,28 @@ The full non-repudiation chain for a strike-produced artifact:
 7. **Attestation** -- SLSA Provenance predicate with all inputs, parameters,
    and outputs, signed and stored as OCI referrer.
 8. **Deploy state** -- pre-state and post-state snapshots with drift detection.
+
+### End-to-end attestation (planned)
+
+Steps 1 and 8 have open ends. Step 1 records that the lane was committed
+to Git, but does not capture *who signed* the commits or whether *all*
+commits were signed. Step 8 captures pre/post state, but the attestation
+itself is not cryptographically signed -- a tampered attestation is
+indistinguishable from a legitimate one.
+
+Two extensions close these gaps:
+
+- **Source provenance** enriches deploy attestations with git commit
+  metadata: commit range, signer identities (GPG, SSH, or gitsign),
+  and a boolean `all_signed` flag for policy gates. Git runs in a
+  container (preserving the no-exec.Command invariant).
+
+- **Attestation signing** wraps the deploy attestation in a DSSE
+  envelope (Dead Simple Signing Envelope, the in-toto v1 standard)
+  signed with the same cosign key that signs image manifests. The
+  signed attestation is stored as an OCI 1.1 referrer on the deployed
+  image.
+
+Together, these complete the chain from developer keystroke to verified
+production state. The design is documented in
+`docs/END-TO-END-ATTESTATION.md`.

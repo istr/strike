@@ -1,0 +1,30 @@
+{
+  "boundary": "ValidateAttestation",
+  "description": "state snap digest not matching #Digest pattern fails validation",
+  "inputs": {
+    "attestation": {
+      "deploy_id": "abcdef0123456789",
+      "timestamp": "2024-01-01T00:00:00Z",
+      "target": {
+        "type": "registry",
+        "description": "test"
+      },
+      "artifacts": {},
+      "pre_state": {
+        "version": {
+          "name": "version",
+          "image": "alpine:latest",
+          "digest": "not-a-valid-digest",
+          "timestamp": "2024-01-01T00:00:00Z",
+          "output": null
+        }
+      },
+      "post_state": {},
+      "lane_ref": ""
+    }
+  },
+  "expected": {
+    "valid": false,
+    "error_contains": "digest"
+  }
+}
