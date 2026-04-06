@@ -29,17 +29,55 @@ const (
 
 // Attestation is the signed record produced by every deploy step.
 type Attestation struct {
-	Timestamp      time.Time            `json:"timestamp"`
-	Target         lane.DeployTarget    `json:"target"`
-	Artifacts      map[string]string    `json:"artifacts"` // name -> digest deployed
-	PreState       map[string]StateSnap `json:"pre_state"`
-	PostState      map[string]StateSnap `json:"post_state"`
-	Drift          *DriftReport         `json:"drift,omitempty"`
-	Engine         *EngineRecord        `json:"engine,omitempty"`
-	Source         *SourceProvenance    `json:"source,omitempty"`
-	DeployID       string               `json:"deploy_id"`
-	LaneRef        string               `json:"lane_ref"` // digest of lane definition
-	SignedEnvelope []byte               `json:"-"`        // DSSE envelope, not part of attestation JSON
+	Timestamp      time.Time                 `json:"timestamp"`
+	Target         lane.DeployTarget         `json:"target"`
+	Artifacts      map[string]SignedArtifact `json:"artifacts"`
+	PreState       map[string]StateSnap      `json:"pre_state"`
+	PostState      map[string]StateSnap      `json:"post_state"`
+	Drift          *DriftReport              `json:"drift,omitempty"`
+	Engine         *EngineRecord             `json:"engine,omitempty"`
+	Source         *SourceProvenance         `json:"source,omitempty"`
+	DeployID       string                    `json:"deploy_id"`
+	LaneRef        string                    `json:"lane_ref"` // digest of lane definition
+	SignedEnvelope []byte                    `json:"-"`        // DSSE envelope, not part of attestation JSON
+}
+
+// SignedArtifact is the provenance record for one artifact.
+type SignedArtifact struct {
+	Signature *SignatureRecord `json:"signature,omitempty"`
+	SBOM      *SBOMRecord      `json:"sbom,omitempty"`
+	Rekor     *RekorEntry      `json:"rekor,omitempty"`
+	Digest    string           `json:"digest"`
+}
+
+// SignatureRecord holds the signing metadata for an artifact.
+type SignatureRecord struct {
+	Annotations map[string]string `json:"annotations"`
+	Algorithm   string            `json:"algorithm"`
+	Payload     string            `json:"payload"`
+}
+
+// SBOMRecord holds SBOM metadata for an artifact.
+type SBOMRecord struct {
+	Format string `json:"format"`
+	Digest string `json:"digest"`
+}
+
+// RekorEntry holds the transparency log response from a Rekor submission.
+type RekorEntry struct {
+	InclusionProof *InclusionProof `json:"inclusion_proof"`
+	LogID          string          `json:"log_id"`
+	Body           string          `json:"body"`
+	LogIndex       int             `json:"log_index"`
+	IntegratedTime int             `json:"integrated_time"`
+}
+
+// InclusionProof holds the Merkle tree proof for a Rekor entry.
+type InclusionProof struct {
+	RootHash string   `json:"root_hash"`
+	Hashes   []string `json:"hashes"`
+	LogIndex int      `json:"log_index"`
+	TreeSize int      `json:"tree_size"`
 }
 
 // EngineRecord captures the engine's identity at deploy time.
@@ -220,17 +258,19 @@ func (d *Deployer) detectAndHandleDrift(stepName string, spec *lane.DeploySpec, 
 	return drift, nil
 }
 
-// resolveArtifactDigests resolves all artifact references to their digests.
-func resolveArtifactDigests(stepName string, spec *lane.DeploySpec, state *lane.State) (map[string]string, error) {
-	artifactDigests := make(map[string]string)
+// resolveArtifactDigests resolves all artifact references to their signed provenance records.
+func resolveArtifactDigests(stepName string, spec *lane.DeploySpec, state *lane.State) (map[string]SignedArtifact, error) {
+	artifacts := make(map[string]SignedArtifact)
 	for artName, artRef := range spec.Artifacts {
 		a, resolveErr := state.Resolve(artRef.From)
 		if resolveErr != nil {
 			return nil, fmt.Errorf("step %q: artifact %q: %w", stepName, artName, resolveErr)
 		}
-		artifactDigests[artName] = a.Digest
+		artifacts[artName] = SignedArtifact{
+			Digest: a.Digest,
+		}
 	}
-	return artifactDigests, nil
+	return artifacts, nil
 }
 
 // recordAttestation marshals and records the attestation in lane state.

@@ -3,6 +3,7 @@ package deploy
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"cuelang.org/go/cue"
 	"cuelang.org/go/cue/cuecontext"
@@ -10,7 +11,24 @@ import (
 	"github.com/istr/strike/specs"
 )
 
-var attestationSchema = specs.AttestationSchema
+// deploySchema combines the attestation and artifact CUE schemas.
+// Both files use package deploy and must be compiled together so that
+// types like #SignedArtifact are available when validating #Attestation.
+// The artifact schema's package declaration is stripped to allow
+// concatenation into a single CUE source string.
+var deploySchema = specs.AttestationSchema + "\n" + stripPackageLine(specs.ArtifactSchema)
+
+// stripPackageLine removes the "package ..." line from a CUE source string.
+func stripPackageLine(src string) string {
+	var lines []string
+	for _, line := range strings.Split(src, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "package ") {
+			continue
+		}
+		lines = append(lines, line)
+	}
+	return strings.Join(lines, "\n")
+}
 
 // ValidateAttestation checks a serialized attestation against the embedded
 // CUE schema. This ensures that the attestation output — the document that
@@ -34,7 +52,7 @@ func ValidateAttestation(att *Attestation) error {
 func ValidateAttestationJSON(data []byte) error {
 	ctx := cuecontext.New()
 
-	compiled := ctx.CompileString(attestationSchema).
+	compiled := ctx.CompileString(deploySchema).
 		LookupPath(cue.ParsePath("#Attestation"))
 
 	expr, err := cuejson.Extract("attestation.json", data)

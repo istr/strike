@@ -160,7 +160,7 @@ func TestAttestationJSON(t *testing.T) {
 	att := &deploy.Attestation{
 		DeployID:  "test-001",
 		Target:    lane.DeployTarget{Type: "registry", Description: "test"},
-		Artifacts: map[string]string{"image": "sha256:abc"},
+		Artifacts: map[string]deploy.SignedArtifact{"image": {Digest: "sha256:abc"}},
 		PreState: map[string]deploy.StateSnap{
 			"version": {Name: "version", Image: "img@sha256:aaa", Digest: "sha256:aaa"},
 		},
@@ -310,7 +310,7 @@ func TestDeployerExecute(t *testing.T) {
 	state := lane.NewState()
 	if err := state.Register("build", "image", lane.Artifact{
 		Type:   "image",
-		Digest: "sha256:abc123",
+		Digest: "sha256:abc1230000000000000000000000000000000000000000000000000000000000",
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -358,8 +358,8 @@ func TestDeployerExecute(t *testing.T) {
 	if len(att.Artifacts) == 0 {
 		t.Error("expected artifact digests in attestation")
 	}
-	if att.Artifacts["image"] != "sha256:abc123" {
-		t.Errorf("artifact digest = %q, want sha256:abc123", att.Artifacts["image"])
+	if att.Artifacts["image"].Digest != "sha256:abc1230000000000000000000000000000000000000000000000000000000000" {
+		t.Errorf("artifact digest = %q, want sha256:abc1230000000000000000000000000000000000000000000000000000000000", att.Artifacts["image"].Digest)
 	}
 	if len(att.PreState) == 0 {
 		t.Error("expected pre-state snapshots")
@@ -443,7 +443,7 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 	state := lane.NewState()
 	if err := state.Register("build", "image", lane.Artifact{
 		Type:   "image",
-		Digest: "sha256:abc123",
+		Digest: "sha256:abc1230000000000000000000000000000000000000000000000000000000000",
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -523,7 +523,7 @@ func TestEngineRecord_NilEngineID(t *testing.T) {
 	state := lane.NewState()
 	if err := state.Register("build", "image", lane.Artifact{
 		Type:   "image",
-		Digest: "sha256:abc123",
+		Digest: "sha256:abc1230000000000000000000000000000000000000000000000000000000000",
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -572,7 +572,7 @@ func TestEngineRecord_WithRuntime(t *testing.T) {
 	state := lane.NewState()
 	if err := state.Register("build", "image", lane.Artifact{
 		Type:   "image",
-		Digest: "sha256:abc123",
+		Digest: "sha256:abc1230000000000000000000000000000000000000000000000000000000000",
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -628,7 +628,7 @@ func TestEngineRecord_WithoutRuntime(t *testing.T) {
 	state := lane.NewState()
 	if err := state.Register("build", "image", lane.Artifact{
 		Type:   "image",
-		Digest: "sha256:abc123",
+		Digest: "sha256:abc1230000000000000000000000000000000000000000000000000000000000",
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -768,7 +768,7 @@ func TestDeployerExecute_DriftDetectFail(t *testing.T) {
 	state := lane.NewState()
 	if err := state.Register("build", "image", lane.Artifact{
 		Type:   "image",
-		Digest: "sha256:abc123",
+		Digest: "sha256:abc1230000000000000000000000000000000000000000000000000000000000",
 	}); err != nil {
 		t.Fatal(err)
 	}

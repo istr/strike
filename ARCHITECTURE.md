@@ -185,11 +185,14 @@ The full non-repudiation chain for a strike-produced artifact:
    in spec hash.
 3. **Build execution** -- container create/start/wait/remove logged with
    timestamps and container IDs.
-4. **Artifact digest** -- computed by the controller via `go-containerregistry`,
-   not the engine.
+4. **Artifact provenance** -- each artifact in the deploy attestation carries a
+   full `#SignedArtifact` record: content-addressed digest (computed by the
+   controller via `go-containerregistry`), signature metadata, SBOM digest,
+   and Rekor transparency log entry. Schema: `specs/artifact.cue`.
 5. **SBOM** -- generated in-process from Go build info and base image referrers.
+   The SBOM digest is recorded in the artifact's `#SBOMRecord`.
 6. **Signature** -- ECDSA P-256 over manifest digest, recorded in Rekor
-   transparency log.
+   transparency log. Signing metadata is captured in `#SignatureRecord`.
 7. **Attestation** -- SLSA Provenance predicate with all inputs, parameters,
    and outputs, signed and stored as OCI referrer.
 8. **Deploy state** -- pre-state and post-state snapshots with drift detection.

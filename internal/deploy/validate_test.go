@@ -17,8 +17,8 @@ func TestValidateAttestation_Valid(t *testing.T) {
 		DeployID:  "abcdef0123456789",
 		Timestamp: time.Date(2025, 1, 15, 10, 30, 0, 0, time.UTC),
 		Target:    lane.DeployTarget{Type: "registry", Description: "production"},
-		Artifacts: map[string]string{
-			"image": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+		Artifacts: map[string]deploy.SignedArtifact{
+			"image": {Digest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
 		},
 		PreState: map[string]deploy.StateSnap{
 			"version": {
@@ -49,8 +49,8 @@ func TestValidateAttestation_WithEngine(t *testing.T) {
 		DeployID:  "abcdef0123456789",
 		Timestamp: time.Date(2025, 1, 15, 10, 30, 0, 0, time.UTC),
 		Target:    lane.DeployTarget{Type: "kubernetes", Description: "staging"},
-		Artifacts: map[string]string{
-			"app": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+		Artifacts: map[string]deploy.SignedArtifact{
+			"app": {Digest: "sha256:1111111111111111111111111111111111111111111111111111111111111111"},
 		},
 		PreState:  map[string]deploy.StateSnap{},
 		PostState: map[string]deploy.StateSnap{},
@@ -73,7 +73,7 @@ func TestValidateAttestation_WithDrift(t *testing.T) {
 		DeployID:  "abcdef0123456789",
 		Timestamp: time.Date(2025, 1, 15, 10, 30, 0, 0, time.UTC),
 		Target:    lane.DeployTarget{Type: "registry", Description: "production"},
-		Artifacts: map[string]string{},
+		Artifacts: map[string]deploy.SignedArtifact{},
 		PreState:  map[string]deploy.StateSnap{},
 		PostState: map[string]deploy.StateSnap{},
 		Drift: &deploy.DriftReport{
@@ -94,7 +94,7 @@ func TestValidateAttestation_InvalidDeployID(t *testing.T) {
 		DeployID:  "NOT-HEX!!", // too short, wrong chars
 		Timestamp: time.Date(2025, 1, 15, 10, 30, 0, 0, time.UTC),
 		Target:    lane.DeployTarget{Type: "registry", Description: "test"},
-		Artifacts: map[string]string{},
+		Artifacts: map[string]deploy.SignedArtifact{},
 		PreState:  map[string]deploy.StateSnap{},
 		PostState: map[string]deploy.StateSnap{},
 	}
@@ -109,7 +109,7 @@ func TestValidateAttestation_InvalidEngineConnectionType(t *testing.T) {
 		DeployID:  "abcdef0123456789",
 		Timestamp: time.Date(2025, 1, 15, 10, 30, 0, 0, time.UTC),
 		Target:    lane.DeployTarget{Type: "registry", Description: "test"},
-		Artifacts: map[string]string{},
+		Artifacts: map[string]deploy.SignedArtifact{},
 		PreState:  map[string]deploy.StateSnap{},
 		PostState: map[string]deploy.StateSnap{},
 		Engine: &deploy.EngineRecord{
@@ -147,7 +147,7 @@ func TestValidateAttestation_EmptyStatesAllowed(t *testing.T) {
 		DeployID:  "abcdef0123456789",
 		Timestamp: time.Date(2025, 1, 15, 10, 30, 0, 0, time.UTC),
 		Target:    lane.DeployTarget{Type: "registry", Description: "first deploy"},
-		Artifacts: map[string]string{},
+		Artifacts: map[string]deploy.SignedArtifact{},
 		PreState:  map[string]deploy.StateSnap{},
 		PostState: map[string]deploy.StateSnap{},
 	}

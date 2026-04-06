@@ -2,11 +2,14 @@
 //
 // This schema defines the output format of every deploy step.
 // The attestation is the signed record that carries the supply chain
-// trust chain — it must be formally specified, not just implicitly
+// trust chain -- it must be formally specified, not just implicitly
 // defined by Go struct tags.
 //
+// Companion file: artifact.cue defines #SignedArtifact and related
+// provenance types (same package deploy, merged automatically by CUE).
+//
 // Validation flow:
-//   deploy.Execute() → Attestation struct → JSON → CUE validate
+//   deploy.Execute() -> Attestation struct -> JSON -> CUE validate
 //
 // This mirrors lane/schema.cue (input validation) but covers
 // the output side. Together they provide a complete CUE-defined
@@ -44,12 +47,10 @@ package deploy
 	// target describes what was deployed to.
 	target: #DeployTarget
 
-	// artifacts maps artifact names to their content-addressed digests.
+	// artifacts maps artifact names to their signed provenance records.
 	// Every artifact listed here was verified against the lane state
 	// before the deploy action executed.
-	// Values are typically "sha256:<hex>" but not constrained to #Digest
-	// because external artifact systems may use different formats.
-	artifacts: [Name=string]: string
+	artifacts: [Name=string]: #SignedArtifact
 
 	// pre_state captures the state of the target before the deploy.
 	pre_state: [Name=string]: #StateSnap
@@ -111,7 +112,7 @@ package deploy
 	current_pre_state: [Name=string]: string
 
 	// drifted lists the dimension names where digests differ.
-	// null when no dimensions drifted (Go nil slice → JSON null).
+	// null when no dimensions drifted (Go nil slice -> JSON null).
 	drifted: [...string] | null
 }
 

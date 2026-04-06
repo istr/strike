@@ -14,3 +14,9 @@ var LaneSchema string
 //
 //go:embed attestation.cue
 var AttestationSchema string
+
+// ArtifactSchema is the embedded CUE schema for artifact provenance records.
+// Same package deploy as AttestationSchema -- must be compiled together.
+//
+//go:embed artifact.cue
+var ArtifactSchema string
