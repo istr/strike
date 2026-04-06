@@ -118,6 +118,11 @@ Agents must stop and ask the operator before:
 - Moving types between CUE files or packages.
 - Changing the `artifacts` map value type or other structural changes
   to `#Attestation`.
+- Adding any `//nolint` or `// #nosec` annotation. Every lint
+  suppression is a security decision. Present the finding, explain
+  why it is a false positive, and wait for approval. This rule
+  applies unconditionally -- even when auto-edit is enabled for the
+  session.
 
 Agents may proceed without confirmation for:
 
@@ -449,7 +454,14 @@ make check      # lint + test + vuln + build (CI entry point)
 - Do not edit `cue_types_lane_gen.go` by hand. Run `make generate`.
 - Do not add a `go:generate` directive for anything other than CUE codegen.
 - Do not introduce build tags. Tests must work with plain `go test ./...`.
-- Do not add `//nolint` without a written justification in a code comment.
+- Do not add `//nolint` or `// #nosec` annotations without operator
+  confirmation. This applies even when auto-edit is enabled for the
+  session. Every suppression is a security decision. Present the
+  linter finding, explain why it is a false positive, and wait for
+  approval before adding the annotation. The annotation must include
+  the specific rule code and a written justification in the code
+  comment (e.g., `//nolint:gosec // G304: path is from MkdirTemp,
+  not user input`).
 - Do not embed configuration files other than the CUE schemas in `specs/`.
 - Do not use `init()` functions.
 - Do not use global mutable state (package-level `var` with mutation).
