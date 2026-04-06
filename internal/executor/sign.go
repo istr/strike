@@ -1,6 +1,7 @@
 package executor
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"crypto/rand"
 	"crypto/sha256"
@@ -9,7 +10,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
+	"log"
+	"strings"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/empty"
@@ -64,10 +68,12 @@ func SignPayload(data, keyPEM, password []byte) (b64sig, keyID string, err error
 // manifestDigest is the "sha256:..." digest of the image manifest to sign.
 // keyPEM is the PEM-encoded ECDSA private key (cosign or PKCS#8 format).
 // password is the key passphrase; empty slice for unencrypted keys.
+// rekor is an optional Rekor client; if non-nil, the signature is submitted
+// to the transparency log and Rekor annotations are added to the image.
 //
 // Returns the signature as a go-containerregistry v1.Image ready to be
 // appended to an OCI Image Index as a referrer.
-func SignManifest(manifestDigest string, keyPEM, password []byte) (v1.Image, error) {
+func SignManifest(ctx context.Context, manifestDigest string, keyPEM, password []byte, rekor *RekorClient) (v1.Image, error) {
 	// Construct cosign simple signing payload.
 	payload, err := json.Marshal(simpleSigning{
 		Critical: criticalSection{
@@ -86,20 +92,27 @@ func SignManifest(manifestDigest string, keyPEM, password []byte) (v1.Image, err
 		return nil, err
 	}
 
-	// TODO(rekor): submit payload + b64sig to Rekor transparency log.
-	// On success, attach the returned tlog entry as an annotation on the
-	// signature manifest:
-	//   "dev.sigstore.cosign/bundle": <rekor bundle JSON>
-	// Required dependency: github.com/sigstore/rekor (client only, not cosign/v2).
+	annotations := map[string]string{
+		"dev.sigstore.cosign/signature": b64sig,
+	}
+
+	// Submit to Rekor transparency log if configured.
+	if rekor != nil {
+		rekorAnnotations, rekorErr := submitToRekor(ctx, rekor, manifestDigest, b64sig, keyPEM, password)
+		if rekorErr != nil {
+			return nil, rekorErr
+		}
+		for k, v := range rekorAnnotations {
+			annotations[k] = v
+		}
+	}
 
 	// Build OCI signature artefact.
 	layer := static.NewLayer(payload,
 		types.MediaType("application/vnd.dev.cosign.simplesigning.v1+json"))
 
 	img := mutate.MediaType(empty.Image, types.OCIManifestSchema1)
-	annotated, ok := mutate.Annotations(img, map[string]string{
-		"dev.sigstore.cosign/signature": b64sig,
-	}).(v1.Image)
+	annotated, ok := mutate.Annotations(img, annotations).(v1.Image)
 	if !ok {
 		return nil, fmt.Errorf("unexpected type from mutate.Annotations")
 	}
@@ -125,6 +138,34 @@ func SignManifest(manifestDigest string, keyPEM, password []byte) (v1.Image, err
 	img = withSubject
 
 	return img, nil
+}
+
+// submitToRekor submits the signature to a Rekor transparency log.
+// Returns Rekor annotations on success, nil on warning (fail open),
+// or a hard error on SET verification failure.
+func submitToRekor(ctx context.Context, client *RekorClient, manifestDigest, b64sig string, keyPEM, password []byte) (map[string]string, error) {
+	sig, err := base64.StdEncoding.DecodeString(b64sig)
+	if err != nil {
+		return nil, fmt.Errorf("rekor: decode signature: %w", err)
+	}
+
+	pubPEM, err := derivePublicKeyPEM(keyPEM, password)
+	if err != nil {
+		return nil, fmt.Errorf("rekor: derive public key: %w", err)
+	}
+
+	hexDigest := strings.TrimPrefix(manifestDigest, "sha256:")
+	entry, err := client.SubmitHashedRekord(ctx, hexDigest, sig, pubPEM)
+	if err != nil {
+		var w *RekorTransientError
+		if errors.As(err, &w) {
+			log.Printf("WARN   rekor: %v", err)
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	return entry.Annotations(), nil
 }
 
 // loadCosignKey parses an ECDSA private key from PEM format.

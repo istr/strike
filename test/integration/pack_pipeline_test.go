@@ -62,7 +62,7 @@ func TestPackPipeline(t *testing.T) {
 	}
 	defer outRoot2.Close() //nolint:errcheck // os.Root.Close on temp dir; error is not actionable in test
 
-	result2, err := executor.Pack(executor.PackOpts{
+	result2, err := executor.Pack(context.Background(), executor.PackOpts{
 		Spec: &lane.PackSpec{
 			Base: lane.ImageRef(staticBase),
 			Files: []lane.PackFile{

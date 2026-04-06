@@ -1,6 +1,7 @@
 package executor_test
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -131,14 +132,14 @@ func TestSignManifest_EncryptedCosignKey(t *testing.T) {
 func TestSignManifest_WrongPassword(t *testing.T) {
 	key, _ := generateTestKey(t)
 	encrypted := encryptCosignKey(t, key, "correct")
-	_, err := executor.SignManifest(testDigest(), encrypted, []byte("wrong"))
+	_, err := executor.SignManifest(context.Background(), testDigest(), encrypted, []byte("wrong"), nil)
 	if err == nil {
 		t.Fatal("expected error for wrong password")
 	}
 }
 
 func TestSignManifest_EmptyPEM(t *testing.T) {
-	_, err := executor.SignManifest(testDigest(), []byte("not a pem"), nil)
+	_, err := executor.SignManifest(context.Background(), testDigest(), []byte("not a pem"), nil, nil)
 	if err == nil {
 		t.Fatal("expected error for empty PEM")
 	}
@@ -146,7 +147,7 @@ func TestSignManifest_EmptyPEM(t *testing.T) {
 
 func TestSignManifest_UnsupportedPEMType(t *testing.T) {
 	pemBytes := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: []byte("fake")})
-	_, err := executor.SignManifest(testDigest(), pemBytes, nil)
+	_, err := executor.SignManifest(context.Background(), testDigest(), pemBytes, nil, nil)
 	if err == nil {
 		t.Fatal("expected error for unsupported PEM type")
 	}
@@ -160,7 +161,7 @@ func TestSignManifest_UnsupportedPEMType(t *testing.T) {
 func verifyRoundTrip(t *testing.T, keyPEM, password []byte, pub *ecdsa.PublicKey) {
 	t.Helper()
 	digest := testDigest()
-	img, err := executor.SignManifest(digest, keyPEM, password)
+	img, err := executor.SignManifest(context.Background(), digest, keyPEM, password, nil)
 	if err != nil {
 		t.Fatalf("SignManifest: %v", err)
 	}

@@ -133,7 +133,7 @@ func packTestImage(t *testing.T, binPath string, keyPEM []byte) (*executor.PackR
 		t.Fatal(err)
 	}
 
-	result, packErr := executor.Pack(executor.PackOpts{
+	result, packErr := executor.Pack(context.Background(), executor.PackOpts{
 		Spec: &lane.PackSpec{
 			Base: lane.ImageRef(staticBase),
 			Files: []lane.PackFile{

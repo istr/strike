@@ -53,7 +53,7 @@ func TestEndToEndChain(t *testing.T) {
 	}
 	defer packRoot.Close() //nolint:errcheck // os.Root.Close on temp dir; error is not actionable in test
 
-	packResult, err := executor.Pack(executor.PackOpts{
+	packResult, err := executor.Pack(context.Background(), executor.PackOpts{
 		Spec:        chainPackSpec(),
 		InputPaths:  map[string]string{"build.app": binPath},
 		OutputRoot:  packRoot,

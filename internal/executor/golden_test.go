@@ -1,6 +1,7 @@
 package executor_test
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -160,7 +161,7 @@ func TestSignManifest_Golden(t *testing.T) {
 		password = []byte(*vec.Inputs.Password)
 	}
 
-	sigImage, err := executor.SignManifest(vec.Inputs.ManifestDigest, keyPEM, password)
+	sigImage, err := executor.SignManifest(context.Background(), vec.Inputs.ManifestDigest, keyPEM, password, nil)
 	if err != nil {
 		t.Fatalf("SignManifest: %v", err)
 	}

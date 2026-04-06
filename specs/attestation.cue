@@ -69,6 +69,10 @@ package deploy
 	// source captures git provenance when source mounts are present.
 	source?: #SourceProvenance
 
+	// rekor is the transparency log entry from a Rekor hashedrekord
+	// submission. Present only when REKOR_URL is configured.
+	rekor?: #RekorEntry
+
 	// lane_ref is the digest of the lane definition file.
 	// Empty string when not yet computed.
 	lane_ref: string

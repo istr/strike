@@ -5,6 +5,7 @@ package executor
 import (
 	"archive/tar"
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"io/fs"
@@ -30,10 +31,11 @@ type PackOpts struct {
 	InputPaths  map[string]string
 	Spec        *lane.PackSpec
 	State       *lane.State
-	OutputRoot  *os.Root // root-scoped output directory
-	OutputName  string   // filename within OutputRoot
+	OutputRoot  *os.Root     // root-scoped output directory
+	OutputName  string       // filename within OutputRoot
 	SigningKey  []byte
 	KeyPassword []byte
+	Rekor       *RekorClient // optional Rekor transparency log client
 }
 
 // PackResult holds the outputs of a successful pack operation.
@@ -118,7 +120,7 @@ func AssembleImage(base v1.Image, spec *lane.PackSpec, inputPaths map[string]str
 // Pack is the orchestrator: it handles I/O (pull, write) and delegates
 // to pure functions (AssembleImage, SignManifest, GenerateSBOM) for the
 // security-critical computations.
-func Pack(opts PackOpts) (*PackResult, error) {
+func Pack(ctx context.Context, opts PackOpts) (*PackResult, error) {
 	if opts.SigningKey == nil {
 		return nil, fmt.Errorf("pack: signing key is required; keyless signing is not yet implemented")
 	}
@@ -146,8 +148,8 @@ func Pack(opts PackOpts) (*PackResult, error) {
 		return nil, fmt.Errorf("pack: SBOM artifact: %w", err)
 	}
 
-	// 4. Sign the image manifest digest — pure crypto
-	sigImage, err := SignManifest(assembled.Digest.String(), opts.SigningKey, opts.KeyPassword)
+	// 4. Sign the image manifest digest — pure crypto, optional Rekor submission
+	sigImage, err := SignManifest(ctx, assembled.Digest.String(), opts.SigningKey, opts.KeyPassword, opts.Rekor)
 	if err != nil {
 		return nil, fmt.Errorf("pack: sign: %w", err)
 	}
