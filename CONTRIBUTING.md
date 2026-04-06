@@ -34,6 +34,12 @@ strike takes a different approach:
   a Merkle tree over image digests, arguments, and source hashes -- not
   timestamps, not build IDs, not mutable tags.
 
+- **Schema-driven data model.** Every data structure that crosses a package
+  boundary is defined in CUE under `specs/`. CUE schemas are the single
+  source of truth -- Go types are either generated from CUE or validated
+  against CUE at runtime. This ensures every implementation (Go, Rust
+  verifier, external policy engines) works against the same contract.
+
 ## What we welcome
 
 **Bug fixes** -- always welcome. If something is broken, please open an issue
@@ -75,13 +81,23 @@ communicates with the container engine via REST API over Unix socket. We will
 not embed container runtimes, add gRPC services, bundle web UIs, or introduce
 daemon processes.
 
+**Untyped cross-package data.** Do not introduce `map[string]string` or
+`interface{}` for structured data that flows between packages. If your feature
+needs new data to cross a boundary, define it in a CUE schema first, get it
+approved, then implement the Go types.
+
 ## How to contribute
 
 1. Fork the repository.
 2. Create a branch from `main`.
-3. Make your changes. Keep diffs small and focused.
-4. Ensure all quality gates pass (see below).
-5. Open a merge request with a clear description of what and why.
+3. **If your change introduces or modifies data structures that cross
+   package boundaries, start with the CUE schema.** Add or update types
+   in `specs/*.cue`, run `make specs` to validate, then open an issue or
+   draft MR to discuss the schema before writing Go code. Schema changes
+   are architectural decisions and will be reviewed carefully.
+4. Make your changes. Keep diffs small and focused.
+5. Ensure all quality gates pass (see below).
+6. Open a merge request with a clear description of what and why.
 
 For larger changes, please open an issue first to discuss the approach. This
 saves time for everyone.
@@ -155,11 +171,16 @@ essential rules:
 - Path operations on untrusted input must use `filepath.IsLocal` and
   prefix validation.
 - Secrets must never appear in error messages, logs, or process arguments.
+- Data structures crossing package boundaries must be defined in CUE schemas
+  under `specs/` before Go implementation. No `map[string]string` for
+  structured inter-package data.
 
 ## Security review
 
 Changes touching these areas require extra scrutiny:
 
+- `specs/*.cue` -- CUE schema changes affect the cross-implementation
+  contract and every existing attestation in every registry
 - `internal/executor/` -- container security profile, signing, SBOM generation
 - `internal/registry/` -- OCI registry interaction, cache integrity
 - `internal/deploy/` -- command execution, state capture

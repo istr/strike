@@ -49,6 +49,100 @@ Build: `CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o strike ./cmd/strike
    `CONTAINER_TLS_KEY` for optional mutual TLS. Unix socket connections
    are not affected.
 
+8. **CUE schemas are the single source of truth.** Every data structure
+   that crosses a package boundary -- step inputs, artifact records,
+   attestations, state snapshots -- must be defined in a CUE schema
+   under `specs/` before it is implemented in Go. Go types are either
+   generated from CUE (`cue exp gengotypes`) or validated against CUE
+   at runtime. There are no untyped `map[string]string` bags for
+   structured data. See "CUE schema workflow" below.
+
+## CUE schema workflow
+
+CUE schemas define the complete data model for strike. They serve three
+purposes: input validation (lane YAML), output validation (attestations),
+and cross-implementation contracts (Rust verifier, policy engines).
+
+### Schema files
+
+```
+specs/
+  lane.cue          package lane    -- input: what operators declare
+  attestation.cue   package deploy  -- output: deploy attestation record
+  artifact.cue      package deploy  -- output: signed artifact provenance
+  crossval.cue      package crossval -- cross-validation test vectors
+  embed.go          Go embed for runtime validation
+```
+
+Files in the same directory with the same `package` declaration are
+merged by CUE automatically -- no import needed.
+
+### Schema-first development
+
+New features that introduce or change data structures follow this order:
+
+1. **Define the CUE type first.** Write the `#Type` definition in the
+   appropriate `specs/*.cue` file. Include field constraints (regex,
+   bounds, enums). Add a doc comment on every field.
+
+2. **Stop and ask the operator for confirmation.** Do not proceed to
+   Go implementation until the operator has reviewed and approved the
+   schema change. Present the CUE diff and explain what each field
+   is for. Schema changes are architectural decisions -- they affect
+   every implementation (Go, Rust verifier, external tools) and every
+   existing attestation in every registry.
+
+3. **Run `make specs` to validate.** CUE must parse and validate
+   without errors. JSON Schema export must succeed.
+
+4. **Run `make generate` to regenerate Go types.** Never edit
+   `cue_types_lane_gen.go` by hand. If the generated types do not
+   match what the Go code needs, fix the CUE schema -- not the
+   generated code.
+
+5. **Implement the Go code against the generated or validated types.**
+   If a type is CUE-generated, use it directly. If a type is manually
+   defined in Go (e.g., `deploy.Attestation`), it must serialize to
+   JSON that passes `ValidateAttestation()` against the CUE schema.
+
+6. **Add or update golden test fixtures.** Run `make golden`. Review
+   the diffs to confirm the schema change produces the expected JSON.
+
+### What requires operator confirmation
+
+Agents must stop and ask the operator before:
+
+- Adding a new `#Type` definition to any `specs/*.cue` file.
+- Adding, removing, or renaming fields on an existing CUE type.
+- Changing field constraints (regex, bounds, optionality, enums).
+- Moving types between CUE files or packages.
+- Changing the `artifacts` map value type or other structural changes
+  to `#Attestation`.
+
+Agents may proceed without confirmation for:
+
+- Adding doc comments to existing CUE fields.
+- Fixing typos in CUE comments.
+- Updating golden test fixtures after an approved schema change.
+
+### Go types and CUE alignment
+
+Two categories of Go types exist:
+
+**CUE-generated types** (package `lane`): Produced by `cue exp gengotypes`
+from `specs/lane.cue`. File: `internal/lane/cue_types_lane_gen.go`. Never
+edit by hand. The CUE `@go()` attributes control Go type and field names.
+
+**CUE-validated types** (package `deploy`): Manually defined in Go but
+validated at runtime against `specs/attestation.cue` via
+`ValidateAttestation()`. JSON field names must match CUE field names
+exactly. Adding a field in Go without adding it in CUE causes a
+validation failure. Adding a field in CUE without adding it in Go
+causes the field to be missing from the output.
+
+In both cases, **CUE is authoritative**. If the Go code and the CUE
+schema disagree, the CUE schema wins and the Go code must be fixed.
+
 ## Package structure
 
 ```
@@ -67,11 +161,13 @@ packages.
 
 ### Key files
 
-- `specs/lane.cue` -- CUE schema for lane definitions (source of truth).
-  `specs/attestation.cue` -- CUE schema for deploy attestations.
-  After editing, run `make generate` to re-export JSON Schema and
-  regenerate `internal/lane/cue_types_lane_gen.go`. Never edit the
-  generated file by hand.
+- `specs/lane.cue` -- CUE schema for lane definitions (source of truth
+  for inputs). `specs/attestation.cue` -- CUE schema for deploy
+  attestations. `specs/artifact.cue` -- CUE schema for signed artifact
+  provenance records. After editing any `.cue` file, run `make specs`
+  to validate, then `make generate` to regenerate
+  `internal/lane/cue_types_lane_gen.go`. Never edit the generated file
+  by hand.
 - `internal/container/engine.go` -- Engine interface and types. All container
   operations go through this interface.
 - `internal/container/podman.go` -- Podman libpod REST API implementation.
@@ -342,6 +438,15 @@ make check      # lint + test + vuln + build (CI entry point)
 
 ## What not to do
 
+- Do not add or modify CUE schema types without operator confirmation.
+  Schema changes are architectural decisions that affect all
+  implementations and all existing data.
+- Do not define Go structs for cross-package data without a
+  corresponding CUE type. If data crosses a package boundary, it must
+  be in CUE first.
+- Do not use `map[string]string` as a catch-all for structured data
+  that flows between packages. Define typed fields in CUE instead.
+- Do not edit `cue_types_lane_gen.go` by hand. Run `make generate`.
 - Do not add a `go:generate` directive for anything other than CUE codegen.
 - Do not introduce build tags. Tests must work with plain `go test ./...`.
 - Do not add `//nolint` without a written justification in a code comment.
