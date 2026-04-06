@@ -19,10 +19,10 @@ import (
 // fully computable before execution.
 func SpecHash(
 	step *lane.Step,
-	imageDigest string, // sha256 digest of the image
-	inputHashes map[string]string, // step-name -> spec hash of producing step
-	sourceHashes map[string]string, // mount-path -> sha256 of source file
-) string {
+	imageDigest lane.Digest, // sha256 digest of the image
+	inputHashes map[string]lane.Digest, // step-name -> spec hash of producing step
+	sourceHashes map[string]lane.Digest, // mount-path -> sha256 of source file
+) lane.Digest {
 	h := sha256.New()
 
 	h.Write([]byte(imageDigest))
@@ -39,26 +39,26 @@ func SpecHash(
 	}
 
 	// Input hashes sorted by name for determinism
-	names := sortedKeys(inputHashes)
+	names := sortedDigestMapKeys(inputHashes)
 	for _, n := range names {
-		h.Write([]byte(n + "=" + inputHashes[n]))
+		h.Write([]byte(n + "=" + string(inputHashes[n])))
 	}
 
 	// Source hashes sorted by path
-	paths := sortedKeys(sourceHashes)
+	paths := sortedDigestMapKeys(sourceHashes)
 	for _, p := range paths {
-		h.Write([]byte(p + "=" + sourceHashes[p]))
+		h.Write([]byte(p + "=" + string(sourceHashes[p])))
 	}
 
-	return "sha256:" + fmt.Sprintf("%x", h.Sum(nil))
+	return lane.Digest("sha256:" + fmt.Sprintf("%x", h.Sum(nil)))
 }
 
 // Tag builds the registry tag from step name and spec hash.
 // The hash is truncated to 16 hex characters for OCI tag length constraints.
 // Format: registry:step-name-<first16hex>
 // Example: ghcr.io/istr/strike-cache:build-package-a3f9c2b1d4e7f801.
-func Tag(registry, stepName, hash string) string {
-	short := strings.TrimPrefix(hash, "sha256:")
+func Tag(registry, stepName string, hash lane.Digest) string {
+	short := strings.TrimPrefix(string(hash), "sha256:")
 	if len(short) > 16 {
 		short = short[:16]
 	}
@@ -67,22 +67,22 @@ func Tag(registry, stepName, hash string) string {
 
 // HashPath computes SHA256 of a file or directory within the given root scope.
 // Returns a typed digest in "sha256:<hex>" format.
-func HashPath(root *os.Root, laneDir, path string) (string, error) {
+func HashPath(root *os.Root, laneDir, path string) (lane.Digest, error) {
 	return lane.SourceDigest(root, laneDir, path)
 }
 
 // hashReader computes SHA256 of the data from r.
-func hashReader(r io.Reader) (string, error) {
+func hashReader(r io.Reader) (lane.Digest, error) {
 	h := sha256.New()
 	if _, err := io.Copy(h, r); err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("sha256:%x", h.Sum(nil)), nil
+	return lane.Digest(fmt.Sprintf("sha256:%x", h.Sum(nil))), nil
 }
 
 // HashFile computes SHA256 of a file within the given root scope.
 // Returns a typed digest in "sha256:<hex>" format.
-func HashFile(root *os.Root, path string) (hash string, err error) {
+func HashFile(root *os.Root, path string) (hash lane.Digest, err error) {
 	f, err := root.Open(path)
 	if err != nil {
 		return "", err
@@ -97,7 +97,7 @@ func HashFile(root *os.Root, path string) (hash string, err error) {
 
 // HashFileAbs hashes a file given as an absolute path from CLI args.
 // Returns a typed digest in "sha256:<hex>" format.
-func HashFileAbs(path string) (hash string, err error) {
+func HashFileAbs(path string) (hash lane.Digest, err error) {
 	f, err := os.Open(path) //nolint:gosec // G304: path is an absolute file path from step execution, not web input
 	if err != nil {
 		return "", err
@@ -111,6 +111,15 @@ func HashFileAbs(path string) (hash string, err error) {
 }
 
 func sortedKeys(m map[string]string) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func sortedDigestMapKeys(m map[string]lane.Digest) []string {
 	keys := make([]string, 0, len(m))
 	for k := range m {
 		keys = append(keys, k)

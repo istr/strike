@@ -11,18 +11,50 @@ import (
 	"github.com/istr/strike/specs"
 )
 
-// deploySchema combines the attestation and artifact CUE schemas.
-// Both files use package deploy and must be compiled together so that
-// types like #SignedArtifact are available when validating #Attestation.
-// The artifact schema's package declaration is stripped to allow
-// concatenation into a single CUE source string.
-var deploySchema = specs.AttestationSchema + "\n" + stripPackageLine(specs.ArtifactSchema)
+// deploySchema combines the attestation, artifact, and lane CUE schemas.
+// All three are compiled together via string concatenation so that types
+// like #SignedArtifact and #RekorEntry are available when validating
+// #Attestation.
+//
+// artifact.cue uses `import "github.com/istr/strike/specs:lane"` for
+// the `cue export` toolchain, but ctx.CompileString cannot resolve module
+// imports. stripForConcat removes package declarations, import blocks,
+// and cross-package re-export lines so the files can be concatenated
+// into a single CUE source. lane.cue provides #RekorEntry and
+// #InclusionProof directly.
+var deploySchema = specs.AttestationSchema + "\n" +
+	stripForConcat(specs.ArtifactSchema) + "\n" +
+	stripForConcat(specs.LaneSchema)
 
-// stripPackageLine removes the "package ..." line from a CUE source string.
-func stripPackageLine(src string) string {
+// stripForConcat removes package declarations, import blocks, and
+// cross-package re-export lines (e.g. "#Foo: pkg.#Foo") from a CUE
+// source string so it can be concatenated with other CUE sources for
+// single-string compilation.
+func stripForConcat(src string) string {
 	var lines []string
+	inImport := false
 	for _, line := range strings.Split(src, "\n") {
-		if strings.HasPrefix(strings.TrimSpace(line), "package ") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "package ") {
+			continue
+		}
+		// Single-line import: import "..."
+		if strings.HasPrefix(trimmed, "import \"") {
+			continue
+		}
+		// Multi-line import block: import ( ... )
+		if trimmed == "import (" {
+			inImport = true
+			continue
+		}
+		if inImport {
+			if trimmed == ")" {
+				inImport = false
+			}
+			continue
+		}
+		// Re-export lines referencing another CUE package (e.g. lane.#RekorEntry)
+		if strings.Contains(line, "lane.#") {
 			continue
 		}
 		lines = append(lines, line)

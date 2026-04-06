@@ -23,7 +23,15 @@ import (
 
 	"golang.org/x/crypto/nacl/secretbox"
 	"golang.org/x/crypto/scrypt"
+
+	"github.com/istr/strike/internal/lane"
 )
+
+// SignResult holds the outputs of a successful signing + optional Rekor submission.
+type SignResult struct {
+	Image v1.Image         // OCI signature artefact
+	Rekor *lane.RekorEntry // verified Rekor entry (nil when Rekor is not configured)
+}
 
 // SignPayload signs arbitrary data with an ECDSA P-256 key.
 // Returns a base64-encoded raw (r||s) signature and the public key
@@ -69,11 +77,10 @@ func SignPayload(data, keyPEM, password []byte) (b64sig, keyID string, err error
 // keyPEM is the PEM-encoded ECDSA private key (cosign or PKCS#8 format).
 // password is the key passphrase; empty slice for unencrypted keys.
 // rekor is an optional Rekor client; if non-nil, the signature is submitted
-// to the transparency log and Rekor annotations are added to the image.
+// to the transparency log and the verified entry JSON is returned in SignResult.
 //
-// Returns the signature as a go-containerregistry v1.Image ready to be
-// appended to an OCI Image Index as a referrer.
-func SignManifest(ctx context.Context, manifestDigest string, keyPEM, password []byte, rekor *RekorClient) (v1.Image, error) {
+// Returns a SignResult containing the OCI signature image and optional Rekor JSON.
+func SignManifest(ctx context.Context, manifestDigest string, keyPEM, password []byte, rekor *RekorClient) (*SignResult, error) {
 	// Construct cosign simple signing payload.
 	payload, err := json.Marshal(simpleSigning{
 		Critical: criticalSection{
@@ -97,13 +104,12 @@ func SignManifest(ctx context.Context, manifestDigest string, keyPEM, password [
 	}
 
 	// Submit to Rekor transparency log if configured.
+	var rekorEntry *lane.RekorEntry
 	if rekor != nil {
-		rekorAnnotations, rekorErr := submitToRekor(ctx, rekor, manifestDigest, b64sig, keyPEM, password)
+		var rekorErr error
+		rekorEntry, rekorErr = submitToRekor(ctx, rekor, manifestDigest, b64sig, keyPEM, password)
 		if rekorErr != nil {
 			return nil, rekorErr
-		}
-		for k, v := range rekorAnnotations {
-			annotations[k] = v
 		}
 	}
 
@@ -137,13 +143,13 @@ func SignManifest(ctx context.Context, manifestDigest string, keyPEM, password [
 	}
 	img = withSubject
 
-	return img, nil
+	return &SignResult{Image: img, Rekor: rekorEntry}, nil
 }
 
 // submitToRekor submits the signature to a Rekor transparency log.
-// Returns Rekor annotations on success, nil on warning (fail open),
+// Returns the verified Rekor entry on success, nil on warning (fail open),
 // or a hard error on SET verification failure.
-func submitToRekor(ctx context.Context, client *RekorClient, manifestDigest, b64sig string, keyPEM, password []byte) (map[string]string, error) {
+func submitToRekor(ctx context.Context, client *RekorClient, manifestDigest, b64sig string, keyPEM, password []byte) (*lane.RekorEntry, error) {
 	sig, err := base64.StdEncoding.DecodeString(b64sig)
 	if err != nil {
 		return nil, fmt.Errorf("rekor: decode signature: %w", err)
@@ -165,7 +171,7 @@ func submitToRekor(ctx context.Context, client *RekorClient, manifestDigest, b64
 		return nil, err
 	}
 
-	return entry.Annotations(), nil
+	return entry, nil
 }
 
 // loadCosignKey parses an ECDSA private key from PEM format.

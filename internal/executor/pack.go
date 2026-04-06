@@ -32,15 +32,16 @@ type PackOpts struct {
 	Spec        *lane.PackSpec
 	State       *lane.State
 	OutputRoot  *os.Root     // root-scoped output directory
+	Rekor       *RekorClient // optional Rekor transparency log client
 	OutputName  string       // filename within OutputRoot
 	SigningKey  []byte
 	KeyPassword []byte
-	Rekor       *RekorClient // optional Rekor transparency log client
 }
 
 // PackResult holds the outputs of a successful pack operation.
 type PackResult struct {
-	Digest string // "sha256:..." manifest digest of the main image
+	Rekor  *lane.RekorEntry // verified Rekor entry (nil when Rekor is not configured)
+	Digest lane.Digest      // "sha256:..." manifest digest of the main image
 }
 
 // AssembleResult holds the outputs of the pure image assembly step.
@@ -149,17 +150,17 @@ func Pack(ctx context.Context, opts PackOpts) (*PackResult, error) {
 	}
 
 	// 4. Sign the image manifest digest — pure crypto, optional Rekor submission
-	sigImage, err := SignManifest(ctx, assembled.Digest.String(), opts.SigningKey, opts.KeyPassword, opts.Rekor)
+	signRes, err := SignManifest(ctx, assembled.Digest.String(), opts.SigningKey, opts.KeyPassword, opts.Rekor)
 	if err != nil {
 		return nil, fmt.Errorf("pack: sign: %w", err)
 	}
 
 	// 5. Write OCI layout with all three manifests (filesystem I/O)
-	if err := writeOCILayout(assembled.Image, sbomImage, sigImage, opts.OutputRoot, opts.OutputName, assembled.Digest.String()); err != nil {
+	if err := writeOCILayout(assembled.Image, sbomImage, signRes.Image, opts.OutputRoot, opts.OutputName, assembled.Digest.String()); err != nil {
 		return nil, err
 	}
 
-	return &PackResult{Digest: assembled.Digest.String()}, nil
+	return &PackResult{Digest: lane.Digest(assembled.Digest.String()), Rekor: signRes.Rekor}, nil
 }
 
 // addFileLayers appends a layer for each file entry, returning the updated

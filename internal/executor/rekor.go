@@ -12,37 +12,18 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strconv"
-	"strings"
 	"time"
+
+	"github.com/istr/strike/internal/lane"
 )
 
 const rekorTimeout = 30 * time.Second
 
 // RekorClient submits hashedrekord entries to a Rekor transparency log.
 type RekorClient struct {
-	URL       string
 	PublicKey *ecdsa.PublicKey
 	HTTP      *http.Client
-}
-
-// RekorEntry holds the transparency log response for a hashedrekord submission.
-type RekorEntry struct {
-	SignedEntryTimestamp []byte
-	InclusionProof      *InclusionProof
-	UUID                string
-	Body                string // base64-encoded canonicalized entry (kept for SET verification)
-	LogID               string
-	LogIndex            int64
-	IntegratedTime      int64
-}
-
-// InclusionProof holds the Merkle tree inclusion proof from the transparency log.
-type InclusionProof struct {
-	Hashes   []string
-	RootHash string
-	TreeSize int64
-	LogIndex int64
+	URL       string
 }
 
 // RekorTransientError represents a non-fatal Rekor submission failure.
@@ -60,32 +41,15 @@ func (e *RekorTransientError) Unwrap() error {
 	return e.Err
 }
 
-// Annotations returns the Rekor metadata as a string map suitable for
-// OCI manifest annotations.
-func (e *RekorEntry) Annotations() map[string]string {
-	m := map[string]string{
-		"rekor.logIndex":             strconv.FormatInt(e.LogIndex, 10),
-		"rekor.logID":                e.LogID,
-		"rekor.integratedTime":       strconv.FormatInt(e.IntegratedTime, 10),
-		"rekor.signedEntryTimestamp": base64.StdEncoding.EncodeToString(e.SignedEntryTimestamp),
-	}
-	if e.InclusionProof != nil {
-		m["rekor.inclusionProof.rootHash"] = e.InclusionProof.RootHash
-		m["rekor.inclusionProof.treeSize"] = strconv.FormatInt(e.InclusionProof.TreeSize, 10)
-		m["rekor.inclusionProof.logIndex"] = strconv.FormatInt(e.InclusionProof.LogIndex, 10)
-		m["rekor.inclusionProof.hashes"] = strings.Join(e.InclusionProof.Hashes, ",")
-	}
-	return m
-}
-
 // SubmitHashedRekord submits a hashedrekord entry to the Rekor transparency log.
 // hexDigest is the hex-encoded SHA-256 digest (without "sha256:" prefix).
 // sig is the raw signature bytes.
 // pubKeyPEM is the PEM-encoded public key of the signer.
 //
+// Returns a verified lane.RekorEntry on success.
 // Returns RekorTransientError for transient failures (network, timeout, 5xx).
 // Returns a hard error for SET verification failures.
-func (c *RekorClient) SubmitHashedRekord(ctx context.Context, hexDigest string, sig, pubKeyPEM []byte) (*RekorEntry, error) {
+func (c *RekorClient) SubmitHashedRekord(ctx context.Context, hexDigest string, sig, pubKeyPEM []byte) (*lane.RekorEntry, error) {
 	ctx, cancel := context.WithTimeout(ctx, rekorTimeout)
 	defer cancel()
 
@@ -116,7 +80,7 @@ func (c *RekorClient) SubmitHashedRekord(ctx context.Context, hexDigest string, 
 		return nil, &RekorTransientError{Err: fmt.Errorf("status %d: %s", resp.StatusCode, respBody)}
 	}
 
-	entry, err := parseRekorResponse(resp.Body)
+	parsed, err := parseRekorResponse(resp.Body)
 	if err != nil {
 		return nil, &RekorTransientError{Err: fmt.Errorf("parse response: %w", err)}
 	}
@@ -124,8 +88,26 @@ func (c *RekorClient) SubmitHashedRekord(ctx context.Context, hexDigest string, 
 	// Verify the signed entry timestamp (SET). A failed verification is a
 	// hard error -- a forged response is a security event, not a transient
 	// failure.
-	if err := verifySET(entry, c.PublicKey); err != nil {
-		return nil, fmt.Errorf("rekor SET verification failed: %w", err)
+	if setErr := verifySET(parsed, c.PublicKey); setErr != nil {
+		return nil, fmt.Errorf("rekor SET verification failed: %w", setErr)
+	}
+
+	// Build the lane.RekorEntry from parsed response.
+	entry := &lane.RekorEntry{
+		UUID:                 parsed.uuid,
+		LogIndex:             parsed.logIndex,
+		LogID:                parsed.logID,
+		IntegratedTime:       parsed.integratedTime,
+		Body:                 parsed.body,
+		SignedEntryTimestamp: base64.StdEncoding.EncodeToString(parsed.signedEntryTimestamp),
+	}
+	if parsed.inclusionProof != nil {
+		entry.InclusionProof = lane.InclusionProof{
+			RootHash: parsed.inclusionProof.rootHash,
+			TreeSize: parsed.inclusionProof.treeSize,
+			LogIndex: parsed.inclusionProof.logIndex,
+			Hashes:   parsed.inclusionProof.hashes,
+		}
 	}
 
 	return entry, nil
@@ -170,8 +152,27 @@ func buildHashedRekordRequest(hexDigest string, sig, pubKeyPEM []byte) map[strin
 	}
 }
 
+// parsedRekorEntry holds the raw Rekor API response fields needed for
+// SET verification and conversion to the output format.
+type parsedRekorEntry struct {
+	inclusionProof       *parsedInclusionProof
+	body                 string
+	logID                string
+	uuid                 string
+	signedEntryTimestamp []byte
+	logIndex             int64
+	integratedTime       int64
+}
+
+type parsedInclusionProof struct {
+	rootHash string
+	hashes   []string
+	logIndex int64
+	treeSize int64
+}
+
 // parseRekorResponse parses the Rekor v1 log entry creation response.
-func parseRekorResponse(body io.Reader) (*RekorEntry, error) {
+func parseRekorResponse(body io.Reader) (*parsedRekorEntry, error) {
 	raw, err := io.ReadAll(io.LimitReader(body, 1<<20))
 	if err != nil {
 		return nil, err
@@ -183,14 +184,19 @@ func parseRekorResponse(body io.Reader) (*RekorEntry, error) {
 	}
 
 	for uuid, entryJSON := range entries {
-		return parseSingleEntry(uuid, entryJSON)
+		entry, err := parseSingleEntry(entryJSON)
+		if err != nil {
+			return nil, err
+		}
+		entry.uuid = uuid
+		return entry, nil
 	}
 
 	return nil, fmt.Errorf("empty response")
 }
 
 // parseSingleEntry decodes one entry from the Rekor response map.
-func parseSingleEntry(uuid string, entryJSON json.RawMessage) (*RekorEntry, error) {
+func parseSingleEntry(entryJSON json.RawMessage) (*parsedRekorEntry, error) {
 	var raw struct { //nolint:govet // fieldalignment: field order matches JSON response structure
 		Body           string `json:"body"`
 		IntegratedTime int64  `json:"integratedTime"`
@@ -215,21 +221,20 @@ func parseSingleEntry(uuid string, entryJSON json.RawMessage) (*RekorEntry, erro
 		return nil, fmt.Errorf("decode SET: %w", err)
 	}
 
-	entry := &RekorEntry{
-		UUID:                uuid,
-		LogIndex:            raw.LogIndex,
-		LogID:               raw.LogID,
-		IntegratedTime:      raw.IntegratedTime,
-		SignedEntryTimestamp: set,
-		Body:                raw.Body,
+	entry := &parsedRekorEntry{
+		logIndex:             raw.LogIndex,
+		logID:                raw.LogID,
+		integratedTime:       raw.IntegratedTime,
+		signedEntryTimestamp: set,
+		body:                 raw.Body,
 	}
 
 	if raw.Verification.InclusionProof != nil {
-		entry.InclusionProof = &InclusionProof{
-			RootHash: raw.Verification.InclusionProof.RootHash,
-			TreeSize: raw.Verification.InclusionProof.TreeSize,
-			LogIndex: raw.Verification.InclusionProof.LogIndex,
-			Hashes:   raw.Verification.InclusionProof.Hashes,
+		entry.inclusionProof = &parsedInclusionProof{
+			rootHash: raw.Verification.InclusionProof.RootHash,
+			treeSize: raw.Verification.InclusionProof.TreeSize,
+			logIndex: raw.Verification.InclusionProof.LogIndex,
+			hashes:   raw.Verification.InclusionProof.Hashes,
 		}
 	}
 
@@ -239,19 +244,19 @@ func parseSingleEntry(uuid string, entryJSON json.RawMessage) (*RekorEntry, erro
 // verifySET verifies the signed entry timestamp against the Rekor public key.
 // The SET is an ECDSA signature over the SHA-256 hash of the canonicalized
 // log entry payload (body, integratedTime, logID, logIndex).
-func verifySET(entry *RekorEntry, pub *ecdsa.PublicKey) error {
+func verifySET(entry *parsedRekorEntry, pub *ecdsa.PublicKey) error {
 	payload, err := json.Marshal(setPayload{
-		Body:           entry.Body,
-		IntegratedTime: entry.IntegratedTime,
-		LogID:          entry.LogID,
-		LogIndex:       entry.LogIndex,
+		Body:           entry.body,
+		IntegratedTime: entry.integratedTime,
+		LogID:          entry.logID,
+		LogIndex:       entry.logIndex,
 	})
 	if err != nil {
 		return fmt.Errorf("canonicalize SET payload: %w", err)
 	}
 
 	digest := sha256.Sum256(payload)
-	if !ecdsa.VerifyASN1(pub, digest[:], entry.SignedEntryTimestamp) {
+	if !ecdsa.VerifyASN1(pub, digest[:], entry.signedEntryTimestamp) {
 		return fmt.Errorf("ECDSA signature mismatch")
 	}
 	return nil

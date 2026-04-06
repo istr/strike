@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/istr/strike/internal/executor"
+	"github.com/istr/strike/internal/lane"
 )
 
 // --------------------------------------------------------------------------.
@@ -74,7 +75,7 @@ func generateSignerKey(t *testing.T) (sig, pubKeyPEM []byte, hexDigest string) {
 // signSET signs a Rekor SET payload with the given private key.
 func signSET(t *testing.T, rekorKey *ecdsa.PrivateKey, body string, integratedTime int64, logID string, logIndex int64) []byte {
 	t.Helper()
-	payload := struct {
+	payload := struct { //nolint:govet // fieldalignment: field order determines canonical JSON for SET verification
 		Body           string `json:"body"`
 		IntegratedTime int64  `json:"integratedTime"`
 		LogID          string `json:"logID"`
@@ -101,7 +102,7 @@ func signSET(t *testing.T, rekorKey *ecdsa.PrivateKey, body string, integratedTi
 func fakeRekorResponse(t *testing.T, rekorKey *ecdsa.PrivateKey) []byte {
 	t.Helper()
 	body := base64.StdEncoding.EncodeToString([]byte(`{"kind":"hashedrekord"}`))
-	logID := "deadbeef"
+	logID := strings.Repeat("ab", 32) // 64 hex chars to match CUE constraint
 	var integratedTime int64 = 1700000000
 	var logIndex int64 = 42
 
@@ -115,10 +116,10 @@ func fakeRekorResponse(t *testing.T, rekorKey *ecdsa.PrivateKey) []byte {
 		"verification": map[string]any{
 			"signedEntryTimestamp": base64.StdEncoding.EncodeToString(set),
 			"inclusionProof": map[string]any{
-				"rootHash": "aabbccdd",
+				"rootHash": strings.Repeat("cc", 32),
 				"treeSize": 100,
 				"logIndex": logIndex,
-				"hashes":   []string{"1111", "2222", "3333"},
+				"hashes":   []string{strings.Repeat("11", 32), strings.Repeat("22", 32), strings.Repeat("33", 32)},
 			},
 		},
 	}
@@ -130,6 +131,66 @@ func fakeRekorResponse(t *testing.T, rekorKey *ecdsa.PrivateKey) []byte {
 	}
 	return data
 }
+
+// invalidSETHandler returns a handler that responds with a valid-looking Rekor
+// entry but with an invalid signed entry timestamp.
+func invalidSETHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, _ *http.Request) {
+		body := base64.StdEncoding.EncodeToString([]byte(`{"kind":"hashedrekord"}`))
+		entry := map[string]any{
+			"body":           body,
+			"integratedTime": 1700000000,
+			"logID":          strings.Repeat("ab", 32),
+			"logIndex":       42,
+			"verification": map[string]any{
+				"signedEntryTimestamp": base64.StdEncoding.EncodeToString([]byte("bad-sig")),
+				"inclusionProof": map[string]any{
+					"rootHash": strings.Repeat("cc", 32),
+					"treeSize": 100,
+					"logIndex": 42,
+					"hashes":   []string{strings.Repeat("11", 32)},
+				},
+			},
+		}
+		resp := map[string]any{"uuid-bad": entry}
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(resp) //nolint:errcheck,gosec // test helper
+	}
+}
+
+// fakeRekorHandler returns an HTTP handler that validates the request structure
+// and responds with a canned Rekor 201 response.
+func fakeRekorHandler(t *testing.T, rekorKey *ecdsa.PrivateKey) http.HandlerFunc {
+	t.Helper()
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("method = %s, want POST", r.Method)
+		}
+		if r.URL.Path != "/api/v1/log/entries" {
+			t.Errorf("path = %s, want /api/v1/log/entries", r.URL.Path)
+		}
+		if ct := r.Header.Get("Content-Type"); ct != "application/json" {
+			t.Errorf("content-type = %s, want application/json", ct)
+		}
+
+		var body map[string]any
+		if decErr := json.NewDecoder(r.Body).Decode(&body); decErr != nil {
+			t.Errorf("decode request body: %v", decErr)
+		}
+		if body["kind"] != "hashedrekord" {
+			t.Errorf("kind = %v, want hashedrekord", body["kind"])
+		}
+		if body["apiVersion"] != "0.0.1" {
+			t.Errorf("apiVersion = %v, want 0.0.1", body["apiVersion"])
+		}
+
+		w.WriteHeader(http.StatusCreated)
+		w.Write(fakeRekorResponse(t, rekorKey)) //nolint:errcheck,gosec // test helper
+	}
+}
+
+// rekorOutputEntry and rekorOutputProof are no longer needed —
+// SubmitHashedRekord now returns *lane.RekorEntry directly.
 
 // --------------------------------------------------------------------------.
 // Tests.
@@ -145,48 +206,22 @@ func TestSubmitHashedRekord(t *testing.T) {
 	sig, pubKeyPEM, hexDigest := generateSignerKey(t)
 
 	tests := []struct {
-		name        string
 		handler     http.HandlerFunc
+		name        string
 		wantErr     bool
 		wantWarning bool
 		checkEntry  bool
 	}{
 		{
-			name: "success",
-			handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				// Verify request structure.
-				if r.Method != http.MethodPost {
-					t.Errorf("method = %s, want POST", r.Method)
-				}
-				if r.URL.Path != "/api/v1/log/entries" {
-					t.Errorf("path = %s, want /api/v1/log/entries", r.URL.Path)
-				}
-				if ct := r.Header.Get("Content-Type"); ct != "application/json" {
-					t.Errorf("content-type = %s, want application/json", ct)
-				}
-
-				// Verify request body structure.
-				var body map[string]any
-				if decErr := json.NewDecoder(r.Body).Decode(&body); decErr != nil {
-					t.Errorf("decode request body: %v", decErr)
-				}
-				if body["kind"] != "hashedrekord" {
-					t.Errorf("kind = %v, want hashedrekord", body["kind"])
-				}
-				if body["apiVersion"] != "0.0.1" {
-					t.Errorf("apiVersion = %v, want 0.0.1", body["apiVersion"])
-				}
-
-				w.WriteHeader(http.StatusCreated)
-				w.Write(fakeRekorResponse(t, rekorKey)) //nolint:errcheck // test helper
-			}),
+			name:       "success",
+			handler:    fakeRekorHandler(t, rekorKey),
 			checkEntry: true,
 		},
 		{
 			name: "server error returns warning",
 			handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(http.StatusInternalServerError)
-				w.Write([]byte("internal error")) //nolint:errcheck // test helper
+				w.Write([]byte("internal error")) //nolint:errcheck,gosec // test helper
 			}),
 			wantErr:     true,
 			wantWarning: true,
@@ -203,34 +238,14 @@ func TestSubmitHashedRekord(t *testing.T) {
 			name: "invalid JSON response returns warning",
 			handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(http.StatusCreated)
-				w.Write([]byte("not json")) //nolint:errcheck // test helper
+				w.Write([]byte("not json")) //nolint:errcheck,gosec // test helper
 			}),
 			wantErr:     true,
 			wantWarning: true,
 		},
 		{
-			name: "invalid SET is hard error",
-			handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-				body := base64.StdEncoding.EncodeToString([]byte(`{"kind":"hashedrekord"}`))
-				entry := map[string]any{
-					"body":           body,
-					"integratedTime": 1700000000,
-					"logID":          "deadbeef",
-					"logIndex":       42,
-					"verification": map[string]any{
-						"signedEntryTimestamp": base64.StdEncoding.EncodeToString([]byte("bad-sig")),
-						"inclusionProof": map[string]any{
-							"rootHash": "aabbccdd",
-							"treeSize": 100,
-							"logIndex": 42,
-							"hashes":   []string{"1111"},
-						},
-					},
-				}
-				resp := map[string]any{"uuid-bad": entry}
-				w.WriteHeader(http.StatusCreated)
-				json.NewEncoder(w).Encode(resp) //nolint:errcheck // test helper
-			}),
+			name:        "invalid SET is hard error",
+			handler:     invalidSETHandler(),
 			wantErr:     true,
 			wantWarning: false, // SET failure is hard error
 		},
@@ -242,29 +257,16 @@ func TestSubmitHashedRekord(t *testing.T) {
 			defer srv.Close()
 
 			client := &executor.RekorClient{
-				URL:       srv.URL,
 				PublicKey: rekorPub,
 				HTTP:      srv.Client(),
+				URL:       srv.URL,
 			}
 
-			entry, submitErr := client.SubmitHashedRekord(
+			rekorJSON, submitErr := client.SubmitHashedRekord(
 				context.Background(), hexDigest, sig, pubKeyPEM)
 
 			if tt.wantErr {
-				if submitErr == nil {
-					t.Fatal("expected error, got nil")
-				}
-				var w *executor.RekorWarning
-				isWarning := false
-				if ok := errorAs(submitErr, &w); ok {
-					isWarning = true
-				}
-				if tt.wantWarning && !isWarning {
-					t.Errorf("expected RekorWarning, got: %v", submitErr)
-				}
-				if !tt.wantWarning && isWarning {
-					t.Errorf("expected hard error, got RekorWarning: %v", submitErr)
-				}
+				assertRekorError(t, submitErr, tt.wantWarning)
 				return
 			}
 
@@ -272,97 +274,60 @@ func TestSubmitHashedRekord(t *testing.T) {
 				t.Fatalf("unexpected error: %v", submitErr)
 			}
 
-			if !tt.checkEntry {
-				return
-			}
-
-			// Verify entry fields.
-			if entry.UUID != "test-uuid-123" {
-				t.Errorf("UUID = %q, want test-uuid-123", entry.UUID)
-			}
-			if entry.LogIndex != 42 {
-				t.Errorf("LogIndex = %d, want 42", entry.LogIndex)
-			}
-			if entry.LogID != "deadbeef" {
-				t.Errorf("LogID = %q, want deadbeef", entry.LogID)
-			}
-			if entry.IntegratedTime != 1700000000 {
-				t.Errorf("IntegratedTime = %d, want 1700000000", entry.IntegratedTime)
-			}
-			if entry.InclusionProof == nil {
-				t.Fatal("InclusionProof is nil")
-			}
-			if entry.InclusionProof.RootHash != "aabbccdd" {
-				t.Errorf("RootHash = %q, want aabbccdd", entry.InclusionProof.RootHash)
-			}
-			if entry.InclusionProof.TreeSize != 100 {
-				t.Errorf("TreeSize = %d, want 100", entry.InclusionProof.TreeSize)
-			}
-			if len(entry.InclusionProof.Hashes) != 3 {
-				t.Errorf("Hashes count = %d, want 3", len(entry.InclusionProof.Hashes))
+			if tt.checkEntry {
+				verifyRekorEntry(t, rekorJSON)
 			}
 		})
 	}
 }
 
-func TestRekorAnnotations(t *testing.T) {
-	entry := &executor.RekorEntry{
-		UUID:                "uuid-1",
-		LogIndex:            99,
-		LogID:               "aabb",
-		IntegratedTime:      1700000001,
-		SignedEntryTimestamp: []byte("fake-set"),
-		InclusionProof: &executor.InclusionProof{
-			RootHash: "ccdd",
-			TreeSize: 200,
-			LogIndex: 99,
-			Hashes:   []string{"h1", "h2"},
-		},
+// assertRekorError verifies that the error is present and has the expected type.
+func assertRekorError(t *testing.T, err error, wantWarning bool) {
+	t.Helper()
+	if err == nil {
+		t.Fatal("expected error, got nil")
 	}
-
-	ann := entry.Annotations()
-
-	tests := []struct {
-		key  string
-		want string
-	}{
-		{"rekor.logIndex", "99"},
-		{"rekor.logID", "aabb"},
-		{"rekor.integratedTime", "1700000001"},
-		{"rekor.signedEntryTimestamp", base64.StdEncoding.EncodeToString([]byte("fake-set"))},
-		{"rekor.inclusionProof.rootHash", "ccdd"},
-		{"rekor.inclusionProof.treeSize", "200"},
-		{"rekor.inclusionProof.logIndex", "99"},
-		{"rekor.inclusionProof.hashes", "h1,h2"},
+	var w *executor.RekorTransientError
+	isWarning := errorAs(err, &w)
+	if wantWarning && !isWarning {
+		t.Errorf("expected RekorTransientError, got: %v", err)
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.key, func(t *testing.T) {
-			got, ok := ann[tt.key]
-			if !ok {
-				t.Fatalf("annotation %q not found", tt.key)
-			}
-			if got != tt.want {
-				t.Errorf("annotation %q = %q, want %q", tt.key, got, tt.want)
-			}
-		})
+	if !wantWarning && isWarning {
+		t.Errorf("expected hard error, got RekorTransientError: %v", err)
 	}
 }
 
-func TestRekorAnnotations_NoInclusionProof(t *testing.T) {
-	entry := &executor.RekorEntry{
-		LogIndex:            1,
-		LogID:               "aa",
-		IntegratedTime:      1,
-		SignedEntryTimestamp: []byte("s"),
+// verifyRekorEntry checks all fields of a *lane.RekorEntry match the fake response.
+func verifyRekorEntry(t *testing.T, entry *lane.RekorEntry) {
+	t.Helper()
+	if entry == nil {
+		t.Fatal("RekorEntry is nil")
 	}
-
-	ann := entry.Annotations()
-
-	for key := range ann {
-		if strings.HasPrefix(key, "rekor.inclusionProof.") {
-			t.Errorf("unexpected inclusion proof annotation: %s", key)
-		}
+	if entry.LogIndex != 42 {
+		t.Errorf("LogIndex = %d, want 42", entry.LogIndex)
+	}
+	wantLogID := strings.Repeat("ab", 32)
+	if entry.LogID != wantLogID {
+		t.Errorf("LogID = %q, want %s", entry.LogID, wantLogID)
+	}
+	if entry.IntegratedTime != 1700000000 {
+		t.Errorf("IntegratedTime = %d, want 1700000000", entry.IntegratedTime)
+	}
+	if entry.UUID == "" {
+		t.Error("UUID is empty")
+	}
+	if entry.SignedEntryTimestamp == "" {
+		t.Error("SignedEntryTimestamp is empty")
+	}
+	wantRootHash := strings.Repeat("cc", 32)
+	if entry.InclusionProof.RootHash != wantRootHash {
+		t.Errorf("RootHash = %q, want %s", entry.InclusionProof.RootHash, wantRootHash)
+	}
+	if entry.InclusionProof.TreeSize != 100 {
+		t.Errorf("TreeSize = %d, want 100", entry.InclusionProof.TreeSize)
+	}
+	if len(entry.InclusionProof.Hashes) != 3 {
+		t.Errorf("Hashes count = %d, want 3", len(entry.InclusionProof.Hashes))
 	}
 }
 
@@ -419,13 +384,12 @@ func TestParseRekorPublicKey(t *testing.T) {
 
 func TestSubmitHashedRekord_NetworkTimeout(t *testing.T) {
 	// Server that never responds.
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
 		select {} // block forever
 	}))
 	defer srv.Close()
 
-	rekorKey, rekorPubPEM := generateRekorKey(t)
-	_ = rekorKey
+	_, rekorPubPEM := generateRekorKey(t)
 	rekorPub, err := executor.ParseRekorPublicKey(rekorPubPEM)
 	if err != nil {
 		t.Fatal(err)
@@ -434,9 +398,9 @@ func TestSubmitHashedRekord_NetworkTimeout(t *testing.T) {
 	sig, pubKeyPEM, hexDigest := generateSignerKey(t)
 
 	client := &executor.RekorClient{
-		URL:       srv.URL,
 		PublicKey: rekorPub,
 		HTTP:      srv.Client(),
+		URL:       srv.URL,
 	}
 
 	// Use an already-cancelled context to trigger immediate timeout.
@@ -447,9 +411,9 @@ func TestSubmitHashedRekord_NetworkTimeout(t *testing.T) {
 	if submitErr == nil {
 		t.Fatal("expected error for cancelled context")
 	}
-	var w *executor.RekorWarning
+	var w *executor.RekorTransientError
 	if !errorAs(submitErr, &w) {
-		t.Errorf("expected RekorWarning, got: %T: %v", submitErr, submitErr)
+		t.Errorf("expected RekorTransientError, got: %T: %v", submitErr, submitErr)
 	}
 }
 
@@ -462,7 +426,7 @@ func TestSignManifest_WithRekor(t *testing.T) {
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusCreated)
-		w.Write(fakeRekorResponse(t, rekorKey)) //nolint:errcheck // test helper
+		w.Write(fakeRekorResponse(t, rekorKey)) //nolint:errcheck,gosec // test helper
 	}))
 	defer srv.Close()
 
@@ -470,42 +434,32 @@ func TestSignManifest_WithRekor(t *testing.T) {
 	_ = signingKey
 
 	client := &executor.RekorClient{
-		URL:       srv.URL,
 		PublicKey: rekorPub,
 		HTTP:      srv.Client(),
+		URL:       srv.URL,
 	}
 
 	digest := testDigest()
-	img, signErr := executor.SignManifest(context.Background(), digest, signingKeyPEM, nil, client)
+	result, signErr := executor.SignManifest(context.Background(), digest, signingKeyPEM, nil, client)
 	if signErr != nil {
 		t.Fatalf("SignManifest with Rekor: %v", signErr)
 	}
 
-	manifest, err := img.Manifest()
+	// Verify the OCI image still has the cosign signature annotation.
+	manifest, err := result.Image.Manifest()
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	// Verify Rekor annotations are present.
-	rekorKeys := []string{
-		"rekor.logIndex",
-		"rekor.logID",
-		"rekor.integratedTime",
-		"rekor.signedEntryTimestamp",
-		"rekor.inclusionProof.rootHash",
-		"rekor.inclusionProof.treeSize",
-		"rekor.inclusionProof.logIndex",
-		"rekor.inclusionProof.hashes",
-	}
-	for _, key := range rekorKeys {
-		if _, ok := manifest.Annotations[key]; !ok {
-			t.Errorf("missing annotation %q", key)
-		}
-	}
-
-	// Verify the cosign signature annotation is still present.
 	if manifest.Annotations["dev.sigstore.cosign/signature"] == "" {
 		t.Error("missing cosign signature annotation")
+	}
+
+	// Verify Rekor entry is present and valid.
+	if result.Rekor == nil {
+		t.Fatal("Rekor is nil")
+	}
+	if result.Rekor.LogIndex != 42 {
+		t.Errorf("LogIndex = %d, want 42", result.Rekor.LogIndex)
 	}
 }
 
@@ -513,21 +467,23 @@ func TestSignManifest_RekorSkippedWhenNil(t *testing.T) {
 	_, signingKeyPEM := generateTestKey(t)
 
 	digest := testDigest()
-	img, err := executor.SignManifest(context.Background(), digest, signingKeyPEM, nil, nil)
+	result, err := executor.SignManifest(context.Background(), digest, signingKeyPEM, nil, nil)
 	if err != nil {
 		t.Fatalf("SignManifest without Rekor: %v", err)
 	}
 
-	manifest, manifestErr := img.Manifest()
+	// Rekor should be nil when Rekor is not configured.
+	if result.Rekor != nil {
+		t.Errorf("expected nil Rekor, got %+v", result.Rekor)
+	}
+
+	// OCI image should still be valid with cosign signature.
+	manifest, manifestErr := result.Image.Manifest()
 	if manifestErr != nil {
 		t.Fatal(manifestErr)
 	}
-
-	// No Rekor annotations should be present.
-	for key := range manifest.Annotations {
-		if strings.HasPrefix(key, "rekor.") {
-			t.Errorf("unexpected rekor annotation: %s", key)
-		}
+	if manifest.Annotations["dev.sigstore.cosign/signature"] == "" {
+		t.Error("missing cosign signature annotation")
 	}
 }
 

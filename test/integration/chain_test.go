@@ -71,7 +71,7 @@ func TestEndToEndChain(t *testing.T) {
 	if _, loadErr := regClient.LoadOCITar(ctx, packRoot, "image.tar"); loadErr != nil {
 		t.Fatalf("load: %v", loadErr)
 	}
-	localTag := "localhost/strike:" + strings.TrimPrefix(imageDigest, "sha256:")[:12]
+	localTag := "localhost/strike:" + strings.TrimPrefix(string(imageDigest), "sha256:")[:12]
 
 	// --- Part 4: Deploy — with attestation and source provenance ---
 	state := lane.NewState()
@@ -85,7 +85,7 @@ func TestEndToEndChain(t *testing.T) {
 	att := chainDeploy(t, engine, keyPEM, state, localTag, srcDir)
 
 	// --- Part 5: Verify the complete chain ---
-	verifyChain(t, att, imageDigest, keyPEM)
+	verifyChain(t, att, string(imageDigest), keyPEM)
 }
 
 func chainPackSpec() *lane.PackSpec {
@@ -162,9 +162,9 @@ func verifyChain(t *testing.T, att *deploy.Attestation, imageDigest string, keyP
 	}
 
 	// B. Artifact digest matches packed image.
-	if att.Artifacts["app"] != imageDigest {
+	if att.Artifacts["app"].Digest != imageDigest {
 		t.Errorf("artifact digest mismatch:\n  attestation: %s\n  packed:      %s",
-			att.Artifacts["app"], imageDigest)
+			att.Artifacts["app"].Digest, imageDigest)
 	}
 
 	// C. Source provenance present.
@@ -225,7 +225,7 @@ func chainVerifySignature(t *testing.T, att *deploy.Attestation, imageDigest str
 	if roundTripped.DeployID != att.DeployID {
 		t.Errorf("round-trip deploy ID mismatch: %s vs %s", roundTripped.DeployID, att.DeployID)
 	}
-	if roundTripped.Artifacts["app"] != imageDigest {
+	if roundTripped.Artifacts["app"].Digest != imageDigest {
 		t.Error("round-trip artifact digest mismatch")
 	}
 }

@@ -4,8 +4,20 @@
 // artifact after pack + sign + SBOM generation + optional Rekor
 // submission. This is the unit of trust that flows from build
 // into deploy attestations.
+//
+// Rekor types (#RekorEntry, #InclusionProof) are defined in lane.cue
+// and re-exported here so the deploy package can reference them
+// without duplication.
 
 package deploy
+
+import "github.com/istr/strike/specs:lane"
+
+// Re-export Rekor types from lane for use within the deploy package.
+// attestation.cue references #RekorEntry -- this alias keeps the name
+// available without duplicating the definition.
+#RekorEntry:    lane.#RekorEntry
+#InclusionProof: lane.#InclusionProof
 
 // SignedArtifact is the provenance record for one artifact.
 #SignedArtifact: {
@@ -40,38 +52,4 @@ package deploy
 
 	// digest is the content hash of the SBOM document.
 	digest: #Digest
-}
-
-// RekorEntry holds the transparency log response from a Rekor
-// submission (hashedrekord or dsse). When present, all subfields
-// are required -- a partial Rekor entry is invalid.
-#RekorEntry: {
-	// log_index is the global sequence number in the transparency log.
-	log_index: int
-
-	// log_id is the hex-encoded hash of the log's public key.
-	log_id: =~"^[a-f0-9]{64}$"
-
-	// integrated_time is the Unix timestamp when the entry was added.
-	integrated_time: int
-
-	// body is the base64-encoded entry body.
-	body: string
-
-	// inclusion_proof holds the Merkle tree proof for this entry.
-	inclusion_proof: #InclusionProof
-}
-
-#InclusionProof: {
-	// log_index is the leaf index in the Merkle tree.
-	log_index: int
-
-	// root_hash is the hex-encoded tree root at inclusion time.
-	root_hash: =~"^[a-f0-9]{64}$"
-
-	// tree_size is the number of leaves when the proof was generated.
-	tree_size: int
-
-	// hashes are the hex-encoded sibling hashes from leaf to root.
-	hashes: [...=~"^[a-f0-9]{64}$"]
 }

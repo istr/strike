@@ -29,6 +29,15 @@ import (
 
 var update = flag.Bool("update", false, "update cross-validation vector expected fields")
 
+// toDigestMap converts a map[string]string (from JSON vectors) to map[string]lane.Digest.
+func toDigestMap(m map[string]string) map[string]lane.Digest {
+	out := make(map[string]lane.Digest, len(m))
+	for k, v := range m {
+		out[k] = lane.Digest(v)
+	}
+	return out
+}
+
 // --------------------------------------------------------------------------.
 // Golden test: AssembleImage (crossval vector).
 // --------------------------------------------------------------------------.
@@ -131,16 +140,20 @@ func TestSpecHash_Golden(t *testing.T) {
 				Env:  vec.Inputs.Step.Env,
 			}
 
-			got := registry.SpecHash(step, vec.Inputs.ImageDigest, vec.Inputs.InputHashes, vec.Inputs.SourceHashes)
+			got := registry.SpecHash(step,
+				lane.Digest(vec.Inputs.ImageDigest),
+				toDigestMap(vec.Inputs.InputHashes),
+				toDigestMap(vec.Inputs.SourceHashes),
+			)
 
 			if *update {
 				updateVectorExpected(t, "spechash", name, struct {
 					Hash string `json:"hash"`
-				}{Hash: got})
+				}{Hash: string(got)})
 				return
 			}
 
-			if got != vec.Expected.Hash {
+			if string(got) != vec.Expected.Hash {
 				t.Errorf("hash mismatch:\n  got:  %s\n  want: %s", got, vec.Expected.Hash)
 			}
 		})
@@ -161,10 +174,11 @@ func TestSignManifest_Golden(t *testing.T) {
 		password = []byte(*vec.Inputs.Password)
 	}
 
-	sigImage, err := executor.SignManifest(context.Background(), vec.Inputs.ManifestDigest, keyPEM, password, nil)
+	signResult, err := executor.SignManifest(context.Background(), vec.Inputs.ManifestDigest, keyPEM, password, nil)
 	if err != nil {
 		t.Fatalf("SignManifest: %v", err)
 	}
+	sigImage := signResult.Image
 
 	// Extract signature from the OCI image annotations.
 	manifest, err := sigImage.Manifest()

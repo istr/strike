@@ -19,15 +19,15 @@ func TestSpecHashDeterministic(t *testing.T) {
 		Args:  []string{"build", "-o", "/out/bin"},
 		Env:   map[string]string{"CGO_ENABLED": "0"},
 	}
-	inputHashes := map[string]string{"src": "sha256:deadbeef"}
-	sourceHashes := map[string]string{"/src": "sha256:cafebabe"}
+	inputHashes := map[string]lane.Digest{"src": "sha256:deadbeef"}
+	sourceHashes := map[string]lane.Digest{"/src": "sha256:cafebabe"}
 
 	h1 := registry.SpecHash(step, "sha256:img", inputHashes, sourceHashes)
 	h2 := registry.SpecHash(step, "sha256:img", inputHashes, sourceHashes)
 	if h1 != h2 {
 		t.Fatalf("not deterministic: %q vs %q", h1, h2)
 	}
-	if !strings.HasPrefix(h1, "sha256:") {
+	if !strings.HasPrefix(string(h1), "sha256:") {
 		t.Fatalf("expected sha256: prefix, got %q", h1)
 	}
 }
@@ -40,8 +40,8 @@ func TestSpecHashChangesOnInput(t *testing.T) {
 		Env:   map[string]string{},
 	}
 
-	h1 := registry.SpecHash(step, "sha256:img1", map[string]string{}, map[string]string{})
-	h2 := registry.SpecHash(step, "sha256:img2", map[string]string{}, map[string]string{})
+	h1 := registry.SpecHash(step, "sha256:img1", map[string]lane.Digest{}, map[string]lane.Digest{})
+	h2 := registry.SpecHash(step, "sha256:img2", map[string]lane.Digest{}, map[string]lane.Digest{})
 	if h1 == h2 {
 		t.Fatal("different images should produce different hashes")
 	}
@@ -103,7 +103,7 @@ func TestHashPathMachineIndependent(t *testing.T) {
 	if h1 != h2 {
 		t.Fatalf("same content in different dirs produced different hashes: %q vs %q", h1, h2)
 	}
-	if !strings.HasPrefix(h1, "sha256:") {
+	if !strings.HasPrefix(string(h1), "sha256:") {
 		t.Fatalf("expected sha256: prefix, got %q", h1)
 	}
 }
@@ -126,7 +126,7 @@ func TestTag(t *testing.T) {
 	tests := []struct {
 		registry string
 		step     string
-		hash     string
+		hash     lane.Digest
 		want     string
 		name     string
 	}{
@@ -163,7 +163,7 @@ func TestHashFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("HashFile: %v", err)
 	}
-	if !strings.HasPrefix(h, "sha256:") {
+	if !strings.HasPrefix(string(h), "sha256:") {
 		t.Fatalf("expected sha256: prefix, got %q", h)
 	}
 
@@ -189,7 +189,7 @@ func TestHashFileAbs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("HashFileAbs: %v", err)
 	}
-	if !strings.HasPrefix(h, "sha256:") {
+	if !strings.HasPrefix(string(h), "sha256:") {
 		t.Fatalf("expected sha256: prefix, got %q", h)
 	}
 

@@ -161,10 +161,11 @@ func TestSignManifest_UnsupportedPEMType(t *testing.T) {
 func verifyRoundTrip(t *testing.T, keyPEM, password []byte, pub *ecdsa.PublicKey) {
 	t.Helper()
 	digest := testDigest()
-	img, err := executor.SignManifest(context.Background(), digest, keyPEM, password, nil)
+	result, err := executor.SignManifest(context.Background(), digest, keyPEM, password, nil)
 	if err != nil {
 		t.Fatalf("SignManifest: %v", err)
 	}
+	img := result.Image
 
 	// Check image structure.
 	layers, err := img.Layers()

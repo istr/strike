@@ -38,7 +38,7 @@ func TestDeployAttestation(t *testing.T) {
 	t.Logf("packed image: %s", packedDigest)
 
 	// Local tag assigned by LoadOCITar for podman lookups.
-	localTag := "localhost/strike:" + strings.TrimPrefix(packedDigest, "sha256:")[:12]
+	localTag := "localhost/strike:" + strings.TrimPrefix(string(packedDigest), "sha256:")[:12]
 
 	// Register the packed artifact in lane state.
 	state := lane.NewState()
@@ -50,7 +50,7 @@ func TestDeployAttestation(t *testing.T) {
 	}
 
 	// Deploy using the "custom" method with the packed image.
-	att := executeDeploy(t, engine, keyPEM, state, packedDigest, localTag)
+	att := executeDeploy(t, engine, keyPEM, state, string(packedDigest), localTag)
 
 	// Verify DSSE signature round-trip.
 	verifyDSSE(t, att, keyPEM)
@@ -98,8 +98,8 @@ func executeDeploy(t *testing.T, engine container.Engine, keyPEM []byte, state *
 	if att.DeployID == "" {
 		t.Error("empty deploy ID")
 	}
-	if att.Artifacts["app"] != packedDigest {
-		t.Errorf("artifact digest: got %s, want %s", att.Artifacts["app"], packedDigest)
+	if att.Artifacts["app"].Digest != packedDigest {
+		t.Errorf("artifact digest: got %s, want %s", att.Artifacts["app"].Digest, packedDigest)
 	}
 	if valErr := deploy.ValidateAttestation(att); valErr != nil {
 		t.Errorf("attestation validation: %v", valErr)

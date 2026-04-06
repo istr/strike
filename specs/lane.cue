@@ -278,3 +278,74 @@ package lane
 
 #Digest: =~"^sha256:[a-f0-9]{64}$"
 #Duration: =~"^[0-9]+(s|m|h)$"
+
+// ---------------------------------------------------------------------------
+// Runtime artifact carrier
+// ---------------------------------------------------------------------------
+
+// Artifact is a content-addressed output from a step. This type flows
+// between executor, lane state, and deploy -- it is the internal
+// interface for artifact handover between pipeline phases.
+#Artifact: {
+	@go(Artifact)
+	type:          #ArtifactType @go(Type)
+	digest:        #Digest @go(Digest)
+	local_path?:   string @go(LocalPath)
+	size:          int & >=0 @go(Size)
+	content_type?: string @go(ContentType)
+	metadata?:     [string]: string @go(Metadata)
+	rekor?:        #RekorEntry @go(Rekor,optional=nillable)
+}
+
+// ---------------------------------------------------------------------------
+// Rekor transparency log types
+// ---------------------------------------------------------------------------
+
+// RekorEntry holds the transparency log response from a Rekor
+// hashedrekord submission. When present, all subfields are required --
+// a partial Rekor entry is invalid. Used by both #Artifact (internal
+// carrier) and deploy.#SignedArtifact (attestation output).
+#RekorEntry: {
+	@go(RekorEntry)
+
+	// uuid is the entry identifier in the transparency log.
+	// Needed for lookups via GET /api/v1/log/entries/{uuid}.
+	uuid: =~"^[0-9a-f]{64,}$" @go(UUID)
+
+	// log_index is the global sequence number in the transparency log.
+	log_index: int & >=0 @go(LogIndex)
+
+	// log_id is the hex-encoded hash of the log's public key.
+	log_id: =~"^[a-f0-9]{64}$" @go(LogID)
+
+	// integrated_time is the Unix timestamp when the entry was added.
+	integrated_time: int & >0 @go(IntegratedTime)
+
+	// body is the base64-encoded entry body.
+	body: string @go(Body)
+
+	// signed_entry_timestamp is the base64-encoded SET proving
+	// the log server processed this entry. Verifiers use this to
+	// re-verify the SET offline without contacting Rekor.
+	signed_entry_timestamp: string @go(SignedEntryTimestamp)
+
+	// inclusion_proof holds the Merkle tree proof for this entry.
+	inclusion_proof: #InclusionProof @go(InclusionProof)
+}
+
+// InclusionProof holds the Merkle tree proof for a Rekor entry.
+#InclusionProof: {
+	@go(InclusionProof)
+
+	// log_index is the leaf index in the Merkle tree.
+	log_index: int & >=0 @go(LogIndex)
+
+	// root_hash is the hex-encoded tree root at inclusion time.
+	root_hash: =~"^[a-f0-9]{64}$" @go(RootHash)
+
+	// tree_size is the number of leaves when the proof was generated.
+	tree_size: int & >=1 @go(TreeSize)
+
+	// hashes are the hex-encoded sibling hashes from leaf to root.
+	hashes: [...=~"^[a-f0-9]{64}$"] @go(Hashes)
+}

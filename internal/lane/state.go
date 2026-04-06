@@ -7,22 +7,16 @@ import (
 	"time"
 )
 
+// Compile-time check: Artifact is now CUE-generated in cue_types_lane_gen.go.
+// If this line fails, the generated file is missing the Artifact definition.
+var _ Artifact
+
 // State tracks artifacts and step results across lane execution.
 // All artifact references use "step_name.output_name" keys.
 type State struct {
 	Artifacts map[string]Artifact   `json:"artifacts"`
 	Steps     map[string]StepResult `json:"steps"`
 	mu        sync.RWMutex
-}
-
-// Artifact is a content-addressed output from a step.
-type Artifact struct {
-	Metadata    map[string]string `json:"metadata,omitempty"`
-	Type        ArtifactType      `json:"type"`
-	Digest      string            `json:"digest"` // "sha256:..."
-	LocalPath   string            `json:"local_path"`
-	ContentType string            `json:"content_type,omitempty"`
-	Size        int64             `json:"size"`
 }
 
 // StepResult records execution metadata for a completed step.

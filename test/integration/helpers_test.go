@@ -23,10 +23,12 @@ const (
 	staticBase = "cgr.dev/chainguard/static@sha256:2fdfacc8d61164aa9e20909dceec7cc28b9feb66580e8e1a65b9f2443c53b61b"
 )
 
-// needsEngine returns a live container.Engine or skips the test.
+// needsEngine returns a live container.Engine or fails the test.
 //
 // By default, the helper probes the local podman socket via container.New().
 // Set STRIKE_INTEGRATION=0 to skip integration tests unconditionally.
+// A missing or unresponsive engine is a hard failure -- the operator must
+// fix the prerequisite before integration tests can pass.
 func needsEngine(t *testing.T) container.Engine {
 	t.Helper()
 	if os.Getenv("STRIKE_INTEGRATION") == "0" {
@@ -34,11 +36,11 @@ func needsEngine(t *testing.T) container.Engine {
 	}
 	engine, err := container.New()
 	if err != nil {
-		t.Skipf("no container engine: %v", err)
+		t.Fatalf("no container engine (is the podman socket running?): %v", err)
 	}
 	ctx := context.Background()
 	if err := engine.Ping(ctx); err != nil {
-		t.Skipf("container engine not responding: %v", err)
+		t.Fatalf("container engine not responding (check podman socket): %v", err)
 	}
 	return engine
 }

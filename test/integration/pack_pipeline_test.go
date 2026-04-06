@@ -29,7 +29,7 @@ func TestPackPipeline(t *testing.T) {
 	t.Logf("image digest: %s", result.Digest)
 
 	// 3. Verify digest format.
-	if !strings.HasPrefix(result.Digest, "sha256:") {
+	if !strings.HasPrefix(string(result.Digest), "sha256:") {
 		t.Errorf("unexpected digest format: %s", result.Digest)
 	}
 
@@ -42,7 +42,7 @@ func TestPackPipeline(t *testing.T) {
 	t.Logf("loaded as: %s", digest)
 
 	// 5. Inspect the loaded image via its local tag.
-	localTag := "localhost/strike:" + strings.TrimPrefix(digest, "sha256:")[:12]
+	localTag := "localhost/strike:" + strings.TrimPrefix(string(digest), "sha256:")[:12]
 	imgInfo, err := engine.ImageInspect(ctx, localTag)
 	if err != nil {
 		t.Fatalf("inspect: %v", err)
@@ -50,7 +50,7 @@ func TestPackPipeline(t *testing.T) {
 	if imgInfo.Size == 0 {
 		t.Error("loaded image has zero size")
 	}
-	if imgInfo.Digest != digest {
+	if imgInfo.Digest != string(digest) {
 		t.Errorf("digest mismatch: inspect=%s, load=%s", imgInfo.Digest, digest)
 	}
 

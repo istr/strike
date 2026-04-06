@@ -46,7 +46,7 @@ type Attestation struct {
 type SignedArtifact struct {
 	Signature *SignatureRecord `json:"signature,omitempty"`
 	SBOM      *SBOMRecord      `json:"sbom,omitempty"`
-	Rekor     *RekorEntry      `json:"rekor,omitempty"`
+	Rekor     *lane.RekorEntry `json:"rekor,omitempty"`
 	Digest    string           `json:"digest"`
 }
 
@@ -61,23 +61,6 @@ type SignatureRecord struct {
 type SBOMRecord struct {
 	Format string `json:"format"`
 	Digest string `json:"digest"`
-}
-
-// RekorEntry holds the transparency log response from a Rekor submission.
-type RekorEntry struct {
-	InclusionProof *InclusionProof `json:"inclusion_proof"`
-	LogID          string          `json:"log_id"`
-	Body           string          `json:"body"`
-	LogIndex       int             `json:"log_index"`
-	IntegratedTime int             `json:"integrated_time"`
-}
-
-// InclusionProof holds the Merkle tree proof for a Rekor entry.
-type InclusionProof struct {
-	RootHash string   `json:"root_hash"`
-	Hashes   []string `json:"hashes"`
-	LogIndex int      `json:"log_index"`
-	TreeSize int      `json:"tree_size"`
 }
 
 // EngineRecord captures the engine's identity at deploy time.
@@ -267,7 +250,8 @@ func resolveArtifactDigests(stepName string, spec *lane.DeploySpec, state *lane.
 			return nil, fmt.Errorf("step %q: artifact %q: %w", stepName, artName, resolveErr)
 		}
 		artifacts[artName] = SignedArtifact{
-			Digest: a.Digest,
+			Digest: string(a.Digest),
+			Rekor:  a.Rekor,
 		}
 	}
 	return artifacts, nil
@@ -283,7 +267,7 @@ func (d *Deployer) recordAttestation(att *Attestation, step *lane.Step, state *l
 
 	if err := state.Register(step.Name, "attestation", lane.Artifact{
 		Type:        "file",
-		Digest:      attDigest,
+		Digest:      lane.Digest(attDigest),
 		Size:        int64(len(attJSON)),
 		ContentType: "application/vnd.strike.attestation+json",
 	}); err != nil {
