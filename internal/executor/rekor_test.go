@@ -487,6 +487,126 @@ func TestSignManifest_RekorSkippedWhenNil(t *testing.T) {
 	}
 }
 
+// --------------------------------------------------------------------------.
+// SubmitDSSE tests.
+// --------------------------------------------------------------------------.
+
+func TestSubmitDSSE(t *testing.T) {
+	rekorKey, rekorPubPEM := generateRekorKey(t)
+	rekorPub, err := executor.ParseRekorPublicKey(rekorPubPEM)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Fake DSSE envelope and signer public key.
+	envelopeJSON := []byte(`{"payloadType":"application/vnd.strike.attestation+json","payload":"dGVzdA","signatures":[]}`)
+	_, signerPubPEM := generateTestKey(t)
+
+	tests := []struct {
+		handler     http.HandlerFunc
+		name        string
+		wantErr     bool
+		wantWarning bool
+		checkEntry  bool
+	}{
+		{
+			name:       "success",
+			handler:    fakeDSSERekorHandler(t, rekorKey),
+			checkEntry: true,
+		},
+		{
+			name: "server error returns warning",
+			handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusInternalServerError)
+				w.Write([]byte("internal error")) //nolint:errcheck,gosec // test helper
+			}),
+			wantErr:     true,
+			wantWarning: true,
+		},
+		{
+			name:        "invalid SET is hard error",
+			handler:     invalidSETHandler(),
+			wantErr:     true,
+			wantWarning: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			srv := httptest.NewServer(tt.handler)
+			defer srv.Close()
+
+			client := &executor.RekorClient{
+				PublicKey: rekorPub,
+				HTTP:      srv.Client(),
+				URL:       srv.URL,
+			}
+
+			entry, submitErr := client.SubmitDSSE(
+				context.Background(), envelopeJSON, signerPubPEM)
+
+			if tt.wantErr {
+				assertRekorError(t, submitErr, tt.wantWarning)
+				return
+			}
+
+			if submitErr != nil {
+				t.Fatalf("unexpected error: %v", submitErr)
+			}
+
+			if tt.checkEntry {
+				verifyRekorEntry(t, entry)
+			}
+		})
+	}
+}
+
+// fakeDSSERekorHandler validates the dsse request structure and responds with
+// a canned Rekor 201 response.
+func fakeDSSERekorHandler(t *testing.T, rekorKey *ecdsa.PrivateKey) http.HandlerFunc {
+	t.Helper()
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("method = %s, want POST", r.Method)
+		}
+		if r.URL.Path != "/api/v1/log/entries" {
+			t.Errorf("path = %s, want /api/v1/log/entries", r.URL.Path)
+		}
+		if ct := r.Header.Get("Content-Type"); ct != "application/json" {
+			t.Errorf("content-type = %s, want application/json", ct)
+		}
+
+		var body map[string]any
+		if decErr := json.NewDecoder(r.Body).Decode(&body); decErr != nil {
+			t.Errorf("decode request body: %v", decErr)
+		}
+		if body["kind"] != "dsse" {
+			t.Errorf("kind = %v, want dsse", body["kind"])
+		}
+		if body["apiVersion"] != "0.0.1" {
+			t.Errorf("apiVersion = %v, want 0.0.1", body["apiVersion"])
+		}
+
+		spec, ok := body["spec"].(map[string]any)
+		if !ok {
+			t.Fatal("missing or invalid spec in request body")
+		}
+		pc, ok := spec["proposedContent"].(map[string]any)
+		if !ok {
+			t.Fatal("missing or invalid proposedContent in spec")
+		}
+		if pc["envelope"] == nil {
+			t.Error("missing envelope in proposedContent")
+		}
+		if pc["verifiers"] == nil {
+			t.Error("missing verifiers in proposedContent")
+		}
+
+		w.WriteHeader(http.StatusCreated)
+		w.Write(fakeRekorResponse(t, rekorKey)) //nolint:errcheck,gosec // test helper
+	}
+}
+
 // errorAs is a type-safe wrapper for errors.As that avoids importing errors
 // in every call site (errors is already used via the executor package).
 func errorAs[T error](err error, target *T) bool {

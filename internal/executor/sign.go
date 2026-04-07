@@ -155,7 +155,7 @@ func submitToRekor(ctx context.Context, client *RekorClient, manifestDigest, b64
 		return nil, fmt.Errorf("rekor: decode signature: %w", err)
 	}
 
-	pubPEM, err := derivePublicKeyPEM(keyPEM, password)
+	pubPEM, err := DerivePublicKeyPEM(keyPEM, password)
 	if err != nil {
 		return nil, fmt.Errorf("rekor: derive public key: %w", err)
 	}

@@ -194,18 +194,17 @@ The full non-repudiation chain for a strike-produced artifact:
 6. **Signature** -- ECDSA P-256 over manifest digest, recorded in Rekor
    transparency log. Signing metadata is captured in `#SignatureRecord`.
 7. **Attestation** -- SLSA Provenance predicate with all inputs, parameters,
-   and outputs, signed and stored as OCI referrer.
+   and outputs, signed as a DSSE envelope (Dead Simple Signing Envelope,
+   the in-toto v1 standard) and submitted to the Rekor transparency log
+   as a `dsse` entry. The `att.Rekor` field is unsigned metadata -- it
+   proves the signing event was logged but is not covered by the DSSE
+   signature. Verifiers must strip the `rekor` field before checking
+   the DSSE signature.
 8. **Deploy state** -- pre-state and post-state snapshots with drift detection.
 
-### End-to-end attestation (planned)
+### End-to-end attestation
 
-Steps 1 and 8 have open ends. Step 1 records that the lane was committed
-to Git, but does not capture *who signed* the commits or whether *all*
-commits were signed. Step 8 captures pre/post state, but the attestation
-itself is not cryptographically signed -- a tampered attestation is
-indistinguishable from a legitimate one.
-
-Two extensions close these gaps:
+Source provenance and attestation signing close the original open ends:
 
 - **Source provenance** enriches deploy attestations with git commit
   metadata: commit range, signer identities (GPG, SSH, or gitsign),
@@ -213,10 +212,12 @@ Two extensions close these gaps:
   container (preserving the no-exec.Command invariant).
 
 - **Attestation signing** wraps the deploy attestation in a DSSE
-  envelope (Dead Simple Signing Envelope, the in-toto v1 standard)
-  signed with the same cosign key that signs image manifests. The
-  signed attestation is stored as an OCI 1.1 referrer on the deployed
-  image.
+  envelope signed with the same cosign key that signs image manifests.
+  The signed DSSE envelope is submitted to Rekor as a `dsse` entry,
+  providing independent third-party timestamping of the signing event.
+  This completes the Rekor chain: each artifact's signature has a
+  transparency log entry (hashedrekord), and the attestation that
+  references those artifacts also has a transparency log entry (dsse).
 
 Together, these complete the chain from developer keystroke to verified
 production state. The design is documented in

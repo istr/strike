@@ -8,6 +8,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
 	"math/big"
@@ -819,6 +820,210 @@ func TestDeployerExecute_DriftDetectFail(t *testing.T) {
 	// First deploy -- drift should be nil (no previous attestation).
 	if att.Drift != nil {
 		t.Error("expected nil drift for first deploy")
+	}
+}
+
+// --------------------------------------------------------------------------.
+// Rekor DSSE attestation tests.
+// --------------------------------------------------------------------------.
+
+func TestDeployerExecute_WithRekor(t *testing.T) {
+	rekorKey, rekorPubPEM := generateRekorKey(t)
+	srv := httptest.NewServer(fakeDSSERekorHandler(t, rekorKey))
+	defer srv.Close()
+
+	eng := newTLSTestEngine(t, containerMock(t, "v1.2.3"))
+	keyPEM, _ := generateTestKeyPEM(t)
+
+	state := lane.NewState()
+	if err := state.Register("build", "image", lane.Artifact{
+		Type:   "image",
+		Digest: lane.MustParseDigest("sha256:abc1230000000000000000000000000000000000000000000000000000000000"),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	step := deployStep()
+	d := &deploy.Deployer{
+		Engine:      eng,
+		EngineID:    eng.Identity(),
+		Rekor:       newRekorClient(t, rekorPubPEM, srv.Client(), srv.URL),
+		SigningKey:  keyPEM,
+		KeyPassword: nil,
+	}
+
+	att, err := d.Execute(context.Background(), step, state)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	if att.Rekor == nil {
+		t.Fatal("expected non-nil att.Rekor when RekorClient is configured")
+	}
+	if att.Rekor.LogIndex != 42 {
+		t.Errorf("att.Rekor.LogIndex = %d, want 42", att.Rekor.LogIndex)
+	}
+	if att.SignedEnvelope == nil {
+		t.Error("expected non-nil SignedEnvelope")
+	}
+}
+
+func TestDeployerExecute_NoRekor(t *testing.T) {
+	eng := newTLSTestEngine(t, containerMock(t, "v1.2.3"))
+	keyPEM, _ := generateTestKeyPEM(t)
+
+	state := lane.NewState()
+	if err := state.Register("build", "image", lane.Artifact{
+		Type:   "image",
+		Digest: lane.MustParseDigest("sha256:abc1230000000000000000000000000000000000000000000000000000000000"),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	step := deployStep()
+	d := &deploy.Deployer{
+		Engine:      eng,
+		SigningKey:  keyPEM,
+		KeyPassword: nil,
+	}
+
+	att, err := d.Execute(context.Background(), step, state)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	if att.Rekor != nil {
+		t.Errorf("expected nil att.Rekor when no RekorClient, got %+v", att.Rekor)
+	}
+	if att.SignedEnvelope == nil {
+		t.Error("expected non-nil SignedEnvelope (signing should still work)")
+	}
+}
+
+func TestDeployerExecute_RekorTransient(t *testing.T) {
+	_, rekorPubPEM := generateRekorKey(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("temporary failure")) //nolint:errcheck,gosec // test helper
+	}))
+	defer srv.Close()
+
+	eng := newTLSTestEngine(t, containerMock(t, "v1.2.3"))
+	keyPEM, _ := generateTestKeyPEM(t)
+
+	state := lane.NewState()
+	if err := state.Register("build", "image", lane.Artifact{
+		Type:   "image",
+		Digest: lane.MustParseDigest("sha256:abc1230000000000000000000000000000000000000000000000000000000000"),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	step := deployStep()
+	d := &deploy.Deployer{
+		Engine:      eng,
+		Rekor:       newRekorClient(t, rekorPubPEM, srv.Client(), srv.URL),
+		SigningKey:  keyPEM,
+		KeyPassword: nil,
+	}
+
+	att, err := d.Execute(context.Background(), step, state)
+	if err != nil {
+		t.Fatalf("Execute: %v (expected fail-open on transient Rekor error)", err)
+	}
+
+	if att.Rekor != nil {
+		t.Errorf("expected nil att.Rekor on transient failure, got %+v", att.Rekor)
+	}
+	if att.SignedEnvelope == nil {
+		t.Error("expected non-nil SignedEnvelope (signing should still work)")
+	}
+}
+
+func TestDeployerExecute_RekorSignedContentNoRekorField(t *testing.T) {
+	rekorKey, rekorPubPEM := generateRekorKey(t)
+	srv := httptest.NewServer(fakeDSSERekorHandler(t, rekorKey))
+	defer srv.Close()
+
+	eng := newTLSTestEngine(t, containerMock(t, "v1.2.3"))
+	keyPEM, _ := generateTestKeyPEM(t)
+
+	state := lane.NewState()
+	if err := state.Register("build", "image", lane.Artifact{
+		Type:   "image",
+		Digest: lane.MustParseDigest("sha256:abc1230000000000000000000000000000000000000000000000000000000000"),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	step := deployStep()
+	d := &deploy.Deployer{
+		Engine:      eng,
+		EngineID:    eng.Identity(),
+		Rekor:       newRekorClient(t, rekorPubPEM, srv.Client(), srv.URL),
+		SigningKey:  keyPEM,
+		KeyPassword: nil,
+	}
+
+	att, err := d.Execute(context.Background(), step, state)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	// The DSSE envelope must have been signed BEFORE the rekor field was set.
+	// Verify by decoding the envelope and checking the payload has no "rekor" key.
+	var env deploy.DSSEEnvelope
+	if unmarshalErr := json.Unmarshal(att.SignedEnvelope, &env); unmarshalErr != nil {
+		t.Fatalf("unmarshal DSSE envelope: %v", unmarshalErr)
+	}
+
+	payloadJSON, decErr := base64.RawURLEncoding.DecodeString(env.Payload)
+	if decErr != nil {
+		t.Fatalf("decode payload: %v", decErr)
+	}
+
+	var attMap map[string]any
+	if unmarshalErr := json.Unmarshal(payloadJSON, &attMap); unmarshalErr != nil {
+		t.Fatalf("unmarshal payload: %v", unmarshalErr)
+	}
+
+	if _, hasRekor := attMap["rekor"]; hasRekor {
+		t.Error("DSSE-signed payload must NOT contain 'rekor' field")
+	}
+}
+
+// deployStep returns a minimal deploy step for Rekor tests.
+func deployStep() *lane.Step {
+	return &lane.Step{
+		Name: "deploy-prod",
+		Deploy: &lane.DeploySpec{
+			Method: lane.DeployMethod{
+				"type":  "custom",
+				"image": "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+			},
+			Artifacts: map[string]lane.ArtifactRef{
+				"image": {From: "build.image"},
+			},
+			Target: lane.DeployTarget{Type: "registry", Description: "production"},
+			Attestation: lane.AttestationSpec{
+				PreState: lane.StateCaptureSpec{
+					Capture: []lane.StateCapture{{
+						Name:    "version",
+						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+						Command: []string{"cat", "/version"},
+						Network: true,
+					}},
+				},
+				PostState: lane.StateCaptureSpec{
+					Capture: []lane.StateCapture{{
+						Name:    "version",
+						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+						Command: []string{"cat", "/version"},
+						Network: true,
+					}},
+				},
+			},
+		},
 	}
 }
 

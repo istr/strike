@@ -32,6 +32,7 @@ The following are in scope for security reports:
 - Supply chain issues in the bootstrap process or dependency chain
 - Cryptographic weaknesses in signing or key handling
 - SBOM integrity or attestation bypass
+- Rekor transparency log response forgery (SET verification bypass)
 
 ## Threat model
 
@@ -116,6 +117,13 @@ strike is designed with a minimal attack surface:
   set via `CONTAINER_TLS_CA`, only that CA is trusted. Otherwise the
   system CA store is used. Mutual TLS is supported when client cert and
   key are provided via `CONTAINER_TLS_CERT` and `CONTAINER_TLS_KEY`.
+- **Transparency logging** -- artifact signatures are submitted to a Rekor
+  transparency log as `hashedrekord` entries. Deploy attestations (signed
+  DSSE envelopes) are submitted as `dsse` entries. Both entry types are
+  verified via signed entry timestamps (SET) before acceptance -- a forged
+  Rekor response is a hard error, not a transient failure. Rekor submission
+  is optional (skip when `REKOR_URL` is unset) and fail-open on transient
+  errors (network/timeout/5xx), but fail-closed on SET verification failure.
 - **Audit logging** -- when `STRIKE_AUDIT=1` is set, every API request
   to the container engine is logged with method, path, response status,
   and duration. Request bodies are never logged (they may contain secrets).

@@ -50,10 +50,26 @@ func (e *RekorTransientError) Unwrap() error {
 // Returns RekorTransientError for transient failures (network, timeout, 5xx).
 // Returns a hard error for SET verification failures.
 func (c *RekorClient) SubmitHashedRekord(ctx context.Context, hexDigest string, sig, pubKeyPEM []byte) (*lane.RekorEntry, error) {
+	return c.submit(ctx, buildHashedRekordRequest(hexDigest, sig, pubKeyPEM))
+}
+
+// SubmitDSSE submits a DSSE envelope to the Rekor transparency log.
+// envelopeJSON is the marshaled DSSE envelope.
+// pubKeyPEM is the PEM-encoded public key of the signer.
+//
+// Returns a verified lane.RekorEntry on success.
+// Returns RekorTransientError for transient failures.
+// Returns a hard error for SET verification failures.
+func (c *RekorClient) SubmitDSSE(ctx context.Context, envelopeJSON, pubKeyPEM []byte) (*lane.RekorEntry, error) {
+	return c.submit(ctx, buildDSSERequest(envelopeJSON, pubKeyPEM))
+}
+
+// submit posts an entry to the Rekor v1 log entries API, parses the response,
+// and verifies the signed entry timestamp. Shared by SubmitHashedRekord and SubmitDSSE.
+func (c *RekorClient) submit(ctx context.Context, reqBody map[string]any) (*lane.RekorEntry, error) {
 	ctx, cancel := context.WithTimeout(ctx, rekorTimeout)
 	defer cancel()
 
-	reqBody := buildHashedRekordRequest(hexDigest, sig, pubKeyPEM)
 	bodyBytes, err := json.Marshal(reqBody)
 	if err != nil {
 		return nil, &RekorTransientError{Err: fmt.Errorf("marshal request: %w", err)}
@@ -128,6 +144,22 @@ func ParseRekorPublicKey(pemBytes []byte) (*ecdsa.PublicKey, error) {
 		return nil, fmt.Errorf("key is %T, not ECDSA", pub)
 	}
 	return ecPub, nil
+}
+
+// buildDSSERequest constructs a Rekor v1 dsse entry request body.
+func buildDSSERequest(envelopeJSON, pubKeyPEM []byte) map[string]any {
+	return map[string]any{
+		"apiVersion": "0.0.1",
+		"kind":       "dsse",
+		"spec": map[string]any{
+			"proposedContent": map[string]any{
+				"envelope": base64.StdEncoding.EncodeToString(envelopeJSON),
+				"verifiers": []string{
+					base64.StdEncoding.EncodeToString(pubKeyPEM),
+				},
+			},
+		},
+	}
 }
 
 // buildHashedRekordRequest constructs the Rekor v1 API request body.
@@ -272,8 +304,8 @@ type setPayload struct { //nolint:govet // fieldalignment: field order determine
 	LogIndex       int64  `json:"logIndex"`
 }
 
-// derivePublicKeyPEM loads a signing key and returns the PEM-encoded public key.
-func derivePublicKeyPEM(keyPEM, password []byte) ([]byte, error) {
+// DerivePublicKeyPEM loads a signing key and returns the PEM-encoded public key.
+func DerivePublicKeyPEM(keyPEM, password []byte) ([]byte, error) {
 	privKey, err := loadCosignKey(keyPEM, password)
 	if err != nil {
 		return nil, err

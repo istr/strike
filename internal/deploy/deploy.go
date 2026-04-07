@@ -11,6 +11,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -18,6 +19,7 @@ import (
 	"time"
 
 	"github.com/istr/strike/internal/container"
+	"github.com/istr/strike/internal/executor"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/registry"
 )
@@ -36,6 +38,7 @@ type Attestation struct {
 	PostState      map[string]StateSnap      `json:"post_state"`
 	Drift          *DriftReport              `json:"drift,omitempty"`
 	Engine         *EngineRecord             `json:"engine,omitempty"`
+	Rekor          *lane.RekorEntry          `json:"rekor,omitempty"`
 	Source         *SourceProvenance         `json:"source,omitempty"`
 	DeployID       string                    `json:"deploy_id"`
 	LaneRef        string                    `json:"lane_ref"` // digest of lane definition
@@ -115,6 +118,7 @@ func HardenedRunOpts() container.RunOpts {
 type Deployer struct {
 	Engine      container.Engine
 	EngineID    *container.EngineIdentity
+	Rekor       *executor.RekorClient
 	SigningKey  []byte
 	KeyPassword []byte
 	SourceDirs  []string // host paths with source mounts (for git provenance)
@@ -122,7 +126,7 @@ type Deployer struct {
 
 // Execute runs a deploy step: capture pre-state, detect drift, execute
 // the deploy action, capture post-state, and build the attestation.
-func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.State) (*Attestation, error) {
+func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.State) (*Attestation, error) { //nolint:gocyclo // sequential orchestrator; splitting further hurts readability
 	spec := step.Deploy
 	if spec == nil {
 		return nil, fmt.Errorf("step %q: not a deploy step", step.Name)
@@ -198,6 +202,19 @@ func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.Sta
 		return nil, err
 	}
 
+	// 7.6. Submit signed attestation to Rekor transparency log (optional).
+	// The DSSE envelope was signed over the attestation WITHOUT the rekor
+	// field. att.Rekor is unsigned metadata proving the signing event was
+	// logged. Verifiers must strip the rekor field before checking the
+	// DSSE signature.
+	if d.Rekor != nil && att.SignedEnvelope != nil {
+		rekorEntry, rekorErr := submitAttestationToRekor(ctx, d, att)
+		if rekorErr != nil {
+			return nil, rekorErr
+		}
+		att.Rekor = rekorEntry
+	}
+
 	// 8. Record in lane state
 	if err := d.recordAttestation(att, step, state, started); err != nil {
 		return nil, fmt.Errorf("step %q: %w", step.Name, err)
@@ -222,6 +239,33 @@ func (d *Deployer) signAttestation(att *Attestation, stepName string) error {
 	}
 	att.SignedEnvelope = envelope
 	return nil
+}
+
+const rekorMaxEnvelopeSize = 100 * 1024 // 100KB Rekor upload limit
+
+// submitAttestationToRekor submits the signed DSSE envelope to Rekor.
+// Returns nil entry on transient failure (fail open) or oversized envelope.
+func submitAttestationToRekor(ctx context.Context, d *Deployer, att *Attestation) (*lane.RekorEntry, error) {
+	if len(att.SignedEnvelope) > rekorMaxEnvelopeSize {
+		log.Printf("WARN   deploy %s: DSSE envelope %d bytes exceeds Rekor %d byte limit, skipping",
+			att.DeployID, len(att.SignedEnvelope), rekorMaxEnvelopeSize)
+		return nil, nil
+	}
+
+	pubPEM, err := executor.DerivePublicKeyPEM(d.SigningKey, d.KeyPassword)
+	if err != nil {
+		return nil, fmt.Errorf("rekor: derive public key: %w", err)
+	}
+	entry, err := d.Rekor.SubmitDSSE(ctx, att.SignedEnvelope, pubPEM)
+	if err != nil {
+		var w *executor.RekorTransientError
+		if errors.As(err, &w) {
+			log.Printf("WARN   deploy %s: rekor dsse: %v", att.DeployID, err)
+			return nil, nil
+		}
+		return nil, err
+	}
+	return entry, nil
 }
 
 // detectAndHandleDrift checks for drift between pre-state and previous post-state.
