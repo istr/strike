@@ -124,7 +124,7 @@ func fakeRekorResponse(t *testing.T, rekorKey *ecdsa.PrivateKey) []byte {
 		},
 	}
 
-	resp := map[string]any{"test-uuid-123": entry}
+	resp := map[string]any{strings.Repeat("ab", 32): entry}
 	data, err := json.Marshal(resp)
 	if err != nil {
 		t.Fatal(err)
@@ -152,7 +152,7 @@ func invalidSETHandler() http.HandlerFunc {
 				},
 			},
 		}
-		resp := map[string]any{"uuid-bad": entry}
+		resp := map[string]any{strings.Repeat("cd", 32): entry}
 		w.WriteHeader(http.StatusCreated)
 		json.NewEncoder(w).Encode(resp) //nolint:errcheck,gosec // test helper
 	}

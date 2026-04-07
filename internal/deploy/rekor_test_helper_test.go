@@ -84,7 +84,7 @@ func fakeRekorResponse(t *testing.T, rekorKey *ecdsa.PrivateKey) []byte {
 		},
 	}
 
-	resp := map[string]any{"dsse-uuid-123": entry}
+	resp := map[string]any{strings.Repeat("ab", 32): entry}
 	data, err := json.Marshal(resp)
 	if err != nil {
 		t.Fatal(err)
