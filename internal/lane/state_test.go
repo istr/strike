@@ -13,7 +13,7 @@ func TestRegisterAndResolve(t *testing.T) {
 
 	a := lane.Artifact{
 		Type:      "file",
-		Digest:    "sha256:abc123",
+		Digest:    lane.MustParseDigest("sha256:abc123"),
 		Size:      1024,
 		LocalPath: "/tmp/out/binary",
 	}
@@ -36,7 +36,7 @@ func TestRegisterAndResolve(t *testing.T) {
 
 func TestRegisterDuplicate(t *testing.T) {
 	s := lane.NewState()
-	a := lane.Artifact{Digest: "sha256:abc123", Type: "file"}
+	a := lane.Artifact{Digest: lane.MustParseDigest("sha256:abc123"), Type: "file"}
 
 	if err := s.Register("build", "binary", a); err != nil {
 		t.Fatal(err)
@@ -89,7 +89,7 @@ func TestStateJSON(t *testing.T) {
 	s := lane.NewState()
 	if err := s.Register("build", "binary", lane.Artifact{
 		Type:   "file",
-		Digest: "sha256:abc123",
+		Digest: lane.MustParseDigest("sha256:abc123"),
 		Size:   1024,
 	}); err != nil {
 		t.Fatal(err)

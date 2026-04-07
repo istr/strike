@@ -46,7 +46,7 @@ func (s *State) Register(stepName, outputName string, a Artifact) error {
 	if _, exists := s.Artifacts[key]; exists {
 		return fmt.Errorf("artifact %q already registered", key)
 	}
-	if a.Digest == "" {
+	if a.Digest.IsZero() {
 		return fmt.Errorf("artifact %q: digest is required", key)
 	}
 	s.Artifacts[key] = a

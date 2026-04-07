@@ -12,7 +12,6 @@ import (
 	"math/big"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/istr/strike/internal/container"
@@ -71,7 +70,7 @@ func TestEndToEndChain(t *testing.T) {
 	if _, loadErr := regClient.LoadOCITar(ctx, packRoot, "image.tar"); loadErr != nil {
 		t.Fatalf("load: %v", loadErr)
 	}
-	localTag := "localhost/strike:" + strings.TrimPrefix(string(imageDigest), "sha256:")[:12]
+	localTag := "localhost/strike:" + imageDigest.Hex[:12]
 
 	// --- Part 4: Deploy — with attestation and source provenance ---
 	state := lane.NewState()
@@ -85,7 +84,7 @@ func TestEndToEndChain(t *testing.T) {
 	att := chainDeploy(t, engine, keyPEM, state, localTag, srcDir)
 
 	// --- Part 5: Verify the complete chain ---
-	verifyChain(t, att, string(imageDigest), keyPEM)
+	verifyChain(t, att, imageDigest.String(), keyPEM)
 }
 
 func chainPackSpec() *lane.PackSpec {

@@ -73,14 +73,14 @@ package lane
 	name:    string @go(Name)
 	from:    string @go(From)           // "step_name.output_name"
 	mount:   string & =~"^/" @go(Mount)
-	digest?: #Digest @go(Digest)
+	digest?: #Digest @go(Digest,type=*Digest)
 }
 
 #SourceRef: {
 	@go(SourceRef)
 	path:    string @go(Path)
 	mount:   string & =~"^/" @go(Mount)
-	digest?: #Digest @go(Digest)
+	digest?: #Digest @go(Digest,type=*Digest)
 }
 
 // ---------------------------------------------------------------------------
@@ -276,7 +276,7 @@ package lane
 	key?:    string @go(Key)
 }
 
-#Digest: =~"^sha256:[a-f0-9]{64}$"
+#Digest: =~"^sha256:[a-f0-9]{64}$" @go(-)
 #Duration: =~"^[0-9]+(s|m|h)$"
 
 // ---------------------------------------------------------------------------
@@ -289,7 +289,7 @@ package lane
 #Artifact: {
 	@go(Artifact)
 	type:          #ArtifactType @go(Type)
-	digest:        #Digest @go(Digest)
+	digest:        #Digest @go(Digest,type=Digest)
 	local_path?:   string @go(LocalPath)
 	size:          int & >=0 @go(Size)
 	content_type?: string @go(ContentType)

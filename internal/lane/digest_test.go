@@ -3,7 +3,6 @@ package lane_test
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/istr/strike/internal/lane"
@@ -36,7 +35,7 @@ func TestSourceDigestFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(string(d1), "sha256:") {
+	if d1.Algorithm != "sha256" {
 		t.Fatalf("expected sha256: prefix, got %q", d1)
 	}
 
@@ -81,7 +80,7 @@ func TestSourceDigestDir(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(string(d1), "sha256:") {
+	if d1.Algorithm != "sha256" {
 		t.Fatalf("expected sha256: prefix, got %q", d1)
 	}
 

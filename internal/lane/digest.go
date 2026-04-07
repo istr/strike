@@ -15,7 +15,7 @@ import (
 func SourceDigest(root *os.Root, laneDir, path string) (Digest, error) {
 	info, err := root.Stat(path)
 	if err != nil {
-		return "", fmt.Errorf("source digest %q: %w", path, err)
+		return Digest{}, fmt.Errorf("source digest %q: %w", path, err)
 	}
 	if info.IsDir() {
 		return dirDigest(root, laneDir, path)
@@ -26,7 +26,7 @@ func SourceDigest(root *os.Root, laneDir, path string) (Digest, error) {
 func fileDigest(root *os.Root, path string) (digest Digest, err error) {
 	f, err := root.Open(path)
 	if err != nil {
-		return "", err
+		return Digest{}, err
 	}
 	defer func() {
 		if cerr := f.Close(); cerr != nil && err == nil {
@@ -36,9 +36,9 @@ func fileDigest(root *os.Root, path string) (digest Digest, err error) {
 
 	h := sha256.New()
 	if _, err := io.Copy(h, f); err != nil {
-		return "", err
+		return Digest{}, err
 	}
-	return Digest("sha256:" + hex.EncodeToString(h.Sum(nil))), nil
+	return Digest{Algorithm: "sha256", Hex: hex.EncodeToString(h.Sum(nil))}, nil
 }
 
 // dirDigest hashes all files in a directory tree, sorted by relative path.
@@ -47,19 +47,19 @@ func fileDigest(root *os.Root, path string) (digest Digest, err error) {
 func dirDigest(root *os.Root, laneDir, dir string) (Digest, error) {
 	info, err := root.Stat(dir)
 	if err != nil {
-		return "", err
+		return Digest{}, err
 	}
 	if !info.IsDir() {
-		return "", fmt.Errorf("%q is not a directory", dir)
+		return Digest{}, fmt.Errorf("%q is not a directory", dir)
 	}
 
 	absDir := filepath.Join(laneDir, dir)
 	h := sha256.New()
 	err = filepath.WalkDir(absDir, dirDigestWalkFunc(root, absDir, dir, h))
 	if err != nil {
-		return "", err
+		return Digest{}, err
 	}
-	return Digest("sha256:" + hex.EncodeToString(h.Sum(nil))), nil
+	return Digest{Algorithm: "sha256", Hex: hex.EncodeToString(h.Sum(nil))}, nil
 }
 
 // dirDigestWalkFunc returns a WalkDir callback that hashes each file

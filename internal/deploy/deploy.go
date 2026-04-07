@@ -250,7 +250,7 @@ func resolveArtifactDigests(stepName string, spec *lane.DeploySpec, state *lane.
 			return nil, fmt.Errorf("step %q: artifact %q: %w", stepName, artName, resolveErr)
 		}
 		artifacts[artName] = SignedArtifact{
-			Digest: string(a.Digest),
+			Digest: a.Digest.String(),
 			Rekor:  a.Rekor,
 		}
 	}
@@ -263,11 +263,12 @@ func (d *Deployer) recordAttestation(att *Attestation, step *lane.Step, state *l
 	if err != nil {
 		return fmt.Errorf("marshal attestation: %w", err)
 	}
-	attDigest := "sha256:" + hex.EncodeToString(sha256Sum(attJSON))
+	attHex := hex.EncodeToString(sha256Sum(attJSON))
 
+	attDigest := lane.Digest{Algorithm: "sha256", Hex: attHex}
 	if err := state.Register(step.Name, "attestation", lane.Artifact{
 		Type:        "file",
-		Digest:      lane.Digest(attDigest),
+		Digest:      attDigest,
 		Size:        int64(len(attJSON)),
 		ContentType: "application/vnd.strike.attestation+json",
 	}); err != nil {
@@ -279,7 +280,7 @@ func (d *Deployer) recordAttestation(att *Attestation, step *lane.Step, state *l
 		StepType:  "deploy",
 		StartedAt: started,
 		Duration:  time.Since(started),
-		Outputs:   map[string]string{"attestation": attDigest},
+		Outputs:   map[string]string{"attestation": attDigest.String()},
 	})
 	return nil
 }

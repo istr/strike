@@ -33,7 +33,7 @@ var update = flag.Bool("update", false, "update cross-validation vector expected
 func toDigestMap(m map[string]string) map[string]lane.Digest {
 	out := make(map[string]lane.Digest, len(m))
 	for k, v := range m {
-		out[k] = lane.Digest(v)
+		out[k] = lane.MustParseDigest(v)
 	}
 	return out
 }
@@ -141,7 +141,7 @@ func TestSpecHash_Golden(t *testing.T) {
 			}
 
 			got := registry.SpecHash(step,
-				lane.Digest(vec.Inputs.ImageDigest),
+				lane.MustParseDigest(vec.Inputs.ImageDigest),
 				toDigestMap(vec.Inputs.InputHashes),
 				toDigestMap(vec.Inputs.SourceHashes),
 			)
@@ -149,11 +149,11 @@ func TestSpecHash_Golden(t *testing.T) {
 			if *update {
 				updateVectorExpected(t, "spechash", name, struct {
 					Hash string `json:"hash"`
-				}{Hash: string(got)})
+				}{Hash: got.String()})
 				return
 			}
 
-			if string(got) != vec.Expected.Hash {
+			if got.String() != vec.Expected.Hash {
 				t.Errorf("hash mismatch:\n  got:  %s\n  want: %s", got, vec.Expected.Hash)
 			}
 		})

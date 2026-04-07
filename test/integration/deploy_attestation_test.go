@@ -38,7 +38,7 @@ func TestDeployAttestation(t *testing.T) {
 	t.Logf("packed image: %s", packedDigest)
 
 	// Local tag assigned by LoadOCITar for podman lookups.
-	localTag := "localhost/strike:" + strings.TrimPrefix(string(packedDigest), "sha256:")[:12]
+	localTag := "localhost/strike:" + packedDigest.Hex[:12]
 
 	// Register the packed artifact in lane state.
 	state := lane.NewState()
@@ -50,7 +50,7 @@ func TestDeployAttestation(t *testing.T) {
 	}
 
 	// Deploy using the "custom" method with the packed image.
-	att := executeDeploy(t, engine, keyPEM, state, string(packedDigest), localTag)
+	att := executeDeploy(t, engine, keyPEM, state, packedDigest.String(), localTag)
 
 	// Verify DSSE signature round-trip.
 	verifyDSSE(t, att, keyPEM)

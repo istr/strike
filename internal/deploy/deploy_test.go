@@ -310,7 +310,7 @@ func TestDeployerExecute(t *testing.T) {
 	state := lane.NewState()
 	if err := state.Register("build", "image", lane.Artifact{
 		Type:   "image",
-		Digest: "sha256:abc1230000000000000000000000000000000000000000000000000000000000",
+		Digest: lane.MustParseDigest("sha256:abc1230000000000000000000000000000000000000000000000000000000000"),
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -443,7 +443,7 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 	state := lane.NewState()
 	if err := state.Register("build", "image", lane.Artifact{
 		Type:   "image",
-		Digest: "sha256:abc1230000000000000000000000000000000000000000000000000000000000",
+		Digest: lane.MustParseDigest("sha256:abc1230000000000000000000000000000000000000000000000000000000000"),
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -523,7 +523,7 @@ func TestEngineRecord_NilEngineID(t *testing.T) {
 	state := lane.NewState()
 	if err := state.Register("build", "image", lane.Artifact{
 		Type:   "image",
-		Digest: "sha256:abc1230000000000000000000000000000000000000000000000000000000000",
+		Digest: lane.MustParseDigest("sha256:abc1230000000000000000000000000000000000000000000000000000000000"),
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -572,7 +572,7 @@ func TestEngineRecord_WithRuntime(t *testing.T) {
 	state := lane.NewState()
 	if err := state.Register("build", "image", lane.Artifact{
 		Type:   "image",
-		Digest: "sha256:abc1230000000000000000000000000000000000000000000000000000000000",
+		Digest: lane.MustParseDigest("sha256:abc1230000000000000000000000000000000000000000000000000000000000"),
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -628,7 +628,7 @@ func TestEngineRecord_WithoutRuntime(t *testing.T) {
 	state := lane.NewState()
 	if err := state.Register("build", "image", lane.Artifact{
 		Type:   "image",
-		Digest: "sha256:abc1230000000000000000000000000000000000000000000000000000000000",
+		Digest: lane.MustParseDigest("sha256:abc1230000000000000000000000000000000000000000000000000000000000"),
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -768,7 +768,7 @@ func TestDeployerExecute_DriftDetectFail(t *testing.T) {
 	state := lane.NewState()
 	if err := state.Register("build", "image", lane.Artifact{
 		Type:   "image",
-		Digest: "sha256:abc1230000000000000000000000000000000000000000000000000000000000",
+		Digest: lane.MustParseDigest("sha256:abc1230000000000000000000000000000000000000000000000000000000000"),
 	}); err != nil {
 		t.Fatal(err)
 	}

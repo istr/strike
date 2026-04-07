@@ -160,7 +160,7 @@ func Pack(ctx context.Context, opts PackOpts) (*PackResult, error) {
 		return nil, err
 	}
 
-	return &PackResult{Digest: lane.Digest(assembled.Digest.String()), Rekor: signRes.Rekor}, nil
+	return &PackResult{Digest: lane.MustParseDigest(assembled.Digest.String()), Rekor: signRes.Rekor}, nil
 }
 
 // addFileLayers appends a layer for each file entry, returning the updated

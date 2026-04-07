@@ -4,13 +4,14 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/registry"
 )
+
+const testAlgoSHA256 = "sha256"
 
 func TestSpecHashDeterministic(t *testing.T) {
 	step := &lane.Step{
@@ -19,16 +20,16 @@ func TestSpecHashDeterministic(t *testing.T) {
 		Args:  []string{"build", "-o", "/out/bin"},
 		Env:   map[string]string{"CGO_ENABLED": "0"},
 	}
-	inputHashes := map[string]lane.Digest{"src": "sha256:deadbeef"}
-	sourceHashes := map[string]lane.Digest{"/src": "sha256:cafebabe"}
+	inputHashes := map[string]lane.Digest{"src": lane.MustParseDigest("sha256:deadbeef")}
+	sourceHashes := map[string]lane.Digest{"/src": lane.MustParseDigest("sha256:cafebabe")}
 
-	h1 := registry.SpecHash(step, "sha256:img", inputHashes, sourceHashes)
-	h2 := registry.SpecHash(step, "sha256:img", inputHashes, sourceHashes)
+	h1 := registry.SpecHash(step, lane.MustParseDigest("sha256:img"), inputHashes, sourceHashes)
+	h2 := registry.SpecHash(step, lane.MustParseDigest("sha256:img"), inputHashes, sourceHashes)
 	if h1 != h2 {
 		t.Fatalf("not deterministic: %q vs %q", h1, h2)
 	}
-	if !strings.HasPrefix(string(h1), "sha256:") {
-		t.Fatalf("expected sha256: prefix, got %q", h1)
+	if h1.Algorithm != testAlgoSHA256 {
+		t.Fatalf("expected sha256 algorithm, got %q", h1.Algorithm)
 	}
 }
 
@@ -40,8 +41,8 @@ func TestSpecHashChangesOnInput(t *testing.T) {
 		Env:   map[string]string{},
 	}
 
-	h1 := registry.SpecHash(step, "sha256:img1", map[string]lane.Digest{}, map[string]lane.Digest{})
-	h2 := registry.SpecHash(step, "sha256:img2", map[string]lane.Digest{}, map[string]lane.Digest{})
+	h1 := registry.SpecHash(step, lane.MustParseDigest("sha256:img1"), map[string]lane.Digest{}, map[string]lane.Digest{})
+	h2 := registry.SpecHash(step, lane.MustParseDigest("sha256:img2"), map[string]lane.Digest{}, map[string]lane.Digest{})
 	if h1 == h2 {
 		t.Fatal("different images should produce different hashes")
 	}
@@ -58,8 +59,8 @@ func TestSpecHashPreservesArgOrder(t *testing.T) {
 		Args: []string{"-o", "/out", "build"},
 		Env:  map[string]string{},
 	}
-	h1 := registry.SpecHash(step1, "sha256:img", nil, nil)
-	h2 := registry.SpecHash(step2, "sha256:img", nil, nil)
+	h1 := registry.SpecHash(step1, lane.MustParseDigest("sha256:img"), nil, nil)
+	h2 := registry.SpecHash(step2, lane.MustParseDigest("sha256:img"), nil, nil)
 	if h1 == h2 {
 		t.Fatal("different arg order must produce different spec hashes")
 	}
@@ -103,8 +104,8 @@ func TestHashPathMachineIndependent(t *testing.T) {
 	if h1 != h2 {
 		t.Fatalf("same content in different dirs produced different hashes: %q vs %q", h1, h2)
 	}
-	if !strings.HasPrefix(string(h1), "sha256:") {
-		t.Fatalf("expected sha256: prefix, got %q", h1)
+	if h1.Algorithm != testAlgoSHA256 {
+		t.Fatalf("expected sha256 algorithm, got %q", h1.Algorithm)
 	}
 }
 
@@ -130,8 +131,8 @@ func TestTag(t *testing.T) {
 		want     string
 		name     string
 	}{
-		{"ghcr.io/cache", "build", "sha256:abcdef0123456789abcdef0123456789", "ghcr.io/cache:build-abcdef0123456789", "full hash"},
-		{"r.io/c", "pack", "sha256:0123", "r.io/c:pack-0123", "short hash"},
+		{"ghcr.io/cache", "build", lane.MustParseDigest("sha256:abcdef0123456789abcdef0123456789"), "ghcr.io/cache:build-abcdef0123456789", "full hash"},
+		{"r.io/c", "pack", lane.MustParseDigest("sha256:0123"), "r.io/c:pack-0123", "short hash"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -163,8 +164,8 @@ func TestHashFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("HashFile: %v", err)
 	}
-	if !strings.HasPrefix(string(h), "sha256:") {
-		t.Fatalf("expected sha256: prefix, got %q", h)
+	if h.Algorithm != testAlgoSHA256 {
+		t.Fatalf("expected sha256 algorithm, got %q", h.Algorithm)
 	}
 
 	// Same content should produce same hash.
@@ -189,8 +190,8 @@ func TestHashFileAbs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("HashFileAbs: %v", err)
 	}
-	if !strings.HasPrefix(string(h), "sha256:") {
-		t.Fatalf("expected sha256: prefix, got %q", h)
+	if h.Algorithm != testAlgoSHA256 {
+		t.Fatalf("expected sha256 algorithm, got %q", h.Algorithm)
 	}
 
 	// Should match HashFile for same content.

@@ -5,11 +5,11 @@ package registry
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
 	"sort"
-	"strings"
 
 	"github.com/istr/strike/internal/lane"
 )
@@ -25,7 +25,7 @@ func SpecHash(
 ) lane.Digest {
 	h := sha256.New()
 
-	h.Write([]byte(imageDigest))
+	h.Write([]byte(imageDigest.String()))
 
 	args := append([]string{}, step.Args...)
 	for _, a := range args {
@@ -41,16 +41,16 @@ func SpecHash(
 	// Input hashes sorted by name for determinism
 	names := sortedDigestMapKeys(inputHashes)
 	for _, n := range names {
-		h.Write([]byte(n + "=" + string(inputHashes[n])))
+		h.Write([]byte(n + "=" + inputHashes[n].String()))
 	}
 
 	// Source hashes sorted by path
 	paths := sortedDigestMapKeys(sourceHashes)
 	for _, p := range paths {
-		h.Write([]byte(p + "=" + string(sourceHashes[p])))
+		h.Write([]byte(p + "=" + sourceHashes[p].String()))
 	}
 
-	return lane.Digest("sha256:" + fmt.Sprintf("%x", h.Sum(nil)))
+	return lane.Digest{Algorithm: "sha256", Hex: hex.EncodeToString(h.Sum(nil))}
 }
 
 // Tag builds the registry tag from step name and spec hash.
@@ -58,7 +58,7 @@ func SpecHash(
 // Format: registry:step-name-<first16hex>
 // Example: ghcr.io/istr/strike-cache:build-package-a3f9c2b1d4e7f801.
 func Tag(registry, stepName string, hash lane.Digest) string {
-	short := strings.TrimPrefix(string(hash), "sha256:")
+	short := hash.Hex
 	if len(short) > 16 {
 		short = short[:16]
 	}
@@ -66,7 +66,7 @@ func Tag(registry, stepName string, hash lane.Digest) string {
 }
 
 // HashPath computes SHA256 of a file or directory within the given root scope.
-// Returns a typed digest in "sha256:<hex>" format.
+// Returns a typed digest.
 func HashPath(root *os.Root, laneDir, path string) (lane.Digest, error) {
 	return lane.SourceDigest(root, laneDir, path)
 }
@@ -75,17 +75,16 @@ func HashPath(root *os.Root, laneDir, path string) (lane.Digest, error) {
 func hashReader(r io.Reader) (lane.Digest, error) {
 	h := sha256.New()
 	if _, err := io.Copy(h, r); err != nil {
-		return "", err
+		return lane.Digest{}, err
 	}
-	return lane.Digest(fmt.Sprintf("sha256:%x", h.Sum(nil))), nil
+	return lane.Digest{Algorithm: "sha256", Hex: hex.EncodeToString(h.Sum(nil))}, nil
 }
 
 // HashFile computes SHA256 of a file within the given root scope.
-// Returns a typed digest in "sha256:<hex>" format.
 func HashFile(root *os.Root, path string) (hash lane.Digest, err error) {
 	f, err := root.Open(path)
 	if err != nil {
-		return "", err
+		return lane.Digest{}, err
 	}
 	defer func() {
 		if cerr := f.Close(); cerr != nil && err == nil {
@@ -96,11 +95,10 @@ func HashFile(root *os.Root, path string) (hash lane.Digest, err error) {
 }
 
 // HashFileAbs hashes a file given as an absolute path from CLI args.
-// Returns a typed digest in "sha256:<hex>" format.
 func HashFileAbs(path string) (hash lane.Digest, err error) {
 	f, err := os.Open(path) //nolint:gosec // G304: path is an absolute file path from step execution, not web input
 	if err != nil {
-		return "", err
+		return lane.Digest{}, err
 	}
 	defer func() {
 		if cerr := f.Close(); cerr != nil && err == nil {

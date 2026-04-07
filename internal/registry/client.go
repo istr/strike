@@ -73,23 +73,23 @@ func CopyImage(src, dst string) error {
 func (c *Client) LoadOCITar(ctx context.Context, root *os.Root, relPath string) (digest lane.Digest, err error) {
 	r, openErr := openMainImage(root, relPath)
 	if openErr != nil {
-		return "", fmt.Errorf("image load: %w", openErr)
+		return lane.Digest{}, fmt.Errorf("image load: %w", openErr)
 	}
 
 	id, err := c.Engine.ImageLoad(ctx, r)
 	if err != nil {
-		return "", err
+		return lane.Digest{}, err
 	}
 
 	d, err := c.InspectDigest(ctx, id)
 	if err != nil {
-		return "", err
+		return lane.Digest{}, err
 	}
 
 	// Tag with a local reference so downstream operations can look up by digest.
-	localTag := "localhost/strike:" + strings.TrimPrefix(string(d), "sha256:")[:12]
+	localTag := "localhost/strike:" + d.Hex[:12]
 	if tagErr := c.Engine.ImageTag(ctx, id, localTag); tagErr != nil {
-		return "", fmt.Errorf("image tag: %w", tagErr)
+		return lane.Digest{}, fmt.Errorf("image tag: %w", tagErr)
 	}
 
 	return d, nil
@@ -108,7 +108,7 @@ func (c *Client) LoadOCITarByDigest(ctx context.Context, root *os.Root, relPath 
 		return loadErr
 	}
 
-	localTag := "localhost/strike:" + strings.TrimPrefix(string(digest), "sha256:")[:12]
+	localTag := "localhost/strike:" + digest.Hex[:12]
 	return c.Engine.ImageTag(ctx, id, localTag)
 }
 
@@ -299,12 +299,12 @@ func tarDirEntries(tw *tar.Writer, base, prefix string, entries []os.DirEntry) e
 func (c *Client) InspectDigest(ctx context.Context, ref string) (lane.Digest, error) {
 	info, err := c.Engine.ImageInspect(ctx, ref)
 	if err != nil {
-		return "", err
+		return lane.Digest{}, err
 	}
 	if info.Digest == "" {
-		return "", fmt.Errorf("no digest for %s", ref)
+		return lane.Digest{}, fmt.Errorf("no digest for %s", ref)
 	}
-	return lane.Digest(info.Digest), nil
+	return lane.MustParseDigest(info.Digest), nil
 }
 
 // InspectAnnotation retrieves an annotation value from a local image.

@@ -30,7 +30,7 @@ func TestSourceProvenance(t *testing.T) {
 	state := lane.NewState()
 	if err := state.Register("build", "bin", lane.Artifact{
 		Type:   "file",
-		Digest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+		Digest: lane.MustParseDigest("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +78,7 @@ func TestSourceProvenanceNoGitRepo(t *testing.T) {
 	state := lane.NewState()
 	if err := state.Register("build", "bin", lane.Artifact{
 		Type:   "file",
-		Digest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+		Digest: lane.MustParseDigest("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
 	}); err != nil {
 		t.Fatal(err)
 	}

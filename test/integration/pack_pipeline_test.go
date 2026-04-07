@@ -3,7 +3,6 @@ package integration_test
 import (
 	"context"
 	"os"
-	"strings"
 	"testing"
 
 	"github.com/istr/strike/internal/executor"
@@ -29,8 +28,8 @@ func TestPackPipeline(t *testing.T) {
 	t.Logf("image digest: %s", result.Digest)
 
 	// 3. Verify digest format.
-	if !strings.HasPrefix(string(result.Digest), "sha256:") {
-		t.Errorf("unexpected digest format: %s", result.Digest)
+	if result.Digest.Algorithm != "sha256" {
+		t.Errorf("unexpected digest algorithm: %s", result.Digest.Algorithm)
 	}
 
 	// 4. Load into local store.
@@ -42,7 +41,7 @@ func TestPackPipeline(t *testing.T) {
 	t.Logf("loaded as: %s", digest)
 
 	// 5. Inspect the loaded image via its local tag.
-	localTag := "localhost/strike:" + strings.TrimPrefix(string(digest), "sha256:")[:12]
+	localTag := "localhost/strike:" + digest.Hex[:12]
 	imgInfo, err := engine.ImageInspect(ctx, localTag)
 	if err != nil {
 		t.Fatalf("inspect: %v", err)
@@ -50,7 +49,7 @@ func TestPackPipeline(t *testing.T) {
 	if imgInfo.Size == 0 {
 		t.Error("loaded image has zero size")
 	}
-	if imgInfo.Digest != string(digest) {
+	if imgInfo.Digest != digest.String() {
 		t.Errorf("digest mismatch: inspect=%s, load=%s", imgInfo.Digest, digest)
 	}
 
