@@ -467,3 +467,33 @@ Adding a dependency requires:
 4. Transitive dependency count impact assessment.
 
 Run `go mod verify` in CI to ensure dependency integrity. Commit `go.sum`.
+
+## 6. Commit messages
+
+This project uses [Conventional Commits](https://www.conventionalcommits.org)
+backed by [git-cliff](https://git-cliff.org) for changelog generation (see
+`cliff.toml`).
+
+Format: `<type>(<optional scope>): <description>`
+
+- Imperative mood, max 72 characters, no period.
+- Type is mandatory. Allowed types (matching `cliff.toml` commit parsers):
+  `feat`, `fix`, `refactor`, `perf`, `test`, `doc`, `style`, `chore`, `ci`,
+  `revert`.
+- Scope is optional but encouraged when the change is clearly scoped to a
+  single package or area (e.g., `fix(container): ...`, `feat(lane): ...`,
+  `test(deploy): ...`).
+- Breaking changes: add `!` after the type/scope (e.g., `feat!: ...` or
+  `fix(lane)!: ...`) and explain in the commit body.
+- Reference issue numbers where applicable.
+
+Examples:
+
+```
+fix(container): use correct podman info rootless field path
+feat(lane): add image_from step type
+test(deploy): add schema-drift integration test
+refactor: remove unused hashDir size buffer allocation
+doc: update CUE schema workflow instructions
+chore: update go directive to 1.26
+```

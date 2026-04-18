@@ -86,6 +86,21 @@ daemon processes.
 needs new data to cross a boundary, define it in a CUE schema first, get it
 approved, then implement the Go types.
 
+## Commit messages
+
+This project uses [Conventional Commits](https://www.conventionalcommits.org)
+backed by [git-cliff](https://git-cliff.org) for changelog generation (see
+`cliff.toml`).
+
+Format: `<type>(<optional scope>): <description>`
+
+- Imperative mood, max 72 characters, no period.
+- Allowed types: `feat`, `fix`, `refactor`, `perf`, `test`, `doc`, `style`,
+  `chore`, `ci`, `revert`.
+- Scope is optional but encouraged when the change targets a single package
+  (e.g., `fix(container): ...`, `test(deploy): ...`).
+- Breaking changes: add `!` after the type/scope and explain in the body.
+
 ## How to contribute
 
 1. Fork the repository.
@@ -96,8 +111,9 @@ approved, then implement the Go types.
    draft MR to discuss the schema before writing Go code. Schema changes
    are architectural decisions and will be reviewed carefully.
 4. Make your changes. Keep diffs small and focused.
-5. Ensure all quality gates pass (see below).
-6. Open a merge request with a clear description of what and why.
+5. Write commit messages following the Conventional Commits format above.
+6. Ensure all quality gates pass (see below).
+7. Open a merge request with a clear description of what and why.
 
 For larger changes, please open an issue first to discuss the approach. This
 saves time for everyone.
