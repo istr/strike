@@ -1,6 +1,6 @@
 module github.com/istr/strike
 
-go 1.26.1
+go 1.26.2
 
 require (
 	cuelang.org/go v0.16.0
