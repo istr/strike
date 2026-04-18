@@ -623,43 +623,34 @@ func TestIdentityAfterPing_MTLS(t *testing.T) {
 	}
 }
 
-func TestInfoPopulatesRuntime(t *testing.T) {
-	infoResp := map[string]any{
-		"host": map[string]any{
-			"security": map[string]any{
-				"rootless":        true,
-				"selinuxEnabled":  false,
-				"apparmorEnabled": true,
-			},
-		},
-		"version": map[string]any{
-			"APIVersion": "5.0.0",
-			"Version":    "5.2.1",
-		},
-	}
-
+// infoHandler returns an HTTP handler that responds to /_ping and /info.
+func infoHandler(t *testing.T, body string) http.Handler {
+	t.Helper()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		path := r.URL.Path
+		p := r.URL.Path
 		switch {
-		case strings.HasSuffix(path, "/_ping"):
+		case strings.HasSuffix(p, "/_ping"):
 			w.WriteHeader(http.StatusOK)
-		case strings.HasSuffix(path, "/info"):
-			writeJSON(t, w, infoResp)
+		case strings.HasSuffix(p, "/info"):
+			w.Header().Set("Content-Type", "application/json")
+			mustWrite(t, w, []byte(body))
 		default:
 			w.WriteHeader(http.StatusOK)
 		}
 	})
+	return mux
+}
 
-	eng := newTLSTestEngine(t, mux)
-
+// fetchRuntime pings the engine, calls Info, and returns the RuntimeInfo.
+func fetchRuntime(t *testing.T, eng container.Engine) *container.RuntimeInfo {
+	t.Helper()
 	if err := eng.Ping(context.Background()); err != nil {
 		t.Fatalf("Ping: %v", err)
 	}
 	if err := eng.Info(context.Background()); err != nil {
 		t.Fatalf("Info: %v", err)
 	}
-
 	id := eng.Identity()
 	if id == nil {
 		t.Fatal("expected non-nil Identity")
@@ -667,20 +658,64 @@ func TestInfoPopulatesRuntime(t *testing.T) {
 	if id.Runtime == nil {
 		t.Fatal("expected non-nil Runtime after Info")
 	}
-	if id.Runtime.Version != "5.2.1" {
-		t.Errorf("Version = %q, want 5.2.1", id.Runtime.Version)
+	return id.Runtime
+}
+
+func TestEngineInfoDecoding(t *testing.T) {
+	tests := []struct {
+		name         string
+		body         string
+		wantRootless bool
+		wantSELinux  bool
+		wantAppArmor bool
+	}{
+		{
+			name: "rootless podman",
+			body: `{
+				"host": {
+					"security": {
+						"rootless": true,
+						"selinuxEnabled": false,
+						"apparmorEnabled": false
+					}
+				},
+				"version": {"APIVersion": "5.0.0", "Version": "5.0.0"}
+			}`,
+			wantRootless: true,
+		},
+		{
+			name: "rootful podman with selinux",
+			body: `{
+				"host": {
+					"security": {
+						"rootless": false,
+						"selinuxEnabled": true,
+						"apparmorEnabled": false
+					}
+				},
+				"version": {"APIVersion": "5.0.0", "Version": "5.0.0"}
+			}`,
+			wantSELinux: true,
+		},
+		{
+			name: "missing security block defaults to false",
+			body: `{"host": {}, "version": {"APIVersion": "5.0.0", "Version": "5.0.0"}}`,
+		},
 	}
-	if id.Runtime.APIVersion != "5.0.0" {
-		t.Errorf("APIVersion = %q, want 5.0.0", id.Runtime.APIVersion)
-	}
-	if !id.Runtime.Rootless {
-		t.Error("expected Rootless=true")
-	}
-	if !id.Runtime.AppArmor {
-		t.Error("expected AppArmor=true")
-	}
-	if id.Runtime.SELinux {
-		t.Error("expected SELinux=false")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			eng := newTLSTestEngine(t, infoHandler(t, tt.body))
+			rt := fetchRuntime(t, eng)
+			if rt.Rootless != tt.wantRootless {
+				t.Errorf("Rootless = %v, want %v", rt.Rootless, tt.wantRootless)
+			}
+			if rt.SELinux != tt.wantSELinux {
+				t.Errorf("SELinux = %v, want %v", rt.SELinux, tt.wantSELinux)
+			}
+			if rt.AppArmor != tt.wantAppArmor {
+				t.Errorf("AppArmor = %v, want %v", rt.AppArmor, tt.wantAppArmor)
+			}
+		})
 	}
 }
 
