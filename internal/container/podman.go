@@ -125,8 +125,8 @@ func (e *podmanEngine) Info(ctx context.Context) error {
 			Security struct {
 				SELinuxEnabled  bool `json:"selinuxEnabled"`
 				AppArmorEnabled bool `json:"apparmorEnabled"`
+				Rootless        bool `json:"rootless"`
 			} `json:"security"`
-			Rootless bool `json:"rootless"`
 		} `json:"host"`
 		Version struct {
 			Version    string `json:"Version"`
@@ -143,7 +143,7 @@ func (e *podmanEngine) Info(ctx context.Context) error {
 	e.identity.Runtime = &RuntimeInfo{
 		Version:    raw.Version.Version,
 		APIVersion: raw.Version.APIVersion,
-		Rootless:   raw.Host.Rootless,
+		Rootless:   raw.Host.Security.Rootless,
 		SELinux:    raw.Host.Security.SELinuxEnabled,
 		AppArmor:   raw.Host.Security.AppArmorEnabled,
 	}

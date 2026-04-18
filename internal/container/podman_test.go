@@ -626,8 +626,8 @@ func TestIdentityAfterPing_MTLS(t *testing.T) {
 func TestInfoPopulatesRuntime(t *testing.T) {
 	infoResp := map[string]any{
 		"host": map[string]any{
-			"rootless": true,
 			"security": map[string]any{
+				"rootless":        true,
 				"selinuxEnabled":  false,
 				"apparmorEnabled": true,
 			},
