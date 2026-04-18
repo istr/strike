@@ -20,7 +20,7 @@ steps:
     outputs:
       - name: binary
         type: file
-        path: ./out/strike
+        path: /out/strike
 
   - name: build_image
     pack:
@@ -37,4 +37,4 @@ steps:
     outputs:
       - name: image
         type: image
-        path: ./out/image.tar
+        path: /out/image.tar

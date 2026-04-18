@@ -122,6 +122,47 @@ func TestParse_StepMultiImage(t *testing.T) {
 	}
 }
 
+func TestValidatePaths(t *testing.T) {
+	tests := []struct {
+		name    string
+		lane    *lane.Lane
+		wantErr string
+	}{
+		{
+			name:    "absolute output path is valid",
+			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Outputs: []lane.OutputSpec{{Path: "/src/node_modules"}}}}},
+			wantErr: "",
+		},
+		{
+			name:    "relative output path rejected",
+			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Outputs: []lane.OutputSpec{{Path: "out.txt"}}}}},
+			wantErr: "must be an absolute container path",
+		},
+		{
+			name:    "non-canonical output path rejected",
+			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Outputs: []lane.OutputSpec{{Path: "/src/../etc/passwd"}}}}},
+			wantErr: "is not canonical",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := lane.ValidatePaths(tt.lane)
+			if tt.wantErr == "" {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatal("expected error, got nil")
+			}
+			if !strings.Contains(err.Error(), tt.wantErr) {
+				t.Errorf("error %q should contain %q", err, tt.wantErr)
+			}
+		})
+	}
+}
+
 func TestParse_PathTraversal(t *testing.T) {
 	_, err := lane.Parse("testdata/invalid_path_traversal.yaml")
 	if err == nil {

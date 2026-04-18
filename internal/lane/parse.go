@@ -78,20 +78,24 @@ func Parse(path string) (*Lane, error) {
 		}
 	}
 
-	if err := validatePaths(&p); err != nil {
+	if err := ValidatePaths(&p); err != nil {
 		return nil, err
 	}
 
 	return &p, nil
 }
 
-// validatePaths rejects non-local paths in sources and outputs.
+// ValidatePaths rejects unsafe paths in sources, outputs, and pack dests.
 // Defense-in-depth -- os.Root enforces at runtime, but rejecting early
 // produces better error messages.
 //
-// Pack file destinations are container image paths (e.g., /usr/bin/strike),
-// not host paths. They must be absolute and canonical (no ".." components).
-func validatePaths(p *Lane) error {
+// sources[].path is a host path relative to the lane root -- it must
+// be local (filepath.IsLocal) to prevent escape from the lane scope.
+//
+// outputs[].path and pack.files[].dest are container-internal paths
+// (e.g., /src/node_modules, /usr/bin/strike). They must be absolute
+// and canonical (no ".." components).
+func ValidatePaths(p *Lane) error {
 	for _, s := range p.Steps {
 		if err := validateStepPaths(s); err != nil {
 			return err
@@ -108,8 +112,11 @@ func validateStepPaths(s Step) error {
 		}
 	}
 	for _, out := range s.Outputs {
-		if !filepath.IsLocal(out.Path) {
-			return fmt.Errorf("step %q: output path %q must be a local filename", s.Name, out.Path)
+		if !filepath.IsAbs(out.Path) {
+			return fmt.Errorf("step %q: output path %q must be an absolute container path", s.Name, out.Path)
+		}
+		if filepath.Clean(out.Path) != out.Path {
+			return fmt.Errorf("step %q: output path %q is not canonical", s.Name, out.Path)
 		}
 	}
 	if s.Pack != nil {
