@@ -168,9 +168,9 @@ func Pack(ctx context.Context, opts PackOpts) (*PackResult, error) {
 func addFileLayers(img v1.Image, files []lane.PackFile, inputPaths map[string]string) (v1.Image, string, error) {
 	var binaryPath string
 	for _, f := range files {
-		hostPath, ok := inputPaths[f.From]
+		hostPath, ok := inputPaths[f.Dest]
 		if !ok {
-			return nil, "", fmt.Errorf("pack: file from %q: host path not resolved", f.From)
+			return nil, "", fmt.Errorf("pack: file dest %q: host path not resolved", f.Dest)
 		}
 		if binaryPath == "" {
 			binaryPath = hostPath

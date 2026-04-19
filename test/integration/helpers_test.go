@@ -146,7 +146,7 @@ func packTestImage(t *testing.T, binPath string, keyPEM []byte) (*executor.PackR
 				User:       "65534:65534",
 			},
 		},
-		InputPaths:  map[string]string{"build.app": binPath},
+		InputPaths:  map[string]string{"/app": binPath},
 		OutputRoot:  outRoot,
 		OutputName:  "image.tar",
 		SigningKey:  keyPEM,

@@ -489,11 +489,11 @@ func TestResolvePackInputPaths(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := paths["compile.bin"]; !ok {
-		t.Fatal("expected 'compile.bin' in paths")
+	if _, ok := paths["/app"]; !ok {
+		t.Fatal("expected '/app' in paths")
 	}
-	if !strings.HasSuffix(paths["compile.bin"], "binary") {
-		t.Errorf("path should end in 'binary', got %q", paths["compile.bin"])
+	if !strings.HasSuffix(paths["/app"], "binary") {
+		t.Errorf("path should end in 'binary', got %q", paths["/app"])
 	}
 }
 

@@ -96,13 +96,19 @@ func (rc *runContext) executeDeploy(ctx context.Context, step *lane.Step, stepNa
 		return err
 	}
 
+	artifactRefs := make(map[string]string)
+	for _, e := range rc.dag.DeployEdges[stepName] {
+		artifactRefs[e.ArtifactName] = string(e.FromStep.Name) + "." + e.FromOutput.Name
+	}
+
 	d := &deploy.Deployer{
-		Engine:      rc.engine,
-		EngineID:    rc.engineID,
-		Rekor:       rc.rekor,
-		SigningKey:  signingKey,
-		KeyPassword: keyPassword,
-		SourceDirs:  rc.collectSourceDirs(step),
+		Engine:       rc.engine,
+		EngineID:     rc.engineID,
+		Rekor:        rc.rekor,
+		ArtifactRefs: artifactRefs,
+		SigningKey:   signingKey,
+		KeyPassword:  keyPassword,
+		SourceDirs:   rc.collectSourceDirs(step),
 	}
 
 	att, err := d.Execute(ctx, step, rc.laneState)
@@ -269,9 +275,7 @@ func (rc *runContext) resolvePackInputPaths(step *lane.Step, safeName string) (m
 			rc.state.outputDirs[string(e.FromStep.Name)],
 			filepath.Base(e.FromOutput.Path),
 		)
-		// Key uses dotted form to keep the signature stable for executor.Pack.
-		key := string(e.FromStep.Name) + "." + e.FromOutput.Name
-		inputPaths[key] = hostPath
+		inputPaths[e.Dest] = hostPath
 	}
 	_ = safeName // reserved for future error wrapping
 	return inputPaths, nil

@@ -72,7 +72,7 @@ func TestPackPipeline(t *testing.T) {
 				User:       "65534:65534",
 			},
 		},
-		InputPaths:  map[string]string{"build.app": binPath},
+		InputPaths:  map[string]string{"/app": binPath},
 		OutputRoot:  outRoot2,
 		OutputName:  "image.tar",
 		SigningKey:  keyPEM,

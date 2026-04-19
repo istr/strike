@@ -4,6 +4,7 @@ internal/lane/cue_types_lane_gen.go
 .vscode
 cosign.*
 coverage.out
+.build/
 # No private key material in repository
 *.pem
 *.key

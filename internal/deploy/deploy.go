@@ -116,12 +116,13 @@ func HardenedRunOpts() container.RunOpts {
 
 // Deployer executes deploy steps and produces attestations.
 type Deployer struct {
-	Engine      container.Engine
-	EngineID    *container.EngineIdentity
-	Rekor       *executor.RekorClient
-	SigningKey  []byte
-	KeyPassword []byte
-	SourceDirs  []string // host paths with source mounts (for git provenance)
+	Engine       container.Engine
+	EngineID     *container.EngineIdentity
+	Rekor        *executor.RekorClient
+	ArtifactRefs map[string]string // pre-resolved: artifact name → "step.output" state ref
+	SigningKey   []byte
+	KeyPassword  []byte
+	SourceDirs   []string // host paths with source mounts (for git provenance)
 }
 
 // Execute runs a deploy step: capture pre-state, detect drift, execute
@@ -151,7 +152,7 @@ func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.Sta
 	}
 
 	// 3. Resolve artifact digests
-	artifactDigests, err := resolveArtifactDigests(step.Name, spec, state)
+	artifactDigests, err := resolveArtifactDigests(step.Name, d.ArtifactRefs, state)
 	if err != nil {
 		return nil, err
 	}
@@ -286,10 +287,11 @@ func (d *Deployer) detectAndHandleDrift(stepName string, spec *lane.DeploySpec, 
 }
 
 // resolveArtifactDigests resolves all artifact references to their signed provenance records.
-func resolveArtifactDigests(stepName string, spec *lane.DeploySpec, state *lane.State) (map[string]SignedArtifact, error) {
+// refs maps artifact name → "step.output" state ref (pre-resolved by the caller from DAG edges).
+func resolveArtifactDigests(stepName string, refs map[string]string, state *lane.State) (map[string]SignedArtifact, error) {
 	artifacts := make(map[string]SignedArtifact)
-	for artName, artRef := range spec.Artifacts {
-		a, resolveErr := state.Resolve(artRef.From)
+	for artName, ref := range refs {
+		a, resolveErr := state.Resolve(ref)
 		if resolveErr != nil {
 			return nil, fmt.Errorf("step %q: artifact %q: %w", stepName, artName, resolveErr)
 		}

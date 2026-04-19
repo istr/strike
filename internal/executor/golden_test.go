@@ -12,7 +12,6 @@ import (
 	"encoding/pem"
 	"flag"
 	"io"
-	"io/fs"
 	"math/big"
 	"os"
 	"path/filepath"
@@ -38,6 +37,31 @@ func toDigestMap(m map[string]string) map[string]lane.Digest {
 	return out
 }
 
+// writeVectorFiles writes vector file entries to a temp dir and returns
+// inputPaths keyed by Dest (matching the contract of addFileLayers).
+func writeVectorFiles(t *testing.T, specFiles []lane.PackFile, vecFiles map[string]assembleFileEntry) map[string]string {
+	t.Helper()
+	fromToDest := make(map[string]string, len(specFiles))
+	for _, pf := range specFiles {
+		fromToDest[pf.From] = pf.Dest
+	}
+	tmp := t.TempDir()
+	inputPaths := make(map[string]string, len(vecFiles))
+	for ref, f := range vecFiles {
+		content := decodeBase64(t, f.ContentBase64)
+		hostPath := filepath.Join(tmp, filepath.Base(ref))
+		if err := os.WriteFile(hostPath, content, os.FileMode(f.Mode)); err != nil { //nolint:gosec // G306: test binary must be executable
+			t.Fatalf("write test file %s: %v", ref, err)
+		}
+		dest, ok := fromToDest[ref]
+		if !ok {
+			t.Fatalf("vector file %q not found in spec.Files", ref)
+		}
+		inputPaths[dest] = hostPath
+	}
+	return inputPaths
+}
+
 // --------------------------------------------------------------------------.
 // Golden test: AssembleImage (crossval vector).
 // --------------------------------------------------------------------------.
@@ -49,23 +73,13 @@ func TestAssembleImage_Golden(t *testing.T) {
 		t.Fatalf("unsupported base type: %q", vec.Inputs.Base)
 	}
 
-	// Decode file content from vector and write to temp dir.
-	tmp := t.TempDir()
-	inputPaths := make(map[string]string)
-	for ref, f := range vec.Inputs.Files {
-		content := decodeBase64(t, f.ContentBase64)
-		hostPath := filepath.Join(tmp, filepath.Base(ref))
-		if err := os.WriteFile(hostPath, content, fs.FileMode(f.Mode)); err != nil { //nolint:gosec // G306: test binary must be executable
-			t.Fatalf("write test file %s: %v", ref, err)
-		}
-		inputPaths[ref] = hostPath
-	}
-
 	// Unmarshal spec from the vector.
 	var spec lane.PackSpec
 	if err := json.Unmarshal(vec.Inputs.Spec, &spec); err != nil {
 		t.Fatalf("unmarshal spec: %v", err)
 	}
+
+	inputPaths := writeVectorFiles(t, spec.Files, vec.Inputs.Files)
 
 	result, err := executor.AssembleImage(empty.Image, &spec, inputPaths)
 	if err != nil {
@@ -301,7 +315,7 @@ func TestAssembleImage_Deterministic(t *testing.T) {
 			{From: "step.out", Dest: "/app", Mode: 0o755},
 		},
 	}
-	inputs := map[string]string{"step.out": binPath}
+	inputs := map[string]string{"/app": binPath}
 
 	r1, err := executor.AssembleImage(empty.Image, spec, inputs)
 	if err != nil {
@@ -331,7 +345,7 @@ func TestAssembleImage_WithMutatedBase(t *testing.T) {
 			{From: "step.out", Dest: "/app", Mode: 0o755},
 		},
 	}
-	inputs := map[string]string{"step.out": binPath}
+	inputs := map[string]string{"/app": binPath}
 
 	r1, err := executor.AssembleImage(empty.Image, spec, inputs)
 	if err != nil {

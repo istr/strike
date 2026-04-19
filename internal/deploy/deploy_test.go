@@ -348,7 +348,10 @@ func TestDeployerExecute(t *testing.T) {
 		},
 	}
 
-	d := &deploy.Deployer{Engine: eng}
+	d := &deploy.Deployer{
+		Engine:       eng,
+		ArtifactRefs: map[string]string{"image": "build.image"},
+	}
 	att, err := d.Execute(context.Background(), step, state)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -385,7 +388,10 @@ func TestDeployerExecute_MissingArtifact(t *testing.T) {
 		},
 	}
 
-	d := &deploy.Deployer{Engine: eng}
+	d := &deploy.Deployer{
+		Engine:       eng,
+		ArtifactRefs: map[string]string{"image": "build.image"},
+	}
 	_, err := d.Execute(context.Background(), step, state)
 	if err == nil {
 		t.Fatal("expected error for missing artifact")
@@ -481,7 +487,7 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 		},
 	}
 
-	d := &deploy.Deployer{Engine: eng, EngineID: eng.Identity()}
+	d := &deploy.Deployer{Engine: eng, EngineID: eng.Identity(), ArtifactRefs: map[string]string{"image": "build.image"}}
 	att, err := d.Execute(context.Background(), step, state)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -545,7 +551,7 @@ func TestEngineRecord_NilEngineID(t *testing.T) {
 	}
 
 	// EngineID is nil -- engineRecord should return nil.
-	d := &deploy.Deployer{Engine: eng, EngineID: nil}
+	d := &deploy.Deployer{Engine: eng, EngineID: nil, ArtifactRefs: map[string]string{"image": "build.image"}}
 	att, err := d.Execute(context.Background(), step, state)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -593,7 +599,7 @@ func TestEngineRecord_WithRuntime(t *testing.T) {
 		},
 	}
 
-	d := &deploy.Deployer{Engine: eng, EngineID: id}
+	d := &deploy.Deployer{Engine: eng, EngineID: id, ArtifactRefs: map[string]string{"image": "build.image"}}
 	att, err := d.Execute(context.Background(), step, state)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -649,7 +655,7 @@ func TestEngineRecord_WithoutRuntime(t *testing.T) {
 		},
 	}
 
-	d := &deploy.Deployer{Engine: eng, EngineID: id}
+	d := &deploy.Deployer{Engine: eng, EngineID: id, ArtifactRefs: map[string]string{"image": "build.image"}}
 	att, err := d.Execute(context.Background(), step, state)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -812,7 +818,7 @@ func TestDeployerExecute_DriftDetectFail(t *testing.T) {
 
 	// Drift detection is enabled but previous attestation is nil (first deploy).
 	// So no actual drift occurs. Just test the code path is exercised.
-	d := &deploy.Deployer{Engine: eng}
+	d := &deploy.Deployer{Engine: eng, ArtifactRefs: map[string]string{"image": "build.image"}}
 	att, err := d.Execute(context.Background(), step, state)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -845,11 +851,12 @@ func TestDeployerExecute_WithRekor(t *testing.T) {
 
 	step := deployStep()
 	d := &deploy.Deployer{
-		Engine:      eng,
-		EngineID:    eng.Identity(),
-		Rekor:       newRekorClient(t, rekorPubPEM, srv.Client(), srv.URL),
-		SigningKey:  keyPEM,
-		KeyPassword: nil,
+		Engine:       eng,
+		EngineID:     eng.Identity(),
+		Rekor:        newRekorClient(t, rekorPubPEM, srv.Client(), srv.URL),
+		ArtifactRefs: map[string]string{"image": "build.image"},
+		SigningKey:   keyPEM,
+		KeyPassword:  nil,
 	}
 
 	att, err := d.Execute(context.Background(), step, state)
@@ -882,9 +889,10 @@ func TestDeployerExecute_NoRekor(t *testing.T) {
 
 	step := deployStep()
 	d := &deploy.Deployer{
-		Engine:      eng,
-		SigningKey:  keyPEM,
-		KeyPassword: nil,
+		Engine:       eng,
+		ArtifactRefs: map[string]string{"image": "build.image"},
+		SigningKey:   keyPEM,
+		KeyPassword:  nil,
 	}
 
 	att, err := d.Execute(context.Background(), step, state)
@@ -921,10 +929,11 @@ func TestDeployerExecute_RekorTransient(t *testing.T) {
 
 	step := deployStep()
 	d := &deploy.Deployer{
-		Engine:      eng,
-		Rekor:       newRekorClient(t, rekorPubPEM, srv.Client(), srv.URL),
-		SigningKey:  keyPEM,
-		KeyPassword: nil,
+		Engine:       eng,
+		Rekor:        newRekorClient(t, rekorPubPEM, srv.Client(), srv.URL),
+		ArtifactRefs: map[string]string{"image": "build.image"},
+		SigningKey:   keyPEM,
+		KeyPassword:  nil,
 	}
 
 	att, err := d.Execute(context.Background(), step, state)
@@ -958,11 +967,12 @@ func TestDeployerExecute_RekorSignedContentNoRekorField(t *testing.T) {
 
 	step := deployStep()
 	d := &deploy.Deployer{
-		Engine:      eng,
-		EngineID:    eng.Identity(),
-		Rekor:       newRekorClient(t, rekorPubPEM, srv.Client(), srv.URL),
-		SigningKey:  keyPEM,
-		KeyPassword: nil,
+		Engine:       eng,
+		EngineID:     eng.Identity(),
+		Rekor:        newRekorClient(t, rekorPubPEM, srv.Client(), srv.URL),
+		ArtifactRefs: map[string]string{"image": "build.image"},
+		SigningKey:   keyPEM,
+		KeyPassword:  nil,
 	}
 
 	att, err := d.Execute(context.Background(), step, state)

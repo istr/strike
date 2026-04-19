@@ -37,9 +37,10 @@ func TestSourceProvenance(t *testing.T) {
 
 	step := sourceDeployStep(goImage)
 	deployer := &deploy.Deployer{
-		Engine:     engine,
-		EngineID:   engine.Identity(),
-		SourceDirs: []string{srcDir},
+		Engine:       engine,
+		EngineID:     engine.Identity(),
+		ArtifactRefs: map[string]string{"bin": "build.bin"},
+		SourceDirs:   []string{srcDir},
 	}
 
 	att, err := deployer.Execute(ctx, step, state)
@@ -85,9 +86,10 @@ func TestSourceProvenanceNoGitRepo(t *testing.T) {
 
 	step := sourceDeployStep(goImage)
 	deployer := &deploy.Deployer{
-		Engine:     engine,
-		EngineID:   engine.Identity(),
-		SourceDirs: []string{emptyDir},
+		Engine:       engine,
+		EngineID:     engine.Identity(),
+		ArtifactRefs: map[string]string{"bin": "build.bin"},
+		SourceDirs:   []string{emptyDir},
 	}
 
 	att, err := deployer.Execute(ctx, step, state)

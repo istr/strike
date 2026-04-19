@@ -84,10 +84,11 @@ func executeDeploy(t *testing.T, engine container.Engine, keyPEM []byte, state *
 	}
 
 	deployer := &deploy.Deployer{
-		Engine:      engine,
-		EngineID:    engine.Identity(),
-		SigningKey:  keyPEM,
-		KeyPassword: nil,
+		Engine:       engine,
+		EngineID:     engine.Identity(),
+		ArtifactRefs: map[string]string{"app": "pack.image"},
+		SigningKey:   keyPEM,
+		KeyPassword:  nil,
 	}
 
 	att, err := deployer.Execute(ctx, step, state)

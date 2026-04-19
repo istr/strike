@@ -7,8 +7,8 @@ import (
 	"strings"
 )
 
-// ParseRef splits a "step_name.output_name" reference into its parts.
-func ParseRef(ref string) (step, output string, err error) {
+// parseRef splits a "step_name.output_name" reference into its parts.
+func parseRef(ref string) (step, output string, err error) {
 	parts := strings.SplitN(ref, ".", 2)
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
 		return "", "", fmt.Errorf("invalid reference %q: expected step_name.output_name", ref)
@@ -128,7 +128,7 @@ func (d *DAG) resolveInputEdges(p *Lane) error {
 	for _, s := range p.Steps {
 		name := string(s.Name)
 		for _, inp := range s.Inputs {
-			refStep, refOutput, err := ParseRef(inp.From)
+			refStep, refOutput, err := parseRef(inp.From)
 			if err != nil {
 				return fmt.Errorf("step %q: input %q: %w", name, inp.Name, err)
 			}
@@ -169,7 +169,7 @@ func (d *DAG) resolvePackEdges(p *Lane) error {
 }
 
 func (d *DAG) resolvePackFileEdge(name string, f PackFile) error {
-	stepName, outputName, err := ParseRef(f.From)
+	stepName, outputName, err := parseRef(f.From)
 	if err != nil {
 		return fmt.Errorf("step %q: pack file: %w", name, err)
 	}
@@ -210,7 +210,7 @@ func (d *DAG) resolveDeployEdges(p *Lane) error {
 			continue
 		}
 		for artName, artRef := range s.Deploy.Artifacts {
-			stepName, outputName, err := ParseRef(artRef.From)
+			stepName, outputName, err := parseRef(artRef.From)
 			if err != nil {
 				return fmt.Errorf("step %q: deploy artifact %q: %w", name, artName, err)
 			}

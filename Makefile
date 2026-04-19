@@ -28,7 +28,12 @@ golden:
 
 # --- Quality gates ---
 
-lint:
+.PHONY: lint-from
+lint-from:
+	cd tools/lintfrom && go build -o $(CURDIR)/.build/lintfrom .
+	$(CURDIR)/.build/lintfrom ./...
+
+lint: lint-from
 	golangci-lint run ./...
 
 test:
