@@ -193,11 +193,14 @@ func (rc *runContext) guardUnsignedImages(step *lane.Step, safeName string) erro
 	if !step.Network {
 		return nil
 	}
-	for _, inp := range step.Inputs {
-		if rc.dag.IsOCITarOutput(inp) && !rc.state.ociSigned[inp.From+"/"+inp.Name] {
-			return fmt.Errorf("%s: input %q/%q is an unsigned OCI image -- "+
-				"unsigned images must not leave the local store",
-				safeName, inp.From, inp.Name)
+	for _, e := range rc.dag.InputEdges[string(step.Name)] {
+		if e.FromOutput.Type != artifactTypeImage {
+			continue
+		}
+		key := string(e.FromStep.Name) + "/" + e.FromOutput.Name
+		if !rc.state.ociSigned[key] {
+			return fmt.Errorf("%s: input %q is unsigned OCI image from %s.%s",
+				safeName, e.LocalName, e.FromStep.Name, e.FromOutput.Name)
 		}
 	}
 	return nil

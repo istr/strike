@@ -301,20 +301,6 @@ func (d *DAG) Tree() string {
 	return sb.String()
 }
 
-// IsOCITarOutput checks if an input references an image-type output in the DAG.
-func (d *DAG) IsOCITarOutput(inp InputRef) bool {
-	fromStep, ok := d.Steps[inp.From]
-	if !ok {
-		return false
-	}
-	for _, out := range fromStep.Outputs {
-		if out.Name == inp.Name {
-			return out.Type == "image"
-		}
-	}
-	return false
-}
-
 func (d *DAG) treeNode(sb *strings.Builder, node, prefix string, lastParent bool) {
 	dependents := d.reverse[node]
 	childPrefix := prefix

@@ -158,40 +158,69 @@ func TestBuildSourceMounts(t *testing.T) {
 
 func TestGuardUnsignedImages_NoNetwork(t *testing.T) {
 	rc := newTestRC(t, &mockEngine{})
-	step := &lane.Step{Network: false}
-	if err := rc.guardUnsignedImages(step, "test"); err != nil {
+	p := &lane.Lane{
+		Registry: "localhost:5555/test",
+		Steps: []lane.Step{
+			{
+				Name: "pack", Image: "img", Args: []string{}, Env: map[string]string{},
+				Outputs: []lane.OutputSpec{{Name: "img", Type: "image", Path: "/out/img.tar"}},
+			},
+			{
+				Name: "publish", Image: "img", Args: []string{}, Env: map[string]string{},
+				Inputs: []lane.InputRef{{Name: "img", From: "pack.img", Mount: "/in/img"}},
+			},
+		},
+	}
+	rc.dag = buildTestDAG(t, p)
+	if err := rc.guardUnsignedImages(rc.dag.Steps["publish"], "test"); err != nil {
 		t.Fatalf("no-network step should not error: %v", err)
 	}
 }
 
 func TestGuardUnsignedImages_SignedOK(t *testing.T) {
 	rc := newTestRC(t, &mockEngine{})
-	rc.dag.Steps["pack"] = &lane.Step{
-		Outputs: []lane.OutputSpec{{Name: "img", Type: "image", Path: "/out/img.tar"}},
+	p := &lane.Lane{
+		Registry: "localhost:5555/test",
+		Steps: []lane.Step{
+			{
+				Name: "pack", Image: "img", Args: []string{}, Env: map[string]string{},
+				Outputs: []lane.OutputSpec{{Name: "img", Type: "image", Path: "/out/img.tar"}},
+			},
+			{
+				Name: "publish", Image: "img", Args: []string{}, Env: map[string]string{},
+				Network: true,
+				Inputs:  []lane.InputRef{{Name: "img", From: "pack.img", Mount: "/in/img"}},
+			},
+		},
 	}
+	rc.dag = buildTestDAG(t, p)
 	rc.state.ociSigned["pack/img"] = true
 
-	step := &lane.Step{
-		Network: true,
-		Inputs:  []lane.InputRef{{Name: "img", From: "pack", Mount: "/in/img"}},
-	}
-	if err := rc.guardUnsignedImages(step, "test"); err != nil {
+	if err := rc.guardUnsignedImages(rc.dag.Steps["publish"], "test"); err != nil {
 		t.Fatalf("signed image should be OK: %v", err)
 	}
 }
 
 func TestGuardUnsignedImages_UnsignedError(t *testing.T) {
 	rc := newTestRC(t, &mockEngine{})
-	rc.dag.Steps["pack"] = &lane.Step{
-		Outputs: []lane.OutputSpec{{Name: "img", Type: "image", Path: "/out/img.tar"}},
+	p := &lane.Lane{
+		Registry: "localhost:5555/test",
+		Steps: []lane.Step{
+			{
+				Name: "pack", Image: "img", Args: []string{}, Env: map[string]string{},
+				Outputs: []lane.OutputSpec{{Name: "img", Type: "image", Path: "/out/img.tar"}},
+			},
+			{
+				Name: "publish", Image: "img", Args: []string{}, Env: map[string]string{},
+				Network: true,
+				Inputs:  []lane.InputRef{{Name: "img", From: "pack.img", Mount: "/in/img"}},
+			},
+		},
 	}
+	rc.dag = buildTestDAG(t, p)
 	// ociSigned not set for "pack/img"
 
-	step := &lane.Step{
-		Network: true,
-		Inputs:  []lane.InputRef{{Name: "img", From: "pack", Mount: "/in/img"}},
-	}
-	err := rc.guardUnsignedImages(step, "test")
+	err := rc.guardUnsignedImages(rc.dag.Steps["publish"], "test")
 	if err == nil {
 		t.Fatal("expected error for unsigned image with network")
 	}
@@ -202,15 +231,23 @@ func TestGuardUnsignedImages_UnsignedError(t *testing.T) {
 
 func TestGuardUnsignedImages_NonImageInput(t *testing.T) {
 	rc := newTestRC(t, &mockEngine{})
-	rc.dag.Steps["build"] = &lane.Step{
-		Outputs: []lane.OutputSpec{{Name: "bin", Type: "file", Path: "/out/bin"}},
+	p := &lane.Lane{
+		Registry: "localhost:5555/test",
+		Steps: []lane.Step{
+			{
+				Name: "compile", Image: "img", Args: []string{}, Env: map[string]string{},
+				Outputs: []lane.OutputSpec{{Name: "bin", Type: "file", Path: "/out/bin"}},
+			},
+			{
+				Name: "run", Image: "img", Args: []string{}, Env: map[string]string{},
+				Network: true,
+				Inputs:  []lane.InputRef{{Name: "bin", From: "compile.bin", Mount: "/in/bin"}},
+			},
+		},
 	}
+	rc.dag = buildTestDAG(t, p)
 
-	step := &lane.Step{
-		Network: true,
-		Inputs:  []lane.InputRef{{Name: "bin", From: "build", Mount: "/in/bin"}},
-	}
-	if err := rc.guardUnsignedImages(step, "test"); err != nil {
+	if err := rc.guardUnsignedImages(rc.dag.Steps["run"], "test"); err != nil {
 		t.Fatalf("non-image input should be OK: %v", err)
 	}
 }
