@@ -9,6 +9,8 @@ import (
 	"github.com/istr/strike/internal/lane"
 )
 
+const testAlgoSHA256 = "sha256"
+
 func openTestRoot(t *testing.T, dir string) *os.Root {
 	t.Helper()
 	root, err := os.OpenRoot(dir)
@@ -36,7 +38,7 @@ func TestSourceDigestFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if d1.Algorithm != "sha256" {
+	if d1.Algorithm != testAlgoSHA256 {
 		t.Fatalf("expected sha256: prefix, got %q", d1)
 	}
 
@@ -81,7 +83,7 @@ func TestSourceDigestDir(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if d1.Algorithm != "sha256" {
+	if d1.Algorithm != testAlgoSHA256 {
 		t.Fatalf("expected sha256: prefix, got %q", d1)
 	}
 
@@ -215,6 +217,77 @@ func setupTopLevelSymlinkDir(t *testing.T, dir string) {
 	mustMkdirAll(t, filepath.Join(dir, "real-dir"))
 	mustWriteFile(t, filepath.Join(dir, "real-dir", "f.go"), "package f")
 	mustSymlink(t, "real-dir", filepath.Join(dir, "link-dir"))
+}
+
+func TestDirDigestWithSize(t *testing.T) {
+	t.Run("sum of file sizes", func(t *testing.T) {
+		tmp := t.TempDir()
+		mustMkdirAll(t, filepath.Join(tmp, "out"))
+		mustWriteFile(t, filepath.Join(tmp, "out", "a.bin"), strings.Repeat("a", 100))
+		mustWriteFile(t, filepath.Join(tmp, "out", "b.bin"), strings.Repeat("b", 200))
+		mustWriteFile(t, filepath.Join(tmp, "out", "c.bin"), strings.Repeat("c", 300))
+
+		root := openTestRoot(t, tmp)
+		d, size, err := lane.DirDigestWithSize(root, tmp, "out")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if d.Algorithm != testAlgoSHA256 {
+			t.Fatalf("expected sha256, got %q", d.Algorithm)
+		}
+		if size != 600 {
+			t.Fatalf("expected size 600, got %d", size)
+		}
+	})
+
+	t.Run("empty directory has size zero", func(t *testing.T) {
+		tmp := t.TempDir()
+		mustMkdirAll(t, filepath.Join(tmp, "empty"))
+
+		root := openTestRoot(t, tmp)
+		_, size, err := lane.DirDigestWithSize(root, tmp, "empty")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if size != 0 {
+			t.Fatalf("expected size 0, got %d", size)
+		}
+	})
+
+	t.Run("nested files", func(t *testing.T) {
+		tmp := t.TempDir()
+		mustMkdirAll(t, filepath.Join(tmp, "out", "sub"))
+		mustWriteFile(t, filepath.Join(tmp, "out", "a.txt"), strings.Repeat("x", 50))
+		mustWriteFile(t, filepath.Join(tmp, "out", "sub", "b.txt"), strings.Repeat("y", 150))
+
+		root := openTestRoot(t, tmp)
+		_, size, err := lane.DirDigestWithSize(root, tmp, "out")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if size != 200 {
+			t.Fatalf("expected size 200, got %d", size)
+		}
+	})
+
+	t.Run("digest matches SourceDigest", func(t *testing.T) {
+		tmp := t.TempDir()
+		mustMkdirAll(t, filepath.Join(tmp, "out"))
+		mustWriteFile(t, filepath.Join(tmp, "out", "f.txt"), "content")
+
+		root := openTestRoot(t, tmp)
+		d1, _, err := lane.DirDigestWithSize(root, tmp, "out")
+		if err != nil {
+			t.Fatal(err)
+		}
+		d2, err := lane.SourceDigest(root, tmp, "out")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if d1 != d2 {
+			t.Fatalf("DirDigestWithSize digest %q != SourceDigest %q", d1, d2)
+		}
+	})
 }
 
 func mustMkdirAll(t *testing.T, path string) {

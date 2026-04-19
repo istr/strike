@@ -68,26 +68,42 @@ func fileDigest(root *os.Root, path string) (digest Digest, err error) {
 // WalkDir enumerates via the absolute path; file reads go through root.Open
 // for TOCTOU safety.
 func dirDigest(root *os.Root, laneDir, dir string) (Digest, error) {
+	d, _, err := dirDigestWithSize(root, laneDir, dir)
+	return d, err
+}
+
+// DirDigestWithSize computes the sha256 digest and total file size of a
+// directory tree within the given root scope. Size is the sum of regular
+// file sizes (matching du -sb behavior).
+func DirDigestWithSize(root *os.Root, laneDir, dir string) (Digest, int64, error) {
+	if err := rejectSymlink(filepath.Join(laneDir, dir), dir); err != nil {
+		return Digest{}, 0, err
+	}
+	return dirDigestWithSize(root, laneDir, dir)
+}
+
+func dirDigestWithSize(root *os.Root, laneDir, dir string) (Digest, int64, error) {
 	info, err := root.Stat(dir)
 	if err != nil {
-		return Digest{}, err
+		return Digest{}, 0, err
 	}
 	if !info.IsDir() {
-		return Digest{}, fmt.Errorf("%q is not a directory", dir)
+		return Digest{}, 0, fmt.Errorf("%q is not a directory", dir)
 	}
 
 	absDir := filepath.Join(laneDir, dir)
 	h := sha256.New()
-	err = filepath.WalkDir(absDir, dirDigestWalkFunc(root, absDir, dir, h))
+	var totalSize int64
+	err = filepath.WalkDir(absDir, dirDigestWalkFunc(root, absDir, dir, h, &totalSize))
 	if err != nil {
-		return Digest{}, err
+		return Digest{}, 0, err
 	}
-	return Digest{Algorithm: "sha256", Hex: hex.EncodeToString(h.Sum(nil))}, nil
+	return Digest{Algorithm: "sha256", Hex: hex.EncodeToString(h.Sum(nil))}, totalSize, nil
 }
 
 // dirDigestWalkFunc returns a WalkDir callback that hashes each file
 // through the root scope for TOCTOU safety.
-func dirDigestWalkFunc(root *os.Root, absDir, dir string, h io.Writer) fs.WalkDirFunc {
+func dirDigestWalkFunc(root *os.Root, absDir, dir string, h io.Writer, size *int64) fs.WalkDirFunc {
 	return func(path string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			if os.IsPermission(walkErr) {
@@ -105,6 +121,12 @@ func dirDigestWalkFunc(root *os.Root, absDir, dir string, h io.Writer) fs.WalkDi
 		if d.IsDir() {
 			return nil
 		}
+		info, infoErr := d.Info()
+		if infoErr != nil {
+			return infoErr
+		}
+		*size += info.Size()
+
 		rel, relErr := filepath.Rel(absDir, path)
 		if relErr != nil {
 			return relErr

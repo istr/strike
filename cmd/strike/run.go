@@ -376,9 +376,10 @@ func (rc *runContext) registerFileOutputs(step *lane.Step, stepName, safeName, o
 			}
 		}
 		var h lane.Digest
+		var size int64
 		var hashErr error
 		if out.Type == "directory" {
-			h, hashErr = registry.HashPath(outRoot, outDir, relName)
+			h, size, hashErr = registry.HashDir(outRoot, outDir, relName)
 		} else {
 			h, hashErr = registry.HashFile(outRoot, relName)
 		}
@@ -388,6 +389,7 @@ func (rc *runContext) registerFileOutputs(step *lane.Step, stepName, safeName, o
 		if regErr := rc.laneState.Register(stepName, out.Name, lane.Artifact{
 			Type:   lane.ArtifactType(out.Type),
 			Digest: h,
+			Size:   size,
 		}); regErr != nil {
 			return fmt.Errorf("%s: register artifact: %w", safeName, regErr)
 		}

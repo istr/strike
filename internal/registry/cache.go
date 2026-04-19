@@ -71,6 +71,12 @@ func HashPath(root *os.Root, laneDir, path string) (lane.Digest, error) {
 	return lane.SourceDigest(root, laneDir, path)
 }
 
+// HashDir computes SHA256 and total file size of a directory within the given
+// root scope. Size is the sum of regular file sizes.
+func HashDir(root *os.Root, laneDir, path string) (lane.Digest, int64, error) {
+	return lane.DirDigestWithSize(root, laneDir, path)
+}
+
 // hashReader computes SHA256 of the data from r.
 func hashReader(r io.Reader) (lane.Digest, error) {
 	h := sha256.New()

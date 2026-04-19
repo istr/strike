@@ -312,6 +312,26 @@ func TestHashPathDirectoryEmptySubdirIgnored(t *testing.T) {
 	}
 }
 
+func TestHashDirSize(t *testing.T) {
+	dir := t.TempDir()
+	mustMkdir(t, filepath.Join(dir, "out"))
+	mustWriteContent(t, filepath.Join(dir, "out", "a.txt"), strings.Repeat("a", 100))
+	mustWriteContent(t, filepath.Join(dir, "out", "b.txt"), strings.Repeat("b", 200))
+
+	root := mustOpenRoot(t, dir)
+
+	d, size, err := registry.HashDir(root, dir, "out")
+	if err != nil {
+		t.Fatalf("HashDir: %v", err)
+	}
+	if d.Algorithm != testAlgoSHA256 {
+		t.Fatalf("expected sha256, got %q", d.Algorithm)
+	}
+	if size != 300 {
+		t.Fatalf("expected size 300, got %d", size)
+	}
+}
+
 func TestHashFileOutputUnchanged(t *testing.T) {
 	dir := t.TempDir()
 	mustWriteContent(t, filepath.Join(dir, "file.txt"), "content")
