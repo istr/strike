@@ -485,6 +485,11 @@ func buildSpecGenerator(opts RunOpts) map[string]any {
 		spec["entrypoint"] = opts.Entrypoint
 	}
 
+	// Working directory
+	if opts.Workdir != "" {
+		spec["work_dir"] = opts.Workdir
+	}
+
 	// Environment
 	if len(opts.Env) > 0 {
 		spec["env"] = opts.Env

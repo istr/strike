@@ -70,6 +70,7 @@ func (r Run) Execute(ctx context.Context) error {
 	opts.Env = env
 	opts.Mounts = mounts
 	opts.Network = NetworkMode(r.Step.Network)
+	opts.Workdir = r.Step.Workdir
 	opts.Stdout = os.Stdout
 	opts.Stderr = os.Stderr
 

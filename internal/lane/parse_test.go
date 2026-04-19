@@ -136,12 +136,52 @@ func TestValidatePaths(t *testing.T) {
 		{
 			name:    "relative output path rejected",
 			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Outputs: []lane.OutputSpec{{Path: "out.txt"}}}}},
-			wantErr: "must be an absolute container path",
+			wantErr: "must be absolute",
 		},
 		{
 			name:    "non-canonical output path rejected",
 			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Outputs: []lane.OutputSpec{{Path: "/src/../etc/passwd"}}}}},
-			wantErr: "is not canonical",
+			wantErr: "must be canonical",
+		},
+		{
+			name:    "workdir absolute canonical",
+			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Image: "img", Workdir: "/src"}}},
+			wantErr: "",
+		},
+		{
+			name:    "workdir root",
+			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Image: "img", Workdir: "/"}}},
+			wantErr: "",
+		},
+		{
+			name:    "workdir nested",
+			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Image: "img", Workdir: "/out/www"}}},
+			wantErr: "",
+		},
+		{
+			name:    "workdir relative rejected",
+			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Image: "img", Workdir: "src"}}},
+			wantErr: "must be absolute",
+		},
+		{
+			name:    "workdir dot-dot rejected",
+			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Image: "img", Workdir: "/src/../etc"}}},
+			wantErr: "must be canonical",
+		},
+		{
+			name:    "workdir dot rejected",
+			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Image: "img", Workdir: "/src/./build"}}},
+			wantErr: "must be canonical",
+		},
+		{
+			name:    "workdir double slash rejected",
+			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Image: "img", Workdir: "/src//out"}}},
+			wantErr: "must be canonical",
+		},
+		{
+			name:    "workdir trailing slash rejected",
+			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Image: "img", Workdir: "/src/"}}},
+			wantErr: "must be canonical",
 		},
 	}
 	for _, tt := range tests {

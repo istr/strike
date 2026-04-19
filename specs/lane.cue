@@ -43,6 +43,7 @@ package lane
 	sources:     [...#SourceRef] @go(Sources)
 	outputs:     [...#OutputSpec] @go(Outputs)
 	secrets:     [...#SecretRef] @go(Secrets)
+	workdir?:    string & =~"^/" @go(Workdir)
 	network?:    bool @go(Network)
 	timeout?:    #Duration @go(Timeout)
 	pack?:       #PackSpec @go(Pack,optional=nillable)

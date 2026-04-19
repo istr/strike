@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"time"
 
@@ -104,7 +105,7 @@ func ValidatePaths(p *Lane) error {
 	return nil
 }
 
-// validateStepPaths checks one step's source, output, and pack-dest paths.
+// validateStepPaths checks one step's source, output, pack-dest, and workdir paths.
 func validateStepPaths(s Step) error {
 	for _, src := range s.Sources {
 		if !filepath.IsLocal(src.Path) {
@@ -112,22 +113,33 @@ func validateStepPaths(s Step) error {
 		}
 	}
 	for _, out := range s.Outputs {
-		if !filepath.IsAbs(out.Path) {
-			return fmt.Errorf("step %q: output path %q must be an absolute container path", s.Name, out.Path)
-		}
-		if filepath.Clean(out.Path) != out.Path {
-			return fmt.Errorf("step %q: output path %q is not canonical", s.Name, out.Path)
+		if err := validateContainerPath(out.Path); err != nil {
+			return fmt.Errorf("step %q: output path %q: %w", s.Name, out.Path, err)
 		}
 	}
 	if s.Pack != nil {
 		for _, f := range s.Pack.Files {
-			if !filepath.IsAbs(f.Dest) {
-				return fmt.Errorf("step %q: pack dest %q must be an absolute container path", s.Name, f.Dest)
-			}
-			if filepath.Clean(f.Dest) != f.Dest {
-				return fmt.Errorf("step %q: pack dest %q is not canonical", s.Name, f.Dest)
+			if err := validateContainerPath(f.Dest); err != nil {
+				return fmt.Errorf("step %q: pack dest %q: %w", s.Name, f.Dest, err)
 			}
 		}
+	}
+	if s.Workdir != "" {
+		if err := validateContainerPath(s.Workdir); err != nil {
+			return fmt.Errorf("step %q: workdir %q: %w", s.Name, s.Workdir, err)
+		}
+	}
+	return nil
+}
+
+// validateContainerPath checks that p is an absolute, canonical container path.
+// Uses path (not filepath) because container paths are always forward-slash.
+func validateContainerPath(p string) error {
+	if !path.IsAbs(p) {
+		return fmt.Errorf("must be absolute")
+	}
+	if path.Clean(p) != p {
+		return fmt.Errorf("must be canonical (cleaned: %q)", path.Clean(p))
 	}
 	return nil
 }

@@ -356,6 +356,75 @@ func verifySpecGenerator(t *testing.T, capturedSpec map[string]any) {
 	}
 }
 
+func TestContainerRunWorkdir(t *testing.T) {
+	tests := []struct {
+		name       string
+		workdir    string
+		wantInSpec bool
+	}{
+		{"workdir set", "/src", true},
+		{"workdir empty", "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			capturedSpec := runAndCaptureSpec(t, container.RunOpts{
+				Image:   "test:latest",
+				Cmd:     []string{"pwd"},
+				Workdir: tt.workdir,
+				Remove:  true,
+				Stdout:  io.Discard,
+				Stderr:  io.Discard,
+			})
+			_, hasWorkdir := capturedSpec["work_dir"]
+			if hasWorkdir != tt.wantInSpec {
+				t.Errorf("work_dir in spec = %v, want %v", hasWorkdir, tt.wantInSpec)
+			}
+			if tt.wantInSpec && capturedSpec["work_dir"] != tt.workdir {
+				t.Errorf("work_dir = %v, want %q", capturedSpec["work_dir"], tt.workdir)
+			}
+		})
+	}
+}
+
+// runAndCaptureSpec runs a container and returns the captured create spec.
+func runAndCaptureSpec(t *testing.T, opts container.RunOpts) map[string]any {
+	t.Helper()
+	var capturedSpec map[string]any
+	eng := newTLSTestEngine(t, captureCreateHandler(t, &capturedSpec))
+	_, err := eng.ContainerRun(context.Background(), opts)
+	if err != nil {
+		t.Fatalf("ContainerRun() error = %v", err)
+	}
+	return capturedSpec
+}
+
+// captureCreateHandler returns a handler that captures the container create spec.
+func captureCreateHandler(t *testing.T, spec *map[string]any) http.Handler {
+	t.Helper()
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		p := r.URL.Path
+		switch {
+		case strings.HasSuffix(p, "/containers/create"):
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				t.Fatalf("ReadAll: %v", err)
+			}
+			if err := json.Unmarshal(body, spec); err != nil {
+				t.Fatalf("Unmarshal: %v", err)
+			}
+			writeJSON(t, w, map[string]string{"Id": "captured-test"})
+		case strings.HasSuffix(p, "/start"):
+			w.WriteHeader(http.StatusNoContent)
+		case strings.HasSuffix(p, "/logs"):
+			// empty
+		case strings.HasSuffix(p, "/wait"):
+			writeJSON(t, w, map[string]int{"StatusCode": 0})
+		case r.Method == http.MethodDelete:
+			writeJSON(t, w, []map[string]any{})
+		}
+	})
+}
+
 func TestContainerRunExitCode(t *testing.T) {
 	eng := newTLSTestEngine(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path

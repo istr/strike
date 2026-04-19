@@ -76,6 +76,7 @@ type RunOpts struct {
 	Image       string
 	Network     string
 	UsernsMode  string
+	Workdir     string
 	Mounts      []Mount
 	SecurityOpt []string
 	CapDrop     []string
