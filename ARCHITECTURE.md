@@ -147,7 +147,10 @@ strike achieves reproducible OCI image assembly through four mechanisms:
 2. **Content-addressed everything.** Base images are digest-pinned. File layers
    are constructed from content, not filesystem metadata. The spec hash is a
    Merkle tree over image digest, arguments, environment, input hashes, and
-   source hashes -- fully computable before execution.
+   source hashes -- fully computable before execution. File sizes in spec
+   hashes and reports are logical byte counts (equivalent to ```du -sb```),
+   not on-disk allocation (plain ```du -s```). This is required for
+   reproducibility across filesystems with different block sizes.
 
 3. **No non-deterministic inputs.** Pack steps do not execute commands inside
    the image (no `RUN`). They assemble layers from typed file entries with
