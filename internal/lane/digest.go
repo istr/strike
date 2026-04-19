@@ -10,9 +10,32 @@ import (
 	"path/filepath"
 )
 
+// rejectSymlink returns an error if absPath is a symlink.
+// Returns nil when absPath does not exist (caller handles that case).
+func rejectSymlink(absPath, name string) error {
+	info, ok := lstat(absPath)
+	if !ok || info.Mode()&fs.ModeSymlink == 0 {
+		return nil
+	}
+	target, readErr := os.Readlink(absPath)
+	if readErr != nil {
+		return fmt.Errorf("symlink not allowed: %s", name)
+	}
+	return fmt.Errorf("symlink not allowed: %s -> %s", name, target)
+}
+
+// lstat wraps os.Lstat, returning (info, true) on success.
+func lstat(path string) (fs.FileInfo, bool) {
+	info, err := os.Lstat(path)
+	return info, err == nil
+}
+
 // SourceDigest computes the sha256 digest of a local path (file or directory)
 // within the given root scope.
 func SourceDigest(root *os.Root, laneDir, path string) (Digest, error) {
+	if err := rejectSymlink(filepath.Join(laneDir, path), path); err != nil {
+		return Digest{}, err
+	}
 	info, err := root.Stat(path)
 	if err != nil {
 		return Digest{}, fmt.Errorf("source digest %q: %w", path, err)
@@ -71,6 +94,13 @@ func dirDigestWalkFunc(root *os.Root, absDir, dir string, h io.Writer) fs.WalkDi
 				return nil
 			}
 			return walkErr
+		}
+		if d.Type()&fs.ModeSymlink != 0 {
+			rel, relErr := filepath.Rel(absDir, path)
+			if relErr != nil {
+				return relErr
+			}
+			return rejectSymlink(path, filepath.Join(dir, rel))
 		}
 		if d.IsDir() {
 			return nil

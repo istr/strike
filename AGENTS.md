@@ -221,6 +221,13 @@ if !filepath.IsLocal(header.Name) {
 clean := filepath.Clean(header.Name)
 ```
 
+### Source hashing
+
+Source directory trees must not contain symlinks. Both valid and broken
+symlinks are rejected during source hashing (`internal/lane/digest.go`).
+Symlinks break source hash reproducibility and can reference files outside
+the source tree.
+
 ### Tar extraction
 
 When reading tar archives (OCI layers, cache artifacts):

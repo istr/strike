@@ -182,7 +182,9 @@ The full non-repudiation chain for a strike-produced artifact:
 
 1. **Lane definition** -- committed to Git with a signed commit.
 2. **Source inputs** -- hashed through `os.Root` scoped reads, digests recorded
-   in spec hash.
+   in spec hash. Symlinks in source trees are rejected (both valid and broken)
+   to prevent non-deterministic hashing and implicit references outside the
+   source directory.
 3. **Build execution** -- container create/start/wait/remove logged with
    timestamps and container IDs.
 4. **Artifact provenance** -- each artifact in the deploy attestation carries a
