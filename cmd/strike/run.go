@@ -1,0 +1,494 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"os"
+	"path/filepath"
+	"time"
+
+	"github.com/istr/strike/internal/container"
+	"github.com/istr/strike/internal/deploy"
+	"github.com/istr/strike/internal/executor"
+	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/registry"
+)
+
+// runState holds accumulated state across steps during a lane execution.
+type runState struct {
+	specHashes map[string]lane.Digest
+	outputDirs map[string]string
+	ociDigests map[string]lane.Digest
+	ociSigned  map[string]bool
+}
+
+func newRunState() *runState {
+	return &runState{
+		specHashes: map[string]lane.Digest{},
+		outputDirs: map[string]string{},
+		ociDigests: map[string]lane.Digest{},
+		ociSigned:  map[string]bool{},
+	}
+}
+
+// runContext bundles everything needed to execute steps.
+type runContext struct {
+	ctx       context.Context
+	engine    container.Engine
+	lane      *lane.Lane
+	dag       *lane.DAG
+	regClient *registry.Client
+	engineID  *container.EngineIdentity
+	state     *runState
+	laneState *lane.State // artifact graph for deploy attestations
+	laneRoot  *os.Root
+	rekor     *executor.RekorClient // optional Rekor transparency log client
+	laneDir   string
+}
+
+func (rc *runContext) runStep(stepName string) error {
+	step := rc.dag.Steps[stepName]
+	safeName := sanitizeForLog(stepName)
+
+	timeout, err := lane.ParseDuration(step.Timeout, 10*time.Minute)
+	if err != nil {
+		return fmt.Errorf("%s: invalid timeout %q: %w", safeName, step.Timeout, err)
+	}
+	ctx, cancel := context.WithTimeout(rc.ctx, timeout)
+	defer cancel()
+
+	// Deploy steps have their own execution model -- no image resolution,
+	// no spec hash caching. Dispatch early.
+	if step.Deploy != nil {
+		return rc.executeDeploy(ctx, step, stepName, safeName)
+	}
+
+	imageDigest, err := rc.resolveImageDigest(ctx, step, safeName)
+	if err != nil {
+		return err
+	}
+	specHash, tag, err := rc.computeSpecHash(step, stepName, imageDigest)
+	if err != nil {
+		return err
+	}
+
+	if rc.checkCache(ctx, stepName, safeName, tag, specHash) {
+		return nil
+	}
+	if err := rc.guardUnsignedImages(step, safeName); err != nil {
+		return err
+	}
+
+	log.Printf("RUN    %s", safeName)
+
+	if step.Pack != nil {
+		return rc.executePack(ctx, step, stepName, safeName)
+	}
+	return rc.executeContainerStep(ctx, step, stepName, safeName, tag)
+}
+
+func (rc *runContext) executeDeploy(ctx context.Context, step *lane.Step, stepName, safeName string) error {
+	log.Printf("DEPLOY %s", safeName)
+
+	signingKey, keyPassword, err := rc.resolveDeploySecrets(step, safeName)
+	if err != nil {
+		return err
+	}
+
+	d := &deploy.Deployer{
+		Engine:      rc.engine,
+		EngineID:    rc.engineID,
+		Rekor:       rc.rekor,
+		SigningKey:  signingKey,
+		KeyPassword: keyPassword,
+		SourceDirs:  rc.collectSourceDirs(step),
+	}
+
+	att, err := d.Execute(ctx, step, rc.laneState)
+	if err != nil {
+		return fmt.Errorf("%s: deploy failed: %w", safeName, err)
+	}
+
+	attJSON, err := att.JSON()
+	if err != nil {
+		return fmt.Errorf("%s: attestation marshal: %w", safeName, err)
+	}
+	log.Printf("OK     %s -> deploy_id=%s", safeName, att.DeployID)
+
+	outDir, err := os.MkdirTemp("", "strike-"+stepName+"-")
+	if err != nil {
+		return fmt.Errorf("%s: create temp dir: %w", safeName, err)
+	}
+	if writeErr := writeToOutputDir(outDir, "attestation.json", attJSON); writeErr != nil {
+		return fmt.Errorf("%s: write attestation: %w", safeName, writeErr)
+	}
+	if att.SignedEnvelope != nil {
+		if writeErr := writeToOutputDir(outDir, "attestation.dsse.json", att.SignedEnvelope); writeErr != nil {
+			return fmt.Errorf("%s: write signed attestation: %w", safeName, writeErr)
+		}
+	}
+	rc.state.outputDirs[stepName] = outDir
+	return nil
+}
+
+func (rc *runContext) resolveImageDigest(ctx context.Context, step *lane.Step, safeName string) (lane.Digest, error) {
+	if step.Pack != nil {
+		digest, err := resolveDigest(ctx, rc.regClient, string(step.Pack.Base))
+		if err != nil {
+			return lane.Digest{}, fmt.Errorf("%s: pack base digest: %w", safeName, err)
+		}
+		return digest, nil
+	}
+	if step.ImageFrom != nil {
+		key := step.ImageFrom.Step + "/" + step.ImageFrom.Output
+		digest, ok := rc.state.ociDigests[key]
+		if !ok {
+			return lane.Digest{}, fmt.Errorf("%s: image_from %s/%s: digest not available",
+				safeName, step.ImageFrom.Step, step.ImageFrom.Output)
+		}
+		step.Image = "localhost/strike:" + digest.Hex[:12]
+		return digest, nil
+	}
+	digest, err := resolveDigest(ctx, rc.regClient, step.Image)
+	if err != nil {
+		return lane.Digest{}, fmt.Errorf("%s: image digest: %w", safeName, err)
+	}
+	return digest, nil
+}
+
+func (rc *runContext) computeSpecHash(step *lane.Step, stepName string, imageDigest lane.Digest) (lane.Digest, string, error) {
+	safeName := sanitizeForLog(stepName)
+
+	inputHashes := map[string]lane.Digest{}
+	for _, inp := range step.Inputs {
+		inputHashes[inp.Name] = rc.state.specHashes[inp.From]
+	}
+
+	sourceHashes := map[string]lane.Digest{}
+	for _, src := range step.Sources {
+		h, err := registry.HashPath(rc.laneRoot, rc.laneDir, src.Path)
+		if err != nil {
+			return lane.Digest{}, "", fmt.Errorf("%s: source hash %s: %w", safeName, src.Path, err)
+		}
+		sourceHashes[src.Mount] = h
+	}
+
+	key := registry.SpecHash(step, imageDigest, inputHashes, sourceHashes)
+	tag := registry.Tag(rc.lane.Registry, stepName, key)
+	rc.state.specHashes[stepName] = key
+	return key, tag, nil
+}
+
+func (rc *runContext) checkCache(ctx context.Context, stepName, safeName, tag string, specHash lane.Digest) bool {
+	if !registry.Lookup(ctx, rc.regClient, tag, specHash.String()) {
+		return false
+	}
+	log.Printf("CACHED %s (%s)", safeName, tag)
+	rc.state.outputDirs[stepName] = cachedOutputDir(tag)
+	return true
+}
+
+func (rc *runContext) guardUnsignedImages(step *lane.Step, safeName string) error {
+	if !step.Network {
+		return nil
+	}
+	for _, inp := range step.Inputs {
+		if rc.dag.IsOCITarOutput(inp) && !rc.state.ociSigned[inp.From+"/"+inp.Name] {
+			return fmt.Errorf("%s: input %q/%q is an unsigned OCI image -- "+
+				"unsigned images must not leave the local store",
+				safeName, inp.From, inp.Name)
+		}
+	}
+	return nil
+}
+
+func (rc *runContext) executePack(ctx context.Context, step *lane.Step, stepName, safeName string) error {
+	inputPaths, err := rc.resolvePackInputPaths(step, safeName)
+	if err != nil {
+		return err
+	}
+	signingKey, keyPassword, err := rc.resolvePackSecrets(step, safeName)
+	if err != nil {
+		return err
+	}
+
+	outDir, err := os.MkdirTemp("", "strike-"+stepName+"-")
+	if err != nil {
+		return fmt.Errorf("%s: create temp dir: %w", safeName, err)
+	}
+
+	outRoot, err := os.OpenRoot(outDir)
+	if err != nil {
+		return fmt.Errorf("%s: open output dir: %w", safeName, err)
+	}
+	defer outRoot.Close() //nolint:errcheck // best-effort cleanup
+
+	outputName := filepath.Base(step.Outputs[0].Path)
+	result, err := executor.Pack(ctx, executor.PackOpts{
+		Spec:        step.Pack,
+		InputPaths:  inputPaths,
+		OutputRoot:  outRoot,
+		OutputName:  outputName,
+		SigningKey:  signingKey,
+		KeyPassword: keyPassword,
+		Rekor:       rc.rekor,
+	})
+	if err != nil {
+		return fmt.Errorf("%s: pack failed: %w", safeName, err)
+	}
+
+	rc.state.outputDirs[stepName] = outDir
+	outKey := stepName + "/" + step.Outputs[0].Name
+	rc.state.ociDigests[outKey] = result.Digest
+	rc.state.ociSigned[outKey] = signingKey != nil
+
+	if regErr := rc.laneState.Register(stepName, step.Outputs[0].Name, lane.Artifact{
+		Type:   artifactTypeImage,
+		Digest: result.Digest,
+		Rekor:  result.Rekor,
+	}); regErr != nil {
+		return fmt.Errorf("%s: register artifact: %w", safeName, regErr)
+	}
+
+	if err := rc.regClient.LoadOCITarByDigest(ctx, outRoot, outputName, result.Digest); err != nil {
+		return fmt.Errorf("%s: load image: %w", safeName, err)
+	}
+	log.Printf("OK     %s -> %s", safeName, result.Digest)
+	return nil
+}
+
+func (rc *runContext) resolvePackInputPaths(step *lane.Step, safeName string) (map[string]string, error) {
+	inputPaths := map[string]string{}
+	for _, f := range step.Pack.Files {
+		refStep, refOutput, err := lane.ParseRef(f.From)
+		if err != nil {
+			return nil, fmt.Errorf("%s: pack file: %w", safeName, err)
+		}
+		fromStep := rc.dag.Steps[refStep]
+		var hostPath string
+		for _, out := range fromStep.Outputs {
+			if out.Name == refOutput {
+				hostPath = filepath.Join(rc.state.outputDirs[refStep], filepath.Base(out.Path))
+				break
+			}
+		}
+		if hostPath == "" {
+			return nil, fmt.Errorf("%s: pack file from %q: output not found", safeName, f.From)
+		}
+		inputPaths[f.From] = hostPath
+	}
+	return inputPaths, nil
+}
+
+func (rc *runContext) resolveDeploySecrets(step *lane.Step, safeName string) ([]byte, []byte, error) {
+	return rc.resolveSigningSecrets(step, safeName)
+}
+
+func (rc *runContext) resolvePackSecrets(step *lane.Step, safeName string) ([]byte, []byte, error) {
+	return rc.resolveSigningSecrets(step, safeName)
+}
+
+func (rc *runContext) resolveSigningSecrets(step *lane.Step, safeName string) ([]byte, []byte, error) {
+	var signingKey, keyPassword []byte
+	for _, ref := range step.Secrets {
+		source, ok := rc.lane.Secrets[ref.Name]
+		if !ok {
+			return nil, nil, fmt.Errorf("%s: secret %q not defined", safeName, ref.Name)
+		}
+		val, err := lane.ReadSecret(source, rc.laneRoot)
+		if ref.Name == "cosign_key" {
+			if err != nil {
+				return nil, nil, fmt.Errorf("%s: secret cosign_key: %w", safeName, err)
+			}
+			signingKey = []byte(val.Expose())
+		}
+		if ref.Name == "cosign_password" {
+			if err != nil {
+				return nil, nil, fmt.Errorf("%s: secret cosign_password: %w", safeName, err)
+			}
+			keyPassword = []byte(val.Expose())
+		}
+	}
+	return signingKey, keyPassword, nil
+}
+
+func (rc *runContext) executeContainerStep(ctx context.Context, step *lane.Step, stepName, safeName, tag string) error {
+	outDir, err := os.MkdirTemp("", "strike-"+stepName+"-")
+	if err != nil {
+		return fmt.Errorf("%s: create temp dir: %w", safeName, err)
+	}
+
+	secrets, err := lane.ResolveSecrets(step.Secrets, rc.lane.Secrets, rc.laneRoot)
+	if err != nil {
+		return fmt.Errorf("%s: secrets: %w", safeName, err)
+	}
+
+	inputMounts, err := rc.buildInputMounts(step, safeName)
+	if err != nil {
+		return err
+	}
+	sourceMounts := rc.buildSourceMounts(step)
+
+	run := executor.Run{
+		Engine:       rc.engine,
+		Step:         step,
+		InputMounts:  inputMounts,
+		SourceMounts: sourceMounts,
+		OutputDir:    outDir,
+		Secrets:      secrets,
+	}
+	if execErr := run.Execute(ctx); execErr != nil {
+		return fmt.Errorf("%s: execution failed: %w", safeName, execErr)
+	}
+
+	rc.state.outputDirs[stepName] = outDir
+
+	outRoot, err := os.OpenRoot(outDir)
+	if err != nil {
+		return fmt.Errorf("%s: open output dir: %w", safeName, err)
+	}
+	defer outRoot.Close() //nolint:errcheck // best-effort cleanup
+
+	if err := rc.registerFileOutputs(step, stepName, safeName, outDir, outRoot); err != nil {
+		return err
+	}
+	if err := rc.loadOCIOutputs(ctx, step, stepName, safeName, outRoot); err != nil {
+		return err
+	}
+	return rc.pushAndReport(ctx, step, safeName, tag)
+}
+
+func (rc *runContext) registerFileOutputs(step *lane.Step, stepName, safeName, outDir string, outRoot *os.Root) error {
+	for _, out := range step.Outputs {
+		if out.Type == artifactTypeImage {
+			continue
+		}
+		relName := filepath.Base(out.Path)
+		outPath := filepath.Join(outDir, relName)
+		if out.Expected != nil {
+			info, statErr := os.Stat(outPath) //nolint:gosec // G703: outPath is outDir (our temp dir) + filepath.Base (no traversal)
+			if statErr != nil {
+				return fmt.Errorf("%s: output %q: %w", safeName, out.Name, statErr)
+			}
+			if valErr := executor.ValidateOutput(outPath, info, out.Expected); valErr != nil {
+				return fmt.Errorf("%s: output %q validation: %w", safeName, out.Name, valErr)
+			}
+		}
+		var h lane.Digest
+		var hashErr error
+		if out.Type == "directory" {
+			h, hashErr = registry.HashPath(outRoot, outDir, relName)
+		} else {
+			h, hashErr = registry.HashFile(outRoot, relName)
+		}
+		if hashErr != nil {
+			return fmt.Errorf("%s: hash output %q: %w", safeName, out.Name, hashErr)
+		}
+		if regErr := rc.laneState.Register(stepName, out.Name, lane.Artifact{
+			Type:   lane.ArtifactType(out.Type),
+			Digest: h,
+		}); regErr != nil {
+			return fmt.Errorf("%s: register artifact: %w", safeName, regErr)
+		}
+	}
+	return nil
+}
+
+func (rc *runContext) buildInputMounts(step *lane.Step, safeName string) ([]executor.Mount, error) {
+	inputMounts := []executor.Mount{}
+	for _, inp := range step.Inputs {
+		fromStep := rc.dag.Steps[inp.From]
+		var hostPath string
+		for _, out := range fromStep.Outputs {
+			if out.Name == inp.Name {
+				hostPath = filepath.Join(rc.state.outputDirs[inp.From], filepath.Base(out.Path))
+				break
+			}
+		}
+		if hostPath == "" {
+			return nil, fmt.Errorf("%s: input %q not found in outputs of %q", safeName, inp.Name, inp.From)
+		}
+		inputMounts = append(inputMounts, executor.Mount{
+			Host:      hostPath,
+			Container: inp.Mount,
+			ReadOnly:  true,
+		})
+	}
+	return inputMounts, nil
+}
+
+// collectSourceDirs returns the host paths of all source mounts from the
+// deploy step's upstream dependencies. Used for git provenance capture.
+func (rc *runContext) collectSourceDirs(step *lane.Step) []string {
+	seen := map[string]bool{}
+	var dirs []string
+	for _, s := range rc.dag.Order {
+		ds := rc.dag.Steps[s]
+		for _, src := range ds.Sources {
+			dir := filepath.Join(rc.laneDir, src.Path)
+			if !seen[dir] {
+				seen[dir] = true
+				dirs = append(dirs, dir)
+			}
+		}
+	}
+	_ = step // deploy step itself has no sources, we collect from the lane
+	return dirs
+}
+
+func (rc *runContext) buildSourceMounts(step *lane.Step) []executor.Mount {
+	sourceMounts := []executor.Mount{}
+	for _, src := range step.Sources {
+		sourceMounts = append(sourceMounts, executor.Mount{
+			Host:      filepath.Join(rc.laneDir, src.Path),
+			Container: src.Mount,
+			ReadOnly:  true,
+		})
+	}
+	return sourceMounts
+}
+
+func (rc *runContext) loadOCIOutputs(ctx context.Context, step *lane.Step, stepName, safeName string, outRoot *os.Root) error {
+	for _, out := range step.Outputs {
+		if out.Type != artifactTypeImage {
+			continue
+		}
+		relName := filepath.Base(out.Path)
+		digest, err := rc.regClient.LoadOCITar(ctx, outRoot, relName)
+		if err != nil {
+			return fmt.Errorf("%s: oci-tar load %q: %w", safeName, out.Name, err)
+		}
+		key := stepName + "/" + out.Name
+		rc.state.ociDigests[key] = digest
+
+		if regErr := rc.laneState.Register(stepName, out.Name, lane.Artifact{
+			Type:   lane.ArtifactType(out.Type),
+			Digest: digest,
+		}); regErr != nil {
+			return fmt.Errorf("%s: register artifact: %w", safeName, regErr)
+		}
+
+		log.Printf("       %s/%s -> %s", safeName, out.Name, digest)
+	}
+	return nil
+}
+
+func (rc *runContext) pushAndReport(ctx context.Context, step *lane.Step, safeName, tag string) error {
+	pushed := false
+	for _, out := range step.Outputs {
+		if out.Type == artifactTypeImage {
+			if err := rc.regClient.PushArtifact(ctx, tag); err != nil {
+				return fmt.Errorf("%s: push failed: %w", safeName, err)
+			}
+			pushed = true
+			break
+		}
+	}
+	if pushed {
+		log.Printf("OK     %s -> %s", safeName, tag)
+	} else {
+		log.Printf("OK     %s", safeName)
+	}
+	return nil
+}

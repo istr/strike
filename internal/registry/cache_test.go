@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/istr/strike/internal/container"
@@ -207,6 +208,150 @@ func TestHashFileAbs(t *testing.T) {
 	}
 	if h != h2 {
 		t.Fatalf("HashFileAbs and HashFile differ: %q vs %q", h, h2)
+	}
+}
+
+// --------------------------------------------------------------------------.
+// HashPath for directory outputs.
+// --------------------------------------------------------------------------.
+
+func TestHashPathDirectory(t *testing.T) {
+	dir := t.TempDir()
+	mustMkdir(t, filepath.Join(dir, "out", "sub"))
+	mustWriteContent(t, filepath.Join(dir, "out", "a.txt"), "aaa")
+	mustWriteContent(t, filepath.Join(dir, "out", "sub", "b.txt"), "bbb")
+
+	root := mustOpenRoot(t, dir)
+
+	h, err := registry.HashPath(root, dir, "out")
+	if err != nil {
+		t.Fatalf("HashPath: %v", err)
+	}
+	if h.Algorithm != testAlgoSHA256 {
+		t.Fatalf("expected sha256, got %q", h.Algorithm)
+	}
+
+	// Same content -> same hash (deterministic).
+	h2, err := registry.HashPath(root, dir, "out")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h != h2 {
+		t.Fatalf("not deterministic: %q vs %q", h, h2)
+	}
+}
+
+func TestHashPathDirectoryDeterministicOrder(t *testing.T) {
+	dir1 := t.TempDir()
+	dir2 := t.TempDir()
+	for _, d := range []string{dir1, dir2} {
+		mustMkdir(t, filepath.Join(d, "out"))
+	}
+	mustWriteContent(t, filepath.Join(dir1, "out", "z.txt"), "zzz")
+	mustWriteContent(t, filepath.Join(dir1, "out", "a.txt"), "aaa")
+	mustWriteContent(t, filepath.Join(dir2, "out", "a.txt"), "aaa")
+	mustWriteContent(t, filepath.Join(dir2, "out", "z.txt"), "zzz")
+
+	root1 := mustOpenRoot(t, dir1)
+	root2 := mustOpenRoot(t, dir2)
+
+	h1, err := registry.HashPath(root1, dir1, "out")
+	if err != nil {
+		t.Fatal(err)
+	}
+	h2, err := registry.HashPath(root2, dir2, "out")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h1 != h2 {
+		t.Fatalf("same content different order: %q vs %q", h1, h2)
+	}
+}
+
+func TestHashPathDirectoryRejectsSymlinks(t *testing.T) {
+	dir := t.TempDir()
+	mustMkdir(t, filepath.Join(dir, "out"))
+	mustWriteContent(t, filepath.Join(dir, "out", "real.txt"), "real")
+	if err := os.Symlink("real.txt", filepath.Join(dir, "out", "link.txt")); err != nil {
+		t.Fatal(err)
+	}
+
+	root := mustOpenRoot(t, dir)
+
+	_, err := registry.HashPath(root, dir, "out")
+	if err == nil {
+		t.Fatal("expected error for symlink in directory")
+	}
+	if !strings.Contains(err.Error(), "symlink not allowed") {
+		t.Fatalf("error %q should mention symlink", err)
+	}
+}
+
+func TestHashPathDirectoryEmptySubdirIgnored(t *testing.T) {
+	dir1 := t.TempDir()
+	dir2 := t.TempDir()
+	for _, d := range []string{dir1, dir2} {
+		mustMkdir(t, filepath.Join(d, "out"))
+		mustWriteContent(t, filepath.Join(d, "out", "a.txt"), "aaa")
+	}
+	mustMkdir(t, filepath.Join(dir2, "out", "empty"))
+
+	root1 := mustOpenRoot(t, dir1)
+	root2 := mustOpenRoot(t, dir2)
+
+	h1, err := registry.HashPath(root1, dir1, "out")
+	if err != nil {
+		t.Fatal(err)
+	}
+	h2, err := registry.HashPath(root2, dir2, "out")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h1 != h2 {
+		t.Fatalf("empty subdir changed hash: %q vs %q", h1, h2)
+	}
+}
+
+func TestHashFileOutputUnchanged(t *testing.T) {
+	dir := t.TempDir()
+	mustWriteContent(t, filepath.Join(dir, "file.txt"), "content")
+
+	root := mustOpenRoot(t, dir)
+
+	h, err := registry.HashFile(root, "file.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h.Algorithm != testAlgoSHA256 {
+		t.Fatalf("HashFile algorithm = %q", h.Algorithm)
+	}
+}
+
+func mustOpenRoot(t *testing.T, dir string) *os.Root {
+	t.Helper()
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := root.Close(); err != nil {
+			t.Errorf("close root: %v", err)
+		}
+	})
+	return root
+}
+
+func mustMkdir(t *testing.T, path string) {
+	t.Helper()
+	if err := os.MkdirAll(path, 0o750); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func mustWriteContent(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
 	}
 }
 
