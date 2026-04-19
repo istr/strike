@@ -140,12 +140,12 @@ func (rc *runContext) resolveImageDigest(ctx context.Context, step *lane.Step, s
 		}
 		return digest, nil
 	}
-	if step.ImageFrom != nil {
-		key := step.ImageFrom.Step + "/" + step.ImageFrom.Output
+	if edge, ok := rc.dag.ImageFromEdges[string(step.Name)]; ok {
+		key := string(edge.FromStep.Name) + "/" + edge.FromOutput.Name
 		digest, ok := rc.state.ociDigests[key]
 		if !ok {
 			return lane.Digest{}, fmt.Errorf("%s: image_from %s/%s: digest not available",
-				safeName, step.ImageFrom.Step, step.ImageFrom.Output)
+				safeName, edge.FromStep.Name, edge.FromOutput.Name)
 		}
 		step.Image = "localhost/strike:" + digest.Hex[:12]
 		return digest, nil
@@ -161,8 +161,8 @@ func (rc *runContext) computeSpecHash(step *lane.Step, stepName string, imageDig
 	safeName := sanitizeForLog(stepName)
 
 	inputHashes := map[string]lane.Digest{}
-	for _, inp := range step.Inputs {
-		inputHashes[inp.Name] = rc.state.specHashes[inp.From]
+	for _, e := range rc.dag.InputEdges[string(step.Name)] {
+		inputHashes[e.LocalName] = rc.state.specHashes[string(e.FromStep.Name)]
 	}
 
 	sourceHashes := map[string]lane.Digest{}
@@ -262,25 +262,18 @@ func (rc *runContext) executePack(ctx context.Context, step *lane.Step, stepName
 }
 
 func (rc *runContext) resolvePackInputPaths(step *lane.Step, safeName string) (map[string]string, error) {
-	inputPaths := map[string]string{}
-	for _, f := range step.Pack.Files {
-		refStep, refOutput, err := lane.ParseRef(f.From)
-		if err != nil {
-			return nil, fmt.Errorf("%s: pack file: %w", safeName, err)
-		}
-		fromStep := rc.dag.Steps[refStep]
-		var hostPath string
-		for _, out := range fromStep.Outputs {
-			if out.Name == refOutput {
-				hostPath = filepath.Join(rc.state.outputDirs[refStep], filepath.Base(out.Path))
-				break
-			}
-		}
-		if hostPath == "" {
-			return nil, fmt.Errorf("%s: pack file from %q: output not found", safeName, f.From)
-		}
-		inputPaths[f.From] = hostPath
+	edges := rc.dag.PackFileEdges[string(step.Name)]
+	inputPaths := make(map[string]string, len(edges))
+	for _, e := range edges {
+		hostPath := filepath.Join(
+			rc.state.outputDirs[string(e.FromStep.Name)],
+			filepath.Base(e.FromOutput.Path),
+		)
+		// Key uses dotted form to keep the signature stable for executor.Pack.
+		key := string(e.FromStep.Name) + "." + e.FromOutput.Name
+		inputPaths[key] = hostPath
 	}
+	_ = safeName // reserved for future error wrapping
 	return inputPaths, nil
 }
 

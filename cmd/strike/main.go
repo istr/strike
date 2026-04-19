@@ -167,10 +167,10 @@ func cmdDAG(path string) {
 
 	log.Print("Execution order:")
 	for i, name := range dag.Order {
-		step := dag.Steps[name]
-		deps := []string{}
-		for _, inp := range step.Inputs {
-			deps = append(deps, inp.From)
+		edges := dag.InputEdges[name]
+		deps := make([]string, len(edges))
+		for j, e := range edges {
+			deps[j] = string(e.FromStep.Name) + "." + e.FromOutput.Name
 		}
 		if len(deps) > 0 {
 			log.Printf("  %d. %s <- %v", i+1, name, deps) // #nosec G706 -- name/deps from parsed lane YAML

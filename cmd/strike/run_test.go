@@ -400,11 +400,23 @@ func TestResolveImageDigest_FromInspect(t *testing.T) {
 
 func TestResolveImageDigest_ImageFrom(t *testing.T) {
 	rc := newTestRC(t, &mockEngine{})
+	p := &lane.Lane{
+		Registry: "localhost:5555/test",
+		Steps: []lane.Step{
+			{
+				Name: "pack", Image: "img", Args: []string{}, Env: map[string]string{},
+				Outputs: []lane.OutputSpec{{Name: "img", Type: "image", Path: "/out/img.tar"}},
+			},
+			{
+				Name: "run", Env: map[string]string{}, Args: []string{"run"},
+				ImageFrom: &lane.ImageFrom{Step: "pack", Output: "img"},
+			},
+		},
+	}
+	rc.dag = buildTestDAG(t, p)
 	rc.state.ociDigests["pack/img"] = lane.MustParseDigest("sha256:abcdef123456789000")
 
-	step := &lane.Step{
-		ImageFrom: &lane.ImageFrom{Step: "pack", Output: "img"},
-	}
+	step := rc.dag.Steps["run"]
 	digest, err := rc.resolveImageDigest(context.Background(), step, "test")
 	if err != nil {
 		t.Fatal(err)
@@ -419,10 +431,22 @@ func TestResolveImageDigest_ImageFrom(t *testing.T) {
 
 func TestResolveImageDigest_ImageFromMissing(t *testing.T) {
 	rc := newTestRC(t, &mockEngine{})
-	step := &lane.Step{
-		ImageFrom: &lane.ImageFrom{Step: "pack", Output: "img"},
+	p := &lane.Lane{
+		Registry: "localhost:5555/test",
+		Steps: []lane.Step{
+			{
+				Name: "pack", Image: "img", Args: []string{}, Env: map[string]string{},
+				Outputs: []lane.OutputSpec{{Name: "img", Type: "image", Path: "/out/img.tar"}},
+			},
+			{
+				Name: "run", Env: map[string]string{}, Args: []string{"run"},
+				ImageFrom: &lane.ImageFrom{Step: "pack", Output: "img"},
+			},
+		},
 	}
-	_, err := rc.resolveImageDigest(context.Background(), step, "test")
+	rc.dag = buildTestDAG(t, p)
+
+	_, err := rc.resolveImageDigest(context.Background(), rc.dag.Steps["run"], "test")
 	if err == nil {
 		t.Fatal("expected error for missing digest")
 	}
@@ -438,22 +462,30 @@ func TestResolveImageDigest_ImageFromMissing(t *testing.T) {
 func TestResolvePackInputPaths(t *testing.T) {
 	rc := newTestRC(t, &mockEngine{})
 
-	outDir := t.TempDir()
-	writeTestFile(t, filepath.Join(outDir, "binary"), "bin")
-	rc.state.outputDirs["compile"] = outDir
-	rc.dag.Steps["compile"] = &lane.Step{
-		Outputs: []lane.OutputSpec{{Name: "bin", Path: "/out/binary"}},
-	}
-
-	step := &lane.Step{
-		Pack: &lane.PackSpec{
-			Files: []lane.PackFile{
-				{From: "compile.bin", Dest: "/app"},
+	p := &lane.Lane{
+		Registry: "localhost:5555/test",
+		Steps: []lane.Step{
+			{
+				Name: "compile", Image: "img", Args: []string{}, Env: map[string]string{},
+				Outputs: []lane.OutputSpec{{Name: "bin", Type: "file", Path: "/out/binary"}},
+			},
+			{
+				Name: "pack", Env: map[string]string{}, Args: []string{},
+				Pack: &lane.PackSpec{
+					Base:  "scratch",
+					Files: []lane.PackFile{{From: "compile.bin", Dest: "/app"}},
+				},
+				Outputs: []lane.OutputSpec{{Name: "img", Type: "image", Path: "/out/img.tar"}},
 			},
 		},
 	}
+	rc.dag = buildTestDAG(t, p)
 
-	paths, err := rc.resolvePackInputPaths(step, "test")
+	outDir := t.TempDir()
+	writeTestFile(t, filepath.Join(outDir, "binary"), "bin")
+	rc.state.outputDirs["compile"] = outDir
+
+	paths, err := rc.resolvePackInputPaths(rc.dag.Steps["pack"], "test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -462,30 +494,6 @@ func TestResolvePackInputPaths(t *testing.T) {
 	}
 	if !strings.HasSuffix(paths["compile.bin"], "binary") {
 		t.Errorf("path should end in 'binary', got %q", paths["compile.bin"])
-	}
-}
-
-func TestResolvePackInputPaths_OutputNotFound(t *testing.T) {
-	rc := newTestRC(t, &mockEngine{})
-	rc.state.outputDirs["compile"] = t.TempDir()
-	rc.dag.Steps["compile"] = &lane.Step{
-		Outputs: []lane.OutputSpec{{Name: "other", Path: "/out/other"}},
-	}
-
-	step := &lane.Step{
-		Pack: &lane.PackSpec{
-			Files: []lane.PackFile{
-				{From: "compile.bin", Dest: "/app"},
-			},
-		},
-	}
-
-	_, err := rc.resolvePackInputPaths(step, "test")
-	if err == nil {
-		t.Fatal("expected error for missing output")
-	}
-	if !strings.Contains(err.Error(), "output not found") {
-		t.Errorf("error should mention 'output not found': %v", err)
 	}
 }
 
