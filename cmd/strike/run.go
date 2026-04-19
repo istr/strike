@@ -324,10 +324,7 @@ func (rc *runContext) executeContainerStep(ctx context.Context, step *lane.Step,
 		return fmt.Errorf("%s: secrets: %w", safeName, err)
 	}
 
-	inputMounts, err := rc.buildInputMounts(step, safeName)
-	if err != nil {
-		return err
-	}
+	inputMounts := rc.buildInputMounts(step)
 	sourceMounts := rc.buildSourceMounts(step)
 
 	run := executor.Run{
@@ -397,27 +394,17 @@ func (rc *runContext) registerFileOutputs(step *lane.Step, stepName, safeName, o
 	return nil
 }
 
-func (rc *runContext) buildInputMounts(step *lane.Step, safeName string) ([]executor.Mount, error) {
-	inputMounts := []executor.Mount{}
-	for _, inp := range step.Inputs {
-		fromStep := rc.dag.Steps[inp.From]
-		var hostPath string
-		for _, out := range fromStep.Outputs {
-			if out.Name == inp.Name {
-				hostPath = filepath.Join(rc.state.outputDirs[inp.From], filepath.Base(out.Path))
-				break
-			}
-		}
-		if hostPath == "" {
-			return nil, fmt.Errorf("%s: input %q not found in outputs of %q", safeName, inp.Name, inp.From)
-		}
-		inputMounts = append(inputMounts, executor.Mount{
-			Host:      hostPath,
-			Container: inp.Mount,
+func (rc *runContext) buildInputMounts(step *lane.Step) []executor.Mount {
+	edges := rc.dag.InputEdges[string(step.Name)]
+	mounts := make([]executor.Mount, len(edges))
+	for i, e := range edges {
+		mounts[i] = executor.Mount{
+			Host:      filepath.Join(rc.state.outputDirs[string(e.FromStep.Name)], filepath.Base(e.FromOutput.Path)),
+			Container: e.Mount,
 			ReadOnly:  true,
-		})
+		}
 	}
-	return inputMounts, nil
+	return mounts
 }
 
 // collectSourceDirs returns the host paths of all source mounts from the

@@ -49,25 +49,28 @@ func TestBuildInputMounts_Single(t *testing.T) {
 	eng := &mockEngine{}
 	rc := newTestRC(t, eng)
 
+	p := &lane.Lane{
+		Registry: "localhost:5555/test",
+		Steps: []lane.Step{
+			{
+				Name: "compile", Image: "img", Args: []string{}, Env: map[string]string{},
+				Outputs: []lane.OutputSpec{{Name: "bin", Type: "file", Path: "/out/binary"}},
+			},
+			{
+				Name: "test", Image: "img", Args: []string{}, Env: map[string]string{},
+				Inputs: []lane.InputRef{{Name: "bin", From: "compile.bin", Mount: "/input/binary"}},
+			},
+		},
+	}
+	rc.dag = buildTestDAG(t, p)
+
 	outDir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(outDir, "binary"), []byte("data"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	rc.state.outputDirs["compile"] = outDir
-	rc.dag.Steps["compile"] = &lane.Step{
-		Outputs: []lane.OutputSpec{{Name: "bin", Path: "/out/binary"}},
-	}
 
-	step := &lane.Step{
-		Inputs: []lane.InputRef{
-			{Name: "bin", From: "compile", Mount: "/input/binary"},
-		},
-	}
-
-	mounts, err := rc.buildInputMounts(step, "test")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	mounts := rc.buildInputMounts(rc.dag.Steps["test"])
 	if len(mounts) != 1 {
 		t.Fatalf("expected 1 mount, got %d", len(mounts))
 	}
@@ -86,55 +89,37 @@ func TestBuildInputMounts_Multiple(t *testing.T) {
 	eng := &mockEngine{}
 	rc := newTestRC(t, eng)
 
+	p := &lane.Lane{
+		Registry: "localhost:5555/test",
+		Steps: []lane.Step{
+			{
+				Name: "s1", Image: "img", Args: []string{}, Env: map[string]string{},
+				Outputs: []lane.OutputSpec{{Name: "a", Type: "file", Path: "/out/a.tar"}},
+			},
+			{
+				Name: "s2", Image: "img", Args: []string{}, Env: map[string]string{},
+				Outputs: []lane.OutputSpec{{Name: "b", Type: "file", Path: "/out/b.tar"}},
+			},
+			{
+				Name: "consumer", Image: "img", Args: []string{}, Env: map[string]string{},
+				Inputs: []lane.InputRef{
+					{Name: "a", From: "s1.a", Mount: "/in/a"},
+					{Name: "b", From: "s2.b", Mount: "/in/b"},
+				},
+			},
+		},
+	}
+	rc.dag = buildTestDAG(t, p)
+
 	dir1, dir2 := t.TempDir(), t.TempDir()
 	writeTestFile(t, filepath.Join(dir1, "a.tar"), "a")
 	writeTestFile(t, filepath.Join(dir2, "b.tar"), "b")
 	rc.state.outputDirs["s1"] = dir1
 	rc.state.outputDirs["s2"] = dir2
-	rc.dag.Steps["s1"] = &lane.Step{
-		Outputs: []lane.OutputSpec{{Name: "a", Path: "/out/a.tar"}},
-	}
-	rc.dag.Steps["s2"] = &lane.Step{
-		Outputs: []lane.OutputSpec{{Name: "b", Path: "/out/b.tar"}},
-	}
 
-	step := &lane.Step{
-		Inputs: []lane.InputRef{
-			{Name: "a", From: "s1", Mount: "/in/a"},
-			{Name: "b", From: "s2", Mount: "/in/b"},
-		},
-	}
-
-	mounts, err := rc.buildInputMounts(step, "test")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	mounts := rc.buildInputMounts(rc.dag.Steps["consumer"])
 	if len(mounts) != 2 {
 		t.Fatalf("expected 2 mounts, got %d", len(mounts))
-	}
-}
-
-func TestBuildInputMounts_NotFound(t *testing.T) {
-	eng := &mockEngine{}
-	rc := newTestRC(t, eng)
-
-	rc.dag.Steps["s1"] = &lane.Step{
-		Outputs: []lane.OutputSpec{{Name: "other", Path: "/out/other"}},
-	}
-	rc.state.outputDirs["s1"] = t.TempDir()
-
-	step := &lane.Step{
-		Inputs: []lane.InputRef{
-			{Name: "missing", From: "s1", Mount: "/in/x"},
-		},
-	}
-
-	_, err := rc.buildInputMounts(step, "test")
-	if err == nil {
-		t.Fatal("expected error for missing output")
-	}
-	if !strings.Contains(err.Error(), "not found") {
-		t.Errorf("error should mention 'not found': %v", err)
 	}
 }
 

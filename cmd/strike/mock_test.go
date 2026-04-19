@@ -3,8 +3,10 @@ package main
 import (
 	"context"
 	"io"
+	"testing"
 
 	"github.com/istr/strike/internal/container"
+	"github.com/istr/strike/internal/lane"
 )
 
 // mockEngine implements container.Engine for testing runContext methods.
@@ -53,3 +55,13 @@ func (m *mockEngine) TLSIdentity() *container.TLSIdentity { return nil }
 func (m *mockEngine) Identity() *container.EngineIdentity { return m.identity }
 
 func (m *mockEngine) Info(context.Context) error { return nil }
+
+// buildTestDAG runs lane.Build on p and fails the test on error.
+func buildTestDAG(t *testing.T, p *lane.Lane) *lane.DAG {
+	t.Helper()
+	dag, err := lane.Build(p)
+	if err != nil {
+		t.Fatalf("lane.Build: %v", err)
+	}
+	return dag
+}
