@@ -1,0 +1,35 @@
+name: pack-test
+registry: localhost:5555/test
+secrets: {}
+steps:
+  - name: compile
+    image: docker.io/library/golang@sha256:abababababababababababababababababababababababababababababababab
+    args: [go, build, -o, /out/binary]
+    env:
+      CGO_ENABLED: "0"
+    inputs: []
+    sources: []
+    secrets: []
+    outputs:
+      - name: binary
+        type: file
+        path: /out/binary
+  - name: pack
+    pack:
+      base: docker.io/library/static@sha256:cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd
+      files:
+        - from: compile.binary
+          dest: /app
+          mode: 0o755
+      config:
+        entrypoint: [/app]
+        user: "65534:65534"
+    args: []
+    env: {}
+    inputs: []
+    sources: []
+    secrets: []
+    outputs:
+      - name: image
+        type: image
+        path: /out/image.tar

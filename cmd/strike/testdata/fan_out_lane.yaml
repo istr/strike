@@ -1,0 +1,54 @@
+name: fan-out-test
+registry: localhost:5555/test
+secrets: {}
+steps:
+  - name: generate
+    image: docker.io/library/alpine@sha256:abababababababababababababababababababababababababababababababab
+    args: [sh, -c, "echo ok"]
+    env: {}
+    inputs: []
+    sources: []
+    secrets: []
+    outputs:
+      - name: data
+        type: file
+        path: /out/data.json
+      - name: config
+        type: file
+        path: /out/config.yaml
+      - name: manifest
+        type: file
+        path: /out/manifest.txt
+  - name: consumer_a
+    image: docker.io/library/alpine@sha256:cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd
+    args: [cat, /input/data.json]
+    env: {}
+    inputs:
+      - name: data
+        from: generate.data
+        mount: /input/data.json
+    sources: []
+    secrets: []
+    outputs: []
+  - name: consumer_b
+    image: docker.io/library/alpine@sha256:cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd
+    args: [cat, /input/config.yaml]
+    env: {}
+    inputs:
+      - name: config
+        from: generate.config
+        mount: /input/config.yaml
+    sources: []
+    secrets: []
+    outputs: []
+  - name: consumer_c
+    image: docker.io/library/alpine@sha256:cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd
+    args: [cat, /input/manifest.txt]
+    env: {}
+    inputs:
+      - name: manifest
+        from: generate.manifest
+        mount: /input/manifest.txt
+    sources: []
+    secrets: []
+    outputs: []

@@ -1,0 +1,28 @@
+name: image-from-test
+registry: localhost:5555/test
+secrets: {}
+steps:
+  - name: build_base
+    image: docker.io/library/golang@sha256:abababababababababababababababababababababababababababababababab
+    args: [go, build, -o, /out/base]
+    env: {}
+    inputs: []
+    sources: []
+    secrets: []
+    outputs:
+      - name: custom_image
+        type: image
+        path: /out/custom.tar
+  - name: use_base
+    image_from:
+      step: build_base
+      output: custom_image
+    args: [/app/run]
+    env: {}
+    inputs: []
+    sources: []
+    secrets: []
+    outputs:
+      - name: result
+        type: file
+        path: /out/result.txt

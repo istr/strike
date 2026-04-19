@@ -1,0 +1,29 @@
+name: hugo-test
+registry: localhost:5555/test
+secrets: {}
+steps:
+  - name: npm_install
+    image: docker.io/library/node@sha256:abababababababababababababababababababababababababababababababab
+    args: [npm, ci]
+    env: {}
+    inputs: []
+    sources: []
+    secrets: []
+    outputs:
+      - name: node_modules
+        type: directory
+        path: /out/node_modules
+  - name: build
+    image: docker.io/library/hugo@sha256:cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd
+    args: [hugo]
+    env: {}
+    inputs:
+      - name: node_modules
+        from: npm_install.node_modules
+        mount: /src/node_modules
+    sources: []
+    secrets: []
+    outputs:
+      - name: site
+        type: directory
+        path: /out/www
