@@ -16,20 +16,57 @@ func ParseRef(ref string) (step, output string, err error) {
 	return parts[0], parts[1], nil
 }
 
+// InputEdge is a fully resolved step.inputs[i] entry.
+// FromStep and FromOutput are guaranteed non-nil by Build.
+type InputEdge struct {
+	FromStep   *Step
+	FromOutput *OutputSpec
+	LocalName  string // == InputRef.Name
+	Mount      string // == InputRef.Mount
+}
+
+// PackFileEdge is a fully resolved step.pack.files[i] entry.
+type PackFileEdge struct {
+	FromStep   *Step
+	FromOutput *OutputSpec
+	Dest       string // == PackFile.Dest
+}
+
+// DeployArtifactEdge is a fully resolved step.deploy.artifacts[name] entry.
+type DeployArtifactEdge struct {
+	FromStep     *Step
+	FromOutput   *OutputSpec
+	ArtifactName string
+}
+
+// ImageFromEdge is a fully resolved step.image_from.
+type ImageFromEdge struct {
+	FromStep   *Step
+	FromOutput *OutputSpec
+}
+
 // DAG is the directed acyclic graph of step dependencies in a lane.
 type DAG struct {
-	Steps   map[string]*Step
-	edges   map[string][]string // step -> []dependencies
-	reverse map[string][]string // dep -> []dependents
-	Order   []string
+	Steps          map[string]*Step
+	InputEdges     map[string][]InputEdge // key: consuming step name
+	PackFileEdges  map[string][]PackFileEdge
+	DeployEdges    map[string][]DeployArtifactEdge
+	ImageFromEdges map[string]ImageFromEdge // one per step, if any
+	edges          map[string][]string      // step -> []dependencies
+	reverse        map[string][]string      // dep -> []dependents
+	Order          []string
 }
 
 // Build constructs a DAG from a Lane definition, resolving all inter-step edges.
 func Build(p *Lane) (*DAG, error) {
 	d := &DAG{
-		Steps:   make(map[string]*Step),
-		edges:   make(map[string][]string),
-		reverse: make(map[string][]string),
+		Steps:          make(map[string]*Step),
+		InputEdges:     make(map[string][]InputEdge),
+		PackFileEdges:  make(map[string][]PackFileEdge),
+		DeployEdges:    make(map[string][]DeployArtifactEdge),
+		ImageFromEdges: make(map[string]ImageFromEdge),
+		edges:          make(map[string][]string),
+		reverse:        make(map[string][]string),
 	}
 
 	for i := range p.Steps {
@@ -72,21 +109,16 @@ func (d *DAG) resolveImageFromEdges(p *Lane) error {
 		if !ok {
 			return fmt.Errorf("step %q: image_from references unknown step %q", name, from)
 		}
-		found := false
-		for _, out := range fromStep.Outputs {
-			if out.Name == s.ImageFrom.Output {
-				if out.Type != "image" {
-					return fmt.Errorf("step %q: image_from output %q in step %q is %q, not image",
-						name, out.Name, from, out.Type)
-				}
-				found = true
-				break
-			}
-		}
-		if !found {
+		out := findOutput(fromStep, s.ImageFrom.Output)
+		if out == nil {
 			return fmt.Errorf("step %q: image_from output %q not found in step %q",
 				name, s.ImageFrom.Output, from)
 		}
+		if out.Type != "image" {
+			return fmt.Errorf("step %q: image_from output %q in step %q is %q, not image",
+				name, out.Name, from, out.Type)
+		}
+		d.ImageFromEdges[name] = ImageFromEdge{FromStep: fromStep, FromOutput: out}
 		d.addEdge(name, from)
 	}
 	return nil
@@ -96,14 +128,26 @@ func (d *DAG) resolveInputEdges(p *Lane) error {
 	for _, s := range p.Steps {
 		name := string(s.Name)
 		for _, inp := range s.Inputs {
-			fromStep, _, err := ParseRef(inp.From)
+			refStep, refOutput, err := ParseRef(inp.From)
 			if err != nil {
 				return fmt.Errorf("step %q: input %q: %w", name, inp.Name, err)
 			}
-			if _, ok := d.Steps[fromStep]; !ok {
-				return fmt.Errorf("step %q: input %q references unknown step %q", name, inp.Name, fromStep)
+			fromStep, ok := d.Steps[refStep]
+			if !ok {
+				return fmt.Errorf("step %q: input %q references unknown step %q", name, inp.Name, refStep)
 			}
-			d.addEdge(name, fromStep)
+			out := findOutput(fromStep, refOutput)
+			if out == nil {
+				return fmt.Errorf("step %q: input %q: output %q not found in step %q",
+					name, inp.Name, refOutput, refStep)
+			}
+			d.InputEdges[name] = append(d.InputEdges[name], InputEdge{
+				LocalName:  inp.Name,
+				Mount:      inp.Mount,
+				FromStep:   fromStep,
+				FromOutput: out,
+			})
+			d.addEdge(name, refStep)
 		}
 	}
 	return nil
@@ -133,21 +177,30 @@ func (d *DAG) resolvePackFileEdge(name string, f PackFile) error {
 	if !ok {
 		return fmt.Errorf("step %q: pack file from %q: unknown step %q", name, f.From, stepName)
 	}
-	if !hasOutput(fromStep, outputName) {
+	out := findOutput(fromStep, outputName)
+	if out == nil {
 		return fmt.Errorf("step %q: pack file from %q: output %q not found in step %q",
 			name, f.From, outputName, stepName)
 	}
+	d.PackFileEdges[name] = append(d.PackFileEdges[name], PackFileEdge{
+		Dest:       f.Dest,
+		FromStep:   fromStep,
+		FromOutput: out,
+	})
 	d.addEdge(name, stepName)
 	return nil
 }
 
-func hasOutput(step *Step, outputName string) bool {
-	for _, out := range step.Outputs {
-		if out.Name == outputName {
-			return true
+// findOutput returns a pointer to the OutputSpec with the given name,
+// or nil if not found. The returned pointer aliases into s.Outputs,
+// so callers must not mutate s after Build returns.
+func findOutput(s *Step, name string) *OutputSpec {
+	for i := range s.Outputs {
+		if s.Outputs[i].Name == name {
+			return &s.Outputs[i]
 		}
 	}
-	return false
+	return nil
 }
 
 func (d *DAG) resolveDeployEdges(p *Lane) error {
@@ -157,15 +210,25 @@ func (d *DAG) resolveDeployEdges(p *Lane) error {
 			continue
 		}
 		for artName, artRef := range s.Deploy.Artifacts {
-			stepName, _, err := ParseRef(artRef.From)
+			stepName, outputName, err := ParseRef(artRef.From)
 			if err != nil {
-				// Allow bare step name for pack outputs
-				stepName = artRef.From
+				return fmt.Errorf("step %q: deploy artifact %q: %w", name, artName, err)
 			}
-			if _, ok := d.Steps[stepName]; !ok {
+			fromStep, ok := d.Steps[stepName]
+			if !ok {
 				return fmt.Errorf("step %q: deploy artifact %q references unknown step %q",
 					name, artName, stepName)
 			}
+			out := findOutput(fromStep, outputName)
+			if out == nil {
+				return fmt.Errorf("step %q: deploy artifact %q: output %q not found in step %q",
+					name, artName, outputName, stepName)
+			}
+			d.DeployEdges[name] = append(d.DeployEdges[name], DeployArtifactEdge{
+				ArtifactName: artName,
+				FromStep:     fromStep,
+				FromOutput:   out,
+			})
 			d.addEdge(name, stepName)
 		}
 	}

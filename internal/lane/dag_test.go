@@ -178,7 +178,7 @@ func TestBuild_DeployArtifactEdge(t *testing.T) {
 			{
 				Name: "deploy", Env: map[string]string{}, Args: []string{},
 				Deploy: &lane.DeploySpec{
-					Artifacts: map[string]lane.ArtifactRef{"image": {From: "pack"}},
+					Artifacts: map[string]lane.ArtifactRef{"image": {From: "pack.img"}},
 				},
 			},
 		},
@@ -317,7 +317,7 @@ func TestBuild_UnknownDeployArtifact(t *testing.T) {
 			{
 				Name: "deploy", Env: map[string]string{}, Args: []string{},
 				Deploy: &lane.DeploySpec{
-					Artifacts: map[string]lane.ArtifactRef{"img": {From: "missing"}},
+					Artifacts: map[string]lane.ArtifactRef{"img": {From: "missing.out"}},
 				},
 			},
 		},
