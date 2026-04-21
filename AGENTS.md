@@ -203,6 +203,26 @@ cmd := exec.Command("podman", "run", imageRef)   // NEVER
 cmd := exec.CommandContext(ctx, "curl", url)      // NEVER
 ```
 
+### Container args must not invoke a shell
+
+Container step args must always be direct executable invocations. Never
+use `/bin/sh -c`, `/bin/bash -c`, `sh -c`, or any shell wrapper -- not
+in production lanes, not in test fixtures, not in documentation examples.
+Assume no container image has a shell installed. If a step needs to run
+a tool, invoke the tool binary directly. This applies everywhere: lane
+YAML, test fixtures, and inline lane definitions in test code.
+
+```yaml
+# CORRECT -- direct executable
+args: [hugo, --gc, --minify, -d, /out/public]
+args: [npm, ci, --prefix, /src]
+args: [git, clone, --depth, "1", "https://example.com/repo.git", /out/tree]
+
+# PROHIBITED -- shell invocation
+args: [/bin/sh, -c, "mkdir -p /out && cp -r /src /out/tree"]   # NEVER
+args: [bash, -c, "echo hello > /out/file"]                      # NEVER
+```
+
 ### Path handling
 
 All file path operations involving untrusted input (image contents, tar
