@@ -14,8 +14,8 @@ steps:
     env:
       CGO_ENABLED: "0"
     network: true
-    sources:
-      - path: ./src
+    inputs:
+      - from: src.tree
         mount: /src
     outputs:
       - name: binary

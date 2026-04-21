@@ -40,7 +40,7 @@ type CommitSigner struct {
 // Each git operation is a separate container run (exec form, no shell).
 // Returns nil (not error) if no git repo is found or if any git
 // command fails. Source provenance is best-effort enrichment.
-func (d *Deployer) captureSourceProvenance(
+func (d *Deployer) captureSourceProvenance( //nolint:unused // TODO(refactor-b/05): entire file deleted when provenance traversal lands
 	ctx context.Context,
 	sourceDirs []string,
 	gitImage string,
@@ -55,7 +55,7 @@ func (d *Deployer) captureSourceProvenance(
 }
 
 // trySourceDir attempts to capture source provenance from a single directory.
-func (d *Deployer) trySourceDir(ctx context.Context, dir, gitImage string) *SourceProvenance {
+func (d *Deployer) trySourceDir(ctx context.Context, dir, gitImage string) *SourceProvenance { //nolint:unused // see captureSourceProvenance
 	if !isGitRepo(ctx, d.Engine, dir, gitImage) {
 		return nil
 	}
@@ -93,7 +93,7 @@ func (d *Deployer) trySourceDir(ctx context.Context, dir, gitImage string) *Sour
 // Overrides entrypoint to "git" so commands work regardless of the image's
 // default entrypoint. Uses -c safe.directory=/src to handle ownership
 // differences from user namespace remapping.
-func gitRunOpts(gitImage, dir string) container.RunOpts {
+func gitRunOpts(gitImage, dir string) container.RunOpts { //nolint:unused // see captureSourceProvenance
 	opts := HardenedRunOpts()
 	opts.Image = gitImage
 	opts.Entrypoint = []string{"git"}
@@ -104,12 +104,12 @@ func gitRunOpts(gitImage, dir string) container.RunOpts {
 }
 
 // gitArgs prepends -c safe.directory=/src to the given git arguments.
-func gitArgs(args ...string) []string {
+func gitArgs(args ...string) []string { //nolint:unused // see captureSourceProvenance
 	return append([]string{"-c", "safe.directory=/src"}, args...)
 }
 
 // isGitRepo checks whether a directory contains a git repository.
-func isGitRepo(ctx context.Context, engine container.Engine, dir, gitImage string) bool {
+func isGitRepo(ctx context.Context, engine container.Engine, dir, gitImage string) bool { //nolint:unused // see captureSourceProvenance
 	var stdout bytes.Buffer
 	opts := gitRunOpts(gitImage, dir)
 	opts.Cmd = gitArgs("-C", "/src", "rev-parse", "--git-dir")
@@ -122,7 +122,7 @@ func isGitRepo(ctx context.Context, engine container.Engine, dir, gitImage strin
 
 // runGitCmd runs a git command in a container and returns trimmed stdout.
 // Each invocation is exec form (no shell). Returns empty string on failure.
-func runGitCmd(ctx context.Context, engine container.Engine, dir, gitImage string, args ...string) string {
+func runGitCmd(ctx context.Context, engine container.Engine, dir, gitImage string, args ...string) string { //nolint:unused // see captureSourceProvenance
 	var stdout, stderr bytes.Buffer
 	opts := gitRunOpts(gitImage, dir)
 	opts.Cmd = gitArgs(args...)

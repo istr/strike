@@ -7,8 +7,8 @@ steps:
     args: ["build"]
     env: {}
     inputs: []
-    sources:
-      - path: "../secret"
-        mount: /src
     secrets: []
-    outputs: []
+    outputs:
+      - name: binary
+        type: file
+        path: "../escape"

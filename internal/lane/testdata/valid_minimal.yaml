@@ -8,7 +8,6 @@ steps:
     env:
       CGO_ENABLED: "0"
     inputs: []
-    sources: []
     secrets: []
     outputs:
       - name: binary

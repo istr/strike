@@ -7,7 +7,6 @@ steps:
     args: [go, build, -o, /out/base]
     env: {}
     inputs: []
-    sources: []
     secrets: []
     outputs:
       - name: custom_image
@@ -20,7 +19,6 @@ steps:
     args: [/app/run]
     env: {}
     inputs: []
-    sources: []
     secrets: []
     outputs:
       - name: result

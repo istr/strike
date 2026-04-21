@@ -7,7 +7,6 @@ steps:
     args: ["go", "build"]
     env: {}
     inputs: []
-    sources: []
     secrets: []
     outputs:
       - name: binary
@@ -38,6 +37,5 @@ steps:
     args: []
     env: {}
     inputs: []
-    sources: []
     secrets: []
     outputs: []

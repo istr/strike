@@ -15,6 +15,7 @@ import (
 const networkNone = "none"
 
 func TestSourceProvenance(t *testing.T) {
+	t.Skip("TODO(refactor-b/05): source provenance removed from Deployer, will be replaced by provenance traversal")
 	engine := needsEngine(t)
 	ctx := context.Background()
 
@@ -40,7 +41,6 @@ func TestSourceProvenance(t *testing.T) {
 		Engine:       engine,
 		EngineID:     engine.Identity(),
 		ArtifactRefs: map[string]string{"bin": "build.bin"},
-		SourceDirs:   []string{srcDir},
 	}
 
 	att, err := deployer.Execute(ctx, step, state)
@@ -68,13 +68,11 @@ func TestSourceProvenance(t *testing.T) {
 }
 
 func TestSourceProvenanceNoGitRepo(t *testing.T) {
+	t.Skip("TODO(refactor-b/05): source provenance removed from Deployer, will be replaced by provenance traversal")
 	engine := needsEngine(t)
 	ctx := context.Background()
 
 	ensureImage(t, engine, goImage)
-
-	// Empty temp dir — no .git.
-	emptyDir := containerTempDir(t)
 
 	state := lane.NewState()
 	if err := state.Register("build", "bin", lane.Artifact{
@@ -89,7 +87,6 @@ func TestSourceProvenanceNoGitRepo(t *testing.T) {
 		Engine:       engine,
 		EngineID:     engine.Identity(),
 		ArtifactRefs: map[string]string{"bin": "build.bin"},
-		SourceDirs:   []string{emptyDir},
 	}
 
 	att, err := deployer.Execute(ctx, step, state)

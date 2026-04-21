@@ -12,12 +12,11 @@ import (
 
 // Run holds the configuration for executing a step container.
 type Run struct {
-	Engine       container.Engine
-	Secrets      map[string]lane.SecretString
-	Step         *lane.Step
-	OutputDir    string
-	InputMounts  []Mount
-	SourceMounts []Mount
+	Engine      container.Engine
+	Secrets     map[string]lane.SecretString
+	Step        *lane.Step
+	OutputDir   string
+	InputMounts []Mount
 }
 
 // Mount describes a bind mount from host to container.
@@ -50,11 +49,6 @@ func (r Run) Execute(ctx context.Context) error {
 	for _, m := range r.InputMounts {
 		mounts = append(mounts, container.Mount{
 			Source: m.Host, Target: m.Container, ReadOnly: m.ReadOnly,
-		})
-	}
-	for _, m := range r.SourceMounts {
-		mounts = append(mounts, container.Mount{
-			Source: m.Host, Target: m.Container, ReadOnly: true,
 		})
 	}
 	// Output directory

@@ -122,12 +122,11 @@ type Deployer struct {
 	ArtifactRefs map[string]string // pre-resolved: artifact name → "step.output" state ref
 	SigningKey   []byte
 	KeyPassword  []byte
-	SourceDirs   []string // host paths with source mounts (for git provenance)
 }
 
 // Execute runs a deploy step: capture pre-state, detect drift, execute
 // the deploy action, capture post-state, and build the attestation.
-func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.State) (*Attestation, error) { //nolint:gocyclo // sequential orchestrator; splitting further hurts readability
+func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.State) (*Attestation, error) {
 	spec := step.Deploy
 	if spec == nil {
 		return nil, fmt.Errorf("step %q: not a deploy step", step.Name)
@@ -157,11 +156,9 @@ func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.Sta
 		return nil, err
 	}
 
-	// 3.5. Capture source provenance (best-effort)
+	// 3.5. Source provenance — TODO(step-05): replace with provenance
+	// record traversal from the DAG once ProvenanceRecord is wired in.
 	var sourceProv *SourceProvenance
-	if len(d.SourceDirs) > 0 && spec.Source != nil && spec.Source.Git_image != "" {
-		sourceProv = d.captureSourceProvenance(ctx, d.SourceDirs, string(spec.Source.Git_image))
-	}
 
 	// 4. Execute deploy action
 	if execErr := d.executeMethod(ctx, spec); execErr != nil {

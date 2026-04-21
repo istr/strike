@@ -8,7 +8,7 @@ build: generate
 # Step 1: Export CUE specs to JSON Schema.
 # These JSON Schema files are the cross-implementation contract that
 # both the Go and (future) Rust validators build from.
-specs: specs/lane.cue specs/attestation.cue specs/artifact.cue
+specs: specs/lane.cue specs/source-provenance.cue specs/attestation.cue specs/artifact.cue
 	cue export ./specs:lane -e '#Lane' \
 	    --out jsonschema --force -o specs/lane.schema.json
 	cue export ./specs:deploy -e '#Attestation' \

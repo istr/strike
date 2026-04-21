@@ -208,7 +208,7 @@ func TestParse_PathTraversal(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for path traversal")
 	}
-	if !strings.Contains(err.Error(), "relative to lane root") {
+	if !strings.Contains(err.Error(), "must be absolute") {
 		t.Errorf("error should mention path constraint: %v", err)
 	}
 }

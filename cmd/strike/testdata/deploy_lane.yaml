@@ -8,7 +8,6 @@ steps:
     env:
       CGO_ENABLED: "0"
     inputs: []
-    sources: []
     secrets: []
     outputs:
       - name: binary
@@ -26,7 +25,6 @@ steps:
     args: []
     env: {}
     inputs: []
-    sources: []
     secrets: []
     outputs:
       - name: image
@@ -56,6 +54,5 @@ steps:
     args: []
     env: {}
     inputs: []
-    sources: []
     secrets: []
     outputs: []

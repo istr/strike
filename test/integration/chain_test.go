@@ -81,7 +81,7 @@ func TestEndToEndChain(t *testing.T) {
 		t.Fatal(regErr)
 	}
 
-	att := chainDeploy(t, engine, keyPEM, state, localTag, srcDir)
+	att := chainDeploy(t, engine, keyPEM, state, localTag)
 
 	// --- Part 5: Verify the complete chain ---
 	verifyChain(t, att, imageDigest.String(), keyPEM)
@@ -105,7 +105,7 @@ func chainPackSpec() *lane.PackSpec {
 
 func chainDeploy(
 	t *testing.T, engine container.Engine,
-	keyPEM []byte, state *lane.State, imageRef, srcDir string,
+	keyPEM []byte, state *lane.State, imageRef string,
 ) *deploy.Attestation {
 	t.Helper()
 	ctx := context.Background()
@@ -143,7 +143,6 @@ func chainDeploy(
 		ArtifactRefs: map[string]string{"app": "pack.image"},
 		SigningKey:   keyPEM,
 		KeyPassword:  nil,
-		SourceDirs:   []string{srcDir},
 	}
 
 	att, err := deployer.Execute(ctx, step, state)
@@ -167,8 +166,10 @@ func verifyChain(t *testing.T, att *deploy.Attestation, imageDigest string, keyP
 			att.Artifacts["app"].Digest, imageDigest)
 	}
 
-	// C. Source provenance present.
-	chainVerifySource(t, att)
+	// C. Source provenance — temporarily nil until step 05 wires provenance traversal.
+	if att.Source != nil {
+		t.Error("expected nil source provenance (removed in refactor-b/03)")
+	}
 
 	// D. Engine identity present.
 	if att.Engine == nil {
@@ -184,29 +185,9 @@ func verifyChain(t *testing.T, att *deploy.Attestation, imageDigest string, keyP
 	chainVerifySignature(t, att, imageDigest, keyPEM)
 
 	t.Logf("=== End-to-end chain verified ===")
-	t.Logf("  source:      %s (%s)", att.Source.Commit[:12], att.Source.Ref)
 	t.Logf("  image:       %s", imageDigest[:19])
 	t.Logf("  deploy:      %s", att.DeployID)
 	t.Logf("  signed:      yes (DSSE verified)")
-	t.Logf("  all_signed:  %v", att.Source.AllSigned)
-}
-
-func chainVerifySource(t *testing.T, att *deploy.Attestation) {
-	t.Helper()
-	if att.Source == nil {
-		t.Fatal("source provenance missing")
-	}
-	if len(att.Source.Commit) != 40 {
-		t.Errorf("commit hash length: %d, want 40", len(att.Source.Commit))
-	}
-	if att.Source.Ref == "" {
-		t.Error("source ref is empty")
-	}
-	if att.Source.AllSigned {
-		t.Error("all_signed should be false (no signing configured)")
-	}
-	t.Logf("source: commit=%s ref=%s unsigned=%d",
-		att.Source.Commit[:12], att.Source.Ref, len(att.Source.UnsignedCommits))
 }
 
 func chainVerifySignature(t *testing.T, att *deploy.Attestation, imageDigest string, keyPEM []byte) {

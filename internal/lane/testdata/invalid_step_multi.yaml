@@ -10,6 +10,5 @@ steps:
     args: []
     env: {}
     inputs: []
-    sources: []
     secrets: []
     outputs: []

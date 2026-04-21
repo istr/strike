@@ -7,7 +7,6 @@ steps:
     args: [sh, -c, "echo ok"]
     env: {}
     inputs: []
-    sources: []
     secrets: []
     outputs:
       - name: data
@@ -27,7 +26,6 @@ steps:
       - name: data
         from: generate.data
         mount: /input/data.json
-    sources: []
     secrets: []
     outputs: []
   - name: consumer_b
@@ -38,7 +36,6 @@ steps:
       - name: config
         from: generate.config
         mount: /input/config.yaml
-    sources: []
     secrets: []
     outputs: []
   - name: consumer_c
@@ -49,6 +46,5 @@ steps:
       - name: manifest
         from: generate.manifest
         mount: /input/manifest.txt
-    sources: []
     secrets: []
     outputs: []

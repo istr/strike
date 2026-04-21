@@ -108,7 +108,6 @@ func (rc *runContext) executeDeploy(ctx context.Context, step *lane.Step, stepNa
 		ArtifactRefs: artifactRefs,
 		SigningKey:   signingKey,
 		KeyPassword:  keyPassword,
-		SourceDirs:   rc.collectSourceDirs(step),
 	}
 
 	att, err := d.Execute(ctx, step, rc.laneState)
@@ -164,23 +163,12 @@ func (rc *runContext) resolveImageDigest(ctx context.Context, step *lane.Step, s
 }
 
 func (rc *runContext) computeSpecHash(step *lane.Step, stepName string, imageDigest lane.Digest) (lane.Digest, string, error) {
-	safeName := sanitizeForLog(stepName)
-
 	inputHashes := map[string]lane.Digest{}
 	for _, e := range rc.dag.InputEdges[string(step.Name)] {
 		inputHashes[e.LocalName] = rc.state.specHashes[string(e.FromStep.Name)]
 	}
 
-	sourceHashes := map[string]lane.Digest{}
-	for _, src := range step.Sources {
-		h, err := registry.HashPath(rc.laneRoot, rc.laneDir, src.Path)
-		if err != nil {
-			return lane.Digest{}, "", fmt.Errorf("%s: source hash %s: %w", safeName, src.Path, err)
-		}
-		sourceHashes[src.Mount] = h
-	}
-
-	key := registry.SpecHash(step, imageDigest, inputHashes, sourceHashes)
+	key := registry.SpecHash(step, imageDigest, inputHashes, map[string]lane.Digest{})
 	tag := registry.Tag(rc.lane.Registry, stepName, key)
 	rc.state.specHashes[stepName] = key
 	return key, tag, nil
@@ -325,15 +313,13 @@ func (rc *runContext) executeContainerStep(ctx context.Context, step *lane.Step,
 	}
 
 	inputMounts := rc.buildInputMounts(step)
-	sourceMounts := rc.buildSourceMounts(step)
 
 	run := executor.Run{
-		Engine:       rc.engine,
-		Step:         step,
-		InputMounts:  inputMounts,
-		SourceMounts: sourceMounts,
-		OutputDir:    outDir,
-		Secrets:      secrets,
+		Engine:      rc.engine,
+		Step:        step,
+		InputMounts: inputMounts,
+		OutputDir:   outDir,
+		Secrets:     secrets,
 	}
 	if execErr := run.Execute(ctx); execErr != nil {
 		return fmt.Errorf("%s: execution failed: %w", safeName, execErr)
@@ -405,37 +391,6 @@ func (rc *runContext) buildInputMounts(step *lane.Step) []executor.Mount {
 		}
 	}
 	return mounts
-}
-
-// collectSourceDirs returns the host paths of all source mounts from the
-// deploy step's upstream dependencies. Used for git provenance capture.
-func (rc *runContext) collectSourceDirs(step *lane.Step) []string {
-	seen := map[string]bool{}
-	var dirs []string
-	for _, s := range rc.dag.Order {
-		ds := rc.dag.Steps[s]
-		for _, src := range ds.Sources {
-			dir := filepath.Join(rc.laneDir, src.Path)
-			if !seen[dir] {
-				seen[dir] = true
-				dirs = append(dirs, dir)
-			}
-		}
-	}
-	_ = step // deploy step itself has no sources, we collect from the lane
-	return dirs
-}
-
-func (rc *runContext) buildSourceMounts(step *lane.Step) []executor.Mount {
-	sourceMounts := []executor.Mount{}
-	for _, src := range step.Sources {
-		sourceMounts = append(sourceMounts, executor.Mount{
-			Host:      filepath.Join(rc.laneDir, src.Path),
-			Container: src.Mount,
-			ReadOnly:  true,
-		})
-	}
-	return sourceMounts
 }
 
 func (rc *runContext) loadOCIOutputs(ctx context.Context, step *lane.Step, stepName, safeName string, outRoot *os.Root) error {

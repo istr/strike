@@ -124,35 +124,6 @@ func TestBuildInputMounts_Multiple(t *testing.T) {
 }
 
 // --------------------------------------------------------------------------.
-// buildSourceMounts
-// --------------------------------------------------------------------------.
-
-func TestBuildSourceMounts(t *testing.T) {
-	eng := &mockEngine{}
-	rc := newTestRC(t, eng)
-
-	step := &lane.Step{
-		Sources: []lane.SourceRef{
-			{Path: "src", Mount: "/src"},
-		},
-	}
-
-	mounts := rc.buildSourceMounts(step)
-	if len(mounts) != 1 {
-		t.Fatalf("expected 1 mount, got %d", len(mounts))
-	}
-	if mounts[0].Container != "/src" {
-		t.Errorf("container = %q, want /src", mounts[0].Container)
-	}
-	if !mounts[0].ReadOnly {
-		t.Error("expected read-only")
-	}
-	if !strings.HasSuffix(mounts[0].Host, "src") {
-		t.Errorf("host should end in 'src', got %q", mounts[0].Host)
-	}
-}
-
-// --------------------------------------------------------------------------.
 // guardUnsignedImages
 // --------------------------------------------------------------------------.
 
@@ -302,22 +273,12 @@ func TestComputeSpecHash_ChangesWithImageDigest(t *testing.T) {
 	}
 }
 
-func TestComputeSpecHash_WithSources(t *testing.T) {
+func TestComputeSpecHash_NoSources(t *testing.T) {
 	rc := newTestRC(t, &mockEngine{})
 
-	// Create a source file in the lane dir.
-	srcDir := filepath.Join(rc.laneDir, "src")
-	if err := os.MkdirAll(srcDir, 0o750); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(srcDir, "main.go"), []byte("package main"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
 	step := &lane.Step{
-		Args:    []string{"build"},
-		Env:     map[string]string{},
-		Sources: []lane.SourceRef{{Path: "src", Mount: "/src"}},
+		Args: []string{"build"},
+		Env:  map[string]string{},
 	}
 
 	h, _, err := rc.computeSpecHash(step, "build", lane.MustParseDigest("sha256:img"))
@@ -606,24 +567,6 @@ func TestRunStep_InvalidTimeout(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "invalid timeout") {
 		t.Errorf("error should mention 'invalid timeout': %v", err)
-	}
-}
-
-// --------------------------------------------------------------------------.
-// executor.Mount field checks
-// --------------------------------------------------------------------------.
-
-func TestBuildSourceMounts_HostPathJoined(t *testing.T) {
-	rc := newTestRC(t, &mockEngine{})
-	step := &lane.Step{
-		Sources: []lane.SourceRef{
-			{Path: "a/b", Mount: "/m"},
-		},
-	}
-	mounts := rc.buildSourceMounts(step)
-	want := filepath.Join(rc.laneDir, "a/b")
-	if mounts[0].Host != want {
-		t.Errorf("host = %q, want %q", mounts[0].Host, want)
 	}
 }
 

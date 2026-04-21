@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path"
-	"path/filepath"
 	"time"
 
 	"cuelang.org/go/cue"
@@ -86,12 +85,9 @@ func Parse(path string) (*Lane, error) {
 	return &p, nil
 }
 
-// ValidatePaths rejects unsafe paths in sources, outputs, and pack dests.
+// ValidatePaths rejects unsafe paths in outputs and pack dests.
 // Defense-in-depth -- os.Root enforces at runtime, but rejecting early
 // produces better error messages.
-//
-// sources[].path is a host path relative to the lane root -- it must
-// be local (filepath.IsLocal) to prevent escape from the lane scope.
 //
 // outputs[].path and pack.files[].dest are container-internal paths
 // (e.g., /src/node_modules, /usr/bin/strike). They must be absolute
@@ -105,13 +101,8 @@ func ValidatePaths(p *Lane) error {
 	return nil
 }
 
-// validateStepPaths checks one step's source, output, pack-dest, and workdir paths.
+// validateStepPaths checks one step's output, pack-dest, and workdir paths.
 func validateStepPaths(s Step) error {
-	for _, src := range s.Sources {
-		if !filepath.IsLocal(src.Path) {
-			return fmt.Errorf("step %q: source path %q must be relative to lane root", s.Name, src.Path)
-		}
-	}
 	for _, out := range s.Outputs {
 		if err := validateContainerPath(out.Path); err != nil {
 			return fmt.Errorf("step %q: output path %q: %w", s.Name, out.Path, err)

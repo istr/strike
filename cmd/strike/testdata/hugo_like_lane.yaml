@@ -7,7 +7,6 @@ steps:
     args: [npm, ci]
     env: {}
     inputs: []
-    sources: []
     secrets: []
     outputs:
       - name: node_modules
@@ -21,7 +20,6 @@ steps:
       - name: node_modules
         from: npm_install.node_modules
         mount: /src/node_modules
-    sources: []
     secrets: []
     outputs:
       - name: site

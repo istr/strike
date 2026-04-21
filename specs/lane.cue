@@ -40,7 +40,6 @@ package lane
 	args:        [...string] @go(Args)
 	env:         [string]: string @go(Env)
 	inputs:      [...#InputRef] @go(Inputs)
-	sources:     [...#SourceRef] @go(Sources)
 	outputs:     [...#OutputSpec] @go(Outputs)
 	secrets:     [...#SecretRef] @go(Secrets)
 	workdir?:    string & =~"^/" @go(Workdir)
@@ -48,7 +47,8 @@ package lane
 	timeout?:    #Duration @go(Timeout)
 	pack?:       #PackSpec @go(Pack,optional=nillable)
 	deploy?:     #DeploySpec @go(Deploy,optional=nillable)
-	// constraint: exactly one of image, image_from, pack, or deploy — validated in Go
+	provenance?: #ProvenanceSpec @go(Provenance,optional=nillable)
+	// constraint: exactly one of image, image_from, pack, or deploy -- validated in Go
 }
 
 // ---------------------------------------------------------------------------
@@ -73,13 +73,6 @@ package lane
 	@go(InputRef)
 	name:    string @go(Name)
 	from:    string @go(From)           // "step_name.output_name"
-	mount:   string & =~"^/" @go(Mount)
-	digest?: #Digest @go(Digest,type=*Digest)
-}
-
-#SourceRef: {
-	@go(SourceRef)
-	path:    string @go(Path)
 	mount:   string & =~"^/" @go(Mount)
 	digest?: #Digest @go(Digest,type=*Digest)
 }
@@ -258,6 +251,26 @@ package lane
 	@go(CaptureMount)
 	source: string @go(Source)
 	target: string & =~"^/" @go(Target)
+}
+
+// ---------------------------------------------------------------------------
+// Provenance declaration
+// ---------------------------------------------------------------------------
+
+// ProvenanceSpec declares that a step produces a source-provenance
+// record at a specific path inside its container, in a specific format.
+// After step exit, strike reads the file, validates against the schema
+// for the declared type, and stores the resulting record in lane state.
+//
+// path is an absolute container path that must lie within an output mount.
+// require_signed enforces that the produced record's signature.verified
+// is true; otherwise the step fails. Strike trusts the container's claim
+// -- cryptographic verification happens inside the container, not in strike.
+#ProvenanceSpec: {
+	@go(ProvenanceSpec)
+	type:            "git" | "tarball" | "oci" | "url" @go(Type)
+	path:            string & =~"^/" @go(Path)
+	require_signed?: bool @go(RequireSigned)
 }
 
 // ---------------------------------------------------------------------------
