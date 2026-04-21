@@ -1,0 +1,94 @@
+name: hugo
+registry: localhost:5555/test
+secrets: {}
+steps:
+  - name: source
+    image: docker.io/library/busybox@sha256:abababababababababababababababababababababababababababababababab
+    args: [git, clone, --depth, "1", "https://example.com/site.git", /out/tree]
+    network: true
+    env: {}
+    inputs: []
+    secrets: []
+    outputs:
+      - { name: tree, type: directory, path: /out/tree }
+    provenance:
+      type: git
+      path: /out/provenance.json
+
+  - name: npm_install
+    image: docker.io/library/node@sha256:cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd
+    args: [npm, ci, --ignore-scripts, --no-bin-links, --prefix, /src]
+    workdir: /src
+    network: true
+    env: {}
+    inputs:
+      - { name: tree, from: source.tree, mount: /src }
+    secrets: []
+    outputs:
+      - { name: node_modules, type: directory, path: /out/node_modules }
+
+  - name: workspace
+    args: []
+    env: {}
+    inputs: []
+    secrets: []
+    pack:
+      base: docker.io/library/busybox@sha256:efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef
+      files:
+        - { from: source.tree, dest: /work }
+        - { from: npm_install.node_modules, dest: /work/node_modules }
+    outputs:
+      - { name: image, type: image, path: /out/workspace.tar }
+
+  - name: build
+    image_from:
+      step: workspace
+      output: image
+    args: [hugo, --gc, --minify, -d, /out/public]
+    workdir: /work
+    env: {}
+    inputs: []
+    secrets: []
+    outputs:
+      - { name: site, type: directory, path: /out/public }
+
+  - name: pack_site
+    args: []
+    env: {}
+    inputs: []
+    secrets: []
+    pack:
+      base: docker.io/library/busybox@sha256:efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef
+      files:
+        - { from: build.site, dest: /usr/share/nginx/html }
+      config:
+        entrypoint: [nginx, -g, "daemon off;"]
+    outputs:
+      - { name: image, type: image, path: /out/image.tar }
+
+  - name: deploy
+    deploy:
+      method:
+        type: custom
+        image: docker.io/library/alpine@sha256:1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a
+      artifacts:
+        site:
+          from: pack_site.image
+      target:
+        type: registry
+        description: push site image to registry
+      attestation:
+        pre_state:
+          required: false
+          capture: []
+        post_state:
+          required: false
+          capture: []
+        drift:
+          detect: false
+          on_drift: warn
+    args: []
+    env: {}
+    inputs: []
+    secrets: []
+    outputs: []

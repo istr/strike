@@ -65,12 +65,6 @@ func Tag(registry, stepName string, hash lane.Digest) string {
 	return fmt.Sprintf("%s:%s-%s", registry, stepName, short)
 }
 
-// HashPath computes SHA256 of a file or directory within the given root scope.
-// Returns a typed digest.
-func HashPath(root *os.Root, laneDir, path string) (lane.Digest, error) {
-	return lane.SourceDigest(root, laneDir, path)
-}
-
 // HashDir computes SHA256 and total file size of a directory within the given
 // root scope. Size is the sum of regular file sizes.
 func HashDir(root *os.Root, laneDir, path string) (lane.Digest, int64, error) {

@@ -13,11 +13,12 @@ package deploy
 
 import "github.com/istr/strike/specs:lane"
 
-// Re-export Rekor types from lane for use within the deploy package.
-// attestation.cue references #RekorEntry -- this alias keeps the name
-// available without duplicating the definition.
-#RekorEntry:    lane.#RekorEntry
-#InclusionProof: lane.#InclusionProof
+// Re-export types from lane for use within the deploy package.
+// attestation.cue references these -- aliases keep the names
+// available without duplicating the definitions.
+#RekorEntry:       lane.#RekorEntry
+#InclusionProof:   lane.#InclusionProof
+#ProvenanceRecord: lane.#ProvenanceRecord
 
 // SignedArtifact is the provenance record for one artifact.
 #SignedArtifact: {

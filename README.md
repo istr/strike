@@ -84,17 +84,23 @@ external container image must be SHA-256 pinned:
 
 ```yaml
 steps:
-  - name: build
-    image: cgr.dev/chainguard/go@sha256:abc123...
-    args: [build, -C, /src, -o, /out/binary, .]
+  - name: source
+    image: docker.io/library/alpine/git@sha256:abc123...
+    args: [git, clone, --depth, "1", "https://example.com/repo.git", /out/tree]
     network: true
-    sources:
-      - path: .
-        mount: /src
     outputs:
-      - name: binary
-        type: file
-        path: /out/binary
+      - { name: tree, type: directory, path: /out/tree }
+    provenance:
+      type: git
+      path: /out/provenance.json
+
+  - name: build
+    image: cgr.dev/chainguard/go@sha256:def456...
+    args: [go, build, -C, /src, -o, /out/binary, .]
+    inputs:
+      - { name: tree, from: source.tree, mount: /src }
+    outputs:
+      - { name: binary, type: file, path: /out/binary }
 ```
 
 Steps run with `--network=none` by default. Set `network: true` to allow
@@ -128,7 +134,7 @@ Each step's cache key is a spec hash -- a Merkle tree over:
 - the image digest
 - the step arguments
 - input hashes (spec hashes of producing steps, not content)
-- source file hashes
+- environment variables
 
 Cache lookup is local-first, then remote. Cache artifacts are stored as OCI
 images in any standard registry.

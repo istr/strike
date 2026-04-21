@@ -30,37 +30,44 @@ func TestRunStep_RealLanePatterns_NoPanic(t *testing.T) {
 
 	for _, path := range fixtures {
 		t.Run(filepath.Base(path), func(t *testing.T) {
-			p, err := lane.Parse(path)
-			if err != nil {
-				t.Fatalf("lane.Parse(%s): %v", path, err)
-			}
-			dag, err := lane.Build(p)
-			if err != nil {
-				t.Fatalf("lane.Build(%s): %v", path, err)
-			}
-
-			eng := &mockEngine{
-				imageExistsRV: true,
-				runExitCode:   0,
-				inspectRV: &container.ImageInfo{
-					Annotations: map[string]string{},
-				},
-			}
-			rc := newTestRC(t, eng)
-			rc.lane = p
-			rc.dag = dag
-
-			for _, stepName := range dag.Order {
-				// Stub output dir so downstream steps find their inputs.
-				rc.state.outputDirs[stepName] = t.TempDir()
-				// runStep may return errors (missing files, no registry), but
-				// must never panic. The invariant we're testing is:
-				// Build-accepts ⇒ runStep is panic-free.
-				if err := rc.runStep(stepName); err != nil {
-					t.Logf("step %q returned error (OK, panic would not be): %v",
-						stepName, err)
-				}
-			}
+			assertLanePanicFree(t, path)
 		})
+	}
+}
+
+// assertLanePanicFree parses and builds a lane, then runs every step
+// through a mock engine. Errors are acceptable; panics are not.
+func assertLanePanicFree(t *testing.T, path string) {
+	t.Helper()
+	p, err := lane.Parse(path)
+	if err != nil {
+		t.Fatalf("lane.Parse(%s): %v", path, err)
+	}
+	dag, err := lane.Build(p)
+	if err != nil {
+		t.Fatalf("lane.Build(%s): %v", path, err)
+	}
+
+	eng := &mockEngine{
+		imageExistsRV: true,
+		runExitCode:   0,
+		inspectRV: &container.ImageInfo{
+			Annotations: map[string]string{},
+		},
+	}
+	rc := newTestRC(t, eng)
+	rc.lane = p
+	rc.dag = dag
+
+	for _, stepName := range dag.Order {
+		rc.state.outputDirs[stepName] = t.TempDir()
+		step := dag.Steps[stepName]
+		if step.Provenance != nil {
+			placeFakeProvenance(t, rc.state.outputDirs[stepName], step)
+		}
+		if err := rc.runStep(stepName); err != nil {
+			t.Logf("step %q returned error (OK, panic would not be): %v",
+				stepName, err)
+		}
 	}
 }

@@ -30,48 +30,6 @@ func lstat(path string) (fs.FileInfo, bool) {
 	return info, err == nil
 }
 
-// SourceDigest computes the sha256 digest of a local path (file or directory)
-// within the given root scope.
-func SourceDigest(root *os.Root, laneDir, path string) (Digest, error) {
-	if err := rejectSymlink(filepath.Join(laneDir, path), path); err != nil {
-		return Digest{}, err
-	}
-	info, err := root.Stat(path)
-	if err != nil {
-		return Digest{}, fmt.Errorf("source digest %q: %w", path, err)
-	}
-	if info.IsDir() {
-		return dirDigest(root, laneDir, path)
-	}
-	return fileDigest(root, path)
-}
-
-func fileDigest(root *os.Root, path string) (digest Digest, err error) {
-	f, err := root.Open(path)
-	if err != nil {
-		return Digest{}, err
-	}
-	defer func() {
-		if cerr := f.Close(); cerr != nil && err == nil {
-			err = cerr
-		}
-	}()
-
-	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
-		return Digest{}, err
-	}
-	return Digest{Algorithm: "sha256", Hex: hex.EncodeToString(h.Sum(nil))}, nil
-}
-
-// dirDigest hashes all files in a directory tree, sorted by relative path.
-// WalkDir enumerates via the absolute path; file reads go through root.Open
-// for TOCTOU safety.
-func dirDigest(root *os.Root, laneDir, dir string) (Digest, error) {
-	d, _, err := dirDigestWithSize(root, laneDir, dir)
-	return d, err
-}
-
 // DirDigestWithSize computes the sha256 digest and total file size of a
 // directory tree within the given root scope. Size is the sum of regular
 // file sizes (matching du -sb behavior).

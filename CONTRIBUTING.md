@@ -31,7 +31,7 @@ strike takes a different approach:
 
 - **Reproducible builds.** The bootstrap process proves reproducibility: the
   tool builds itself twice and compares the output. Cache keys are derived from
-  a Merkle tree over image digests, arguments, and source hashes -- not
+  a Merkle tree over image digests, arguments, and input hashes -- not
   timestamps, not build IDs, not mutable tags.
 
 - **Schema-driven data model.** Every data structure that crosses a package

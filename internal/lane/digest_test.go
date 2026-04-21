@@ -25,106 +25,92 @@ func openTestRoot(t *testing.T, dir string) *os.Root {
 	return root
 }
 
-func TestSourceDigestFile(t *testing.T) {
+func TestDirDigestWithSize_SumOfFileSizes(t *testing.T) {
 	tmp := t.TempDir()
-	path := filepath.Join(tmp, "hello.txt")
-	if err := os.WriteFile(path, []byte("hello world"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	mustMkdirAll(t, filepath.Join(tmp, "out"))
+	mustWriteFile(t, filepath.Join(tmp, "out", "a.bin"), strings.Repeat("a", 100))
+	mustWriteFile(t, filepath.Join(tmp, "out", "b.bin"), strings.Repeat("b", 200))
+	mustWriteFile(t, filepath.Join(tmp, "out", "c.bin"), strings.Repeat("c", 300))
 
 	root := openTestRoot(t, tmp)
-
-	d1, err := lane.SourceDigest(root, tmp, "hello.txt")
+	d, size, err := lane.DirDigestWithSize(root, tmp, "out")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if d1.Algorithm != testAlgoSHA256 {
-		t.Fatalf("expected sha256: prefix, got %q", d1)
+	if d.Algorithm != testAlgoSHA256 {
+		t.Fatalf("expected sha256, got %q", d.Algorithm)
 	}
+	if size != 600 {
+		t.Fatalf("expected size 600, got %d", size)
+	}
+}
 
-	// Same content -> same digest
-	d2, err := lane.SourceDigest(root, tmp, "hello.txt")
+func TestDirDigestWithSize_EmptyDir(t *testing.T) {
+	tmp := t.TempDir()
+	mustMkdirAll(t, filepath.Join(tmp, "empty"))
+
+	root := openTestRoot(t, tmp)
+	_, size, err := lane.DirDigestWithSize(root, tmp, "empty")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if size != 0 {
+		t.Fatalf("expected size 0, got %d", size)
+	}
+}
+
+func TestDirDigestWithSize_NestedFiles(t *testing.T) {
+	tmp := t.TempDir()
+	mustMkdirAll(t, filepath.Join(tmp, "out", "sub"))
+	mustWriteFile(t, filepath.Join(tmp, "out", "a.txt"), strings.Repeat("x", 50))
+	mustWriteFile(t, filepath.Join(tmp, "out", "sub", "b.txt"), strings.Repeat("y", 150))
+
+	root := openTestRoot(t, tmp)
+	_, size, err := lane.DirDigestWithSize(root, tmp, "out")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if size != 200 {
+		t.Fatalf("expected size 200, got %d", size)
+	}
+}
+
+func TestDirDigestWithSize_Deterministic(t *testing.T) {
+	tmp := t.TempDir()
+	mustMkdirAll(t, filepath.Join(tmp, "out"))
+	mustWriteFile(t, filepath.Join(tmp, "out", "f.txt"), "content")
+
+	root := openTestRoot(t, tmp)
+	d1, _, err := lane.DirDigestWithSize(root, tmp, "out")
+	if err != nil {
+		t.Fatal(err)
+	}
+	d2, _, err := lane.DirDigestWithSize(root, tmp, "out")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if d1 != d2 {
-		t.Fatalf("same file, different digest: %q vs %q", d1, d2)
+		t.Fatalf("same directory produced different digests: %q vs %q", d1, d2)
 	}
+}
 
-	// Different content -> different digest
-	if writeErr := os.WriteFile(path, []byte("different"), 0o600); writeErr != nil {
-		t.Fatal(writeErr)
-	}
-	d3, err := lane.SourceDigest(root, tmp, "hello.txt")
+func TestDirDigestWithSize_ContentChange(t *testing.T) {
+	tmp := t.TempDir()
+	mustMkdirAll(t, filepath.Join(tmp, "out"))
+	mustWriteFile(t, filepath.Join(tmp, "out", "f.txt"), "original")
+
+	root := openTestRoot(t, tmp)
+	d1, _, err := lane.DirDigestWithSize(root, tmp, "out")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if d1 == d3 {
+	mustWriteFile(t, filepath.Join(tmp, "out", "f.txt"), "changed")
+	d2, _, err := lane.DirDigestWithSize(root, tmp, "out")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d1 == d2 {
 		t.Fatal("different content should produce different digest")
-	}
-}
-
-func TestSourceDigestDir(t *testing.T) {
-	tmp := t.TempDir()
-	srcDir := filepath.Join(tmp, "src")
-	if err := os.MkdirAll(filepath.Join(srcDir, "sub"), 0o750); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(srcDir, "a.go"), []byte("package main"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(srcDir, "sub", "b.go"), []byte("package sub"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	root := openTestRoot(t, tmp)
-
-	d1, err := lane.SourceDigest(root, tmp, "src")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if d1.Algorithm != testAlgoSHA256 {
-		t.Fatalf("expected sha256: prefix, got %q", d1)
-	}
-
-	// Same content -> same digest (deterministic)
-	d2, err := lane.SourceDigest(root, tmp, "src")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if d1 != d2 {
-		t.Fatal("same directory should produce same digest")
-	}
-
-	// Change a file -> different digest
-	if writeErr := os.WriteFile(filepath.Join(srcDir, "sub", "b.go"), []byte("package changed"), 0o600); writeErr != nil {
-		t.Fatal(writeErr)
-	}
-	d3, err := lane.SourceDigest(root, tmp, "src")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if d1 == d3 {
-		t.Fatal("changed file should change directory digest")
-	}
-}
-
-func TestSourceDigestRejectsEscape(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "ok.txt"), []byte("hello"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	root := openTestRoot(t, dir)
-
-	// Valid path succeeds
-	if _, err := lane.SourceDigest(root, dir, "ok.txt"); err != nil {
-		t.Fatalf("valid path failed: %v", err)
-	}
-
-	// Traversal path fails
-	if _, err := lane.SourceDigest(root, dir, "../../../etc/passwd"); err == nil {
-		t.Fatal("expected error for traversal path")
 	}
 }
 
@@ -143,18 +129,17 @@ func symlinkTestCases() []symlinkTestCase {
 		{"broken symlink", setupBrokenSymlink, "src", "symlink not allowed: src/broken -> nonexistent"},
 		{"symlink to directory", setupSymlinkDir, "src", "symlink not allowed: src/link-dir -> real-dir"},
 		{"nested symlink", setupNestedSymlink, "src", "symlink not allowed: src/sub/link.go -> real.go"},
-		{"top-level symlink to file", setupTopLevelSymlinkFile, "link.txt", "symlink not allowed: link.txt -> real.txt"},
 		{"top-level symlink to dir", setupTopLevelSymlinkDir, "link-dir", "symlink not allowed: link-dir -> real-dir"},
 	}
 }
 
-func TestSourceDigestRejectsSymlinks(t *testing.T) {
+func TestDirDigestWithSizeRejectsSymlinks(t *testing.T) {
 	for _, tt := range symlinkTestCases() {
 		t.Run(tt.name, func(t *testing.T) {
 			tmp := t.TempDir()
 			tt.setup(t, tmp)
 			root := openTestRoot(t, tmp)
-			_, err := lane.SourceDigest(root, tmp, tt.path)
+			_, _, err := lane.DirDigestWithSize(root, tmp, tt.path)
 			if tt.wantErr == "" {
 				if err != nil {
 					t.Fatalf("unexpected error: %v", err)
@@ -206,88 +191,11 @@ func setupNestedSymlink(t *testing.T, dir string) {
 	mustSymlink(t, "real.go", filepath.Join(dir, "src", "sub", "link.go"))
 }
 
-func setupTopLevelSymlinkFile(t *testing.T, dir string) {
-	t.Helper()
-	mustWriteFile(t, filepath.Join(dir, "real.txt"), "hello")
-	mustSymlink(t, "real.txt", filepath.Join(dir, "link.txt"))
-}
-
 func setupTopLevelSymlinkDir(t *testing.T, dir string) {
 	t.Helper()
 	mustMkdirAll(t, filepath.Join(dir, "real-dir"))
 	mustWriteFile(t, filepath.Join(dir, "real-dir", "f.go"), "package f")
 	mustSymlink(t, "real-dir", filepath.Join(dir, "link-dir"))
-}
-
-func TestDirDigestWithSize(t *testing.T) {
-	t.Run("sum of file sizes", func(t *testing.T) {
-		tmp := t.TempDir()
-		mustMkdirAll(t, filepath.Join(tmp, "out"))
-		mustWriteFile(t, filepath.Join(tmp, "out", "a.bin"), strings.Repeat("a", 100))
-		mustWriteFile(t, filepath.Join(tmp, "out", "b.bin"), strings.Repeat("b", 200))
-		mustWriteFile(t, filepath.Join(tmp, "out", "c.bin"), strings.Repeat("c", 300))
-
-		root := openTestRoot(t, tmp)
-		d, size, err := lane.DirDigestWithSize(root, tmp, "out")
-		if err != nil {
-			t.Fatal(err)
-		}
-		if d.Algorithm != testAlgoSHA256 {
-			t.Fatalf("expected sha256, got %q", d.Algorithm)
-		}
-		if size != 600 {
-			t.Fatalf("expected size 600, got %d", size)
-		}
-	})
-
-	t.Run("empty directory has size zero", func(t *testing.T) {
-		tmp := t.TempDir()
-		mustMkdirAll(t, filepath.Join(tmp, "empty"))
-
-		root := openTestRoot(t, tmp)
-		_, size, err := lane.DirDigestWithSize(root, tmp, "empty")
-		if err != nil {
-			t.Fatal(err)
-		}
-		if size != 0 {
-			t.Fatalf("expected size 0, got %d", size)
-		}
-	})
-
-	t.Run("nested files", func(t *testing.T) {
-		tmp := t.TempDir()
-		mustMkdirAll(t, filepath.Join(tmp, "out", "sub"))
-		mustWriteFile(t, filepath.Join(tmp, "out", "a.txt"), strings.Repeat("x", 50))
-		mustWriteFile(t, filepath.Join(tmp, "out", "sub", "b.txt"), strings.Repeat("y", 150))
-
-		root := openTestRoot(t, tmp)
-		_, size, err := lane.DirDigestWithSize(root, tmp, "out")
-		if err != nil {
-			t.Fatal(err)
-		}
-		if size != 200 {
-			t.Fatalf("expected size 200, got %d", size)
-		}
-	})
-
-	t.Run("digest matches SourceDigest", func(t *testing.T) {
-		tmp := t.TempDir()
-		mustMkdirAll(t, filepath.Join(tmp, "out"))
-		mustWriteFile(t, filepath.Join(tmp, "out", "f.txt"), "content")
-
-		root := openTestRoot(t, tmp)
-		d1, _, err := lane.DirDigestWithSize(root, tmp, "out")
-		if err != nil {
-			t.Fatal(err)
-		}
-		d2, err := lane.SourceDigest(root, tmp, "out")
-		if err != nil {
-			t.Fatal(err)
-		}
-		if d1 != d2 {
-			t.Fatalf("DirDigestWithSize digest %q != SourceDigest %q", d1, d2)
-		}
-	})
 }
 
 func mustMkdirAll(t *testing.T, path string) {
