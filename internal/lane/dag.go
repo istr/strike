@@ -4,6 +4,7 @@ package lane
 
 import (
 	"fmt"
+	"path"
 	"strings"
 )
 
@@ -91,6 +92,9 @@ func Build(p *Lane) (*DAG, error) {
 	}
 
 	if err := d.validateProvenancePaths(p); err != nil {
+		return nil, err
+	}
+	if err := d.validateMountDisjointness(p); err != nil {
 		return nil, err
 	}
 
@@ -263,6 +267,69 @@ func (d *DAG) validateProvenancePaths(p *Lane) error {
 		}
 	}
 	return nil
+}
+
+// validateMountDisjointness checks that input mounts within the same step
+// do not nest. Two mounts a and b conflict iff a == b, or a is a path
+// prefix of b, or b is a path prefix of a. Workdir is not a mount and
+// is excluded from this check.
+//
+// When a step legitimately needs multiple sources to appear at related
+// container paths (e.g. /work + /work/node_modules), the user must compose
+// them in a separate pack step that produces a single image output, then
+// mount that image at the desired root. This keeps mount topology trivial
+// and makes composition explicit and content-addressed.
+func (d *DAG) validateMountDisjointness(p *Lane) error {
+	for _, s := range p.Steps {
+		edges := d.InputEdges[string(s.Name)]
+		if len(edges) < 2 {
+			continue
+		}
+		for i := range edges {
+			for j := i + 1; j < len(edges); j++ {
+				a, b := edges[i].Mount, edges[j].Mount
+				if mountsConflict(a, b) {
+					return fmt.Errorf(
+						"step %q: input mounts %q (input %q) and %q (input %q) overlap; compose them in a pack step",
+						s.Name, a, edges[i].LocalName, b, edges[j].LocalName)
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// mountsConflict reports whether two absolute container paths overlap
+// in a way that would make their bind mounts nested.
+//
+//	"/a"     and "/a"      → conflict (identical)
+//	"/a"     and "/a/b"    → conflict (a is prefix of b)
+//	"/a/b"   and "/a"      → conflict (a is prefix of b)
+//	"/a/b"   and "/a/c"    → no conflict (siblings)
+//	"/a"     and "/abc"    → no conflict (NOT a prefix in path terms)
+func mountsConflict(a, b ContainerPath) bool {
+	ca := path.Clean(string(a))
+	cb := path.Clean(string(b))
+	if ca == cb {
+		return true
+	}
+	return isPathPrefix(ca, cb) || isPathPrefix(cb, ca)
+}
+
+// isPathPrefix reports whether prefix is a strict path-component prefix
+// of full. "/a" is a prefix of "/a/b" but not of "/abc".
+func isPathPrefix(prefix, full string) bool {
+	if !strings.HasPrefix(full, prefix) {
+		return false
+	}
+	if len(full) == len(prefix) {
+		return false // identical, not a strict prefix
+	}
+	// "/" is a prefix of everything — the separator is already there.
+	if prefix == "/" {
+		return true
+	}
+	return full[len(prefix)] == '/'
 }
 
 func (d *DAG) addEdge(from, to string) {
