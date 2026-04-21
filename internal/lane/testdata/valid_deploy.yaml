@@ -20,7 +20,7 @@ steps:
         target: registry.example.com/app:latest
       artifacts:
         binary:
-          from: build
+          from: build.binary
       target:
         type: registry
         description: push to registry
