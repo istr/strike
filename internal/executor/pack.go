@@ -165,6 +165,8 @@ func Pack(ctx context.Context, opts PackOpts) (*PackResult, error) {
 
 // addFileLayers appends a layer for each file entry, returning the updated
 // image and the host path of the first binary (used for SBOM generation).
+// When the host path is a directory, a dirLayer is created instead of a
+// fileLayer; the directory tree is mirrored at dest in the container image.
 func addFileLayers(img v1.Image, files []lane.PackFile, inputPaths map[string]string) (v1.Image, string, error) {
 	var binaryPath string
 	for _, f := range files {
@@ -172,15 +174,27 @@ func addFileLayers(img v1.Image, files []lane.PackFile, inputPaths map[string]st
 		if !ok {
 			return nil, "", fmt.Errorf("pack: file dest %q: host path not resolved", f.Dest)
 		}
-		if binaryPath == "" {
-			binaryPath = hostPath
-		}
-		if f.Mode < 0 || f.Mode > 0o7777 {
-			return nil, "", fmt.Errorf("pack: file %q: invalid mode %#o", f.Dest, f.Mode)
-		}
-		layer, err := fileLayer(hostPath, f.Dest, fs.FileMode(f.Mode))
+		info, err := os.Lstat(hostPath)
 		if err != nil {
-			return nil, "", fmt.Errorf("pack: add file %q: %w", f.Dest, err)
+			return nil, "", fmt.Errorf("pack: stat %q: %w", f.Dest, err)
+		}
+		var layer v1.Layer
+		switch {
+		case info.IsDir():
+			layer, err = dirLayer(hostPath, f.Dest)
+		case info.Mode().IsRegular():
+			if binaryPath == "" {
+				binaryPath = hostPath
+			}
+			if f.Mode < 0 || f.Mode > 0o7777 {
+				return nil, "", fmt.Errorf("pack: file %q: invalid mode %#o", f.Dest, f.Mode)
+			}
+			layer, err = fileLayer(hostPath, f.Dest, fs.FileMode(f.Mode))
+		default:
+			return nil, "", fmt.Errorf("pack: %q: unsupported file type %v", f.Dest, info.Mode().Type())
+		}
+		if err != nil {
+			return nil, "", fmt.Errorf("pack: add %q: %w", f.Dest, err)
 		}
 		img, err = mutate.AppendLayers(img, layer)
 		if err != nil {
@@ -368,6 +382,95 @@ func fileLayer(hostPath, destPath string, mode fs.FileMode) (v1.Layer, error) {
 	return buildTarLayer(data, destPath, mode, 0, 0)
 }
 
+// dirLayer reads a directory recursively and creates an OCI layer that
+// mirrors the directory tree at destPath in the container. File modes
+// are preserved; ownership is normalized to 0:0; mtimes are zeroed for
+// determinism. Symlinks are rejected (pre-beta strict policy).
+func dirLayer(hostDir, destPath string) (v1.Layer, error) {
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+
+	dest := filepath.Clean(destPath[1:]) // strip leading /
+
+	// Emit the root directory entry for dest.
+	if err := tw.WriteHeader(&tar.Header{
+		Typeflag: tar.TypeDir,
+		Name:     dest + "/",
+		Mode:     0o755,
+	}); err != nil {
+		return nil, err
+	}
+
+	if err := filepath.WalkDir(hostDir, dirWalkFunc(tw, hostDir, dest)); err != nil {
+		return nil, err
+	}
+	if err := tw.Close(); err != nil {
+		return nil, err
+	}
+
+	opener := func() (io.ReadCloser, error) {
+		return io.NopCloser(bytes.NewReader(buf.Bytes())), nil
+	}
+	return tarball.LayerFromOpener(opener, tarball.WithMediaType(types.OCILayer))
+}
+
+// dirWalkFunc returns a WalkDir callback that writes each entry under
+// root into a tar at the given dest prefix.
+func dirWalkFunc(tw *tar.Writer, root, dest string) fs.WalkDirFunc {
+	return func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		rel, relErr := filepath.Rel(root, path)
+		if relErr != nil {
+			return relErr
+		}
+		if rel == "." {
+			return nil
+		}
+		if d.Type()&fs.ModeSymlink != 0 {
+			return fmt.Errorf("symlink at %q: not supported", rel)
+		}
+		return writeDirEntry(tw, path, d, filepath.Join(dest, rel))
+	}
+}
+
+// writeDirEntry writes a single directory or file entry to the tar writer.
+func writeDirEntry(tw *tar.Writer, hostPath string, d fs.DirEntry, tarName string) error {
+	info, err := d.Info()
+	if err != nil {
+		return err
+	}
+	hdr := &tar.Header{
+		Name: tarName,
+		Mode: int64(info.Mode().Perm()),
+		// Uid, Gid, ModTime intentionally zero for determinism.
+	}
+	switch {
+	case d.IsDir():
+		hdr.Typeflag = tar.TypeDir
+		hdr.Name += "/"
+	case info.Mode().IsRegular():
+		hdr.Typeflag = tar.TypeReg
+		hdr.Size = info.Size()
+	default:
+		return fmt.Errorf("unsupported file type %v at %q", info.Mode().Type(), tarName)
+	}
+	if err = tw.WriteHeader(hdr); err != nil {
+		return err
+	}
+	if d.IsDir() {
+		return nil
+	}
+	f, err := os.Open(hostPath) //nolint:gosec // G304: path from controlled WalkDir within MkdirTemp output
+	if err != nil {
+		return err
+	}
+	defer f.Close() //nolint:errcheck // best-effort in walk callback
+	_, err = io.Copy(tw, f)
+	return err
+}
+
 // parentDirs returns all parent directory paths for an absolute path.
 // e.g. "/usr/bin/strike" -> ["usr", "usr/bin"].
 func parentDirs(absPath string) []string {
@@ -474,8 +577,8 @@ func tarEntry(tw *tar.Writer, path, rel string, d fs.DirEntry) error {
 		return err
 	}
 	header.Name = rel
-	if whErr := tw.WriteHeader(header); whErr != nil {
-		return whErr
+	if err = tw.WriteHeader(header); err != nil {
+		return err
 	}
 	if d.IsDir() {
 		return nil
