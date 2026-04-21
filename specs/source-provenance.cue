@@ -12,10 +12,10 @@ package lane
 // Discriminated union of provenance record types
 // ---------------------------------------------------------------------------
 
-#ProvenanceRecord: #GitProvenanceRecord |
+#ProvenanceRecord: (#GitProvenanceRecord |
                    #TarballProvenanceRecord |
                    #OCIProvenanceRecord |
-                   #URLProvenanceRecord
+                   #URLProvenanceRecord) @go(-)
 
 // ---------------------------------------------------------------------------
 // Git

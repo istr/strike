@@ -106,6 +106,7 @@ func (rc *runContext) executeDeploy(ctx context.Context, step *lane.Step, stepNa
 		Engine:       rc.engine,
 		EngineID:     rc.engineID,
 		Rekor:        rc.rekor,
+		DAG:          rc.dag,
 		ArtifactRefs: artifactRefs,
 		SigningKey:   signingKey,
 		KeyPassword:  keyPassword,
@@ -222,7 +223,7 @@ func (rc *runContext) executePack(ctx context.Context, step *lane.Step, stepName
 	}
 	defer outRoot.Close() //nolint:errcheck // best-effort cleanup
 
-	outputName := filepath.Base(step.Outputs[0].Path)
+	outputName := filepath.Base(step.Outputs[0].Path.String())
 	result, err := executor.Pack(ctx, executor.PackOpts{
 		Spec:        step.Pack,
 		InputPaths:  inputPaths,
@@ -262,9 +263,9 @@ func (rc *runContext) resolvePackInputPaths(step *lane.Step, safeName string) (m
 	for _, e := range edges {
 		hostPath := filepath.Join(
 			rc.state.outputDirs[string(e.FromStep.Name)],
-			filepath.Base(e.FromOutput.Path),
+			filepath.Base(e.FromOutput.Path.String()),
 		)
-		inputPaths[e.Dest] = hostPath
+		inputPaths[e.Dest.String()] = hostPath
 	}
 	_ = safeName // reserved for future error wrapping
 	return inputPaths, nil
@@ -353,7 +354,7 @@ func (rc *runContext) registerFileOutputs(step *lane.Step, stepName, safeName, o
 		if out.Type == artifactTypeImage {
 			continue
 		}
-		relName := filepath.Base(out.Path)
+		relName := filepath.Base(out.Path.String())
 		outPath := filepath.Join(outDir, relName)
 		if out.Expected != nil {
 			info, statErr := os.Stat(outPath) //nolint:gosec // G703: outPath is outDir (our temp dir) + filepath.Base (no traversal)
@@ -393,7 +394,7 @@ func (rc *runContext) captureProvenance(step *lane.Step, safeName, outDir string
 	spec := step.Provenance
 	// Map container path to host path. The output directory is mounted at /out,
 	// so /out/provenance.json → outDir/provenance.json.
-	rel, err := filepath.Rel(outputMountTarget, spec.Path)
+	rel, err := filepath.Rel(outputMountTarget, spec.Path.String())
 	if err != nil || strings.HasPrefix(rel, "..") {
 		return fmt.Errorf("provenance path %q is not within %s", spec.Path, outputMountTarget)
 	}
@@ -419,8 +420,8 @@ func (rc *runContext) buildInputMounts(step *lane.Step) []executor.Mount {
 	mounts := make([]executor.Mount, len(edges))
 	for i, e := range edges {
 		mounts[i] = executor.Mount{
-			Host:      filepath.Join(rc.state.outputDirs[string(e.FromStep.Name)], filepath.Base(e.FromOutput.Path)),
-			Container: e.Mount,
+			Host:      filepath.Join(rc.state.outputDirs[string(e.FromStep.Name)], filepath.Base(e.FromOutput.Path.String())),
+			Container: e.Mount.String(),
 			ReadOnly:  true,
 		}
 	}
@@ -432,7 +433,7 @@ func (rc *runContext) loadOCIOutputs(ctx context.Context, step *lane.Step, stepN
 		if out.Type != artifactTypeImage {
 			continue
 		}
-		relName := filepath.Base(out.Path)
+		relName := filepath.Base(out.Path.String())
 		digest, err := rc.regClient.LoadOCITar(ctx, outRoot, relName)
 		if err != nil {
 			return fmt.Errorf("%s: oci-tar load %q: %w", safeName, out.Name, err)

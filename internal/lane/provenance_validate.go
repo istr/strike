@@ -35,48 +35,62 @@ func init() {
 }
 
 // ValidateProvenance parses raw JSON, validates it against the CUE schema
-// for the declared type, and returns a canonical StepProvenance.
-func ValidateProvenance(declaredType string, raw []byte) (StepProvenance, error) {
+// for the declared type, and returns the typed ProvenanceRecord.
+func ValidateProvenance(declaredType string, raw []byte) (ProvenanceRecord, error) {
 	schema, ok := provenanceSchemas[declaredType]
 	if !ok {
-		return StepProvenance{}, fmt.Errorf("unknown provenance type %q", declaredType)
+		return nil, fmt.Errorf("unknown provenance type %q", declaredType)
 	}
 
 	var probe map[string]any
 	if err := json.Unmarshal(raw, &probe); err != nil {
-		return StepProvenance{}, fmt.Errorf("not valid JSON: %w", err)
+		return nil, fmt.Errorf("not valid JSON: %w", err)
 	}
 
 	recordType, _ := probe["type"].(string) //nolint:errcheck // type assertion, not error
 	if recordType != declaredType {
-		return StepProvenance{}, fmt.Errorf("record type %q does not match declared type %q", recordType, declaredType)
+		return nil, fmt.Errorf("record type %q does not match declared type %q", recordType, declaredType)
 	}
 
 	rec := provenanceCtx.CompileBytes(raw)
 	if rec.Err() != nil {
-		return StepProvenance{}, fmt.Errorf("invalid record: %w", rec.Err())
+		return nil, fmt.Errorf("invalid record: %w", rec.Err())
 	}
 	unified := schema.Unify(rec)
 	if err := unified.Validate(cue.Concrete(true)); err != nil {
-		return StepProvenance{}, fmt.Errorf("schema validation: %w", err)
+		return nil, fmt.Errorf("schema validation: %w", err)
 	}
 
-	canonical, err := json.Marshal(probe)
-	if err != nil {
-		return StepProvenance{}, fmt.Errorf("canonicalize: %w", err)
-	}
-	return StepProvenance{Type: declaredType, Raw: canonical}, nil
+	return unmarshalProvenanceRecord(declaredType, raw)
 }
 
-// IsSigned returns true iff the record contains a signature with verified=true.
-func (r StepProvenance) IsSigned() bool {
-	var probe struct {
-		Signature *struct {
-			Verified bool `json:"verified"`
-		} `json:"signature"`
+func unmarshalProvenanceRecord(typ string, raw []byte) (ProvenanceRecord, error) {
+	switch typ {
+	case "git":
+		var r GitProvenanceRecord
+		if err := json.Unmarshal(raw, &r); err != nil {
+			return nil, fmt.Errorf("decode git record: %w", err)
+		}
+		return r, nil
+	case "tarball":
+		var r TarballProvenanceRecord
+		if err := json.Unmarshal(raw, &r); err != nil {
+			return nil, fmt.Errorf("decode tarball record: %w", err)
+		}
+		return r, nil
+	case "oci":
+		var r OCIProvenanceRecord
+		if err := json.Unmarshal(raw, &r); err != nil {
+			return nil, fmt.Errorf("decode oci record: %w", err)
+		}
+		return r, nil
+	case "url":
+		var r URLProvenanceRecord
+		if err := json.Unmarshal(raw, &r); err != nil {
+			return nil, fmt.Errorf("decode url record: %w", err)
+		}
+		return r, nil
+	default:
+		return nil, fmt.Errorf("unknown provenance type %q", typ)
 	}
-	if err := json.Unmarshal(r.Raw, &probe); err != nil {
-		return false
-	}
-	return probe.Signature != nil && probe.Signature.Verified
 }

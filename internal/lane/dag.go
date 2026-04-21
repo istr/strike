@@ -4,7 +4,6 @@ package lane
 
 import (
 	"fmt"
-	"path"
 	"strings"
 )
 
@@ -22,15 +21,15 @@ func parseRef(ref string) (step, output string, err error) {
 type InputEdge struct {
 	FromStep   *Step
 	FromOutput *OutputSpec
-	LocalName  string // == InputRef.Name
-	Mount      string // == InputRef.Mount
+	LocalName  string        // == InputRef.Name
+	Mount      ContainerPath // == InputRef.Mount
 }
 
 // PackFileEdge is a fully resolved step.pack.files[i] entry.
 type PackFileEdge struct {
 	FromStep   *Step
 	FromOutput *OutputSpec
-	Dest       string // == PackFile.Dest
+	Dest       ContainerPath // == PackFile.Dest
 }
 
 // DeployArtifactEdge is a fully resolved step.deploy.artifacts[name] entry.
@@ -248,14 +247,12 @@ func (d *DAG) validateProvenancePaths(p *Lane) error {
 			continue
 		}
 		provPath := s.Provenance.Path
-		if !path.IsAbs(provPath) || path.Clean(provPath) != provPath {
-			return fmt.Errorf("step %q: provenance.path %q must be absolute and canonical",
-				s.Name, provPath)
+		if err := provPath.Validate(); err != nil {
+			return fmt.Errorf("step %q: provenance.path %q: %w", s.Name, provPath, err)
 		}
 		found := false
 		for _, out := range s.Outputs {
-			outDir := path.Dir(out.Path)
-			if strings.HasPrefix(provPath, outDir+"/") || provPath == out.Path {
+			if provPath.HasPrefix(out.Path.Dir()+"/") || provPath == out.Path {
 				found = true
 				break
 			}

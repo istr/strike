@@ -20,8 +20,8 @@ func TestValidateProvenance_Git_Valid(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rec.Type != "git" {
-		t.Errorf("type = %q, want git", rec.Type)
+	if rec.ProvenanceType() != "git" {
+		t.Errorf("type = %q, want git", rec.ProvenanceType())
 	}
 	if !rec.IsSigned() {
 		t.Error("expected IsSigned() == true")
@@ -53,8 +53,8 @@ func TestValidateProvenance_Tarball_Valid(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rec.Type != "tarball" {
-		t.Errorf("type = %q, want tarball", rec.Type)
+	if rec.ProvenanceType() != "tarball" {
+		t.Errorf("type = %q, want tarball", rec.ProvenanceType())
 	}
 }
 
@@ -68,8 +68,8 @@ func TestValidateProvenance_OCI_Valid(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rec.Type != "oci" {
-		t.Errorf("type = %q, want oci", rec.Type)
+	if rec.ProvenanceType() != "oci" {
+		t.Errorf("type = %q, want oci", rec.ProvenanceType())
 	}
 }
 
@@ -83,8 +83,8 @@ func TestValidateProvenance_URL_Valid(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rec.Type != "url" {
-		t.Errorf("type = %q, want url", rec.Type)
+	if rec.ProvenanceType() != "url" {
+		t.Errorf("type = %q, want url", rec.ProvenanceType())
 	}
 }
 

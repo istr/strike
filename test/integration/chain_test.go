@@ -1,7 +1,6 @@
 package integration_test
 
 import (
-	"bytes"
 	"context"
 	"crypto/ecdsa"
 	"crypto/sha256"
@@ -11,7 +10,6 @@ import (
 	"encoding/pem"
 	"math/big"
 	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/istr/strike/internal/container"
@@ -22,8 +20,7 @@ import (
 )
 
 // TestEndToEndChain validates the complete attestation chain:
-// source -> build -> pack -> sign -> deploy -> signed attestation
-// with source provenance.
+// build -> pack -> sign -> deploy -> signed attestation.
 func TestEndToEndChain(t *testing.T) {
 	engine := needsEngine(t)
 	ctx := context.Background()
@@ -32,17 +29,8 @@ func TestEndToEndChain(t *testing.T) {
 	ensureImage(t, engine, goImage)
 	ensureImage(t, engine, staticBase)
 
-	// --- Part 1: Source — git repo with the test Go program ---
-	srcDir := containerTempDir(t)
-	copyTestSource(t, srcDir)
-	runGitInit(t, engine, srcDir)
-	addTestSourceToGit(t, engine, srcDir)
-	runGitCommit(t, engine, srcDir, "initial commit")
-
-	// --- Part 2: Build — compile from git source ---
-	outDir := containerTempDir(t)
-	buildBinaryFrom(t, engine, srcDir, outDir)
-	binPath := filepath.Join(outDir, "app")
+	// --- Part 1: Build — compile test Go program ---
+	binPath := buildTestBinary(t, engine)
 
 	// --- Part 3: Pack — assemble and sign OCI image ---
 	packDir := t.TempDir()
@@ -129,11 +117,6 @@ func chainDeploy(
 				PostState: lane.StateCaptureSpec{Required: false},
 				Drift:     lane.DriftSpec{Detect: false},
 			},
-			Source: &struct {
-				Git_image lane.ImageRef `json:"git_image"` //nolint:revive // generated field name
-			}{
-				Git_image: lane.ImageRef(goImage),
-			},
 		},
 	}
 
@@ -166,9 +149,9 @@ func verifyChain(t *testing.T, att *deploy.Attestation, imageDigest string, keyP
 			att.Artifacts["app"].Digest, imageDigest)
 	}
 
-	// C. Source provenance — temporarily nil until step 05 wires provenance traversal.
-	if att.Source != nil {
-		t.Error("expected nil source provenance (removed in refactor-b/03)")
+	// C. Provenance — nil when no predecessor steps declare provenance.
+	if att.Provenance != nil {
+		t.Errorf("expected nil provenance (no predecessors with provenance), got %d records", len(att.Provenance))
 	}
 
 	// D. Engine identity present.
@@ -287,56 +270,3 @@ func chainExtractPubKey(t *testing.T, privPEM []byte) []byte {
 }
 
 // copyTestSource copies testdata/src/* into the target directory on the host.
-func copyTestSource(t *testing.T, dstDir string) {
-	t.Helper()
-	srcDir := filepath.Join("testdata", "src")
-	entries, err := os.ReadDir(srcDir)
-	if err != nil {
-		t.Fatalf("read testdata/src: %v", err)
-	}
-	for _, e := range entries {
-		data, readErr := os.ReadFile(filepath.Join(srcDir, e.Name())) //nolint:gosec // G304: srcDir is hardcoded "testdata/src", not user input
-		if readErr != nil {
-			t.Fatalf("read %s: %v", e.Name(), readErr)
-		}
-		if writeErr := os.WriteFile(filepath.Join(dstDir, e.Name()), data, 0o666); writeErr != nil { //nolint:gosec // G306: world-readable required for Podman keep-id userns mapping
-			t.Fatalf("write %s: %v", e.Name(), writeErr)
-		}
-	}
-}
-
-// addTestSourceToGit stages all files in the repo via git add (exec form).
-func addTestSourceToGit(t *testing.T, engine container.Engine, dir string) {
-	t.Helper()
-	runGit(t, engine, dir, true, "-C", "/repo", "add", "-A")
-}
-
-// buildBinaryFrom compiles Go source from srcDir into outDir.
-func buildBinaryFrom(t *testing.T, engine container.Engine, srcDir, outDir string) {
-	t.Helper()
-	ctx := context.Background()
-	var stdout, stderr bytes.Buffer
-	opts := container.DefaultSecureOpts()
-	opts.Image = goImage
-	opts.Cmd = []string{
-		"build", "-C", "/src", "-trimpath",
-		"-buildvcs=false", "-ldflags=-s -w",
-		"-o", "/out/app", ".",
-	}
-	opts.Env = map[string]string{"CGO_ENABLED": "0", "GOCACHE": "/tmp/gocache", "GOPATH": "/tmp/gopath"}
-	opts.Stdout = &stdout
-	opts.Stderr = &stderr
-	opts.Mounts = []container.Mount{
-		{Source: srcDir, Target: "/src", ReadOnly: true},
-		{Source: outDir, Target: "/out"},
-	}
-
-	exitCode, err := engine.ContainerRun(ctx, opts)
-	if err != nil {
-		t.Fatalf("build: %v", err)
-	}
-	if exitCode != 0 {
-		t.Fatalf("build: exit code %d\nstdout: %s\nstderr: %s",
-			exitCode, stdout.String(), stderr.String())
-	}
-}

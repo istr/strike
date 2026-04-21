@@ -1,4 +1,4 @@
-# End-to-end attestation: source provenance, outcome signing, and integration tests
+# End-to-end attestation: typed provenance, outcome signing, and integration tests
 
 ## The convergence
 
@@ -19,170 +19,74 @@ untested code paths AND validate the end-to-end attestation chain.
 
 ---
 
-## Part 1: Source provenance in attestations
+## Part 1: Provenance in attestations
 
 ### What to capture
 
-When a lane has source mounts, strike can extract git metadata by
-running git in a container (consistent with the no-exec.Command
-invariant). The attestation gains a `source` field:
+Each step in a lane can declare a `provenance` spec that names a
+type (`git`, `tarball`, `oci`, `url`) and a container path where
+the step writes a JSON provenance record. The record is validated
+against the type-specific CUE schema in `specs/source-provenance.cue`
+at capture time (step 04).
+
+At deploy time, the deployer traverses the DAG backwards from the
+deploy step and collects all validated provenance records from
+predecessor steps. The attestation carries them in a `provenance`
+array, sorted deterministically by step name:
 
 ```json
 {
   "deploy_id": "a1b2c3d4e5f67890",
-  "source": {
-    "commit": "abc123def456...",
-    "ref": "refs/heads/main",
-    "range": {
-      "from": "previous_deploy_commit_or_tag",
-      "to": "abc123def456..."
-    },
-    "signers": [
-      {
-        "commit": "abc123...",
-        "identity": "dev@example.com",
-        "method": "ssh",
-        "fingerprint": "SHA256:...",
-        "verified": true
-      },
-      {
-        "commit": "def456...",
-        "identity": "other@example.com",
-        "method": "gitsign",
-        "oidc_issuer": "https://accounts.google.com",
-        "verified": true
+  "provenance": [
+    {
+      "type": "git",
+      "raw": {
+        "type": "git",
+        "uri": "https://github.com/foo/bar.git",
+        "commit": "abc123def456...",
+        "ref": "refs/heads/main",
+        "signature": {
+          "method": "gpg",
+          "verified": true,
+          "signer": "dev@example.com",
+          "fingerprint": "ABCD1234"
+        }
       }
-    ],
-    "unsigned_commits": ["789abc..."],
-    "all_signed": false
-  },
-  "artifacts": { ... },
-  "pre_state": { ... },
-  "post_state": { ... }
+    }
+  ],
+  "artifacts": { "..." : "..." },
+  "pre_state": {},
+  "post_state": {}
 }
 ```
 
 ### Design decisions
 
-**Git runs in a container.** No exec.Command, no exception. Use a
-digest-pinned git image (e.g., `cgr.dev/chainguard/git@sha256:...`).
-The source directory is bind-mounted read-only. The git command
-extracts commit metadata and signature verification status as JSON.
+**Provenance is step-declared, not auto-detected.** Each step
+explicitly declares what type of provenance it produces and where
+the record file lives. This is more general than the old git-only
+source provenance and supports tarball, OCI, and URL sources.
 
-**The signer list is not a new step type.** It is an automatic
-enrichment of the deploy attestation when the lane includes source
-mounts. Strike runs the git container internally as part of
-`deploy.Execute()`, similar to how state capture runs containers.
+**Validation happens at capture time.** The raw JSON record is
+validated against the CUE schema for its declared type before being
+stored in lane state. Invalid records fail the step.
 
-**Verification is best-effort.** If the git image is not available,
-or if the repo has no signatures, the `source` field records what
-it found (including `unsigned_commits`). The `all_signed` flag lets
-policies gate on signature completeness without parsing individual
-entries.
+**DAG traversal collects transitive provenance.** The deploy step
+does not need to know which predecessor steps have provenance. It
+walks the DAG and collects all records.
 
-**Identity is method-dependent.** GPG signatures expose key
-fingerprints. SSH signatures expose key fingerprints. Gitsign
-(Sigstore) signatures expose OIDC identity and issuer. The
-`method` field disambiguates.
+**Null when empty.** Go nil slices serialize to JSON `null`. The
+CUE schema allows `[...{...}] | null`.
 
-### CUE schema extension (attestation.cue)
+### CUE schema (attestation.cue)
 
+In `#Attestation`:
 ```cue
-#SourceProvenance: {
-    // commit is the HEAD commit hash that produced the build.
-    commit: =~"^[a-f0-9]{40}$"
-
-    // ref is the git ref (branch or tag) at build time.
-    ref: string
-
-    // range is the commit range since the last deploy (optional).
-    range?: {
-        from: =~"^[a-f0-9]{40}$"
-        to:   =~"^[a-f0-9]{40}$"
-    }
-
-    // signers lists verified commit signatures in the range.
-    signers: [...#CommitSigner]
-
-    // unsigned_commits lists commit hashes without signatures.
-    unsigned_commits: [...=~"^[a-f0-9]{40}$"] | null
-
-    // all_signed is true iff every commit in the range is signed.
-    all_signed: bool
-}
-
-#CommitSigner: {
-    commit:       =~"^[a-f0-9]{40}$"
-    identity:     string
-    method:       "gpg" | "ssh" | "gitsign" | "x509"
-    fingerprint?: string
-    oidc_issuer?: string
-    verified:     bool
-}
+provenance: [...{type: "git" | "tarball" | "oci" | "url", raw: _}] | null
 ```
 
-Add to `#Attestation`:
-```cue
-source?: #SourceProvenance
-```
-
-Optional because not every deploy step has source mounts.
-
-### Implementation path
-
-1. **Add `#SourceProvenance` to `specs/attestation.cue`**, run
-   `make specs` to re-export JSON Schema.
-
-2. **Add `SourceProvenance` struct to `internal/deploy/deploy.go`**,
-   matching the CUE schema. Add `Source *SourceProvenance` field to
-   `Attestation`.
-
-3. **Add `captureSourceProvenance` method to `Deployer`** that:
-   - Finds source mounts from the lane steps that produced the
-     deployed artifacts (walk the DAG backwards)
-   - Runs a git container with the source dir mounted read-only
-   - Parses `git log --format='%H %G? %GK %GS' <range>` output
-   - Builds the `SourceProvenance` struct
-
-4. **Call from `Execute()`** between artifact resolution and deploy
-   action. Non-fatal: if source capture fails, log a warning and
-   proceed with `Source: nil`.
-
-5. **Lane-level config** (optional, future): add a `source` block
-   to the lane schema specifying the git image and commit range
-   strategy. For the PoC, auto-detect from source mounts.
-
-### Git signature parsing
-
-The key git command (run inside a container):
-
-```sh
-git -C /src log --format='%H|%G?|%GK|%GS|%aE' HEAD~10..HEAD
-```
-
-Output format per line: `commit|status|key|signer|email`
-
-Status codes (`%G?`):
-- `G` = good GPG signature
-- `B` = bad GPG signature
-- `U` = good but untrusted GPG signature
-- `X` = good but expired GPG signature
-- `Y` = good but expired key GPG signature
-- `N` = no signature
-- `E` = cannot check signature
-
-For SSH signatures (Git 2.34+), the same `%G?` flag works when
-`gpg.format = ssh` is configured, and `%GK` contains the SSH key
-fingerprint.
-
-For gitsign, `git verify-commit <hash>` returns the OIDC identity
-from the Fulcio certificate. Parsing requires `gitsign verify`
-rather than raw git output.
-
-**PoC simplification:** For the first implementation, parse `%G?`
-and `%GK` only (covers GPG and SSH). Gitsign support can be added
-later via `gitsign verify --certificate-identity` in a separate
-container.
+No wrapper type — the records are already validated at capture time.
+Type-specific record schemas are in `specs/source-provenance.cue`.
 
 ---
 
@@ -306,14 +210,12 @@ Create `test/integration/` with:
 ```
 test/integration/
     integration_test.go      # test gate, helpers
-    source_test.go           # git provenance capture
-    pack_test.go             # full pack pipeline
-    deploy_test.go           # full deploy + attestation
-    attestation_chain_test.go # end-to-end chain verification
+    helpers_test.go          # shared test infrastructure
+    pack_pipeline_test.go    # full pack pipeline
+    deploy_attestation_test.go # full deploy + attestation
+    chain_test.go            # end-to-end chain verification
     testdata/
-        lane_build.yaml      # minimal build+pack lane
-        lane_deploy.yaml     # deploy lane referencing packed image
-        cosign_test.key      # deterministic test key (same as golden tests)
+        src/                 # minimal Go program for build tests
 ```
 
 All tests use `package integration_test` and import the internal
@@ -361,18 +263,6 @@ Coverage impact: executor/pack.go (29.8% -> ~80%),
 executor/sbom.go (3.5% -> ~60%), executor/sign.go (43.8% -> ~80%),
 registry/client.go (20% -> ~70%).
 
-**TestSourceProvenance** -- exercises source capture:
-
-1. Create a temp git repo in `t.TempDir()`
-2. Configure git with a test GPG or SSH key
-3. Make 3 signed commits and 1 unsigned commit
-4. Invoke source provenance capture
-5. Verify:
-   - `source.commit` matches HEAD
-   - `source.signers` has 3 entries with `verified: true`
-   - `source.unsigned_commits` has 1 entry
-   - `source.all_signed` is false
-
 **TestDeployAttestation** -- exercises deploy/deploy.go:
 
 1. Prepare a packed image (from TestPackPipeline or helper)
@@ -386,27 +276,21 @@ registry/client.go (20% -> ~70%).
 
 **TestEndToEndChain** -- the full chain:
 
-1. Create a git repo with signed commits
-2. Write a lane with build + pack + deploy steps
-3. Execute the full lane
-4. Extract the deploy attestation
-5. Verify the complete chain:
-   - `source.commit` matches git HEAD
-   - `source.signers` lists the test committer
+1. Build test binary in a container
+2. Pack into signed OCI image
+3. Deploy with attestation
+4. Verify the complete chain:
    - `artifacts` maps to the packed image digest
-   - `pre_state` captured before deploy
-   - `post_state` captured after deploy
+   - Attestation validates against CUE schema
    - Attestation signature verifies with the cosign public key
-   - Image in registry has referrers: SBOM, signature, attestation
-
-This single test exercises every untested code path.
+   - Round-trip through DSSE envelope preserves all fields
+   - Engine identity present
 
 ### Chain properties verified by TestEndToEndChain
 
 | Property | How verified |
 |----------|-------------|
-| Source identity | `att.Source.Commit` matches git HEAD in test repo |
-| Source integrity | `att.Source.UnsignedCommits` lists unverified commits |
+| Provenance chain | `att.Provenance` collects predecessor step records |
 | Build determinism | Two pack runs produce identical digest (TestPackPipeline) |
 | Artifact binding | `att.Artifacts["app"]` == packed image digest |
 | Attestation schema | `ValidateAttestation(att)` passes CUE validation |
@@ -418,8 +302,7 @@ This single test exercises every untested code path.
 
 | Property | What is needed |
 |----------|---------------|
-| All commits signed | GPG/SSH key setup in test git container |
-| Gitsign OIDC identity | Fulcio CA mock or test instance |
+| Provenance with signatures | Steps that produce signed provenance records |
 | Pre/post state capture | State capture containers in test lane |
 | Drift detection | Two successive deploys with state change |
 | Rekor transparency | Rekor submission in sign.go |
@@ -451,25 +334,6 @@ func startLocalRegistry(t *testing.T, engine container.Engine) string {
     return registryAddr
 }
 ```
-
-### Git test repo helper
-
-```go
-func createSignedRepo(t *testing.T, engine container.Engine) string {
-    t.Helper()
-    dir := t.TempDir()
-
-    // Run git init + commits in a git container
-    // Mount dir as /repo, mount test signing key
-    // Execute: git init, git config, git commit --gpg-sign
-    // Return dir path
-
-    return dir
-}
-```
-
-This uses the container engine (no exec.Command) to run git,
-consistent with the project invariants.
 
 ---
 
@@ -519,18 +383,19 @@ This is self-contained, no new dependencies, no schema changes.
 3. Write `TestPackPipeline` (largest coverage impact)
 4. Write `TestDeployAttestation` (exercises signed attestation)
 
-### Phase 3: Source provenance
+### Phase 3: Typed provenance (refactor-b)
 
-1. Extend `specs/attestation.cue` with `#SourceProvenance`
-2. Add Go structs, wire into `Deployer.Execute()`
-3. Implement `captureSourceProvenance` (git container)
-4. Write `TestSourceProvenance` integration test
+1. Define `#ProvenanceRecord` types in `specs/source-provenance.cue`
+2. Add `#ProvenanceSpec` to lane schema, `#AttestationProvenance` to attestation schema
+3. Implement `ValidateProvenance` (CUE-based validation at capture time)
+4. DAG traversal via `CollectProvenance` wires records into attestation
+5. Write provenance validation unit tests
 
 ### Phase 4: End-to-end chain test
 
-1. Write `TestEndToEndChain` combining all three
+1. Write `TestEndToEndChain` exercising build -> pack -> deploy
 2. Verify the complete chain is auditable:
-   - From: signed commit by known identity
+   - From: typed provenance records from predecessor steps
    - Through: build provenance, SBOM, image signature
    - To: signed deploy attestation with verified outcome
 

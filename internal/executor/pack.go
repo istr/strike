@@ -170,31 +170,32 @@ func Pack(ctx context.Context, opts PackOpts) (*PackResult, error) {
 func addFileLayers(img v1.Image, files []lane.PackFile, inputPaths map[string]string) (v1.Image, string, error) {
 	var binaryPath string
 	for _, f := range files {
-		hostPath, ok := inputPaths[f.Dest]
+		dest := f.Dest.String()
+		hostPath, ok := inputPaths[dest]
 		if !ok {
-			return nil, "", fmt.Errorf("pack: file dest %q: host path not resolved", f.Dest)
+			return nil, "", fmt.Errorf("pack: file dest %q: host path not resolved", dest)
 		}
 		info, err := os.Lstat(hostPath)
 		if err != nil {
-			return nil, "", fmt.Errorf("pack: stat %q: %w", f.Dest, err)
+			return nil, "", fmt.Errorf("pack: stat %q: %w", dest, err)
 		}
 		var layer v1.Layer
 		switch {
 		case info.IsDir():
-			layer, err = dirLayer(hostPath, f.Dest)
+			layer, err = dirLayer(hostPath, dest)
 		case info.Mode().IsRegular():
 			if binaryPath == "" {
 				binaryPath = hostPath
 			}
 			if f.Mode < 0 || f.Mode > 0o7777 {
-				return nil, "", fmt.Errorf("pack: file %q: invalid mode %#o", f.Dest, f.Mode)
+				return nil, "", fmt.Errorf("pack: file %q: invalid mode %#o", dest, f.Mode)
 			}
-			layer, err = fileLayer(hostPath, f.Dest, fs.FileMode(f.Mode))
+			layer, err = fileLayer(hostPath, dest, fs.FileMode(f.Mode))
 		default:
-			return nil, "", fmt.Errorf("pack: %q: unsupported file type %v", f.Dest, info.Mode().Type())
+			return nil, "", fmt.Errorf("pack: %q: unsupported file type %v", dest, info.Mode().Type())
 		}
 		if err != nil {
-			return nil, "", fmt.Errorf("pack: add %q: %w", f.Dest, err)
+			return nil, "", fmt.Errorf("pack: add %q: %w", dest, err)
 		}
 		img, err = mutate.AppendLayers(img, layer)
 		if err != nil {

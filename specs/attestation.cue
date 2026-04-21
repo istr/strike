@@ -66,8 +66,10 @@ package deploy
 	// Verifiers use this to assess the trust level of the environment.
 	engine?: #EngineRecord
 
-	// source captures git provenance when source mounts are present.
-	source?: #SourceProvenance
+	// provenance collects validated provenance records from transitive
+	// predecessor steps. Sorted deterministically by step name.
+	// Empty array when no steps declare provenance.
+	provenance: [...#ProvenanceRecord] | null
 
 	// rekor is the transparency log entry from a Rekor hashedrekord
 	// submission. Present only when REKOR_URL is configured.
@@ -155,49 +157,3 @@ package deploy
 	namespace?:   string
 }
 
-// ---------------------------------------------------------------------------
-// Source provenance
-// ---------------------------------------------------------------------------
-
-#SourceProvenance: {
-	// commit is the HEAD commit hash at build time.
-	commit: =~"^[a-f0-9]{40}$"
-
-	// ref is the checked-out git ref (branch or tag).
-	ref: string
-
-	// range is the commit range since the previous known deploy.
-	range?: {
-		from: =~"^[a-f0-9]{40}$"
-		to:   =~"^[a-f0-9]{40}$"
-	}
-
-	// signers lists verified commit signatures in the range.
-	signers: [...#CommitSigner] | null
-
-	// unsigned_commits lists commit hashes without valid signatures.
-	unsigned_commits: [...=~"^[a-f0-9]{40}$"] | null
-
-	// all_signed is true iff every commit in range has a valid signature.
-	all_signed: bool
-}
-
-#CommitSigner: {
-	// commit is the signed commit hash.
-	commit: =~"^[a-f0-9]{40}$"
-
-	// identity is the signer's identity (email, key ID).
-	identity: string
-
-	// method is how the commit was signed.
-	method: "gpg" | "ssh" | "gitsign" | "x509"
-
-	// fingerprint is the key fingerprint (GPG or SSH).
-	fingerprint?: string
-
-	// oidc_issuer is the OIDC issuer for gitsign signatures.
-	oidc_issuer?: string
-
-	// verified is true if the signature was successfully verified.
-	verified: bool
-}

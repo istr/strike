@@ -1,6 +1,6 @@
 {
   "boundary": "ValidateAttestation",
-  "description": "valid attestation with source provenance",
+  "description": "valid attestation with provenance records",
   "inputs": {
     "attestation": {
       "deploy_id": "a1b2c3d4e5f67890",
@@ -17,21 +17,20 @@
       "pre_state": {},
       "post_state": {},
       "lane_ref": "",
-      "source": {
-        "commit": "abc123def456abc123def456abc123def456abc1",
-        "ref": "refs/heads/main",
-        "signers": [
-          {
-            "commit": "abc123def456abc123def456abc123def456abc1",
-            "identity": "dev@example.com",
+      "provenance": [
+        {
+          "type": "git",
+          "uri": "https://github.com/foo/bar.git",
+          "commit": "abc123def456abc123def456abc123def456abc1",
+          "ref": "refs/heads/main",
+          "signature": {
             "method": "gpg",
-            "fingerprint": "ABCD1234",
-            "verified": true
+            "verified": true,
+            "signer": "dev@example.com",
+            "fingerprint": "ABCD1234"
           }
-        ],
-        "unsigned_commits": null,
-        "all_signed": true
-      }
+        }
+      ]
     }
   },
   "expected": {

@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path"
 	"time"
 
 	"cuelang.org/go/cue"
@@ -104,33 +103,21 @@ func ValidatePaths(p *Lane) error {
 // validateStepPaths checks one step's output, pack-dest, and workdir paths.
 func validateStepPaths(s Step) error {
 	for _, out := range s.Outputs {
-		if err := validateContainerPath(out.Path); err != nil {
+		if err := out.Path.Validate(); err != nil {
 			return fmt.Errorf("step %q: output path %q: %w", s.Name, out.Path, err)
 		}
 	}
 	if s.Pack != nil {
 		for _, f := range s.Pack.Files {
-			if err := validateContainerPath(f.Dest); err != nil {
+			if err := f.Dest.Validate(); err != nil {
 				return fmt.Errorf("step %q: pack dest %q: %w", s.Name, f.Dest, err)
 			}
 		}
 	}
 	if s.Workdir != "" {
-		if err := validateContainerPath(s.Workdir); err != nil {
+		if err := s.Workdir.Validate(); err != nil {
 			return fmt.Errorf("step %q: workdir %q: %w", s.Name, s.Workdir, err)
 		}
-	}
-	return nil
-}
-
-// validateContainerPath checks that p is an absolute, canonical container path.
-// Uses path (not filepath) because container paths are always forward-slash.
-func validateContainerPath(p string) error {
-	if !path.IsAbs(p) {
-		return fmt.Errorf("must be absolute")
-	}
-	if path.Clean(p) != p {
-		return fmt.Errorf("must be canonical (cleaned: %q)", path.Clean(p))
 	}
 	return nil
 }

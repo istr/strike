@@ -18,7 +18,8 @@
         "current_pre_state": {"version": "sha256:bbb"},
         "drifted": ["version"]
       },
-      "lane_ref": ""
+      "lane_ref": "",
+      "provenance": null
     }
   },
   "expected": {

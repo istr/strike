@@ -20,7 +20,8 @@
         }
       },
       "post_state": {},
-      "lane_ref": ""
+      "lane_ref": "",
+      "provenance": null
     }
   },
   "expected": {

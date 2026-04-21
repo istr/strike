@@ -24,7 +24,8 @@ import (
 // #InclusionProof directly.
 var deploySchema = specs.AttestationSchema + "\n" +
 	stripForConcat(specs.ArtifactSchema) + "\n" +
-	stripForConcat(specs.LaneSchema)
+	stripForConcat(specs.LaneSchema) + "\n" +
+	stripForConcat(specs.ProvenanceSchema)
 
 // stripForConcat removes package declarations, import blocks, and
 // cross-package re-export lines (e.g. "#Foo: pkg.#Foo") from a CUE

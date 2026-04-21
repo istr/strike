@@ -16,7 +16,8 @@
       },
       "pre_state": {},
       "post_state": {},
-      "lane_ref": "sha256:def456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0"
+      "lane_ref": "sha256:def456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0",
+      "provenance": null
     }
   },
   "expected": {

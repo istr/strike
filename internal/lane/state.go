@@ -3,6 +3,7 @@ package lane
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 )
@@ -11,20 +12,12 @@ import (
 // If this line fails, the generated file is missing the Artifact definition.
 var _ Artifact
 
-// StepProvenance is a type-tagged wrapper around a validated provenance
-// record. The Raw field contains canonical JSON that has been validated
-// against the CUE schema for the declared type.
-type StepProvenance struct {
-	Type string          `json:"type"`
-	Raw  json.RawMessage `json:"raw"`
-}
-
 // State tracks artifacts and step results across lane execution.
 // All artifact references use "step_name.output_name" keys.
 type State struct {
-	Artifacts  map[string]Artifact       `json:"artifacts"`
-	Steps      map[string]StepResult     `json:"steps"`
-	Provenance map[string]StepProvenance `json:"provenance"`
+	Artifacts  map[string]Artifact         `json:"artifacts"`
+	Steps      map[string]StepResult       `json:"steps"`
+	Provenance map[string]ProvenanceRecord `json:"provenance"`
 	mu         sync.RWMutex
 }
 
@@ -44,12 +37,12 @@ func NewState() *State {
 	return &State{
 		Artifacts:  make(map[string]Artifact),
 		Steps:      make(map[string]StepResult),
-		Provenance: make(map[string]StepProvenance),
+		Provenance: make(map[string]ProvenanceRecord),
 	}
 }
 
 // RecordProvenance stores a validated provenance record for a step.
-func (s *State) RecordProvenance(stepName string, rec StepProvenance) error {
+func (s *State) RecordProvenance(stepName string, rec ProvenanceRecord) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, exists := s.Provenance[stepName]; exists {
@@ -83,6 +76,45 @@ func (s *State) Resolve(ref string) (Artifact, error) {
 		return Artifact{}, fmt.Errorf("artifact %q not found; available: %v", ref, s.artifactKeys())
 	}
 	return a, nil
+}
+
+// CollectProvenance walks the DAG backwards from fromStep and returns
+// all provenance records of transitive predecessors, sorted by step name
+// for deterministic attestation output.
+func (s *State) CollectProvenance(dag *DAG, fromStep string) []ProvenanceRecord {
+	if dag == nil {
+		return nil
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	visited := map[string]bool{}
+	var walk func(name string)
+	walk = func(name string) {
+		if visited[name] {
+			return
+		}
+		visited[name] = true
+		for _, dep := range dag.edges[name] {
+			walk(dep)
+		}
+	}
+	walk(fromStep)
+	delete(visited, fromStep) // exclude the deploy step itself
+
+	var names []string
+	for n := range visited {
+		if _, ok := s.Provenance[n]; ok {
+			names = append(names, n)
+		}
+	}
+	sort.Strings(names)
+
+	out := make([]ProvenanceRecord, 0, len(names))
+	for _, n := range names {
+		out = append(out, s.Provenance[n])
+	}
+	return out
 }
 
 // RecordStep stores the result of a completed step.

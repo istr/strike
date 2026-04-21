@@ -39,7 +39,7 @@ type Attestation struct {
 	Drift          *DriftReport              `json:"drift,omitempty"`
 	Engine         *EngineRecord             `json:"engine,omitempty"`
 	Rekor          *lane.RekorEntry          `json:"rekor,omitempty"`
-	Source         *SourceProvenance         `json:"source,omitempty"`
+	Provenance     []lane.ProvenanceRecord   `json:"provenance"`
 	DeployID       string                    `json:"deploy_id"`
 	LaneRef        string                    `json:"lane_ref"` // digest of lane definition
 	SignedEnvelope []byte                    `json:"-"`        // DSSE envelope, not part of attestation JSON
@@ -119,6 +119,7 @@ type Deployer struct {
 	Engine       container.Engine
 	EngineID     *container.EngineIdentity
 	Rekor        *executor.RekorClient
+	DAG          *lane.DAG
 	ArtifactRefs map[string]string // pre-resolved: artifact name → "step.output" state ref
 	SigningKey   []byte
 	KeyPassword  []byte
@@ -156,9 +157,8 @@ func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.Sta
 		return nil, err
 	}
 
-	// 3.5. Source provenance — TODO(step-05): replace with provenance
-	// record traversal from the DAG once ProvenanceRecord is wired in.
-	var sourceProv *SourceProvenance
+	// 3.5. Collect provenance records from transitive predecessors.
+	provenance := state.CollectProvenance(d.DAG, string(step.Name))
 
 	// 4. Execute deploy action
 	if execErr := d.executeMethod(ctx, spec); execErr != nil {
@@ -176,15 +176,15 @@ func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.Sta
 
 	// 6. Build attestation
 	att := &Attestation{
-		DeployID:  deployID,
-		Timestamp: started,
-		Target:    spec.Target,
-		Artifacts: artifactDigests,
-		PreState:  preState,
-		PostState: postState,
-		Drift:     drift,
-		Engine:    d.engineRecord(),
-		Source:    sourceProv,
+		DeployID:   deployID,
+		Timestamp:  started,
+		Target:     spec.Target,
+		Artifacts:  artifactDigests,
+		PreState:   preState,
+		PostState:  postState,
+		Drift:      drift,
+		Engine:     d.engineRecord(),
+		Provenance: provenance,
 	}
 
 	// 7. Validate attestation against CUE schema.
@@ -374,7 +374,7 @@ func (d *Deployer) captureOne(ctx context.Context, sc lane.StateCapture) (StateS
 	for _, m := range sc.Mounts {
 		mounts = append(mounts, container.Mount{
 			Source:   m.Source,
-			Target:   m.Target,
+			Target:   m.Target.String(),
 			ReadOnly: true,
 		})
 	}
