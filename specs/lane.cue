@@ -29,6 +29,14 @@ package lane
 }
 
 // ---------------------------------------------------------------------------
+// Shared path type — absolute and canonical container path
+// ---------------------------------------------------------------------------
+
+// ContainerPath is an absolute, canonical path inside a container.
+// Rejects: relative paths, double slashes, dot segments, trailing slashes.
+#ContainerPath: string & =~"^/" & !~"//" & !~"/\\.(/|$)" & !~"/\\.\\.(/|$)" & !~".+/$"
+
+// ---------------------------------------------------------------------------
 // Step — the union type
 // ---------------------------------------------------------------------------
 
@@ -42,7 +50,7 @@ package lane
 	inputs:      [...#InputRef] @go(Inputs)
 	outputs:     [...#OutputSpec] @go(Outputs)
 	secrets:     [...#SecretRef] @go(Secrets)
-	workdir?:    string & =~"^/" @go(Workdir)
+	workdir?:    #ContainerPath @go(Workdir)
 	network?:    bool @go(Network)
 	timeout?:    #Duration @go(Timeout)
 	pack?:       #PackSpec @go(Pack,optional=nillable)
@@ -73,7 +81,7 @@ package lane
 	@go(InputRef)
 	name:    string @go(Name)
 	from:    string @go(From)           // "step_name.output_name"
-	mount:   string & =~"^/" @go(Mount)
+	mount:   #ContainerPath @go(Mount)
 	digest?: #Digest @go(Digest,type=*Digest)
 }
 
@@ -87,7 +95,7 @@ package lane
 	@go(OutputSpec)
 	name:      string @go(Name)
 	type:      #ArtifactType @go(Type)
-	path:      string @go(Path)
+	path:      #ContainerPath @go(Path)
 	expected?: #OutputValidation @go(Expected,optional=nillable)
 }
 
@@ -130,7 +138,7 @@ package lane
 #PackFile: {
 	@go(PackFile)
 	from: string @go(From)
-	dest: string & =~"^/" @go(Dest)
+	dest: #ContainerPath @go(Dest)
 	mode: *0o755 | int @go(Mode)
 	uid?: int @go(UID)
 	gid?: int @go(GID)
@@ -250,7 +258,7 @@ package lane
 #CaptureMount: {
 	@go(CaptureMount)
 	source: string @go(Source)
-	target: string & =~"^/" @go(Target)
+	target: #ContainerPath @go(Target)
 }
 
 // ---------------------------------------------------------------------------
@@ -269,7 +277,7 @@ package lane
 #ProvenanceSpec: {
 	@go(ProvenanceSpec)
 	type:            "git" | "tarball" | "oci" | "url" @go(Type)
-	path:            string & =~"^/" @go(Path)
+	path:            #ContainerPath @go(Path)
 	require_signed?: bool @go(RequireSigned)
 }
 
