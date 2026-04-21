@@ -4,6 +4,7 @@ package lane
 
 import (
 	"fmt"
+	"path"
 	"strings"
 )
 
@@ -87,6 +88,10 @@ func Build(p *Lane) (*DAG, error) {
 		return nil, err
 	}
 	if err := d.resolveDeployEdges(p); err != nil {
+		return nil, err
+	}
+
+	if err := d.validateProvenancePaths(p); err != nil {
 		return nil, err
 	}
 
@@ -230,6 +235,34 @@ func (d *DAG) resolveDeployEdges(p *Lane) error {
 				FromOutput:   out,
 			})
 			d.addEdge(name, stepName)
+		}
+	}
+	return nil
+}
+
+// validateProvenancePaths checks that each step's provenance.path
+// (if declared) is absolute, canonical, and lies within an output directory.
+func (d *DAG) validateProvenancePaths(p *Lane) error {
+	for _, s := range p.Steps {
+		if s.Provenance == nil {
+			continue
+		}
+		provPath := s.Provenance.Path
+		if !path.IsAbs(provPath) || path.Clean(provPath) != provPath {
+			return fmt.Errorf("step %q: provenance.path %q must be absolute and canonical",
+				s.Name, provPath)
+		}
+		found := false
+		for _, out := range s.Outputs {
+			outDir := path.Dir(out.Path)
+			if strings.HasPrefix(provPath, outDir+"/") || provPath == out.Path {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("step %q: provenance.path %q is not within any declared output",
+				s.Name, provPath)
 		}
 	}
 	return nil

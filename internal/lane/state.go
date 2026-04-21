@@ -11,12 +11,21 @@ import (
 // If this line fails, the generated file is missing the Artifact definition.
 var _ Artifact
 
+// StepProvenance is a type-tagged wrapper around a validated provenance
+// record. The Raw field contains canonical JSON that has been validated
+// against the CUE schema for the declared type.
+type StepProvenance struct {
+	Type string          `json:"type"`
+	Raw  json.RawMessage `json:"raw"`
+}
+
 // State tracks artifacts and step results across lane execution.
 // All artifact references use "step_name.output_name" keys.
 type State struct {
-	Artifacts map[string]Artifact   `json:"artifacts"`
-	Steps     map[string]StepResult `json:"steps"`
-	mu        sync.RWMutex
+	Artifacts  map[string]Artifact       `json:"artifacts"`
+	Steps      map[string]StepResult     `json:"steps"`
+	Provenance map[string]StepProvenance `json:"provenance"`
+	mu         sync.RWMutex
 }
 
 // StepResult records execution metadata for a completed step.
@@ -33,9 +42,21 @@ type StepResult struct {
 // NewState creates an empty lane state.
 func NewState() *State {
 	return &State{
-		Artifacts: make(map[string]Artifact),
-		Steps:     make(map[string]StepResult),
+		Artifacts:  make(map[string]Artifact),
+		Steps:      make(map[string]StepResult),
+		Provenance: make(map[string]StepProvenance),
 	}
+}
+
+// RecordProvenance stores a validated provenance record for a step.
+func (s *State) RecordProvenance(stepName string, rec StepProvenance) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, exists := s.Provenance[stepName]; exists {
+		return fmt.Errorf("provenance for step %q already recorded", stepName)
+	}
+	s.Provenance[stepName] = rec
+	return nil
 }
 
 // Register adds an artifact to the state under "step_name.output_name".

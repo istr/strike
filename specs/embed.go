@@ -20,3 +20,9 @@ var AttestationSchema string
 //
 //go:embed artifact.cue
 var ArtifactSchema string
+
+// ProvenanceSchema is the embedded CUE schema for source provenance records.
+// Same package lane as LaneSchema.
+//
+//go:embed source-provenance.cue
+var ProvenanceSchema string

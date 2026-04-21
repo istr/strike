@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/istr/strike/internal/container"
@@ -339,6 +340,11 @@ func (rc *runContext) executeContainerStep(ctx context.Context, step *lane.Step,
 	if err := rc.loadOCIOutputs(ctx, step, stepName, safeName, outRoot); err != nil {
 		return err
 	}
+	if step.Provenance != nil {
+		if err := rc.captureProvenance(step, safeName, outDir); err != nil {
+			return fmt.Errorf("%s: provenance: %w", safeName, err)
+		}
+	}
 	return rc.pushAndReport(ctx, step, safeName, tag)
 }
 
@@ -378,6 +384,34 @@ func (rc *runContext) registerFileOutputs(step *lane.Step, stepName, safeName, o
 		}
 	}
 	return nil
+}
+
+// outputMountTarget is the fixed container path where the output directory is mounted.
+const outputMountTarget = "/out"
+
+func (rc *runContext) captureProvenance(step *lane.Step, safeName, outDir string) error {
+	spec := step.Provenance
+	// Map container path to host path. The output directory is mounted at /out,
+	// so /out/provenance.json → outDir/provenance.json.
+	rel, err := filepath.Rel(outputMountTarget, spec.Path)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return fmt.Errorf("provenance path %q is not within %s", spec.Path, outputMountTarget)
+	}
+	hostPath := filepath.Join(outDir, rel)
+
+	raw, err := os.ReadFile(hostPath) //nolint:gosec // G304: path is outDir (our temp) + validated relative
+	if err != nil {
+		return fmt.Errorf("read provenance file %q: %w", spec.Path, err)
+	}
+	rec, err := lane.ValidateProvenance(spec.Type, raw)
+	if err != nil {
+		return fmt.Errorf("validate %s provenance: %w", spec.Type, err)
+	}
+	if spec.RequireSigned && !rec.IsSigned() {
+		return fmt.Errorf("provenance requires signature.verified=true, but record is unsigned")
+	}
+	log.Printf("PROV   %s type=%s signed=%v", safeName, spec.Type, rec.IsSigned())
+	return rc.laneState.RecordProvenance(string(step.Name), rec)
 }
 
 func (rc *runContext) buildInputMounts(step *lane.Step) []executor.Mount {

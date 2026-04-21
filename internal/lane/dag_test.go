@@ -399,6 +399,62 @@ func assertOrder(t *testing.T, order []string, before, after string) {
 	}
 }
 
+// --------------------------------------------------------------------------.
+// Provenance path validation.
+// --------------------------------------------------------------------------.
+
+func TestBuild_ProvenancePathInOutput(t *testing.T) {
+	p := &lane.Lane{
+		Steps: []lane.Step{
+			{
+				Name: "src", Image: "img", Args: []string{}, Env: map[string]string{},
+				Outputs: []lane.OutputSpec{{Name: "tree", Type: "directory", Path: "/out/tree"}},
+				Provenance: &lane.ProvenanceSpec{
+					Type: "git",
+					Path: "/out/provenance.json",
+				},
+			},
+		},
+	}
+	if _, err := lane.Build(p); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestBuild_ProvenancePathOutsideOutput(t *testing.T) {
+	p := &lane.Lane{
+		Steps: []lane.Step{
+			{
+				Name: "src", Image: "img", Args: []string{}, Env: map[string]string{},
+				Outputs: []lane.OutputSpec{{Name: "tree", Type: "directory", Path: "/out/tree"}},
+				Provenance: &lane.ProvenanceSpec{
+					Type: "git",
+					Path: "/etc/provenance.json",
+				},
+			},
+		},
+	}
+	_, err := lane.Build(p)
+	assertErrContains(t, err, "not within any declared output")
+}
+
+func TestBuild_ProvenancePathRelative(t *testing.T) {
+	p := &lane.Lane{
+		Steps: []lane.Step{
+			{
+				Name: "src", Image: "img", Args: []string{}, Env: map[string]string{},
+				Outputs: []lane.OutputSpec{{Name: "tree", Type: "directory", Path: "/out/tree"}},
+				Provenance: &lane.ProvenanceSpec{
+					Type: "git",
+					Path: "out/provenance.json",
+				},
+			},
+		},
+	}
+	_, err := lane.Build(p)
+	assertErrContains(t, err, "must be absolute")
+}
+
 // assertErrContains checks that err is non-nil and contains substr.
 func assertErrContains(t *testing.T, err error, substr string) {
 	t.Helper()
