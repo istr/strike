@@ -2,6 +2,18 @@
 
 Reproducible, rootless CI/CD lanes. No shell. No root. No local toolchain.
 
+**Please note that the Strike project is still in the pre-beta and pre-production phase.**
+Breaking changes are acceptable and do not need to be mentioned.
+
+We are developing our tool architecture based on real-world use cases with
+the aim of creating a tool that operates according to a few principles
+to support end-to-end software attestation and provenance tracing.
+
+This will also systematically reduce the attack surface for modern software
+supply-chain attacks.
+
+See also: [DESIGN-PRINCIPLES.md](DESIGN-PRINCIPLES.md)
+
 ## What is strike?
 
 strike is a cloud-native lane executor that treats containers as the only
