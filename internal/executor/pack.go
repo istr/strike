@@ -23,6 +23,7 @@ import (
 
 	"github.com/google/go-containerregistry/pkg/name"
 
+	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/lane"
 )
 
@@ -139,7 +140,7 @@ func Pack(ctx context.Context, opts PackOpts) (*PackResult, error) {
 	}
 
 	// 3. Generate SBOM (reads binary buildinfo + probes remote registry)
-	buildTime := ReproducibleTimestamp()
+	buildTime := clock.Reproducible()
 	sbomBytes, err := GenerateSBOM(assembled.BinaryPath, assembled.Digest.String(), string(opts.Spec.Base), buildTime)
 	if err != nil {
 		return nil, fmt.Errorf("pack: sbom: %w", err)

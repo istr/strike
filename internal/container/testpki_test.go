@@ -16,8 +16,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
+	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/container"
 )
 
@@ -44,8 +44,8 @@ func generateTestPKI(t *testing.T) *testPKI {
 	caTemplate := &x509.Certificate{
 		SerialNumber:          big.NewInt(1),
 		Subject:               pkix.Name{CommonName: "strike-test-ca"},
-		NotBefore:             time.Now().Add(-time.Minute),
-		NotAfter:              time.Now().Add(time.Hour),
+		NotBefore:             clock.Wall().Add(-clock.Minute),
+		NotAfter:              clock.Wall().Add(clock.Hour),
 		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
 		BasicConstraintsValid: true,
 		IsCA:                  true,
@@ -89,8 +89,8 @@ func generateLeafCert(t *testing.T, cn string, caKey *ecdsa.PrivateKey, caCert *
 	template := &x509.Certificate{
 		SerialNumber: big.NewInt(2),
 		Subject:      pkix.Name{CommonName: cn},
-		NotBefore:    time.Now().Add(-time.Minute),
-		NotAfter:     time.Now().Add(time.Hour),
+		NotBefore:    clock.Wall().Add(-clock.Minute),
+		NotAfter:     clock.Wall().Add(clock.Hour),
 		KeyUsage:     x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:  usage,
 		IPAddresses:  ips,
@@ -121,8 +121,8 @@ func generateClientCert(t *testing.T, cn string, caKey *ecdsa.PrivateKey, caCert
 	template := &x509.Certificate{
 		SerialNumber: big.NewInt(3),
 		Subject:      pkix.Name{CommonName: cn},
-		NotBefore:    time.Now().Add(-time.Minute),
-		NotAfter:     time.Now().Add(time.Hour),
+		NotBefore:    clock.Wall().Add(-clock.Minute),
+		NotAfter:     clock.Wall().Add(clock.Hour),
 		KeyUsage:     x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
 	}

@@ -8,7 +8,8 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"time"
+
+	"github.com/istr/strike/internal/clock"
 )
 
 // newHTTPClient creates an HTTP client for the given address.
@@ -21,7 +22,7 @@ func newHTTPClient(addr string, tlsCfg *TLSConfig) (*http.Client, error) {
 	transport := &http.Transport{
 		DisableCompression: true,
 		MaxIdleConns:       10,
-		IdleConnTimeout:    30 * time.Second,
+		IdleConnTimeout:    30 * clock.Second,
 	}
 
 	switch {
@@ -75,16 +76,16 @@ type auditTransport struct {
 }
 
 func (a *auditTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	start := time.Now()
+	start := clock.Wall()
 	resp, err := a.inner.RoundTrip(req)
-	duration := time.Since(start)
+	duration := clock.Since(start)
 
 	status := -1
 	if resp != nil {
 		status = resp.StatusCode
 	}
 	log.Printf("AUDIT  %s %s -> %d (%s)", // #nosec G706 -- internal engine HTTP request, not user input
-		req.Method, req.URL.Path, status, duration.Round(time.Millisecond))
+		req.Method, req.URL.Path, status, duration.Round(clock.Millisecond))
 
 	return resp, err
 }

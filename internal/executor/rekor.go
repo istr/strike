@@ -12,12 +12,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"time"
 
+	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/lane"
 )
 
-const rekorTimeout = 30 * time.Second
+const rekorTimeout = 30 * clock.Second
 
 // RekorClient submits hashedrekord entries to a Rekor transparency log.
 type RekorClient struct {

@@ -3,8 +3,8 @@ package lane_test
 import (
 	"strings"
 	"testing"
-	"time"
 
+	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/lane"
 )
 
@@ -12,15 +12,15 @@ func TestParseDuration(t *testing.T) {
 	tests := []struct {
 		input   lane.Duration
 		name    string
-		def     time.Duration
-		want    time.Duration
+		def     clock.Duration
+		want    clock.Duration
 		wantErr bool
 	}{
-		{input: "30s", name: "seconds", def: time.Minute, want: 30 * time.Second},
-		{input: "5m", name: "minutes", def: time.Minute, want: 5 * time.Minute},
-		{input: "1h", name: "hours", def: time.Minute, want: time.Hour},
-		{input: "", name: "empty uses default", def: time.Minute, want: time.Minute},
-		{input: "invalid", name: "invalid", def: time.Minute, wantErr: true},
+		{input: "30s", name: "seconds", def: clock.Minute, want: 30 * clock.Second},
+		{input: "5m", name: "minutes", def: clock.Minute, want: 5 * clock.Minute},
+		{input: "1h", name: "hours", def: clock.Minute, want: clock.Hour},
+		{input: "", name: "empty uses default", def: clock.Minute, want: clock.Minute},
+		{input: "invalid", name: "invalid", def: clock.Minute, wantErr: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

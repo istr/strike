@@ -3,8 +3,8 @@ package lane_test
 import (
 	"encoding/json"
 	"testing"
-	"time"
 
+	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/lane"
 )
 
@@ -68,8 +68,8 @@ func TestRecordStep(t *testing.T) {
 	r := lane.StepResult{
 		Name:      "build",
 		StepType:  "run",
-		StartedAt: time.Now(),
-		Duration:  5 * time.Second,
+		StartedAt: clock.Wall(),
+		Duration:  5 * clock.Second,
 		Inputs:    map[string]string{"src": "sha256:111"},
 		Outputs:   map[string]string{"binary": "sha256:222"},
 		ExitCode:  0,

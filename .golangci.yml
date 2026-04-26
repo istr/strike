@@ -103,22 +103,38 @@ linters:
               desc: "use crypto/sha256 -- MD5 is not collision resistant"
             - pkg: crypto/sha1
               desc: "use crypto/sha256 -- SHA-1 is not collision resistant"
+        no-direct-time:
+          files:
+            - $all
+            - "!**/internal/clock/clock.go"
+            - "!**/internal/clock/clock_test.go"
+          deny:
+            - pkg: "time"
+              desc: "import internal/clock instead; see DESIGN-PRINCIPLES.md 'Reproducibility is enforced, not hoped for'"
+
+  exclusions:
+    presets: []
+    rules:
+      # Test files: relax complexity limits (table-driven tests are long)
+      - path: _test\.go
+        linters:
+          - funlen
+          - gocyclo
+          - gocognit
+          - dupl
+      # clock package: re-exported stdlib duration constants must keep their
+      # original names (Second, Minute, etc.) -- time-naming is a false positive.
+      - path: internal/clock/clock\.go
+        linters:
+          - revive
+        text: "time-naming"
+      # Generated code: skip all linters
+      - path: cue_types_lane_gen\.go
+        linters:
+          - godot
+          - revive
+          - govet
 
 issues:
-  exclude-use-default: false
   max-issues-per-linter: 0
   max-same-issues: 50
-  exclude-rules:
-    # Test files: relax complexity limits (table-driven tests are long)
-    - path: _test\.go
-      linters:
-        - funlen
-        - gocyclo
-        - gocognit
-        - dupl
-    # Generated code: skip all linters
-    - path: cue_types_lane_gen\.go
-      linters:
-        - godot
-        - revive
-        - govet

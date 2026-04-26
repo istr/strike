@@ -5,7 +5,8 @@ import (
 	"fmt"
 	"sort"
 	"sync"
-	"time"
+
+	"github.com/istr/strike/internal/clock"
 )
 
 // Compile-time check: Artifact is now CUE-generated in cue_types_lane_gen.go.
@@ -23,12 +24,12 @@ type State struct {
 
 // StepResult records execution metadata for a completed step.
 type StepResult struct {
-	StartedAt time.Time         `json:"started_at"`
+	StartedAt clock.Time        `json:"started_at"`
 	Inputs    map[string]string `json:"inputs"`
 	Outputs   map[string]string `json:"outputs"`
 	Name      string            `json:"name"`
 	StepType  string            `json:"step_type"`
-	Duration  time.Duration     `json:"duration"`
+	Duration  clock.Duration    `json:"duration"`
 	ExitCode  int               `json:"exit_code"`
 }
 

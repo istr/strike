@@ -276,10 +276,11 @@ return fmt.Errorf("Failed to sign image: %s. Error: %v", ref, err)
 
 ### Reproducible builds
 
-Pack steps produce deterministic OCI images. All timestamps use
-`SOURCE_DATE_EPOCH` (per https://reproducible-builds.org/specs/) when
-set, otherwise Unix epoch 0. Never use `time.Now()` in any code path
-that affects image content, SBOM data, or attestation payloads.
+Never import the standard library `time` package directly. Use
+`internal/clock`: `clock.Wall()` for event timestamps (deploy
+attestations, audit logs, engine handshake, test fixtures);
+`clock.Reproducible()` for any value whose bytes end up in artifact
+content. Direct `time` imports are rejected by depguard in CI.
 
 ### Cryptography
 

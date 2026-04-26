@@ -16,8 +16,8 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"time"
 
+	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/executor"
 	"github.com/istr/strike/internal/lane"
@@ -31,7 +31,7 @@ const (
 
 // Attestation is the signed record produced by every deploy step.
 type Attestation struct {
-	Timestamp      time.Time                 `json:"timestamp"`
+	Timestamp      clock.Time                `json:"timestamp"`
 	Target         lane.DeployTarget         `json:"target"`
 	Artifacts      map[string]SignedArtifact `json:"artifacts"`
 	PreState       map[string]StateSnap      `json:"pre_state"`
@@ -93,11 +93,11 @@ type EngineRecord struct {
 
 // StateSnap is a point-in-time capture of one state dimension.
 type StateSnap struct {
-	Timestamp time.Time `json:"timestamp"`
-	Name      string    `json:"name"`
-	Image     string    `json:"image"`
-	Digest    string    `json:"digest"`
-	Output    []byte    `json:"output"`
+	Timestamp clock.Time `json:"timestamp"`
+	Name      string     `json:"name"`
+	Image     string     `json:"image"`
+	Digest    string     `json:"digest"`
+	Output    []byte     `json:"output"`
 }
 
 // DriftReport compares current pre-state with previous post-state.
@@ -134,7 +134,7 @@ func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.Sta
 	}
 
 	deployID := GenerateDeployID(step.Name)
-	started := time.Now()
+	started := clock.Wall()
 
 	// 1. Capture pre-state
 	preState, err := d.captureState(ctx, spec.Attestation.PreState)
@@ -301,7 +301,7 @@ func resolveArtifactDigests(stepName string, refs map[string]string, state *lane
 }
 
 // recordAttestation marshals and records the attestation in lane state.
-func (d *Deployer) recordAttestation(att *Attestation, step *lane.Step, state *lane.State, started time.Time) error {
+func (d *Deployer) recordAttestation(att *Attestation, step *lane.Step, state *lane.State, started clock.Time) error {
 	attJSON, err := json.Marshal(att)
 	if err != nil {
 		return fmt.Errorf("marshal attestation: %w", err)
@@ -322,7 +322,7 @@ func (d *Deployer) recordAttestation(att *Attestation, step *lane.Step, state *l
 		Name:      step.Name,
 		StepType:  "deploy",
 		StartedAt: started,
-		Duration:  time.Since(started),
+		Duration:  clock.Since(started),
 		Outputs:   map[string]string{"attestation": attDigest.String()},
 	})
 	return nil
@@ -352,7 +352,7 @@ func (d *Deployer) captureOne(ctx context.Context, sc lane.StateCapture) (StateS
 	snap := StateSnap{
 		Name:      sc.Name,
 		Image:     string(sc.Image),
-		Timestamp: time.Now(),
+		Timestamp: clock.Wall(),
 	}
 
 	if sc.Image == "" {
@@ -516,7 +516,7 @@ func (d *Deployer) executeCustomDeploy(ctx context.Context, m lane.DeployMethod)
 
 // GenerateDeployID creates a unique deploy identifier from a step name.
 func GenerateDeployID(stepName string) string {
-	data := fmt.Sprintf("%s-%d", stepName, time.Now().UnixNano())
+	data := fmt.Sprintf("%s-%d", stepName, clock.Wall().UnixNano())
 	return hex.EncodeToString(sha256Sum([]byte(data)))[:16]
 }
 

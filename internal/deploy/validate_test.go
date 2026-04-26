@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
+	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/deploy"
 	"github.com/istr/strike/internal/lane"
 )
@@ -15,7 +15,7 @@ import (
 func TestValidateAttestation_Valid(t *testing.T) {
 	att := &deploy.Attestation{
 		DeployID:  "abcdef0123456789",
-		Timestamp: time.Date(2025, 1, 15, 10, 30, 0, 0, time.UTC),
+		Timestamp: clock.Reproducible(),
 		Target:    lane.DeployTarget{Type: "registry", Description: "production"},
 		Artifacts: map[string]deploy.SignedArtifact{
 			"image": {Digest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
@@ -25,7 +25,7 @@ func TestValidateAttestation_Valid(t *testing.T) {
 				Name:      "version",
 				Image:     "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 				Digest:    "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-				Timestamp: time.Date(2025, 1, 15, 10, 30, 1, 0, time.UTC),
+				Timestamp: clock.Unix(1, 0),
 			},
 		},
 		PostState: map[string]deploy.StateSnap{
@@ -33,7 +33,7 @@ func TestValidateAttestation_Valid(t *testing.T) {
 				Name:      "version",
 				Image:     "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 				Digest:    "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-				Timestamp: time.Date(2025, 1, 15, 10, 31, 0, 0, time.UTC),
+				Timestamp: clock.Unix(60, 0),
 			},
 		},
 	}
@@ -47,7 +47,7 @@ func TestValidateAttestation_WithEngine(t *testing.T) {
 	rootless := true
 	att := &deploy.Attestation{
 		DeployID:  "abcdef0123456789",
-		Timestamp: time.Date(2025, 1, 15, 10, 30, 0, 0, time.UTC),
+		Timestamp: clock.Reproducible(),
 		Target:    lane.DeployTarget{Type: "kubernetes", Description: "staging"},
 		Artifacts: map[string]deploy.SignedArtifact{
 			"app": {Digest: "sha256:1111111111111111111111111111111111111111111111111111111111111111"},
@@ -71,7 +71,7 @@ func TestValidateAttestation_WithEngine(t *testing.T) {
 func TestValidateAttestation_WithDrift(t *testing.T) {
 	att := &deploy.Attestation{
 		DeployID:  "abcdef0123456789",
-		Timestamp: time.Date(2025, 1, 15, 10, 30, 0, 0, time.UTC),
+		Timestamp: clock.Reproducible(),
 		Target:    lane.DeployTarget{Type: "registry", Description: "production"},
 		Artifacts: map[string]deploy.SignedArtifact{},
 		PreState:  map[string]deploy.StateSnap{},
@@ -92,7 +92,7 @@ func TestValidateAttestation_WithDrift(t *testing.T) {
 func TestValidateAttestation_InvalidDeployID(t *testing.T) {
 	att := &deploy.Attestation{
 		DeployID:  "NOT-HEX!!", // too short, wrong chars
-		Timestamp: time.Date(2025, 1, 15, 10, 30, 0, 0, time.UTC),
+		Timestamp: clock.Reproducible(),
 		Target:    lane.DeployTarget{Type: "registry", Description: "test"},
 		Artifacts: map[string]deploy.SignedArtifact{},
 		PreState:  map[string]deploy.StateSnap{},
@@ -107,7 +107,7 @@ func TestValidateAttestation_InvalidDeployID(t *testing.T) {
 func TestValidateAttestation_InvalidEngineConnectionType(t *testing.T) {
 	att := &deploy.Attestation{
 		DeployID:  "abcdef0123456789",
-		Timestamp: time.Date(2025, 1, 15, 10, 30, 0, 0, time.UTC),
+		Timestamp: clock.Reproducible(),
 		Target:    lane.DeployTarget{Type: "registry", Description: "test"},
 		Artifacts: map[string]deploy.SignedArtifact{},
 		PreState:  map[string]deploy.StateSnap{},
@@ -145,7 +145,7 @@ func TestValidateAttestation_MissingTarget(t *testing.T) {
 func TestValidateAttestation_EmptyStatesAllowed(t *testing.T) {
 	att := &deploy.Attestation{
 		DeployID:  "abcdef0123456789",
-		Timestamp: time.Date(2025, 1, 15, 10, 30, 0, 0, time.UTC),
+		Timestamp: clock.Reproducible(),
 		Target:    lane.DeployTarget{Type: "registry", Description: "first deploy"},
 		Artifacts: map[string]deploy.SignedArtifact{},
 		PreState:  map[string]deploy.StateSnap{},

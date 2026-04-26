@@ -113,10 +113,14 @@ validation cannot be reproducibly attested.
 
 Output artifacts must be byte-identical for byte-identical inputs.
 Timestamps follow `SOURCE_DATE_EPOCH`, file enumeration is
-canonicalized, layer ordering is stable, and `time.Now()` is prohibited
-in any path that affects artifact content. Without this property, the
-cross-implementation verification that the CUE-first principle exists
-to support cannot distinguish correctness from coincidence.
+canonicalized, and layer ordering is stable. All time access in strike
+is dispatched through the `internal/clock` package: `clock.Reproducible()`
+for values that end up in artifact content bytes, `clock.Wall()` for
+event receipts and telemetry. Direct imports of the standard-library
+`time` package are rejected in CI outside that one file. Without this
+property, the cross-implementation verification that the CUE-first
+principle exists to support cannot distinguish correctness from
+coincidence.
 
 
 ## Code is liability

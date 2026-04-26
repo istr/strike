@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"os"
 	"testing"
-	"time"
 
+	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/container"
 )
 
@@ -57,7 +57,7 @@ func checkVolatilePresence(t *testing.T, m map[string]any, paths [][]string) {
 }
 
 func TestIntegrationContainerInspectSchema(t *testing.T) {
-	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 60*clock.Second)
 	defer cancel()
 
 	eng := needsIntegrationEngine(ctx, t)
@@ -73,7 +73,7 @@ func TestIntegrationContainerInspectSchema(t *testing.T) {
 		t.Fatalf("ContainerCreate: %v", err)
 	}
 	t.Cleanup(func() {
-		cctx, ccancel := context.WithTimeout(context.Background(), 5*time.Second)
+		cctx, ccancel := context.WithTimeout(context.Background(), 5*clock.Second)
 		defer ccancel()
 		if rmErr := container.PodmanContainerRemove(cctx, eng, id); rmErr != nil {
 			t.Logf("cleanup: ContainerRemove(%s): %v", id, rmErr)

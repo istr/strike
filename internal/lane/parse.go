@@ -4,7 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"time"
+
+	"github.com/istr/strike/internal/clock"
 
 	"cuelang.org/go/cue"
 	"cuelang.org/go/cue/cuecontext"
@@ -14,12 +15,12 @@ import (
 )
 
 // ParseDuration converts a lane duration string ("30s", "5m", "1h") to
-// time.Duration. Returns defaultVal if d is empty.
-func ParseDuration(d Duration, defaultVal time.Duration) (time.Duration, error) {
+// clock.Duration. Returns defaultVal if d is empty.
+func ParseDuration(d Duration, defaultVal clock.Duration) (clock.Duration, error) {
 	if d == "" {
 		return defaultVal, nil
 	}
-	return time.ParseDuration(string(d))
+	return clock.ParseDuration(string(d))
 }
 
 var schema = specs.LaneSchema

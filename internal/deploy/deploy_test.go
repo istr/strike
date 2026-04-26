@@ -19,8 +19,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
+	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/deploy"
 	"github.com/istr/strike/internal/lane"
@@ -39,8 +39,8 @@ func newTLSTestEngine(t *testing.T, handler http.Handler) container.Engine {
 	caTemplate := &x509.Certificate{
 		SerialNumber:          big.NewInt(1),
 		Subject:               pkix.Name{CommonName: "deploy-test-ca"},
-		NotBefore:             time.Now().Add(-time.Minute),
-		NotAfter:              time.Now().Add(time.Hour),
+		NotBefore:             clock.Wall().Add(-clock.Minute),
+		NotAfter:              clock.Wall().Add(clock.Hour),
 		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
 		BasicConstraintsValid: true,
 		IsCA:                  true,
@@ -63,8 +63,8 @@ func newTLSTestEngine(t *testing.T, handler http.Handler) container.Engine {
 	serverTemplate := &x509.Certificate{
 		SerialNumber: big.NewInt(2),
 		Subject:      pkix.Name{CommonName: "deploy-test-engine"},
-		NotBefore:    time.Now().Add(-time.Minute),
-		NotAfter:     time.Now().Add(time.Hour),
+		NotBefore:    clock.Wall().Add(-clock.Minute),
+		NotAfter:     clock.Wall().Add(clock.Hour),
 		KeyUsage:     x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		IPAddresses:  []net.IP{net.IPv4(127, 0, 0, 1)},

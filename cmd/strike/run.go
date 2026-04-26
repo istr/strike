@@ -7,8 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
+	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/deploy"
 	"github.com/istr/strike/internal/executor"
@@ -52,7 +52,7 @@ func (rc *runContext) runStep(stepName string) error {
 	step := rc.dag.Steps[stepName]
 	safeName := sanitizeForLog(stepName)
 
-	timeout, err := lane.ParseDuration(step.Timeout, 10*time.Minute)
+	timeout, err := lane.ParseDuration(step.Timeout, 10*clock.Minute)
 	if err != nil {
 		return fmt.Errorf("%s: invalid timeout %q: %w", safeName, step.Timeout, err)
 	}

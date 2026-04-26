@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"os"
 	"testing"
-	"time"
 
+	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/container"
 )
 
@@ -20,7 +20,7 @@ func TestIntegrationInfoSchema(t *testing.T) {
 		t.Skipf("no container engine: %v", err)
 	}
 
-	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 30*clock.Second)
 	defer cancel()
 
 	if pingErr := eng.Ping(ctx); pingErr != nil {
