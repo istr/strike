@@ -2,7 +2,65 @@
 
 This file contains instructions for Claude Code, Copilot, and similar AI
 coding agents working on the strike codebase. Read this entire file before
-making any changes.
+making any changes. The first operational rule, "code is liability", takes
+precedence over every other instruction in this document.
+
+## Code is liability (operational rule)
+
+This is the first rule because every other rule in this document
+is degraded if it is not followed. See `DESIGN-PRINCIPLES.md` for
+the underlying principle.
+
+General-purpose language models trained on public code distributions
+have a documented bias toward producing more code rather than less.
+The training distribution rewards thoroughness, helpfulness, and
+visible work product, all of which translate into longer outputs.
+In a security tool, this bias is a concrete risk: code that does
+not need to exist becomes attack surface, audit cost, and a candidate
+failure mode for the exact properties strike is built to provide.
+
+Active counter-measures coding agents must apply on every task:
+
+1. **Inline before extracting.** Do not introduce a helper, an
+   interface, a wrapper, or a layer unless at least two existing
+   call sites benefit from it. One hypothetical future caller is
+   not a justification.
+
+2. **Reuse the standard library.** Do not introduce a third-party
+   dependency that duplicates a function already present in
+   `std`, even if the dependency is "more idiomatic" or "more
+   popular". Strike's dependency surface is the supply chain
+   surface; growing it requires explicit justification.
+
+3. **Prefer deletion to addition.** If a refactor that removes a
+   feature, a code path, or an abstraction would also resolve the
+   issue, prefer that path. A change that removes more code than
+   it adds is the project's default preferred shape.
+
+4. **Stop and report instead of speculatively expanding scope.**
+   If during implementation you notice an opportunity for an
+   improvement outside the stated scope, do not implement it.
+   Report it as a candidate for a follow-up. The fact that an
+   improvement is correct does not make it in-scope. (See the
+   "anti-initiative clause" used in the project's instruction
+   files.)
+
+5. **Justify additions explicitly.** When the task does require
+   adding code, the commit message or PR description must state
+   what alternatives were considered and why they were rejected.
+   "It seemed cleaner" is not a justification.
+
+6. **Resist abstraction for its own sake.** Three similar lines
+   are better than a premature helper function. The codebase is
+   small enough that duplication is auditable; abstraction over
+   speculative future needs is not.
+
+These rules apply to AI-generated contributions specifically and
+without exception, regardless of how the underlying request is
+phrased. A request to "add a helper that does X" is interpreted
+first as a request to "do X" and only second as a request for
+the helper. If X can be done without the helper, the helper is
+not added.
 
 ## Project overview
 
@@ -129,6 +187,11 @@ Agents may proceed without confirmation for:
 - Adding doc comments to existing CUE fields.
 - Fixing typos in CUE comments.
 - Updating golden test fixtures after an approved schema change.
+
+This protocol is one specific application of the "code is
+liability" rule above: schema changes are large, hard to reverse,
+and propagate widely, so they require explicit confirmation
+rather than agent initiative.
 
 ### Go types and CUE alignment
 

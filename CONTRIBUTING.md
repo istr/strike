@@ -40,14 +40,63 @@ strike takes a different approach:
   against CUE at runtime. This ensures every implementation (Go, Rust
   verifier, external policy engines) works against the same contract.
 
+## What we look for first
+
+Every contribution to strike is reviewed first against this
+criterion: **the change should not add code unless it must**.
+
+This is the project's first design principle (see
+`DESIGN-PRINCIPLES.md`). It is stated here because it is also the
+first review filter: a PR that adds substantial code without
+removing equivalent or more code requires explicit justification
+in the PR description, and reviewers may close PRs that fail
+this filter without further discussion.
+
+Concretely, the order in which a PR is evaluated:
+
+1. **Does it remove more than it adds?** A PR that deletes code
+   while preserving behavior is the most welcome contribution
+   shape. Refactors that reduce abstraction are valued more than
+   refactors that introduce abstraction.
+
+2. **Does the addition justify itself?** New code must serve at
+   least two existing use sites or one demonstrated production
+   need. New dependencies must replace more lines than they add
+   (counting transitive surface). New abstractions must cite the
+   call sites that benefit, not the ones that might.
+
+3. **Could a smaller change achieve the same result?** Three
+   similar lines copied across files are preferred over one
+   helper. A targeted small change to a framework hook is
+   preferred over a new abstraction layer.
+
+4. **Does it respect the project's principles?** Once the volume
+   question is answered, the standard principle review applies:
+   no shell, no exec, no root, CUE-first, typed secrets, etc.
+
+The order matters. A change that perfectly respects every other
+principle but adds 500 lines where 50 would do will not be merged.
+A change that removes 100 lines while preserving behavior will be
+reviewed favorably even if the diff initially looks unfamiliar.
+
+This filter applies to AI-generated contributions specifically.
+The project is built in an AI-heavy workflow, and the most common
+failure mode of LLM-produced code is volume: a helper added when
+inlining would do, a dependency introduced when the standard
+library suffices, an abstraction created on a single use site.
+Contributors using AI tools are responsible for filtering output
+against this criterion before submitting.
+
 ## What we welcome
 
 **Bug fixes** -- always welcome. If something is broken, please open an issue
 or send a merge request with a clear description of the problem.
 
-**Improvements** -- if they reduce complexity, improve correctness, or make the
-codebase smaller. Refactoring that removes code is valued more than refactoring
-that adds abstractions.
+**Improvements** -- changes that reduce complexity, improve
+correctness, or make the codebase smaller. Refactoring that
+removes code is valued more than refactoring that adds
+abstractions. See "What we look for first" above for the review
+criterion this reflects.
 
 **Features aligned with the project goals** -- new capabilities that maintain
 the small footprint and no-shell invariant.
@@ -190,6 +239,21 @@ essential rules:
 - Data structures crossing package boundaries must be defined in CUE schemas
   under `specs/` before Go implementation. No `map[string]string` for
   structured inter-package data.
+
+## What a good MR description includes
+
+Beyond the conventional commits format described above, a useful
+MR description states:
+
+- **What changed and why.** Imperative, concise.
+- **Volume justification.** If the change adds substantially more
+  code than it removes, what alternatives were considered and
+  why they were rejected.
+- **Principle correspondence.** Which design principles the
+  change relates to, especially if it adjusts a load-bearing
+  invariant.
+- **Test surface.** What new tests cover the change, and which
+  existing tests prove the surrounding behavior is unchanged.
 
 ## Security review
 
