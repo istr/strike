@@ -63,7 +63,7 @@ func (r Run) Execute(ctx context.Context) error {
 	opts.Cmd = r.Step.Args
 	opts.Env = env
 	opts.Mounts = mounts
-	opts.Network = NetworkMode(r.Step.Network)
+	opts.Network = NetworkMode(r.Step.Peers)
 	opts.Workdir = r.Step.Workdir.String()
 	opts.Stdout = os.Stdout
 	opts.Stderr = os.Stderr
@@ -78,10 +78,14 @@ func (r Run) Execute(ctx context.Context) error {
 	return nil
 }
 
-// NetworkMode returns the container network mode string for the given setting.
-func NetworkMode(enabled bool) string {
-	if enabled {
-		return "" // default bridge
+// NetworkMode returns the container engine network mode string for the
+// given peer list. An empty list means --network=none; a non-empty list
+// means --network=bridge. Phase 1 enforcement is declaratory: the peer
+// list itself flows into the deploy attestation; the kernel sees only
+// the bridge/none switch.
+func NetworkMode(peers []lane.Peer) string {
+	if len(peers) == 0 {
+		return "none"
 	}
-	return "none"
+	return "bridge"
 }

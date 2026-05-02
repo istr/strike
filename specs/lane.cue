@@ -24,7 +24,6 @@ package lane
 
 #LaneDefaults: {
 	@go(LaneDefaults)
-	network: *false | bool @go(Network)
 	timeout: *"10m" | #Duration @go(Timeout)
 }
 
@@ -51,7 +50,7 @@ package lane
 	outputs:     [...#OutputSpec] @go(Outputs)
 	secrets:     [...#SecretRef] @go(Secrets)
 	workdir?:    #ContainerPath @go(Workdir)
-	network?:    bool @go(Network)
+	peers?:      [...#Peer] @go(Peers)
 	timeout?:    #Duration @go(Timeout)
 	pack?:       #PackSpec @go(Pack,optional=nillable)
 	deploy?:     #DeploySpec @go(Deploy,optional=nillable)
@@ -104,6 +103,75 @@ package lane
 	content_type?: string @go(ContentType)
 	min_size?:     int @go(MinSize)
 	max_size?:     int @go(MaxSize)
+}
+
+// ---------------------------------------------------------------------------
+// Network peers -- declared trust contracts (ADR-005, ADR-007)
+// ---------------------------------------------------------------------------
+
+// Peer is a discriminated union over the supported network protocols.
+// A non-empty peers list opts the step into network access; absent or
+// empty means --network=none. Peers flow into the deploy attestation.
+#Peer: #HTTPSPeer | #SSHPeer | #OCIPeer
+
+// HTTPSPeer declares an HTTPS endpoint together with its server-trust anchor.
+#HTTPSPeer: {
+	@go(HTTPSPeer)
+	type: "https" @go(Type)
+	// host is hostname or IPv4 literal, optionally with :port.
+	// Lowercase ASCII; punycode required for internationalized domains.
+	host:  string & =~"^[a-z0-9.-]+(:[0-9]+)?$" @go(Host)
+	trust: #HTTPSTrust @go(Trust)
+}
+
+// HTTPSTrust selects between certificate-fingerprint pinning and CA-bundle
+// validation. The system trust store is not an option (deferred per ADR-021).
+#HTTPSTrust: #FingerprintTrust | #CABundleTrust
+
+#FingerprintTrust: {
+	@go(FingerprintTrust)
+	mode:        "cert_fingerprint" @go(Mode)
+	fingerprint: =~"^sha256:[a-f0-9]{64}$" @go(Fingerprint)
+}
+
+#CABundleTrust: {
+	@go(CABundleTrust)
+	mode: "ca_bundle" @go(Mode)
+	// path is a container-internal path. The executor mounts the lane-
+	// relative bundle file there in Phase 2; in Phase 1 the field is
+	// declaratory only.
+	path: #ContainerPath @go(Path)
+}
+
+// SSHPeer declares an SSH endpoint with explicit known_hosts entries.
+// Phase 1 is declaratory: ssh-agent socket forwarding and known_hosts
+// file mounting remain the lane author's responsibility via secrets and
+// inputs.
+#SSHPeer: {
+	@go(SSHPeer)
+	type:        "ssh" @go(Type)
+	host:        string & =~"^[a-z0-9.-]+(:[0-9]+)?$" @go(Host)
+	known_hosts: [...#KnownHostEntry] @go(KnownHosts)
+}
+
+// KnownHostEntry is one server key, an OpenSSH known_hosts line
+// decomposed into typed fields.
+#KnownHostEntry: {
+	@go(KnownHostEntry)
+	key_type: "ssh-ed25519" | "ecdsa-sha2-nistp256" |
+		"rsa-sha2-512" | "rsa-sha2-256" @go(KeyType)
+	// key is the base64-encoded public key body (no PEM armor).
+	key: =~"^[A-Za-z0-9+/]+={0,2}$" @go(Key)
+}
+
+// OCIPeer declares an OCI registry. Content trust is enforced via image
+// digest pinning (#ImageRef); the optional trust field covers the
+// registry's TLS connection.
+#OCIPeer: {
+	@go(OCIPeer)
+	type:     "oci" @go(Type)
+	registry: string & =~"^[a-z0-9.-]+(:[0-9]+)?$" @go(Registry)
+	trust?:   #HTTPSTrust @go(Trust,optional=nillable)
 }
 
 // ---------------------------------------------------------------------------
@@ -251,7 +319,7 @@ package lane
 	name:     string @go(Name)
 	image:    #ImageRef @go(Image)
 	command:  [...string] @go(Command)
-	network?: bool @go(Network)
+	peers?:   [...#Peer] @go(Peers)
 	mounts?:  [...#CaptureMount] @go(Mounts)
 }
 

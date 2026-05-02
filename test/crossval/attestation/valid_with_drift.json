@@ -19,7 +19,8 @@
         "drifted": ["version"]
       },
       "lane_ref": "",
-      "provenance": null
+      "provenance": null,
+      "peers": {}
     }
   },
   "expected": {

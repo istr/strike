@@ -159,8 +159,8 @@ func TestGuardUnsignedImages_SignedOK(t *testing.T) {
 			},
 			{
 				Name: "publish", Image: "img", Args: []string{}, Env: map[string]string{},
-				Network: true,
-				Inputs:  []lane.InputRef{{Name: "img", From: "pack.img", Mount: "/in/img"}},
+				Peers:  []lane.Peer{{"type": "oci", "registry": "localhost:5555"}},
+				Inputs: []lane.InputRef{{Name: "img", From: "pack.img", Mount: "/in/img"}},
 			},
 		},
 	}
@@ -183,8 +183,8 @@ func TestGuardUnsignedImages_UnsignedError(t *testing.T) {
 			},
 			{
 				Name: "publish", Image: "img", Args: []string{}, Env: map[string]string{},
-				Network: true,
-				Inputs:  []lane.InputRef{{Name: "img", From: "pack.img", Mount: "/in/img"}},
+				Peers:  []lane.Peer{{"type": "oci", "registry": "localhost:5555"}},
+				Inputs: []lane.InputRef{{Name: "img", From: "pack.img", Mount: "/in/img"}},
 			},
 		},
 	}
@@ -211,8 +211,8 @@ func TestGuardUnsignedImages_NonImageInput(t *testing.T) {
 			},
 			{
 				Name: "run", Image: "img", Args: []string{}, Env: map[string]string{},
-				Network: true,
-				Inputs:  []lane.InputRef{{Name: "bin", From: "compile.bin", Mount: "/in/bin"}},
+				Peers:  []lane.Peer{{"type": "oci", "registry": "localhost:5555"}},
+				Inputs: []lane.InputRef{{Name: "bin", From: "compile.bin", Mount: "/in/bin"}},
 			},
 		},
 	}

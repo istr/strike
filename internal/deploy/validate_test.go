@@ -36,6 +36,7 @@ func TestValidateAttestation_Valid(t *testing.T) {
 				Timestamp: clock.Unix(60, 0),
 			},
 		},
+		Peers: map[string][]lane.Peer{},
 	}
 
 	if err := deploy.ValidateAttestation(att); err != nil {
@@ -61,6 +62,7 @@ func TestValidateAttestation_WithEngine(t *testing.T) {
 			Rootless:              &rootless,
 			Version:               "5.3.1",
 		},
+		Peers: map[string][]lane.Peer{},
 	}
 
 	if err := deploy.ValidateAttestation(att); err != nil {
@@ -82,6 +84,7 @@ func TestValidateAttestation_WithDrift(t *testing.T) {
 			CurrentPreState:   map[string]string{"version": "sha256:bbb"},
 			Drifted:           []string{"version"},
 		},
+		Peers: map[string][]lane.Peer{},
 	}
 
 	if err := deploy.ValidateAttestation(att); err != nil {
@@ -150,6 +153,7 @@ func TestValidateAttestation_EmptyStatesAllowed(t *testing.T) {
 		Artifacts: map[string]deploy.SignedArtifact{},
 		PreState:  map[string]deploy.StateSnap{},
 		PostState: map[string]deploy.StateSnap{},
+		Peers:     map[string][]lane.Peer{},
 	}
 
 	if err := deploy.ValidateAttestation(att); err != nil {

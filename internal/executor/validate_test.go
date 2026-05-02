@@ -126,18 +126,19 @@ func TestValidateContentType_InvalidELF(t *testing.T) {
 
 func TestNetworkMode(t *testing.T) {
 	tests := []struct {
-		name    string
-		want    string
-		enabled bool
+		name  string
+		want  string
+		peers []lane.Peer
 	}{
-		{"disabled", "none", false},
-		{"enabled", "", true},
+		{"empty", "none", nil},
+		{"empty slice", "none", []lane.Peer{}},
+		{"one oci peer", "bridge", []lane.Peer{{"type": "oci", "registry": "localhost:5555"}}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := executor.NetworkMode(tt.enabled)
+			got := executor.NetworkMode(tt.peers)
 			if got != tt.want {
-				t.Errorf("NetworkMode(%v) = %q, want %q", tt.enabled, got, tt.want)
+				t.Errorf("NetworkMode(%v) = %q, want %q", tt.peers, got, tt.want)
 			}
 		})
 	}

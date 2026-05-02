@@ -45,9 +45,10 @@ Every step container runs with:
   declared output mounts which are noexec/nosuid;
 - `--security-opt=no-new-privileges` -- no setuid escalation inside
   the container;
-- `--network=none` -- network disabled unless `network: true` is set
-  on the step. The opt-in surface is one bit, visible in the lane
-  source.
+- `--network=none` by default. Steps opt into network access with a
+  declared peer list (`peers: [...#Peer]`); see ADR-022. The opt-in
+  surface is visible in the lane source and recorded in the
+  attestation.
 
 The user-namespace mapping (`--userns=keep-id`) is set per ADR-003
 and is not part of this profile -- it is the host-boundary plumbing
@@ -57,8 +58,8 @@ host.
 The profile is encoded as `container.RunOpts` fields in
 `internal/executor/podman.go` and is not configurable from lane
 definitions. Steps control: image, arguments, environment, the
-network bit, declared inputs and outputs, declared workdir. They
-control nothing else about the security profile.
+declared peer list, declared inputs and outputs, declared workdir.
+They control nothing else about the security profile.
 
 ## Consequences
 
@@ -71,12 +72,13 @@ control nothing else about the security profile.
   pressure. The strongest profile is the only profile.
 - Reviewers reading a lane definition do not have to audit the
   security profile per-step; they can trust that every step has the
-  same profile and only verify the network bit and declared mounts.
+  same profile and only verify the declared peer list and mounts.
 - The opt-in for network surfaces in three places: the lane source,
-  the deploy attestation, and the declared-peers contract. ADR-007
-  builds on this to require trust anchors per declared peer; ADR-003
-  ensures the network opt-in cannot be silently bypassed by a
-  privileged helper, because there is no privileged helper.
+  the deploy attestation, and the typed peer declaration (ADR-022).
+  ADR-007 mandates trust anchors per declared peer; ADR-022
+  realises the schema. ADR-003 ensures the network opt-in cannot be
+  silently bypassed by a privileged helper, because there is no
+  privileged helper.
 
 ## Principles
 

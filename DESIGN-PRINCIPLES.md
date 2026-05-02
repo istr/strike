@@ -179,7 +179,8 @@ upstream identities, and it becomes part of the step's attestation.
 Binary `network: true` is not a valid expression.
 
 *See: [ADR-005](docs/ADR-005-hardened-container-profile-non-configurable.md),
-[ADR-007](docs/ADR-007-asymmetric-identity.md).*
+[ADR-007](docs/ADR-007-asymmetric-identity.md),
+[ADR-022](docs/ADR-022-network-opt-in-as-peer-list.md).*
 
 
 ## Identity is asymmetric

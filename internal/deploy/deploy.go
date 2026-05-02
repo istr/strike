@@ -24,11 +24,6 @@ import (
 	"github.com/istr/strike/internal/registry"
 )
 
-const (
-	networkHost = "host"
-	networkNone = "none"
-)
-
 // Attestation is the signed record produced by every deploy step.
 type Attestation struct {
 	Timestamp      clock.Time                `json:"timestamp"`
@@ -40,6 +35,7 @@ type Attestation struct {
 	Engine         *EngineRecord             `json:"engine,omitempty"`
 	Rekor          *lane.RekorEntry          `json:"rekor,omitempty"`
 	Provenance     []lane.ProvenanceRecord   `json:"provenance"`
+	Peers          map[string][]lane.Peer    `json:"peers"`
 	DeployID       string                    `json:"deploy_id"`
 	LaneRef        string                    `json:"lane_ref"` // digest of lane definition
 	SignedEnvelope []byte                    `json:"-"`        // DSSE envelope, not part of attestation JSON
@@ -93,11 +89,12 @@ type EngineRecord struct {
 
 // StateSnap is a point-in-time capture of one state dimension.
 type StateSnap struct {
-	Timestamp clock.Time `json:"timestamp"`
-	Name      string     `json:"name"`
-	Image     string     `json:"image"`
-	Digest    string     `json:"digest"`
-	Output    []byte     `json:"output"`
+	Timestamp clock.Time  `json:"timestamp"`
+	Name      string      `json:"name"`
+	Image     string      `json:"image"`
+	Digest    string      `json:"digest"`
+	Output    []byte      `json:"output"`
+	Peers     []lane.Peer `json:"peers"`
 }
 
 // DriftReport compares current pre-state with previous post-state.
@@ -161,7 +158,7 @@ func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.Sta
 	provenance := state.CollectProvenance(d.DAG, string(step.Name))
 
 	// 4. Execute deploy action
-	if execErr := d.executeMethod(ctx, spec); execErr != nil {
+	if execErr := d.executeMethod(ctx, spec, step.Peers); execErr != nil {
 		return nil, fmt.Errorf("step %q: deploy action failed: %w", step.Name, execErr)
 	}
 
@@ -185,6 +182,7 @@ func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.Sta
 		Drift:      drift,
 		Engine:     d.engineRecord(),
 		Provenance: provenance,
+		Peers:      d.DAG.CollectPeers(string(step.Name)),
 	}
 
 	// 7. Validate attestation against CUE schema.
@@ -353,6 +351,7 @@ func (d *Deployer) captureOne(ctx context.Context, sc lane.StateCapture) (StateS
 		Name:      sc.Name,
 		Image:     string(sc.Image),
 		Timestamp: clock.Wall(),
+		Peers:     sc.Peers,
 	}
 
 	if sc.Image == "" {
@@ -364,11 +363,6 @@ func (d *Deployer) captureOne(ctx context.Context, sc lane.StateCapture) (StateS
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-
-	network := networkHost
-	if !sc.Network {
-		network = networkNone
-	}
 
 	var mounts []container.Mount
 	for _, m := range sc.Mounts {
@@ -383,7 +377,7 @@ func (d *Deployer) captureOne(ctx context.Context, sc lane.StateCapture) (StateS
 	opts.Image = string(sc.Image)
 	opts.Cmd = sc.Command
 	opts.Mounts = mounts
-	opts.Network = network
+	opts.Network = executor.NetworkMode(sc.Peers)
 	opts.Stdout = &stdout
 	opts.Stderr = &stderr
 
@@ -427,15 +421,15 @@ func DetectDrift(preState map[string]StateSnap, previousAtt *Attestation) *Drift
 }
 
 // executeMethod dispatches to the appropriate deploy method.
-func (d *Deployer) executeMethod(ctx context.Context, spec *lane.DeploySpec) error {
+func (d *Deployer) executeMethod(ctx context.Context, spec *lane.DeploySpec, peers []lane.Peer) error {
 	m := spec.Method
 	switch m.Type() {
 	case "registry":
 		return executeRegistryDeploy(m)
 	case "kubernetes":
-		return d.executeKubernetesDeploy(ctx, m)
+		return d.executeKubernetesDeploy(ctx, m, peers)
 	case "custom":
-		return d.executeCustomDeploy(ctx, m)
+		return d.executeCustomDeploy(ctx, m, peers)
 	default:
 		return fmt.Errorf("unknown deploy method type %q", m.Type())
 	}
@@ -448,7 +442,7 @@ func executeRegistryDeploy(m lane.DeployMethod) error {
 	return nil
 }
 
-func (d *Deployer) executeKubernetesDeploy(ctx context.Context, m lane.DeployMethod) error {
+func (d *Deployer) executeKubernetesDeploy(ctx context.Context, m lane.DeployMethod, peers []lane.Peer) error {
 	image := m.Image()
 	if image == "" {
 		return fmt.Errorf("kubernetes deploy: image required (digest-pinned kubectl image)")
@@ -472,7 +466,7 @@ func (d *Deployer) executeKubernetesDeploy(ctx context.Context, m lane.DeployMet
 	opts := HardenedRunOpts()
 	opts.Image = image
 	opts.Cmd = kubectlArgs
-	opts.Network = networkHost
+	opts.Network = executor.NetworkMode(peers)
 	opts.Mounts = []container.Mount{
 		{Source: kubeconfig, Target: "/root/.kube/config", ReadOnly: true},
 	}
@@ -490,7 +484,7 @@ func (d *Deployer) executeKubernetesDeploy(ctx context.Context, m lane.DeployMet
 	return nil
 }
 
-func (d *Deployer) executeCustomDeploy(ctx context.Context, m lane.DeployMethod) error {
+func (d *Deployer) executeCustomDeploy(ctx context.Context, m lane.DeployMethod, peers []lane.Peer) error {
 	if m.Image() == "" {
 		return fmt.Errorf("custom deploy: image required")
 	}
@@ -500,7 +494,7 @@ func (d *Deployer) executeCustomDeploy(ctx context.Context, m lane.DeployMethod)
 	opts.Entrypoint = m.Entrypoint()
 	opts.Cmd = m.Args()
 	opts.Env = m.Env()
-	opts.Network = networkHost
+	opts.Network = executor.NetworkMode(peers)
 	opts.Stdout = os.Stdout
 	opts.Stderr = os.Stderr
 

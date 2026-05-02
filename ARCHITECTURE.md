@@ -127,9 +127,9 @@ over unencrypted TCP.
 
 **Authorization.** strike does not attempt to restrict which API calls it makes
 to the engine -- the engine grants full access to whoever connects. Instead,
-strike restricts what it *asks* the engine to do: all step containers receive
-the hardened security profile. Deploy containers receive the same profile with
-explicit network exceptions.
+strike restricts what it *asks* the engine to do: every step container, run
+or deploy, receives the same hardened security profile, including the same
+peer-driven network opt-in (see [ADR-022](docs/ADR-022-network-opt-in-as-peer-list.md)).
 
 **Accounting.** Every API request is logged with method, path, container ID,
 image digest, and response status via a `http.RoundTripper` wrapper. This audit

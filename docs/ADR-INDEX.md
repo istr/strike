@@ -35,6 +35,7 @@ shows how the architecture was built up.
 | 019 | [SBOMs as OCI 1.1 referrer artifacts](ADR-019-sbom-as-oci-referrer.md)                        | Accepted | Runtime is attested; Digest-pinned references; Identity is asymmetric; Code is liability |
 | 020 | [Storage driver selection and host environment plumbing](ADR-020-storage-driver-and-host-plumbing.md) | Accepted | No root; Code is liability; Digest-pinned references |
 | 021 | [Deferred extensions](ADR-021-deferred-extensions.md)                                         | Accepted | Code is liability; Digest-pinned references      |
+| 022 | [Network opt-in as a typed peer list](ADR-022-network-opt-in-as-peer-list.md)                 | Accepted | Peers are declared; Identity is asymmetric; CUE first; No root |
 
 ## By principle
 
@@ -58,11 +59,11 @@ ADR-001, ADR-003.
 
 ### No root
 
-ADR-003, ADR-005, ADR-020.
+ADR-003, ADR-005, ADR-020, ADR-022.
 
 ### CUE first
 
-ADR-004, ADR-010, ADR-015, ADR-017.
+ADR-004, ADR-010, ADR-015, ADR-017, ADR-022.
 
 ### Secrets are typed
 
@@ -74,11 +75,11 @@ ADR-012, ADR-013, ADR-014, ADR-016, ADR-019.
 
 ### Peers are declared
 
-ADR-005, ADR-007.
+ADR-005, ADR-007, ADR-022.
 
 ### Identity is asymmetric
 
-ADR-007, ADR-008, ADR-012, ADR-013, ADR-019.
+ADR-007, ADR-008, ADR-012, ADR-013, ADR-019, ADR-022.
 
 ### External references are digest-pinned
 

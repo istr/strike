@@ -30,7 +30,8 @@
             "fingerprint": "ABCD1234"
           }
         }
-      ]
+      ],
+      "peers": {}
     }
   },
   "expected": {

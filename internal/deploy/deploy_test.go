@@ -333,7 +333,7 @@ func TestDeployerExecute(t *testing.T) {
 						Name:    "version",
 						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 						Command: []string{"cat", "/version"},
-						Network: true,
+						Peers:   []lane.Peer{{"type": "oci", "registry": "localhost:5555"}},
 					}},
 				},
 				PostState: lane.StateCaptureSpec{
@@ -341,7 +341,7 @@ func TestDeployerExecute(t *testing.T) {
 						Name:    "version",
 						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 						Command: []string{"cat", "/version"},
-						Network: true,
+						Peers:   []lane.Peer{{"type": "oci", "registry": "localhost:5555"}},
 					}},
 				},
 			},
@@ -472,7 +472,7 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 						Name:    "version",
 						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 						Command: []string{"cat", "/version"},
-						Network: true,
+						Peers:   []lane.Peer{{"type": "oci", "registry": "localhost:5555"}},
 					}},
 				},
 				PostState: lane.StateCaptureSpec{
@@ -480,7 +480,7 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 						Name:    "version",
 						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 						Command: []string{"cat", "/version"},
-						Network: true,
+						Peers:   []lane.Peer{{"type": "oci", "registry": "localhost:5555"}},
 					}},
 				},
 			},
@@ -801,7 +801,7 @@ func TestDeployerExecute_DriftDetectFail(t *testing.T) {
 						Name:    "version",
 						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 						Command: []string{"cat", "/version"},
-						Network: true,
+						Peers:   []lane.Peer{{"type": "oci", "registry": "localhost:5555"}},
 					}},
 				},
 				PostState: lane.StateCaptureSpec{
@@ -809,7 +809,7 @@ func TestDeployerExecute_DriftDetectFail(t *testing.T) {
 						Name:    "version",
 						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 						Command: []string{"cat", "/version"},
-						Network: true,
+						Peers:   []lane.Peer{{"type": "oci", "registry": "localhost:5555"}},
 					}},
 				},
 			},
@@ -1021,7 +1021,7 @@ func deployStep() *lane.Step {
 						Name:    "version",
 						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 						Command: []string{"cat", "/version"},
-						Network: true,
+						Peers:   []lane.Peer{{"type": "oci", "registry": "localhost:5555"}},
 					}},
 				},
 				PostState: lane.StateCaptureSpec{
@@ -1029,7 +1029,7 @@ func deployStep() *lane.Step {
 						Name:    "version",
 						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 						Command: []string{"cat", "/version"},
-						Network: true,
+						Peers:   []lane.Peer{{"type": "oci", "registry": "localhost:5555"}},
 					}},
 				},
 			},
@@ -1043,7 +1043,7 @@ func TestExecuteMethod_UnknownType(t *testing.T) {
 	spec := &lane.DeploySpec{
 		Method: lane.DeployMethod{"type": "unknown"},
 	}
-	err := d.ExecuteMethod(context.Background(), spec)
+	err := d.ExecuteMethod(context.Background(), spec, nil)
 	if err == nil {
 		t.Fatal("expected error for unknown method type")
 	}

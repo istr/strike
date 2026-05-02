@@ -71,6 +71,11 @@ package deploy
 	// Empty array when no steps declare provenance.
 	provenance: [...#ProvenanceRecord] | null
 
+	// peers maps step name to the network peer declarations attached to
+	// that step. Only steps that declared at least one peer appear.
+	// State-capture peers are recorded in the corresponding StateSnap.
+	peers: [Step=string]: [...#Peer]
+
 	// rekor is the transparency log entry from a Rekor hashedrekord
 	// submission. Present only when REKOR_URL is configured.
 	rekor?: #RekorEntry
@@ -99,6 +104,10 @@ package deploy
 
 	// output is the raw capture output (base64-encoded in JSON).
 	output: _
+
+	// peers lists the network peers declared on this state capture.
+	// null when the capture ran with network disabled.
+	peers: [...#Peer] | null
 }
 
 // ---------------------------------------------------------------------------
@@ -155,5 +164,47 @@ package deploy
 	description:  =~"^.+$"
 	url?:         string
 	namespace?:   string
+}
+
+// ---------------------------------------------------------------------------
+// Network peers (mirrored from lane.cue for verifier independence)
+// ---------------------------------------------------------------------------
+
+#Peer: #HTTPSPeer | #SSHPeer | #OCIPeer
+
+#HTTPSPeer: {
+	type:  "https"
+	host:  =~"^[a-z0-9.-]+(:[0-9]+)?$"
+	trust: #HTTPSTrust
+}
+
+#HTTPSTrust: #FingerprintTrust | #CABundleTrust
+
+#FingerprintTrust: {
+	mode:        "cert_fingerprint"
+	fingerprint: =~"^sha256:[a-f0-9]{64}$"
+}
+
+#CABundleTrust: {
+	mode: "ca_bundle"
+	path: =~"^/" & !~"//" & !~"/\\.(/|$)" & !~"/\\.\\.(/|$)" & !~".+/$"
+}
+
+#SSHPeer: {
+	type:        "ssh"
+	host:        =~"^[a-z0-9.-]+(:[0-9]+)?$"
+	known_hosts: [...#KnownHostEntry]
+}
+
+#KnownHostEntry: {
+	key_type: "ssh-ed25519" | "ecdsa-sha2-nistp256" |
+		"rsa-sha2-512" | "rsa-sha2-256"
+	key: =~"^[A-Za-z0-9+/]+={0,2}$"
+}
+
+#OCIPeer: {
+	type:     "oci"
+	registry: =~"^[a-z0-9.-]+(:[0-9]+)?$"
+	trust?:   #HTTPSTrust
 }
 

@@ -99,7 +99,12 @@ steps:
   - name: source
     image: docker.io/library/alpine/git@sha256:abc123...
     args: [git, clone, --depth, "1", "https://example.com/repo.git", /out/tree]
-    network: true
+    peers:
+      - type: https
+        host: example.com
+        trust:
+          mode: cert_fingerprint
+          fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
     outputs:
       - { name: tree, type: directory, path: /out/tree }
     provenance:
@@ -115,8 +120,10 @@ steps:
       - { name: binary, type: file, path: /out/binary }
 ```
 
-Steps run with `--network=none` by default. Set `network: true` to allow
-outbound access (e.g. for fetching dependencies or pushing to a registry).
+Steps run with `--network=none` by default. To opt into network
+access, declare a `peers:` list with the trust anchor for each
+peer (HTTPS cert fingerprint or CA bundle, SSH known_hosts, OCI
+registry digest). See [ADR-022](docs/ADR-022-network-opt-in-as-peer-list.md).
 
 ### Image references
 

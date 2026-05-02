@@ -13,7 +13,17 @@ steps:
     args: [build, -C, /src, -trimpath, "-buildvcs=false", "-ldflags=-s -w", -o, /out/strike, ./cmd/strike]
     env:
       CGO_ENABLED: "0"
-    network: true
+    peers:
+      - type: https
+        host: proxy.golang.org
+        trust:
+          mode: cert_fingerprint
+          fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+      - type: https
+        host: sum.golang.org
+        trust:
+          mode: cert_fingerprint
+          fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
     inputs:
       - from: src.tree
         mount: /src

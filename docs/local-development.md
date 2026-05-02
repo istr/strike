@@ -2,7 +2,7 @@
 
 This guide explains how to iterate on a strike lane locally without
 violating the architectural principle that host filesystem state
-cannot enter the DAG (see [ADR-011](adrs/ADR-011-sources-elimination.md)).
+cannot enter the DAG (see [ADR-011](ADR-011-sources-elimination.md)).
 
 The short form: **git is the protocol boundary**. What enters a
 strike step is a content-addressed git commit, not a filesystem
@@ -51,7 +51,11 @@ Lane snippet:
 - name: source
   image: alpine/git@sha256:...
   args: [git, clone, --depth, "1", git://localhost:9418/repo, /out/tree]
-  network: true
+  # Note: this snippet does not currently validate against the lane
+  # schema. The git:// protocol has no trust anchor, so it has no
+  # corresponding #Peer variant. Use Option B for a workflow that
+  # passes schema validation, or wait for a follow-up ADR that adds
+  # a plaintext-loopback peer variant.
   outputs:
     - name: tree
       type: directory
@@ -61,11 +65,14 @@ Lane snippet:
 **Iteration rhythm.** Each `git commit` is immediately visible to
 the next strike run. Nothing else to refresh.
 
-**Network requirement.** `network: true` is required (loopback is
-network). Per [ADR-007](adrs/ADR-007-asymmetric-identity.md), the
-network step's declared peer is `localhost:9418`, with no trust
-anchor (the git protocol has none). This is acceptable for local
-development; it is not how a production lane should look.
+**Network requirement.** Per [ADR-022](ADR-022-network-opt-in-as-peer-list.md),
+network access requires a typed peer declaration with a trust
+anchor. The git protocol has no trust anchor, so this option is
+currently in transition: the snippet above does not pass schema
+validation. For a workflow that does, use Option B. A future ADR
+may add a plaintext-loopback peer variant for development; until
+then, treat Option A as illustrative of the underlying iteration
+pattern, not as a working lane fragment.
 
 **Caveat.** The `git://` protocol is unauthenticated. Anyone with
 access to the loopback interface (which on a multi-user host
@@ -91,7 +98,12 @@ Lane snippet:
 - name: source
   image: alpine/git@sha256:...
   args: [git, clone, --depth, "1", https://localhost/repo.git, /out/tree]
-  network: true
+  peers:
+    - type: https
+      host: localhost
+      trust:
+        mode: cert_fingerprint
+        fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
   outputs:
     - name: tree
       type: directory
@@ -101,11 +113,12 @@ Lane snippet:
 **Iteration rhythm.** Each iteration requires a `git push --mirror`
 to refresh the bare clone. One extra command per iteration.
 
-**Network requirement.** `network: true` plus a trust anchor for
-the local HTTPS server (cert fingerprint or pinned CA). The lane
-snippet looks structurally identical to a production lane fetching
-from a real git server, which is the point: the local workflow
-exercises the same trust-declaration plumbing as production.
+**Network requirement.** A `peers:` list with one HTTPS entry for
+the local server, carrying a cert fingerprint or pinned CA bundle.
+The lane snippet looks structurally identical to a production lane
+fetching from a real git server, which is the point: the local
+workflow exercises the same trust-declaration plumbing as
+production. See [ADR-022](ADR-022-network-opt-in-as-peer-list.md).
 
 **Why it might be worth the extra step.** This option is the only
 one that produces a lane file you could ship to production
@@ -139,7 +152,7 @@ would be `sources:` again under a different name. This includes:
 - any other mechanism that takes a host path and makes it appear
   inside a container without an upstream step that produced it.
 
-All of these would re-open the structural hole [ADR-011](adrs/ADR-011-sources-elimination.md)
+All of these would re-open the structural hole [ADR-011](ADR-011-sources-elimination.md)
 closed: a piece of state enters the DAG without content
 addressing and without an edge that the spec hash sees. The
 attestation could not record what the input was; the cache could
@@ -206,11 +219,13 @@ fetch).
 
 ## See also
 
-- [ADR-011: Host filesystem cannot enter the DAG](adrs/ADR-011-sources-elimination.md)
+- [ADR-011: Host filesystem cannot enter the DAG](ADR-011-sources-elimination.md)
   -- the architectural decision this guide implements.
-- [ADR-007: Asymmetric identity](adrs/ADR-007-asymmetric-identity.md)
+- [ADR-007: Asymmetric identity](ADR-007-asymmetric-identity.md)
   -- the trust-anchor declaration that Option B exercises and
   Option A skips.
-- [ADR-005: Hardened container profile](adrs/ADR-005-hardened-container-profile-non-configurable.md)
-  -- why `network: true` is the only network-related lane field
-  and what it implies.
+- [ADR-005: Hardened container profile](ADR-005-hardened-container-profile-non-configurable.md)
+  -- the per-step hardening profile.
+- [ADR-022: Network opt-in as a typed peer list](ADR-022-network-opt-in-as-peer-list.md)
+  -- the typed peer declaration that replaces the boolean
+  network field.

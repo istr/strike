@@ -5,7 +5,12 @@ steps:
   - name: source
     image: docker.io/library/busybox@sha256:abababababababababababababababababababababababababababababababab
     args: [git, clone, --depth, "1", "https://example.com/site.git", /out/tree]
-    network: true
+    peers:
+      - type: https
+        host: example.com
+        trust:
+          mode: cert_fingerprint
+          fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
     env: {}
     inputs: []
     secrets: []
@@ -19,7 +24,12 @@ steps:
     image: docker.io/library/node@sha256:cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd
     args: [npm, ci, --ignore-scripts, --no-bin-links, --prefix, /src]
     workdir: /src
-    network: true
+    peers:
+      - type: https
+        host: registry.npmjs.org
+        trust:
+          mode: cert_fingerprint
+          fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
     env: {}
     inputs:
       - { name: tree, from: source.tree, mount: /src }

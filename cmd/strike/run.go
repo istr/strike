@@ -186,7 +186,7 @@ func (rc *runContext) checkCache(ctx context.Context, stepName, safeName, tag st
 }
 
 func (rc *runContext) guardUnsignedImages(step *lane.Step, safeName string) error {
-	if !step.Network {
+	if len(step.Peers) == 0 {
 		return nil
 	}
 	for _, e := range rc.dag.InputEdges[string(step.Name)] {

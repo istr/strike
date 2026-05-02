@@ -84,7 +84,7 @@ read-only.
 **A05 Security Misconfiguration** -- The hardened security profile is
 expressed as `container.RunOpts` fields in `internal/executor/podman.go`
 and is not configurable by lane definitions. Steps control only the image,
-arguments, environment, network flag, and declared inputs and outputs.
+arguments, environment, declared peer list, and declared inputs and outputs.
 
 **A06 Vulnerable and Outdated Components** -- `govulncheck` runs in CI and
 reports only actually-reachable vulnerable functions. Dependencies are minimal
@@ -97,7 +97,8 @@ strike is designed with a minimal attack surface:
 - **No subprocess execution** -- zero `exec.Command` calls, zero `os/exec` imports. All operations use the container Engine REST API over Unix socket.
 - **No root** -- runs entirely under rootless podman.
 - **No network by default** -- steps run with `--network=none` unless
-  explicitly opted in with `network: true`.
+  they declare a typed peer list (`peers: [...]`); see
+  [ADR-022](docs/ADR-022-network-opt-in-as-peer-list.md).
 - **Digest pinning** -- all external images must be referenced by SHA-256
   manifest digest.
 - **Secrets via API request body** -- passed as JSON over Unix socket in the

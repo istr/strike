@@ -372,6 +372,36 @@ func kahnSort(d *DAG) ([]string, error) {
 	return order, nil
 }
 
+// CollectPeers returns peer declarations for fromStep and all its
+// transitive predecessors, keyed by step name. Steps without declared
+// peers are omitted from the result. Used by deploy attestation to
+// record the full network exposure of the build chain. Nil-safe:
+// callers may invoke this on a nil receiver and receive a non-nil
+// empty map (matching the schema requirement that Attestation.peers
+// be a present map).
+func (d *DAG) CollectPeers(fromStep string) map[string][]Peer {
+	peers := map[string][]Peer{}
+	if d == nil {
+		return peers
+	}
+	visited := map[string]bool{}
+	var walk func(name string)
+	walk = func(name string) {
+		if visited[name] {
+			return
+		}
+		visited[name] = true
+		if step := d.Steps[name]; step != nil && len(step.Peers) > 0 {
+			peers[name] = step.Peers
+		}
+		for _, dep := range d.edges[name] {
+			walk(dep)
+		}
+	}
+	walk(fromStep)
+	return peers
+}
+
 // Tree renders the DAG as a tree structure.
 func (d *DAG) Tree() string {
 	var sb strings.Builder
