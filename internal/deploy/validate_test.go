@@ -238,23 +238,23 @@ func TestValidateAttestation_WithPeers(t *testing.T) {
 		PostState: map[string]deploy.StateSnap{},
 		Peers: map[string][]lane.Peer{
 			"build": {
-				{
-					"type": "https",
-					"host": "api.example.com",
-					"trust": map[string]any{
-						"mode":        "cert_fingerprint",
-						"fingerprint": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+				lane.HTTPSPeer{
+					Type: "https",
+					Host: "api.example.com",
+					Trust: lane.FingerprintTrust{
+						Mode:        "cert_fingerprint",
+						Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000",
 					},
 				},
 			},
 			"clone": {
-				{
-					"type": "ssh",
-					"host": "git.example.com",
-					"known_hosts": []map[string]any{
+				lane.SSHPeer{
+					Type: "ssh",
+					Host: "git.example.com",
+					KnownHosts: []lane.KnownHostEntry{
 						{
-							"key_type": "ssh-ed25519",
-							"key":      "AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl",
+							KeyType: "ssh-ed25519",
+							Key:     "AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl",
 						},
 					},
 				},
@@ -279,10 +279,10 @@ func TestValidateAttestation_InvalidPeer(t *testing.T) {
 		PostState: map[string]deploy.StateSnap{},
 		Peers: map[string][]lane.Peer{
 			"build": {
-				{
-					"type": "https",
-					"host": "api.example.com",
-					// missing trust -- violates #HTTPSPeer
+				lane.HTTPSPeer{
+					Type: "https",
+					Host: "api.example.com",
+					// Trust deliberately nil -- triggers schema reject.
 				},
 			},
 		},

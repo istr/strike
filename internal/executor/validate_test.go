@@ -132,13 +132,21 @@ func TestNetworkMode(t *testing.T) {
 	}{
 		{"empty", "none", nil},
 		{"empty slice", "none", []lane.Peer{}},
-		{"one oci peer", "bridge", []lane.Peer{{"type": "oci", "registry": "localhost:5555"}}},
+		{"one oci peer", "bridge", []lane.Peer{
+			lane.OCIPeer{Type: "oci", Registry: "localhost:5555"},
+		}},
 		{"multiple peers", "bridge", []lane.Peer{
-			{"type": "https", "host": "a.example", "trust": map[string]any{"mode": "cert_fingerprint", "fingerprint": "sha256:0000000000000000000000000000000000000000000000000000000000000000"}},
-			{"type": "ssh", "host": "git.example"},
+			lane.HTTPSPeer{
+				Type: "https", Host: "a.example",
+				Trust: lane.FingerprintTrust{
+					Mode:        "cert_fingerprint",
+					Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+				},
+			},
+			lane.SSHPeer{Type: "ssh", Host: "git.example"},
 		}},
 		{"single ssh peer", "bridge", []lane.Peer{
-			{"type": "ssh", "host": "git.example"},
+			lane.SSHPeer{Type: "ssh", Host: "git.example"},
 		}},
 	}
 	for _, tt := range tests {

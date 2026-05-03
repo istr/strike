@@ -8,15 +8,14 @@ import (
 	"github.com/istr/strike/internal/lane"
 )
 
-// httpsPeer returns a minimal valid HTTPSPeer as a Peer map literal.
-// Used to construct in-memory lanes for CollectPeers tests.
+// httpsPeer returns a minimal valid HTTPSPeer for CollectPeers tests.
 func httpsPeer(host string) lane.Peer {
-	return lane.Peer{
-		"type": "https",
-		"host": host,
-		"trust": map[string]any{
-			"mode":        "cert_fingerprint",
-			"fingerprint": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+	return lane.HTTPSPeer{
+		Type: "https",
+		Host: host,
+		Trust: lane.FingerprintTrust{
+			Mode:        "cert_fingerprint",
+			Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000",
 		},
 	}
 }

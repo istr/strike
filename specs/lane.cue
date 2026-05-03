@@ -112,7 +112,7 @@ package lane
 // Peer is a discriminated union over the supported network protocols.
 // A non-empty peers list opts the step into network access; absent or
 // empty means --network=none. Peers flow into the deploy attestation.
-#Peer: #HTTPSPeer | #SSHPeer | #OCIPeer
+#Peer: (#HTTPSPeer | #SSHPeer | #OCIPeer) @go(-)
 
 // HTTPSPeer declares an HTTPS endpoint together with its server-trust anchor.
 #HTTPSPeer: {
@@ -126,7 +126,7 @@ package lane
 
 // HTTPSTrust selects between certificate-fingerprint pinning and CA-bundle
 // validation. The system trust store is not an option (deferred per ADR-021).
-#HTTPSTrust: #FingerprintTrust | #CABundleTrust
+#HTTPSTrust: (#FingerprintTrust | #CABundleTrust) @go(-)
 
 #FingerprintTrust: {
 	@go(FingerprintTrust)
