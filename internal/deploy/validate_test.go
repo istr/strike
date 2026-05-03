@@ -225,3 +225,74 @@ func runAttestationVector(t *testing.T, path string) {
 		t.Errorf("error %q does not contain %q", valErr.Error(), vec.Expected.ErrorContains)
 	}
 }
+
+func TestValidateAttestation_WithPeers(t *testing.T) {
+	att := &deploy.Attestation{
+		DeployID:  "abcdef0123456789",
+		Timestamp: clock.Reproducible(),
+		Target:    lane.DeployTarget{Type: "registry", Description: "production"},
+		Artifacts: map[string]deploy.SignedArtifact{
+			"image": {Digest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
+		},
+		PreState:  map[string]deploy.StateSnap{},
+		PostState: map[string]deploy.StateSnap{},
+		Peers: map[string][]lane.Peer{
+			"build": {
+				{
+					"type": "https",
+					"host": "api.example.com",
+					"trust": map[string]any{
+						"mode":        "cert_fingerprint",
+						"fingerprint": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+					},
+				},
+			},
+			"clone": {
+				{
+					"type": "ssh",
+					"host": "git.example.com",
+					"known_hosts": []map[string]any{
+						{
+							"key_type": "ssh-ed25519",
+							"key":      "AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	if err := deploy.ValidateAttestation(att); err != nil {
+		t.Fatalf("attestation with valid peers rejected: %v", err)
+	}
+}
+
+func TestValidateAttestation_InvalidPeer(t *testing.T) {
+	att := &deploy.Attestation{
+		DeployID:  "abcdef0123456789",
+		Timestamp: clock.Reproducible(),
+		Target:    lane.DeployTarget{Type: "registry", Description: "production"},
+		Artifacts: map[string]deploy.SignedArtifact{
+			"image": {Digest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
+		},
+		PreState:  map[string]deploy.StateSnap{},
+		PostState: map[string]deploy.StateSnap{},
+		Peers: map[string][]lane.Peer{
+			"build": {
+				{
+					"type": "https",
+					"host": "api.example.com",
+					// missing trust -- violates #HTTPSPeer
+				},
+			},
+		},
+	}
+
+	err := deploy.ValidateAttestation(att)
+	if err == nil {
+		t.Fatal("attestation with HTTPS peer missing trust was accepted")
+	}
+	if !strings.Contains(err.Error(), "trust") {
+		t.Errorf("error %q does not mention 'trust'", err.Error())
+	}
+}

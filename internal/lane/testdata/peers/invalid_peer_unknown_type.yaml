@@ -1,0 +1,17 @@
+name: peers-bad-type
+registry: localhost:5555/test
+secrets: {}
+steps:
+  - name: fetch
+    image: alpine:3.20
+    args: [echo, ok]
+    env: {}
+    inputs: []
+    secrets: []
+    outputs:
+      - name: ok
+        type: file
+        path: /out/ok
+    peers:
+      - type: ftp
+        host: example.com

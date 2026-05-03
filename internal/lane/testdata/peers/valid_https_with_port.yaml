@@ -1,0 +1,20 @@
+name: peers-https-port
+registry: localhost:5555/test
+secrets: {}
+steps:
+  - name: fetch
+    image: alpine:3.20
+    args: [wget, "https://localhost:8443/x"]
+    env: {}
+    inputs: []
+    secrets: []
+    outputs:
+      - name: file
+        type: file
+        path: /out/file
+    peers:
+      - type: https
+        host: localhost:8443
+        trust:
+          mode: cert_fingerprint
+          fingerprint: sha256:1111111111111111111111111111111111111111111111111111111111111111

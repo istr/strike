@@ -1,0 +1,49 @@
+name: peers-state-capture
+registry: localhost:5555/test
+secrets: {}
+steps:
+  - name: build
+    image: alpine:3.20
+    args: [touch, /out/binary]
+    env: {}
+    inputs: []
+    secrets: []
+    outputs:
+      - name: image
+        type: image
+        path: /out/image
+  - name: deploy
+    deploy:
+      method:
+        type: custom
+        image: alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000
+      artifacts:
+        image:
+          from: build.image
+      target:
+        type: registry
+        description: prod
+      attestation:
+        pre_state:
+          required: false
+          capture:
+            - name: probe
+              image: alpine@sha256:1111111111111111111111111111111111111111111111111111111111111111
+              command: [cat, /version]
+              peers:
+                - type: https
+                  host: api.example.com
+                  trust:
+                    mode: cert_fingerprint
+                    fingerprint: sha256:3333333333333333333333333333333333333333333333333333333333333333
+        post_state:
+          required: false
+          capture: []
+        drift:
+          detect: false
+          on_drift: warn
+    args: []
+    env: {}
+    inputs: []
+    secrets: []
+    outputs: []

@@ -1,0 +1,24 @@
+name: peers-ssh-multi
+registry: localhost:5555/test
+secrets: {}
+steps:
+  - name: clone
+    image: alpine/git:2.45
+    args: [git, clone, "git@git.example.com:org/repo"]
+    env: {}
+    inputs: []
+    secrets: []
+    outputs:
+      - name: tree
+        type: directory
+        path: /out/tree
+    peers:
+      - type: ssh
+        host: git.example.com
+        known_hosts:
+          - key_type: ssh-ed25519
+            key: AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl
+          - key_type: ecdsa-sha2-nistp256
+            key: AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBHIOLkE5
+          - key_type: rsa-sha2-512
+            key: AAAAB3NzaC1yc2EAAAADAQABAAABAQDcdef

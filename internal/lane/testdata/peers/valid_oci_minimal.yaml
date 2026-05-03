@@ -1,0 +1,17 @@
+name: peers-oci-min
+registry: localhost:5555/test
+secrets: {}
+steps:
+  - name: pull
+    image: alpine:3.20
+    args: [echo, "ok"]
+    env: {}
+    inputs: []
+    secrets: []
+    outputs:
+      - name: ok
+        type: file
+        path: /out/ok
+    peers:
+      - type: oci
+        registry: registry.example.com
