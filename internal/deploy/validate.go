@@ -8,6 +8,7 @@ import (
 	"cuelang.org/go/cue"
 	"cuelang.org/go/cue/cuecontext"
 	cuejson "cuelang.org/go/encoding/json"
+	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/specs"
 )
 
@@ -94,7 +95,7 @@ func ValidateAttestationJSON(data []byte) error {
 	}
 
 	unified := compiled.Unify(ctx.BuildExpr(expr))
-	if err := unified.Validate(cue.Concrete(true)); err != nil {
+	if err := lane.FormatValidationError(unified.Validate(cue.Concrete(true))); err != nil {
 		return fmt.Errorf("attestation schema violation:\n%w", err)
 	}
 	return nil

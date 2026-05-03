@@ -1,6 +1,8 @@
 package lane_test
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -210,5 +212,51 @@ func TestParse_PathTraversal(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "validation") {
 		t.Errorf("error should be a validation error: %v", err)
+	}
+}
+
+// TestParse_DisjunctionErrorIsReadable ensures schema validation
+// errors do not leak the "N errors in empty disjunction" aggregate
+// marker into user-visible output. Regression guard for the
+// FormatValidationError integration.
+func TestParse_DisjunctionErrorIsReadable(t *testing.T) {
+	// Use whichever discriminator-bearing field exists on the
+	// current branch. Adjust if the lane schema has shifted.
+	bad := []byte(`
+name: test
+registry: localhost:5555/test
+secrets: {}
+steps:
+  - name: bad-deploy
+    deploy:
+      method:
+        type: nonsense
+        image: img@sha256:0000000000000000000000000000000000000000000000000000000000000000
+      artifacts: {}
+      target:
+        type: registry
+        description: x
+      attestation:
+        pre_state: {required: false, capture: []}
+        post_state: {required: false, capture: []}
+        drift: {detect: false, on_drift: warn}
+`)
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "lane.yaml")
+	if err := os.WriteFile(path, bad, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := lane.Parse(path)
+	if err == nil {
+		t.Fatal("expected parse error for invalid deploy method type")
+	}
+	msg := err.Error()
+	if strings.Contains(msg, "errors in empty disjunction") {
+		t.Errorf("parse error contains aggregate marker: %s", msg)
+	}
+	if !strings.Contains(msg, "validation:") {
+		t.Errorf("parse error missing validation prefix: %s", msg)
 	}
 }

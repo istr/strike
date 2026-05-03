@@ -135,5 +135,5 @@ func validate(data []byte) error {
 	}
 
 	unified := compiledSchema.Unify(ctx.BuildExpr(expr))
-	return unified.Validate(cue.Concrete(true))
+	return FormatValidationError(unified.Validate(cue.Concrete(true)))
 }
