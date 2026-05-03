@@ -18,7 +18,7 @@ import (
 // TCP always uses TLS. If an explicit CA is configured, only that CA is
 // trusted (pinned mode). Otherwise the system CA store is used.
 // mTLS is used when client cert and key are provided.
-func newHTTPClient(addr string, tlsCfg *TLSConfig) (*http.Client, error) {
+func newHTTPClient(addr string, tlsCfg TLSConfig) (*http.Client, error) {
 	transport := &http.Transport{
 		DisableCompression: true,
 		MaxIdleConns:       10,
@@ -34,9 +34,6 @@ func newHTTPClient(addr string, tlsCfg *TLSConfig) (*http.Client, error) {
 		}
 
 	case strings.HasPrefix(addr, "tcp://"):
-		if !tlsCfg.IsReady() {
-			return nil, fmt.Errorf("tcp:// connections require TLS configuration")
-		}
 		tc, err := tlsCfg.Build()
 		if err != nil {
 			return nil, fmt.Errorf("engine TLS: %w", err)

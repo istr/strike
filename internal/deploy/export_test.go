@@ -10,6 +10,6 @@ import (
 var PAEEncode = paeEncode
 
 // ExecuteMethod exposes executeMethod for the external test package.
-func (d *Deployer) ExecuteMethod(ctx context.Context, spec *lane.DeploySpec, peers []lane.Peer) error {
+func (d *Deployer) ExecuteMethod(ctx context.Context, spec lane.DeploySpec, peers []lane.Peer) error {
 	return d.executeMethod(ctx, spec, peers)
 }

@@ -1040,7 +1040,7 @@ func deployStep() *lane.Step {
 func TestExecuteMethod_UnknownType(t *testing.T) {
 	eng := newTLSTestEngine(t, http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 	d := &deploy.Deployer{Engine: eng}
-	spec := &lane.DeploySpec{
+	spec := lane.DeploySpec{
 		Method: lane.DeployMethod{"type": "unknown"},
 	}
 	err := d.ExecuteMethod(context.Background(), spec, nil)

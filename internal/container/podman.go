@@ -16,7 +16,7 @@ import (
 
 type podmanEngine struct {
 	client   *http.Client
-	tlsCfg   *TLSConfig
+	tlsCfg   TLSConfig
 	tlsID    *TLSIdentity
 	identity *EngineIdentity
 	base     string

@@ -504,9 +504,6 @@ func TestSystemCAStoreUsedWhenNoPinnedCA(t *testing.T) {
 	if cfg.IsPinned() {
 		t.Error("expected IsPinned() = false when CA is empty")
 	}
-	if !cfg.IsReady() {
-		t.Error("expected IsReady() = true even without explicit CA")
-	}
 
 	// Build should succeed -- produces a config with nil RootCAs (= system store).
 	tlsCfg, err := cfg.Build()

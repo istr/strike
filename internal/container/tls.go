@@ -27,37 +27,30 @@ type TLSConfig struct {
 }
 
 // LoadTLSConfig reads TLS paths from environment variables.
-func LoadTLSConfig() *TLSConfig {
-	return &TLSConfig{
+func LoadTLSConfig() TLSConfig {
+	return TLSConfig{
 		CAFile:   os.Getenv("CONTAINER_TLS_CA"),
 		CertFile: os.Getenv("CONTAINER_TLS_CERT"),
 		KeyFile:  os.Getenv("CONTAINER_TLS_KEY"),
 	}
 }
 
-// IsReady returns true if the TLS config can produce a working tls.Config.
-// This is always true: either an explicit CA is set, or the system pool
-// will be used as fallback.
-func (c *TLSConfig) IsReady() bool {
-	return c != nil
-}
-
 // IsPinned returns true if an explicit CA file is configured.
 // When false, the system CA store is used.
-func (c *TLSConfig) IsPinned() bool {
-	return c != nil && c.CAFile != ""
+func (c TLSConfig) IsPinned() bool {
+	return c.CAFile != ""
 }
 
 // HasClientCert returns true if both client cert and key are configured.
-func (c *TLSConfig) HasClientCert() bool {
-	return c != nil && c.CertFile != "" && c.KeyFile != ""
+func (c TLSConfig) HasClientCert() bool {
+	return c.CertFile != "" && c.KeyFile != ""
 }
 
 // Build constructs a tls.Config. TLS 1.3 is the minimum version.
 // If CAFile is set, only that CA is trusted (pinned mode). Otherwise the
 // system CA store is used. Client authentication is added only if CertFile
 // and KeyFile are both set.
-func (c *TLSConfig) Build() (*tls.Config, error) {
+func (c TLSConfig) Build() (*tls.Config, error) {
 	cfg := &tls.Config{
 		MinVersion: tls.VersionTLS13,
 	}

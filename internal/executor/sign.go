@@ -107,7 +107,7 @@ func SignManifest(ctx context.Context, manifestDigest string, keyPEM, password [
 	var rekorEntry *lane.RekorEntry
 	if rekor != nil {
 		var rekorErr error
-		rekorEntry, rekorErr = submitToRekor(ctx, rekor, manifestDigest, b64sig, keyPEM, password)
+		rekorEntry, rekorErr = submitToRekor(ctx, *rekor, manifestDigest, b64sig, keyPEM, password)
 		if rekorErr != nil {
 			return nil, rekorErr
 		}
@@ -149,7 +149,7 @@ func SignManifest(ctx context.Context, manifestDigest string, keyPEM, password [
 // submitToRekor submits the signature to a Rekor transparency log.
 // Returns the verified Rekor entry on success, nil on warning (fail open),
 // or a hard error on SET verification failure.
-func submitToRekor(ctx context.Context, client *RekorClient, manifestDigest, b64sig string, keyPEM, password []byte) (*lane.RekorEntry, error) {
+func submitToRekor(ctx context.Context, client RekorClient, manifestDigest, b64sig string, keyPEM, password []byte) (*lane.RekorEntry, error) {
 	sig, err := base64.StdEncoding.DecodeString(b64sig)
 	if err != nil {
 		return nil, fmt.Errorf("rekor: decode signature: %w", err)

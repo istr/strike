@@ -408,6 +408,24 @@ content. Direct `time` imports are rejected by depguard in CI.
   extract when testing or multiple implementations require it.
 - "Accept interfaces, return structs."
 
+### Pointer arguments
+
+- Default to value semantics for struct arguments. Pointer is
+  used only when:
+  - the function mutates the argument and the caller needs to see
+    the change;
+  - the struct embeds a sync primitive or other uncopyable type;
+  - the struct is large enough that copying is a measurable cost
+    (~64 bytes of header excluding referenced fields);
+  - `nil` is a meaningful contract signal ("optional", "disabled");
+  - interface satisfaction requires pointer receivers.
+- The same rule applies to method receivers. Read-only methods on
+  small structs use value receivers.
+- Existing pointer signatures may be left alone if no concrete
+  benefit comes from converting -- the rule is a default, not a
+  retrofit-everything mandate.
+- See [ADR-023](docs/ADR-023-pointer-arguments-require-justification.md).
+
 ### Documentation
 
 - Every exported name must have a doc comment starting with the name.

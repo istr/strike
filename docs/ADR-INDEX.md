@@ -36,6 +36,7 @@ shows how the architecture was built up.
 | 020 | [Storage driver selection and host environment plumbing](ADR-020-storage-driver-and-host-plumbing.md) | Accepted | No root; Code is liability; Digest-pinned references |
 | 021 | [Deferred extensions](ADR-021-deferred-extensions.md)                                         | Accepted | Code is liability; Digest-pinned references      |
 | 022 | [Network opt-in as a typed peer list](ADR-022-network-opt-in-as-peer-list.md)                 | Accepted | Peers are declared; Identity is asymmetric; CUE first; No root |
+| 023 | [Pointer arguments require justification](ADR-023-pointer-arguments-require-justification.md)  | Accepted | Code is liability                                |
 
 ## By principle
 
@@ -47,7 +48,7 @@ headings.
 
 ADR-001, ADR-002, ADR-004, ADR-005, ADR-006, ADR-008, ADR-010,
 ADR-011, ADR-013, ADR-014, ADR-015, ADR-016, ADR-017, ADR-018,
-ADR-019, ADR-020, ADR-021.
+ADR-019, ADR-020, ADR-021, ADR-023.
 
 ### No shell
 

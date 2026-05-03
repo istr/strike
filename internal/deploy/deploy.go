@@ -125,10 +125,10 @@ type Deployer struct {
 // Execute runs a deploy step: capture pre-state, detect drift, execute
 // the deploy action, capture post-state, and build the attestation.
 func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.State) (*Attestation, error) {
-	spec := step.Deploy
-	if spec == nil {
+	if step.Deploy == nil {
 		return nil, fmt.Errorf("step %q: not a deploy step", step.Name)
 	}
+	spec := *step.Deploy
 
 	deployID := GenerateDeployID(step.Name)
 	started := clock.Wall()
@@ -265,7 +265,7 @@ func submitAttestationToRekor(ctx context.Context, d *Deployer, att *Attestation
 }
 
 // detectAndHandleDrift checks for drift between pre-state and previous post-state.
-func (d *Deployer) detectAndHandleDrift(stepName string, spec *lane.DeploySpec, preState map[string]StateSnap) (*DriftReport, error) {
+func (d *Deployer) detectAndHandleDrift(stepName string, spec lane.DeploySpec, preState map[string]StateSnap) (*DriftReport, error) {
 	if !spec.Attestation.Drift.Detect {
 		return nil, nil
 	}
@@ -421,7 +421,7 @@ func DetectDrift(preState map[string]StateSnap, previousAtt *Attestation) *Drift
 }
 
 // executeMethod dispatches to the appropriate deploy method.
-func (d *Deployer) executeMethod(ctx context.Context, spec *lane.DeploySpec, peers []lane.Peer) error {
+func (d *Deployer) executeMethod(ctx context.Context, spec lane.DeploySpec, peers []lane.Peer) error {
 	m := spec.Method
 	switch m.Type() {
 	case "registry":

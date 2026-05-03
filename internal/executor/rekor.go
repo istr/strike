@@ -49,7 +49,7 @@ func (e *RekorTransientError) Unwrap() error {
 // Returns a verified lane.RekorEntry on success.
 // Returns RekorTransientError for transient failures (network, timeout, 5xx).
 // Returns a hard error for SET verification failures.
-func (c *RekorClient) SubmitHashedRekord(ctx context.Context, hexDigest string, sig, pubKeyPEM []byte) (*lane.RekorEntry, error) {
+func (c RekorClient) SubmitHashedRekord(ctx context.Context, hexDigest string, sig, pubKeyPEM []byte) (*lane.RekorEntry, error) {
 	return c.submit(ctx, buildHashedRekordRequest(hexDigest, sig, pubKeyPEM))
 }
 
@@ -60,13 +60,13 @@ func (c *RekorClient) SubmitHashedRekord(ctx context.Context, hexDigest string, 
 // Returns a verified lane.RekorEntry on success.
 // Returns RekorTransientError for transient failures.
 // Returns a hard error for SET verification failures.
-func (c *RekorClient) SubmitDSSE(ctx context.Context, envelopeJSON, pubKeyPEM []byte) (*lane.RekorEntry, error) {
+func (c RekorClient) SubmitDSSE(ctx context.Context, envelopeJSON, pubKeyPEM []byte) (*lane.RekorEntry, error) {
 	return c.submit(ctx, buildDSSERequest(envelopeJSON, pubKeyPEM))
 }
 
 // submit posts an entry to the Rekor v1 log entries API, parses the response,
 // and verifies the signed entry timestamp. Shared by SubmitHashedRekord and SubmitDSSE.
-func (c *RekorClient) submit(ctx context.Context, reqBody map[string]any) (*lane.RekorEntry, error) {
+func (c RekorClient) submit(ctx context.Context, reqBody map[string]any) (*lane.RekorEntry, error) {
 	ctx, cancel := context.WithTimeout(ctx, rekorTimeout)
 	defer cancel()
 
