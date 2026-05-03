@@ -319,9 +319,9 @@ func TestDeployerExecute(t *testing.T) {
 	step := &lane.Step{
 		Name: "deploy-prod",
 		Deploy: &lane.DeploySpec{
-			Method: lane.DeployMethod{
-				"type":  "custom",
-				"image": "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+			Method: lane.DeployCustom{
+				Type:  "custom",
+				Image: "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 			},
 			Artifacts: map[string]lane.ArtifactRef{
 				"image": {From: "build.image"},
@@ -380,7 +380,7 @@ func TestDeployerExecute_MissingArtifact(t *testing.T) {
 	step := &lane.Step{
 		Name: "deploy-prod",
 		Deploy: &lane.DeploySpec{
-			Method: lane.DeployMethod{"type": "custom", "image": "img@sha256:0000000000000000000000000000000000000000000000000000000000000000"},
+			Method: lane.DeployCustom{Type: "custom", Image: "img@sha256:0000000000000000000000000000000000000000000000000000000000000000"},
 			Artifacts: map[string]lane.ArtifactRef{
 				"image": {From: "build.image"},
 			},
@@ -401,7 +401,7 @@ func TestDeployerExecute_MissingArtifact(t *testing.T) {
 func TestRunStepDispatchesDeploy(t *testing.T) {
 	step := &lane.Step{
 		Deploy: &lane.DeploySpec{
-			Method: lane.DeployMethod{"type": "custom", "image": "img@sha256:0000000000000000000000000000000000000000000000000000000000000000"},
+			Method: lane.DeployCustom{Type: "custom", Image: "img@sha256:0000000000000000000000000000000000000000000000000000000000000000"},
 		},
 	}
 	if step.Deploy == nil {
@@ -458,9 +458,9 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 	step := &lane.Step{
 		Name: "deploy-prod",
 		Deploy: &lane.DeploySpec{
-			Method: lane.DeployMethod{
-				"type":  "custom",
-				"image": "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+			Method: lane.DeployCustom{
+				Type:  "custom",
+				Image: "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 			},
 			Artifacts: map[string]lane.ArtifactRef{
 				"image": {From: "build.image"},
@@ -538,9 +538,9 @@ func TestEngineRecord_NilEngineID(t *testing.T) {
 	step := &lane.Step{
 		Name: "deploy-nil-engine",
 		Deploy: &lane.DeploySpec{
-			Method: lane.DeployMethod{
-				"type":  "custom",
-				"image": "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+			Method: lane.DeployCustom{
+				Type:  "custom",
+				Image: "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 			},
 			Artifacts: map[string]lane.ArtifactRef{
 				"image": {From: "build.image"},
@@ -587,9 +587,9 @@ func TestEngineRecord_WithRuntime(t *testing.T) {
 	step := &lane.Step{
 		Name: "deploy-runtime",
 		Deploy: &lane.DeploySpec{
-			Method: lane.DeployMethod{
-				"type":  "custom",
-				"image": "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+			Method: lane.DeployCustom{
+				Type:  "custom",
+				Image: "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 			},
 			Artifacts: map[string]lane.ArtifactRef{
 				"image": {From: "build.image"},
@@ -643,9 +643,9 @@ func TestEngineRecord_WithoutRuntime(t *testing.T) {
 	step := &lane.Step{
 		Name: "deploy-no-runtime",
 		Deploy: &lane.DeploySpec{
-			Method: lane.DeployMethod{
-				"type":  "custom",
-				"image": "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+			Method: lane.DeployCustom{
+				Type:  "custom",
+				Image: "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 			},
 			Artifacts: map[string]lane.ArtifactRef{
 				"image": {From: "build.image"},
@@ -741,9 +741,9 @@ func TestDeployerExecute_RequiredPreStateFails(t *testing.T) {
 	step := &lane.Step{
 		Name: "deploy-fail-pre",
 		Deploy: &lane.DeploySpec{
-			Method: lane.DeployMethod{
-				"type":  "custom",
-				"image": "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+			Method: lane.DeployCustom{
+				Type:  "custom",
+				Image: "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 			},
 			Artifacts: map[string]lane.ArtifactRef{},
 			Target:    lane.DeployTarget{Type: "registry", Description: "test"},
@@ -783,9 +783,9 @@ func TestDeployerExecute_DriftDetectFail(t *testing.T) {
 	step := &lane.Step{
 		Name: "deploy-drift-fail",
 		Deploy: &lane.DeploySpec{
-			Method: lane.DeployMethod{
-				"type":  "custom",
-				"image": "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+			Method: lane.DeployCustom{
+				Type:  "custom",
+				Image: "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 			},
 			Artifacts: map[string]lane.ArtifactRef{
 				"image": {From: "build.image"},
@@ -1007,9 +1007,9 @@ func deployStep() *lane.Step {
 	return &lane.Step{
 		Name: "deploy-prod",
 		Deploy: &lane.DeploySpec{
-			Method: lane.DeployMethod{
-				"type":  "custom",
-				"image": "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+			Method: lane.DeployCustom{
+				Type:  "custom",
+				Image: "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 			},
 			Artifacts: map[string]lane.ArtifactRef{
 				"image": {From: "build.image"},
@@ -1037,13 +1037,9 @@ func deployStep() *lane.Step {
 	}
 }
 
-func TestExecuteMethod_UnknownType(t *testing.T) {
-	eng := newTLSTestEngine(t, http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
-	d := &deploy.Deployer{Engine: eng}
-	spec := lane.DeploySpec{
-		Method: lane.DeployMethod{"type": "unknown"},
-	}
-	err := d.ExecuteMethod(context.Background(), spec, nil)
+func TestUnmarshalDeploySpec_UnknownType(t *testing.T) {
+	var spec lane.DeploySpec
+	err := json.Unmarshal([]byte(`{"method": {"type": "unknown"}}`), &spec)
 	if err == nil {
 		t.Fatal("expected error for unknown method type")
 	}

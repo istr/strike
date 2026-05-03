@@ -251,7 +251,7 @@ package lane
 	} @go(Source,optional=nillable)
 }
 
-#DeployMethod: #DeployKubernetes | #DeployRegistry | #DeployCustom
+#DeployMethod: (#DeployKubernetes | #DeployRegistry | #DeployCustom) @go(-)
 
 #DeployKubernetes: {
 	@go(DeployKubernetes)

@@ -1,93 +1,187 @@
 package lane_test
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/istr/strike/internal/lane"
 )
 
-func TestDeployMethod_StringAccessors(t *testing.T) {
-	m := lane.DeployMethod{
-		"type":       "kubernetes",
-		"namespace":  "production",
-		"strategy":   "apply",
-		"source":     "img@sha256:abc",
-		"target":     "prod.io/app:latest",
-		"image":      "kubectl@sha256:def",
-		"kubeconfig": "/home/user/.kube/config",
+// Each subtest unmarshals a DeploySpec JSON snippet and asserts
+// that Method is the expected concrete branch type with the
+// expected field values.
+func TestDeploySpec_UnmarshalJSON_Discriminator(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		check   func(t *testing.T, m lane.DeployMethod)
+		wantErr string
+	}{
+		{
+			name: "kubernetes",
+			input: `{
+				"method": {
+					"type": "kubernetes",
+					"image": "img@sha256:` + strings.Repeat("a", 64) + `",
+					"namespace": "production",
+					"strategy": "apply",
+					"kubeconfig": "/etc/kubeconfig"
+				},
+				"artifacts": {},
+				"target": {"type": "kubernetes", "description": "prod"},
+				"attestation": {
+					"pre_state": {"required": false, "capture": []},
+					"post_state": {"required": false, "capture": []},
+					"drift": {"detect": false, "on_drift": "warn"}
+				}
+			}`,
+			check: func(t *testing.T, m lane.DeployMethod) {
+				k, ok := m.(lane.DeployKubernetes)
+				if !ok {
+					t.Fatalf("Method type = %T, want DeployKubernetes", m)
+				}
+				if k.Namespace != "production" {
+					t.Errorf("Namespace = %q, want production", k.Namespace)
+				}
+				if k.Strategy != "apply" {
+					t.Errorf("Strategy = %q, want apply", k.Strategy)
+				}
+			},
+		},
+		{
+			name: "registry",
+			input: `{
+				"method": {
+					"type": "registry",
+					"source": "src@sha256:` + strings.Repeat("b", 64) + `",
+					"target": "dst.io/app:latest"
+				},
+				"artifacts": {},
+				"target": {"type": "registry", "description": "prod"},
+				"attestation": {
+					"pre_state": {"required": false, "capture": []},
+					"post_state": {"required": false, "capture": []},
+					"drift": {"detect": false, "on_drift": "warn"}
+				}
+			}`,
+			check: func(t *testing.T, m lane.DeployMethod) {
+				r, ok := m.(lane.DeployRegistry)
+				if !ok {
+					t.Fatalf("Method type = %T, want DeployRegistry", m)
+				}
+				if r.Target != "dst.io/app:latest" {
+					t.Errorf("Target = %q, want dst.io/app:latest", r.Target)
+				}
+			},
+		},
+		{
+			name: "custom",
+			input: `{
+				"method": {
+					"type": "custom",
+					"image": "img@sha256:` + strings.Repeat("c", 64) + `",
+					"args": ["deploy", "--prod"],
+					"env": {"FOO": "bar"},
+					"entrypoint": ["/bin/sh", "-c"]
+				},
+				"artifacts": {},
+				"target": {"type": "custom", "description": "prod"},
+				"attestation": {
+					"pre_state": {"required": false, "capture": []},
+					"post_state": {"required": false, "capture": []},
+					"drift": {"detect": false, "on_drift": "warn"}
+				}
+			}`,
+			check: func(t *testing.T, m lane.DeployMethod) {
+				c, ok := m.(lane.DeployCustom)
+				if !ok {
+					t.Fatalf("Method type = %T, want DeployCustom", m)
+				}
+				if len(c.Args) != 2 {
+					t.Errorf("Args len = %d, want 2", len(c.Args))
+				}
+				if c.Env["FOO"] != "bar" {
+					t.Errorf("Env[FOO] = %q, want bar", c.Env["FOO"])
+				}
+			},
+		},
+		{
+			name:    "unknown_type",
+			input:   `{"method": {"type": "rsync"}}`,
+			wantErr: "unknown deploy method type",
+		},
+		{
+			name:    "missing_type",
+			input:   `{"method": {"image": "irrelevant"}}`,
+			wantErr: "missing type discriminator",
+		},
+		{
+			name:    "missing_method",
+			input:   `{}`,
+			wantErr: "deploy method missing",
+		},
 	}
 
-	tests := []struct {
-		name string
-		got  string
-		want string
-	}{
-		{"Type", m.Type(), "kubernetes"},
-		{"Namespace", m.Namespace(), "production"},
-		{"Strategy", m.Strategy(), "apply"},
-		{"Source", m.Source(), "img@sha256:abc"},
-		{"MethodTarget", m.MethodTarget(), "prod.io/app:latest"},
-		{"Image", m.Image(), "kubectl@sha256:def"},
-		{"Kubeconfig", m.Kubeconfig(), "/home/user/.kube/config"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if tt.got != tt.want {
-				t.Errorf("%s() = %q, want %q", tt.name, tt.got, tt.want)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var spec lane.DeploySpec
+			err := json.Unmarshal([]byte(tc.input), &spec)
+			if tc.wantErr != "" {
+				if err == nil {
+					t.Fatalf("expected error containing %q, got nil", tc.wantErr)
+				}
+				if !strings.Contains(err.Error(), tc.wantErr) {
+					t.Errorf("error = %v, want substring %q", err, tc.wantErr)
+				}
+				return
 			}
+			if err != nil {
+				t.Fatalf("unmarshal: %v", err)
+			}
+			tc.check(t, spec.Method)
 		})
 	}
 }
 
-func TestDeployMethod_EmptyMap(t *testing.T) {
-	m := lane.DeployMethod{}
-	if m.Type() != "" {
-		t.Errorf("Type() = %q, want empty", m.Type())
-	}
-	if m.Image() != "" {
-		t.Errorf("Image() = %q, want empty", m.Image())
-	}
-}
+// Round-trip test: marshalling the unmarshalled spec must produce
+// JSON whose method.type matches the original.
+func TestDeploySpec_RoundTrip(t *testing.T) {
+	original := `{
+		"method": {
+			"type": "registry",
+			"source": "src@sha256:` + strings.Repeat("d", 64) + `",
+			"target": "dst.io/app:latest"
+		},
+		"artifacts": {},
+		"target": {"type": "registry", "description": "test"},
+		"attestation": {
+			"pre_state": {"required": false, "capture": []},
+			"post_state": {"required": false, "capture": []},
+			"drift": {"detect": false, "on_drift": "warn"}
+		}
+	}`
 
-func TestDeployMethod_Args(t *testing.T) {
-	m := lane.DeployMethod{
-		"args": []any{"apply", "-f", "-"},
+	var spec lane.DeploySpec
+	if err := json.Unmarshal([]byte(original), &spec); err != nil {
+		t.Fatalf("unmarshal: %v", err)
 	}
-	args := m.Args()
-	if len(args) != 3 {
-		t.Fatalf("Args() len = %d, want 3", len(args))
-	}
-	if args[0] != "apply" || args[1] != "-f" || args[2] != "-" {
-		t.Errorf("Args() = %v, want [apply -f -]", args)
-	}
-}
 
-func TestDeployMethod_ArgsEmpty(t *testing.T) {
-	m := lane.DeployMethod{}
-	if args := m.Args(); args != nil {
-		t.Errorf("Args() = %v, want nil", args)
+	out, err := json.Marshal(spec)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
 	}
-}
 
-func TestDeployMethod_Env(t *testing.T) {
-	m := lane.DeployMethod{
-		"env": map[string]any{"FOO": "bar", "BAZ": "qux"},
+	var roundtrip map[string]any
+	if err := json.Unmarshal(out, &roundtrip); err != nil {
+		t.Fatalf("re-unmarshal: %v", err)
 	}
-	env := m.Env()
-	if len(env) != 2 {
-		t.Fatalf("Env() len = %d, want 2", len(env))
-	}
-	if env["FOO"] != "bar" {
-		t.Errorf("Env[FOO] = %q, want bar", env["FOO"])
-	}
-	if env["BAZ"] != "qux" {
-		t.Errorf("Env[BAZ] = %q, want qux", env["BAZ"])
-	}
-}
 
-func TestDeployMethod_EnvEmpty(t *testing.T) {
-	m := lane.DeployMethod{}
-	if env := m.Env(); env != nil {
-		t.Errorf("Env() = %v, want nil", env)
+	method, ok := roundtrip["method"].(map[string]any)
+	if !ok {
+		t.Fatal("method key missing or not an object after marshal")
+	}
+	if method["type"] != "registry" {
+		t.Errorf("round-tripped method.type = %v, want registry", method["type"])
 	}
 }

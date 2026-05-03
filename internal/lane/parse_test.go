@@ -73,8 +73,8 @@ func TestParse_ValidDeploy(t *testing.T) {
 	if deployStep.Deploy == nil {
 		t.Fatal("deploy spec should be non-nil")
 	}
-	if deployStep.Deploy.Method.Type() != "registry" {
-		t.Errorf("deploy method type = %q, want registry", deployStep.Deploy.Method.Type())
+	if deployStep.Deploy.Method.MethodType() != "registry" {
+		t.Errorf("deploy method type = %q, want registry", deployStep.Deploy.Method.MethodType())
 	}
 }
 

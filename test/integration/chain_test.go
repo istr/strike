@@ -101,9 +101,9 @@ func chainDeploy(
 	step := &lane.Step{
 		Name: "deploy-e2e",
 		Deploy: &lane.DeploySpec{
-			Method: lane.DeployMethod{
-				"type":  "custom",
-				"image": imageRef,
+			Method: lane.DeployCustom{
+				Type:  "custom",
+				Image: lane.ImageRef(imageRef),
 			},
 			Artifacts: map[string]lane.ArtifactRef{
 				"app": {From: "pack.image"},

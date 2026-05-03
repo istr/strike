@@ -422,49 +422,47 @@ func DetectDrift(preState map[string]StateSnap, previousAtt *Attestation) *Drift
 
 // executeMethod dispatches to the appropriate deploy method.
 func (d *Deployer) executeMethod(ctx context.Context, spec lane.DeploySpec, peers []lane.Peer) error {
-	m := spec.Method
-	switch m.Type() {
-	case "registry":
+	switch m := spec.Method.(type) {
+	case lane.DeployRegistry:
 		return executeRegistryDeploy(m)
-	case "kubernetes":
+	case lane.DeployKubernetes:
 		return d.executeKubernetesDeploy(ctx, m, peers)
-	case "custom":
+	case lane.DeployCustom:
 		return d.executeCustomDeploy(ctx, m, peers)
 	default:
-		return fmt.Errorf("unknown deploy method type %q", m.Type())
+		return fmt.Errorf("unknown deploy method type %q", spec.Method.MethodType())
 	}
 }
 
-func executeRegistryDeploy(m lane.DeployMethod) error {
-	if err := registry.CopyImage(m.Source(), m.MethodTarget()); err != nil {
+func executeRegistryDeploy(m lane.DeployRegistry) error {
+	if err := registry.CopyImage(m.Source, m.Target); err != nil {
 		return fmt.Errorf("registry deploy: %w", err)
 	}
 	return nil
 }
 
-func (d *Deployer) executeKubernetesDeploy(ctx context.Context, m lane.DeployMethod, peers []lane.Peer) error {
-	image := m.Image()
-	if image == "" {
+func (d *Deployer) executeKubernetesDeploy(ctx context.Context, m lane.DeployKubernetes, peers []lane.Peer) error {
+	if m.Image == "" {
 		return fmt.Errorf("kubernetes deploy: image required (digest-pinned kubectl image)")
 	}
 
-	kubeconfig, err := ResolveKubeconfig(m.Kubeconfig())
+	kubeconfig, err := ResolveKubeconfig(m.Kubeconfig)
 	if err != nil {
 		return fmt.Errorf("kubernetes deploy: %w", err)
 	}
 
-	strategy := m.Strategy()
+	strategy := m.Strategy
 	if strategy == "" {
 		strategy = "apply"
 	}
 
 	kubectlArgs := []string{strategy, "-f", "-"}
-	if m.Namespace() != "" {
-		kubectlArgs = append(kubectlArgs, "-n", m.Namespace())
+	if m.Namespace != "" {
+		kubectlArgs = append(kubectlArgs, "-n", m.Namespace)
 	}
 
 	opts := HardenedRunOpts()
-	opts.Image = image
+	opts.Image = string(m.Image)
 	opts.Cmd = kubectlArgs
 	opts.Network = executor.NetworkMode(peers)
 	opts.Mounts = []container.Mount{
@@ -484,16 +482,16 @@ func (d *Deployer) executeKubernetesDeploy(ctx context.Context, m lane.DeployMet
 	return nil
 }
 
-func (d *Deployer) executeCustomDeploy(ctx context.Context, m lane.DeployMethod, peers []lane.Peer) error {
-	if m.Image() == "" {
+func (d *Deployer) executeCustomDeploy(ctx context.Context, m lane.DeployCustom, peers []lane.Peer) error {
+	if m.Image == "" {
 		return fmt.Errorf("custom deploy: image required")
 	}
 
 	opts := HardenedRunOpts()
-	opts.Image = m.Image()
-	opts.Entrypoint = m.Entrypoint()
-	opts.Cmd = m.Args()
-	opts.Env = m.Env()
+	opts.Image = string(m.Image)
+	opts.Entrypoint = m.Entrypoint
+	opts.Cmd = m.Args
+	opts.Env = m.Env
 	opts.Network = executor.NetworkMode(peers)
 	opts.Stdout = os.Stdout
 	opts.Stderr = os.Stderr
