@@ -1,4 +1,5 @@
 name: fan-out-test
+lane_id: fan-out-test
 registry: localhost:5555/test
 secrets: {}
 steps:

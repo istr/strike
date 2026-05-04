@@ -82,6 +82,7 @@ var boundaryToCUEType = map[string]string{
 	"SignManifest":        "#SignVector",
 	"SignAttestation":     "#SignAttestationVector",
 	"ValidateAttestation": "#AttestationVector",
+	"StateDigest":         "#StateDigestVector",
 }
 
 // TestCrossvalVectorsConformToSchema validates all vector files against

@@ -1,4 +1,5 @@
 name: image-from-test
+lane_id: image-from-test
 registry: localhost:5555/test
 secrets: {}
 steps:

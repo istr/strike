@@ -1,4 +1,5 @@
 name: peers-state-capture
+lane_id: peers-state-capture
 registry: localhost:5555/test
 secrets: {}
 steps:
@@ -21,6 +22,7 @@ steps:
         image:
           from: build.image
       target:
+        id: prod-registry
         type: registry
         description: prod
       attestation:
@@ -39,9 +41,6 @@ steps:
         post_state:
           required: false
           capture: []
-        drift:
-          detect: false
-          on_drift: warn
     args: []
     env: {}
     inputs: []

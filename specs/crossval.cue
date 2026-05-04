@@ -10,7 +10,7 @@ package crossval
 
 // Shared envelope for all cross-validation test vectors.
 #Vector: {
-	boundary:    "AssembleImage" | "SpecHash" | "SignManifest" | "ValidateAttestation" | "SignAttestation"
+	boundary:    "AssembleImage" | "SpecHash" | "SignManifest" | "ValidateAttestation" | "SignAttestation" | "StateDigest"
 	description: string
 	inputs:      _
 	expected:    _
@@ -100,5 +100,19 @@ package crossval
 		if !valid {
 			error_contains: string
 		}
+	}
+}
+
+#StateDigestVector: #Vector & {
+	boundary: "StateDigest"
+	inputs: {
+		captures: [...{
+			name:           string
+			image:          string
+			output_base64:  string
+		}]
+	}
+	expected: {
+		digest: =~"^sha256:[a-f0-9]{64}$"
 	}
 }

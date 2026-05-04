@@ -1,25 +1,18 @@
 {
   "boundary": "ValidateAttestation",
-  "description": "state snap digest not matching #Digest pattern fails validation",
+  "description": "pre_state_digest not matching #Digest pattern fails validation",
   "inputs": {
     "attestation": {
-      "deploy_id": "abcdef0123456789",
+      "lane_id": "test-lane",
       "timestamp": "2024-01-01T00:00:00Z",
       "target": {
+        "id": "test-target",
         "type": "registry",
         "description": "test"
       },
       "artifacts": {},
-      "pre_state": {
-        "version": {
-          "name": "version",
-          "image": "alpine:latest",
-          "digest": "not-a-valid-digest",
-          "timestamp": "2024-01-01T00:00:00Z",
-          "output": null
-        }
-      },
-      "post_state": {},
+      "pre_state_digest": "not-a-valid-digest",
+      "post_state_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "lane_ref": "",
       "provenance": null
     }

@@ -1,4 +1,5 @@
 name: hugo-test
+lane_id: hugo-test
 registry: localhost:5555/test
 secrets: {}
 steps:

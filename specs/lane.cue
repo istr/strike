@@ -16,6 +16,10 @@ package lane
 #Lane: {
 	@go(Lane)
 	name:     string @go(Name)
+	// Stable identifier assigned at authoring time. Used by external
+	// verifiers to pair attestations against the same lane across runs.
+	// Distinct from `name`, which is human-display.
+	lane_id:  =~"^[a-z0-9][a-z0-9-]{0,62}$" @go(LaneID)
 	registry: string & =~"^[a-z0-9./-]+" @go(Registry)
 	secrets: [Name=string]: #SecretSource @go(Secrets)
 	steps: [#Step, ...#Step] @go(Steps)
@@ -285,6 +289,10 @@ package lane
 
 #DeployTarget: {
 	@go(DeployTarget)
+	// Stable identifier assigned at authoring time. External verifiers use
+	// this to pair pre/post-state digests across consecutive deploys
+	// to the same target.
+	id:          =~"^[a-z0-9][a-z0-9-]{0,62}$" @go(ID)
 	type:        string @go(Type)
 	description: string @go(Description)
 	url?:        string @go(URL)
@@ -299,19 +307,12 @@ package lane
 	@go(AttestationSpec)
 	pre_state:  #StateCaptureSpec @go(PreState)
 	post_state: #StateCaptureSpec @go(PostState)
-	drift:      #DriftSpec @go(Drift)
 }
 
 #StateCaptureSpec: {
 	@go(StateCaptureSpec)
 	required: *true | bool @go(Required)
 	capture:  [...#StateCapture] @go(Capture)
-}
-
-#DriftSpec: {
-	@go(DriftSpec)
-	detect:   *true | bool @go(Detect)
-	on_drift: *"warn" | "fail" | "record" @go(OnDrift)
 }
 
 #StateCapture: {

@@ -14,29 +14,15 @@ import (
 
 func TestValidateAttestation_Valid(t *testing.T) {
 	att := &deploy.Attestation{
-		DeployID:  "abcdef0123456789",
+		LaneID:    "test-lane",
 		Timestamp: clock.Reproducible(),
-		Target:    lane.DeployTarget{Type: "registry", Description: "production"},
+		Target:    lane.DeployTarget{ID: "prod-1", Type: "registry", Description: "production"},
 		Artifacts: map[string]deploy.SignedArtifact{
 			"image": {Digest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
 		},
-		PreState: map[string]deploy.StateSnap{
-			"version": {
-				Name:      "version",
-				Image:     "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
-				Digest:    "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-				Timestamp: clock.Unix(1, 0),
-			},
-		},
-		PostState: map[string]deploy.StateSnap{
-			"version": {
-				Name:      "version",
-				Image:     "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
-				Digest:    "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-				Timestamp: clock.Unix(60, 0),
-			},
-		},
-		Peers: map[string][]lane.Peer{},
+		PreStateDigest:  lane.MustParseDigest("sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+		PostStateDigest: lane.MustParseDigest("sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
+		Peers:           map[string][]lane.Peer{},
 	}
 
 	if err := deploy.ValidateAttestation(att); err != nil {
@@ -47,14 +33,14 @@ func TestValidateAttestation_Valid(t *testing.T) {
 func TestValidateAttestation_WithEngine(t *testing.T) {
 	rootless := true
 	att := &deploy.Attestation{
-		DeployID:  "abcdef0123456789",
+		LaneID:    "test-lane",
 		Timestamp: clock.Reproducible(),
-		Target:    lane.DeployTarget{Type: "kubernetes", Description: "staging"},
+		Target:    lane.DeployTarget{ID: "staging-1", Type: "kubernetes", Description: "staging"},
 		Artifacts: map[string]deploy.SignedArtifact{
 			"app": {Digest: "sha256:1111111111111111111111111111111111111111111111111111111111111111"},
 		},
-		PreState:  map[string]deploy.StateSnap{},
-		PostState: map[string]deploy.StateSnap{},
+		PreStateDigest:  lane.MustParseDigest("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
+		PostStateDigest: lane.MustParseDigest("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
 		Engine: &deploy.EngineRecord{
 			ConnectionType:        "tls",
 			CATrustMode:           "pinned",
@@ -70,51 +56,14 @@ func TestValidateAttestation_WithEngine(t *testing.T) {
 	}
 }
 
-func TestValidateAttestation_WithDrift(t *testing.T) {
-	att := &deploy.Attestation{
-		DeployID:  "abcdef0123456789",
-		Timestamp: clock.Reproducible(),
-		Target:    lane.DeployTarget{Type: "registry", Description: "production"},
-		Artifacts: map[string]deploy.SignedArtifact{},
-		PreState:  map[string]deploy.StateSnap{},
-		PostState: map[string]deploy.StateSnap{},
-		Drift: &deploy.DriftReport{
-			PreviousDeployID:  "9876543210fedcba",
-			PreviousPostState: map[string]string{"version": "sha256:aaa"},
-			CurrentPreState:   map[string]string{"version": "sha256:bbb"},
-			Drifted:           []string{"version"},
-		},
-		Peers: map[string][]lane.Peer{},
-	}
-
-	if err := deploy.ValidateAttestation(att); err != nil {
-		t.Fatalf("attestation with drift rejected: %v", err)
-	}
-}
-
-func TestValidateAttestation_InvalidDeployID(t *testing.T) {
-	att := &deploy.Attestation{
-		DeployID:  "NOT-HEX!!", // too short, wrong chars
-		Timestamp: clock.Reproducible(),
-		Target:    lane.DeployTarget{Type: "registry", Description: "test"},
-		Artifacts: map[string]deploy.SignedArtifact{},
-		PreState:  map[string]deploy.StateSnap{},
-		PostState: map[string]deploy.StateSnap{},
-	}
-
-	if err := deploy.ValidateAttestation(att); err == nil {
-		t.Fatal("expected validation error for invalid deploy_id")
-	}
-}
-
 func TestValidateAttestation_InvalidEngineConnectionType(t *testing.T) {
 	att := &deploy.Attestation{
-		DeployID:  "abcdef0123456789",
-		Timestamp: clock.Reproducible(),
-		Target:    lane.DeployTarget{Type: "registry", Description: "test"},
-		Artifacts: map[string]deploy.SignedArtifact{},
-		PreState:  map[string]deploy.StateSnap{},
-		PostState: map[string]deploy.StateSnap{},
+		LaneID:          "test-lane",
+		Timestamp:       clock.Reproducible(),
+		Target:          lane.DeployTarget{ID: "test-1", Type: "registry", Description: "test"},
+		Artifacts:       map[string]deploy.SignedArtifact{},
+		PreStateDigest:  lane.MustParseDigest("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
+		PostStateDigest: lane.MustParseDigest("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
 		Engine: &deploy.EngineRecord{
 			ConnectionType: "plaintext", // not in enum
 		},
@@ -126,14 +75,12 @@ func TestValidateAttestation_InvalidEngineConnectionType(t *testing.T) {
 }
 
 func TestValidateAttestation_MissingTarget(t *testing.T) {
-	// Build a minimal attestation with missing target fields via raw JSON
-	// to bypass Go struct defaults.
 	raw := `{
-		"deploy_id": "abcdef0123456789",
+		"lane_id": "test-lane",
 		"timestamp": "2025-01-15T10:30:00Z",
 		"artifacts": {},
-		"pre_state": {},
-		"post_state": {}
+		"pre_state_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+		"post_state_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 	}`
 
 	var att deploy.Attestation
@@ -145,19 +92,19 @@ func TestValidateAttestation_MissingTarget(t *testing.T) {
 	}
 }
 
-func TestValidateAttestation_EmptyStatesAllowed(t *testing.T) {
+func TestValidateAttestation_EmptyDigestsAllowed(t *testing.T) {
 	att := &deploy.Attestation{
-		DeployID:  "abcdef0123456789",
-		Timestamp: clock.Reproducible(),
-		Target:    lane.DeployTarget{Type: "registry", Description: "first deploy"},
-		Artifacts: map[string]deploy.SignedArtifact{},
-		PreState:  map[string]deploy.StateSnap{},
-		PostState: map[string]deploy.StateSnap{},
-		Peers:     map[string][]lane.Peer{},
+		LaneID:          "test-lane",
+		Timestamp:       clock.Reproducible(),
+		Target:          lane.DeployTarget{ID: "test-1", Type: "registry", Description: "first deploy"},
+		Artifacts:       map[string]deploy.SignedArtifact{},
+		PreStateDigest:  lane.MustParseDigest("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
+		PostStateDigest: lane.MustParseDigest("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
+		Peers:           map[string][]lane.Peer{},
 	}
 
 	if err := deploy.ValidateAttestation(att); err != nil {
-		t.Fatalf("empty states should be valid: %v", err)
+		t.Fatalf("empty captures should be valid: %v", err)
 	}
 }
 
@@ -228,14 +175,14 @@ func runAttestationVector(t *testing.T, path string) {
 
 func TestValidateAttestation_WithPeers(t *testing.T) {
 	att := &deploy.Attestation{
-		DeployID:  "abcdef0123456789",
+		LaneID:    "test-lane",
 		Timestamp: clock.Reproducible(),
-		Target:    lane.DeployTarget{Type: "registry", Description: "production"},
+		Target:    lane.DeployTarget{ID: "prod-1", Type: "registry", Description: "production"},
 		Artifacts: map[string]deploy.SignedArtifact{
 			"image": {Digest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
 		},
-		PreState:  map[string]deploy.StateSnap{},
-		PostState: map[string]deploy.StateSnap{},
+		PreStateDigest:  lane.MustParseDigest("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
+		PostStateDigest: lane.MustParseDigest("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
 		Peers: map[string][]lane.Peer{
 			"build": {
 				lane.HTTPSPeer{
@@ -269,14 +216,14 @@ func TestValidateAttestation_WithPeers(t *testing.T) {
 
 func TestValidateAttestation_InvalidPeer(t *testing.T) {
 	att := &deploy.Attestation{
-		DeployID:  "abcdef0123456789",
+		LaneID:    "test-lane",
 		Timestamp: clock.Reproducible(),
-		Target:    lane.DeployTarget{Type: "registry", Description: "production"},
+		Target:    lane.DeployTarget{ID: "prod-1", Type: "registry", Description: "production"},
 		Artifacts: map[string]deploy.SignedArtifact{
 			"image": {Digest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
 		},
-		PreState:  map[string]deploy.StateSnap{},
-		PostState: map[string]deploy.StateSnap{},
+		PreStateDigest:  lane.MustParseDigest("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
+		PostStateDigest: lane.MustParseDigest("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
 		Peers: map[string][]lane.Peer{
 			"build": {
 				lane.HTTPSPeer{

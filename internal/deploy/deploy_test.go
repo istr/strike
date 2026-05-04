@@ -109,65 +109,13 @@ func newTLSTestEngine(t *testing.T, handler http.Handler) container.Engine {
 	return eng
 }
 
-func TestDetectDrift_NoPrevious(t *testing.T) {
-	pre := map[string]deploy.StateSnap{
-		"version": {Name: "version", Digest: "sha256:aaa"},
-	}
-	report := deploy.DetectDrift(pre, nil)
-	if report != nil {
-		t.Fatal("expected nil drift report for first deploy")
-	}
-}
-
-func TestDetectDrift_NoDrift(t *testing.T) {
-	pre := map[string]deploy.StateSnap{
-		"version": {Name: "version", Digest: "sha256:aaa"},
-	}
-	prev := &deploy.Attestation{
-		DeployID: "prev-001",
-		PostState: map[string]deploy.StateSnap{
-			"version": {Name: "version", Digest: "sha256:aaa"},
-		},
-	}
-	report := deploy.DetectDrift(pre, prev)
-	if report == nil {
-		t.Fatal("expected non-nil drift report")
-	}
-	if len(report.Drifted) != 0 {
-		t.Fatalf("expected no drift, got %v", report.Drifted)
-	}
-}
-
-func TestDetectDrift_WithDrift(t *testing.T) {
-	pre := map[string]deploy.StateSnap{
-		"version": {Name: "version", Digest: "sha256:bbb"},
-	}
-	prev := &deploy.Attestation{
-		DeployID: "prev-001",
-		PostState: map[string]deploy.StateSnap{
-			"version": {Name: "version", Digest: "sha256:aaa"},
-		},
-	}
-	report := deploy.DetectDrift(pre, prev)
-	if report == nil {
-		t.Fatal("expected drift report")
-	}
-	if len(report.Drifted) != 1 || report.Drifted[0] != "version" {
-		t.Fatalf("expected drift on 'version', got %v", report.Drifted)
-	}
-}
-
 func TestAttestationJSON(t *testing.T) {
 	att := &deploy.Attestation{
-		DeployID:  "test-001",
-		Target:    lane.DeployTarget{Type: "registry", Description: "test"},
-		Artifacts: map[string]deploy.SignedArtifact{"image": {Digest: "sha256:abc"}},
-		PreState: map[string]deploy.StateSnap{
-			"version": {Name: "version", Image: "img@sha256:aaa", Digest: "sha256:aaa"},
-		},
-		PostState: map[string]deploy.StateSnap{
-			"version": {Name: "version", Image: "img@sha256:aaa", Digest: "sha256:bbb"},
-		},
+		LaneID:          "test-lane",
+		Target:          lane.DeployTarget{ID: "prod-1", Type: "registry", Description: "test"},
+		Artifacts:       map[string]deploy.SignedArtifact{"image": {Digest: "sha256:abc"}},
+		PreStateDigest:  lane.MustParseDigest("sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+		PostStateDigest: lane.MustParseDigest("sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
 	}
 
 	data, err := att.JSON()
@@ -179,25 +127,14 @@ func TestAttestationJSON(t *testing.T) {
 	if err := json.Unmarshal(data, &m); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if m["deploy_id"] != "test-001" {
-		t.Errorf("deploy_id = %v, want test-001", m["deploy_id"])
+	if m["lane_id"] != "test-lane" {
+		t.Errorf("lane_id = %v, want test-lane", m["lane_id"])
 	}
-	if _, ok := m["pre_state"]; !ok {
-		t.Error("missing pre_state")
+	if _, ok := m["pre_state_digest"]; !ok {
+		t.Error("missing pre_state_digest")
 	}
-	if _, ok := m["post_state"]; !ok {
-		t.Error("missing post_state")
-	}
-}
-
-func TestGenerateDeployID(t *testing.T) {
-	id1 := deploy.GenerateDeployID("test")
-	id2 := deploy.GenerateDeployID("test")
-	if id1 == id2 {
-		t.Fatal("deploy IDs should be unique")
-	}
-	if len(id1) != 16 {
-		t.Fatalf("deploy ID length = %d, want 16", len(id1))
+	if _, ok := m["post_state_digest"]; !ok {
+		t.Error("missing post_state_digest")
 	}
 }
 
@@ -326,7 +263,7 @@ func TestDeployerExecute(t *testing.T) {
 			Artifacts: map[string]lane.ArtifactRef{
 				"image": {From: "build.image"},
 			},
-			Target: lane.DeployTarget{Type: "registry", Description: "production"},
+			Target: lane.DeployTarget{ID: "prod-1", Type: "registry", Description: "production"},
 			Attestation: lane.AttestationSpec{
 				PreState: lane.StateCaptureSpec{
 					Capture: []lane.StateCapture{{
@@ -351,13 +288,14 @@ func TestDeployerExecute(t *testing.T) {
 	d := &deploy.Deployer{
 		Engine:       eng,
 		ArtifactRefs: map[string]string{"image": "build.image"},
+		LaneID:       "test-lane",
 	}
 	att, err := d.Execute(context.Background(), step, state)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
-	if att.DeployID == "" {
-		t.Error("expected non-empty deploy ID")
+	if att.LaneID != "test-lane" {
+		t.Errorf("LaneID = %q, want test-lane", att.LaneID)
 	}
 	if len(att.Artifacts) == 0 {
 		t.Error("expected artifact digests in attestation")
@@ -365,11 +303,11 @@ func TestDeployerExecute(t *testing.T) {
 	if att.Artifacts["image"].Digest != "sha256:abc1230000000000000000000000000000000000000000000000000000000000" {
 		t.Errorf("artifact digest = %q, want sha256:abc1230000000000000000000000000000000000000000000000000000000000", att.Artifacts["image"].Digest)
 	}
-	if len(att.PreState) == 0 {
-		t.Error("expected pre-state snapshots")
+	if att.PreStateDigest.IsZero() {
+		t.Error("expected non-zero pre-state digest")
 	}
-	if len(att.PostState) == 0 {
-		t.Error("expected post-state snapshots")
+	if att.PostStateDigest.IsZero() {
+		t.Error("expected non-zero post-state digest")
 	}
 }
 
@@ -391,6 +329,7 @@ func TestDeployerExecute_MissingArtifact(t *testing.T) {
 	d := &deploy.Deployer{
 		Engine:       eng,
 		ArtifactRefs: map[string]string{"image": "build.image"},
+		LaneID:       "test-lane",
 	}
 	_, err := d.Execute(context.Background(), step, state)
 	if err == nil {
@@ -465,7 +404,7 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 			Artifacts: map[string]lane.ArtifactRef{
 				"image": {From: "build.image"},
 			},
-			Target: lane.DeployTarget{Type: "registry", Description: "production"},
+			Target: lane.DeployTarget{ID: "prod-1", Type: "registry", Description: "production"},
 			Attestation: lane.AttestationSpec{
 				PreState: lane.StateCaptureSpec{
 					Capture: []lane.StateCapture{{
@@ -487,7 +426,7 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 		},
 	}
 
-	d := &deploy.Deployer{Engine: eng, EngineID: eng.Identity(), ArtifactRefs: map[string]string{"image": "build.image"}}
+	d := &deploy.Deployer{Engine: eng, EngineID: eng.Identity(), ArtifactRefs: map[string]string{"image": "build.image"}, LaneID: "test-lane"}
 	att, err := d.Execute(context.Background(), step, state)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -545,13 +484,13 @@ func TestEngineRecord_NilEngineID(t *testing.T) {
 			Artifacts: map[string]lane.ArtifactRef{
 				"image": {From: "build.image"},
 			},
-			Target:      lane.DeployTarget{Type: "registry", Description: "test"},
+			Target:      lane.DeployTarget{ID: "test-1", Type: "registry", Description: "test"},
 			Attestation: lane.AttestationSpec{},
 		},
 	}
 
 	// EngineID is nil -- engineRecord should return nil.
-	d := &deploy.Deployer{Engine: eng, EngineID: nil, ArtifactRefs: map[string]string{"image": "build.image"}}
+	d := &deploy.Deployer{Engine: eng, EngineID: nil, ArtifactRefs: map[string]string{"image": "build.image"}, LaneID: "test-lane"}
 	att, err := d.Execute(context.Background(), step, state)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -594,12 +533,12 @@ func TestEngineRecord_WithRuntime(t *testing.T) {
 			Artifacts: map[string]lane.ArtifactRef{
 				"image": {From: "build.image"},
 			},
-			Target:      lane.DeployTarget{Type: "registry", Description: "test"},
+			Target:      lane.DeployTarget{ID: "test-1", Type: "registry", Description: "test"},
 			Attestation: lane.AttestationSpec{},
 		},
 	}
 
-	d := &deploy.Deployer{Engine: eng, EngineID: id, ArtifactRefs: map[string]string{"image": "build.image"}}
+	d := &deploy.Deployer{Engine: eng, EngineID: id, ArtifactRefs: map[string]string{"image": "build.image"}, LaneID: "test-lane"}
 	att, err := d.Execute(context.Background(), step, state)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -650,12 +589,12 @@ func TestEngineRecord_WithoutRuntime(t *testing.T) {
 			Artifacts: map[string]lane.ArtifactRef{
 				"image": {From: "build.image"},
 			},
-			Target:      lane.DeployTarget{Type: "registry", Description: "test"},
+			Target:      lane.DeployTarget{ID: "test-1", Type: "registry", Description: "test"},
 			Attestation: lane.AttestationSpec{},
 		},
 	}
 
-	d := &deploy.Deployer{Engine: eng, EngineID: id, ArtifactRefs: map[string]string{"image": "build.image"}}
+	d := &deploy.Deployer{Engine: eng, EngineID: id, ArtifactRefs: map[string]string{"image": "build.image"}, LaneID: "test-lane"}
 	att, err := d.Execute(context.Background(), step, state)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -675,31 +614,6 @@ func TestEngineRecord_WithoutRuntime(t *testing.T) {
 }
 
 // --------------------------------------------------------------------------.
-// DetectDrift additional cases.
-// --------------------------------------------------------------------------.
-
-func TestDetectDrift_NewDimension(t *testing.T) {
-	pre := map[string]deploy.StateSnap{
-		"version": {Name: "version", Digest: "sha256:aaa"},
-		"config":  {Name: "config", Digest: "sha256:bbb"},
-	}
-	prev := &deploy.Attestation{
-		DeployID: "prev-001",
-		PostState: map[string]deploy.StateSnap{
-			"version": {Name: "version", Digest: "sha256:aaa"},
-		},
-	}
-	report := deploy.DetectDrift(pre, prev)
-	if report == nil {
-		t.Fatal("expected non-nil drift report")
-	}
-	// "config" is new, should not be in Drifted.
-	if len(report.Drifted) != 0 {
-		t.Fatalf("expected no drift for new dimensions, got %v", report.Drifted)
-	}
-}
-
-// --------------------------------------------------------------------------.
 // Execute edge cases.
 // --------------------------------------------------------------------------.
 
@@ -707,7 +621,7 @@ func TestDeployerExecute_NotDeployStep(t *testing.T) {
 	eng := newTLSTestEngine(t, containerMock(t, ""))
 	state := lane.NewState()
 	step := &lane.Step{Name: "build", Deploy: nil}
-	d := &deploy.Deployer{Engine: eng}
+	d := &deploy.Deployer{Engine: eng, LaneID: "test-lane"}
 	_, err := d.Execute(context.Background(), step, state)
 	if err == nil {
 		t.Fatal("expected error for non-deploy step")
@@ -746,7 +660,7 @@ func TestDeployerExecute_RequiredPreStateFails(t *testing.T) {
 				Image: "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 			},
 			Artifacts: map[string]lane.ArtifactRef{},
-			Target:    lane.DeployTarget{Type: "registry", Description: "test"},
+			Target:    lane.DeployTarget{ID: "test-1", Type: "registry", Description: "test"},
 			Attestation: lane.AttestationSpec{
 				PreState: lane.StateCaptureSpec{
 					Required: true,
@@ -760,72 +674,13 @@ func TestDeployerExecute_RequiredPreStateFails(t *testing.T) {
 		},
 	}
 
-	d := &deploy.Deployer{Engine: eng}
+	d := &deploy.Deployer{Engine: eng, LaneID: "test-lane"}
 	_, err := d.Execute(context.Background(), step, state)
 	if err == nil {
 		t.Fatal("expected error for required pre-state failure")
 	}
 	if !strings.Contains(err.Error(), "pre-state capture failed") {
 		t.Errorf("error = %q, want 'pre-state capture failed'", err.Error())
-	}
-}
-
-func TestDeployerExecute_DriftDetectFail(t *testing.T) {
-	eng := newTLSTestEngine(t, containerMock(t, "v1.0"))
-	state := lane.NewState()
-	if err := state.Register("build", "image", lane.Artifact{
-		Type:   "image",
-		Digest: lane.MustParseDigest("sha256:abc1230000000000000000000000000000000000000000000000000000000000"),
-	}); err != nil {
-		t.Fatal(err)
-	}
-
-	step := &lane.Step{
-		Name: "deploy-drift-fail",
-		Deploy: &lane.DeploySpec{
-			Method: lane.DeployCustom{
-				Type:  "custom",
-				Image: "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
-			},
-			Artifacts: map[string]lane.ArtifactRef{
-				"image": {From: "build.image"},
-			},
-			Target: lane.DeployTarget{Type: "registry", Description: "test"},
-			Attestation: lane.AttestationSpec{
-				Drift: lane.DriftSpec{
-					Detect:  true,
-					OnDrift: "fail",
-				},
-				PreState: lane.StateCaptureSpec{
-					Capture: []lane.StateCapture{{
-						Name:    "version",
-						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
-						Command: []string{"cat", "/version"},
-						Peers:   []lane.Peer{lane.OCIPeer{Type: "oci", Registry: "localhost:5555"}},
-					}},
-				},
-				PostState: lane.StateCaptureSpec{
-					Capture: []lane.StateCapture{{
-						Name:    "version",
-						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
-						Command: []string{"cat", "/version"},
-						Peers:   []lane.Peer{lane.OCIPeer{Type: "oci", Registry: "localhost:5555"}},
-					}},
-				},
-			},
-		},
-	}
-
-	// Drift detection is enabled but previous attestation is nil (first deploy).
-	// So no actual drift occurs. Just test the code path is exercised.
-	d := &deploy.Deployer{Engine: eng, ArtifactRefs: map[string]string{"image": "build.image"}}
-	att, err := d.Execute(context.Background(), step, state)
-	if err != nil {
-		t.Fatalf("Execute: %v", err)
-	}
-	// First deploy -- drift should be nil (no previous attestation).
-	if att.Drift != nil {
-		t.Error("expected nil drift for first deploy")
 	}
 }
 
@@ -857,6 +712,7 @@ func TestDeployerExecute_WithRekor(t *testing.T) {
 		ArtifactRefs: map[string]string{"image": "build.image"},
 		SigningKey:   keyPEM,
 		KeyPassword:  nil,
+		LaneID:       "test-lane",
 	}
 
 	att, err := d.Execute(context.Background(), step, state)
@@ -893,6 +749,7 @@ func TestDeployerExecute_NoRekor(t *testing.T) {
 		ArtifactRefs: map[string]string{"image": "build.image"},
 		SigningKey:   keyPEM,
 		KeyPassword:  nil,
+		LaneID:       "test-lane",
 	}
 
 	att, err := d.Execute(context.Background(), step, state)
@@ -934,6 +791,7 @@ func TestDeployerExecute_RekorTransient(t *testing.T) {
 		ArtifactRefs: map[string]string{"image": "build.image"},
 		SigningKey:   keyPEM,
 		KeyPassword:  nil,
+		LaneID:       "test-lane",
 	}
 
 	att, err := d.Execute(context.Background(), step, state)
@@ -973,6 +831,7 @@ func TestDeployerExecute_RekorSignedContentNoRekorField(t *testing.T) {
 		ArtifactRefs: map[string]string{"image": "build.image"},
 		SigningKey:   keyPEM,
 		KeyPassword:  nil,
+		LaneID:       "test-lane",
 	}
 
 	att, err := d.Execute(context.Background(), step, state)
@@ -1014,7 +873,7 @@ func deployStep() *lane.Step {
 			Artifacts: map[string]lane.ArtifactRef{
 				"image": {From: "build.image"},
 			},
-			Target: lane.DeployTarget{Type: "registry", Description: "production"},
+			Target: lane.DeployTarget{ID: "prod-1", Type: "registry", Description: "production"},
 			Attestation: lane.AttestationSpec{
 				PreState: lane.StateCaptureSpec{
 					Capture: []lane.StateCapture{{
@@ -1034,6 +893,23 @@ func deployStep() *lane.Step {
 				},
 			},
 		},
+	}
+}
+
+// TestValidateAttestation_InvalidLaneID checks that an invalid lane_id is rejected.
+func TestValidateAttestation_InvalidLaneID(t *testing.T) {
+	att := &deploy.Attestation{
+		LaneID:          "INVALID_LANE_ID",
+		Timestamp:       clock.Reproducible(),
+		Target:          lane.DeployTarget{ID: "prod-1", Type: "registry", Description: "test"},
+		Artifacts:       map[string]deploy.SignedArtifact{},
+		PreStateDigest:  lane.MustParseDigest("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
+		PostStateDigest: lane.MustParseDigest("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
+		Peers:           map[string][]lane.Peer{},
+	}
+
+	if err := deploy.ValidateAttestation(att); err == nil {
+		t.Fatal("expected validation error for invalid lane_id")
 	}
 }
 

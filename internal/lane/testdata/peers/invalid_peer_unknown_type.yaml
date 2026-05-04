@@ -1,4 +1,5 @@
 name: peers-bad-type
+lane_id: peers-bad-type
 registry: localhost:5555/test
 secrets: {}
 steps:

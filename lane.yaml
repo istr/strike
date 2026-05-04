@@ -1,6 +1,7 @@
 # Rebuild strike from source to prove reproducibility.
 # Run by stage_2 inside the built strike image with source at /src.
 name: strike-bootstrap
+lane_id: strike-bootstrap
 registry: localhost/strike-bootstrap
 
 secrets:

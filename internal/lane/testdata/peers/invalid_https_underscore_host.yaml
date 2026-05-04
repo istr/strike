@@ -1,4 +1,5 @@
 name: peers-https-fp
+lane_id: peers-https-fp
 registry: localhost:5555/test
 secrets: {}
 steps:

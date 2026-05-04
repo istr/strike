@@ -1,0 +1,26 @@
+{
+  "boundary": "StateDigest",
+  "description": "three captures in reverse-alphabetical order; digest equals alphabetical order (order-independence)",
+  "inputs": {
+    "captures": [
+      {
+        "name": "version",
+        "image": "alpine@sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "output_base64": "djIuMC4wCg=="
+      },
+      {
+        "name": "replicas",
+        "image": "busybox@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "output_base64": "Mw=="
+      },
+      {
+        "name": "config",
+        "image": "alpine@sha256:2222222222222222222222222222222222222222222222222222222222222222",
+        "output_base64": "eyJrZXkiOiJ2YWx1ZSJ9"
+      }
+    ]
+  },
+  "expected": {
+    "digest": "sha256:7c3028cff30537894fe739fcb0f695837551f57f56cad4d9285c32842151e252"
+  }
+}

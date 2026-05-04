@@ -1,4 +1,5 @@
 name: peers-empty
+lane_id: peers-empty
 registry: localhost:5555/test
 secrets: {}
 steps:

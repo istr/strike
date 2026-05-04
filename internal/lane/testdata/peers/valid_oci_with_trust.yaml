@@ -1,4 +1,5 @@
 name: peers-oci-trust
+lane_id: peers-oci-trust
 registry: localhost:5555/test
 secrets: {}
 steps:

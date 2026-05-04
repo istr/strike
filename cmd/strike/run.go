@@ -110,6 +110,7 @@ func (rc *runContext) executeDeploy(ctx context.Context, step *lane.Step, stepNa
 		ArtifactRefs: artifactRefs,
 		SigningKey:   signingKey,
 		KeyPassword:  keyPassword,
+		LaneID:       rc.lane.LaneID,
 	}
 
 	att, err := d.Execute(ctx, step, rc.laneState)
@@ -121,7 +122,7 @@ func (rc *runContext) executeDeploy(ctx context.Context, step *lane.Step, stepNa
 	if err != nil {
 		return fmt.Errorf("%s: attestation marshal: %w", safeName, err)
 	}
-	log.Printf("OK     %s -> deploy_id=%s", safeName, att.DeployID)
+	log.Printf("OK     %s -> %s/%s", safeName, att.LaneID, att.Target.ID)
 
 	outDir, err := os.MkdirTemp("", "strike-"+stepName+"-")
 	if err != nil {

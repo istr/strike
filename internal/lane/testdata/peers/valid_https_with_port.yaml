@@ -1,4 +1,5 @@
 name: peers-https-port
+lane_id: peers-https-port
 registry: localhost:5555/test
 secrets: {}
 steps:

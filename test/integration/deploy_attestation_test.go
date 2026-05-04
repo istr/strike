@@ -72,13 +72,13 @@ func executeDeploy(t *testing.T, engine container.Engine, keyPEM []byte, state *
 				"app": {From: "pack.image"},
 			},
 			Target: lane.DeployTarget{
+				ID:          "integration-deploy-1",
 				Type:        "custom",
 				Description: "integration test deploy",
 			},
 			Attestation: lane.AttestationSpec{
 				PreState:  lane.StateCaptureSpec{Required: false},
 				PostState: lane.StateCaptureSpec{Required: false},
-				Drift:     lane.DriftSpec{Detect: false},
 			},
 		},
 	}
@@ -89,6 +89,7 @@ func executeDeploy(t *testing.T, engine container.Engine, keyPEM []byte, state *
 		ArtifactRefs: map[string]string{"app": "pack.image"},
 		SigningKey:   keyPEM,
 		KeyPassword:  nil,
+		LaneID:       "integration-test",
 	}
 
 	att, err := deployer.Execute(ctx, step, state)
@@ -96,8 +97,11 @@ func executeDeploy(t *testing.T, engine container.Engine, keyPEM []byte, state *
 		t.Fatalf("deploy: %v", err)
 	}
 
-	if att.DeployID == "" {
-		t.Error("empty deploy ID")
+	if att.LaneID == "" {
+		t.Error("empty lane ID")
+	}
+	if att.Target.ID == "" {
+		t.Error("empty target ID")
 	}
 	if att.Artifacts["app"].Digest != packedDigest {
 		t.Errorf("artifact digest: got %s, want %s", att.Artifacts["app"].Digest, packedDigest)
@@ -105,7 +109,7 @@ func executeDeploy(t *testing.T, engine container.Engine, keyPEM []byte, state *
 	if valErr := deploy.ValidateAttestation(att); valErr != nil {
 		t.Errorf("attestation validation: %v", valErr)
 	}
-	t.Logf("deploy ID: %s", att.DeployID)
+	t.Logf("lane: %s/%s", att.LaneID, att.Target.ID)
 	return att
 }
 
@@ -169,8 +173,8 @@ func verifyDSSE(t *testing.T, att *deploy.Attestation, keyPEM []byte) {
 	if string(recovered) != string(attJSON) {
 		t.Error("recovered DSSE payload does not match attestation JSON")
 	}
-	if !strings.Contains(string(recovered), att.DeployID) {
-		t.Error("deploy ID not found in attestation payload")
+	if !strings.Contains(string(recovered), att.LaneID) {
+		t.Error("lane ID not found in attestation payload")
 	}
 }
 

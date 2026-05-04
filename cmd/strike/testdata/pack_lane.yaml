@@ -1,4 +1,5 @@
 name: pack-test
+lane_id: pack-test
 registry: localhost:5555/test
 secrets: {}
 steps:

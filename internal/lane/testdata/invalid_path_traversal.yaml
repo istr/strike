@@ -1,4 +1,5 @@
 name: traversal-lane
+lane_id: traversal-lane
 registry: localhost:5555/test
 secrets: {}
 steps:

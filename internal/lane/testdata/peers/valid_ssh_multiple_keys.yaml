@@ -1,4 +1,5 @@
 name: peers-ssh-multi
+lane_id: peers-ssh-multi
 registry: localhost:5555/test
 secrets: {}
 steps:

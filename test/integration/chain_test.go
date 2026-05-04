@@ -109,13 +109,13 @@ func chainDeploy(
 				"app": {From: "pack.image"},
 			},
 			Target: lane.DeployTarget{
+				ID:          "e2e-test-1",
 				Type:        "test",
 				Description: "end-to-end test",
 			},
 			Attestation: lane.AttestationSpec{
 				PreState:  lane.StateCaptureSpec{Required: false},
 				PostState: lane.StateCaptureSpec{Required: false},
-				Drift:     lane.DriftSpec{Detect: false},
 			},
 		},
 	}
@@ -126,6 +126,7 @@ func chainDeploy(
 		ArtifactRefs: map[string]string{"app": "pack.image"},
 		SigningKey:   keyPEM,
 		KeyPassword:  nil,
+		LaneID:       "e2e-chain",
 	}
 
 	att, err := deployer.Execute(ctx, step, state)
@@ -159,9 +160,12 @@ func verifyChain(t *testing.T, att *deploy.Attestation, imageDigest string, keyP
 		t.Error("engine identity missing")
 	}
 
-	// E. Deploy ID format.
-	if len(att.DeployID) != 16 {
-		t.Errorf("deploy ID length: %d, want 16", len(att.DeployID))
+	// E. Lane and target IDs present.
+	if att.LaneID == "" {
+		t.Error("empty lane ID")
+	}
+	if att.Target.ID == "" {
+		t.Error("empty target ID")
 	}
 
 	// F. Signature verifies + round-trip.
@@ -169,7 +173,7 @@ func verifyChain(t *testing.T, att *deploy.Attestation, imageDigest string, keyP
 
 	t.Logf("=== End-to-end chain verified ===")
 	t.Logf("  image:       %s", imageDigest[:19])
-	t.Logf("  deploy:      %s", att.DeployID)
+	t.Logf("  lane:        %s/%s", att.LaneID, att.Target.ID)
 	t.Logf("  signed:      yes (DSSE verified)")
 }
 
@@ -186,8 +190,8 @@ func chainVerifySignature(t *testing.T, att *deploy.Attestation, imageDigest str
 	if err := json.Unmarshal(payload, &roundTripped); err != nil {
 		t.Fatalf("unmarshal round-tripped attestation: %v", err)
 	}
-	if roundTripped.DeployID != att.DeployID {
-		t.Errorf("round-trip deploy ID mismatch: %s vs %s", roundTripped.DeployID, att.DeployID)
+	if roundTripped.LaneID != att.LaneID {
+		t.Errorf("round-trip lane ID mismatch: %s vs %s", roundTripped.LaneID, att.LaneID)
 	}
 	if roundTripped.Artifacts["app"].Digest != imageDigest {
 		t.Error("round-trip artifact digest mismatch")

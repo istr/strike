@@ -1,4 +1,5 @@
 name: deploy-lane
+lane_id: deploy-lane
 registry: localhost:5555/test
 secrets: {}
 steps:
@@ -22,6 +23,7 @@ steps:
         binary:
           from: build.binary
       target:
+        id: prod-registry
         type: registry
         description: push to registry
       attestation:
@@ -31,9 +33,6 @@ steps:
         post_state:
           required: false
           capture: []
-        drift:
-          detect: false
-          on_drift: warn
     args: []
     env: {}
     inputs: []

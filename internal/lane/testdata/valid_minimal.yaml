@@ -1,4 +1,5 @@
 name: test-lane
+lane_id: test-lane
 registry: localhost:5555/test
 secrets: {}
 steps:

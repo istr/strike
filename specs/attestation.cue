@@ -30,16 +30,13 @@ package deploy
 
 #Timestamp: =~"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}"
 
-// DeployID is a 16-character hex string derived from sha256(step_name + nanos).
-#DeployID: =~"^[a-f0-9]{16}$"
-
 // ---------------------------------------------------------------------------
 // Top-level attestation
 // ---------------------------------------------------------------------------
 
 #Attestation: {
-	// deploy_id uniquely identifies this deploy event.
-	deploy_id: #DeployID
+	// lane_id is the stable identifier from the lane definition.
+	lane_id: =~"^[a-z0-9][a-z0-9-]{0,62}$"
 
 	// timestamp is the wall-clock time when the deploy started.
 	timestamp: #Timestamp
@@ -52,15 +49,15 @@ package deploy
 	// before the deploy action executed.
 	artifacts: [Name=string]: #SignedArtifact
 
-	// pre_state captures the state of the target before the deploy.
-	pre_state: [Name=string]: #StateSnap
+	// pre_state_digest is the canonical SHA-256 digest of all configured
+	// pre-deploy state captures. Computed by internal/deploy/digest_state.go
+	// over name-sorted captures with length-prefixed encoding. Independent
+	// of capture order and capture timestamps.
+	pre_state_digest: #Digest
 
-	// post_state captures the state of the target after the deploy.
-	post_state: [Name=string]: #StateSnap
-
-	// drift is present when drift detection is enabled and a previous
-	// attestation exists for comparison.
-	drift?: #DriftReport
+	// post_state_digest is the canonical SHA-256 digest of all configured
+	// post-deploy state captures. Same encoding as pre_state_digest.
+	post_state_digest: #Digest
 
 	// engine records the container engine identity at deploy time.
 	// Verifiers use this to assess the trust level of the environment.
@@ -73,7 +70,6 @@ package deploy
 
 	// peers maps step name to the network peer declarations attached to
 	// that step. Only steps that declared at least one peer appear.
-	// State-capture peers are recorded in the corresponding StateSnap.
 	peers: [Step=string]: [...#Peer]
 
 	// rekor is the transparency log entry from a Rekor hashedrekord
@@ -83,52 +79,6 @@ package deploy
 	// lane_ref is the digest of the lane definition file.
 	// Empty string when not yet computed.
 	lane_ref: string
-}
-
-// ---------------------------------------------------------------------------
-// State snapshots
-// ---------------------------------------------------------------------------
-
-#StateSnap: {
-	// name identifies this state dimension (e.g. "version", "config-hash").
-	name: string
-
-	// image is the digest-pinned container image used for capture.
-	image: string
-
-	// digest is the sha256 of the captured output.
-	digest: #Digest | ""
-
-	// timestamp is when this snapshot was taken.
-	timestamp: #Timestamp
-
-	// output is the raw capture output (base64-encoded in JSON).
-	output: _
-
-	// peers lists the network peers declared on this state capture.
-	// null when the capture ran with network disabled.
-	peers: [...#Peer] | null
-}
-
-// ---------------------------------------------------------------------------
-// Drift detection
-// ---------------------------------------------------------------------------
-
-#DriftReport: {
-	// previous_deploy_id links to the attestation being compared against.
-	previous_deploy_id: #DeployID
-
-	// previous_post_state maps dimension names to their digests from
-	// the previous deploy's post-state.
-	previous_post_state: [Name=string]: string
-
-	// current_pre_state maps dimension names to their digests from
-	// the current deploy's pre-state.
-	current_pre_state: [Name=string]: string
-
-	// drifted lists the dimension names where digests differ.
-	// null when no dimensions drifted (Go nil slice -> JSON null).
-	drifted: [...string] | null
 }
 
 // ---------------------------------------------------------------------------
@@ -160,6 +110,7 @@ package deploy
 // ---------------------------------------------------------------------------
 
 #DeployTarget: {
+	id:           =~"^[a-z0-9][a-z0-9-]{0,62}$"
 	type:         =~"^.+$"
 	description:  =~"^.+$"
 	url?:         string
@@ -207,4 +158,3 @@ package deploy
 	registry: =~"^[a-z0-9.-]+(:[0-9]+)?$"
 	trust?:   #HTTPSTrust
 }
-

@@ -1,0 +1,16 @@
+{
+  "boundary": "StateDigest",
+  "description": "single capture with fixed name, image, and output",
+  "inputs": {
+    "captures": [
+      {
+        "name": "version",
+        "image": "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+        "output_base64": "djEuMi4zCg=="
+      }
+    ]
+  },
+  "expected": {
+    "digest": "sha256:cd457501cfc7f32f43976f31c43afe6ffc8a43df1e5ec3178686b151f8dabdfb"
+  }
+}

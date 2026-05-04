@@ -1,4 +1,5 @@
 name: peers-bad-https-1
+lane_id: peers-bad-https-1
 registry: localhost:5555/test
 secrets: {}
 steps:
