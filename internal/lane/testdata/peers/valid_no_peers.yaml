@@ -3,7 +3,7 @@ lane_id: peers-absent
 registry: localhost:5555/test
 secrets: {}
 steps:
-  - name: offline
+  - name: peerless
     image: alpine:3.20
     args: [echo, "ok"]
     env: {}

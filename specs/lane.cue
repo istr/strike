@@ -416,8 +416,7 @@ package lane
 	body: string @go(Body)
 
 	// signed_entry_timestamp is the base64-encoded SET proving
-	// the log server processed this entry. Verifiers use this to
-	// re-verify the SET offline without contacting Rekor.
+	// the log server processed this entry.
 	signed_entry_timestamp: string @go(SignedEntryTimestamp)
 
 	// inclusion_proof holds the Merkle tree proof for this entry.

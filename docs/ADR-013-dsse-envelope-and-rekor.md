@@ -65,8 +65,8 @@ After Rekor accepts the entry, strike captures:
 - `LogIndex`, `LogID`, `IntegratedTime` from the response.
 - `SignedEntryTimestamp`: Rekor's SET, signed by the Rekor public
   key, proving inclusion at the recorded time.
-- `InclusionProof`: a Merkle inclusion proof for offline
-  verification of the entry's presence in the log.
+- `InclusionProof`: a Merkle inclusion proof for verification of 
+  the entry's presence in the log.
 
 These are stored in `Attestation.Rekor`. The field is set after
 signing and is not part of the signed payload, by design: a verifier

@@ -158,7 +158,7 @@ fingerprint, the resolved digests of all upstream inputs, pre- and
 post-action state snapshots for deploy steps, and the full DAG
 predecessor chain. Attestations are signed as DSSE envelopes and
 submitted to a transparency log. The resulting chain is designed to be
-verifiable offline, without contacting strike or the original engine.
+verifiable without contacting strike or the original engine.
 
 *See: [ADR-012](docs/ADR-012-engine-identity-capture.md),
 [ADR-013](docs/ADR-013-dsse-envelope-and-rekor.md),
