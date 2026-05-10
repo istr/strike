@@ -30,6 +30,12 @@ type Mount struct {
 // Secrets are passed as env vars in the API request body (JSON over Unix
 // socket), never via os.Setenv or process arguments.
 func (r Run) Execute(ctx context.Context) error {
+	scratchDir, err := os.MkdirTemp("", "strike-ssh-")
+	if err != nil {
+		return fmt.Errorf("ssh scratch: %w", err)
+	}
+	defer os.RemoveAll(scratchDir) //nolint:errcheck // best-effort cleanup of ephemeral host-key file
+
 	// Build environment (non-sensitive + secrets)
 	env := make(map[string]string, len(r.Step.Env)+len(r.Secrets)+2)
 	for k, v := range r.Step.Env {
@@ -57,6 +63,17 @@ func (r Run) Execute(ctx context.Context) error {
 		Target:  "/out",
 		Options: []string{"noexec", "nosuid"},
 	})
+
+	sshMount, sshEnv, err := ConfigureSSHPeers(r.Step.Peers, scratchDir)
+	if err != nil {
+		return fmt.Errorf("ssh peer setup: %w", err)
+	}
+	if sshMount != nil {
+		mounts = append(mounts, *sshMount)
+	}
+	for k, v := range sshEnv {
+		env[k] = v
+	}
 
 	opts := container.DefaultSecureOpts()
 	opts.Image = r.Step.Image

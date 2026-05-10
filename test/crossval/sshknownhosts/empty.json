@@ -1,0 +1,10 @@
+{
+  "boundary": "RenderKnownHosts",
+  "description": "empty peer list produces empty output",
+  "inputs": {
+    "peers": []
+  },
+  "expected": {
+    "content_base64": ""
+  }
+}

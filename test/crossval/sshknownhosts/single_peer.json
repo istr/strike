@@ -1,0 +1,21 @@
+{
+  "boundary": "RenderKnownHosts",
+  "description": "single SSH peer with one ed25519 entry",
+  "inputs": {
+    "peers": [
+      {
+        "type": "ssh",
+        "host": "git.example.com",
+        "known_hosts": [
+          {
+            "key_type": "ssh-ed25519",
+            "key": "AAAAC3NzaC1lZDI1NTE5AAAAITestKey1"
+          }
+        ]
+      }
+    ]
+  },
+  "expected": {
+    "content_base64": "Z2l0LmV4YW1wbGUuY29tIHNzaC1lZDI1NTE5IEFBQUFDM056YUMxbFpESTFOVEU1QUFBQUlUZXN0S2V5MQo="
+  }
+}

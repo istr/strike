@@ -1,0 +1,41 @@
+{
+  "boundary": "RenderKnownHosts",
+  "description": "three SSH peers in reverse-alphabetical order, output sorted alphabetically",
+  "inputs": {
+    "peers": [
+      {
+        "type": "ssh",
+        "host": "zeta.example",
+        "known_hosts": [
+          {
+            "key_type": "ssh-ed25519",
+            "key": "ZetaKey"
+          }
+        ]
+      },
+      {
+        "type": "ssh",
+        "host": "mu.example",
+        "known_hosts": [
+          {
+            "key_type": "ssh-ed25519",
+            "key": "MuKey"
+          }
+        ]
+      },
+      {
+        "type": "ssh",
+        "host": "alpha.example",
+        "known_hosts": [
+          {
+            "key_type": "ssh-ed25519",
+            "key": "AlphaKey"
+          }
+        ]
+      }
+    ]
+  },
+  "expected": {
+    "content_base64": "YWxwaGEuZXhhbXBsZSBzc2gtZWQyNTUxOSBBbHBoYUtleQptdS5leGFtcGxlIHNzaC1lZDI1NTE5IE11S2V5CnpldGEuZXhhbXBsZSBzc2gtZWQyNTUxOSBaZXRhS2V5Cg=="
+  }
+}

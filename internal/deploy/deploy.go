@@ -297,6 +297,12 @@ func (d *Deployer) captureState(ctx context.Context, spec lane.StateCaptureSpec)
 
 // captureOne runs a state capture command inside a container.
 func (d *Deployer) captureOne(ctx context.Context, sc lane.StateCapture) (captureSnap, error) {
+	scratchDir, err := os.MkdirTemp("", "strike-ssh-capture-")
+	if err != nil {
+		return captureSnap{}, fmt.Errorf("ssh scratch: %w", err)
+	}
+	defer os.RemoveAll(scratchDir) //nolint:errcheck // best-effort cleanup of ephemeral host-key file
+
 	if sc.Image == "" {
 		return captureSnap{}, fmt.Errorf("capture %q: image is required", sc.Name)
 	}
@@ -316,11 +322,22 @@ func (d *Deployer) captureOne(ctx context.Context, sc lane.StateCapture) (captur
 		})
 	}
 
+	sshMount, sshEnv, err := executor.ConfigureSSHPeers(sc.Peers, scratchDir)
+	if err != nil {
+		return captureSnap{}, fmt.Errorf("ssh peer setup: %w", err)
+	}
+	if sshMount != nil {
+		mounts = append(mounts, *sshMount)
+	}
+
 	opts := HardenedRunOpts()
 	opts.Image = string(sc.Image)
 	opts.Cmd = sc.Command
 	opts.Mounts = mounts
 	opts.Network = executor.NetworkMode(sc.Peers)
+	if sshEnv != nil {
+		opts.Env = sshEnv
+	}
 	opts.Stdout = &stdout
 	opts.Stderr = &stderr
 
@@ -362,6 +379,12 @@ func executeRegistryDeploy(m lane.DeployRegistry) error {
 }
 
 func (d *Deployer) executeKubernetesDeploy(ctx context.Context, m lane.DeployKubernetes, peers []lane.Peer) error {
+	scratchDir, err := os.MkdirTemp("", "strike-ssh-k8s-")
+	if err != nil {
+		return fmt.Errorf("ssh scratch: %w", err)
+	}
+	defer os.RemoveAll(scratchDir) //nolint:errcheck // best-effort cleanup of ephemeral host-key file
+
 	if m.Image == "" {
 		return fmt.Errorf("kubernetes deploy: image required (digest-pinned kubectl image)")
 	}
@@ -381,13 +404,28 @@ func (d *Deployer) executeKubernetesDeploy(ctx context.Context, m lane.DeployKub
 		kubectlArgs = append(kubectlArgs, "-n", m.Namespace)
 	}
 
+	mounts := []container.Mount{
+		{Source: kubeconfig, Target: "/root/.kube/config", ReadOnly: true},
+	}
+
+	sshMount, sshEnv, err := executor.ConfigureSSHPeers(peers, scratchDir)
+	if err != nil {
+		return fmt.Errorf("ssh peer setup: %w", err)
+	}
+	if sshMount != nil {
+		mounts = append(mounts, *sshMount)
+	}
+	var env map[string]string
+	if sshEnv != nil {
+		env = sshEnv
+	}
+
 	opts := HardenedRunOpts()
 	opts.Image = string(m.Image)
 	opts.Cmd = kubectlArgs
 	opts.Network = executor.NetworkMode(peers)
-	opts.Mounts = []container.Mount{
-		{Source: kubeconfig, Target: "/root/.kube/config", ReadOnly: true},
-	}
+	opts.Mounts = mounts
+	opts.Env = env
 	opts.Stdin = os.Stdin
 	opts.Stdout = os.Stdout
 	opts.Stderr = os.Stderr
@@ -403,16 +441,41 @@ func (d *Deployer) executeKubernetesDeploy(ctx context.Context, m lane.DeployKub
 }
 
 func (d *Deployer) executeCustomDeploy(ctx context.Context, m lane.DeployCustom, peers []lane.Peer) error {
+	scratchDir, err := os.MkdirTemp("", "strike-ssh-custom-")
+	if err != nil {
+		return fmt.Errorf("ssh scratch: %w", err)
+	}
+	defer os.RemoveAll(scratchDir) //nolint:errcheck // best-effort cleanup of ephemeral host-key file
+
 	if m.Image == "" {
 		return fmt.Errorf("custom deploy: image required")
+	}
+
+	sshMount, sshEnv, err := executor.ConfigureSSHPeers(peers, scratchDir)
+	if err != nil {
+		return fmt.Errorf("ssh peer setup: %w", err)
+	}
+
+	var mounts []container.Mount
+	if sshMount != nil {
+		mounts = append(mounts, *sshMount)
+	}
+
+	env := make(map[string]string, len(m.Env)+len(sshEnv))
+	for k, v := range m.Env {
+		env[k] = v
+	}
+	for k, v := range sshEnv {
+		env[k] = v
 	}
 
 	opts := HardenedRunOpts()
 	opts.Image = string(m.Image)
 	opts.Entrypoint = m.Entrypoint
 	opts.Cmd = m.Args
-	opts.Env = m.Env
+	opts.Env = env
 	opts.Network = executor.NetworkMode(peers)
+	opts.Mounts = mounts
 	opts.Stdout = os.Stdout
 	opts.Stderr = os.Stderr
 
