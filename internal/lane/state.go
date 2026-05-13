@@ -16,10 +16,11 @@ var _ Artifact
 // State tracks artifacts and step results across lane execution.
 // All artifact references use "step_name.output_name" keys.
 type State struct {
-	Artifacts  map[string]Artifact         `json:"artifacts"`
-	Steps      map[string]StepResult       `json:"steps"`
-	Provenance map[string]ProvenanceRecord `json:"provenance"`
-	mu         sync.RWMutex
+	Artifacts          map[string]Artifact          `json:"artifacts"`
+	Steps              map[string]StepResult        `json:"steps"`
+	Provenance         map[string]ProvenanceRecord  `json:"provenance"`
+	OutputImageDigests map[string]map[string]Digest `json:"-"` // step -> output -> manifest digest (internal, not serialized)
+	mu                 sync.RWMutex
 }
 
 // StepResult records execution metadata for a completed step.
@@ -36,9 +37,10 @@ type StepResult struct {
 // NewState creates an empty lane state.
 func NewState() *State {
 	return &State{
-		Artifacts:  make(map[string]Artifact),
-		Steps:      make(map[string]StepResult),
-		Provenance: make(map[string]ProvenanceRecord),
+		Artifacts:          make(map[string]Artifact),
+		Steps:              make(map[string]StepResult),
+		Provenance:         make(map[string]ProvenanceRecord),
+		OutputImageDigests: make(map[string]map[string]Digest),
 	}
 }
 
@@ -116,6 +118,21 @@ func (s *State) CollectProvenance(dag *DAG, fromStep string) []ProvenanceRecord 
 		out = append(out, s.Provenance[n])
 	}
 	return out
+}
+
+// RegisterOutputImage records the manifest digest of a wrapped output image.
+// Returns an error on duplicate registration within the same (step, output) pair.
+func (s *State) RegisterOutputImage(step, output string, digest Digest) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, exists := s.OutputImageDigests[step]; !exists {
+		s.OutputImageDigests[step] = make(map[string]Digest)
+	}
+	if _, dup := s.OutputImageDigests[step][output]; dup {
+		return fmt.Errorf("output image %q/%q already registered", step, output)
+	}
+	s.OutputImageDigests[step][output] = digest
+	return nil
 }
 
 // RecordStep stores the result of a completed step.

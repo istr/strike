@@ -342,6 +342,9 @@ func (rc *runContext) executeContainerStep(ctx context.Context, step *lane.Step,
 	if err := rc.loadOCIOutputs(ctx, step, stepName, safeName, outRoot); err != nil {
 		return err
 	}
+	if err := rc.wrapOutputs(ctx, step, stepName, safeName, outDir); err != nil {
+		return err
+	}
 	if step.Provenance != nil {
 		if err := rc.captureProvenance(step, safeName, outDir); err != nil {
 			return fmt.Errorf("%s: provenance: %w", safeName, err)
@@ -383,6 +386,33 @@ func (rc *runContext) registerFileOutputs(step *lane.Step, stepName, safeName, o
 			Size:   size,
 		}); regErr != nil {
 			return fmt.Errorf("%s: register artifact: %w", safeName, regErr)
+		}
+	}
+	return nil
+}
+
+func (rc *runContext) wrapOutputs(ctx context.Context, step *lane.Step, stepName, safeName, outDir string) error {
+	specHash := rc.state.specHashes[stepName]
+	for _, out := range step.Outputs {
+		tag := fmt.Sprintf("localhost/strike/%s/%s:%s", rc.lane.LaneID, stepName, specHash.Hex)
+		outPath := filepath.Join(outDir, filepath.Base(out.Path.String()))
+		var digest lane.Digest
+		var err error
+		switch out.Type {
+		case "file":
+			digest, err = rc.regClient.WrapFileAsImage(ctx, outPath, tag)
+		case "directory":
+			digest, err = rc.regClient.WrapDirectoryAsImage(ctx, outPath, tag)
+		case artifactTypeImage:
+			digest, err = rc.regClient.WrapImageOutputAsImage(ctx, outPath, tag)
+		default:
+			return fmt.Errorf("%s: unknown output type %q", safeName, out.Type)
+		}
+		if err != nil {
+			return fmt.Errorf("%s: wrap output %q: %w", safeName, out.Name, err)
+		}
+		if regErr := rc.laneState.RegisterOutputImage(stepName, out.Name, digest); regErr != nil {
+			return fmt.Errorf("%s: register output image: %w", safeName, regErr)
 		}
 	}
 	return nil

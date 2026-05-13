@@ -85,6 +85,30 @@ func TestRecordStep(t *testing.T) {
 	}
 }
 
+func TestRegisterOutputImage(t *testing.T) {
+	s := lane.NewState()
+	d := lane.MustParseDigest("sha256:abc123")
+
+	if err := s.RegisterOutputImage("build", "binary", d); err != nil {
+		t.Fatalf("RegisterOutputImage: %v", err)
+	}
+	if got := s.OutputImageDigests["build"]["binary"]; got != d {
+		t.Errorf("digest = %v, want %v", got, d)
+	}
+}
+
+func TestRegisterOutputImage_RejectsDuplicate(t *testing.T) {
+	s := lane.NewState()
+	d := lane.MustParseDigest("sha256:abc123")
+
+	if err := s.RegisterOutputImage("build", "binary", d); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RegisterOutputImage("build", "binary", d); err == nil {
+		t.Fatal("expected error on duplicate register")
+	}
+}
+
 func TestStateJSON(t *testing.T) {
 	s := lane.NewState()
 	if err := s.Register("build", "binary", lane.Artifact{

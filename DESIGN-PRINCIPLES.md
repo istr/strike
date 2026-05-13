@@ -76,7 +76,10 @@ contact with everyday development.
 [ADR-018](docs/ADR-018-ephemeral-test-material.md),
 [ADR-019](docs/ADR-019-sbom-as-oci-referrer.md),
 [ADR-020](docs/ADR-020-storage-driver-and-host-plumbing.md),
-[ADR-021](docs/ADR-021-deferred-extensions.md).*
+[ADR-021](docs/ADR-021-deferred-extensions.md),
+[ADR-024](docs/ADR-024-ssh-peer-server-trust-enforcement.md),
+[ADR-025](docs/ADR-025-ssh-peer-client-identity-enforcement.md),
+[ADR-026](docs/ADR-026-containers-as-sole-inter-step-storage.md).*
 
 
 ## No shell
@@ -115,7 +118,9 @@ disabled unless explicitly declared.
 
 *See: [ADR-003](docs/ADR-003-rootless-end-to-end.md),
 [ADR-005](docs/ADR-005-hardened-container-profile-non-configurable.md),
-[ADR-020](docs/ADR-020-storage-driver-and-host-plumbing.md).*
+[ADR-020](docs/ADR-020-storage-driver-and-host-plumbing.md),
+[ADR-024](docs/ADR-024-ssh-peer-server-trust-enforcement.md),
+[ADR-025](docs/ADR-025-ssh-peer-client-identity-enforcement.md).*
 
 
 ## Declarative type enforcement (CUE first)
@@ -180,7 +185,9 @@ Binary `network: true` is not a valid expression.
 
 *See: [ADR-005](docs/ADR-005-hardened-container-profile-non-configurable.md),
 [ADR-007](docs/ADR-007-asymmetric-identity.md),
-[ADR-022](docs/ADR-022-network-opt-in-as-peer-list.md).*
+[ADR-022](docs/ADR-022-network-opt-in-as-peer-list.md),
+[ADR-024](docs/ADR-024-ssh-peer-server-trust-enforcement.md),
+[ADR-025](docs/ADR-025-ssh-peer-client-identity-enforcement.md).*
 
 
 ## Identity is asymmetric
@@ -198,7 +205,9 @@ underlying protocol actually supports.
 [ADR-008](docs/ADR-008-cryptographic-primitives.md),
 [ADR-012](docs/ADR-012-engine-identity-capture.md),
 [ADR-013](docs/ADR-013-dsse-envelope-and-rekor.md),
-[ADR-019](docs/ADR-019-sbom-as-oci-referrer.md).*
+[ADR-019](docs/ADR-019-sbom-as-oci-referrer.md),
+[ADR-024](docs/ADR-024-ssh-peer-server-trust-enforcement.md),
+[ADR-025](docs/ADR-025-ssh-peer-client-identity-enforcement.md).*
 
 
 ## External references are digest-pinned
@@ -219,7 +228,8 @@ validation cannot be reproducibly attested.
 [ADR-018](docs/ADR-018-ephemeral-test-material.md),
 [ADR-019](docs/ADR-019-sbom-as-oci-referrer.md),
 [ADR-020](docs/ADR-020-storage-driver-and-host-plumbing.md),
-[ADR-021](docs/ADR-021-deferred-extensions.md).*
+[ADR-021](docs/ADR-021-deferred-extensions.md),
+[ADR-026](docs/ADR-026-containers-as-sole-inter-step-storage.md).*
 
 
 ## Reproducibility is enforced, not hoped for
@@ -240,7 +250,21 @@ coincidence.
 [ADR-011](docs/ADR-011-sources-elimination.md),
 [ADR-015](docs/ADR-015-internal-clock-dispatch.md),
 [ADR-016](docs/ADR-016-drift-recording-posture.md),
-[ADR-017](docs/ADR-017-cross-validation-vectors.md).*
+[ADR-017](docs/ADR-017-cross-validation-vectors.md),
+[ADR-026](docs/ADR-026-containers-as-sole-inter-step-storage.md).*
+
+
+## Containers are the only storage
+
+Strike does not implement a cache, a state directory, or a host-side
+intermediate filesystem. Every artifact that survives a step boundary is an
+OCI container image. The container engine's local image store is the storage
+and cache layer; an OCI registry provides optional cross-machine and
+long-term persistence. Strike's storage interface is the container engine
+API; registry interaction is an explicit operation, not the default storage
+path.
+
+*See: [ADR-026](docs/ADR-026-containers-as-sole-inter-step-storage.md).*
 
 
 ## How the principles interact
