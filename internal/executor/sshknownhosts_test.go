@@ -209,7 +209,7 @@ func TestConfigureSSHPeers_with_ssh_peers(t *testing.T) {
 	if env == nil {
 		t.Fatal("env is nil")
 	}
-	const wantCmd = "ssh -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/etc/ssh/ssh_known_hosts -o GlobalKnownHostsFile=/etc/ssh/ssh_known_hosts -o PasswordAuthentication=no"
+	const wantCmd = "ssh -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/etc/ssh/ssh_known_hosts -o GlobalKnownHostsFile=/etc/ssh/ssh_known_hosts -o PasswordAuthentication=no -o BatchMode=yes"
 	if env["GIT_SSH_COMMAND"] != wantCmd {
 		t.Errorf("GIT_SSH_COMMAND =\n  %q\nwant:\n  %q", env["GIT_SSH_COMMAND"], wantCmd)
 	}

@@ -97,7 +97,7 @@ func ConfigureSSHPeers(peers []lane.Peer, scratchDir string) (*container.Mount, 
 	}
 
 	env := map[string]string{
-		"GIT_SSH_COMMAND": "ssh -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/etc/ssh/ssh_known_hosts -o GlobalKnownHostsFile=/etc/ssh/ssh_known_hosts -o PasswordAuthentication=no",
+		"GIT_SSH_COMMAND": "ssh -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/etc/ssh/ssh_known_hosts -o GlobalKnownHostsFile=/etc/ssh/ssh_known_hosts -o PasswordAuthentication=no -o BatchMode=yes",
 	}
 
 	return mount, env, nil

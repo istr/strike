@@ -330,14 +330,28 @@ func (d *Deployer) captureOne(ctx context.Context, sc lane.StateCapture) (captur
 		mounts = append(mounts, *sshMount)
 	}
 
+	agentMount, agentEnv, err := executor.StartAgentProxy(ctx, sc.Peers, scratchDir)
+	if err != nil {
+		return captureSnap{}, fmt.Errorf("ssh agent proxy setup: %w", err)
+	}
+	if agentMount != nil {
+		mounts = append(mounts, *agentMount)
+	}
+
+	env := make(map[string]string, len(sshEnv)+len(agentEnv))
+	for k, v := range sshEnv {
+		env[k] = v
+	}
+	for k, v := range agentEnv {
+		env[k] = v
+	}
+
 	opts := HardenedRunOpts()
 	opts.Image = string(sc.Image)
 	opts.Cmd = sc.Command
 	opts.Mounts = mounts
 	opts.Network = executor.NetworkMode(sc.Peers)
-	if sshEnv != nil {
-		opts.Env = sshEnv
-	}
+	opts.Env = env
 	opts.Stdout = &stdout
 	opts.Stderr = &stderr
 
@@ -415,9 +429,21 @@ func (d *Deployer) executeKubernetesDeploy(ctx context.Context, m lane.DeployKub
 	if sshMount != nil {
 		mounts = append(mounts, *sshMount)
 	}
-	var env map[string]string
-	if sshEnv != nil {
-		env = sshEnv
+
+	agentMount, agentEnv, err := executor.StartAgentProxy(ctx, peers, scratchDir)
+	if err != nil {
+		return fmt.Errorf("ssh agent proxy setup: %w", err)
+	}
+	if agentMount != nil {
+		mounts = append(mounts, *agentMount)
+	}
+
+	env := make(map[string]string, len(sshEnv)+len(agentEnv))
+	for k, v := range sshEnv {
+		env[k] = v
+	}
+	for k, v := range agentEnv {
+		env[k] = v
 	}
 
 	opts := HardenedRunOpts()
@@ -456,16 +482,27 @@ func (d *Deployer) executeCustomDeploy(ctx context.Context, m lane.DeployCustom,
 		return fmt.Errorf("ssh peer setup: %w", err)
 	}
 
+	agentMount, agentEnv, err := executor.StartAgentProxy(ctx, peers, scratchDir)
+	if err != nil {
+		return fmt.Errorf("ssh agent proxy setup: %w", err)
+	}
+
 	var mounts []container.Mount
 	if sshMount != nil {
 		mounts = append(mounts, *sshMount)
 	}
+	if agentMount != nil {
+		mounts = append(mounts, *agentMount)
+	}
 
-	env := make(map[string]string, len(m.Env)+len(sshEnv))
+	env := make(map[string]string, len(m.Env)+len(sshEnv)+len(agentEnv))
 	for k, v := range m.Env {
 		env[k] = v
 	}
 	for k, v := range sshEnv {
+		env[k] = v
+	}
+	for k, v := range agentEnv {
 		env[k] = v
 	}
 

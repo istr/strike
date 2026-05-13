@@ -75,6 +75,17 @@ func (r Run) Execute(ctx context.Context) error {
 		env[k] = v
 	}
 
+	agentMount, agentEnv, err := StartAgentProxy(ctx, r.Step.Peers, scratchDir)
+	if err != nil {
+		return fmt.Errorf("ssh agent proxy setup: %w", err)
+	}
+	if agentMount != nil {
+		mounts = append(mounts, *agentMount)
+	}
+	for k, v := range agentEnv {
+		env[k] = v
+	}
+
 	opts := container.DefaultSecureOpts()
 	opts.Image = r.Step.Image
 	opts.Cmd = r.Step.Args
