@@ -21,19 +21,32 @@ steps:
       type: git
       path: /out/provenance.json
 
+  - name: extract_npm_files
+    image: docker.io/library/busybox@sha256:efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef
+    args: [cp, /src/package.json, /src/package-lock.json, /out/]
+    env: {}
+    inputs:
+      - { name: tree, from: source.tree, mount: /src }
+    secrets: []
+    outputs:
+      - { name: package_json, type: file, path: /out/package.json }
+      - { name: package_lock, type: file, path: /out/package-lock.json }
+
   - name: npm_install
     image: docker.io/library/node@sha256:cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd
-    args: [npm, ci, --ignore-scripts, --no-bin-links, --prefix, /src]
-    workdir: /src
+    args: [npm, ci, --ignore-scripts, --no-bin-links]
+    workdir: /out
     peers:
       - type: https
         host: registry.npmjs.org
         trust:
           mode: cert_fingerprint
           fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
-    env: {}
+    env:
+      npm_config_cache: /tmp/.npm
     inputs:
-      - { name: tree, from: source.tree, mount: /src }
+      - { name: pkg, from: extract_npm_files.package_json, mount: /out/package.json }
+      - { name: lock, from: extract_npm_files.package_lock, mount: /out/package-lock.json }
     secrets: []
     outputs:
       - { name: node_modules, type: directory, path: /out/node_modules }
