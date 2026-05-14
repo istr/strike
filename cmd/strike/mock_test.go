@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"testing"
@@ -19,8 +20,10 @@ type mockEngine struct {
 	inspectErr     error
 	tagErr         error
 	runErr         error
+	saveErr        error
 	inspectRV      *container.ImageInfo
 	identity       *container.EngineIdentity
+	saveTars       map[string][]byte // tag -> OCI tar bytes for ImageSave
 	loadRV         string
 	runExitCode    int
 	imageExistsRV  bool
@@ -45,6 +48,18 @@ func (m *mockEngine) ImageInspect(_ context.Context, _ string) (*container.Image
 }
 
 func (m *mockEngine) ImageTag(context.Context, string, string) error { return m.tagErr }
+
+func (m *mockEngine) ImageSave(_ context.Context, tag string) (io.ReadCloser, error) {
+	if m.saveErr != nil {
+		return nil, m.saveErr
+	}
+	if m.saveTars != nil {
+		if data, ok := m.saveTars[tag]; ok {
+			return io.NopCloser(bytes.NewReader(data)), nil
+		}
+	}
+	return io.NopCloser(bytes.NewReader(nil)), nil
+}
 
 func (m *mockEngine) ContainerRun(_ context.Context, _ container.RunOpts) (int, error) {
 	return m.runExitCode, m.runErr

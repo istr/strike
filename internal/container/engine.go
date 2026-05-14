@@ -35,6 +35,9 @@ type Engine interface {
 	// ImageTag adds a tag to an existing image.
 	ImageTag(ctx context.Context, source, target string) error
 
+	// ImageSave exports an image as an OCI archive tar.
+	ImageSave(ctx context.Context, tag string) (io.ReadCloser, error)
+
 	// ContainerRun creates, starts, waits for, and removes a container.
 	// Stdout and stderr are streamed to the provided writers.
 	// Returns the exit code.

@@ -314,6 +314,24 @@ func (e *podmanEngine) ImageTag(ctx context.Context, source, target string) erro
 	return nil
 }
 
+// ImageSave exports an image as an OCI archive tar via GET /images/<tag>/get.
+func (e *podmanEngine) ImageSave(ctx context.Context, tag string) (io.ReadCloser, error) {
+	u := e.base + "/images/" + url.PathEscape(tag) + "/get"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := e.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("image save %s: %w", tag, err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		warnClose(resp.Body, "image save")
+		return nil, fmt.Errorf("image save %s: status %d", tag, resp.StatusCode)
+	}
+	return resp.Body, nil
+}
+
 // ContainerRun creates, starts, waits for, and removes a container.
 func (e *podmanEngine) ContainerRun(ctx context.Context, opts RunOpts) (int, error) {
 	// 1. Create

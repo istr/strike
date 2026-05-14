@@ -65,6 +65,12 @@ func Tag(registry, stepName string, hash lane.Digest) string {
 	return fmt.Sprintf("%s:%s-%s", registry, stepName, short)
 }
 
+// WrapTag builds the local engine tag used by wrapOutputs and input extraction.
+// Format: localhost/strike/{laneID}/{stepName}:{specHashHex}.
+func WrapTag(laneID, stepName string, specHash lane.Digest) string {
+	return fmt.Sprintf("localhost/strike/%s/%s:%s", laneID, stepName, specHash.Hex)
+}
+
 // HashDir computes SHA256 and total file size of a directory within the given
 // root scope. Size is the sum of regular file sizes.
 func HashDir(root *os.Root, laneDir, path string) (lane.Digest, int64, error) {

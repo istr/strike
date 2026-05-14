@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -315,7 +316,10 @@ func (rc *runContext) executeContainerStep(ctx context.Context, step *lane.Step,
 		return fmt.Errorf("%s: secrets: %w", safeName, err)
 	}
 
-	inputMounts := rc.buildInputMounts(step)
+	inputMounts, err := rc.buildInputMounts(ctx, step, outDir)
+	if err != nil {
+		return fmt.Errorf("%s: input mounts: %w", safeName, err)
+	}
 
 	run := executor.Run{
 		Engine:      rc.engine,
@@ -344,7 +348,7 @@ func (rc *runContext) executeContainerStep(ctx context.Context, step *lane.Step,
 func (rc *runContext) wrapOutputs(ctx context.Context, step *lane.Step, stepName, safeName, outDir string) error {
 	specHash := rc.state.specHashes[stepName]
 	for _, out := range step.Outputs {
-		tag := fmt.Sprintf("localhost/strike/%s/%s:%s", rc.lane.LaneID, stepName, specHash.Hex)
+		tag := registry.WrapTag(rc.lane.LaneID, stepName, specHash)
 		outPath := filepath.Join(outDir, filepath.Base(out.Path.String()))
 		var digest lane.Digest
 		var size int64
@@ -403,17 +407,62 @@ func (rc *runContext) captureProvenance(step *lane.Step, safeName, outDir string
 	return rc.laneState.RecordProvenance(string(step.Name), rec)
 }
 
-func (rc *runContext) buildInputMounts(step *lane.Step) []executor.Mount {
+func (rc *runContext) buildInputMounts(ctx context.Context, step *lane.Step, scratchDir string) ([]executor.Mount, error) {
 	edges := rc.dag.InputEdges[string(step.Name)]
-	mounts := make([]executor.Mount, len(edges))
-	for i, e := range edges {
-		mounts[i] = executor.Mount{
-			Host:      filepath.Join(rc.state.outputDirs[string(e.FromStep.Name)], filepath.Base(e.FromOutput.Path.String())),
+	if len(edges) == 0 {
+		return nil, nil
+	}
+
+	scratchRoot, rootErr := os.OpenRoot(scratchDir)
+	if rootErr != nil {
+		return nil, fmt.Errorf("open scratch root: %w", rootErr)
+	}
+	defer func() {
+		if cerr := scratchRoot.Close(); cerr != nil {
+			log.Printf("WARN close scratch root: %v", cerr)
+		}
+	}()
+	if mkErr := scratchRoot.Mkdir("inputs", 0o750); mkErr != nil && !errors.Is(mkErr, os.ErrExist) {
+		return nil, fmt.Errorf("create inputs dir: %w", mkErr)
+	}
+	inputsRoot := filepath.Join(scratchDir, "inputs")
+
+	mounts := make([]executor.Mount, 0, len(edges))
+	for _, e := range edges {
+		fromStep := string(e.FromStep.Name)
+		fromOutput := e.FromOutput.Name
+
+		art, artErr := rc.laneState.Resolve(fromStep + "." + fromOutput)
+		if artErr != nil {
+			return nil, fmt.Errorf("input %s: source artifact not found: %w", e.LocalName, artErr)
+		}
+
+		tag := registry.WrapTag(rc.lane.LaneID, fromStep, rc.state.specHashes[fromStep])
+
+		// Dedup by digest prefix: hex-only chars, no traversal possible.
+		dedupDir := art.Digest.Hex[:16]
+		inputDir := filepath.Join(inputsRoot, dedupDir)
+		if mkErr := scratchRoot.Mkdir(filepath.Join("inputs", dedupDir), 0o750); mkErr == nil {
+			tarBytes, saveErr := registry.SaveImage(ctx, rc.engine, tag)
+			if saveErr != nil {
+				return nil, fmt.Errorf("input %s: save: %w", e.LocalName, saveErr)
+			}
+			if extractErr := registry.ExtractSingleLayer(tarBytes, inputDir); extractErr != nil {
+				return nil, fmt.Errorf("input %s: extract: %w", e.LocalName, extractErr)
+			}
+		} else if !errors.Is(mkErr, os.ErrExist) {
+			return nil, fmt.Errorf("input %s: mkdir: %w", e.LocalName, mkErr)
+		}
+
+		baseName := filepath.Base(e.FromOutput.Path.String())
+		srcPath := filepath.Join(inputDir, baseName)
+		mounts = append(mounts, executor.Mount{
+			Host:      srcPath,
 			Container: e.Mount.String(),
 			ReadOnly:  true,
-		}
+		})
 	}
-	return mounts
+	return mounts, nil
 }
 
 func (rc *runContext) pushAndReport(ctx context.Context, step *lane.Step, safeName, tag string) error {

@@ -64,13 +64,28 @@ func TestBuildInputMounts_Single(t *testing.T) {
 	}
 	rc.dag = buildTestDAG(t, p)
 
-	outDir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(outDir, "binary"), []byte("data"), 0o600); err != nil {
+	// Register the artifact and spec hash for the producing step.
+	compileDigest := lane.MustParseDigest("sha256:aabbccdd11223344")
+	if err := rc.laneState.Register("compile", "bin", lane.Artifact{
+		Type: "file", Digest: compileDigest,
+	}); err != nil {
 		t.Fatal(err)
 	}
-	rc.state.outputDirs["compile"] = outDir
+	rc.state.specHashes["compile"] = lane.MustParseDigest("sha256:1111111111111111")
 
-	mounts := rc.buildInputMounts(rc.dag.Steps["test"])
+	// Build a test OCI tar with a "binary" file inside.
+	tarBytes, _, err := registry.BuildTestImageTar("binary", []byte("data"))
+	if err != nil {
+		t.Fatalf("BuildTestImageTar: %v", err)
+	}
+	tag := registry.WrapTag(rc.lane.LaneID, "compile", rc.state.specHashes["compile"])
+	eng.saveTars = map[string][]byte{tag: tarBytes}
+
+	scratchDir := t.TempDir()
+	mounts, mountErr := rc.buildInputMounts(context.Background(), rc.dag.Steps["test"], scratchDir)
+	if mountErr != nil {
+		t.Fatalf("buildInputMounts: %v", mountErr)
+	}
 	if len(mounts) != 1 {
 		t.Fatalf("expected 1 mount, got %d", len(mounts))
 	}
@@ -111,13 +126,36 @@ func TestBuildInputMounts_Multiple(t *testing.T) {
 	}
 	rc.dag = buildTestDAG(t, p)
 
-	dir1, dir2 := t.TempDir(), t.TempDir()
-	writeTestFile(t, filepath.Join(dir1, "a.tar"), "a")
-	writeTestFile(t, filepath.Join(dir2, "b.tar"), "b")
-	rc.state.outputDirs["s1"] = dir1
-	rc.state.outputDirs["s2"] = dir2
+	// Register artifacts and spec hashes for both producing steps.
+	d1 := lane.MustParseDigest("sha256:aaaa111122223333")
+	d2 := lane.MustParseDigest("sha256:bbbb444455556666")
+	if err := rc.laneState.Register("s1", "a", lane.Artifact{Type: "file", Digest: d1}); err != nil {
+		t.Fatal(err)
+	}
+	if err := rc.laneState.Register("s2", "b", lane.Artifact{Type: "file", Digest: d2}); err != nil {
+		t.Fatal(err)
+	}
+	rc.state.specHashes["s1"] = lane.MustParseDigest("sha256:2222222222222222")
+	rc.state.specHashes["s2"] = lane.MustParseDigest("sha256:3333333333333333")
 
-	mounts := rc.buildInputMounts(rc.dag.Steps["consumer"])
+	// Build test image tars for both steps.
+	tar1, _, err := registry.BuildTestImageTar("a.tar", []byte("a"))
+	if err != nil {
+		t.Fatalf("BuildTestImageTar s1: %v", err)
+	}
+	tar2, _, err := registry.BuildTestImageTar("b.tar", []byte("b"))
+	if err != nil {
+		t.Fatalf("BuildTestImageTar s2: %v", err)
+	}
+	tag1 := registry.WrapTag(rc.lane.LaneID, "s1", rc.state.specHashes["s1"])
+	tag2 := registry.WrapTag(rc.lane.LaneID, "s2", rc.state.specHashes["s2"])
+	eng.saveTars = map[string][]byte{tag1: tar1, tag2: tar2}
+
+	scratchDir := t.TempDir()
+	mounts, mountErr := rc.buildInputMounts(context.Background(), rc.dag.Steps["consumer"], scratchDir)
+	if mountErr != nil {
+		t.Fatalf("buildInputMounts: %v", mountErr)
+	}
 	if len(mounts) != 2 {
 		t.Fatalf("expected 2 mounts, got %d", len(mounts))
 	}

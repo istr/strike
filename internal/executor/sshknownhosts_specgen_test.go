@@ -31,10 +31,14 @@ func (e *captureEngine) ImageInspect(context.Context, string) (*container.ImageI
 	return nil, nil
 }
 func (e *captureEngine) ImageTag(context.Context, string, string) error { return nil }
-func (e *captureEngine) Ping(context.Context) error                     { return nil }
-func (e *captureEngine) TLSIdentity() *container.TLSIdentity            { return nil }
-func (e *captureEngine) Identity() *container.EngineIdentity            { return nil }
-func (e *captureEngine) Info(context.Context) error                     { return nil }
+
+func (e *captureEngine) ImageSave(_ context.Context, _ string) (io.ReadCloser, error) {
+	return io.NopCloser(io.LimitReader(nil, 0)), nil
+}
+func (e *captureEngine) Ping(context.Context) error          { return nil }
+func (e *captureEngine) TLSIdentity() *container.TLSIdentity { return nil }
+func (e *captureEngine) Identity() *container.EngineIdentity { return nil }
+func (e *captureEngine) Info(context.Context) error          { return nil }
 
 const (
 	sshKnownHostsTarget  = "/etc/ssh/ssh_known_hosts"
@@ -274,5 +278,48 @@ func TestRunExecute_SSHPeer_NoAuthSock(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "SSH_AUTH_SOCK not set") {
 		t.Errorf("error = %q, want substring about SSH_AUTH_SOCK", err.Error())
+	}
+}
+
+func TestRunExecute_InputMounts_FromImage_SpecGenerator(t *testing.T) {
+	eng := &captureEngine{}
+	outDir := t.TempDir()
+
+	r := executor.Run{
+		Engine:  eng,
+		Secrets: nil,
+		Step: &lane.Step{
+			Name:  "consumer",
+			Image: "alpine:latest",
+			Args:  []string{"cat", "/in/binary"},
+		},
+		OutputDir: outDir,
+		InputMounts: []executor.Mount{
+			{
+				Host:      "/tmp/inputs/aabbccdd11223344/binary",
+				Container: "/in/binary",
+				ReadOnly:  true,
+			},
+		},
+	}
+
+	if err := r.Execute(context.Background()); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	var found bool
+	for _, m := range eng.captured.Mounts {
+		if m.Target == "/in/binary" {
+			found = true
+			if m.Source != "/tmp/inputs/aabbccdd11223344/binary" {
+				t.Errorf("Source = %q, want /tmp/inputs/aabbccdd11223344/binary", m.Source)
+			}
+			if !m.ReadOnly {
+				t.Error("input mount should be ReadOnly")
+			}
+		}
+	}
+	if !found {
+		t.Error("expected mount with Target=/in/binary")
 	}
 }

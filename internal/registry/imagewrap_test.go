@@ -85,10 +85,15 @@ func extractDigestFromTar(data []byte) (string, error) {
 func (e *wrapEngine) ImageExists(_ context.Context, _ string) (bool, error) { return false, nil }
 func (e *wrapEngine) ImagePull(_ context.Context, _ string) error           { return nil }
 func (e *wrapEngine) ImagePush(_ context.Context, _ string) error           { return nil }
-func (e *wrapEngine) Ping(_ context.Context) error                          { return nil }
-func (e *wrapEngine) TLSIdentity() *container.TLSIdentity                   { return nil }
-func (e *wrapEngine) Identity() *container.EngineIdentity                   { return nil }
-func (e *wrapEngine) Info(_ context.Context) error                          { return nil }
+
+func (e *wrapEngine) ImageSave(_ context.Context, _ string) (io.ReadCloser, error) {
+	return io.NopCloser(bytes.NewReader(nil)), nil
+}
+
+func (e *wrapEngine) Ping(_ context.Context) error        { return nil }
+func (e *wrapEngine) TLSIdentity() *container.TLSIdentity { return nil }
+func (e *wrapEngine) Identity() *container.EngineIdentity { return nil }
+func (e *wrapEngine) Info(_ context.Context) error        { return nil }
 
 func (e *wrapEngine) ContainerRun(_ context.Context, _ container.RunOpts) (int, error) {
 	return 0, nil
