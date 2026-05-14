@@ -62,9 +62,12 @@ func TestWrapFileAsImage_Integration(t *testing.T) {
 		}
 	})
 
-	digest, err := client.WrapFileAsImage(ctx, path, tag)
+	digest, size, err := client.WrapFileAsImage(ctx, path, tag)
 	if err != nil {
 		t.Fatalf("WrapFileAsImage: %v", err)
+	}
+	if size != int64(len("integration test content")) {
+		t.Errorf("size = %d, want %d", size, len("integration test content"))
 	}
 
 	if digest.Algorithm != "sha256" {

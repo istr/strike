@@ -8,13 +8,17 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/google/go-containerregistry/pkg/v1/layout"
 	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/registry"
 )
 
 // wrapEngine captures ImageLoad request bodies and simulates tag/inspect.
+// It extracts the manifest digest from the loaded OCI tar so that digest
+// verification in loadTagVerify succeeds.
 type wrapEngine struct {
 	container.Engine
+	lastDigest string
 	loadBodies [][]byte
 	tags       []string
 	inspected  []string
@@ -26,6 +30,11 @@ func (e *wrapEngine) ImageLoad(_ context.Context, input io.Reader) (string, erro
 		return "", err
 	}
 	e.loadBodies = append(e.loadBodies, data)
+
+	// Extract manifest digest from the OCI layout tar.
+	if digest, extractErr := extractDigestFromTar(data); extractErr == nil {
+		e.lastDigest = digest
+	}
 	return "sha256:loadedid", nil
 }
 
@@ -36,9 +45,41 @@ func (e *wrapEngine) ImageTag(_ context.Context, _, target string) error {
 
 func (e *wrapEngine) ImageInspect(_ context.Context, ref string) (*container.ImageInfo, error) {
 	e.inspected = append(e.inspected, ref)
-	return &container.ImageInfo{
-		Digest: "sha256:abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
-	}, nil
+	digest := e.lastDigest
+	if digest == "" {
+		digest = "sha256:abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
+	}
+	return &container.ImageInfo{Digest: digest}, nil
+}
+
+// extractDigestFromTar extracts the manifest digest from an OCI layout tar.
+func extractDigestFromTar(data []byte) (string, error) {
+	dir, err := os.MkdirTemp("", "wraptest-")
+	if err != nil {
+		return "", err
+	}
+	defer os.RemoveAll(dir) //nolint:errcheck // test helper
+
+	if extractErr := registry.ExtractTarForTest(data, dir); extractErr != nil {
+		return "", extractErr
+	}
+	lp, err := layout.FromPath(dir)
+	if err != nil {
+		return "", err
+	}
+	idx, err := lp.ImageIndex()
+	if err != nil {
+		return "", err
+	}
+	manifest, err := idx.IndexManifest()
+	if err != nil {
+		return "", err
+	}
+	if len(manifest.Manifests) == 0 {
+		return "", err
+	}
+	d := manifest.Manifests[0].Digest
+	return d.Algorithm + ":" + d.Hex, nil
 }
 
 func (e *wrapEngine) ImageExists(_ context.Context, _ string) (bool, error) { return false, nil }
@@ -55,8 +96,9 @@ func (e *wrapEngine) ContainerRun(_ context.Context, _ container.RunOpts) (int, 
 
 func TestWrapFileAsImage_LoadsAndTags(t *testing.T) {
 	dir := t.TempDir()
+	content := []byte("hello")
 	path := filepath.Join(dir, "test.txt")
-	if err := os.WriteFile(path, []byte("hello"), 0o600); err != nil {
+	if err := os.WriteFile(path, content, 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -64,12 +106,15 @@ func TestWrapFileAsImage_LoadsAndTags(t *testing.T) {
 	client := &registry.Client{Engine: eng}
 	tag := "localhost/strike/test-lane/test-step:abc123"
 
-	digest, err := client.WrapFileAsImage(context.Background(), path, tag)
+	digest, size, err := client.WrapFileAsImage(context.Background(), path, tag)
 	if err != nil {
 		t.Fatalf("WrapFileAsImage: %v", err)
 	}
 	if digest.IsZero() {
 		t.Fatal("expected non-zero digest")
+	}
+	if size != int64(len(content)) {
+		t.Errorf("size = %d, want %d", size, len(content))
 	}
 	if len(eng.loadBodies) != 1 {
 		t.Fatalf("expected 1 load call, got %d", len(eng.loadBodies))
@@ -99,12 +144,15 @@ func TestWrapDirectoryAsImage_LoadsAndTags(t *testing.T) {
 	client := &registry.Client{Engine: eng}
 	tag := "localhost/strike/test-lane/test-step:def456"
 
-	digest, err := client.WrapDirectoryAsImage(context.Background(), subDir, tag)
+	digest, size, err := client.WrapDirectoryAsImage(context.Background(), subDir, tag)
 	if err != nil {
 		t.Fatalf("WrapDirectoryAsImage: %v", err)
 	}
 	if digest.IsZero() {
 		t.Fatal("expected non-zero digest")
+	}
+	if size != 6 { // 3 ("aaa") + 3 ("bbb")
+		t.Errorf("size = %d, want 6", size)
 	}
 	if len(eng.loadBodies) != 1 {
 		t.Fatalf("expected 1 load call, got %d", len(eng.loadBodies))
@@ -123,13 +171,13 @@ func TestWrapFileAsImage_Deterministic(t *testing.T) {
 
 	eng1 := &wrapEngine{}
 	client1 := &registry.Client{Engine: eng1}
-	if _, err := client1.WrapFileAsImage(context.Background(), path, "localhost/strike/l/s:h1"); err != nil {
+	if _, _, err := client1.WrapFileAsImage(context.Background(), path, "localhost/strike/l/s:h1"); err != nil {
 		t.Fatal(err)
 	}
 
 	eng2 := &wrapEngine{}
 	client2 := &registry.Client{Engine: eng2}
-	if _, err := client2.WrapFileAsImage(context.Background(), path, "localhost/strike/l/s:h2"); err != nil {
+	if _, _, err := client2.WrapFileAsImage(context.Background(), path, "localhost/strike/l/s:h2"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -153,13 +201,13 @@ func TestWrapDirectoryAsImage_Deterministic(t *testing.T) {
 
 	eng1 := &wrapEngine{}
 	client1 := &registry.Client{Engine: eng1}
-	if _, err := client1.WrapDirectoryAsImage(context.Background(), subDir, "localhost/strike/l/s:h1"); err != nil {
+	if _, _, err := client1.WrapDirectoryAsImage(context.Background(), subDir, "localhost/strike/l/s:h1"); err != nil {
 		t.Fatal(err)
 	}
 
 	eng2 := &wrapEngine{}
 	client2 := &registry.Client{Engine: eng2}
-	if _, err := client2.WrapDirectoryAsImage(context.Background(), subDir, "localhost/strike/l/s:h2"); err != nil {
+	if _, _, err := client2.WrapDirectoryAsImage(context.Background(), subDir, "localhost/strike/l/s:h2"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -181,7 +229,7 @@ func TestWrapFileAsImage_RejectsSymlink(t *testing.T) {
 
 	eng := &wrapEngine{}
 	client := &registry.Client{Engine: eng}
-	_, err := client.WrapFileAsImage(context.Background(), link, "localhost/strike/l/s:h")
+	_, _, err := client.WrapFileAsImage(context.Background(), link, "localhost/strike/l/s:h")
 	if err == nil {
 		t.Fatal("expected error for symlink")
 	}
@@ -204,7 +252,7 @@ func TestWrapDirectoryAsImage_RejectsSymlink(t *testing.T) {
 
 	eng := &wrapEngine{}
 	client := &registry.Client{Engine: eng}
-	_, err := client.WrapDirectoryAsImage(context.Background(), subDir, "localhost/strike/l/s:h")
+	_, _, err := client.WrapDirectoryAsImage(context.Background(), subDir, "localhost/strike/l/s:h")
 	if err == nil {
 		t.Fatal("expected error for directory containing symlink")
 	}
@@ -222,7 +270,7 @@ func TestWrapImageOutputAsImage_LoadsExistingTar(t *testing.T) {
 	// First, capture the tar bytes from a file wrap.
 	eng1 := &wrapEngine{}
 	client1 := &registry.Client{Engine: eng1}
-	if _, err := client1.WrapFileAsImage(context.Background(), srcFile, "localhost/strike/l/s:capture"); err != nil {
+	if _, _, err := client1.WrapFileAsImage(context.Background(), srcFile, "localhost/strike/l/s:capture"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -236,12 +284,15 @@ func TestWrapImageOutputAsImage_LoadsExistingTar(t *testing.T) {
 	eng2 := &wrapEngine{}
 	client2 := &registry.Client{Engine: eng2}
 	tag := "localhost/strike/test-lane/img-step:hash"
-	digest, err := client2.WrapImageOutputAsImage(context.Background(), tarPath, tag)
+	digest, size, err := client2.WrapImageOutputAsImage(context.Background(), tarPath, tag)
 	if err != nil {
 		t.Fatalf("WrapImageOutputAsImage: %v", err)
 	}
 	if digest.IsZero() {
 		t.Fatal("expected non-zero digest")
+	}
+	if size <= 0 {
+		t.Errorf("size should be positive, got %d", size)
 	}
 	if len(eng2.loadBodies) != 1 {
 		t.Fatalf("expected 1 load call, got %d", len(eng2.loadBodies))

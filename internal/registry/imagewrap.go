@@ -21,83 +21,118 @@ import (
 )
 
 // WrapFileAsImage packages a single file into an OCI image, loads it into
-// the engine's local store, tags it, and returns the manifest digest.
-// The file is placed at its base name inside the image. Symlinks are rejected.
-func (c *Client) WrapFileAsImage(ctx context.Context, srcPath, tag string) (lane.Digest, error) {
+// the engine's local store, tags it, and returns the manifest digest and
+// logical byte size. Symlinks are rejected.
+func (c *Client) WrapFileAsImage(ctx context.Context, srcPath, tag string) (lane.Digest, int64, error) {
 	info, err := os.Lstat(srcPath)
 	if err != nil {
-		return lane.Digest{}, fmt.Errorf("wrap file: %w", err)
+		return lane.Digest{}, 0, fmt.Errorf("wrap file: %w", err)
 	}
 	if info.Mode()&fs.ModeSymlink != 0 {
-		return lane.Digest{}, fmt.Errorf("wrap file: symlink not allowed: %s", srcPath)
+		return lane.Digest{}, 0, fmt.Errorf("wrap file: symlink not allowed: %s", srcPath)
 	}
 	if !info.Mode().IsRegular() {
-		return lane.Digest{}, fmt.Errorf("wrap file: not a regular file: %s", srcPath)
+		return lane.Digest{}, 0, fmt.Errorf("wrap file: not a regular file: %s", srcPath)
 	}
 
 	destPath := "/" + filepath.Base(srcPath)
-	layer, err := wrapFileLayer(srcPath, destPath, info.Mode().Perm())
+	layer, size, err := wrapFileLayer(srcPath, destPath, info.Mode().Perm())
 	if err != nil {
-		return lane.Digest{}, fmt.Errorf("wrap file layer: %w", err)
+		return lane.Digest{}, 0, fmt.Errorf("wrap file layer: %w", err)
 	}
 
-	return c.loadTagInspect(ctx, layer, tag)
+	digest, err := c.loadTagVerify(ctx, layer, tag)
+	if err != nil {
+		return lane.Digest{}, 0, err
+	}
+	return digest, size, nil
 }
 
 // WrapDirectoryAsImage packages a directory tree into an OCI image, loads it
-// into the engine's local store, tags it, and returns the manifest digest.
-// The directory contents are placed under its base name inside the image.
-// Symlinks within the directory are rejected.
-func (c *Client) WrapDirectoryAsImage(ctx context.Context, srcPath, tag string) (lane.Digest, error) {
+// into the engine's local store, tags it, and returns the manifest digest and
+// logical byte size (sum of regular file content sizes). Symlinks are rejected.
+func (c *Client) WrapDirectoryAsImage(ctx context.Context, srcPath, tag string) (lane.Digest, int64, error) {
 	info, err := os.Lstat(srcPath)
 	if err != nil {
-		return lane.Digest{}, fmt.Errorf("wrap dir: %w", err)
+		return lane.Digest{}, 0, fmt.Errorf("wrap dir: %w", err)
 	}
 	if info.Mode()&fs.ModeSymlink != 0 {
-		return lane.Digest{}, fmt.Errorf("wrap dir: symlink not allowed: %s", srcPath)
+		return lane.Digest{}, 0, fmt.Errorf("wrap dir: symlink not allowed: %s", srcPath)
 	}
 	if !info.IsDir() {
-		return lane.Digest{}, fmt.Errorf("wrap dir: not a directory: %s", srcPath)
+		return lane.Digest{}, 0, fmt.Errorf("wrap dir: not a directory: %s", srcPath)
 	}
 
 	destPath := "/" + filepath.Base(srcPath)
-	layer, err := wrapDirLayer(srcPath, destPath)
+	layer, size, err := wrapDirLayer(srcPath, destPath)
 	if err != nil {
-		return lane.Digest{}, fmt.Errorf("wrap dir layer: %w", err)
+		return lane.Digest{}, 0, fmt.Errorf("wrap dir layer: %w", err)
 	}
 
-	return c.loadTagInspect(ctx, layer, tag)
+	digest, err := c.loadTagVerify(ctx, layer, tag)
+	if err != nil {
+		return lane.Digest{}, 0, err
+	}
+	return digest, size, nil
 }
 
 // WrapImageOutputAsImage loads an existing OCI tar into the engine's local
-// store, tags it, and returns the manifest digest.
-func (c *Client) WrapImageOutputAsImage(ctx context.Context, tarPath, tag string) (lane.Digest, error) {
+// store, tags it, and returns the manifest digest and the tar file size.
+// The controller-computed manifest digest is verified against the engine.
+func (c *Client) WrapImageOutputAsImage(ctx context.Context, tarPath, tag string) (lane.Digest, int64, error) {
+	info, err := os.Stat(tarPath)
+	if err != nil {
+		return lane.Digest{}, 0, fmt.Errorf("wrap image stat: %w", err)
+	}
+	size := info.Size()
+
 	f, err := os.Open(tarPath) //nolint:gosec // G304: tarPath is from MkdirTemp output directory
 	if err != nil {
-		return lane.Digest{}, fmt.Errorf("wrap image: %w", err)
+		return lane.Digest{}, 0, fmt.Errorf("wrap image: %w", err)
 	}
 	defer warnClose(f, "wrap image")
 
-	r, err := openMainImageFromReader(f)
+	img, cleanup, err := extractMainImage(f)
 	if err != nil {
-		return lane.Digest{}, fmt.Errorf("wrap image: %w", err)
+		return lane.Digest{}, 0, fmt.Errorf("wrap image: %w", err)
+	}
+	defer cleanup()
+
+	expectedDigest, err := img.Digest()
+	if err != nil {
+		return lane.Digest{}, 0, fmt.Errorf("wrap image digest: %w", err)
+	}
+
+	r, err := singleImageTar(img, nil)
+	if err != nil {
+		return lane.Digest{}, 0, fmt.Errorf("wrap image tar: %w", err)
 	}
 
 	id, err := c.Engine.ImageLoad(ctx, r)
 	if err != nil {
-		return lane.Digest{}, fmt.Errorf("wrap image load: %w", err)
+		return lane.Digest{}, 0, fmt.Errorf("wrap image load: %w", err)
 	}
 
-	if err := c.Engine.ImageTag(ctx, id, tag); err != nil {
-		return lane.Digest{}, fmt.Errorf("wrap image tag: %w", err)
+	if tagErr := c.Engine.ImageTag(ctx, id, tag); tagErr != nil {
+		return lane.Digest{}, 0, fmt.Errorf("wrap image tag: %w", tagErr)
 	}
 
-	return c.InspectDigest(ctx, tag)
+	engineDigest, err := c.InspectDigest(ctx, tag)
+	if err != nil {
+		return lane.Digest{}, 0, fmt.Errorf("wrap image inspect: %w", err)
+	}
+
+	controllerDigest := v1HashToDigest(expectedDigest)
+	if engineDigest != controllerDigest {
+		return lane.Digest{}, 0, fmt.Errorf("wrap image: digest mismatch: controller=%s engine=%s", controllerDigest, engineDigest)
+	}
+	return engineDigest, size, nil
 }
 
-// loadTagInspect builds a single-layer OCI image from the given layer,
+// loadTagVerify builds a single-layer OCI image from the given layer,
 // loads it into the engine, tags it, and returns the manifest digest.
-func (c *Client) loadTagInspect(ctx context.Context, layer v1.Layer, tag string) (lane.Digest, error) {
+// The controller-computed manifest digest is verified against the engine.
+func (c *Client) loadTagVerify(ctx context.Context, layer v1.Layer, tag string) (lane.Digest, error) {
 	img := mutate.ConfigMediaType(
 		mutate.MediaType(empty.Image, types.OCIManifestSchema1),
 		types.OCIConfigJSON,
@@ -116,6 +151,11 @@ func (c *Client) loadTagInspect(ctx context.Context, layer v1.Layer, tag string)
 	}
 	img = annotated
 
+	expectedHash, err := img.Digest()
+	if err != nil {
+		return lane.Digest{}, fmt.Errorf("compute digest: %w", err)
+	}
+
 	r, err := singleImageTar(img, nil)
 	if err != nil {
 		return lane.Digest{}, fmt.Errorf("write image tar: %w", err)
@@ -126,90 +166,120 @@ func (c *Client) loadTagInspect(ctx context.Context, layer v1.Layer, tag string)
 		return lane.Digest{}, fmt.Errorf("image load: %w", err)
 	}
 
-	if err := c.Engine.ImageTag(ctx, id, tag); err != nil {
-		return lane.Digest{}, fmt.Errorf("image tag: %w", err)
+	if tagErr := c.Engine.ImageTag(ctx, id, tag); tagErr != nil {
+		return lane.Digest{}, fmt.Errorf("image tag: %w", tagErr)
 	}
 
-	return c.InspectDigest(ctx, tag)
+	engineDigest, err := c.InspectDigest(ctx, tag)
+	if err != nil {
+		return lane.Digest{}, fmt.Errorf("inspect digest: %w", err)
+	}
+
+	controllerDigest := v1HashToDigest(expectedHash)
+	if engineDigest != controllerDigest {
+		return lane.Digest{}, fmt.Errorf("digest mismatch: controller=%s engine=%s", controllerDigest, engineDigest)
+	}
+	return engineDigest, nil
 }
 
-// openMainImageFromReader reads an OCI layout tar from r and returns a
-// reader for a single-image OCI tar suitable for engine load.
-func openMainImageFromReader(r io.Reader) (io.Reader, error) {
+// v1HashToDigest converts a go-containerregistry v1.Hash to a lane.Digest.
+func v1HashToDigest(h v1.Hash) lane.Digest {
+	return lane.Digest{Algorithm: h.Algorithm, Hex: h.Hex}
+}
+
+// extractMainImage reads an OCI layout tar from r and returns the first
+// image from the index. The returned cleanup function removes the temporary
+// directory backing the layout and must be called after the image is no
+// longer needed.
+func extractMainImage(r io.Reader) (v1.Image, func(), error) {
 	tmpDir, err := os.MkdirTemp("", "strike-wrap-load-")
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	defer warnRemoveAll(tmpDir, "wrap image load")
+	cleanup := func() { warnRemoveAll(tmpDir, "wrap image load") }
 
 	if extractErr := extractTar(r, tmpDir); extractErr != nil {
-		return nil, fmt.Errorf("extract layout: %w", extractErr)
+		cleanup()
+		return nil, nil, fmt.Errorf("extract layout: %w", extractErr)
 	}
 
 	lp, err := layout.FromPath(tmpDir)
 	if err != nil {
-		return nil, fmt.Errorf("open layout: %w", err)
+		cleanup()
+		return nil, nil, fmt.Errorf("open layout: %w", err)
 	}
 
 	idx, err := lp.ImageIndex()
 	if err != nil {
-		return nil, fmt.Errorf("read index: %w", err)
+		cleanup()
+		return nil, nil, fmt.Errorf("read index: %w", err)
 	}
 
 	manifest, err := idx.IndexManifest()
 	if err != nil {
-		return nil, fmt.Errorf("read manifest: %w", err)
+		cleanup()
+		return nil, nil, fmt.Errorf("read manifest: %w", err)
 	}
 
 	if len(manifest.Manifests) == 0 {
-		return nil, fmt.Errorf("empty image index")
+		cleanup()
+		return nil, nil, fmt.Errorf("empty image index")
 	}
 
 	desc := manifest.Manifests[0]
-	img, err := idx.Image(desc.Digest)
-	if err != nil {
-		return nil, err
+	img, imgErr := idx.Image(desc.Digest)
+	if imgErr != nil {
+		cleanup()
+		return nil, nil, imgErr
 	}
-	return singleImageTar(img, desc.Annotations)
+	return img, cleanup, nil
 }
 
 // wrapFileLayer reads a file from disk and creates a deterministic OCI layer.
+// Returns the layer and the logical byte size of the file content.
 // Ownership is normalized to 0:0; mtime is zeroed for reproducibility.
-func wrapFileLayer(hostPath, destPath string, mode fs.FileMode) (v1.Layer, error) {
+func wrapFileLayer(hostPath, destPath string, mode fs.FileMode) (v1.Layer, int64, error) {
 	data, err := os.ReadFile(hostPath) //nolint:gosec // G304: hostPath is from MkdirTemp output directory
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
+	size := int64(len(data))
 
 	var buf bytes.Buffer
 	tw := tar.NewWriter(&buf)
 
-	if err := tw.WriteHeader(&tar.Header{
+	err = tw.WriteHeader(&tar.Header{
 		Typeflag: tar.TypeReg,
 		Name:     destPath[1:], // strip leading /
-		Size:     int64(len(data)),
+		Size:     size,
 		Mode:     int64(mode),
 		// Uid, Gid, ModTime intentionally zero for determinism.
-	}); err != nil {
-		return nil, err
+	})
+	if err != nil {
+		return nil, 0, err
 	}
-	if _, err := tw.Write(data); err != nil {
-		return nil, err
+	if _, writeErr := tw.Write(data); writeErr != nil {
+		return nil, 0, writeErr
 	}
-	if err := tw.Close(); err != nil {
-		return nil, err
+	if closeErr := tw.Close(); closeErr != nil {
+		return nil, 0, closeErr
 	}
 
 	opener := func() (io.ReadCloser, error) {
 		return io.NopCloser(bytes.NewReader(buf.Bytes())), nil
 	}
-	return tarball.LayerFromOpener(opener, tarball.WithMediaType(types.OCILayer))
+	layer, err := tarball.LayerFromOpener(opener, tarball.WithMediaType(types.OCILayer))
+	if err != nil {
+		return nil, 0, err
+	}
+	return layer, size, nil
 }
 
 // wrapDirLayer reads a directory recursively and creates a deterministic OCI
-// layer. File modes are preserved; ownership is normalized to 0:0; mtimes
-// are zeroed. Symlinks are rejected.
-func wrapDirLayer(hostDir, destPath string) (v1.Layer, error) {
+// layer. Returns the layer and the logical byte size (sum of regular file
+// content sizes). File modes are preserved; ownership is normalized to 0:0;
+// mtimes are zeroed. Symlinks are rejected.
+func wrapDirLayer(hostDir, destPath string) (v1.Layer, int64, error) {
 	var buf bytes.Buffer
 	tw := tar.NewWriter(&buf)
 
@@ -220,25 +290,31 @@ func wrapDirLayer(hostDir, destPath string) (v1.Layer, error) {
 		Name:     dest + "/",
 		Mode:     0o755,
 	}); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	if err := filepath.WalkDir(hostDir, wrapDirWalkFunc(tw, hostDir, dest)); err != nil {
-		return nil, err
+	var totalSize int64
+	if err := filepath.WalkDir(hostDir, wrapDirWalkFunc(tw, hostDir, dest, &totalSize)); err != nil {
+		return nil, 0, err
 	}
 	if err := tw.Close(); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	opener := func() (io.ReadCloser, error) {
 		return io.NopCloser(bytes.NewReader(buf.Bytes())), nil
 	}
-	return tarball.LayerFromOpener(opener, tarball.WithMediaType(types.OCILayer))
+	layer, err := tarball.LayerFromOpener(opener, tarball.WithMediaType(types.OCILayer))
+	if err != nil {
+		return nil, 0, err
+	}
+	return layer, totalSize, nil
 }
 
 // wrapDirWalkFunc returns a WalkDir callback that writes each entry under
-// root into a tar at the given dest prefix.
-func wrapDirWalkFunc(tw *tar.Writer, root, dest string) fs.WalkDirFunc {
+// root into a tar at the given dest prefix. totalSize accumulates the logical
+// byte count of regular file contents.
+func wrapDirWalkFunc(tw *tar.Writer, root, dest string, totalSize *int64) fs.WalkDirFunc {
 	return func(path string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
@@ -270,6 +346,7 @@ func wrapDirWalkFunc(tw *tar.Writer, root, dest string) fs.WalkDirFunc {
 		case info.Mode().IsRegular():
 			hdr.Typeflag = tar.TypeReg
 			hdr.Size = info.Size()
+			*totalSize += info.Size()
 		default:
 			return fmt.Errorf("unsupported file type %v at %q", info.Mode().Type(), rel)
 		}

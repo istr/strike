@@ -330,18 +330,6 @@ func (rc *runContext) executeContainerStep(ctx context.Context, step *lane.Step,
 
 	rc.state.outputDirs[stepName] = outDir
 
-	outRoot, err := os.OpenRoot(outDir)
-	if err != nil {
-		return fmt.Errorf("%s: open output dir: %w", safeName, err)
-	}
-	defer outRoot.Close() //nolint:errcheck // best-effort cleanup
-
-	if err := rc.registerFileOutputs(step, stepName, safeName, outDir, outRoot); err != nil {
-		return err
-	}
-	if err := rc.loadOCIOutputs(ctx, step, stepName, safeName, outRoot); err != nil {
-		return err
-	}
 	if err := rc.wrapOutputs(ctx, step, stepName, safeName, outDir); err != nil {
 		return err
 	}
@@ -353,66 +341,35 @@ func (rc *runContext) executeContainerStep(ctx context.Context, step *lane.Step,
 	return rc.pushAndReport(ctx, step, safeName, tag)
 }
 
-func (rc *runContext) registerFileOutputs(step *lane.Step, stepName, safeName, outDir string, outRoot *os.Root) error {
-	for _, out := range step.Outputs {
-		if out.Type == artifactTypeImage {
-			continue
-		}
-		relName := filepath.Base(out.Path.String())
-		outPath := filepath.Join(outDir, relName)
-		if out.Expected != nil {
-			info, statErr := os.Stat(outPath) //nolint:gosec // G703: outPath is outDir (our temp dir) + filepath.Base (no traversal)
-			if statErr != nil {
-				return fmt.Errorf("%s: output %q: %w", safeName, out.Name, statErr)
-			}
-			if valErr := executor.ValidateOutput(outPath, info, out.Expected); valErr != nil {
-				return fmt.Errorf("%s: output %q validation: %w", safeName, out.Name, valErr)
-			}
-		}
-		var h lane.Digest
-		var size int64
-		var hashErr error
-		if out.Type == "directory" {
-			h, size, hashErr = registry.HashDir(outRoot, outDir, relName)
-		} else {
-			h, hashErr = registry.HashFile(outRoot, relName)
-		}
-		if hashErr != nil {
-			return fmt.Errorf("%s: hash output %q: %w", safeName, out.Name, hashErr)
-		}
-		if regErr := rc.laneState.Register(stepName, out.Name, lane.Artifact{
-			Type:   lane.ArtifactType(out.Type),
-			Digest: h,
-			Size:   size,
-		}); regErr != nil {
-			return fmt.Errorf("%s: register artifact: %w", safeName, regErr)
-		}
-	}
-	return nil
-}
-
 func (rc *runContext) wrapOutputs(ctx context.Context, step *lane.Step, stepName, safeName, outDir string) error {
 	specHash := rc.state.specHashes[stepName]
 	for _, out := range step.Outputs {
 		tag := fmt.Sprintf("localhost/strike/%s/%s:%s", rc.lane.LaneID, stepName, specHash.Hex)
 		outPath := filepath.Join(outDir, filepath.Base(out.Path.String()))
 		var digest lane.Digest
+		var size int64
 		var err error
 		switch out.Type {
 		case "file":
-			digest, err = rc.regClient.WrapFileAsImage(ctx, outPath, tag)
+			digest, size, err = rc.regClient.WrapFileAsImage(ctx, outPath, tag)
 		case "directory":
-			digest, err = rc.regClient.WrapDirectoryAsImage(ctx, outPath, tag)
+			digest, size, err = rc.regClient.WrapDirectoryAsImage(ctx, outPath, tag)
 		case artifactTypeImage:
-			digest, err = rc.regClient.WrapImageOutputAsImage(ctx, outPath, tag)
+			digest, size, err = rc.regClient.WrapImageOutputAsImage(ctx, outPath, tag)
 		default:
 			return fmt.Errorf("%s: unknown output type %q", safeName, out.Type)
 		}
 		if err != nil {
 			return fmt.Errorf("%s: wrap output %q: %w", safeName, out.Name, err)
 		}
-		if regErr := rc.laneState.RegisterOutputImage(stepName, out.Name, digest); regErr != nil {
-			return fmt.Errorf("%s: register output image: %w", safeName, regErr)
+		key := stepName + "/" + out.Name
+		rc.state.ociDigests[key] = digest
+		if regErr := rc.laneState.Register(stepName, out.Name, lane.Artifact{
+			Type:   lane.ArtifactType(out.Type),
+			Digest: digest,
+			Size:   size,
+		}); regErr != nil {
+			return fmt.Errorf("%s: register artifact: %w", safeName, regErr)
 		}
 	}
 	return nil
@@ -457,31 +414,6 @@ func (rc *runContext) buildInputMounts(step *lane.Step) []executor.Mount {
 		}
 	}
 	return mounts
-}
-
-func (rc *runContext) loadOCIOutputs(ctx context.Context, step *lane.Step, stepName, safeName string, outRoot *os.Root) error {
-	for _, out := range step.Outputs {
-		if out.Type != artifactTypeImage {
-			continue
-		}
-		relName := filepath.Base(out.Path.String())
-		digest, err := rc.regClient.LoadOCITar(ctx, outRoot, relName)
-		if err != nil {
-			return fmt.Errorf("%s: oci-tar load %q: %w", safeName, out.Name, err)
-		}
-		key := stepName + "/" + out.Name
-		rc.state.ociDigests[key] = digest
-
-		if regErr := rc.laneState.Register(stepName, out.Name, lane.Artifact{
-			Type:   lane.ArtifactType(out.Type),
-			Digest: digest,
-		}); regErr != nil {
-			return fmt.Errorf("%s: register artifact: %w", safeName, regErr)
-		}
-
-		log.Printf("       %s/%s -> %s", safeName, out.Name, digest)
-	}
-	return nil
 }
 
 func (rc *runContext) pushAndReport(ctx context.Context, step *lane.Step, safeName, tag string) error {
