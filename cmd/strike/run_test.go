@@ -338,32 +338,127 @@ func TestComputeSpecHash_NoSources(t *testing.T) {
 // --------------------------------------------------------------------------.
 
 func TestCheckCache_Miss(t *testing.T) {
-	eng := &mockEngine{imageExistsRV: false}
+	eng := &mockEngine{inspectErr: fmt.Errorf("image localhost/strike/lane/step1:abc not found")}
 	rc := newTestRC(t, eng)
+	step := &lane.Step{
+		Name:    "step1",
+		Outputs: []lane.OutputSpec{{Name: "bin", Type: "file", Path: "/out/bin"}},
+	}
+	rc.state.specHashes["step1"] = lane.MustParseDigest("sha256:abc")
 
-	hit := rc.checkCache(context.Background(), "step1", "step1", "localhost:5555/test:step1-abc", lane.MustParseDigest("sha256:full"))
+	hit, err := rc.checkCache(context.Background(), step, "step1", "step1", lane.MustParseDigest("sha256:abc"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if hit {
 		t.Error("expected cache miss")
 	}
 }
 
 func TestCheckCache_Hit(t *testing.T) {
+	digest := "sha256:abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
 	eng := &mockEngine{
-		imageExistsRV: true,
 		inspectRV: &container.ImageInfo{
+			Digest: digest,
 			Annotations: map[string]string{
-				"dev.strike.cache-key": "sha256:fullhash",
+				"dev.strike.content-size": "42",
 			},
 		},
 	}
 	rc := newTestRC(t, eng)
+	step := &lane.Step{
+		Name:    "step1",
+		Outputs: []lane.OutputSpec{{Name: "bin", Type: "file", Path: "/out/bin"}},
+	}
 
-	hit := rc.checkCache(context.Background(), "step1", "step1", "localhost:5555/test:step1-abc", lane.MustParseDigest("sha256:fullhash"))
+	hit, err := rc.checkCache(context.Background(), step, "step1", "step1", lane.MustParseDigest("sha256:abc"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if !hit {
 		t.Error("expected cache hit")
 	}
-	if rc.state.outputDirs["step1"] == "" {
-		t.Error("outputDirs should be set on cache hit")
+	art, err2 := rc.laneState.Resolve("step1.bin")
+	if err2 != nil {
+		t.Fatalf("artifact not registered: %v", err2)
+	}
+	if art.Size != 42 {
+		t.Errorf("size = %d, want 42", art.Size)
+	}
+	if art.Digest.String() != digest {
+		t.Errorf("digest = %q, want %q", art.Digest, digest)
+	}
+}
+
+func TestCheckCache_HitMissingSizeAnnotation(t *testing.T) {
+	eng := &mockEngine{
+		inspectRV: &container.ImageInfo{
+			Digest:      "sha256:abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+			Annotations: map[string]string{},
+		},
+	}
+	rc := newTestRC(t, eng)
+	step := &lane.Step{Name: "step1"}
+
+	hit, err := rc.checkCache(context.Background(), step, "step1", "step1", lane.MustParseDigest("sha256:abc"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if hit {
+		t.Error("expected cache miss for missing annotation")
+	}
+}
+
+func TestCheckCache_HitBadSizeAnnotation(t *testing.T) {
+	eng := &mockEngine{
+		inspectRV: &container.ImageInfo{
+			Digest: "sha256:abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+			Annotations: map[string]string{
+				"dev.strike.content-size": "not-a-number",
+			},
+		},
+	}
+	rc := newTestRC(t, eng)
+	step := &lane.Step{Name: "step1"}
+
+	hit, err := rc.checkCache(context.Background(), step, "step1", "step1", lane.MustParseDigest("sha256:abc"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if hit {
+		t.Error("expected cache miss for bad size annotation")
+	}
+}
+
+func TestCheckCache_ForceRunBypass(t *testing.T) {
+	eng := &mockEngine{
+		inspectRV: &container.ImageInfo{
+			Digest: "sha256:abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+			Annotations: map[string]string{
+				"dev.strike.content-size": "42",
+			},
+		},
+	}
+	rc := newTestRC(t, eng)
+	step := &lane.Step{Name: "step1", ForceRun: true}
+
+	hit, err := rc.checkCache(context.Background(), step, "step1", "step1", lane.MustParseDigest("sha256:abc"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if hit {
+		t.Error("expected cache miss with force_run")
+	}
+}
+
+func TestCheckCache_EngineError(t *testing.T) {
+	eng := &mockEngine{inspectErr: fmt.Errorf("engine unavailable")}
+	rc := newTestRC(t, eng)
+	step := &lane.Step{Name: "step1"}
+
+	_, err := rc.checkCache(context.Background(), step, "step1", "step1", lane.MustParseDigest("sha256:abc"))
+	if err == nil {
+		t.Fatal("expected error")
 	}
 }
 

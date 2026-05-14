@@ -1,0 +1,16 @@
+name: test-lane
+lane_id: test-lane
+registry: localhost:5555/test
+secrets: {}
+steps:
+  - name: clone
+    image: alpine:latest
+    args: ["git", "clone", "https://example.com/repo"]
+    env: {}
+    inputs: []
+    secrets: []
+    force_run: true
+    outputs:
+      - name: src
+        type: directory
+        path: /out/src

@@ -14,11 +14,9 @@ import (
 
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/crane"
-	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/empty"
 	"github.com/google/go-containerregistry/pkg/v1/layout"
-	"github.com/google/go-containerregistry/pkg/v1/remote"
 
 	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/lane"
@@ -36,21 +34,6 @@ func (c *Client) ExistsLocal(ctx context.Context, tag string) bool {
 		return false
 	}
 	return exists
-}
-
-// ExistsRemote checks if an image exists in a remote registry (one roundtrip).
-func ExistsRemote(tag string) bool {
-	ref, err := name.ParseReference(tag)
-	if err != nil {
-		return false
-	}
-	_, err = remote.Get(ref, remote.WithAuthFromKeychain(authn.DefaultKeychain))
-	return err == nil
-}
-
-// Pull fetches an image from a remote registry into the local store.
-func (c *Client) Pull(ctx context.Context, tag string) error {
-	return c.Engine.ImagePull(ctx, tag)
 }
 
 // PushArtifact pushes a local image to the registry.
@@ -351,15 +334,4 @@ func (c *Client) InspectAnnotation(ctx context.Context, tag, annotation string) 
 		return "", err
 	}
 	return info.Annotations[annotation], nil
-}
-
-// Find implements local-first lookup with remote fallback.
-func (c *Client) Find(ctx context.Context, tag string) (bool, bool) {
-	if c.ExistsLocal(ctx, tag) {
-		return true, false
-	}
-	if ExistsRemote(tag) {
-		return false, true
-	}
-	return false, false
 }

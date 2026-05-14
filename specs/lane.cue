@@ -55,6 +55,13 @@ package lane
 	secrets:     [...#SecretRef] @go(Secrets)
 	workdir?:    #ContainerPath @go(Workdir)
 	peers?:      [...#Peer] @go(Peers)
+	// force_run: when true, strike bypasses the cache check
+	// and runs the step unconditionally. The explicit escape
+	// hatch for intentionally non-deterministic steps such as
+	// `git clone` from a moving branch or `npm install` of a
+	// `latest` tag. Strike does not auto-detect
+	// non-determinism; lane authors declare it.
+	force_run?:  bool | *false @go(ForceRun)
 	timeout?:    #Duration @go(Timeout)
 	pack?:       #PackSpec @go(Pack,optional=nillable)
 	deploy?:     #DeploySpec @go(Deploy,optional=nillable)

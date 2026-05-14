@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	"github.com/istr/strike/internal/container"
@@ -65,27 +64,6 @@ func TestSanitize(t *testing.T) {
 				t.Errorf("sanitize(%q) = %q, want %q", tt.in, got, tt.want)
 			}
 		})
-	}
-}
-
-// --------------------------------------------------------------------------.
-// cachedOutputDir
-// --------------------------------------------------------------------------.
-
-func TestCachedOutputDir(t *testing.T) {
-	got := cachedOutputDir("my-tag")
-	if !strings.HasPrefix(got, "/tmp/strike-cache/") {
-		t.Errorf("expected /tmp/strike-cache/ prefix, got %q", got)
-	}
-	if !strings.HasSuffix(got, "my-tag") {
-		t.Errorf("expected suffix 'my-tag', got %q", got)
-	}
-
-	// Deterministic.
-	a := cachedOutputDir("x")
-	b := cachedOutputDir("x")
-	if a != b {
-		t.Error("expected deterministic output")
 	}
 }
 

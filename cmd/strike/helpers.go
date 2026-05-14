@@ -35,11 +35,6 @@ func sanitize(s string) string {
 	return string(result)
 }
 
-func cachedOutputDir(tag string) string {
-	// Local output mounted from container store.
-	return "/tmp/strike-cache/" + sanitize(tag)
-}
-
 // writeToOutputDir opens an os.Root on dir, creates name, and writes data.
 func writeToOutputDir(dir, name string, data []byte) (err error) {
 	root, err := os.OpenRoot(dir)

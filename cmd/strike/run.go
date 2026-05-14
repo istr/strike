@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/istr/strike/internal/clock"
@@ -77,7 +78,11 @@ func (rc *runContext) runStep(stepName string) error {
 		return err
 	}
 
-	if rc.checkCache(ctx, stepName, safeName, tag, specHash) {
+	cached, cacheErr := rc.checkCache(ctx, step, stepName, safeName, specHash)
+	if cacheErr != nil {
+		return cacheErr
+	}
+	if cached {
 		return nil
 	}
 	if err := rc.guardUnsignedImages(step, safeName); err != nil {
@@ -180,13 +185,47 @@ func (rc *runContext) computeSpecHash(step *lane.Step, stepName string, imageDig
 	return key, tag, nil
 }
 
-func (rc *runContext) checkCache(ctx context.Context, stepName, safeName, tag string, specHash lane.Digest) bool {
-	if !registry.Lookup(ctx, rc.regClient, tag, specHash.String()) {
-		return false
+func (rc *runContext) checkCache(ctx context.Context, step *lane.Step, stepName, safeName string, specHash lane.Digest) (bool, error) {
+	if step.ForceRun {
+		log.Printf("FORCED %s", safeName)
+		return false, nil
 	}
+
+	tag := registry.WrapTag(rc.lane.LaneID, stepName, specHash)
+	info, err := rc.engine.ImageInspect(ctx, tag)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			return false, nil
+		}
+		return false, fmt.Errorf("cache check %s: %w", safeName, err)
+	}
+
+	sizeStr, ok := info.Annotations[registry.ContentSizeAnnotation]
+	if !ok {
+		log.Printf("CACHE-NO-SIZE %s (annotation missing)", safeName)
+		return false, nil
+	}
+	size, parseErr := strconv.ParseInt(sizeStr, 10, 64)
+	if parseErr != nil {
+		log.Printf("CACHE-BAD-SIZE %s (%q)", safeName, sizeStr)
+		return false, nil
+	}
+
+	digest := lane.MustParseDigest(info.Digest)
+	for _, out := range step.Outputs {
+		key := stepName + "/" + out.Name
+		rc.state.ociDigests[key] = digest
+		if regErr := rc.laneState.Register(stepName, out.Name, lane.Artifact{
+			Type:   lane.ArtifactType(out.Type),
+			Digest: digest,
+			Size:   size,
+		}); regErr != nil {
+			return false, fmt.Errorf("cache hit register %s/%s: %w", stepName, out.Name, regErr)
+		}
+	}
+
 	log.Printf("CACHED %s (%s)", safeName, tag)
-	rc.state.outputDirs[stepName] = cachedOutputDir(tag)
-	return true
+	return true, nil
 }
 
 func (rc *runContext) guardUnsignedImages(step *lane.Step, safeName string) error {

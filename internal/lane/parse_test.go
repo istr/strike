@@ -72,6 +72,26 @@ func TestParse_ValidMinimal(t *testing.T) {
 	}
 }
 
+func TestParse_ForceRunTrue(t *testing.T) {
+	p, err := lane.Parse(mustFilePath(t, "testdata/valid_force_run.yaml"))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if !p.Steps[0].ForceRun {
+		t.Error("expected ForceRun=true")
+	}
+}
+
+func TestParse_ForceRunDefaultFalse(t *testing.T) {
+	p, err := lane.Parse(mustFilePath(t, "testdata/valid_minimal.yaml"))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if p.Steps[0].ForceRun {
+		t.Error("expected ForceRun=false by default")
+	}
+}
+
 func TestParse_ValidDeploy(t *testing.T) {
 	p, err := lane.Parse(mustFilePath(t, "testdata/valid_deploy.yaml"))
 	if err != nil {

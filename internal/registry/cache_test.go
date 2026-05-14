@@ -1,7 +1,6 @@
 package registry_test
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,7 +8,6 @@ import (
 
 	"github.com/istr/strike/internal/testutil"
 
-	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/registry"
 )
@@ -67,16 +65,6 @@ func TestSpecHashPreservesArgOrder(t *testing.T) {
 	if h1 == h2 {
 		t.Fatal("different arg order must produce different spec hashes")
 	}
-}
-
-// fakeEngine is a minimal Engine mock for cache lookup tests.
-type fakeEngine struct {
-	container.Engine
-	existsLocal bool
-}
-
-func (f *fakeEngine) ImageExists(_ context.Context, _ string) (bool, error) {
-	return f.existsLocal, nil
 }
 
 // --------------------------------------------------------------------------.
@@ -237,19 +225,3 @@ func TestHashFile_Nonexistent(t *testing.T) {
 	}
 }
 
-// --------------------------------------------------------------------------.
-// Lookup.
-// --------------------------------------------------------------------------.
-
-func TestLookupMiss(t *testing.T) {
-	client := &registry.Client{Engine: &fakeEngine{existsLocal: false}}
-
-	found := registry.Lookup(
-		context.Background(), client,
-		"localhost:5555/nonexistent:tag-abc",
-		"sha256:0000000000000000000000000000000000000000000000000000000000000000",
-	)
-	if found {
-		t.Fatal("expected cache miss for nonexistent registry")
-	}
-}

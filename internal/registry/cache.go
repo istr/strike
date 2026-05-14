@@ -3,7 +3,6 @@
 package registry
 
 import (
-	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -118,32 +117,3 @@ func sortedDigestMapKeys(m map[string]lane.Digest) []string {
 	return keys
 }
 
-// CacheKeyAnnotation is the OCI annotation key that stores the full spec
-// hash for collision detection. Tags are truncated to 16 hex chars, so
-// the annotation carries the full hash to verify exact matches.
-const CacheKeyAnnotation = "dev.strike.cache-key"
-
-// Lookup checks local and remote for a cached step result.
-// After finding a cached image by tag, it verifies the full spec hash
-// annotation to prevent collisions from tag truncation.
-// Returns true if a verified cache hit was found.
-func Lookup(ctx context.Context, client *Client, tag, specHash string) bool {
-	local, remote := client.Find(ctx, tag)
-	if !local && !remote {
-		return false
-	}
-
-	if remote && !local {
-		if err := client.Pull(ctx, tag); err != nil {
-			return false
-		}
-	}
-
-	// Verify the full spec hash annotation matches (collision detection).
-	fullKey, err := client.InspectAnnotation(ctx, tag, CacheKeyAnnotation)
-	if err != nil || fullKey != specHash {
-		return false
-	}
-
-	return true
-}

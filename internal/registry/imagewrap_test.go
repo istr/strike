@@ -231,6 +231,66 @@ func TestWrapDirectoryAsImage_Deterministic(t *testing.T) {
 	}
 }
 
+func TestWrapFileAsImage_ContentSizeAnnotation(t *testing.T) {
+	dir := t.TempDir()
+	content := []byte("annotation-check")
+	if err := os.WriteFile(filepath.Join(dir, "ann.txt"), content, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	root := mustOpenRoot(t, dir)
+	eng := &wrapEngine{}
+	client := &registry.Client{Engine: eng}
+
+	_, _, err := client.WrapFileAsImage(context.Background(), root, "ann.txt", "localhost/strike/l/s:h")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ann := extractAnnotations(t, eng.loadBodies[0])
+	sizeStr, ok := ann[registry.ContentSizeAnnotation]
+	if !ok {
+		t.Fatal("missing content-size annotation")
+	}
+	if sizeStr != "16" { // len("annotation-check")
+		t.Errorf("content-size = %q, want %q", sizeStr, "16")
+	}
+}
+
+// extractAnnotations extracts manifest annotations from an OCI layout tar.
+func extractAnnotations(t *testing.T, data []byte) map[string]string {
+	t.Helper()
+	dir := t.TempDir()
+	root := mustOpenRoot(t, dir)
+	if err := registry.ExtractTarForTest(data, root); err != nil {
+		t.Fatal(err)
+	}
+	lp, err := layout.FromPath(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	idx, err := lp.ImageIndex()
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest, err := idx.IndexManifest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(manifest.Manifests) == 0 {
+		t.Fatal("empty index")
+	}
+	img, err := idx.Image(manifest.Manifests[0].Digest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, err := img.Manifest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return m.Annotations
+}
+
 func TestWrapFileAsImage_RejectsSymlink(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "real.txt"), []byte("data"), 0o600); err != nil {

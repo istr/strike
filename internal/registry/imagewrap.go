@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/empty"
@@ -20,6 +21,11 @@ import (
 	"github.com/istr/strike/internal/closer"
 	"github.com/istr/strike/internal/lane"
 )
+
+// ContentSizeAnnotation is the OCI annotation key that stores the logical
+// content size (in bytes) of the wrapped artifact. Written by wrapOutputs,
+// read by the cache-hit path to restore Artifact.Size without re-extraction.
+const ContentSizeAnnotation = "dev.strike.content-size"
 
 // WrapFileAsImage packages a single file into an OCI image, loads it into
 // the engine's local store, tags it, and returns the manifest digest and
@@ -43,7 +49,7 @@ func (c *Client) WrapFileAsImage(ctx context.Context, root *os.Root, name, tag s
 		return lane.Digest{}, 0, fmt.Errorf("wrap file layer: %w", err)
 	}
 
-	digest, err := c.loadTagVerify(ctx, layer, tag)
+	digest, err := c.loadTagVerify(ctx, layer, tag, size)
 	if err != nil {
 		return lane.Digest{}, 0, err
 	}
@@ -72,7 +78,7 @@ func (c *Client) WrapDirectoryAsImage(ctx context.Context, root *os.Root, name, 
 		return lane.Digest{}, 0, fmt.Errorf("wrap dir layer: %w", err)
 	}
 
-	digest, err := c.loadTagVerify(ctx, layer, tag)
+	digest, err := c.loadTagVerify(ctx, layer, tag, size)
 	if err != nil {
 		return lane.Digest{}, 0, err
 	}
@@ -101,6 +107,15 @@ func (c *Client) WrapImageOutputAsImage(ctx context.Context, root *os.Root, name
 		return lane.Digest{}, 0, fmt.Errorf("wrap image: %w", err)
 	}
 	defer cleanup()
+
+	annotated, ok := mutate.Annotations(img, map[string]string{
+		"org.opencontainers.image.created": "1970-01-01T00:00:00Z",
+		ContentSizeAnnotation:              strconv.FormatInt(size, 10),
+	}).(v1.Image)
+	if !ok {
+		return lane.Digest{}, 0, fmt.Errorf("wrap image: annotate: unexpected type")
+	}
+	img = annotated
 
 	expectedDigest, err := img.Digest()
 	if err != nil {
@@ -136,7 +151,9 @@ func (c *Client) WrapImageOutputAsImage(ctx context.Context, root *os.Root, name
 // loadTagVerify builds a single-layer OCI image from the given layer,
 // loads it into the engine, tags it, and returns the manifest digest.
 // The controller-computed manifest digest is verified against the engine.
-func (c *Client) loadTagVerify(ctx context.Context, layer v1.Layer, tag string) (lane.Digest, error) {
+// size is the logical content size written as the dev.strike.content-size
+// annotation for cache-hit restoration.
+func (c *Client) loadTagVerify(ctx context.Context, layer v1.Layer, tag string, size int64) (lane.Digest, error) {
 	img := mutate.ConfigMediaType(
 		mutate.MediaType(empty.Image, types.OCIManifestSchema1),
 		types.OCIConfigJSON,
@@ -149,6 +166,7 @@ func (c *Client) loadTagVerify(ctx context.Context, layer v1.Layer, tag string) 
 
 	annotated, ok := mutate.Annotations(img, map[string]string{
 		"org.opencontainers.image.created": "1970-01-01T00:00:00Z",
+		ContentSizeAnnotation:              strconv.FormatInt(size, 10),
 	}).(v1.Image)
 	if !ok {
 		return lane.Digest{}, fmt.Errorf("annotate image: unexpected type")
