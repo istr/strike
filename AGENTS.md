@@ -609,7 +609,7 @@ Format: `<type>(<optional scope>): <description>`
   - `doc: update CUE schema workflow instructions`
   - `chore: update go directive to 1.26`
 
-## After each implementation step
+## After each implementation step and before build
 
 Run `make lint` (or `golangci-lint run ./...`) after every code change and
 fix all findings before moving on. Do not batch lint fixes at the end --
@@ -617,19 +617,34 @@ catching issues immediately prevents them from compounding. The linter
 enforces `errcheck`, `goconst`, `staticcheck`, and other rules that are
 easy to miss during development.
 
+You MUST run this quality gate BEFORE each build step (`make`, `make build` or `CGO_ENABLED=0 go build ./... 2>&1`).
+
 ## Before submitting
 
-Run the full quality gate:
+Run the full quality gate in the order shown. The order is operationally
+important: static checks (lint, deadcode) catch the bulk of issues
+without exercising the test runner. Running tests first risks wasting
+the test run when lint fails. Cleaning the code first is cheap; tests
+are expensive. Fail fast on cheap checks.
 
 ```sh
+# Phase 1: static checks (cheap, fast, fail-loud)
 golangci-lint run ./...
-go test -race -coverprofile=coverage.out -covermode=atomic ./...
 deadcode ./...
+
+# Phase 2: tests (expensive, only after Phase 1 is clean)
+go test -race -coverprofile=coverage.out -covermode=atomic ./...
+
+# Phase 3: supply chain and binary
 govulncheck ./...
 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o strike ./cmd/strike
 ```
 
-All five commands must succeed with zero warnings and zero findings.
+All commands must succeed with zero warnings and zero findings. Do not
+run later phases when an earlier phase fails -- fix the failure first.
+This rule applies even when the failure looks "unrelated to my change":
+the failure is part of the working state your change is responsible for.
+
 `deadcode` reports functions unreachable from `main()`. All exported
 functions must be reachable from `main` or wired through interface
 dispatch. Do not add dead code -- wire it in or do not write it.
