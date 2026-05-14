@@ -10,6 +10,15 @@ import (
 	"github.com/istr/strike/internal/lane"
 )
 
+func mustFilePath(t *testing.T, path string) lane.FilePath {
+	t.Helper()
+	fp, err := lane.NewFilePath(path)
+	if err != nil {
+		t.Fatalf("NewFilePath(%q): %v", path, err)
+	}
+	return fp
+}
+
 func TestParseDuration(t *testing.T) {
 	tests := []struct {
 		input   lane.Duration
@@ -42,7 +51,7 @@ func TestParseDuration(t *testing.T) {
 // --------------------------------------------------------------------------.
 
 func TestParse_ValidMinimal(t *testing.T) {
-	p, err := lane.Parse("testdata/valid_minimal.yaml")
+	p, err := lane.Parse(mustFilePath(t, "testdata/valid_minimal.yaml"))
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
@@ -64,7 +73,7 @@ func TestParse_ValidMinimal(t *testing.T) {
 }
 
 func TestParse_ValidDeploy(t *testing.T) {
-	p, err := lane.Parse("testdata/valid_deploy.yaml")
+	p, err := lane.Parse(mustFilePath(t, "testdata/valid_deploy.yaml"))
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
@@ -85,17 +94,17 @@ func TestParse_ValidDeploy(t *testing.T) {
 // --------------------------------------------------------------------------.
 
 func TestParse_Nonexistent(t *testing.T) {
-	_, err := lane.Parse("testdata/nonexistent.yaml")
+	_, err := lane.NewFilePath("testdata/nonexistent.yaml")
 	if err == nil {
 		t.Fatal("expected error for nonexistent file")
 	}
-	if !strings.Contains(err.Error(), "read:") && !strings.Contains(err.Error(), "no such file") {
-		t.Errorf("error should mention read failure: %v", err)
+	if !strings.Contains(err.Error(), "no such file") {
+		t.Errorf("error should mention no such file: %v", err)
 	}
 }
 
 func TestParse_InvalidYAML(t *testing.T) {
-	_, err := lane.Parse("testdata/invalid_yaml.yaml")
+	_, err := lane.Parse(mustFilePath(t, "testdata/invalid_yaml.yaml"))
 	if err == nil {
 		t.Fatal("expected error for invalid YAML")
 	}
@@ -105,7 +114,7 @@ func TestParse_InvalidYAML(t *testing.T) {
 }
 
 func TestParse_InvalidSchema(t *testing.T) {
-	_, err := lane.Parse("testdata/invalid_schema.yaml")
+	_, err := lane.Parse(mustFilePath(t, "testdata/invalid_schema.yaml"))
 	if err == nil {
 		t.Fatal("expected error for schema violation")
 	}
@@ -115,7 +124,7 @@ func TestParse_InvalidSchema(t *testing.T) {
 }
 
 func TestParse_StepMultiImage(t *testing.T) {
-	_, err := lane.Parse("testdata/invalid_step_multi.yaml")
+	_, err := lane.Parse(mustFilePath(t, "testdata/invalid_step_multi.yaml"))
 	if err == nil {
 		t.Fatal("expected error for step with both image and pack")
 	}
@@ -206,7 +215,7 @@ func TestValidatePaths(t *testing.T) {
 }
 
 func TestParse_PathTraversal(t *testing.T) {
-	_, err := lane.Parse("testdata/invalid_path_traversal.yaml")
+	_, err := lane.Parse(mustFilePath(t, "testdata/invalid_path_traversal.yaml"))
 	if err == nil {
 		t.Fatal("expected error for path traversal")
 	}
@@ -248,7 +257,7 @@ steps:
 		t.Fatal(err)
 	}
 
-	_, err := lane.Parse(path)
+	_, err := lane.Parse(mustFilePath(t, path))
 	if err == nil {
 		t.Fatal("expected parse error for invalid deploy method type")
 	}

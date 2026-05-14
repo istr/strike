@@ -104,7 +104,11 @@ steps:
 	if err := os.WriteFile(tmpFile, []byte(yaml), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	_, err := lane.Parse(tmpFile)
+	fp, fpErr := lane.NewFilePath(tmpFile)
+	if fpErr != nil {
+		t.Fatalf("NewFilePath: %v", fpErr)
+	}
+	_, err := lane.Parse(fp)
 	if err == nil {
 		t.Fatal("expected parse error: 'sources' field does not exist in schema")
 	}
@@ -115,7 +119,11 @@ steps:
 // --------------------------------------------------------------------------.
 
 func TestProvenanceCapture_EndToEnd(t *testing.T) {
-	p, err := lane.Parse("testdata/hugo.yaml")
+	fp, fpErr := lane.NewFilePath("testdata/hugo.yaml")
+	if fpErr != nil {
+		t.Fatal(fpErr)
+	}
+	p, err := lane.Parse(fp)
 	if err != nil {
 		t.Fatal(err)
 	}

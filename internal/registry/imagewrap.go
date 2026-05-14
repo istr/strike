@@ -17,26 +17,28 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
 	"github.com/google/go-containerregistry/pkg/v1/types"
 
+	"github.com/istr/strike/internal/closer"
 	"github.com/istr/strike/internal/lane"
 )
 
 // WrapFileAsImage packages a single file into an OCI image, loads it into
 // the engine's local store, tags it, and returns the manifest digest and
-// logical byte size. Symlinks are rejected.
-func (c *Client) WrapFileAsImage(ctx context.Context, srcPath, tag string) (lane.Digest, int64, error) {
-	info, err := os.Lstat(srcPath)
+// logical byte size. Symlinks are rejected. root is the output directory;
+// name is the relative file path within it.
+func (c *Client) WrapFileAsImage(ctx context.Context, root *os.Root, name, tag string) (lane.Digest, int64, error) {
+	info, err := root.Lstat(name)
 	if err != nil {
 		return lane.Digest{}, 0, fmt.Errorf("wrap file: %w", err)
 	}
 	if info.Mode()&fs.ModeSymlink != 0 {
-		return lane.Digest{}, 0, fmt.Errorf("wrap file: symlink not allowed: %s", srcPath)
+		return lane.Digest{}, 0, fmt.Errorf("wrap file: symlink not allowed: %s", name)
 	}
 	if !info.Mode().IsRegular() {
-		return lane.Digest{}, 0, fmt.Errorf("wrap file: not a regular file: %s", srcPath)
+		return lane.Digest{}, 0, fmt.Errorf("wrap file: not a regular file: %s", name)
 	}
 
-	destPath := "/" + filepath.Base(srcPath)
-	layer, size, err := wrapFileLayer(srcPath, destPath, info.Mode().Perm())
+	destPath := "/" + name
+	layer, size, err := wrapFileLayer(root, name, destPath, info.Mode().Perm())
 	if err != nil {
 		return lane.Digest{}, 0, fmt.Errorf("wrap file layer: %w", err)
 	}
@@ -51,20 +53,21 @@ func (c *Client) WrapFileAsImage(ctx context.Context, srcPath, tag string) (lane
 // WrapDirectoryAsImage packages a directory tree into an OCI image, loads it
 // into the engine's local store, tags it, and returns the manifest digest and
 // logical byte size (sum of regular file content sizes). Symlinks are rejected.
-func (c *Client) WrapDirectoryAsImage(ctx context.Context, srcPath, tag string) (lane.Digest, int64, error) {
-	info, err := os.Lstat(srcPath)
+// root is the output directory; name is the relative directory path within it.
+func (c *Client) WrapDirectoryAsImage(ctx context.Context, root *os.Root, name, tag string) (lane.Digest, int64, error) {
+	info, err := root.Lstat(name)
 	if err != nil {
 		return lane.Digest{}, 0, fmt.Errorf("wrap dir: %w", err)
 	}
 	if info.Mode()&fs.ModeSymlink != 0 {
-		return lane.Digest{}, 0, fmt.Errorf("wrap dir: symlink not allowed: %s", srcPath)
+		return lane.Digest{}, 0, fmt.Errorf("wrap dir: symlink not allowed: %s", name)
 	}
 	if !info.IsDir() {
-		return lane.Digest{}, 0, fmt.Errorf("wrap dir: not a directory: %s", srcPath)
+		return lane.Digest{}, 0, fmt.Errorf("wrap dir: not a directory: %s", name)
 	}
 
-	destPath := "/" + filepath.Base(srcPath)
-	layer, size, err := wrapDirLayer(srcPath, destPath)
+	destPath := "/" + name
+	layer, size, err := wrapDirLayer(root, name, destPath)
 	if err != nil {
 		return lane.Digest{}, 0, fmt.Errorf("wrap dir layer: %w", err)
 	}
@@ -79,18 +82,19 @@ func (c *Client) WrapDirectoryAsImage(ctx context.Context, srcPath, tag string) 
 // WrapImageOutputAsImage loads an existing OCI tar into the engine's local
 // store, tags it, and returns the manifest digest and the tar file size.
 // The controller-computed manifest digest is verified against the engine.
-func (c *Client) WrapImageOutputAsImage(ctx context.Context, tarPath, tag string) (lane.Digest, int64, error) {
-	info, err := os.Stat(tarPath)
+// root is the output directory; name is the relative tar path within it.
+func (c *Client) WrapImageOutputAsImage(ctx context.Context, root *os.Root, name, tag string) (lane.Digest, int64, error) {
+	info, err := root.Stat(name)
 	if err != nil {
 		return lane.Digest{}, 0, fmt.Errorf("wrap image stat: %w", err)
 	}
 	size := info.Size()
 
-	f, err := os.Open(tarPath) //nolint:gosec // G304: tarPath is from MkdirTemp output directory
+	f, err := root.Open(name)
 	if err != nil {
 		return lane.Digest{}, 0, fmt.Errorf("wrap image: %w", err)
 	}
-	defer warnClose(f, "wrap image")
+	defer closer.Warn(f, "wrap image")
 
 	img, cleanup, err := extractMainImage(f)
 	if err != nil {
@@ -196,9 +200,16 @@ func extractMainImage(r io.Reader) (v1.Image, func(), error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	cleanup := func() { warnRemoveAll(tmpDir, "wrap image load") }
+	cleanup := func() { closer.Remove(tmpDir, "wrap image load") }
 
-	if extractErr := extractTar(r, tmpDir); extractErr != nil {
+	tmpRoot, rootErr := os.OpenRoot(tmpDir)
+	if rootErr != nil {
+		cleanup()
+		return nil, nil, rootErr
+	}
+	defer closer.Warn(tmpRoot, "wrap image load root")
+
+	if extractErr := extractTar(r, tmpRoot); extractErr != nil {
 		cleanup()
 		return nil, nil, fmt.Errorf("extract layout: %w", extractErr)
 	}
@@ -235,11 +246,17 @@ func extractMainImage(r io.Reader) (v1.Image, func(), error) {
 	return img, cleanup, nil
 }
 
-// wrapFileLayer reads a file from disk and creates a deterministic OCI layer.
-// Returns the layer and the logical byte size of the file content.
-// Ownership is normalized to 0:0; mtime is zeroed for reproducibility.
-func wrapFileLayer(hostPath, destPath string, mode fs.FileMode) (v1.Layer, int64, error) {
-	data, err := os.ReadFile(hostPath) //nolint:gosec // G304: hostPath is from MkdirTemp output directory
+// wrapFileLayer reads a file from a root-scoped directory and creates a
+// deterministic OCI layer. Returns the layer and the logical byte size of
+// the file content. Ownership is normalized to 0:0; mtime is zeroed for
+// reproducibility.
+func wrapFileLayer(root *os.Root, name, destPath string, mode fs.FileMode) (v1.Layer, int64, error) {
+	f, err := root.Open(name)
+	if err != nil {
+		return nil, 0, err
+	}
+	data, err := io.ReadAll(f)
+	closer.Warn(f, "wrap file layer read")
 	if err != nil {
 		return nil, 0, err
 	}
@@ -275,11 +292,11 @@ func wrapFileLayer(hostPath, destPath string, mode fs.FileMode) (v1.Layer, int64
 	return layer, size, nil
 }
 
-// wrapDirLayer reads a directory recursively and creates a deterministic OCI
-// layer. Returns the layer and the logical byte size (sum of regular file
-// content sizes). File modes are preserved; ownership is normalized to 0:0;
-// mtimes are zeroed. Symlinks are rejected.
-func wrapDirLayer(hostDir, destPath string) (v1.Layer, int64, error) {
+// wrapDirLayer reads a directory recursively via *os.Root and creates a
+// deterministic OCI layer. Returns the layer and the logical byte size (sum
+// of regular file content sizes). File modes are preserved; ownership is
+// normalized to 0:0; mtimes are zeroed. Symlinks are rejected.
+func wrapDirLayer(root *os.Root, dirName, destPath string) (v1.Layer, int64, error) {
 	var buf bytes.Buffer
 	tw := tar.NewWriter(&buf)
 
@@ -294,7 +311,7 @@ func wrapDirLayer(hostDir, destPath string) (v1.Layer, int64, error) {
 	}
 
 	var totalSize int64
-	if err := filepath.WalkDir(hostDir, wrapDirWalkFunc(tw, hostDir, dest, &totalSize)); err != nil {
+	if err := fs.WalkDir(root.FS(), dirName, wrapDirWalkFunc(root, tw, dirName, dest, &totalSize)); err != nil {
 		return nil, 0, err
 	}
 	if err := tw.Close(); err != nil {
@@ -312,14 +329,14 @@ func wrapDirLayer(hostDir, destPath string) (v1.Layer, int64, error) {
 }
 
 // wrapDirWalkFunc returns a WalkDir callback that writes each entry under
-// root into a tar at the given dest prefix. totalSize accumulates the logical
-// byte count of regular file contents.
-func wrapDirWalkFunc(tw *tar.Writer, root, dest string, totalSize *int64) fs.WalkDirFunc {
+// dirName into a tar at the given dest prefix. totalSize accumulates the
+// logical byte count of regular file contents.
+func wrapDirWalkFunc(root *os.Root, tw *tar.Writer, dirName, dest string, totalSize *int64) fs.WalkDirFunc {
 	return func(path string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
-		rel, relErr := filepath.Rel(root, path)
+		rel, relErr := filepath.Rel(dirName, path)
 		if relErr != nil {
 			return relErr
 		}
@@ -356,11 +373,11 @@ func wrapDirWalkFunc(tw *tar.Writer, root, dest string, totalSize *int64) fs.Wal
 		if d.IsDir() {
 			return nil
 		}
-		f, err := os.Open(path) //nolint:gosec // G304: path from controlled WalkDir within MkdirTemp output
+		f, err := root.Open(path)
 		if err != nil {
 			return err
 		}
-		defer warnClose(f, "wrap dir layer")
+		defer closer.Warn(f, "wrap dir layer")
 		_, err = io.Copy(tw, f)
 		return err
 	}

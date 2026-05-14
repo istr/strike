@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 
+	"github.com/istr/strike/internal/closer"
 	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/lane"
 )
@@ -34,7 +35,7 @@ func (r Run) Execute(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("ssh scratch: %w", err)
 	}
-	defer os.RemoveAll(scratchDir) //nolint:errcheck // best-effort cleanup of ephemeral host-key file
+	defer closer.Remove(scratchDir, "executor scratch")
 
 	// Build environment (non-sensitive + secrets)
 	env := make(map[string]string, len(r.Step.Env)+len(r.Secrets)+2)

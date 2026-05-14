@@ -2,7 +2,7 @@ package deploy_test
 
 import (
 	"encoding/json"
-	"os"
+	"io/fs"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -10,6 +10,7 @@ import (
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/deploy"
 	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/test/crossval"
 )
 
 func TestValidateAttestation_Valid(t *testing.T) {
@@ -108,9 +109,6 @@ func TestValidateAttestation_EmptyDigestsAllowed(t *testing.T) {
 	}
 }
 
-// crossvalDir is the path to cross-validation test vectors.
-const crossvalDir = "../../test/crossval"
-
 // attestationVector is the Go representation of a ValidateAttestation test vector.
 type attestationInputs struct {
 	Attestation json.RawMessage `json:"attestation"`
@@ -129,7 +127,7 @@ type attestationVector struct {
 }
 
 func TestValidateAttestation_Crossval(t *testing.T) {
-	files, err := filepath.Glob(filepath.Join(crossvalDir, "attestation", "*.json"))
+	files, err := fs.Glob(crossval.FS, "attestation/*.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -145,10 +143,10 @@ func TestValidateAttestation_Crossval(t *testing.T) {
 	}
 }
 
-func runAttestationVector(t *testing.T, path string) {
+func runAttestationVector(t *testing.T, name string) {
 	t.Helper()
 
-	data, err := os.ReadFile(path) //nolint:gosec // G304: path is a hardcoded test constant, not user input
+	data, err := crossval.FS.ReadFile(name)
 	if err != nil {
 		t.Fatalf("read vector: %v", err)
 	}

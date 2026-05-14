@@ -3,14 +3,13 @@ package executor_test
 import (
 	"context"
 	"io"
-	"net"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/executor"
 	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/testutil"
 )
 
 // captureEngine records the RunOpts passed to ContainerRun.
@@ -49,27 +48,7 @@ const (
 // specgenFakeAgent creates a minimal echo socket for tests that need SSH_AUTH_SOCK.
 func specgenFakeAgent(t *testing.T) string {
 	t.Helper()
-	dir := t.TempDir()
-	sockPath := filepath.Join(dir, "fake-agent.sock")
-	var lc net.ListenConfig
-	ln, err := lc.Listen(context.Background(), "unix", sockPath)
-	if err != nil {
-		t.Fatalf("specgenFakeAgent: %v", err)
-	}
-	t.Cleanup(func() { ln.Close() }) //nolint:errcheck,gosec // test cleanup
-	go func() {
-		for {
-			c, acceptErr := ln.Accept()
-			if acceptErr != nil {
-				return
-			}
-			go func() {
-				defer c.Close() //nolint:errcheck // test echo server
-				io.Copy(c, c)   //nolint:errcheck,gosec // test echo server
-			}()
-		}
-	}()
-	return sockPath
+	return testutil.StartEchoSocket(t)
 }
 
 func TestExecute_WithSSHPeer(t *testing.T) {

@@ -10,14 +10,17 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"net/http"
+	"reflect"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/istr/strike/internal/executor"
 	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/testutil"
 )
 
 // --------------------------------------------------------------------------.
@@ -75,12 +78,7 @@ func generateSignerKey(t *testing.T) (sig, pubKeyPEM []byte, hexDigest string) {
 // signSET signs a Rekor SET payload with the given private key.
 func signSET(t *testing.T, rekorKey *ecdsa.PrivateKey, body string, integratedTime int64, logID string, logIndex int64) []byte {
 	t.Helper()
-	payload := struct { //nolint:govet // fieldalignment: field order determines canonical JSON for SET verification
-		Body           string `json:"body"`
-		IntegratedTime int64  `json:"integratedTime"`
-		LogID          string `json:"logID"`
-		LogIndex       int64  `json:"logIndex"`
-	}{
+	payload := executor.SETPayload{
 		Body:           body,
 		IntegratedTime: integratedTime,
 		LogID:          logID,
@@ -134,7 +132,8 @@ func fakeRekorResponse(t *testing.T, rekorKey *ecdsa.PrivateKey) []byte {
 
 // invalidSETHandler returns a handler that responds with a valid-looking Rekor
 // entry but with an invalid signed entry timestamp.
-func invalidSETHandler() http.HandlerFunc {
+func invalidSETHandler(t *testing.T) http.HandlerFunc {
+	t.Helper()
 	return func(w http.ResponseWriter, _ *http.Request) {
 		body := base64.StdEncoding.EncodeToString([]byte(`{"kind":"hashedrekord"}`))
 		entry := map[string]any{
@@ -154,7 +153,7 @@ func invalidSETHandler() http.HandlerFunc {
 		}
 		resp := map[string]any{strings.Repeat("cd", 32): entry}
 		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(resp) //nolint:errcheck,gosec // test helper
+		testutil.WriteJSON(t, w, resp)
 	}
 }
 
@@ -185,7 +184,7 @@ func fakeRekorHandler(t *testing.T, rekorKey *ecdsa.PrivateKey) http.HandlerFunc
 		}
 
 		w.WriteHeader(http.StatusCreated)
-		w.Write(fakeRekorResponse(t, rekorKey)) //nolint:errcheck,gosec // test helper
+		testutil.WriteBody(t, w, fakeRekorResponse(t, rekorKey))
 	}
 }
 
@@ -221,7 +220,7 @@ func TestSubmitHashedRekord(t *testing.T) {
 			name: "server error returns warning",
 			handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(http.StatusInternalServerError)
-				w.Write([]byte("internal error")) //nolint:errcheck,gosec // test helper
+				testutil.WriteBody(t, w, []byte("internal error"))
 			}),
 			wantErr:     true,
 			wantWarning: true,
@@ -238,14 +237,14 @@ func TestSubmitHashedRekord(t *testing.T) {
 			name: "invalid JSON response returns warning",
 			handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(http.StatusCreated)
-				w.Write([]byte("not json")) //nolint:errcheck,gosec // test helper
+				testutil.WriteBody(t, w, []byte("not json"))
 			}),
 			wantErr:     true,
 			wantWarning: true,
 		},
 		{
 			name:        "invalid SET is hard error",
-			handler:     invalidSETHandler(),
+			handler:     invalidSETHandler(t),
 			wantErr:     true,
 			wantWarning: false, // SET failure is hard error
 		},
@@ -288,7 +287,7 @@ func assertRekorError(t *testing.T, err error, wantWarning bool) {
 		t.Fatal("expected error, got nil")
 	}
 	var w *executor.RekorTransientError
-	isWarning := errorAs(err, &w)
+	isWarning := errors.As(err, &w)
 	if wantWarning && !isWarning {
 		t.Errorf("expected RekorTransientError, got: %v", err)
 	}
@@ -412,7 +411,7 @@ func TestSubmitHashedRekord_NetworkTimeout(t *testing.T) {
 		t.Fatal("expected error for cancelled context")
 	}
 	var w *executor.RekorTransientError
-	if !errorAs(submitErr, &w) {
+	if !errors.As(submitErr, &w) {
 		t.Errorf("expected RekorTransientError, got: %T: %v", submitErr, submitErr)
 	}
 }
@@ -426,7 +425,7 @@ func TestSignManifest_WithRekor(t *testing.T) {
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusCreated)
-		w.Write(fakeRekorResponse(t, rekorKey)) //nolint:errcheck,gosec // test helper
+		testutil.WriteBody(t, w, fakeRekorResponse(t, rekorKey))
 	}))
 	defer srv.Close()
 
@@ -518,14 +517,14 @@ func TestSubmitDSSE(t *testing.T) {
 			name: "server error returns warning",
 			handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(http.StatusInternalServerError)
-				w.Write([]byte("internal error")) //nolint:errcheck,gosec // test helper
+				testutil.WriteBody(t, w, []byte("internal error"))
 			}),
 			wantErr:     true,
 			wantWarning: true,
 		},
 		{
 			name:        "invalid SET is hard error",
-			handler:     invalidSETHandler(),
+			handler:     invalidSETHandler(t),
 			wantErr:     true,
 			wantWarning: false,
 		},
@@ -603,23 +602,19 @@ func fakeDSSERekorHandler(t *testing.T, rekorKey *ecdsa.PrivateKey) http.Handler
 		}
 
 		w.WriteHeader(http.StatusCreated)
-		w.Write(fakeRekorResponse(t, rekorKey)) //nolint:errcheck,gosec // test helper
+		testutil.WriteBody(t, w, fakeRekorResponse(t, rekorKey))
 	}
 }
 
-// errorAs is a type-safe wrapper for errors.As that avoids importing errors
-// in every call site (errors is already used via the executor package).
-func errorAs[T error](err error, target *T) bool {
-	for err != nil {
-		if t, ok := err.(T); ok { //nolint:errorlint // generic helper, intentional type assertion
-			*target = t
-			return true
-		}
-		u, ok := err.(interface{ Unwrap() error })
-		if !ok {
-			return false
-		}
-		err = u.Unwrap()
+func TestSETPayload_FieldOrder(t *testing.T) {
+	want := []string{"Body", "IntegratedTime", "LogID", "LogIndex"}
+	typ := reflect.TypeOf(executor.SETPayload{})
+	if got := typ.NumField(); got != len(want) {
+		t.Fatalf("NumField = %d, want %d", got, len(want))
 	}
-	return false
+	for i, name := range want {
+		if got := typ.Field(i).Name; got != name {
+			t.Errorf("Field %d = %q, want %q", i, got, name)
+		}
+	}
 }

@@ -3,24 +3,28 @@ package executor_test
 import (
 	"encoding/base64"
 	"encoding/json"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/istr/strike/internal/closer"
+	"github.com/istr/strike/test/crossval"
 
 	"cuelang.org/go/cue"
 	"cuelang.org/go/cue/cuecontext"
 	cuejson "cuelang.org/go/encoding/json"
 )
 
-// crossvalDir is the path to cross-validation test vectors.
-// Relative to the executor package test directory.
+// crossvalDir is the on-disk path to cross-validation test vectors.
+// Used only by updateVectorExpected (writes); reads use crossval.FS.
 const crossvalDir = "../../test/crossval"
 
-// loadVector reads and unmarshals a cross-validation vector file.
+// loadVector reads and unmarshals a cross-validation vector file from the
+// embedded crossval.FS.
 func loadVector[T any](t *testing.T, subdir, name string) T {
 	t.Helper()
-	path := filepath.Join(crossvalDir, subdir, name)
-	data, err := os.ReadFile(path) //nolint:gosec // G304: path is a hardcoded test constant, not user input
+	data, err := crossval.FS.ReadFile(subdir + "/" + name)
 	if err != nil {
 		t.Fatalf("load vector %s/%s: %v", subdir, name, err)
 	}
@@ -36,8 +40,7 @@ func loadVector[T any](t *testing.T, subdir, name string) T {
 // modified.
 func updateVectorExpected(t *testing.T, subdir, name string, expected any) {
 	t.Helper()
-	path := filepath.Join(crossvalDir, subdir, name)
-	data, readErr := os.ReadFile(path) //nolint:gosec // G304: path is a hardcoded test constant, not user input
+	data, readErr := crossval.FS.ReadFile(subdir + "/" + name)
 	if readErr != nil {
 		t.Fatalf("read vector for update %s/%s: %v", subdir, name, readErr)
 	}
@@ -56,8 +59,22 @@ func updateVectorExpected(t *testing.T, subdir, name string, expected any) {
 		t.Fatalf("marshal vector for update %s/%s: %v", subdir, name, indentErr)
 	}
 	out = append(out, '\n')
-	if writeErr := os.WriteFile(path, out, 0o600); writeErr != nil {
+
+	root, rootErr := os.OpenRoot(filepath.Join(crossvalDir, subdir))
+	if rootErr != nil {
+		t.Fatalf("open root for update %s/%s: %v", subdir, name, rootErr)
+	}
+	defer closer.Warn(root, "crossval update root")
+	f, createErr := root.Create(name)
+	if createErr != nil {
+		t.Fatalf("create vector %s/%s: %v", subdir, name, createErr)
+	}
+	if _, writeErr := f.Write(out); writeErr != nil {
+		closer.Warn(f, "crossval write error cleanup")
 		t.Fatalf("write vector %s/%s: %v", subdir, name, writeErr)
+	}
+	if closeErr := f.Close(); closeErr != nil {
+		t.Fatalf("close vector %s/%s: %v", subdir, name, closeErr)
 	}
 	t.Logf("updated vector: %s/%s", subdir, name)
 }
@@ -100,7 +117,7 @@ func TestCrossvalVectorsConformToSchema(t *testing.T) {
 		t.Fatalf("compile CUE schema: %v", compiled.Err())
 	}
 
-	files, err := filepath.Glob(filepath.Join(crossvalDir, "*", "*.json"))
+	files, err := fs.Glob(crossval.FS, "*/*.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -109,21 +126,18 @@ func TestCrossvalVectorsConformToSchema(t *testing.T) {
 	}
 
 	for _, f := range files {
-		rel, relErr := filepath.Rel(crossvalDir, f)
-		if relErr != nil {
-			t.Fatalf("filepath.Rel: %v", relErr)
-		}
-		t.Run(rel, func(t *testing.T) {
+		t.Run(f, func(t *testing.T) {
 			validateVectorAgainstCUE(t, ctx, compiled, f)
 		})
 	}
 }
 
 // validateVectorAgainstCUE validates a single vector file against the compiled CUE schema.
-func validateVectorAgainstCUE(t *testing.T, ctx *cue.Context, compiled cue.Value, path string) {
+// name is an embed-relative path like "spechash/foo.json".
+func validateVectorAgainstCUE(t *testing.T, ctx *cue.Context, compiled cue.Value, name string) {
 	t.Helper()
 
-	data, err := os.ReadFile(path) //nolint:gosec // G304: path is a hardcoded test constant, not user input
+	data, err := crossval.FS.ReadFile(name)
 	if err != nil {
 		t.Fatalf("read vector: %v", err)
 	}
@@ -145,7 +159,7 @@ func validateVectorAgainstCUE(t *testing.T, ctx *cue.Context, compiled cue.Value
 		t.Fatalf("lookup %s: %v", cuePath, schema.Err())
 	}
 
-	expr, err := cuejson.Extract(filepath.Base(path), data)
+	expr, err := cuejson.Extract(filepath.Base(name), data)
 	if err != nil {
 		t.Fatalf("extract JSON: %v", err)
 	}

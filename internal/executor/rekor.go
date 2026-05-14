@@ -14,6 +14,7 @@ import (
 	"net/http"
 
 	"github.com/istr/strike/internal/clock"
+	"github.com/istr/strike/internal/closer"
 	"github.com/istr/strike/internal/lane"
 )
 
@@ -86,7 +87,7 @@ func (c RekorClient) submit(ctx context.Context, reqBody map[string]any) (*lane.
 	if err != nil {
 		return nil, &RekorTransientError{Err: fmt.Errorf("submit: %w", err)}
 	}
-	defer resp.Body.Close() //nolint:errcheck // best-effort close on HTTP response
+	defer closer.Warn(resp.Body, "rekor response")
 
 	if resp.StatusCode != http.StatusCreated {
 		respBody, readErr := io.ReadAll(io.LimitReader(resp.Body, 1024))
@@ -229,20 +230,20 @@ func parseRekorResponse(body io.Reader) (*parsedRekorEntry, error) {
 
 // parseSingleEntry decodes one entry from the Rekor response map.
 func parseSingleEntry(entryJSON json.RawMessage) (*parsedRekorEntry, error) {
-	var raw struct { //nolint:govet // fieldalignment: field order matches JSON response structure
-		Body           string `json:"body"`
-		IntegratedTime int64  `json:"integratedTime"`
-		LogID          string `json:"logID"`
-		LogIndex       int64  `json:"logIndex"`
-		Verification   struct {
-			InclusionProof *struct { //nolint:govet // fieldalignment: field order matches JSON response
+	var raw struct {
+		Verification struct {
+			InclusionProof *struct {
 				Hashes   []string `json:"hashes"`
-				LogIndex int64    `json:"logIndex"`
 				RootHash string   `json:"rootHash"`
+				LogIndex int64    `json:"logIndex"`
 				TreeSize int64    `json:"treeSize"`
 			} `json:"inclusionProof"`
 			SignedEntryTimestamp string `json:"signedEntryTimestamp"`
 		} `json:"verification"`
+		Body           string `json:"body"`
+		LogID          string `json:"logID"`
+		IntegratedTime int64  `json:"integratedTime"`
+		LogIndex       int64  `json:"logIndex"`
 	}
 	if err := json.Unmarshal(entryJSON, &raw); err != nil {
 		return nil, fmt.Errorf("unmarshal entry: %w", err)
@@ -277,7 +278,7 @@ func parseSingleEntry(entryJSON json.RawMessage) (*parsedRekorEntry, error) {
 // The SET is an ECDSA signature over the SHA-256 hash of the canonicalized
 // log entry payload (body, integratedTime, logID, logIndex).
 func verifySET(entry *parsedRekorEntry, pub *ecdsa.PublicKey) error {
-	payload, err := json.Marshal(setPayload{
+	payload, err := json.Marshal(SETPayload{
 		Body:           entry.body,
 		IntegratedTime: entry.integratedTime,
 		LogID:          entry.logID,
@@ -294,10 +295,10 @@ func verifySET(entry *parsedRekorEntry, pub *ecdsa.PublicKey) error {
 	return nil
 }
 
-// setPayload is the canonical form of the log entry payload that the Rekor
+// SETPayload is the canonical form of the log entry payload that the Rekor
 // server signs. Field order must match JSON alphabetical sort for canonical
 // encoding -- do not reorder.
-type setPayload struct { //nolint:govet // fieldalignment: field order determines canonical JSON output for SET verification
+type SETPayload struct { //nolint:govet // fieldalignment: field order is signed; pinned by TestSETPayload_FieldOrder
 	Body           string `json:"body"`
 	IntegratedTime int64  `json:"integratedTime"`
 	LogID          string `json:"logID"`

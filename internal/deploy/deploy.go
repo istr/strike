@@ -18,9 +18,11 @@ import (
 	"path/filepath"
 
 	"github.com/istr/strike/internal/clock"
+	"github.com/istr/strike/internal/closer"
 	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/executor"
 	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/probe"
 	"github.com/istr/strike/internal/registry"
 )
 
@@ -301,7 +303,7 @@ func (d *Deployer) captureOne(ctx context.Context, sc lane.StateCapture) (captur
 	if err != nil {
 		return captureSnap{}, fmt.Errorf("ssh scratch: %w", err)
 	}
-	defer os.RemoveAll(scratchDir) //nolint:errcheck // best-effort cleanup of ephemeral host-key file
+	defer closer.Remove(scratchDir, "deploy scratch")
 
 	if sc.Image == "" {
 		return captureSnap{}, fmt.Errorf("capture %q: image is required", sc.Name)
@@ -397,7 +399,7 @@ func (d *Deployer) executeKubernetesDeploy(ctx context.Context, m lane.DeployKub
 	if err != nil {
 		return fmt.Errorf("ssh scratch: %w", err)
 	}
-	defer os.RemoveAll(scratchDir) //nolint:errcheck // best-effort cleanup of ephemeral host-key file
+	defer closer.Remove(scratchDir, "deploy scratch")
 
 	if m.Image == "" {
 		return fmt.Errorf("kubernetes deploy: image required (digest-pinned kubectl image)")
@@ -471,7 +473,7 @@ func (d *Deployer) executeCustomDeploy(ctx context.Context, m lane.DeployCustom,
 	if err != nil {
 		return fmt.Errorf("ssh scratch: %w", err)
 	}
-	defer os.RemoveAll(scratchDir) //nolint:errcheck // best-effort cleanup of ephemeral host-key file
+	defer closer.Remove(scratchDir, "deploy scratch")
 
 	if m.Image == "" {
 		return fmt.Errorf("custom deploy: image required")
@@ -541,7 +543,7 @@ func ResolveKubeconfig(override string) (string, error) {
 		return override, nil
 	}
 	if env := os.Getenv("KUBECONFIG"); env != "" {
-		if _, err := os.Stat(env); err != nil { //nolint:gosec // G703 false positive: err is checked on next line; path from $KUBECONFIG env
+		if _, err := probe.Stat(env); err != nil {
 			return "", fmt.Errorf("$KUBECONFIG %q: %w", env, err)
 		}
 		return env, nil

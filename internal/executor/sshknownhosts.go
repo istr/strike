@@ -86,7 +86,7 @@ func ConfigureSSHPeers(peers []lane.Peer, scratchDir string) (*container.Mount, 
 	}
 
 	path := filepath.Join(scratchDir, "known_hosts")
-	if err := os.WriteFile(path, rendered, 0o644); err != nil { //nolint:gosec // G306: file contains public host-key data only; bind-mounted read-only
+	if err := os.WriteFile(path, rendered, 0o600); err != nil {
 		return nil, nil, fmt.Errorf("ssh known_hosts: %w", err)
 	}
 

@@ -14,31 +14,12 @@ import (
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/executor"
 	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/testutil"
 )
 
 func startFakeAgent(t *testing.T) string {
 	t.Helper()
-	dir := t.TempDir()
-	sockPath := filepath.Join(dir, "fake-agent.sock")
-	var lc net.ListenConfig
-	ln, err := lc.Listen(context.Background(), "unix", sockPath)
-	if err != nil {
-		t.Fatalf("startFakeAgent: %v", err)
-	}
-	t.Cleanup(func() { ln.Close() }) //nolint:errcheck,gosec // test cleanup
-	go func() {
-		for {
-			c, acceptErr := ln.Accept()
-			if acceptErr != nil {
-				return
-			}
-			go func() {
-				defer c.Close() //nolint:errcheck // test echo server
-				io.Copy(c, c)   //nolint:errcheck,gosec // test echo server
-			}()
-		}
-	}()
-	return sockPath
+	return testutil.StartEchoSocket(t)
 }
 
 func sshPeer(host string) lane.SSHPeer {
@@ -157,7 +138,7 @@ func TestStartAgentProxy_ForwardsBidirectionally(t *testing.T) {
 	if dialErr != nil {
 		t.Fatalf("dial proxy: %v", dialErr)
 	}
-	defer conn.Close() //nolint:errcheck // test cleanup
+	defer testutil.CloseLog(t, conn, "agent proxy conn")
 
 	msg := []byte("hello-agent-proxy")
 	if _, writeErr := conn.Write(msg); writeErr != nil {
@@ -166,7 +147,9 @@ func TestStartAgentProxy_ForwardsBidirectionally(t *testing.T) {
 
 	// Half-close write so the echo server sends back and closes.
 	if uc, ok := conn.(*net.UnixConn); ok {
-		uc.CloseWrite() //nolint:errcheck,gosec // half-close for echo
+		if cwErr := uc.CloseWrite(); cwErr != nil {
+			t.Logf("half-close write: %v", cwErr)
+		}
 	}
 
 	buf, readErr := io.ReadAll(conn)
@@ -196,7 +179,7 @@ func TestStartAgentProxy_TerminatesOnContextCancel(t *testing.T) {
 	if dialErr != nil {
 		t.Fatalf("dial proxy: %v", dialErr)
 	}
-	conn.Close() //nolint:errcheck,gosec // test cleanup
+	testutil.CloseLog(t, conn, "agent proxy conn")
 
 	cancel()
 
@@ -210,7 +193,7 @@ func TestStartAgentProxy_TerminatesOnContextCancel(t *testing.T) {
 		if retryErr != nil {
 			break // listener closed, as expected
 		}
-		c.Close() //nolint:errcheck,gosec // test cleanup
+		testutil.CloseLog(t, c, "agent proxy retry conn")
 		if dialCtx.Err() != nil {
 			t.Error("expected dial to fail after context cancel, but it kept succeeding")
 			break

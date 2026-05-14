@@ -6,8 +6,11 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"strings"
+
+	"github.com/istr/strike/internal/closer"
 
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/crane"
@@ -123,7 +126,7 @@ func openMainImage(root *os.Root, relPath string) (io.Reader, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer warnClose(f, "registry load")
+	defer closer.Warn(f, "registry load")
 
 	tmpDir, err := os.MkdirTemp("", "strike-load-")
 	if err != nil {
@@ -131,9 +134,15 @@ func openMainImage(root *os.Root, relPath string) (io.Reader, error) {
 	}
 	// Caller only needs the returned reader; clean up the temp dir after.
 	// The tar bytes are buffered in memory, so the dir can be removed now.
-	defer warnRemoveAll(tmpDir, "registry load")
+	defer closer.Remove(tmpDir, "registry load")
 
-	if extractErr := extractTar(f, tmpDir); extractErr != nil {
+	tmpRoot, rootErr := os.OpenRoot(tmpDir)
+	if rootErr != nil {
+		return nil, rootErr
+	}
+	defer closer.Warn(tmpRoot, "registry load root")
+
+	if extractErr := extractTar(f, tmpRoot); extractErr != nil {
 		return nil, fmt.Errorf("extract layout: %w", extractErr)
 	}
 
@@ -183,7 +192,7 @@ func singleImageTar(img v1.Image, annotations map[string]string) (io.Reader, err
 	if err != nil {
 		return nil, err
 	}
-	defer warnRemoveAll(tmpDir, "registry single image")
+	defer closer.Remove(tmpDir, "registry single image")
 
 	lp, err := layout.Write(tmpDir, empty.Index)
 	if err != nil {
@@ -204,8 +213,8 @@ func singleImageTar(img v1.Image, annotations map[string]string) (io.Reader, err
 	return &buf, nil
 }
 
-// extractTar extracts a tar archive into dst.
-func extractTar(r io.Reader, dst string) error {
+// extractTar extracts a tar archive into the given root-scoped directory.
+func extractTar(r io.Reader, root *os.Root) error {
 	tr := tar.NewReader(r)
 	for {
 		hdr, err := tr.Next()
@@ -215,53 +224,79 @@ func extractTar(r io.Reader, dst string) error {
 		if err != nil {
 			return err
 		}
-		target := dst + "/" + hdr.Name
 		switch hdr.Typeflag {
 		case tar.TypeDir:
-			if mkErr := os.MkdirAll(target, 0o750); mkErr != nil {
+			if mkErr := mkdirAllRoot(root, hdr.Name); mkErr != nil {
 				return mkErr
 			}
 		case tar.TypeReg:
-			if writeErr := extractFile(tr, target); writeErr != nil {
+			if writeErr := extractFile(tr, root, hdr.Name); writeErr != nil {
 				return writeErr
 			}
 		}
 	}
 }
 
-// extractFile writes a single tar entry to the filesystem.
-func extractFile(tr *tar.Reader, target string) error {
-	if mkErr := os.MkdirAll(target[:strings.LastIndex(target, "/")], 0o750); mkErr != nil {
-		return mkErr
+// extractFile writes a single tar entry to the root-scoped filesystem.
+func extractFile(tr *tar.Reader, root *os.Root, name string) error {
+	if idx := strings.LastIndex(name, "/"); idx > 0 {
+		if mkErr := mkdirAllRoot(root, name[:idx]); mkErr != nil {
+			return mkErr
+		}
 	}
-	out, err := os.Create(target) //nolint:gosec // G304: target is inside MkdirTemp dir, not user input
+	out, err := root.Create(name)
 	if err != nil {
 		return err
 	}
 	if _, cpErr := io.Copy(out, tr); cpErr != nil {
-		warnClose(out, "registry extract file")
+		closer.Warn(out, "registry extract file")
 		return cpErr
 	}
 	return out.Close()
 }
 
+// mkdirAllRoot creates a directory and all parents within the root scope.
+func mkdirAllRoot(root *os.Root, path string) error {
+	parts := strings.Split(strings.TrimRight(path, "/"), "/")
+	cur := ""
+	for _, p := range parts {
+		if p == "" {
+			continue
+		}
+		if cur == "" {
+			cur = p
+		} else {
+			cur = cur + "/" + p
+		}
+		if err := root.Mkdir(cur, 0o750); err != nil && !os.IsExist(err) {
+			return err
+		}
+	}
+	return nil
+}
+
 // tarDirectory writes the contents of dir as a tar archive to w.
 func tarDirectory(dir string, w io.Writer) error {
-	tw := tar.NewWriter(w)
-	defer warnClose(tw, "registry tar")
-
-	entries, err := os.ReadDir(dir)
+	root, err := os.OpenRoot(dir)
 	if err != nil {
 		return err
 	}
-	return tarDirEntries(tw, dir, "", entries)
+	defer closer.Warn(root, "registry tar root")
+
+	tw := tar.NewWriter(w)
+	defer closer.Warn(tw, "registry tar")
+
+	entries, rdErr := fs.ReadDir(root.FS(), ".")
+	if rdErr != nil {
+		return rdErr
+	}
+	return tarDirEntries(tw, root, "", entries)
 }
 
 // tarDirEntries recursively writes directory entries to a tar writer.
-func tarDirEntries(tw *tar.Writer, base, prefix string, entries []os.DirEntry) error {
+func tarDirEntries(tw *tar.Writer, root *os.Root, prefix string, entries []fs.DirEntry) error {
 	for _, e := range entries {
 		rel := prefix + e.Name()
-		full := base + "/" + rel
 		info, infoErr := e.Info()
 		if infoErr != nil {
 			return infoErr
@@ -275,21 +310,23 @@ func tarDirEntries(tw *tar.Writer, base, prefix string, entries []os.DirEntry) e
 			return twErr
 		}
 		if e.IsDir() {
-			sub, rdErr := os.ReadDir(full)
+			sub, rdErr := fs.ReadDir(root.FS(), rel)
 			if rdErr != nil {
 				return rdErr
 			}
-			if err := tarDirEntries(tw, base, rel+"/", sub); err != nil {
+			if err := tarDirEntries(tw, root, rel+"/", sub); err != nil {
 				return err
 			}
 			continue
 		}
-		data, rdErr := os.ReadFile(full) //nolint:gosec // G304: full is inside MkdirTemp dir, not user input
-		if rdErr != nil {
-			return rdErr
+		f, openErr := root.Open(rel)
+		if openErr != nil {
+			return openErr
 		}
-		if _, wErr := tw.Write(data); wErr != nil {
-			return wErr
+		_, cpErr := io.Copy(tw, f)
+		closer.Warn(f, "registry tar entry")
+		if cpErr != nil {
+			return cpErr
 		}
 	}
 	return nil

@@ -7,6 +7,7 @@ import (
 
 	"github.com/istr/strike/internal/executor"
 	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/testutil"
 )
 
 func TestValidateELFAmd64(t *testing.T) {
@@ -63,29 +64,34 @@ func TestValidateGzip_NotGzip(t *testing.T) {
 
 func TestValidateOutput_SizeBounds(t *testing.T) {
 	tmp := t.TempDir()
-	path := filepath.Join(tmp, "test.bin")
-	if err := os.WriteFile(path, make([]byte, 100), 0o600); err != nil {
+	root, err := os.OpenRoot(tmp)
+	if err != nil {
 		t.Fatal(err)
 	}
-	info, err := os.Stat(path)
+	defer testutil.CloseLog(t, root, "validate test root")
+
+	if err := os.WriteFile(filepath.Join(tmp, "test.bin"), make([]byte, 100), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	info, err := root.Stat("test.bin")
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Within bounds
-	err = executor.ValidateOutput(path, info, &lane.OutputValidation{MinSize: 50, MaxSize: 200})
+	err = executor.ValidateOutput(root, "test.bin", info, &lane.OutputValidation{MinSize: 50, MaxSize: 200})
 	if err != nil {
 		t.Fatalf("within bounds rejected: %v", err)
 	}
 
 	// Below minimum
-	err = executor.ValidateOutput(path, info, &lane.OutputValidation{MinSize: 200})
+	err = executor.ValidateOutput(root, "test.bin", info, &lane.OutputValidation{MinSize: 200})
 	if err == nil {
 		t.Fatal("expected error for below minimum")
 	}
 
 	// Above maximum
-	err = executor.ValidateOutput(path, info, &lane.OutputValidation{MaxSize: 50})
+	err = executor.ValidateOutput(root, "test.bin", info, &lane.OutputValidation{MaxSize: 50})
 	if err == nil {
 		t.Fatal("expected error for above maximum")
 	}
@@ -93,7 +99,11 @@ func TestValidateOutput_SizeBounds(t *testing.T) {
 
 func TestValidateContentType_ELF(t *testing.T) {
 	tmp := t.TempDir()
-	path := filepath.Join(tmp, "binary")
+	root, err := os.OpenRoot(tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer testutil.CloseLog(t, root, "validate content type root")
 
 	// Write a minimal ELF header
 	header := make([]byte, 64)
@@ -103,23 +113,28 @@ func TestValidateContentType_ELF(t *testing.T) {
 	header[3] = 'F'
 	header[4] = 2     // 64-bit
 	header[18] = 0x3E // x86-64
-	if err := os.WriteFile(path, header, 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(tmp, "binary"), header, 0o600); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := executor.ValidateContentType(path, "executable/elf-amd64"); err != nil {
+	if err := executor.ValidateContentType(root, "binary", "executable/elf-amd64"); err != nil {
 		t.Fatalf("valid ELF rejected: %v", err)
 	}
 }
 
 func TestValidateContentType_InvalidELF(t *testing.T) {
 	tmp := t.TempDir()
-	path := filepath.Join(tmp, "script.sh")
-	if err := os.WriteFile(path, []byte("#!/bin/bash\necho hello"), 0o600); err != nil {
+	root, err := os.OpenRoot(tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer testutil.CloseLog(t, root, "validate invalid content root")
+
+	if err := os.WriteFile(filepath.Join(tmp, "script.sh"), []byte("#!/bin/bash\necho hello"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := executor.ValidateContentType(path, "executable/elf-amd64"); err == nil {
+	if err := executor.ValidateContentType(root, "script.sh", "executable/elf-amd64"); err == nil {
 		t.Fatal("expected error for shell script validated as ELF")
 	}
 }

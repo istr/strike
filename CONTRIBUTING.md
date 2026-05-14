@@ -182,7 +182,8 @@ golangci-lint run ./...
 The project uses a strict `.golangci.yml` configuration that includes gosec for
 security scanning. All findings must be resolved -- do not add `//nolint`
 without a written justification in a code comment explaining why the finding is
-a false positive.
+a false positive. See `docs/CODE-STYLE.md` for the allowed-annotations table
+and chokepoint pattern.
 
 ### Tests
 

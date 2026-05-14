@@ -12,6 +12,7 @@ import (
 	"encoding/pem"
 	"flag"
 	"io"
+	"io/fs"
 	"math/big"
 	"os"
 	"path/filepath"
@@ -24,6 +25,8 @@ import (
 	"github.com/istr/strike/internal/executor"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/registry"
+	"github.com/istr/strike/internal/testutil"
+	"github.com/istr/strike/test/crossval"
 )
 
 var update = flag.Bool("update", false, "update cross-validation vector expected fields")
@@ -50,8 +53,11 @@ func writeVectorFiles(t *testing.T, specFiles []lane.PackFile, vecFiles map[stri
 	for ref, f := range vecFiles {
 		content := decodeBase64(t, f.ContentBase64)
 		hostPath := filepath.Join(tmp, filepath.Base(ref))
-		if err := os.WriteFile(hostPath, content, os.FileMode(f.Mode)); err != nil { //nolint:gosec // G306: test binary must be executable
+		if err := os.WriteFile(hostPath, content, 0o600); err != nil {
 			t.Fatalf("write test file %s: %v", ref, err)
+		}
+		if err := os.Chmod(hostPath, os.FileMode(f.Mode)); err != nil {
+			t.Fatalf("chmod test file %s: %v", ref, err)
 		}
 		dest, ok := fromToDest[ref]
 		if !ok {
@@ -136,7 +142,7 @@ func TestAssembleImage_Golden(t *testing.T) {
 // --------------------------------------------------------------------------.
 
 func TestSpecHash_Golden(t *testing.T) {
-	files, err := filepath.Glob(filepath.Join(crossvalDir, "spechash", "*.json"))
+	files, err := fs.Glob(crossval.FS, "spechash/*.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -306,9 +312,7 @@ func verifySigP256DER(t *testing.T, pubKeyDERBase64 string, payload []byte, b64s
 func TestAssembleImage_Deterministic(t *testing.T) {
 	tmp := t.TempDir()
 	binPath := filepath.Join(tmp, "app")
-	if err := os.WriteFile(binPath, []byte("binary-content"), 0o755); err != nil { //nolint:gosec // G306: test binary must be executable
-		t.Fatal(err)
-	}
+	testutil.WriteTestBinary(t, binPath, []byte("binary-content"))
 
 	spec := &lane.PackSpec{
 		Files: []lane.PackFile{
@@ -336,9 +340,7 @@ func TestAssembleImage_Deterministic(t *testing.T) {
 func TestAssembleImage_WithMutatedBase(t *testing.T) {
 	tmp := t.TempDir()
 	binPath := filepath.Join(tmp, "app")
-	if err := os.WriteFile(binPath, []byte("binary"), 0o755); err != nil { //nolint:gosec // G306: test binary must be executable
-		t.Fatal(err)
-	}
+	testutil.WriteTestBinary(t, binPath, []byte("binary"))
 
 	spec := &lane.PackSpec{
 		Files: []lane.PackFile{

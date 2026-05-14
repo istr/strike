@@ -18,7 +18,14 @@ func TestAllFixturesBuild(t *testing.T) {
 	}
 	for _, path := range fixtures {
 		t.Run(filepath.Base(path), func(t *testing.T) {
-			p, err := lane.Parse(path)
+			fp, fpErr := lane.NewFilePath(path)
+			if fpErr != nil {
+				if strings.HasPrefix(filepath.Base(path), "invalid_") {
+					return
+				}
+				t.Fatalf("NewFilePath: %v", fpErr)
+			}
+			p, err := lane.Parse(fp)
 			if err != nil {
 				if strings.HasPrefix(filepath.Base(path), "invalid_") {
 					return

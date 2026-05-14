@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/istr/strike/internal/testutil"
+
 	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/deploy"
 	"github.com/istr/strike/internal/lane"
@@ -28,7 +30,7 @@ func TestDeployAttestation(t *testing.T) {
 	// Build, pack, and load into local store.
 	binPath := buildTestBinary(t, engine)
 	_, packRoot, _ := packTestImage(t, binPath, keyPEM)
-	defer packRoot.Close() //nolint:errcheck // os.Root.Close on temp dir; error is not actionable in test
+	defer testutil.CloseLog(t, packRoot, "deploy attestation packRoot")
 
 	regClient := &registry.Client{Engine: engine}
 	packedDigest, err := regClient.LoadOCITar(ctx, packRoot, "image.tar")

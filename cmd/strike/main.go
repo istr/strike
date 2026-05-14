@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/istr/strike/internal/closer"
 	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/executor"
 	"github.com/istr/strike/internal/lane"
@@ -145,7 +146,11 @@ func initRekor() *executor.RekorClient {
 }
 
 func cmdValidate(path string) {
-	p, err := lane.Parse(path)
+	fp, fpErr := lane.NewFilePath(path)
+	if fpErr != nil {
+		log.Fatalf("error: %v", fpErr)
+	}
+	p, err := lane.Parse(fp)
 	if err != nil {
 		log.Fatalf("error: %v", err)
 	}
@@ -156,7 +161,11 @@ func cmdValidate(path string) {
 }
 
 func cmdDAG(path string) {
-	p, err := lane.Parse(path)
+	fp, fpErr := lane.NewFilePath(path)
+	if fpErr != nil {
+		log.Fatalf("error: %v", fpErr)
+	}
+	p, err := lane.Parse(fp)
 	if err != nil {
 		log.Fatalf("error: %v", err)
 	}
@@ -184,22 +193,22 @@ func cmdDAG(path string) {
 }
 
 func cmdRun(ctx context.Context, path string, engine container.Engine) {
-	p, err := lane.Parse(path)
+	fp, fpErr := lane.NewFilePath(path)
+	if fpErr != nil {
+		log.Fatalf("error: %v", fpErr)
+	}
+	p, err := lane.Parse(fp)
 	if err != nil {
 		log.Fatalf("error: %v", err)
 	}
 
-	absPath, err := filepath.Abs(path)
-	if err != nil {
-		log.Fatalf("error: resolve lane path: %v", err)
-	}
-	laneDir := filepath.Dir(absPath)
+	laneDir := filepath.Dir(fp.String())
 
 	laneRoot, err := os.OpenRoot(laneDir)
 	if err != nil {
 		log.Fatalf("error: open lane root: %v", err)
 	}
-	defer laneRoot.Close() //nolint:errcheck // best-effort cleanup on exit
+	defer closer.Warn(laneRoot, "lane root")
 
 	dag, err := lane.Build(p)
 	if err != nil {
@@ -238,20 +247,42 @@ func cmdCompare(file1, file2, output string) {
 	safeFile2 := sanitizeForLog(file2)
 	safeOutput := sanitizeForLog(output)
 
-	h1, err := registry.HashFileAbs(file1)
+	root1, err := os.OpenRoot(filepath.Dir(file1))
 	if err != nil {
 		log.Fatalf("error: %s: %v", safeFile1, err)
 	}
-	h2, err := registry.HashFileAbs(file2)
+	defer closer.Warn(root1, "compare root 1")
+	h1, err := registry.HashFile(root1, filepath.Base(file1))
+	if err != nil {
+		log.Fatalf("error: %s: %v", safeFile1, err)
+	}
+	root2, err := os.OpenRoot(filepath.Dir(file2))
+	if err != nil {
+		log.Fatalf("error: %s: %v", safeFile2, err)
+	}
+	defer closer.Warn(root2, "compare root 2")
+	h2, err := registry.HashFile(root2, filepath.Base(file2))
 	if err != nil {
 		log.Fatalf("error: %s: %v", safeFile2, err)
 	}
 	if h1 != h2 {
 		log.Fatalf("error: files differ\n  %s: %s\n  %s: %s", safeFile1, h1, safeFile2, h2)
 	}
-	cleanOutput := filepath.Clean(output)
-	if err := os.WriteFile(cleanOutput, []byte(h1.String()+"\n"), 0o600); err != nil { //nolint:gosec // G703 - output path comes from CLI args, validated by filepath.Clean
+	outRoot, err := os.OpenRoot(filepath.Dir(output))
+	if err != nil {
+		log.Fatalf("error: %s: %v", safeOutput, err)
+	}
+	defer closer.Warn(outRoot, "compare output root")
+	outFile, err := outRoot.Create(filepath.Base(output))
+	if err != nil {
 		log.Fatalf("error: write %s: %v", safeOutput, err)
+	}
+	if _, writeErr := outFile.Write([]byte(h1.String() + "\n")); writeErr != nil {
+		closer.Warn(outFile, "compare output")
+		log.Fatalf("error: write %s: %v", safeOutput, writeErr)
+	}
+	if closeErr := outFile.Close(); closeErr != nil {
+		log.Fatalf("error: write %s: %v", safeOutput, closeErr)
 	}
 	log.Printf("ok: %s", h1) // #nosec G706 -- h1 is a SHA-256 hex digest
 }

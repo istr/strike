@@ -8,6 +8,7 @@ import (
 	"github.com/istr/strike/internal/executor"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/registry"
+	"github.com/istr/strike/internal/testutil"
 )
 
 func TestPackPipeline(t *testing.T) {
@@ -23,7 +24,7 @@ func TestPackPipeline(t *testing.T) {
 
 	// 2. Pack: assemble OCI image.
 	result, outRoot, _ := packTestImage(t, binPath, keyPEM)
-	defer outRoot.Close() //nolint:errcheck // os.Root.Close on temp dir; error is not actionable in test
+	defer testutil.CloseLog(t, outRoot, "pack pipeline outRoot")
 
 	t.Logf("image digest: %s", result.Digest)
 
@@ -59,7 +60,7 @@ func TestPackPipeline(t *testing.T) {
 	if openErr != nil {
 		t.Fatalf("open root 2: %v", openErr)
 	}
-	defer outRoot2.Close() //nolint:errcheck // os.Root.Close on temp dir; error is not actionable in test
+	defer testutil.CloseLog(t, outRoot2, "pack pipeline outRoot2")
 
 	result2, err := executor.Pack(context.Background(), executor.PackOpts{
 		Spec: &lane.PackSpec{

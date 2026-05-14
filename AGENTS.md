@@ -180,7 +180,8 @@ Agents must stop and ask the operator before:
   suppression is a security decision. Present the finding, explain
   why it is a false positive, and wait for approval. This rule
   applies unconditionally -- even when auto-edit is enabled for the
-  session.
+  session. See `docs/CODE-STYLE.md` for the allowed-annotations
+  table and chokepoint pattern.
 
 Agents may proceed without confirmation for:
 

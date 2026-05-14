@@ -46,10 +46,10 @@ func TestWrapFileAsImage_Integration(t *testing.T) {
 	ctx := context.Background()
 
 	dir := t.TempDir()
-	path := filepath.Join(dir, "hello.txt")
-	if err := os.WriteFile(path, []byte("integration test content"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "hello.txt"), []byte("integration test content"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	root := mustOpenRoot(t, dir)
 
 	tag := "localhost/strike/test-lane/test-step:" + randomHex(t)
 	t.Cleanup(func() {
@@ -62,7 +62,7 @@ func TestWrapFileAsImage_Integration(t *testing.T) {
 		}
 	})
 
-	digest, size, err := client.WrapFileAsImage(ctx, path, tag)
+	digest, size, err := client.WrapFileAsImage(ctx, root, "hello.txt", tag)
 	if err != nil {
 		t.Fatalf("WrapFileAsImage: %v", err)
 	}

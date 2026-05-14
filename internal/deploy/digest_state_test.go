@@ -3,11 +3,12 @@ package deploy_test
 import (
 	"encoding/base64"
 	"encoding/json"
-	"os"
+	"io/fs"
 	"path/filepath"
 	"testing"
 
 	"github.com/istr/strike/internal/deploy"
+	"github.com/istr/strike/test/crossval"
 )
 
 func TestStateDigest_Deterministic(t *testing.T) {
@@ -99,8 +100,6 @@ func TestStateDigest_Empty(t *testing.T) {
 	}
 }
 
-const stateDigestCrossvalDir = "../../test/crossval/state_digest"
-
 type stateDigestVector struct {
 	Description string `json:"description"`
 	Boundary    string `json:"boundary"`
@@ -117,7 +116,7 @@ type stateDigestVector struct {
 }
 
 func TestStateDigest_Golden(t *testing.T) {
-	files, err := filepath.Glob(filepath.Join(stateDigestCrossvalDir, "*.json"))
+	files, err := fs.Glob(crossval.FS, "state_digest/*.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,7 +127,7 @@ func TestStateDigest_Golden(t *testing.T) {
 	for _, f := range files {
 		name := filepath.Base(f)
 		t.Run(name, func(t *testing.T) {
-			data, err := os.ReadFile(f) //nolint:gosec // G304: path from hardcoded test constant
+			data, err := crossval.FS.ReadFile(f)
 			if err != nil {
 				t.Fatalf("read vector: %v", err)
 			}

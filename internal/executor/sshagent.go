@@ -3,14 +3,16 @@ package executor
 import (
 	"context"
 	"fmt"
-	"io"
 	"net"
 	"os"
 	"path/filepath"
 	"sync"
 
+	"github.com/istr/strike/internal/closer"
 	"github.com/istr/strike/internal/container"
+	"github.com/istr/strike/internal/copier"
 	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/probe"
 )
 
 const containerAgentSocketPath = "/run/strike/ssh-agent.sock"
@@ -36,7 +38,7 @@ func StartAgentProxy(ctx context.Context, peers []lane.Peer, scratchDir string) 
 		return nil, nil, fmt.Errorf("ssh peer %q declared but SSH_AUTH_SOCK not set in strike process environment", firstSSHHost)
 	}
 
-	info, err := os.Stat(hostSock) //nolint:gosec // G703: hostSock from trusted env var SSH_AUTH_SOCK
+	info, err := probe.Stat(hostSock)
 	if err != nil {
 		return nil, nil, fmt.Errorf("ssh agent socket %q: %w", hostSock, err)
 	}
@@ -51,14 +53,14 @@ func StartAgentProxy(ctx context.Context, peers []lane.Peer, scratchDir string) 
 		return nil, nil, fmt.Errorf("ssh agent proxy listen: %w", err)
 	}
 
-	if chmodErr := os.Chmod(proxyPath, 0o666); chmodErr != nil { //nolint:gosec // G302: 0o666 per ADR-025; scratch dir 0o700 bounds host-side access
-		listener.Close() //nolint:errcheck,gosec // best-effort listener close on chmod failure
+	if chmodErr := chmodAgentSocket(proxyPath); chmodErr != nil {
+		closer.Warn(listener, "ssh agent proxy listener")
 		return nil, nil, fmt.Errorf("ssh agent proxy chmod: %w", chmodErr)
 	}
 
 	go func() {
 		<-ctx.Done()
-		listener.Close() //nolint:errcheck,gosec // best-effort listener close on shutdown
+		closer.Warn(listener, "ssh agent proxy listener")
 	}()
 
 	go func() {
@@ -85,32 +87,26 @@ func StartAgentProxy(ctx context.Context, peers []lane.Peer, scratchDir string) 
 }
 
 func forwardAgent(client net.Conn, hostSock string) {
-	defer client.Close() //nolint:errcheck // best-effort close on forward exit
+	defer closer.Warn(client, "ssh agent client")
 
 	var d net.Dialer
 	upstream, err := d.Dial("unix", hostSock)
 	if err != nil {
 		return
 	}
-	defer upstream.Close() //nolint:errcheck // best-effort close on forward exit
+	defer closer.Warn(upstream, "ssh agent upstream")
 
 	var wg sync.WaitGroup
 	wg.Add(2)
 
 	go func() {
 		defer wg.Done()
-		io.Copy(upstream, client) //nolint:errcheck,gosec // best-effort full-duplex forward
-		if uc, ok := upstream.(*net.UnixConn); ok {
-			uc.CloseWrite() //nolint:errcheck,gosec // best-effort half-close
-		}
+		copier.Forward(upstream, client, "ssh agent forward up")
 	}()
 
 	go func() {
 		defer wg.Done()
-		io.Copy(client, upstream) //nolint:errcheck,gosec // best-effort full-duplex forward
-		if uc, ok := client.(*net.UnixConn); ok {
-			uc.CloseWrite() //nolint:errcheck,gosec // best-effort half-close
-		}
+		copier.Forward(client, upstream, "ssh agent forward down")
 	}()
 
 	wg.Wait()

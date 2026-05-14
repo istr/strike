@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/istr/strike/internal/testutil"
+
 	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/registry"
@@ -103,7 +105,7 @@ func TestTag(t *testing.T) {
 }
 
 // --------------------------------------------------------------------------.
-// HashFile and HashFileAbs.
+// HashFile.
 // --------------------------------------------------------------------------.
 
 func TestHashFile(t *testing.T) {
@@ -116,7 +118,7 @@ func TestHashFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer root.Close() //nolint:errcheck // os.Root.Close on read-only temp dir; error is not actionable
+	defer testutil.CloseLog(t, root, "cache test root")
 
 	h, err := registry.HashFile(root, "test.txt")
 	if err != nil {
@@ -136,35 +138,31 @@ func TestHashFile(t *testing.T) {
 	}
 }
 
-func TestHashFileAbs(t *testing.T) {
+func TestHashFile_Deterministic(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "test.txt")
 	content := []byte("test file content")
-	if err := os.WriteFile(path, content, 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "test.txt"), content, 0o600); err != nil {
 		t.Fatal(err)
 	}
 
-	h, err := registry.HashFileAbs(path)
+	root := mustOpenRoot(t, dir)
+
+	h1, err := registry.HashFile(root, "test.txt")
 	if err != nil {
-		t.Fatalf("HashFileAbs: %v", err)
+		t.Fatalf("HashFile (1): %v", err)
 	}
-	if h.Algorithm != testAlgoSHA256 {
-		t.Fatalf("expected sha256 algorithm, got %q", h.Algorithm)
+	if h1.Algorithm != testAlgoSHA256 {
+		t.Fatalf("expected sha256 algorithm, got %q", h1.Algorithm)
 	}
 
-	// Should match HashFile for same content.
-	root, err := os.OpenRoot(dir)
+	// Re-open root for second hash — same result.
+	root2 := mustOpenRoot(t, dir)
+	h2, err := registry.HashFile(root2, "test.txt")
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("HashFile (2): %v", err)
 	}
-	defer root.Close() //nolint:errcheck // os.Root.Close on read-only temp dir; error is not actionable
-
-	h2, err := registry.HashFile(root, "test.txt")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if h != h2 {
-		t.Fatalf("HashFileAbs and HashFile differ: %q vs %q", h, h2)
+	if h1 != h2 {
+		t.Fatalf("same file, different hashes: %q vs %q", h1, h2)
 	}
 }
 
@@ -231,8 +229,9 @@ func mustWriteContent(t *testing.T, path, content string) {
 	}
 }
 
-func TestHashFileAbs_Nonexistent(t *testing.T) {
-	_, err := registry.HashFileAbs("/nonexistent/path/file.txt")
+func TestHashFile_Nonexistent(t *testing.T) {
+	root := mustOpenRoot(t, t.TempDir())
+	_, err := registry.HashFile(root, "nonexistent.txt")
 	if err == nil {
 		t.Fatal("expected error for nonexistent file")
 	}

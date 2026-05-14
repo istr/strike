@@ -12,6 +12,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/istr/strike/internal/closer"
+
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/empty"
 	"github.com/google/go-containerregistry/pkg/v1/layout"
@@ -183,7 +185,12 @@ func addFileLayers(img v1.Image, files []lane.PackFile, inputPaths map[string]st
 		var layer v1.Layer
 		switch {
 		case info.IsDir():
-			layer, err = dirLayer(hostPath, dest)
+			dirRoot, rootErr := os.OpenRoot(hostPath)
+			if rootErr != nil {
+				return nil, "", fmt.Errorf("pack: open dir %q: %w", dest, rootErr)
+			}
+			layer, err = dirLayer(dirRoot, dest)
+			closer.Warn(dirRoot, "pack dir root")
 		case info.Mode().IsRegular():
 			if binaryPath == "" {
 				binaryPath = hostPath
@@ -191,7 +198,12 @@ func addFileLayers(img v1.Image, files []lane.PackFile, inputPaths map[string]st
 			if f.Mode < 0 || f.Mode > 0o7777 {
 				return nil, "", fmt.Errorf("pack: file %q: invalid mode %#o", dest, f.Mode)
 			}
-			layer, err = fileLayer(hostPath, dest, fs.FileMode(f.Mode))
+			fileRoot, rootErr := os.OpenRoot(filepath.Dir(hostPath))
+			if rootErr != nil {
+				return nil, "", fmt.Errorf("pack: open file dir %q: %w", dest, rootErr)
+			}
+			layer, err = fileLayer(fileRoot, filepath.Base(hostPath), dest, fs.FileMode(f.Mode))
+			closer.Warn(fileRoot, "pack file root")
 		default:
 			return nil, "", fmt.Errorf("pack: %q: unsupported file type %v", dest, info.Mode().Type())
 		}
@@ -285,7 +297,7 @@ func writeOCILayout(img, sbomImage, sigImage v1.Image, outputRoot *os.Root, outp
 	if err != nil {
 		return fmt.Errorf("pack: temp dir: %w", err)
 	}
-	defer warnRemoveAll(layoutDir, "pack layout")
+	defer closer.Remove(layoutDir, "pack layout")
 
 	lp, err := layout.Write(layoutDir, empty.Index)
 	if err != nil {
@@ -375,20 +387,25 @@ func buildTarLayer(content []byte, destPath string, mode fs.FileMode, uid, gid i
 	return tarball.LayerFromOpener(opener, tarball.WithMediaType(types.OCILayer))
 }
 
-// fileLayer reads a file from disk and creates an OCI layer.
-func fileLayer(hostPath, destPath string, mode fs.FileMode) (v1.Layer, error) {
-	data, err := os.ReadFile(hostPath) //nolint:gosec // G304: absolute path from MkdirTemp output directory
+// fileLayer reads a file from a root-scoped directory and creates an OCI layer.
+func fileLayer(root *os.Root, name, destPath string, mode fs.FileMode) (v1.Layer, error) {
+	f, err := root.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	data, err := io.ReadAll(f)
+	closer.Warn(f, "pack file layer")
 	if err != nil {
 		return nil, err
 	}
 	return buildTarLayer(data, destPath, mode, 0, 0)
 }
 
-// dirLayer reads a directory recursively and creates an OCI layer that
-// mirrors the directory tree at destPath in the container. File modes
+// dirLayer reads a directory recursively via *os.Root and creates an OCI layer
+// that mirrors the directory tree at destPath in the container. File modes
 // are preserved; ownership is normalized to 0:0; mtimes are zeroed for
 // determinism. Symlinks are rejected (pre-beta strict policy).
-func dirLayer(hostDir, destPath string) (v1.Layer, error) {
+func dirLayer(root *os.Root, destPath string) (v1.Layer, error) {
 	var buf bytes.Buffer
 	tw := tar.NewWriter(&buf)
 
@@ -403,7 +420,7 @@ func dirLayer(hostDir, destPath string) (v1.Layer, error) {
 		return nil, err
 	}
 
-	if err := filepath.WalkDir(hostDir, dirWalkFunc(tw, hostDir, dest)); err != nil {
+	if err := fs.WalkDir(root.FS(), ".", dirWalkFunc(root, tw, dest)); err != nil {
 		return nil, err
 	}
 	if err := tw.Close(); err != nil {
@@ -418,27 +435,23 @@ func dirLayer(hostDir, destPath string) (v1.Layer, error) {
 
 // dirWalkFunc returns a WalkDir callback that writes each entry under
 // root into a tar at the given dest prefix.
-func dirWalkFunc(tw *tar.Writer, root, dest string) fs.WalkDirFunc {
+func dirWalkFunc(root *os.Root, tw *tar.Writer, dest string) fs.WalkDirFunc {
 	return func(path string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
-		rel, relErr := filepath.Rel(root, path)
-		if relErr != nil {
-			return relErr
-		}
-		if rel == "." {
+		if path == "." {
 			return nil
 		}
 		if d.Type()&fs.ModeSymlink != 0 {
-			return fmt.Errorf("symlink at %q: not supported", rel)
+			return fmt.Errorf("symlink at %q: not supported", path)
 		}
-		return writeDirEntry(tw, path, d, filepath.Join(dest, rel))
+		return writeDirEntry(tw, root, path, d, filepath.Join(dest, path))
 	}
 }
 
 // writeDirEntry writes a single directory or file entry to the tar writer.
-func writeDirEntry(tw *tar.Writer, hostPath string, d fs.DirEntry, tarName string) error {
+func writeDirEntry(tw *tar.Writer, root *os.Root, relPath string, d fs.DirEntry, tarName string) error {
 	info, err := d.Info()
 	if err != nil {
 		return err
@@ -464,11 +477,11 @@ func writeDirEntry(tw *tar.Writer, hostPath string, d fs.DirEntry, tarName strin
 	if d.IsDir() {
 		return nil
 	}
-	f, err := os.Open(hostPath) //nolint:gosec // G304: path from controlled WalkDir within MkdirTemp output
+	f, err := root.Open(relPath)
 	if err != nil {
 		return err
 	}
-	defer f.Close() //nolint:errcheck // best-effort in walk callback
+	defer closer.Warn(f, "pack walk file")
 	_, err = io.Copy(tw, f)
 	return err
 }
@@ -528,7 +541,7 @@ func artifactImage(content []byte, artifactType string, subject v1.Descriptor) (
 	return img, nil
 }
 
-// tarDirectoryToRoot tars a directory and writes the output through root.
+// tarDirectoryToRoot tars a directory and writes the output through outputRoot.
 func tarDirectoryToRoot(srcDir string, outputRoot *os.Root, outputName string) (err error) {
 	f, err := outputRoot.Create(outputName)
 	if err != nil {
@@ -547,29 +560,30 @@ func tarDirectoryToRoot(srcDir string, outputRoot *os.Root, outputName string) (
 		}
 	}()
 
-	return filepath.WalkDir(srcDir, tarWalkFunc(srcDir, tw))
+	srcRoot, rootErr := os.OpenRoot(srcDir)
+	if rootErr != nil {
+		return rootErr
+	}
+	defer closer.Warn(srcRoot, "pack tar source root")
+
+	return fs.WalkDir(srcRoot.FS(), ".", tarWalkFunc(srcRoot, tw))
 }
 
 // tarWalkFunc returns a WalkDir callback that writes each entry to tw.
-func tarWalkFunc(srcDir string, tw *tar.Writer) fs.WalkDirFunc {
+func tarWalkFunc(root *os.Root, tw *tar.Writer) fs.WalkDirFunc {
 	return func(path string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
-		rel, relErr := filepath.Rel(srcDir, path)
-		if relErr != nil {
-			return relErr
-		}
-		if rel == "." {
+		if path == "." {
 			return nil
 		}
-		return tarEntry(tw, path, rel, d)
+		return tarEntry(tw, root, path, d)
 	}
 }
 
 // tarEntry writes a single file or directory entry to the tar writer.
-// path is an absolute path within a MkdirTemp layout directory.
-func tarEntry(tw *tar.Writer, path, rel string, d fs.DirEntry) error {
+func tarEntry(tw *tar.Writer, root *os.Root, rel string, d fs.DirEntry) error {
 	info, err := d.Info()
 	if err != nil {
 		return err
@@ -585,10 +599,11 @@ func tarEntry(tw *tar.Writer, path, rel string, d fs.DirEntry) error {
 	if d.IsDir() {
 		return nil
 	}
-	data, err := os.ReadFile(path) //nolint:gosec // G304: absolute path from MkdirTemp layout directory
-	if err != nil {
-		return err
+	f, openErr := root.Open(rel)
+	if openErr != nil {
+		return openErr
 	}
-	_, err = tw.Write(data)
-	return err
+	_, cpErr := io.Copy(tw, f)
+	closer.Warn(f, "pack tar entry")
+	return cpErr
 }

@@ -12,6 +12,8 @@ import (
 	"os"
 	"testing"
 
+	"github.com/istr/strike/internal/testutil"
+
 	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/deploy"
 	"github.com/istr/strike/internal/executor"
@@ -38,7 +40,7 @@ func TestEndToEndChain(t *testing.T) {
 	if openErr != nil {
 		t.Fatal(openErr)
 	}
-	defer packRoot.Close() //nolint:errcheck // os.Root.Close on temp dir; error is not actionable in test
+	defer testutil.CloseLog(t, packRoot, "chain test packRoot")
 
 	packResult, err := executor.Pack(context.Background(), executor.PackOpts{
 		Spec:        chainPackSpec(),

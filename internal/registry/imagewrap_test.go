@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/istr/strike/internal/closer"
+
 	"github.com/google/go-containerregistry/pkg/v1/layout"
 	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/registry"
@@ -58,9 +60,15 @@ func extractDigestFromTar(data []byte) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer os.RemoveAll(dir) //nolint:errcheck // test helper
+	defer closer.Remove(dir, "wraptest scratch")
 
-	if extractErr := registry.ExtractTarForTest(data, dir); extractErr != nil {
+	root, rootErr := os.OpenRoot(dir)
+	if rootErr != nil {
+		return "", rootErr
+	}
+	defer closer.Warn(root, "wraptest extract root")
+
+	if extractErr := registry.ExtractTarForTest(data, root); extractErr != nil {
 		return "", extractErr
 	}
 	lp, err := layout.FromPath(dir)
@@ -102,16 +110,16 @@ func (e *wrapEngine) ContainerRun(_ context.Context, _ container.RunOpts) (int, 
 func TestWrapFileAsImage_LoadsAndTags(t *testing.T) {
 	dir := t.TempDir()
 	content := []byte("hello")
-	path := filepath.Join(dir, "test.txt")
-	if err := os.WriteFile(path, content, 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "test.txt"), content, 0o600); err != nil {
 		t.Fatal(err)
 	}
 
+	root := mustOpenRoot(t, dir)
 	eng := &wrapEngine{}
 	client := &registry.Client{Engine: eng}
 	tag := "localhost/strike/test-lane/test-step:abc123"
 
-	digest, size, err := client.WrapFileAsImage(context.Background(), path, tag)
+	digest, size, err := client.WrapFileAsImage(context.Background(), root, "test.txt", tag)
 	if err != nil {
 		t.Fatalf("WrapFileAsImage: %v", err)
 	}
@@ -145,11 +153,12 @@ func TestWrapDirectoryAsImage_LoadsAndTags(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	root := mustOpenRoot(t, dir)
 	eng := &wrapEngine{}
 	client := &registry.Client{Engine: eng}
 	tag := "localhost/strike/test-lane/test-step:def456"
 
-	digest, size, err := client.WrapDirectoryAsImage(context.Background(), subDir, tag)
+	digest, size, err := client.WrapDirectoryAsImage(context.Background(), root, "mydir", tag)
 	if err != nil {
 		t.Fatalf("WrapDirectoryAsImage: %v", err)
 	}
@@ -169,20 +178,20 @@ func TestWrapDirectoryAsImage_LoadsAndTags(t *testing.T) {
 
 func TestWrapFileAsImage_Deterministic(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "det.txt")
-	if err := os.WriteFile(path, []byte("deterministic content"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "det.txt"), []byte("deterministic content"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
+	root := mustOpenRoot(t, dir)
 	eng1 := &wrapEngine{}
 	client1 := &registry.Client{Engine: eng1}
-	if _, _, err := client1.WrapFileAsImage(context.Background(), path, "localhost/strike/l/s:h1"); err != nil {
+	if _, _, err := client1.WrapFileAsImage(context.Background(), root, "det.txt", "localhost/strike/l/s:h1"); err != nil {
 		t.Fatal(err)
 	}
 
 	eng2 := &wrapEngine{}
 	client2 := &registry.Client{Engine: eng2}
-	if _, _, err := client2.WrapFileAsImage(context.Background(), path, "localhost/strike/l/s:h2"); err != nil {
+	if _, _, err := client2.WrapFileAsImage(context.Background(), root, "det.txt", "localhost/strike/l/s:h2"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -204,15 +213,16 @@ func TestWrapDirectoryAsImage_Deterministic(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	root := mustOpenRoot(t, dir)
 	eng1 := &wrapEngine{}
 	client1 := &registry.Client{Engine: eng1}
-	if _, _, err := client1.WrapDirectoryAsImage(context.Background(), subDir, "localhost/strike/l/s:h1"); err != nil {
+	if _, _, err := client1.WrapDirectoryAsImage(context.Background(), root, "detdir", "localhost/strike/l/s:h1"); err != nil {
 		t.Fatal(err)
 	}
 
 	eng2 := &wrapEngine{}
 	client2 := &registry.Client{Engine: eng2}
-	if _, _, err := client2.WrapDirectoryAsImage(context.Background(), subDir, "localhost/strike/l/s:h2"); err != nil {
+	if _, _, err := client2.WrapDirectoryAsImage(context.Background(), root, "detdir", "localhost/strike/l/s:h2"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -223,18 +233,17 @@ func TestWrapDirectoryAsImage_Deterministic(t *testing.T) {
 
 func TestWrapFileAsImage_RejectsSymlink(t *testing.T) {
 	dir := t.TempDir()
-	realFile := filepath.Join(dir, "real.txt")
-	if err := os.WriteFile(realFile, []byte("data"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "real.txt"), []byte("data"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	link := filepath.Join(dir, "link.txt")
-	if err := os.Symlink(realFile, link); err != nil {
+	if err := os.Symlink(filepath.Join(dir, "real.txt"), filepath.Join(dir, "link.txt")); err != nil {
 		t.Fatal(err)
 	}
 
+	root := mustOpenRoot(t, dir)
 	eng := &wrapEngine{}
 	client := &registry.Client{Engine: eng}
-	_, _, err := client.WrapFileAsImage(context.Background(), link, "localhost/strike/l/s:h")
+	_, _, err := client.WrapFileAsImage(context.Background(), root, "link.txt", "localhost/strike/l/s:h")
 	if err == nil {
 		t.Fatal("expected error for symlink")
 	}
@@ -246,18 +255,17 @@ func TestWrapDirectoryAsImage_RejectsSymlink(t *testing.T) {
 	if err := os.MkdirAll(subDir, 0o750); err != nil {
 		t.Fatal(err)
 	}
-	realFile := filepath.Join(subDir, "real.txt")
-	if err := os.WriteFile(realFile, []byte("data"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(subDir, "real.txt"), []byte("data"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	link := filepath.Join(subDir, "link.txt")
-	if err := os.Symlink(realFile, link); err != nil {
+	if err := os.Symlink(filepath.Join(subDir, "real.txt"), filepath.Join(subDir, "link.txt")); err != nil {
 		t.Fatal(err)
 	}
 
+	root := mustOpenRoot(t, dir)
 	eng := &wrapEngine{}
 	client := &registry.Client{Engine: eng}
-	_, _, err := client.WrapDirectoryAsImage(context.Background(), subDir, "localhost/strike/l/s:h")
+	_, _, err := client.WrapDirectoryAsImage(context.Background(), root, "mydir", "localhost/strike/l/s:h")
 	if err == nil {
 		t.Fatal("expected error for directory containing symlink")
 	}
@@ -267,21 +275,21 @@ func TestWrapImageOutputAsImage_LoadsExistingTar(t *testing.T) {
 	// Build a minimal valid OCI image tar by wrapping a file first,
 	// capturing the tar, then using it as input to WrapImageOutputAsImage.
 	dir := t.TempDir()
-	srcFile := filepath.Join(dir, "src.txt")
-	if err := os.WriteFile(srcFile, []byte("source"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "src.txt"), []byte("source"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+
+	root := mustOpenRoot(t, dir)
 
 	// First, capture the tar bytes from a file wrap.
 	eng1 := &wrapEngine{}
 	client1 := &registry.Client{Engine: eng1}
-	if _, _, err := client1.WrapFileAsImage(context.Background(), srcFile, "localhost/strike/l/s:capture"); err != nil {
+	if _, _, err := client1.WrapFileAsImage(context.Background(), root, "src.txt", "localhost/strike/l/s:capture"); err != nil {
 		t.Fatal(err)
 	}
 
 	// Write the captured tar to a file.
-	tarPath := filepath.Join(dir, "image.tar")
-	if err := os.WriteFile(tarPath, eng1.loadBodies[0], 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "image.tar"), eng1.loadBodies[0], 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -289,7 +297,7 @@ func TestWrapImageOutputAsImage_LoadsExistingTar(t *testing.T) {
 	eng2 := &wrapEngine{}
 	client2 := &registry.Client{Engine: eng2}
 	tag := "localhost/strike/test-lane/img-step:hash"
-	digest, size, err := client2.WrapImageOutputAsImage(context.Background(), tarPath, tag)
+	digest, size, err := client2.WrapImageOutputAsImage(context.Background(), root, "image.tar", tag)
 	if err != nil {
 		t.Fatalf("WrapImageOutputAsImage: %v", err)
 	}

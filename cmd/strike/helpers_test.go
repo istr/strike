@@ -2,13 +2,12 @@ package main
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/registry"
+	"github.com/istr/strike/internal/testutil"
 )
 
 // --------------------------------------------------------------------------.
@@ -101,11 +100,7 @@ func TestWriteToOutputDir(t *testing.T) {
 		t.Fatalf("writeToOutputDir: %v", err)
 	}
 
-	outPath := filepath.Join(dir, "out.txt")
-	got, err := os.ReadFile(outPath) //nolint:gosec // G304: test reads back from known temp dir
-	if err != nil {
-		t.Fatalf("read back: %v", err)
-	}
+	got := testutil.ReadTemp(t, dir, "out.txt")
 	if string(got) != "test-content" {
 		t.Errorf("content = %q, want test-content", got)
 	}

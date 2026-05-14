@@ -8,11 +8,10 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/istr/strike/internal/deploy"
+	"github.com/istr/strike/test/crossval"
 )
 
 // generateTestKeyPEM creates a fresh ECDSA P-256 key pair and returns
@@ -186,8 +185,7 @@ type signAttestationVerify struct {
 }
 
 func TestSignAttestation_Golden(t *testing.T) {
-	path := filepath.Join(crossvalDir, "sign", "attestation_dsse.json")
-	data, err := os.ReadFile(path) //nolint:gosec // G304: path is a hardcoded test constant, not user input
+	data, err := crossval.FS.ReadFile("sign/attestation_dsse.json")
 	if err != nil {
 		t.Fatalf("read vector: %v", err)
 	}

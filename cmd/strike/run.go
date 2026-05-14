@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/istr/strike/internal/clock"
+	"github.com/istr/strike/internal/closer"
 	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/deploy"
 	"github.com/istr/strike/internal/executor"
@@ -223,7 +225,7 @@ func (rc *runContext) executePack(ctx context.Context, step *lane.Step, stepName
 	if err != nil {
 		return fmt.Errorf("%s: open output dir: %w", safeName, err)
 	}
-	defer outRoot.Close() //nolint:errcheck // best-effort cleanup
+	defer closer.Warn(outRoot, "step output root")
 
 	outputName := filepath.Base(step.Outputs[0].Path.String())
 	result, err := executor.Pack(ctx, executor.PackOpts{
@@ -334,32 +336,38 @@ func (rc *runContext) executeContainerStep(ctx context.Context, step *lane.Step,
 
 	rc.state.outputDirs[stepName] = outDir
 
-	if err := rc.wrapOutputs(ctx, step, stepName, safeName, outDir); err != nil {
+	outRoot, rootErr := os.OpenRoot(outDir)
+	if rootErr != nil {
+		return fmt.Errorf("%s: open output root: %w", safeName, rootErr)
+	}
+	defer closer.Warn(outRoot, "container step output root")
+
+	if err := rc.wrapOutputs(ctx, step, stepName, safeName, outRoot); err != nil {
 		return err
 	}
 	if step.Provenance != nil {
-		if err := rc.captureProvenance(step, safeName, outDir); err != nil {
+		if err := rc.captureProvenance(step, safeName, outRoot); err != nil {
 			return fmt.Errorf("%s: provenance: %w", safeName, err)
 		}
 	}
 	return rc.pushAndReport(ctx, step, safeName, tag)
 }
 
-func (rc *runContext) wrapOutputs(ctx context.Context, step *lane.Step, stepName, safeName, outDir string) error {
+func (rc *runContext) wrapOutputs(ctx context.Context, step *lane.Step, stepName, safeName string, outRoot *os.Root) error {
 	specHash := rc.state.specHashes[stepName]
 	for _, out := range step.Outputs {
 		tag := registry.WrapTag(rc.lane.LaneID, stepName, specHash)
-		outPath := filepath.Join(outDir, filepath.Base(out.Path.String()))
+		outName := filepath.Base(out.Path.String())
 		var digest lane.Digest
 		var size int64
 		var err error
 		switch out.Type {
 		case "file":
-			digest, size, err = rc.regClient.WrapFileAsImage(ctx, outPath, tag)
+			digest, size, err = rc.regClient.WrapFileAsImage(ctx, outRoot, outName, tag)
 		case "directory":
-			digest, size, err = rc.regClient.WrapDirectoryAsImage(ctx, outPath, tag)
+			digest, size, err = rc.regClient.WrapDirectoryAsImage(ctx, outRoot, outName, tag)
 		case artifactTypeImage:
-			digest, size, err = rc.regClient.WrapImageOutputAsImage(ctx, outPath, tag)
+			digest, size, err = rc.regClient.WrapImageOutputAsImage(ctx, outRoot, outName, tag)
 		default:
 			return fmt.Errorf("%s: unknown output type %q", safeName, out.Type)
 		}
@@ -382,17 +390,21 @@ func (rc *runContext) wrapOutputs(ctx context.Context, step *lane.Step, stepName
 // outputMountTarget is the fixed container path where the output directory is mounted.
 const outputMountTarget = "/out"
 
-func (rc *runContext) captureProvenance(step *lane.Step, safeName, outDir string) error {
+func (rc *runContext) captureProvenance(step *lane.Step, safeName string, outRoot *os.Root) error {
 	spec := step.Provenance
-	// Map container path to host path. The output directory is mounted at /out,
-	// so /out/provenance.json → outDir/provenance.json.
+	// Map container path to relative path within the output root.
+	// The output directory is mounted at /out, so /out/provenance.json → provenance.json.
 	rel, err := filepath.Rel(outputMountTarget, spec.Path.String())
 	if err != nil || strings.HasPrefix(rel, "..") {
 		return fmt.Errorf("provenance path %q is not within %s", spec.Path, outputMountTarget)
 	}
-	hostPath := filepath.Join(outDir, rel)
 
-	raw, err := os.ReadFile(hostPath) //nolint:gosec // G304: path is outDir (our temp) + validated relative
+	f, err := outRoot.Open(rel)
+	if err != nil {
+		return fmt.Errorf("read provenance file %q: %w", spec.Path, err)
+	}
+	raw, err := io.ReadAll(f)
+	closer.Warn(f, "provenance file")
 	if err != nil {
 		return fmt.Errorf("read provenance file %q: %w", spec.Path, err)
 	}

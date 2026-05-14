@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/istr/strike/internal/clock"
+	"github.com/istr/strike/internal/closer"
 
 	cdx "github.com/CycloneDX/cyclonedx-go"
 	"github.com/google/go-containerregistry/pkg/name"
@@ -250,7 +251,7 @@ func fetchAndDecodeSBOM(digestRef name.Digest, sbomDesc *v1.Descriptor) ([]cdx.C
 	if err != nil {
 		return nil, err
 	}
-	defer warnClose(rc, "sbom layer")
+	defer closer.Warn(rc, "sbom layer")
 
 	// Parse as CycloneDX JSON
 	bom := &cdx.BOM{}

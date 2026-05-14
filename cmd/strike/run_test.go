@@ -15,6 +15,11 @@ import (
 
 const testAlgoSHA256 = "sha256"
 
+const (
+	testCosignKeyRef = "env://STRIKE_TEST_KEY"
+	testCosignPwdRef = "env://STRIKE_TEST_PWD"
+)
+
 // newTestRC creates a minimal runContext with the given engine for testing.
 func newTestRC(t *testing.T, engine *mockEngine) *runContext {
 	t.Helper()
@@ -502,9 +507,9 @@ func TestResolvePackInputPaths(t *testing.T) {
 
 func TestResolvePackSecrets_FromEnv(t *testing.T) {
 	rc := newTestRC(t, &mockEngine{})
-	rc.lane.Secrets = map[string]lane.SecretSource{ //nolint:gosec // G101: test fixture, not real credentials
-		"cosign_key":      "env://STRIKE_TEST_KEY",
-		"cosign_password": "env://STRIKE_TEST_PWD",
+	rc.lane.Secrets = map[string]lane.SecretSource{
+		"cosign_key":      testCosignKeyRef,
+		"cosign_password": testCosignPwdRef,
 	}
 
 	t.Setenv("STRIKE_TEST_KEY", "key-data")

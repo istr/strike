@@ -11,28 +11,26 @@ import (
 )
 
 // ValidateOutput checks that an extracted output matches its expected properties.
-func ValidateOutput(path string, info fs.FileInfo, expected *lane.OutputValidation) error {
-	// Size bounds
+// root is the output directory; name is the relative file path within it.
+func ValidateOutput(root *os.Root, name string, info fs.FileInfo, expected *lane.OutputValidation) error {
 	if expected.MinSize > 0 && info.Size() < expected.MinSize {
 		return fmt.Errorf("size %d below minimum %d", info.Size(), expected.MinSize)
 	}
 	if expected.MaxSize > 0 && info.Size() > expected.MaxSize {
 		return fmt.Errorf("size %d exceeds maximum %d", info.Size(), expected.MaxSize)
 	}
-
-	// Content type validation
 	if expected.ContentType != "" {
-		if err := ValidateContentType(path, expected.ContentType); err != nil {
+		if err := ValidateContentType(root, name, expected.ContentType); err != nil {
 			return err
 		}
 	}
-
 	return nil
 }
 
 // ValidateContentType checks magic bytes against the declared content type.
-func ValidateContentType(path string, contentType string) (err error) {
-	f, err := os.Open(path) //nolint:gosec // G304: output file path from step execution
+// root is the output directory; name is the relative file path within it.
+func ValidateContentType(root *os.Root, name string, contentType string) (err error) {
+	f, err := root.Open(name)
 	if err != nil {
 		return err
 	}
@@ -55,7 +53,6 @@ func ValidateContentType(path string, contentType string) (err error) {
 	case "application/tar+gzip":
 		return ValidateGzip(header)
 	default:
-		// Unknown content type -- no validation
 		return nil
 	}
 }

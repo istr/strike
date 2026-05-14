@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/istr/strike/internal/executor"
+	"github.com/istr/strike/internal/testutil"
 )
 
 // generateRekorKey generates an ephemeral ECDSA P-256 key pair for a fake
@@ -35,12 +36,7 @@ func generateRekorKey(t *testing.T) (*ecdsa.PrivateKey, []byte) {
 // signSET signs a Rekor SET payload with the given private key.
 func signSET(t *testing.T, rekorKey *ecdsa.PrivateKey, body string, integratedTime int64, logID string, logIndex int64) []byte {
 	t.Helper()
-	payload := struct { //nolint:govet // fieldalignment: field order determines canonical JSON for SET verification
-		Body           string `json:"body"`
-		IntegratedTime int64  `json:"integratedTime"`
-		LogID          string `json:"logID"`
-		LogIndex       int64  `json:"logIndex"`
-	}{
+	payload := executor.SETPayload{
 		Body:           body,
 		IntegratedTime: integratedTime,
 		LogID:          logID,
@@ -110,7 +106,7 @@ func fakeDSSERekorHandler(t *testing.T, rekorKey *ecdsa.PrivateKey) http.Handler
 		}
 
 		w.WriteHeader(http.StatusCreated)
-		w.Write(fakeRekorResponse(t, rekorKey)) //nolint:errcheck,gosec // test helper
+		testutil.WriteBody(t, w, fakeRekorResponse(t, rekorKey))
 	}
 }
 

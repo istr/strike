@@ -297,6 +297,9 @@ Fuzz tests must not panic on any input. Failing inputs are saved to
 
 ## 3. Code style
 
+See `docs/CODE-STYLE.md` for lint-suppression policy, the allowed-annotations
+table, and the chokepoint pattern for `//nolint` directives.
+
 ### 3.1 Formatting
 
 - `gofmt` is the baseline. Prefer `gofumpt` for stricter formatting.

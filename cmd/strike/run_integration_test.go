@@ -39,7 +39,11 @@ func TestRunStep_RealLanePatterns_NoPanic(t *testing.T) {
 // through a mock engine. Errors are acceptable; panics are not.
 func assertLanePanicFree(t *testing.T, path string) {
 	t.Helper()
-	p, err := lane.Parse(path)
+	fp, fpErr := lane.NewFilePath(path)
+	if fpErr != nil {
+		t.Fatalf("lane.NewFilePath(%s): %v", path, fpErr)
+	}
+	p, err := lane.Parse(fp)
 	if err != nil {
 		t.Fatalf("lane.Parse(%s): %v", path, err)
 	}

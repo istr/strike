@@ -3,7 +3,6 @@ package lane
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 
 	"github.com/istr/strike/internal/clock"
 
@@ -27,8 +26,8 @@ var schema = specs.LaneSchema
 
 // Parse reads a lane YAML file, validates it against the embedded CUE schema,
 // and returns a typed Lane instance.
-func Parse(path string) (*Lane, error) {
-	raw, err := os.ReadFile(path) //nolint:gosec // G304: lane file path from CLI argument
+func Parse(fp FilePath) (*Lane, error) {
+	raw, err := fp.Read()
 	if err != nil {
 		return nil, fmt.Errorf("read: %w", err)
 	}

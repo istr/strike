@@ -10,41 +10,35 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	"github.com/google/go-containerregistry/pkg/v1/types"
 
+	"github.com/istr/strike/internal/closer"
 	"github.com/istr/strike/internal/lane"
 )
 
 // ExtractTarForTest is an exported wrapper around extractTar for use in tests.
-func ExtractTarForTest(data []byte, dst string) error {
-	return extractTar(bytes.NewReader(data), dst)
-}
-
-// writeTempLayerFile writes content to a temp file and returns its path.
-func writeTempLayerFile(content []byte) (string, error) {
-	tmp, err := os.CreateTemp("", "strike-test-layer-*")
-	if err != nil {
-		return "", err
-	}
-	if _, err = tmp.Write(content); err != nil {
-		warnClose(tmp, "test layer file")
-		return "", err
-	}
-	if err = tmp.Close(); err != nil {
-		return "", err
-	}
-	return tmp.Name(), nil
+func ExtractTarForTest(data []byte, root *os.Root) error {
+	return extractTar(bytes.NewReader(data), root)
 }
 
 // BuildTestImageTar creates a single-layer OCI image tar containing the
 // given file. Returns the tar bytes and the manifest digest. Exported for
 // use in tests outside the registry package.
 func BuildTestImageTar(fileName string, content []byte) ([]byte, lane.Digest, error) {
-	tmpPath, writeErr := writeTempLayerFile(content)
-	if writeErr != nil {
+	tmpDir, mkErr := os.MkdirTemp("", "strike-test-layer-")
+	if mkErr != nil {
+		return nil, lane.Digest{}, mkErr
+	}
+	defer closer.Remove(tmpDir, "test layer dir")
+
+	if writeErr := os.WriteFile(tmpDir+"/"+fileName, content, 0o600); writeErr != nil {
 		return nil, lane.Digest{}, writeErr
 	}
-	defer warnRemoveAll(tmpPath, "test layer file")
+	tmpRoot, rootErr := os.OpenRoot(tmpDir)
+	if rootErr != nil {
+		return nil, lane.Digest{}, rootErr
+	}
+	defer closer.Warn(tmpRoot, "test layer root")
 
-	layer, _, layerErr := wrapFileLayer(tmpPath, "/"+fileName, 0o644)
+	layer, _, layerErr := wrapFileLayer(tmpRoot, fileName, "/"+fileName, 0o644)
 	if layerErr != nil {
 		return nil, lane.Digest{}, layerErr
 	}

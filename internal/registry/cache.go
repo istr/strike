@@ -100,20 +100,6 @@ func HashFile(root *os.Root, path string) (hash lane.Digest, err error) {
 	return hashReader(f)
 }
 
-// HashFileAbs hashes a file given as an absolute path from CLI args.
-func HashFileAbs(path string) (hash lane.Digest, err error) {
-	f, err := os.Open(path) //nolint:gosec // G304: path is an absolute file path from step execution, not web input
-	if err != nil {
-		return lane.Digest{}, err
-	}
-	defer func() {
-		if cerr := f.Close(); cerr != nil && err == nil {
-			err = cerr
-		}
-	}()
-	return hashReader(f)
-}
-
 func sortedKeys(m map[string]string) []string {
 	keys := make([]string, 0, len(m))
 	for k := range m {

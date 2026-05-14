@@ -3,12 +3,14 @@ package executor_test
 import (
 	"encoding/base64"
 	"encoding/json"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/istr/strike/internal/executor"
 	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/test/crossval"
 )
 
 func TestRenderKnownHosts_nil_peers(t *testing.T) {
@@ -220,8 +222,6 @@ func TestConfigureSSHPeers_with_ssh_peers(t *testing.T) {
 
 // Golden tests against crossval vectors.
 
-const sshKnownHostsCrossvalDir = "../../test/crossval/sshknownhosts"
-
 type sshKnownHostsVectorExpected struct {
 	ContentBase64 string `json:"content_base64"`
 }
@@ -230,15 +230,15 @@ type sshKnownHostsVectorInputs struct {
 	Peers []json.RawMessage `json:"peers"`
 }
 
-type sshKnownHostsVector struct { //nolint:govet // fieldalignment: field order matches JSON structure
+type sshKnownHostsVector struct {
+	Inputs      sshKnownHostsVectorInputs   `json:"inputs"`
 	Description string                      `json:"description"`
 	Boundary    string                      `json:"boundary"`
-	Inputs      sshKnownHostsVectorInputs   `json:"inputs"`
 	Expected    sshKnownHostsVectorExpected `json:"expected"`
 }
 
 func TestRenderKnownHosts_Golden(t *testing.T) {
-	files, err := filepath.Glob(filepath.Join(sshKnownHostsCrossvalDir, "*.json"))
+	files, err := fs.Glob(crossval.FS, "sshknownhosts/*.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -249,7 +249,7 @@ func TestRenderKnownHosts_Golden(t *testing.T) {
 	for _, f := range files {
 		name := filepath.Base(f)
 		t.Run(name, func(t *testing.T) {
-			data, err := os.ReadFile(f) //nolint:gosec // G304: path from hardcoded test constant
+			data, err := crossval.FS.ReadFile(f)
 			if err != nil {
 				t.Fatalf("read vector: %v", err)
 			}

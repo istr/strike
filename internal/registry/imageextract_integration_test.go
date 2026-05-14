@@ -26,8 +26,9 @@ func TestExtractSingleLayer_Integration(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	srcRoot := mustOpenRoot(t, dir)
 	tag := "localhost/strike/test-extract/step:" + randomHex(t)
-	_, _, err := client.WrapFileAsImage(ctx, srcPath, tag)
+	_, _, err := client.WrapFileAsImage(ctx, srcRoot, "data.txt", tag)
 	if err != nil {
 		t.Fatalf("WrapFileAsImage: %v", err)
 	}

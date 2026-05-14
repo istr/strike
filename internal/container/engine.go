@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/istr/strike/internal/probe"
 )
 
 // Engine is the interface for container engine operations.
@@ -195,7 +197,7 @@ func detectSocket() (string, error) {
 	// 2. Standard rootless socket
 	if xdg := os.Getenv("XDG_RUNTIME_DIR"); xdg != "" {
 		sock := filepath.Join(xdg, "podman", "podman.sock")
-		if _, err := os.Stat(sock); err == nil { //nolint:gosec // G703 false positive: err is checked (err == nil probe for socket existence)
+		if _, err := probe.Stat(sock); err == nil {
 			return "unix://" + sock, nil
 		}
 	}

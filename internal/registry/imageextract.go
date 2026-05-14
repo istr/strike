@@ -11,6 +11,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/istr/strike/internal/closer"
+
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/layout"
 
@@ -23,7 +25,7 @@ func SaveImage(ctx context.Context, engine container.Engine, tag string) ([]byte
 	if err != nil {
 		return nil, fmt.Errorf("save image %s: %w", tag, err)
 	}
-	defer warnClose(rc, "save image")
+	defer closer.Warn(rc, "save image")
 	data, err := io.ReadAll(rc)
 	if err != nil {
 		return nil, fmt.Errorf("save image %s: read: %w", tag, err)
@@ -42,9 +44,15 @@ func ExtractSingleLayer(tarBytes []byte, destDir string) error {
 	if err != nil {
 		return fmt.Errorf("extract: create temp dir: %w", err)
 	}
-	defer warnRemoveAll(tmpDir, "extract layout")
+	defer closer.Remove(tmpDir, "extract layout")
 
-	if extractErr := extractTar(bytes.NewReader(tarBytes), tmpDir); extractErr != nil {
+	tmpRoot, rootErr := os.OpenRoot(tmpDir)
+	if rootErr != nil {
+		return fmt.Errorf("extract: open temp root: %w", rootErr)
+	}
+	defer closer.Warn(tmpRoot, "extract layout root")
+
+	if extractErr := extractTar(bytes.NewReader(tarBytes), tmpRoot); extractErr != nil {
 		return fmt.Errorf("extract: unpack layout: %w", extractErr)
 	}
 
@@ -107,7 +115,7 @@ func extractLayer(layer v1.Layer, root *os.Root) error {
 	if err != nil {
 		return fmt.Errorf("uncompress layer: %w", err)
 	}
-	defer warnClose(rc, "extract layer")
+	defer closer.Warn(rc, "extract layer")
 
 	tr := tar.NewReader(rc)
 	for {

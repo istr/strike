@@ -3,13 +3,11 @@ package integration_test
 import (
 	"bytes"
 	"context"
-	"io"
-	"net"
-	"path/filepath"
 	"testing"
 
 	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/deploy"
+	"github.com/istr/strike/internal/testutil"
 )
 
 // TestSSHAgentSocketBindMount verifies that a bind-mounted socket at
@@ -21,26 +19,7 @@ func TestSSHAgentSocketBindMount(t *testing.T) {
 	ensureImage(t, engine, goImage)
 
 	// Create a fake agent socket on the host.
-	dir := t.TempDir()
-	sockPath := filepath.Join(dir, "agent.sock")
-	var lc net.ListenConfig
-	ln, err := lc.Listen(context.Background(), "unix", sockPath)
-	if err != nil {
-		t.Fatalf("listen: %v", err)
-	}
-	t.Cleanup(func() { ln.Close() }) //nolint:errcheck,gosec // test cleanup
-	go func() {
-		for {
-			c, acceptErr := ln.Accept()
-			if acceptErr != nil {
-				return
-			}
-			go func() {
-				defer c.Close() //nolint:errcheck // test echo server
-				io.Copy(c, c)   //nolint:errcheck,gosec // test echo server
-			}()
-		}
-	}()
+	sockPath := testutil.StartEchoSocket(t)
 
 	var stdout, stderr bytes.Buffer
 	opts := deploy.HardenedRunOpts()

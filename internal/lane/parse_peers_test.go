@@ -22,7 +22,11 @@ func TestParse_PeersAccept(t *testing.T) {
 
 	for _, path := range matches {
 		t.Run(filepath.Base(path), func(t *testing.T) {
-			if _, err := lane.Parse(path); err != nil {
+			fp, fpErr := lane.NewFilePath(path)
+			if fpErr != nil {
+				t.Fatalf("NewFilePath(%s): %v", path, fpErr)
+			}
+			if _, err := lane.Parse(fp); err != nil {
 				t.Errorf("Parse(%s): unexpected error: %v", path, err)
 			}
 		})
@@ -72,7 +76,11 @@ func TestParse_PeersReject(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.fixture, func(t *testing.T) {
 			path := filepath.Join("testdata", "peers", tc.fixture)
-			_, err := lane.Parse(path)
+			fp, fpErr := lane.NewFilePath(path)
+			if fpErr != nil {
+				t.Fatalf("NewFilePath(%s): %v", path, fpErr)
+			}
+			_, err := lane.Parse(fp)
 			if err == nil {
 				t.Fatalf("Parse(%s): expected error, got nil", path)
 			}

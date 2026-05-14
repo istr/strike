@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/istr/strike/internal/closer"
 	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/executor"
 	"github.com/istr/strike/internal/lane"
@@ -153,7 +154,7 @@ func packTestImage(t *testing.T, binPath string, keyPEM []byte) (*executor.PackR
 		KeyPassword: nil,
 	})
 	if packErr != nil {
-		outRoot.Close() //nolint:errcheck,gosec // os.Root.Close on error path; test will fatalf next
+		closer.Warn(outRoot, "packTestImage error cleanup")
 		t.Fatalf("pack: %v", packErr)
 	}
 	return result, outRoot, outDir

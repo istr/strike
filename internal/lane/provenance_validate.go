@@ -47,7 +47,10 @@ func ValidateProvenance(declaredType string, raw []byte) (ProvenanceRecord, erro
 		return nil, fmt.Errorf("not valid JSON: %w", err)
 	}
 
-	recordType, _ := probe["type"].(string) //nolint:errcheck // type assertion, not error
+	recordType, ok := probe["type"].(string)
+	if !ok {
+		return nil, fmt.Errorf("provenance record field \"type\" is not a string")
+	}
 	if recordType != declaredType {
 		return nil, fmt.Errorf("record type %q does not match declared type %q", recordType, declaredType)
 	}

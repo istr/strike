@@ -89,10 +89,17 @@ func dirDigestWalkFunc(root *os.Root, absDir, dir string, h io.Writer, size *int
 		if relErr != nil {
 			return relErr
 		}
-		h.Write([]byte(rel)) //nolint:errcheck,gosec // hash.Write never returns an error
+		hashWriteAll(h, []byte(rel))
 
 		return hashFileFromRoot(root, filepath.Join(dir, rel), h)
 	}
+}
+
+// hashWriteAll writes b to h. The hash.Hash contract documents that
+// Write never returns an error; the blank assignment encodes that
+// contract once, rather than at every call site.
+func hashWriteAll(h io.Writer, b []byte) {
+	_, _ = h.Write(b)
 }
 
 // hashFileFromRoot reads a file through root and writes its content to h.

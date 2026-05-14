@@ -24,6 +24,7 @@ import (
 	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/deploy"
 	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/testutil"
 )
 
 const connTypeTLS = "tls"
@@ -769,7 +770,7 @@ func TestDeployerExecute_RekorTransient(t *testing.T) {
 	_, rekorPubPEM := generateRekorKey(t)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("temporary failure")) //nolint:errcheck,gosec // test helper
+		testutil.WriteBody(t, w, []byte("temporary failure"))
 	}))
 	defer srv.Close()
 
