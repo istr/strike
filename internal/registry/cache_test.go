@@ -142,7 +142,7 @@ func TestHashFile_Deterministic(t *testing.T) {
 		t.Fatalf("expected sha256 algorithm, got %q", h1.Algorithm)
 	}
 
-	// Re-open root for second hash — same result.
+	// Re-open root for second hash -- same result.
 	root2 := mustOpenRoot(t, dir)
 	h2, err := registry.HashFile(root2, "test.txt")
 	if err != nil {

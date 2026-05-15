@@ -1,4 +1,4 @@
-// This file tests the invariant "Build-accepts ⇒ runStep is panic-free"
+// This file tests the invariant "Build-accepts => runStep is panic-free"
 // using a MockEngine. It does not require Podman or network access and
 // runs in the default go test invocation. Real container execution is
 // covered separately by integration tests gated on STRIKE_INTEGRATION.

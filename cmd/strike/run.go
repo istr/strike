@@ -473,7 +473,7 @@ const outputMountTarget = "/out"
 func (rc *runContext) captureProvenance(step *lane.Step, safeName string, outRoot *os.Root) error {
 	spec := step.Provenance
 	// Map container path to relative path within the output root.
-	// The output directory is mounted at /out, so /out/provenance.json → provenance.json.
+	// The output directory is mounted at /out, so /out/provenance.json -> provenance.json.
 	rel, err := filepath.Rel(outputMountTarget, spec.Path.String())
 	if err != nil || strings.HasPrefix(rel, "..") {
 		return fmt.Errorf("provenance path %q is not within %s", spec.Path, outputMountTarget)

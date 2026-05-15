@@ -33,7 +33,13 @@ lint-from:
 	cd tools/lintfrom && go build -o $(CURDIR)/.build/lintfrom .
 	$(CURDIR)/.build/lintfrom ./...
 
-lint: lint-from
+lint-ascii:
+	@! grep -rPn '[^\x00-\x7F]' --include='*.go' --include='*.cue' \
+		--exclude='*_test.go' . \
+		&& echo "ascii-only: ok" \
+		|| { echo "non-ASCII found in source files (see above)"; exit 1; }
+
+lint: lint-from lint-ascii
 	golangci-lint run ./...
 
 test:

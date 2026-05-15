@@ -23,21 +23,14 @@
 package deploy
 
 // ---------------------------------------------------------------------------
-// Shared types (mirrored from lane/schema.cue for independence)
+// Shared types -- re-exported from lane via artifact.cue
 // ---------------------------------------------------------------------------
 
-#Digest: =~"^sha256:[a-f0-9]{64}$"
+// #Digest, #AbsPath, peer types, and #DeployTarget are re-exported
+// in artifact.cue (same package). They are available here without
+// import or duplication.
 
 #Timestamp: =~"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}"
-
-#AbsPath: string &
-	=~"^/" &
-	!~"//" &
-	!~"^\\.\\.($|/)" &
-	!~"/\\.\\.($|/)" &
-	!~"^\\.($|/)" &
-	!~"/\\.($|/)" &
-	!~".+/$"
 
 // ---------------------------------------------------------------------------
 // Top-level attestation
@@ -114,56 +107,8 @@ package deploy
 	version?: string
 }
 
-// ---------------------------------------------------------------------------
-// Deploy target (mirrors lane.DeployTarget)
-// ---------------------------------------------------------------------------
+// #DeployTarget is re-exported from lane via artifact.cue.
 
-#DeployTarget: {
-	id:           =~"^[a-z0-9][a-z0-9-]{0,62}$"
-	type:         =~"^.+$"
-	description:  =~"^.+$"
-	url?:         string
-	namespace?:   string
-}
-
-// ---------------------------------------------------------------------------
-// Network peers (mirrored from lane.cue for verifier independence)
-// ---------------------------------------------------------------------------
-
-#Peer: #HTTPSPeer | #SSHPeer | #OCIPeer
-
-#HTTPSPeer: {
-	type:  "https"
-	host:  =~"^[a-z0-9.-]+(:[0-9]+)?$"
-	trust: #HTTPSTrust
-}
-
-#HTTPSTrust: #FingerprintTrust | #CABundleTrust
-
-#FingerprintTrust: {
-	mode:        "cert_fingerprint"
-	fingerprint: =~"^sha256:[a-f0-9]{64}$"
-}
-
-#CABundleTrust: {
-	mode: "ca_bundle"
-	path: #AbsPath
-}
-
-#SSHPeer: {
-	type:        "ssh"
-	host:        =~"^[a-z0-9.-]+(:[0-9]+)?$"
-	known_hosts: [...#KnownHostEntry]
-}
-
-#KnownHostEntry: {
-	key_type: "ssh-ed25519" | "ecdsa-sha2-nistp256" |
-		"rsa-sha2-512" | "rsa-sha2-256"
-	key: =~"^[A-Za-z0-9+/]+={0,2}$"
-}
-
-#OCIPeer: {
-	type:     "oci"
-	registry: =~"^[a-z0-9.-]+(:[0-9]+)?$"
-	trust?:   #HTTPSTrust
-}
+// Peer types (#Peer, #HTTPSPeer, #SSHPeer, #OCIPeer, #HTTPSTrust,
+// #FingerprintTrust, #CABundleTrust, #KnownHostEntry) are re-exported
+// from lane via artifact.cue.

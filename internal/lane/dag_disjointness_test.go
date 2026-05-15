@@ -78,7 +78,7 @@ func TestBuild_SiblingInputMountsAccepted(t *testing.T) {
 }
 
 func TestBuild_PathPrefixNotComponentPrefix(t *testing.T) {
-	// "/work" must not match "/workspace" — only path-component prefixes count
+	// "/work" must not match "/workspace" -- only path-component prefixes count
 	if _, err := lane.Build(twoInputLane("/work", "/workspace")); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

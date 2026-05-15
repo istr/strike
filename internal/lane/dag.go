@@ -308,11 +308,11 @@ func (d *DAG) validateMountDisjointness(p *Lane) error {
 // mountsConflict reports whether two absolute container paths overlap
 // in a way that would make their bind mounts nested.
 //
-//	"/a"     and "/a"      → conflict (identical)
-//	"/a"     and "/a/b"    → conflict (a is prefix of b)
-//	"/a/b"   and "/a"      → conflict (a is prefix of b)
-//	"/a/b"   and "/a/c"    → no conflict (siblings)
-//	"/a"     and "/abc"    → no conflict (NOT a prefix in path terms)
+//	"/a"     and "/a"      -> conflict (identical)
+//	"/a"     and "/a/b"    -> conflict (a is prefix of b)
+//	"/a/b"   and "/a"      -> conflict (a is prefix of b)
+//	"/a/b"   and "/a/c"    -> no conflict (siblings)
+//	"/a"     and "/abc"    -> no conflict (NOT a prefix in path terms)
 func mountsConflict(a, b AbsPath) bool {
 	ca := path.Clean(string(a))
 	cb := path.Clean(string(b))
@@ -331,7 +331,7 @@ func isPathPrefix(prefix, full string) bool {
 	if len(full) == len(prefix) {
 		return false // identical, not a strict prefix
 	}
-	// "/" is a prefix of everything — the separator is already there.
+	// "/" is a prefix of everything -- the separator is already there.
 	if prefix == "/" {
 		return true
 	}

@@ -60,7 +60,7 @@ type AssembleResult struct {
 
 // AssembleImage is the pure computational core of OCI image construction.
 // It takes an already-resolved base image and applies layers, config,
-// and annotations — no network I/O, no filesystem writes.
+// and annotations -- no network I/O, no filesystem writes.
 //
 // This function defines the cross-validation surface for a Rust verifier:
 // given identical (base, spec, inputPaths), the output Digest must match.
@@ -92,7 +92,7 @@ func AssembleImage(base v1.Image, spec *lane.PackSpec, inputPaths map[string]str
 		img = annotated
 	}
 
-	// 5. Compute digest — the cross-validation anchor
+	// 5. Compute digest -- the cross-validation anchor
 	imgDigest, err := img.Digest()
 	if err != nil {
 		return nil, fmt.Errorf("assemble: image digest: %w", err)
@@ -135,7 +135,7 @@ func Pack(ctx context.Context, opts PackOpts) (*PackResult, error) {
 		return nil, fmt.Errorf("pack: pull base image: %w", err)
 	}
 
-	// 2. Assemble image — pure computation, no I/O
+	// 2. Assemble image -- pure computation, no I/O
 	assembled, err := AssembleImage(base, opts.Spec, opts.InputPaths)
 	if err != nil {
 		return nil, fmt.Errorf("pack: %w", err)
@@ -152,7 +152,7 @@ func Pack(ctx context.Context, opts PackOpts) (*PackResult, error) {
 		return nil, fmt.Errorf("pack: SBOM artifact: %w", err)
 	}
 
-	// 4. Sign the image manifest digest — pure crypto, optional Rekor submission
+	// 4. Sign the image manifest digest -- pure crypto, optional Rekor submission
 	signRes, err := SignManifest(ctx, assembled.Digest.String(), opts.SigningKey, opts.KeyPassword, opts.Rekor)
 	if err != nil {
 		return nil, fmt.Errorf("pack: sign: %w", err)

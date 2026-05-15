@@ -188,7 +188,7 @@ func fakeRekorHandler(t *testing.T, rekorKey *ecdsa.PrivateKey) http.HandlerFunc
 	}
 }
 
-// rekorOutputEntry and rekorOutputProof are no longer needed —
+// rekorOutputEntry and rekorOutputProof are no longer needed --
 // SubmitHashedRekord now returns *lane.RekorEntry directly.
 
 // --------------------------------------------------------------------------.

@@ -65,13 +65,13 @@ func stripForConcat(src string) string {
 }
 
 // ValidateAttestation checks a serialized attestation against the embedded
-// CUE schema. This ensures that the attestation output — the document that
-// carries the supply chain trust chain — conforms to the formal specification.
+// CUE schema. This ensures that the attestation output -- the document that
+// carries the supply chain trust chain -- conforms to the formal specification.
 //
 // This mirrors lane.Parse's CUE validation of input (lane YAML) but covers
 // the output side. Together they provide a complete CUE-defined contract:
 //
-//	lane.yaml → CUE validate (input)  → execute → attestation → CUE validate (output)
+//	lane.yaml -> CUE validate (input)  -> execute -> attestation -> CUE validate (output)
 func ValidateAttestation(att *Attestation) error {
 	data, err := json.Marshal(att)
 	if err != nil {

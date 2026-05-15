@@ -117,7 +117,7 @@ func TestProvenanceCapture_EndToEnd(t *testing.T) {
 	state := lane.NewState()
 
 	// Simulate provenance capture for steps that declare provenance.
-	// This exercises ValidateProvenance → RecordProvenance → CollectProvenance.
+	// This exercises ValidateProvenance -> RecordProvenance -> CollectProvenance.
 	for _, stepName := range dag.Order {
 		step := dag.Steps[stepName]
 		if step.Provenance == nil {
@@ -133,7 +133,7 @@ func TestProvenanceCapture_EndToEnd(t *testing.T) {
 		}
 	}
 
-	// deploy traverses the full DAG: deploy → pack_site → build → workspace → {source, npm_install}.
+	// deploy traverses the full DAG: deploy -> pack_site -> build -> workspace -> {source, npm_install}.
 	// source has provenance; CollectProvenance from deploy should find it.
 	records := state.CollectProvenance(dag, "deploy")
 	if len(records) == 0 {

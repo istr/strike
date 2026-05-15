@@ -97,7 +97,7 @@ func HardenedRunOpts() container.RunOpts {
 // Deployer executes deploy steps and produces attestations.
 type Deployer struct {
 	Engine       container.Engine
-	ArtifactRefs map[string]string // pre-resolved: artifact name → "step.output" state ref
+	ArtifactRefs map[string]string // pre-resolved: artifact name -> "step.output" state ref
 	EngineID     *container.EngineIdentity
 	Rekor        *executor.RekorClient
 	DAG          *lane.DAG
@@ -235,7 +235,7 @@ func submitAttestationToRekor(ctx context.Context, d *Deployer, att *Attestation
 }
 
 // resolveArtifactDigests resolves all artifact references to their signed provenance records.
-// refs maps artifact name → "step.output" state ref (pre-resolved by the caller from DAG edges).
+// refs maps artifact name -> "step.output" state ref (pre-resolved by the caller from DAG edges).
 func resolveArtifactDigests(stepName string, refs map[string]string, state *lane.State) (map[string]SignedArtifact, error) {
 	artifacts := make(map[string]SignedArtifact)
 	for artName, ref := range refs {

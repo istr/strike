@@ -1,4 +1,4 @@
-// strike lane schema — target design
+// strike lane schema -- target design
 //
 // Three step types, one supply chain:
 //   run:    execute a command in a container, produce typed artifacts
@@ -32,7 +32,7 @@ package lane
 }
 
 // ---------------------------------------------------------------------------
-// Path types — canonical, composable hierarchy
+// Path types -- canonical, composable hierarchy
 // ---------------------------------------------------------------------------
 
 // Path is the shared canonicalization base: no double slashes, no "." or
@@ -53,7 +53,7 @@ package lane
 #RelPath: #Path & =~"^[^/]"
 
 // ---------------------------------------------------------------------------
-// Step — the union type
+// Step -- the union type
 // ---------------------------------------------------------------------------
 
 #Step: {
@@ -211,7 +211,7 @@ package lane
 }
 
 // ---------------------------------------------------------------------------
-// Pack — deterministic OCI image assembly
+// Pack -- deterministic OCI image assembly
 // ---------------------------------------------------------------------------
 
 #PackSpec: {
@@ -261,7 +261,7 @@ package lane
 }
 
 // ---------------------------------------------------------------------------
-// Deploy — apply to target, mandatory state attestation
+// Deploy -- apply to target, mandatory state attestation
 // ---------------------------------------------------------------------------
 
 #DeploySpec: {

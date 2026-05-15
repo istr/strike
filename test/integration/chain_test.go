@@ -31,10 +31,10 @@ func TestEndToEndChain(t *testing.T) {
 	ensureImage(t, engine, goImage)
 	ensureImage(t, engine, staticBase)
 
-	// --- Part 1: Build — compile test Go program ---
+	// --- Part 1: Build -- compile test Go program ---
 	binPath := buildTestBinary(t, engine)
 
-	// --- Part 3: Pack — assemble and sign OCI image ---
+	// --- Part 3: Pack -- assemble and sign OCI image ---
 	packDir := t.TempDir()
 	packRoot, openErr := os.OpenRoot(packDir)
 	if openErr != nil {
@@ -62,7 +62,7 @@ func TestEndToEndChain(t *testing.T) {
 	}
 	localTag := "localhost/strike:" + imageDigest.Hex[:12]
 
-	// --- Part 4: Deploy — with attestation and source provenance ---
+	// --- Part 4: Deploy -- with attestation and source provenance ---
 	state := lane.NewState()
 	if regErr := state.Register("pack", "image", lane.Artifact{
 		Type:   "image",
@@ -152,7 +152,7 @@ func verifyChain(t *testing.T, att *deploy.Attestation, imageDigest string, keyP
 			att.Artifacts["app"].Digest, imageDigest)
 	}
 
-	// C. Provenance — nil when no predecessor steps declare provenance.
+	// C. Provenance -- nil when no predecessor steps declare provenance.
 	if att.Provenance != nil {
 		t.Errorf("expected nil provenance (no predecessors with provenance), got %d records", len(att.Provenance))
 	}

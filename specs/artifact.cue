@@ -16,9 +16,22 @@ import "github.com/istr/strike/specs:lane"
 // Re-export types from lane for use within the deploy package.
 // attestation.cue references these -- aliases keep the names
 // available without duplicating the definitions.
+// The exported JSON Schema inlines all $defs, so the output
+// remains self-contained for external verifiers (ADR-004).
+#Digest:           lane.#Digest
+#AbsPath:          lane.#AbsPath
 #RekorEntry:       lane.#RekorEntry
 #InclusionProof:   lane.#InclusionProof
 #ProvenanceRecord: lane.#ProvenanceRecord
+#DeployTarget:     lane.#DeployTarget
+#Peer:             lane.#Peer
+#HTTPSPeer:        lane.#HTTPSPeer
+#SSHPeer:          lane.#SSHPeer
+#OCIPeer:          lane.#OCIPeer
+#HTTPSTrust:       lane.#HTTPSTrust
+#FingerprintTrust: lane.#FingerprintTrust
+#CABundleTrust:    lane.#CABundleTrust
+#KnownHostEntry:   lane.#KnownHostEntry
 
 // SignedArtifact is the provenance record for one artifact.
 #SignedArtifact: {
