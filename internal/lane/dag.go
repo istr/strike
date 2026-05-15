@@ -23,15 +23,15 @@ func parseRef(ref string) (step, output string, err error) {
 type InputEdge struct {
 	FromStep   *Step
 	FromOutput *OutputSpec
-	Mount      ContainerPath // == InputRef.Mount
-	Subpath    InputSubpath  // == InputRef.Subpath; "" means whole output
+	Mount      AbsPath // == InputRef.Mount
+	Subpath    RelPath // == InputRef.Subpath; "" means whole output
 }
 
 // PackFileEdge is a fully resolved step.pack.files[i] entry.
 type PackFileEdge struct {
 	FromStep   *Step
 	FromOutput *OutputSpec
-	Dest       ContainerPath // == PackFile.Dest
+	Dest       AbsPath // == PackFile.Dest
 }
 
 // DeployArtifactEdge is a fully resolved step.deploy.artifacts[name] entry.
@@ -313,7 +313,7 @@ func (d *DAG) validateMountDisjointness(p *Lane) error {
 //	"/a/b"   and "/a"      → conflict (a is prefix of b)
 //	"/a/b"   and "/a/c"    → no conflict (siblings)
 //	"/a"     and "/abc"    → no conflict (NOT a prefix in path terms)
-func mountsConflict(a, b ContainerPath) bool {
+func mountsConflict(a, b AbsPath) bool {
 	ca := path.Clean(string(a))
 	cb := path.Clean(string(b))
 	if ca == cb {

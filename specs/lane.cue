@@ -32,12 +32,25 @@ package lane
 }
 
 // ---------------------------------------------------------------------------
-// Shared path type — absolute and canonical container path
+// Path types — canonical, composable hierarchy
 // ---------------------------------------------------------------------------
 
-// ContainerPath is an absolute, canonical path inside a container.
-// Rejects: relative paths, double slashes, dot segments, trailing slashes.
-#ContainerPath: string & =~"^/" & !~"//" & !~"/\\.(/|$)" & !~"/\\.\\.(/|$)" & !~".+/$"
+// Path is the shared canonicalization base: no double slashes, no "." or
+// ".." segments, no trailing slash. Not used directly on fields; use
+// AbsPath or RelPath.
+#Path: string &
+	!~"//" &
+	!~"^\\.\\.($|/)" &
+	!~"/\\.\\.($|/)" &
+	!~"^\\.($|/)" &
+	!~"/\\.($|/)" &
+	!~".+/$"
+
+// AbsPath is a canonical absolute path (starts with "/").
+#AbsPath: #Path & =~"^/"
+
+// RelPath is a canonical relative path (no leading "/").
+#RelPath: #Path & =~"^[^/]"
 
 // ---------------------------------------------------------------------------
 // Step — the union type
@@ -53,7 +66,7 @@ package lane
 	inputs:      [...#InputRef] @go(Inputs)
 	outputs:     [...#OutputSpec] @go(Outputs)
 	secrets:     [...#SecretRef] @go(Secrets)
-	workdir?:    #ContainerPath @go(Workdir)
+	workdir?:    #AbsPath @go(Workdir)
 	peers?:      [...#Peer] @go(Peers)
 	// force_run: when true, strike bypasses the cache check
 	// and runs the step unconditionally. The explicit escape
@@ -87,24 +100,11 @@ package lane
 // Input types
 // ---------------------------------------------------------------------------
 
-// A clean relative path within a producer output. No leading slash,
-// no trailing slash, no "." or ".." segments, no empty segments.
-// Used by #InputRef.subpath to select a single file or subdirectory
-// of a directory or image output for mounting into a consumer step.
-#InputSubpath: string &
-	=~"^[^/]" &
-	!~"//" &
-	!~"^\\.\\.($|/)" &
-	!~"/\\.\\.($|/)" &
-	!~"^\\.($|/)" &
-	!~"/\\.($|/)" &
-	!~".+/$"
-
 #InputRef: {
 	@go(InputRef)
 	from:     string @go(From)            // "step_name.output_name"
-	subpath?: #InputSubpath @go(Subpath)   // path within producer output; "" mounts whole output
-	mount:    #ContainerPath @go(Mount)
+	subpath?: #RelPath @go(Subpath)   // path within producer output; "" mounts whole output
+	mount:    #AbsPath @go(Mount)
 	digest?:  #Digest @go(Digest,type=*Digest)
 }
 
@@ -118,7 +118,7 @@ package lane
 	@go(OutputSpec)
 	name:      string @go(Name)
 	type:      #ArtifactType @go(Type)
-	path:      #ContainerPath @go(Path)
+	path:      #AbsPath @go(Path)
 	expected?: #OutputValidation @go(Expected,optional=nillable)
 }
 
@@ -164,7 +164,7 @@ package lane
 	// path is a container-internal path. The executor mounts the lane-
 	// relative bundle file there in Phase 2; in Phase 1 the field is
 	// declaratory only.
-	path: #ContainerPath @go(Path)
+	path: #AbsPath @go(Path)
 }
 
 // SSHPeer declares an SSH endpoint with explicit known_hosts entries.
@@ -230,7 +230,7 @@ package lane
 #PackFile: {
 	@go(PackFile)
 	from: string @go(From)
-	dest: #ContainerPath @go(Dest)
+	dest: #AbsPath @go(Dest)
 	mode: *0o755 | int @go(Mode)
 	uid?: int @go(UID)
 	gid?: int @go(GID)
@@ -347,7 +347,7 @@ package lane
 #CaptureMount: {
 	@go(CaptureMount)
 	source: string @go(Source)
-	target: #ContainerPath @go(Target)
+	target: #AbsPath @go(Target)
 }
 
 // ---------------------------------------------------------------------------
@@ -366,7 +366,7 @@ package lane
 #ProvenanceSpec: {
 	@go(ProvenanceSpec)
 	type:            "git" | "tarball" | "oci" | "url" @go(Type)
-	path:            #ContainerPath @go(Path)
+	path:            #AbsPath @go(Path)
 	require_signed?: bool @go(RequireSigned)
 }
 

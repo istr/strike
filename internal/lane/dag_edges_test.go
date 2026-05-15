@@ -228,7 +228,7 @@ func TestBuild_ImageFromEdgesPopulated(t *testing.T) {
 	}
 }
 
-func TestBuild_InputSubpathPopulated(t *testing.T) {
+func TestBuild_InputRelPathPopulated(t *testing.T) {
 	p := &lane.Lane{
 		Steps: []lane.Step{
 			{

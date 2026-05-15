@@ -291,8 +291,8 @@ steps:
 	}
 }
 
-// TestParse_InputSubpathValidation exercises the CUE regex for #InputSubpath.
-func TestParse_InputSubpathValidation(t *testing.T) {
+// TestParse_RelPathValidation exercises the CUE regex for #RelPath.
+func TestParse_RelPathValidation(t *testing.T) {
 	tmpl := `
 name: test
 lane_id: test

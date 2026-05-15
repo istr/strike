@@ -553,7 +553,7 @@ func (rc *runContext) resolveInputEdge(ctx context.Context, e lane.InputEdge, sc
 
 // extractInputArtifact ensures the producer output is extracted exactly
 // once (dedup by digest prefix) and returns the extraction directory.
-func (rc *runContext) extractInputArtifact(ctx context.Context, mount lane.ContainerPath, ref, fromStep string, art lane.Artifact, scratchRoot *os.Root, inputsRoot string) (string, error) {
+func (rc *runContext) extractInputArtifact(ctx context.Context, mount lane.AbsPath, ref, fromStep string, art lane.Artifact, scratchRoot *os.Root, inputsRoot string) (string, error) {
 	tag := registry.WrapTag(rc.lane.LaneID, fromStep, rc.state.specHashes[fromStep])
 
 	// Dedup by digest prefix: hex-only chars, no traversal possible.

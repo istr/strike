@@ -9,7 +9,7 @@ import (
 
 // twoInputLane builds a lane where step "c" mounts outputs from "a" and "b"
 // at the given container paths.
-func twoInputLane(mountA, mountB lane.ContainerPath) *lane.Lane {
+func twoInputLane(mountA, mountB lane.AbsPath) *lane.Lane {
 	return &lane.Lane{
 		Steps: []lane.Step{
 			{
