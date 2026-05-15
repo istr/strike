@@ -202,7 +202,7 @@ package lane
 // Secrets
 // ---------------------------------------------------------------------------
 
-#SecretSource: =~"^(env|file|op)://.+"
+#SecretSource: =~"^(env|file)://.+"
 
 #SecretRef: {
 	@go(SecretRef)
