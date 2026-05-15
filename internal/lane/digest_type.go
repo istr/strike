@@ -16,7 +16,17 @@ type Digest struct {
 	Hex       string // hex-encoded hash value
 }
 
-// ParseDigest parses a digest string of the form "algorithm:hex".
+// Digest invariants -- mirrored exactly by the CUE schema
+// (#Digest: =~"^sha256:[a-f0-9]{64}$"). A change here without a
+// matching schema change breaks cross-implementation verification.
+const (
+	digestAlgoSHA256   = "sha256"
+	digestHexLenSHA256 = 64
+)
+
+// ParseDigest parses a digest string of the form "sha256:<64 lowercase hex>".
+// The empty string returns the zero Digest{} without error, so that
+// optional digest fields can round-trip absence through JSON.
 func ParseDigest(s string) (Digest, error) {
 	if s == "" {
 		return Digest{}, nil
@@ -25,7 +35,26 @@ func ParseDigest(s string) (Digest, error) {
 	if i < 1 {
 		return Digest{}, fmt.Errorf("invalid digest %q: expected algorithm:hex", s)
 	}
-	return Digest{Algorithm: s[:i], Hex: s[i+1:]}, nil
+	algo := s[:i]
+	hex := s[i+1:]
+	if algo != digestAlgoSHA256 {
+		return Digest{}, fmt.Errorf("invalid digest %q: algorithm must be %q",
+			s, digestAlgoSHA256)
+	}
+	if len(hex) != digestHexLenSHA256 {
+		return Digest{}, fmt.Errorf("invalid digest %q: hex must be %d chars, got %d",
+			s, digestHexLenSHA256, len(hex))
+	}
+	for j := range len(hex) {
+		c := hex[j]
+		isDigit := c >= '0' && c <= '9'
+		isHexLower := c >= 'a' && c <= 'f'
+		if !isDigit && !isHexLower {
+			return Digest{}, fmt.Errorf("invalid digest %q: hex must be lowercase [0-9a-f], bad byte at offset %d",
+				s, j)
+		}
+	}
+	return Digest{Algorithm: algo, Hex: hex}, nil
 }
 
 // MustParseDigest parses a digest string, panicking on invalid input.

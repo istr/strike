@@ -69,18 +69,18 @@ func TestWriteToOutputDir_BadDir(t *testing.T) {
 
 func TestResolveDigest_WithAtSign(t *testing.T) {
 	// When ref contains @, the digest is extracted directly.
-	digest, err := resolveDigest(context.Background(), nil, "docker.io/lib/img@sha256:abc123")
+	digest, err := resolveDigest(context.Background(), nil, "docker.io/lib/img@sha256:abc1230000000000000000000000000000000000000000000000000000000000")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if digest.String() != "sha256:abc123" {
+	if digest.String() != "sha256:abc1230000000000000000000000000000000000000000000000000000000000" {
 		t.Errorf("digest = %q, want sha256:abc123", digest.String())
 	}
 }
 
 func TestResolveDigest_ViaInspect(t *testing.T) {
 	eng := &mockEngine{
-		inspectRV: &container.ImageInfo{Digest: "sha256:fromengine"},
+		inspectRV: &container.ImageInfo{Digest: "sha256:00000000000000000000000000000000000000000000000000000000000000ff"},
 	}
 	client := &registry.Client{Engine: eng}
 
@@ -88,7 +88,7 @@ func TestResolveDigest_ViaInspect(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if digest.String() != "sha256:fromengine" {
+	if digest.String() != "sha256:00000000000000000000000000000000000000000000000000000000000000ff" {
 		t.Errorf("digest = %q, want sha256:fromengine", digest.String())
 	}
 }

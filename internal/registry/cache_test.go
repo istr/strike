@@ -20,11 +20,11 @@ func TestSpecHashDeterministic(t *testing.T) {
 		Args:  []string{"build", "-o", "/out/bin"},
 		Env:   map[string]string{"CGO_ENABLED": "0"},
 	}
-	inputHashes := map[string]lane.Digest{"src": lane.MustParseDigest("sha256:deadbeef")}
-	sourceHashes := map[string]lane.Digest{"/src": lane.MustParseDigest("sha256:cafebabe")}
+	inputHashes := map[string]lane.Digest{"src": lane.MustParseDigest("sha256:deadbeef00000000000000000000000000000000000000000000000000000000")}
+	sourceHashes := map[string]lane.Digest{"/src": lane.MustParseDigest("sha256:cafebabe00000000000000000000000000000000000000000000000000000000")}
 
-	h1 := registry.SpecHash(step, lane.MustParseDigest("sha256:img"), inputHashes, sourceHashes)
-	h2 := registry.SpecHash(step, lane.MustParseDigest("sha256:img"), inputHashes, sourceHashes)
+	h1 := registry.SpecHash(step, lane.MustParseDigest("sha256:0000000000000000000000000000000000000000000000000000000000000001"), inputHashes, sourceHashes)
+	h2 := registry.SpecHash(step, lane.MustParseDigest("sha256:0000000000000000000000000000000000000000000000000000000000000001"), inputHashes, sourceHashes)
 	if h1 != h2 {
 		t.Fatalf("not deterministic: %q vs %q", h1, h2)
 	}
@@ -41,8 +41,8 @@ func TestSpecHashChangesOnInput(t *testing.T) {
 		Env:   map[string]string{},
 	}
 
-	h1 := registry.SpecHash(step, lane.MustParseDigest("sha256:img1"), map[string]lane.Digest{}, map[string]lane.Digest{})
-	h2 := registry.SpecHash(step, lane.MustParseDigest("sha256:img2"), map[string]lane.Digest{}, map[string]lane.Digest{})
+	h1 := registry.SpecHash(step, lane.MustParseDigest("sha256:0000000000000000000000000000000000000000000000000000000000000011"), map[string]lane.Digest{}, map[string]lane.Digest{})
+	h2 := registry.SpecHash(step, lane.MustParseDigest("sha256:0000000000000000000000000000000000000000000000000000000000000022"), map[string]lane.Digest{}, map[string]lane.Digest{})
 	if h1 == h2 {
 		t.Fatal("different images should produce different hashes")
 	}
@@ -59,8 +59,8 @@ func TestSpecHashPreservesArgOrder(t *testing.T) {
 		Args: []string{"-o", "/out", "build"},
 		Env:  map[string]string{},
 	}
-	h1 := registry.SpecHash(step1, lane.MustParseDigest("sha256:img"), nil, nil)
-	h2 := registry.SpecHash(step2, lane.MustParseDigest("sha256:img"), nil, nil)
+	h1 := registry.SpecHash(step1, lane.MustParseDigest("sha256:0000000000000000000000000000000000000000000000000000000000000001"), nil, nil)
+	h2 := registry.SpecHash(step2, lane.MustParseDigest("sha256:0000000000000000000000000000000000000000000000000000000000000001"), nil, nil)
 	if h1 == h2 {
 		t.Fatal("different arg order must produce different spec hashes")
 	}
@@ -78,8 +78,8 @@ func TestTag(t *testing.T) {
 		want     string
 		name     string
 	}{
-		{"ghcr.io/cache", "build", lane.MustParseDigest("sha256:abcdef0123456789abcdef0123456789"), "ghcr.io/cache:build-abcdef0123456789", "full hash"},
-		{"r.io/c", "pack", lane.MustParseDigest("sha256:0123"), "r.io/c:pack-0123", "short hash"},
+		{"ghcr.io/cache", "build", lane.MustParseDigest("sha256:abcdef0123456789abcdef012345678900000000000000000000000000000000"), "ghcr.io/cache:build-abcdef0123456789", "full hash"},
+		{"r.io/c", "pack", lane.MustParseDigest("sha256:0123000000000000000000000000000000000000000000000000000000000000"), "r.io/c:pack-0123000000000000", "padded hash"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

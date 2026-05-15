@@ -74,13 +74,13 @@ func TestBuildInputMounts_Single(t *testing.T) {
 	rc.dag = buildTestDAG(t, p)
 
 	// Register the artifact and spec hash for the producing step.
-	compileDigest := lane.MustParseDigest("sha256:aabbccdd11223344")
+	compileDigest := lane.MustParseDigest("sha256:aabbccdd11223344000000000000000000000000000000000000000000000000")
 	if err := rc.laneState.Register("compile", "bin", lane.Artifact{
 		Type: "file", Digest: compileDigest,
 	}); err != nil {
 		t.Fatal(err)
 	}
-	rc.state.specHashes["compile"] = lane.MustParseDigest("sha256:1111111111111111")
+	rc.state.specHashes["compile"] = lane.MustParseDigest("sha256:1111111111111111000000000000000000000000000000000000000000000000")
 
 	// Build a test OCI tar with a "binary" file inside.
 	tarBytes, _, err := registry.BuildTestImageTar("binary", []byte("data"))
@@ -136,16 +136,16 @@ func TestBuildInputMounts_Multiple(t *testing.T) {
 	rc.dag = buildTestDAG(t, p)
 
 	// Register artifacts and spec hashes for both producing steps.
-	d1 := lane.MustParseDigest("sha256:aaaa111122223333")
-	d2 := lane.MustParseDigest("sha256:bbbb444455556666")
+	d1 := lane.MustParseDigest("sha256:aaaa111122223333000000000000000000000000000000000000000000000000")
+	d2 := lane.MustParseDigest("sha256:bbbb444455556666000000000000000000000000000000000000000000000000")
 	if err := rc.laneState.Register("s1", "a", lane.Artifact{Type: "file", Digest: d1}); err != nil {
 		t.Fatal(err)
 	}
 	if err := rc.laneState.Register("s2", "b", lane.Artifact{Type: "file", Digest: d2}); err != nil {
 		t.Fatal(err)
 	}
-	rc.state.specHashes["s1"] = lane.MustParseDigest("sha256:2222222222222222")
-	rc.state.specHashes["s2"] = lane.MustParseDigest("sha256:3333333333333333")
+	rc.state.specHashes["s1"] = lane.MustParseDigest("sha256:2222222222222222000000000000000000000000000000000000000000000000")
+	rc.state.specHashes["s2"] = lane.MustParseDigest("sha256:3333333333333333000000000000000000000000000000000000000000000000")
 
 	// Build test image tars for both steps.
 	tar1, _, err := registry.BuildTestImageTar("a.tar", []byte("a"))
@@ -191,13 +191,13 @@ func TestBuildInputMounts_MissingSubpath(t *testing.T) {
 	}
 	rc.dag = buildTestDAG(t, p)
 
-	srcDigest := lane.MustParseDigest("sha256:aabbccdd11223344")
+	srcDigest := lane.MustParseDigest("sha256:aabbccdd11223344000000000000000000000000000000000000000000000000")
 	if err := rc.laneState.Register("src", "tree", lane.Artifact{
 		Type: "directory", Digest: srcDigest,
 	}); err != nil {
 		t.Fatal(err)
 	}
-	rc.state.specHashes["src"] = lane.MustParseDigest("sha256:1111111111111111")
+	rc.state.specHashes["src"] = lane.MustParseDigest("sha256:1111111111111111000000000000000000000000000000000000000000000000")
 
 	// Build a test OCI tar with a "tree" directory containing only "actual.json".
 	tarBytes, _, err := registry.BuildTestImageTar("tree/actual.json", []byte("{}"))
@@ -263,7 +263,7 @@ func TestGuardUnsignedImages_SignedOK(t *testing.T) {
 	}
 	rc.dag = buildTestDAG(t, p)
 	if err := rc.laneState.Register("pack", "img", lane.Artifact{
-		Type: "image", Digest: lane.MustParseDigest("sha256:aabb"), Signed: true,
+		Type: "image", Digest: lane.MustParseDigest("sha256:aabb000000000000000000000000000000000000000000000000000000000000"), Signed: true,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -291,7 +291,7 @@ func TestGuardUnsignedImages_UnsignedError(t *testing.T) {
 	}
 	rc.dag = buildTestDAG(t, p)
 	if err := rc.laneState.Register("pack", "img", lane.Artifact{
-		Type: "image", Digest: lane.MustParseDigest("sha256:aabb"),
+		Type: "image", Digest: lane.MustParseDigest("sha256:aabb000000000000000000000000000000000000000000000000000000000000"),
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -340,11 +340,11 @@ func TestComputeSpecHash_Deterministic(t *testing.T) {
 		Env:  map[string]string{"K": "V"},
 	}
 
-	h1, tag1, err := rc.computeSpecHash(step, "step1", lane.MustParseDigest("sha256:abc"))
+	h1, tag1, err := rc.computeSpecHash(step, "step1", lane.MustParseDigest("sha256:abc0000000000000000000000000000000000000000000000000000000000000"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	h2, tag2, err := rc.computeSpecHash(step, "step1", lane.MustParseDigest("sha256:abc"))
+	h2, tag2, err := rc.computeSpecHash(step, "step1", lane.MustParseDigest("sha256:abc0000000000000000000000000000000000000000000000000000000000000"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -363,13 +363,13 @@ func TestComputeSpecHash_ChangesWithImageDigest(t *testing.T) {
 	rc := newTestRC(t, &mockEngine{})
 	step := &lane.Step{Args: []string{"build"}, Env: map[string]string{}}
 
-	h1, _, err := rc.computeSpecHash(step, "s", lane.MustParseDigest("sha256:aaa"))
+	h1, _, err := rc.computeSpecHash(step, "s", lane.MustParseDigest("sha256:aaa0000000000000000000000000000000000000000000000000000000000000"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Reset specHashes to avoid accumulation from prior call.
 	rc.state.specHashes = map[string]lane.Digest{}
-	h2, _, err := rc.computeSpecHash(step, "s", lane.MustParseDigest("sha256:bbb"))
+	h2, _, err := rc.computeSpecHash(step, "s", lane.MustParseDigest("sha256:bbb0000000000000000000000000000000000000000000000000000000000000"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -386,7 +386,7 @@ func TestComputeSpecHash_NoSources(t *testing.T) {
 		Env:  map[string]string{},
 	}
 
-	h, _, err := rc.computeSpecHash(step, "build", lane.MustParseDigest("sha256:img"))
+	h, _, err := rc.computeSpecHash(step, "build", lane.MustParseDigest("sha256:0000000000000000000000000000000000000000000000000000000000000001"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -406,9 +406,9 @@ func TestCheckCache_Miss(t *testing.T) {
 		Name:    "step1",
 		Outputs: []lane.OutputSpec{{Name: "bin", Type: "file", Path: "/out/bin"}},
 	}
-	rc.state.specHashes["step1"] = lane.MustParseDigest("sha256:abc")
+	rc.state.specHashes["step1"] = lane.MustParseDigest("sha256:abc0000000000000000000000000000000000000000000000000000000000000")
 
-	hit, err := rc.checkCache(context.Background(), step, "step1", "step1", lane.MustParseDigest("sha256:abc"))
+	hit, err := rc.checkCache(context.Background(), step, "step1", "step1", lane.MustParseDigest("sha256:abc0000000000000000000000000000000000000000000000000000000000000"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -433,7 +433,7 @@ func TestCheckCache_Hit(t *testing.T) {
 		Outputs: []lane.OutputSpec{{Name: "bin", Type: "file", Path: "/out/bin"}},
 	}
 
-	hit, err := rc.checkCache(context.Background(), step, "step1", "step1", lane.MustParseDigest("sha256:abc"))
+	hit, err := rc.checkCache(context.Background(), step, "step1", "step1", lane.MustParseDigest("sha256:abc0000000000000000000000000000000000000000000000000000000000000"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -462,7 +462,7 @@ func TestCheckCache_HitMissingSizeAnnotation(t *testing.T) {
 	rc := newTestRC(t, eng)
 	step := &lane.Step{Name: "step1"}
 
-	hit, err := rc.checkCache(context.Background(), step, "step1", "step1", lane.MustParseDigest("sha256:abc"))
+	hit, err := rc.checkCache(context.Background(), step, "step1", "step1", lane.MustParseDigest("sha256:abc0000000000000000000000000000000000000000000000000000000000000"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -483,7 +483,7 @@ func TestCheckCache_HitBadSizeAnnotation(t *testing.T) {
 	rc := newTestRC(t, eng)
 	step := &lane.Step{Name: "step1"}
 
-	hit, err := rc.checkCache(context.Background(), step, "step1", "step1", lane.MustParseDigest("sha256:abc"))
+	hit, err := rc.checkCache(context.Background(), step, "step1", "step1", lane.MustParseDigest("sha256:abc0000000000000000000000000000000000000000000000000000000000000"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -504,7 +504,7 @@ func TestCheckCache_ForceRunBypass(t *testing.T) {
 	rc := newTestRC(t, eng)
 	step := &lane.Step{Name: "step1", ForceRun: true}
 
-	hit, err := rc.checkCache(context.Background(), step, "step1", "step1", lane.MustParseDigest("sha256:abc"))
+	hit, err := rc.checkCache(context.Background(), step, "step1", "step1", lane.MustParseDigest("sha256:abc0000000000000000000000000000000000000000000000000000000000000"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -518,7 +518,7 @@ func TestCheckCache_EngineError(t *testing.T) {
 	rc := newTestRC(t, eng)
 	step := &lane.Step{Name: "step1"}
 
-	_, err := rc.checkCache(context.Background(), step, "step1", "step1", lane.MustParseDigest("sha256:abc"))
+	_, err := rc.checkCache(context.Background(), step, "step1", "step1", lane.MustParseDigest("sha256:abc0000000000000000000000000000000000000000000000000000000000000"))
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -541,7 +541,7 @@ func TestCheckCache_HitRestoresSignedFromAnnotation(t *testing.T) {
 		Outputs: []lane.OutputSpec{{Name: "img", Type: "image", Path: "/out/img.tar"}},
 	}
 
-	hit, err := rc.checkCache(context.Background(), step, "step1", "step1", lane.MustParseDigest("sha256:abc"))
+	hit, err := rc.checkCache(context.Background(), step, "step1", "step1", lane.MustParseDigest("sha256:abc0000000000000000000000000000000000000000000000000000000000000"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -573,7 +573,7 @@ func TestCheckCache_AbsentSignedAnnotationDefaultsFalse(t *testing.T) {
 		Outputs: []lane.OutputSpec{{Name: "bin", Type: "file", Path: "/out/bin"}},
 	}
 
-	hit, err := rc.checkCache(context.Background(), step, "step1", "step1", lane.MustParseDigest("sha256:abc"))
+	hit, err := rc.checkCache(context.Background(), step, "step1", "step1", lane.MustParseDigest("sha256:abc0000000000000000000000000000000000000000000000000000000000000"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -595,13 +595,13 @@ func TestCheckCache_AbsentSignedAnnotationDefaultsFalse(t *testing.T) {
 
 func TestResolveImageDigest_FromRef(t *testing.T) {
 	rc := newTestRC(t, &mockEngine{})
-	step := &lane.Step{Image: "docker.io/lib/golang@sha256:abcdef1234567890"}
+	step := &lane.Step{Image: "docker.io/lib/golang@sha256:abcdef1234567890000000000000000000000000000000000000000000000000"}
 
 	digest, err := rc.resolveImageDigest(context.Background(), step, "test")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if digest.String() != "sha256:abcdef1234567890" {
+	if digest.String() != "sha256:abcdef1234567890000000000000000000000000000000000000000000000000" {
 		t.Errorf("digest = %q, want sha256:abcdef1234567890", digest.String())
 	}
 }
@@ -609,7 +609,7 @@ func TestResolveImageDigest_FromRef(t *testing.T) {
 func TestResolveImageDigest_FromInspect(t *testing.T) {
 	eng := &mockEngine{
 		inspectRV: &container.ImageInfo{
-			Digest: "sha256:inspected1234567890",
+			Digest: "sha256:0000000000000000000000000000000000000000000000000000000000000002",
 		},
 	}
 	rc := newTestRC(t, eng)
@@ -643,11 +643,11 @@ func TestResolveImageDigest_ImageFrom(t *testing.T) {
 	rc.lane = p
 	rc.dag = buildTestDAG(t, p)
 	if err := rc.laneState.Register("pack", "img", lane.Artifact{
-		Type: "image", Digest: lane.MustParseDigest("sha256:abcdef123456789000"),
+		Type: "image", Digest: lane.MustParseDigest("sha256:abcdef1234567890000000000000000000000000000000000000000000000000"),
 	}); err != nil {
 		t.Fatal(err)
 	}
-	producerSpecHash := lane.MustParseDigest("sha256:1111111111111111")
+	producerSpecHash := lane.MustParseDigest("sha256:1111111111111111000000000000000000000000000000000000000000000000")
 	rc.state.specHashes["pack"] = producerSpecHash
 
 	step := rc.dag.Steps["run"]
@@ -656,7 +656,7 @@ func TestResolveImageDigest_ImageFrom(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if digest.String() != "sha256:abcdef123456789000" {
+	if digest.String() != "sha256:abcdef1234567890000000000000000000000000000000000000000000000000" {
 		t.Errorf("digest = %q, want sha256:abcdef123456789000", digest.String())
 	}
 	if step.Image != imageBefore {
@@ -723,13 +723,13 @@ func TestResolvePackInputPaths(t *testing.T) {
 	}
 	rc.dag = buildTestDAG(t, p)
 
-	compileDigest := lane.MustParseDigest("sha256:aabbccdd11223344")
+	compileDigest := lane.MustParseDigest("sha256:aabbccdd11223344000000000000000000000000000000000000000000000000")
 	if err := rc.laneState.Register("compile", "bin", lane.Artifact{
 		Type: "file", Digest: compileDigest,
 	}); err != nil {
 		t.Fatal(err)
 	}
-	rc.state.specHashes["compile"] = lane.MustParseDigest("sha256:1111111111111111")
+	rc.state.specHashes["compile"] = lane.MustParseDigest("sha256:1111111111111111000000000000000000000000000000000000000000000000")
 
 	tarBytes, _, err := registry.BuildTestImageTar("binary", []byte("bin"))
 	if err != nil {
@@ -849,7 +849,7 @@ func TestRunStep_InvalidTimeout(t *testing.T) {
 	rc := newTestRC(t, &mockEngine{})
 	rc.dag.Steps["bad"] = &lane.Step{
 		Timeout: "not-a-duration",
-		Image:   "img@sha256:abc",
+		Image:   "img@sha256:abc0000000000000000000000000000000000000000000000000000000000000",
 		Args:    []string{"run"},
 		Env:     map[string]string{},
 	}
