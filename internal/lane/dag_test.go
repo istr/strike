@@ -35,12 +35,12 @@ func TestBuild_LinearChain(t *testing.T) {
 			},
 			{
 				Name: "b", Image: "img", Args: []string{"b"}, Env: map[string]string{},
-				Inputs:  []lane.InputRef{{Name: "out", From: "a.out", Mount: "/in"}},
+				Inputs:  []lane.InputRef{{From: "a.out", Mount: "/in"}},
 				Outputs: []lane.OutputSpec{{Name: "out", Type: "file", Path: "/out/b"}},
 			},
 			{
 				Name: "c", Image: "img", Args: []string{"c"}, Env: map[string]string{},
-				Inputs: []lane.InputRef{{Name: "out", From: "b.out", Mount: "/in"}},
+				Inputs: []lane.InputRef{{From: "b.out", Mount: "/in"}},
 			},
 		},
 	}
@@ -61,19 +61,19 @@ func TestBuild_Diamond(t *testing.T) {
 			},
 			{
 				Name: "b", Image: "img", Args: []string{"b"}, Env: map[string]string{},
-				Inputs:  []lane.InputRef{{Name: "out", From: "a.out", Mount: "/in"}},
+				Inputs:  []lane.InputRef{{From: "a.out", Mount: "/in"}},
 				Outputs: []lane.OutputSpec{{Name: "out", Type: "file", Path: "/out/b"}},
 			},
 			{
 				Name: "c", Image: "img", Args: []string{"c"}, Env: map[string]string{},
-				Inputs:  []lane.InputRef{{Name: "out", From: "a.out", Mount: "/in"}},
+				Inputs:  []lane.InputRef{{From: "a.out", Mount: "/in"}},
 				Outputs: []lane.OutputSpec{{Name: "out", Type: "file", Path: "/out/c"}},
 			},
 			{
 				Name: "d", Image: "img", Args: []string{"d"}, Env: map[string]string{},
 				Inputs: []lane.InputRef{
-					{Name: "out", From: "b.out", Mount: "/in/b"},
-					{Name: "out", From: "c.out", Mount: "/in/c"},
+					{From: "b.out", Mount: "/in/b"},
+					{From: "c.out", Mount: "/in/c"},
 				},
 			},
 		},
@@ -100,15 +100,15 @@ func TestBuild_FanOut(t *testing.T) {
 			},
 			{
 				Name: "b", Image: "img", Args: []string{"b"}, Env: map[string]string{},
-				Inputs: []lane.InputRef{{Name: "out", From: "a.out", Mount: "/in"}},
+				Inputs: []lane.InputRef{{From: "a.out", Mount: "/in"}},
 			},
 			{
 				Name: "c", Image: "img", Args: []string{"c"}, Env: map[string]string{},
-				Inputs: []lane.InputRef{{Name: "out", From: "a.out", Mount: "/in"}},
+				Inputs: []lane.InputRef{{From: "a.out", Mount: "/in"}},
 			},
 			{
 				Name: "d", Image: "img", Args: []string{"d"}, Env: map[string]string{},
-				Inputs: []lane.InputRef{{Name: "out", From: "a.out", Mount: "/in"}},
+				Inputs: []lane.InputRef{{From: "a.out", Mount: "/in"}},
 			},
 		},
 	}
@@ -254,7 +254,7 @@ func TestBuild_UnknownInputStep(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				Name: "run", Image: "img", Args: []string{}, Env: map[string]string{},
-				Inputs: []lane.InputRef{{Name: "out", From: "missing.out", Mount: "/in"}},
+				Inputs: []lane.InputRef{{From: "missing.out", Mount: "/in"}},
 			},
 		},
 	}
@@ -267,7 +267,7 @@ func TestBuild_InvalidInputRef(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				Name: "run", Image: "img", Args: []string{}, Env: map[string]string{},
-				Inputs: []lane.InputRef{{Name: "out", From: "noperiod", Mount: "/in"}},
+				Inputs: []lane.InputRef{{From: "noperiod", Mount: "/in"}},
 			},
 		},
 	}
@@ -331,12 +331,12 @@ func TestBuild_Cycle(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				Name: "a", Image: "img", Args: []string{}, Env: map[string]string{},
-				Inputs:  []lane.InputRef{{Name: "out", From: "b.out", Mount: "/in"}},
+				Inputs:  []lane.InputRef{{From: "b.out", Mount: "/in"}},
 				Outputs: []lane.OutputSpec{{Name: "out", Type: "file", Path: "/out/a"}},
 			},
 			{
 				Name: "b", Image: "img", Args: []string{}, Env: map[string]string{},
-				Inputs:  []lane.InputRef{{Name: "out", From: "a.out", Mount: "/in"}},
+				Inputs:  []lane.InputRef{{From: "a.out", Mount: "/in"}},
 				Outputs: []lane.OutputSpec{{Name: "out", Type: "file", Path: "/out/b"}},
 			},
 		},
@@ -358,7 +358,7 @@ func TestTree(t *testing.T) {
 			},
 			{
 				Name: "b", Image: "img", Args: []string{}, Env: map[string]string{},
-				Inputs: []lane.InputRef{{Name: "out", From: "a.out", Mount: "/in"}},
+				Inputs: []lane.InputRef{{From: "a.out", Mount: "/in"}},
 			},
 		},
 	}

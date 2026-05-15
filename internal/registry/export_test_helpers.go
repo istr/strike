@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"os"
+	"path/filepath"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/empty"
@@ -29,7 +30,13 @@ func BuildTestImageTar(fileName string, content []byte) ([]byte, lane.Digest, er
 	}
 	defer closer.Remove(tmpDir, "test layer dir")
 
-	if writeErr := os.WriteFile(tmpDir+"/"+fileName, content, 0o600); writeErr != nil {
+	filePath := tmpDir + "/" + fileName
+	if parent := filepath.Dir(filePath); parent != tmpDir {
+		if mkdErr := os.MkdirAll(parent, 0o750); mkdErr != nil {
+			return nil, lane.Digest{}, mkdErr
+		}
+	}
+	if writeErr := os.WriteFile(filePath, content, 0o600); writeErr != nil {
 		return nil, lane.Digest{}, writeErr
 	}
 	tmpRoot, rootErr := os.OpenRoot(tmpDir)

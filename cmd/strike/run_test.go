@@ -67,7 +67,7 @@ func TestBuildInputMounts_Single(t *testing.T) {
 			},
 			{
 				Name: "test", Image: "img", Args: []string{}, Env: map[string]string{},
-				Inputs: []lane.InputRef{{Name: "bin", From: "compile.bin", Mount: "/input/binary"}},
+				Inputs: []lane.InputRef{{From: "compile.bin", Mount: "/input/binary"}},
 			},
 		},
 	}
@@ -127,8 +127,8 @@ func TestBuildInputMounts_Multiple(t *testing.T) {
 			{
 				Name: "consumer", Image: "img", Args: []string{}, Env: map[string]string{},
 				Inputs: []lane.InputRef{
-					{Name: "a", From: "s1.a", Mount: "/in/a"},
-					{Name: "b", From: "s2.b", Mount: "/in/b"},
+					{From: "s1.a", Mount: "/in/a"},
+					{From: "s2.b", Mount: "/in/b"},
 				},
 			},
 		},
@@ -170,6 +170,56 @@ func TestBuildInputMounts_Multiple(t *testing.T) {
 	}
 }
 
+func TestBuildInputMounts_MissingSubpath(t *testing.T) {
+	eng := &mockEngine{}
+	rc := newTestRC(t, eng)
+
+	p := &lane.Lane{
+		Registry: "localhost:5555/test",
+		Steps: []lane.Step{
+			{
+				Name: "src", Image: "img", Args: []string{}, Env: map[string]string{},
+				Outputs: []lane.OutputSpec{{Name: "tree", Type: "directory", Path: "/out/tree"}},
+			},
+			{
+				Name: "consumer", Image: "img", Args: []string{}, Env: map[string]string{},
+				Inputs: []lane.InputRef{
+					{From: "src.tree", Subpath: "nonexistent.json", Mount: "/in/x"},
+				},
+			},
+		},
+	}
+	rc.dag = buildTestDAG(t, p)
+
+	srcDigest := lane.MustParseDigest("sha256:aabbccdd11223344")
+	if err := rc.laneState.Register("src", "tree", lane.Artifact{
+		Type: "directory", Digest: srcDigest,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	rc.state.specHashes["src"] = lane.MustParseDigest("sha256:1111111111111111")
+
+	// Build a test OCI tar with a "tree" directory containing only "actual.json".
+	tarBytes, _, err := registry.BuildTestImageTar("tree/actual.json", []byte("{}"))
+	if err != nil {
+		t.Fatalf("BuildTestImageTar: %v", err)
+	}
+	tag := registry.WrapTag(rc.lane.LaneID, "src", rc.state.specHashes["src"])
+	eng.saveTars = map[string][]byte{tag: tarBytes}
+
+	scratchDir := t.TempDir()
+	_, mountErr := rc.buildInputMounts(context.Background(), rc.dag.Steps["consumer"], scratchDir)
+	if mountErr == nil {
+		t.Fatal("expected error for missing subpath")
+	}
+	if !strings.Contains(mountErr.Error(), "subpath") {
+		t.Errorf("error should mention 'subpath': %v", mountErr)
+	}
+	if !strings.Contains(mountErr.Error(), "src.tree") {
+		t.Errorf("error should mention producer ref 'src.tree': %v", mountErr)
+	}
+}
+
 // --------------------------------------------------------------------------.
 // guardUnsignedImages
 // --------------------------------------------------------------------------.
@@ -185,7 +235,7 @@ func TestGuardUnsignedImages_NoNetwork(t *testing.T) {
 			},
 			{
 				Name: "publish", Image: "img", Args: []string{}, Env: map[string]string{},
-				Inputs: []lane.InputRef{{Name: "img", From: "pack.img", Mount: "/in/img"}},
+				Inputs: []lane.InputRef{{From: "pack.img", Mount: "/in/img"}},
 			},
 		},
 	}
@@ -207,7 +257,7 @@ func TestGuardUnsignedImages_SignedOK(t *testing.T) {
 			{
 				Name: "publish", Image: "img", Args: []string{}, Env: map[string]string{},
 				Peers:  []lane.Peer{lane.OCIPeer{Type: "oci", Registry: "localhost:5555"}},
-				Inputs: []lane.InputRef{{Name: "img", From: "pack.img", Mount: "/in/img"}},
+				Inputs: []lane.InputRef{{From: "pack.img", Mount: "/in/img"}},
 			},
 		},
 	}
@@ -235,7 +285,7 @@ func TestGuardUnsignedImages_UnsignedError(t *testing.T) {
 			{
 				Name: "publish", Image: "img", Args: []string{}, Env: map[string]string{},
 				Peers:  []lane.Peer{lane.OCIPeer{Type: "oci", Registry: "localhost:5555"}},
-				Inputs: []lane.InputRef{{Name: "img", From: "pack.img", Mount: "/in/img"}},
+				Inputs: []lane.InputRef{{From: "pack.img", Mount: "/in/img"}},
 			},
 		},
 	}
@@ -267,7 +317,7 @@ func TestGuardUnsignedImages_NonImageInput(t *testing.T) {
 			{
 				Name: "run", Image: "img", Args: []string{}, Env: map[string]string{},
 				Peers:  []lane.Peer{lane.OCIPeer{Type: "oci", Registry: "localhost:5555"}},
-				Inputs: []lane.InputRef{{Name: "bin", From: "compile.bin", Mount: "/in/bin"}},
+				Inputs: []lane.InputRef{{From: "compile.bin", Mount: "/in/bin"}},
 			},
 		},
 	}

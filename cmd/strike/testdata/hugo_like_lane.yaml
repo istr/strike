@@ -18,8 +18,7 @@ steps:
     args: [hugo]
     env: {}
     inputs:
-      - name: node_modules
-        from: npm_install.node_modules
+      - from: npm_install.node_modules
         mount: /src/node_modules
     secrets: []
     outputs:

@@ -24,8 +24,7 @@ steps:
     args: [cat, /input/data.json]
     env: {}
     inputs:
-      - name: data
-        from: generate.data
+      - from: generate.data
         mount: /input/data.json
     secrets: []
     outputs: []
@@ -34,8 +33,7 @@ steps:
     args: [cat, /input/config.yaml]
     env: {}
     inputs:
-      - name: config
-        from: generate.config
+      - from: generate.config
         mount: /input/config.yaml
     secrets: []
     outputs: []
@@ -44,8 +42,7 @@ steps:
     args: [cat, /input/manifest.txt]
     env: {}
     inputs:
-      - name: manifest
-        from: generate.manifest
+      - from: generate.manifest
         mount: /input/manifest.txt
     secrets: []
     outputs: []

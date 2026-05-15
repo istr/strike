@@ -87,12 +87,25 @@ package lane
 // Input types
 // ---------------------------------------------------------------------------
 
+// A clean relative path within a producer output. No leading slash,
+// no trailing slash, no "." or ".." segments, no empty segments.
+// Used by #InputRef.subpath to select a single file or subdirectory
+// of a directory or image output for mounting into a consumer step.
+#InputSubpath: string &
+	=~"^[^/]" &
+	!~"//" &
+	!~"^\\.\\.($|/)" &
+	!~"/\\.\\.($|/)" &
+	!~"^\\.($|/)" &
+	!~"/\\.($|/)" &
+	!~".+/$"
+
 #InputRef: {
 	@go(InputRef)
-	name:    string @go(Name)
-	from:    string @go(From)           // "step_name.output_name"
-	mount:   #ContainerPath @go(Mount)
-	digest?: #Digest @go(Digest,type=*Digest)
+	from:     string @go(From)            // "step_name.output_name"
+	subpath?: #InputSubpath @go(Subpath)   // path within producer output; "" mounts whole output
+	mount:    #ContainerPath @go(Mount)
+	digest?:  #Digest @go(Digest,type=*Digest)
 }
 
 // ---------------------------------------------------------------------------

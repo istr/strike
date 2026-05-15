@@ -19,11 +19,12 @@ func parseRef(ref string) (step, output string, err error) {
 
 // InputEdge is a fully resolved step.inputs[i] entry.
 // FromStep and FromOutput are guaranteed non-nil by Build.
+// Subpath is "" when the entire producer output is mounted.
 type InputEdge struct {
 	FromStep   *Step
 	FromOutput *OutputSpec
-	LocalName  string        // == InputRef.Name
 	Mount      ContainerPath // == InputRef.Mount
+	Subpath    InputSubpath  // == InputRef.Subpath; "" means whole output
 }
 
 // PackFileEdge is a fully resolved step.pack.files[i] entry.
@@ -138,20 +139,25 @@ func (d *DAG) resolveInputEdges(p *Lane) error {
 		for _, inp := range s.Inputs {
 			refStep, refOutput, err := parseRef(inp.From)
 			if err != nil {
-				return fmt.Errorf("step %q: input %q: %w", name, inp.Name, err)
+				return fmt.Errorf("step %q: input at %q: %w", name, inp.Mount, err)
 			}
 			fromStep, ok := d.Steps[refStep]
 			if !ok {
-				return fmt.Errorf("step %q: input %q references unknown step %q", name, inp.Name, refStep)
+				return fmt.Errorf("step %q: input at %q references unknown step %q",
+					name, inp.Mount, refStep)
 			}
 			out := findOutput(fromStep, refOutput)
 			if out == nil {
-				return fmt.Errorf("step %q: input %q: output %q not found in step %q",
-					name, inp.Name, refOutput, refStep)
+				return fmt.Errorf("step %q: input at %q: output %q not found in step %q",
+					name, inp.Mount, refOutput, refStep)
+			}
+			if inp.Subpath != "" && out.Type == "file" {
+				return fmt.Errorf("step %q: input at %q: subpath %q not allowed on file output %q.%q",
+					name, inp.Mount, inp.Subpath, refStep, refOutput)
 			}
 			d.InputEdges[name] = append(d.InputEdges[name], InputEdge{
-				LocalName:  inp.Name,
 				Mount:      inp.Mount,
+				Subpath:    inp.Subpath,
 				FromStep:   fromStep,
 				FromOutput: out,
 			})
@@ -290,8 +296,8 @@ func (d *DAG) validateMountDisjointness(p *Lane) error {
 				a, b := edges[i].Mount, edges[j].Mount
 				if mountsConflict(a, b) {
 					return fmt.Errorf(
-						"step %q: input mounts %q (input %q) and %q (input %q) overlap; compose them in a pack step",
-						s.Name, a, edges[i].LocalName, b, edges[j].LocalName)
+						"step %q: input mounts %q and %q overlap; compose them in a pack step",
+						s.Name, a, b)
 				}
 			}
 		}

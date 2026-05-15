@@ -168,9 +168,15 @@ func (rc *runContext) resolveImageDigest(ctx context.Context, step *lane.Step, s
 }
 
 func (rc *runContext) computeSpecHash(step *lane.Step, stepName string, imageDigest lane.Digest) (lane.Digest, string, error) {
+	// Per ADR-027, an input is identified in the spec hash by the
+	// canonical triple (from, mount, subpath); mount is unique per step
+	// by disjointness, and subpath is "" when the whole producer output
+	// is mounted. The hashed value remains the producer's spec hash.
 	inputHashes := map[string]lane.Digest{}
 	for _, e := range rc.dag.InputEdges[string(step.Name)] {
-		inputHashes[e.LocalName] = rc.state.specHashes[string(e.FromStep.Name)]
+		from := string(e.FromStep.Name) + "." + e.FromOutput.Name
+		key := from + "|" + e.Mount.String() + "|" + string(e.Subpath)
+		inputHashes[key] = rc.state.specHashes[string(e.FromStep.Name)]
 	}
 
 	key := registry.SpecHash(step, imageDigest, inputHashes, map[string]lane.Digest{})
@@ -234,11 +240,11 @@ func (rc *runContext) guardUnsignedImages(step *lane.Step, safeName string) erro
 		ref := string(e.FromStep.Name) + "." + e.FromOutput.Name
 		art, err := rc.laneState.Resolve(ref)
 		if err != nil {
-			return fmt.Errorf("%s: input %q: %w", safeName, e.LocalName, err)
+			return fmt.Errorf("%s: input at %q: %w", safeName, e.Mount, err)
 		}
 		if !art.Signed {
-			return fmt.Errorf("%s: input %q is unsigned OCI image from %s",
-				safeName, e.LocalName, ref)
+			return fmt.Errorf("%s: input at %q is unsigned OCI image from %s",
+				safeName, e.Mount, ref)
 		}
 	}
 	return nil
@@ -503,11 +509,7 @@ func (rc *runContext) buildInputMounts(ctx context.Context, step *lane.Step, scr
 	if rootErr != nil {
 		return nil, fmt.Errorf("open scratch root: %w", rootErr)
 	}
-	defer func() {
-		if cerr := scratchRoot.Close(); cerr != nil {
-			log.Printf("WARN close scratch root: %v", cerr)
-		}
-	}()
+	defer closer.Warn(scratchRoot, "scratch root")
 	if mkErr := scratchRoot.Mkdir("inputs", 0o750); mkErr != nil && !errors.Is(mkErr, os.ErrExist) {
 		return nil, fmt.Errorf("create inputs dir: %w", mkErr)
 	}
@@ -515,33 +517,10 @@ func (rc *runContext) buildInputMounts(ctx context.Context, step *lane.Step, scr
 
 	mounts := make([]executor.Mount, 0, len(edges))
 	for _, e := range edges {
-		fromStep := string(e.FromStep.Name)
-		fromOutput := e.FromOutput.Name
-
-		art, artErr := rc.laneState.Resolve(fromStep + "." + fromOutput)
-		if artErr != nil {
-			return nil, fmt.Errorf("input %s: source artifact not found: %w", e.LocalName, artErr)
+		srcPath, err := rc.resolveInputEdge(ctx, e, scratchRoot, inputsRoot)
+		if err != nil {
+			return nil, err
 		}
-
-		tag := registry.WrapTag(rc.lane.LaneID, fromStep, rc.state.specHashes[fromStep])
-
-		// Dedup by digest prefix: hex-only chars, no traversal possible.
-		dedupDir := art.Digest.Hex[:16]
-		inputDir := filepath.Join(inputsRoot, dedupDir)
-		if mkErr := scratchRoot.Mkdir(filepath.Join("inputs", dedupDir), 0o750); mkErr == nil {
-			tarBytes, saveErr := registry.SaveImage(ctx, rc.engine, tag)
-			if saveErr != nil {
-				return nil, fmt.Errorf("input %s: save: %w", e.LocalName, saveErr)
-			}
-			if extractErr := registry.ExtractSingleLayer(tarBytes, inputDir); extractErr != nil {
-				return nil, fmt.Errorf("input %s: extract: %w", e.LocalName, extractErr)
-			}
-		} else if !errors.Is(mkErr, os.ErrExist) {
-			return nil, fmt.Errorf("input %s: mkdir: %w", e.LocalName, mkErr)
-		}
-
-		baseName := filepath.Base(e.FromOutput.Path.String())
-		srcPath := filepath.Join(inputDir, baseName)
 		mounts = append(mounts, executor.Mount{
 			Host:      srcPath,
 			Container: e.Mount.String(),
@@ -549,6 +528,85 @@ func (rc *runContext) buildInputMounts(ctx context.Context, step *lane.Step, scr
 		})
 	}
 	return mounts, nil
+}
+
+// resolveInputEdge extracts the producer output for a single input edge
+// and returns the host path to bind-mount. It deduplicates extractions
+// by digest prefix and validates subpath existence via *os.Root.
+func (rc *runContext) resolveInputEdge(ctx context.Context, e lane.InputEdge, scratchRoot *os.Root, inputsRoot string) (string, error) {
+	fromStep := string(e.FromStep.Name)
+	ref := fromStep + "." + e.FromOutput.Name
+
+	art, artErr := rc.laneState.Resolve(ref)
+	if artErr != nil {
+		return "", fmt.Errorf("input at %q: source artifact %s not found: %w",
+			e.Mount, ref, artErr)
+	}
+
+	inputDir, err := rc.extractInputArtifact(ctx, e.Mount, ref, fromStep, art, scratchRoot, inputsRoot)
+	if err != nil {
+		return "", err
+	}
+
+	return resolveInputSubpath(e, inputDir)
+}
+
+// extractInputArtifact ensures the producer output is extracted exactly
+// once (dedup by digest prefix) and returns the extraction directory.
+func (rc *runContext) extractInputArtifact(ctx context.Context, mount lane.ContainerPath, ref, fromStep string, art lane.Artifact, scratchRoot *os.Root, inputsRoot string) (string, error) {
+	tag := registry.WrapTag(rc.lane.LaneID, fromStep, rc.state.specHashes[fromStep])
+
+	// Dedup by digest prefix: hex-only chars, no traversal possible.
+	dedupDir := art.Digest.Hex[:16]
+	inputDir := filepath.Join(inputsRoot, dedupDir)
+	if mkErr := scratchRoot.Mkdir(filepath.Join("inputs", dedupDir), 0o750); mkErr == nil {
+		tarBytes, saveErr := registry.SaveImage(ctx, rc.engine, tag)
+		if saveErr != nil {
+			return "", fmt.Errorf("input at %q: save %s: %w", mount, ref, saveErr)
+		}
+		if extractErr := registry.ExtractSingleLayer(tarBytes, inputDir); extractErr != nil {
+			return "", fmt.Errorf("input at %q: extract %s: %w", mount, ref, extractErr)
+		}
+	} else if !errors.Is(mkErr, os.ErrExist) {
+		return "", fmt.Errorf("input at %q: mkdir: %w", mount, mkErr)
+	}
+	return inputDir, nil
+}
+
+// resolveInputSubpath resolves the content root within the extracted
+// directory, applies an optional subpath, and verifies existence using
+// *os.Root for path-confined I/O (CODE-STYLE.md#path-confined-io).
+func resolveInputSubpath(e lane.InputEdge, inputDir string) (string, error) {
+	ref := string(e.FromStep.Name) + "." + e.FromOutput.Name
+
+	// Content root:
+	//   - image output: rootfs root == inputDir
+	//   - file/directory output: layer entry is at inputDir/<basename>
+	contentRoot := inputDir
+	if e.FromOutput.Type != artifactTypeImage {
+		contentRoot = filepath.Join(inputDir, filepath.Base(e.FromOutput.Path.String()))
+	}
+
+	if e.Subpath == "" {
+		return contentRoot, nil
+	}
+
+	// Stat via *os.Root so the subpath cannot escape contentRoot.
+	root, err := os.OpenRoot(contentRoot)
+	if err != nil {
+		return "", fmt.Errorf("input at %q: open content root: %w", e.Mount, err)
+	}
+	defer closer.Warn(root, "input content root")
+
+	if _, statErr := root.Stat(string(e.Subpath)); statErr != nil {
+		if os.IsNotExist(statErr) {
+			return "", fmt.Errorf("input at %q: subpath %q not found in %s output",
+				e.Mount, e.Subpath, ref)
+		}
+		return "", fmt.Errorf("input at %q: stat subpath %q: %w", e.Mount, e.Subpath, statErr)
+	}
+
+	return filepath.Join(contentRoot, string(e.Subpath)), nil
 }
 
 func (rc *runContext) pushAndReport(ctx context.Context, step *lane.Step, safeName, tag string) error {

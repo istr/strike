@@ -23,8 +23,8 @@ func twoInputLane(mountA, mountB lane.ContainerPath) *lane.Lane {
 			{
 				Name: "c", Image: "img", Args: []string{}, Env: map[string]string{},
 				Inputs: []lane.InputRef{
-					{Name: "x", From: "a.o", Mount: mountA},
-					{Name: "y", From: "b.o", Mount: mountB},
+					{From: "a.o", Mount: mountA},
+					{From: "b.o", Mount: mountB},
 				},
 			},
 		},
@@ -49,8 +49,8 @@ func TestBuild_NestedInputMountsRejected(t *testing.T) {
 			{
 				Name: "build", Image: "img", Args: []string{}, Env: map[string]string{},
 				Inputs: []lane.InputRef{
-					{Name: "tree", From: "src.tree", Mount: "/work"},
-					{Name: "deps", From: "deps.node_modules", Mount: "/work/node_modules"},
+					{From: "src.tree", Mount: "/work"},
+					{From: "deps.node_modules", Mount: "/work/node_modules"},
 				},
 			},
 		},

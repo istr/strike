@@ -1,6 +1,7 @@
 package lane_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -287,5 +288,72 @@ steps:
 	}
 	if !strings.Contains(msg, "validation:") {
 		t.Errorf("parse error missing validation prefix: %s", msg)
+	}
+}
+
+// TestParse_InputSubpathValidation exercises the CUE regex for #InputSubpath.
+func TestParse_InputSubpathValidation(t *testing.T) {
+	tmpl := `
+name: test
+lane_id: test
+registry: localhost:5555/test
+secrets: {}
+steps:
+  - name: src
+    image: img@sha256:abababababababababababababababababababababababababababababababab
+    args: ["true"]
+    env: {}
+    inputs: []
+    secrets: []
+    outputs:
+      - { name: tree, type: directory, path: /out/tree }
+  - name: consumer
+    image: img@sha256:cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd
+    args: ["true"]
+    env: {}
+    inputs:
+      - from: src.tree
+        subpath: %s
+        mount: /in/x
+    secrets: []
+    outputs: []
+`
+
+	tests := []struct {
+		name    string
+		subpath string
+		valid   bool
+	}{
+		{"clean_relative", "package.json", true},
+		{"nested_relative", "packages/sub/file.txt", true},
+		{"leading_slash", "/abs/path", false},
+		{"bare_dotdot", "..", false},
+		{"leading_dotdot", "../escape", false},
+		{"embedded_dotdot", "sub/../escape", false},
+		{"bare_dot", ".", false},
+		{"embedded_dot", "sub/./file", false},
+		{"double_slash", "a//b", false},
+		{"trailing_slash", "trailing/", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			yaml := fmt.Sprintf(tmpl, tt.subpath)
+			dir := t.TempDir()
+			path := filepath.Join(dir, "lane.yaml")
+			if err := os.WriteFile(path, []byte(yaml), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			_, err := lane.Parse(mustFilePath(t, path))
+			if tt.valid {
+				if err != nil {
+					t.Errorf("expected valid subpath %q, got error: %v", tt.subpath, err)
+				}
+			} else {
+				if err == nil {
+					t.Errorf("expected invalid subpath %q to be rejected", tt.subpath)
+				}
+			}
+		})
 	}
 }

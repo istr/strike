@@ -20,7 +20,7 @@ func TestBuild_InputEdgesPopulated(t *testing.T) {
 			},
 			{
 				Name: "b", Image: "img", Args: []string{}, Env: map[string]string{},
-				Inputs: []lane.InputRef{{Name: "in_a", From: "a.out", Mount: "/in"}},
+				Inputs: []lane.InputRef{{From: "a.out", Mount: "/in"}},
 			},
 		},
 	}
@@ -32,8 +32,11 @@ func TestBuild_InputEdgesPopulated(t *testing.T) {
 	if len(edges) != 1 {
 		t.Fatalf("expected 1 edge, got %d", len(edges))
 	}
-	if edges[0].LocalName != "in_a" {
-		t.Errorf("LocalName = %q, want in_a", edges[0].LocalName)
+	if edges[0].Mount != "/in" {
+		t.Errorf("Mount = %q, want /in", edges[0].Mount)
+	}
+	if edges[0].Subpath != "" {
+		t.Errorf("Subpath = %q, want empty", edges[0].Subpath)
 	}
 	if edges[0].FromStep == nil || string(edges[0].FromStep.Name) != "a" {
 		t.Error("FromStep should point to step 'a'")
@@ -52,7 +55,7 @@ func TestBuild_UnknownInputOutput(t *testing.T) {
 			},
 			{
 				Name: "b", Image: "img", Args: []string{}, Env: map[string]string{},
-				Inputs: []lane.InputRef{{Name: "in", From: "a.missing", Mount: "/in"}},
+				Inputs: []lane.InputRef{{From: "a.missing", Mount: "/in"}},
 			},
 		},
 	}
@@ -222,6 +225,79 @@ func TestBuild_ImageFromEdgesPopulated(t *testing.T) {
 	}
 	if edge.FromOutput == nil || edge.FromOutput.Name != "img" {
 		t.Error("FromOutput should point to output 'img'")
+	}
+}
+
+func TestBuild_InputSubpathPopulated(t *testing.T) {
+	p := &lane.Lane{
+		Steps: []lane.Step{
+			{
+				Name: "src", Image: "img", Args: []string{}, Env: map[string]string{},
+				Outputs: []lane.OutputSpec{{Name: "tree", Type: "directory", Path: "/out/tree"}},
+			},
+			{
+				Name: "consumer", Image: "img", Args: []string{}, Env: map[string]string{},
+				Inputs: []lane.InputRef{
+					{From: "src.tree", Subpath: "package.json", Mount: "/out/package.json"},
+				},
+			},
+		},
+	}
+	dag, err := lane.Build(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	edges := dag.InputEdges["consumer"]
+	if len(edges) != 1 {
+		t.Fatalf("expected 1 edge, got %d", len(edges))
+	}
+	if edges[0].Subpath != "package.json" {
+		t.Errorf("Subpath = %q, want package.json", edges[0].Subpath)
+	}
+}
+
+func TestBuild_SubpathOnFileOutputRejected(t *testing.T) {
+	p := &lane.Lane{
+		Steps: []lane.Step{
+			{
+				Name: "compile", Image: "img", Args: []string{}, Env: map[string]string{},
+				Outputs: []lane.OutputSpec{{Name: "bin", Type: "file", Path: "/out/bin"}},
+			},
+			{
+				Name: "consumer", Image: "img", Args: []string{}, Env: map[string]string{},
+				Inputs: []lane.InputRef{
+					{From: "compile.bin", Subpath: "anything", Mount: "/in/bin"},
+				},
+			},
+		},
+	}
+	_, err := lane.Build(p)
+	if err == nil {
+		t.Fatal("expected error: subpath on file output")
+	}
+	if !strings.Contains(err.Error(), "subpath") {
+		t.Errorf("error should mention 'subpath': %v", err)
+	}
+}
+
+func TestBuild_SiblingSubpathsFromSameProducerAccepted(t *testing.T) {
+	p := &lane.Lane{
+		Steps: []lane.Step{
+			{
+				Name: "src", Image: "img", Args: []string{}, Env: map[string]string{},
+				Outputs: []lane.OutputSpec{{Name: "tree", Type: "directory", Path: "/out/tree"}},
+			},
+			{
+				Name: "consumer", Image: "img", Args: []string{}, Env: map[string]string{},
+				Inputs: []lane.InputRef{
+					{From: "src.tree", Subpath: "a.json", Mount: "/out/a.json"},
+					{From: "src.tree", Subpath: "b.json", Mount: "/out/b.json"},
+				},
+			},
+		},
+	}
+	if _, err := lane.Build(p); err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
