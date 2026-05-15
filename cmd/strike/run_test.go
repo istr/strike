@@ -627,6 +627,7 @@ func TestResolveImageDigest_FromInspect(t *testing.T) {
 func TestResolveImageDigest_ImageFrom(t *testing.T) {
 	rc := newTestRC(t, &mockEngine{})
 	p := &lane.Lane{
+		LaneID:   "test-lane",
 		Registry: "localhost:5555/test",
 		Steps: []lane.Step{
 			{
@@ -639,14 +640,18 @@ func TestResolveImageDigest_ImageFrom(t *testing.T) {
 			},
 		},
 	}
+	rc.lane = p
 	rc.dag = buildTestDAG(t, p)
 	if err := rc.laneState.Register("pack", "img", lane.Artifact{
 		Type: "image", Digest: lane.MustParseDigest("sha256:abcdef123456789000"),
 	}); err != nil {
 		t.Fatal(err)
 	}
+	producerSpecHash := lane.MustParseDigest("sha256:1111111111111111")
+	rc.state.specHashes["pack"] = producerSpecHash
 
 	step := rc.dag.Steps["run"]
+	imageBefore := step.Image
 	digest, err := rc.resolveImageDigest(context.Background(), step, "test")
 	if err != nil {
 		t.Fatal(err)
@@ -654,8 +659,14 @@ func TestResolveImageDigest_ImageFrom(t *testing.T) {
 	if digest.String() != "sha256:abcdef123456789000" {
 		t.Errorf("digest = %q, want sha256:abcdef123456789000", digest.String())
 	}
-	if !strings.HasPrefix(step.Image, "localhost/strike:") {
-		t.Errorf("step.Image should be set to localhost/strike:..., got %q", step.Image)
+	if step.Image != imageBefore {
+		t.Errorf("resolveImageDigest must not mutate step.Image; got %q, was %q",
+			step.Image, imageBefore)
+	}
+	got := rc.state.imageFromTags["run"]
+	want := registry.WrapTag("test-lane", "pack", producerSpecHash)
+	if got != want {
+		t.Errorf("imageFromTags[run] = %q, want %q", got, want)
 	}
 }
 

@@ -13,10 +13,15 @@ import (
 
 // Run holds the configuration for executing a step container.
 type Run struct {
-	Engine      container.Engine
-	Secrets     map[string]lane.SecretString
-	Step        *lane.Step
-	OutputDir   string
+	Engine    container.Engine
+	Secrets   map[string]lane.SecretString
+	Step      *lane.Step
+	OutputDir string
+	// ImageRef overrides Step.Image when non-empty. Set by the
+	// caller for image_from steps so that Step.Image remains the
+	// parsed YAML value and the executor sees the producer's
+	// local WrapTag. When empty, Step.Image is used unchanged.
+	ImageRef    string
 	InputMounts []Mount
 }
 
@@ -89,6 +94,9 @@ func (r Run) Execute(ctx context.Context) error {
 
 	opts := container.DefaultSecureOpts()
 	opts.Image = r.Step.Image
+	if r.ImageRef != "" {
+		opts.Image = r.ImageRef
+	}
 	opts.Cmd = r.Step.Args
 	opts.Env = env
 	opts.Mounts = mounts

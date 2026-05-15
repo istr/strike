@@ -23,11 +23,18 @@ import (
 // runState holds accumulated state across steps during a lane execution.
 type runState struct {
 	specHashes map[string]lane.Digest
+	// imageFromTags maps a consumer step name to the producer's
+	// local WrapTag, populated by resolveImageDigest when the
+	// consumer has an image_from edge. Consumed by
+	// executeContainerStep to override Step.Image in the executor
+	// invocation without mutating the parsed Lane.
+	imageFromTags map[string]string
 }
 
 func newRunState() *runState {
 	return &runState{
-		specHashes: map[string]lane.Digest{},
+		specHashes:    map[string]lane.Digest{},
+		imageFromTags: map[string]string{},
 	}
 }
 
@@ -151,13 +158,20 @@ func (rc *runContext) resolveImageDigest(ctx context.Context, step *lane.Step, s
 		return digest, nil
 	}
 	if edge, ok := rc.dag.ImageFromEdges[string(step.Name)]; ok {
-		ref := string(edge.FromStep.Name) + "." + edge.FromOutput.Name
+		fromStep := string(edge.FromStep.Name)
+		ref := fromStep + "." + edge.FromOutput.Name
 		art, err := rc.laneState.Resolve(ref)
 		if err != nil {
 			return lane.Digest{}, fmt.Errorf("%s: image_from %s: %w",
 				safeName, ref, err)
 		}
-		step.Image = "localhost/strike:" + art.Digest.Hex[:12]
+		fromSpecHash, hashOK := rc.state.specHashes[fromStep]
+		if !hashOK {
+			return lane.Digest{}, fmt.Errorf("%s: image_from %s: producer spec hash not recorded",
+				safeName, ref)
+		}
+		rc.state.imageFromTags[string(step.Name)] = registry.WrapTag(
+			rc.lane.LaneID, fromStep, fromSpecHash)
 		return art.Digest, nil
 	}
 	digest, err := resolveDigest(ctx, rc.regClient, step.Image)
@@ -413,6 +427,7 @@ func (rc *runContext) executeContainerStep(ctx context.Context, step *lane.Step,
 		InputMounts: inputMounts,
 		OutputDir:   outDir,
 		Secrets:     secrets,
+		ImageRef:    rc.state.imageFromTags[stepName],
 	}
 	if execErr := run.Execute(ctx); execErr != nil {
 		return fmt.Errorf("%s: execution failed: %w", safeName, execErr)
