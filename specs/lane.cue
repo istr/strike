@@ -223,7 +223,6 @@ package lane
 	config?:       #ImageConfig @go(Config,optional=nillable)
 	annotations?:  [string]: string @go(Annotations)
 	sbom?:         #SBOMConfig @go(SBOM,optional=nillable)
-	sign?:         #SignConfig @go(Sign,optional=nillable)
 	push?:         [...string] @go(Push)
 }
 
@@ -378,13 +377,6 @@ package lane
 	@go(SBOMConfig)
 	generate: *true | bool @go(Generate)
 	format:   *"spdx-json" | "cyclonedx-json" @go(Format)
-}
-
-#SignConfig: {
-	@go(SignConfig)
-	enabled: *true | bool @go(Enabled)
-	keyless: *true | bool @go(Keyless)
-	key?:    string @go(Key)
 }
 
 #Digest: =~"^sha256:[a-f0-9]{64}$" @go(-)
