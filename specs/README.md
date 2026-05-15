@@ -1,4 +1,4 @@
-# specs/ — Cross-Implementation Specification Contract
+# specs/ -- Cross-Implementation Specification Contract
 
 This directory holds the machine-readable specifications that define
 strike's data formats. Any implementation (Go primary, Rust verifier,
@@ -15,7 +15,7 @@ for both input and output formats:
 | Deploy attestation | `internal/deploy/attestation.cue` | JSON output (attestation) |
 
 CUE schemas are embedded in the Go binary via `//go:embed` and validated
-at runtime — lane input before execution, attestation output before
+at runtime -- lane input before execution, attestation output before
 persistence.
 
 ## Exported formats
@@ -28,8 +28,8 @@ make specs    # exports JSON Schema to specs/
 
 This produces:
 
-- `specs/lane.schema.json` — JSON Schema for lane.yaml (after YAML→JSON)
-- `specs/attestation.schema.json` — JSON Schema for deploy attestations
+- `specs/lane.schema.json` -- JSON Schema for lane.yaml (after YAML -> JSON)
+- `specs/attestation.schema.json` -- JSON Schema for deploy attestations
 
 ## Golden test fixtures
 

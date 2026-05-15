@@ -1,9 +1,9 @@
-# Code Style — Patterns and Anti-Patterns
+# Code Style -- Patterns and Anti-Patterns
 
 This document is the authoritative reference for *how strike code is shaped*.
 It does not define linter rules (those live in `.golangci.yml`) and it does
 not define principles (those live in `DESIGN-PRINCIPLES.md`). It defines the
-concrete forms — the named patterns — that the project has settled on, so
+concrete forms -- the named patterns -- that the project has settled on, so
 that the same questions are not relitigated in every PR.
 
 Each pattern below has an anchor name (e.g. `path-confined-io`). PR comments,
@@ -174,7 +174,7 @@ grep -rn -E 'defer os\.RemoveAll.*//nolint'  --include='*.go'
 ```
 
 **Exception.** A `Close` whose return value is part of the function's
-normal error path is not deferred — it is called explicitly and its error
+normal error path is not deferred -- it is called explicitly and its error
 is returned or joined (see `internal/registry/imagewrap.go::extractRegularFile`
 for the canonical shape).
 
@@ -281,7 +281,7 @@ const crossvalDir = "../../test/crossval"
 data, err := os.ReadFile(filepath.Join(crossvalDir, subdir, name)) //nolint:gosec
 ```
 
-**Good — fixtures inside the test package's `testdata/`.**
+**Good -- fixtures inside the test package's `testdata/`.**
 
 ```go
 //go:embed testdata/golden/*.json
@@ -290,7 +290,7 @@ var goldenFS embed.FS
 data, _ := goldenFS.ReadFile("testdata/golden/" + name)
 ```
 
-**Good — fixtures shared across packages (e.g. `test/crossval/`).** Add
+**Good -- fixtures shared across packages (e.g. `test/crossval/`).** Add
 a thin package whose only role is to export the embed:
 
 ```go
@@ -418,7 +418,7 @@ func TestSETPayload_FieldOrder(t *testing.T) {
 Test files use `executor.SETPayload` directly; no duplicate type.
 
 **Rationale.** A field-order suppression that is not test-backed is a
-silent invariant — easy to break, no signal when broken. Reflection turns
+silent invariant -- easy to break, no signal when broken. Reflection turns
 the suppression's text rationale into an executable contract.
 
 ---
@@ -491,7 +491,7 @@ if err := os.Chmod(path, 0o755); err != nil { return err }
 ```
 
 **Rationale.** `gosec` G306 audits the mode parameter of `WriteFile`,
-not subsequent `Chmod` calls. This is not a workaround — the resulting
+not subsequent `Chmod` calls. This is not a workaround -- the resulting
 file genuinely passes through a `0o600` window before its wider mode is
 set, which is the security property G306 exists to encourage.
 
@@ -570,7 +570,7 @@ if errors.As(err, &transient) { ... }
 
 **Rationale.** `errors.As` since Go 1.20 covers the generic case. The
 hand-rolled helper does not understand `Unwrap() []error` (multi-error
-trees), which `errors.As` does — so the hand-roll is also subtly less
+trees), which `errors.As` does -- so the hand-roll is also subtly less
 correct.
 
 ---
@@ -646,8 +646,8 @@ fixture remains inline.
 
 ## See also
 
-- `DESIGN-PRINCIPLES.md` — the principles these patterns operationalize.
-- `docs/DEVELOPMENT.md` — toolchain configuration that enforces them.
-- `AGENTS.md` — the operational rules for AI coding agents.
-- `.golangci.yml` — the linter configuration that flags violations.
-- `CONTRIBUTING.md` — the review process that gates merges.
+- `DESIGN-PRINCIPLES.md` -- the principles these patterns operationalize.
+- `docs/DEVELOPMENT.md` -- toolchain configuration that enforces them.
+- `AGENTS.md` -- the operational rules for AI coding agents.
+- `.golangci.yml` -- the linter configuration that flags violations.
+- `CONTRIBUTING.md` -- the review process that gates merges.

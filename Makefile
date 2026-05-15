@@ -34,7 +34,7 @@ lint-from:
 	$(CURDIR)/.build/lintfrom ./...
 
 lint-ascii:
-	@! grep -rPn '[^\x00-\x7F]' --include='*.go' --include='*.cue' \
+	@! grep -rPn '[^\x00-\x7F]' --include='*.md' --include='*.go' --include='*.cue' \
 		--exclude='*_test.go' . \
 		&& echo "ascii-only: ok" \
 		|| { echo "non-ASCII found in source files (see above)"; exit 1; }
