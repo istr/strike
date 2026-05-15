@@ -13,8 +13,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"reflect"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 

@@ -64,11 +64,6 @@ func assertLanePanicFree(t *testing.T, path string) {
 	rc.dag = dag
 
 	for _, stepName := range dag.Order {
-		rc.state.outputDirs[stepName] = t.TempDir()
-		step := dag.Steps[stepName]
-		if step.Provenance != nil {
-			placeFakeProvenance(t, rc.state.outputDirs[stepName], step)
-		}
 		if err := rc.runStep(stepName); err != nil {
 			t.Logf("step %q returned error (OK, panic would not be): %v",
 				stepName, err)

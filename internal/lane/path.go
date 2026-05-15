@@ -41,5 +41,5 @@ func (p FilePath) Read() ([]byte, error) {
 	if p.s == "" {
 		return nil, fs.ErrInvalid
 	}
-	return os.ReadFile(p.s) //nolint:gosec // G304: FilePath constructor validates; documented chokepoint, docs/CODE-STYLE.md#path-confined-io
+	return os.ReadFile(p.s)
 }

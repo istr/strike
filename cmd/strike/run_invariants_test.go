@@ -9,24 +9,6 @@ import (
 	"github.com/istr/strike/internal/lane"
 )
 
-// placeFakeProvenance writes a minimal valid provenance record for the
-// step's declared type into the output directory.
-func placeFakeProvenance(t *testing.T, outDir string, step *lane.Step) {
-	t.Helper()
-	raw := fakeProvenanceJSON(t, step.Provenance.Type)
-	rel, err := filepath.Rel(outputMountTarget, step.Provenance.Path.String())
-	if err != nil {
-		t.Fatalf("provenance path %q: %v", step.Provenance.Path, err)
-	}
-	hostPath := filepath.Join(outDir, rel)
-	if err := os.MkdirAll(filepath.Dir(hostPath), 0o750); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(hostPath, raw, 0o600); err != nil {
-		t.Fatal(err)
-	}
-}
-
 // --------------------------------------------------------------------------.
 // Negative: structural invariants enforced by Build.
 // --------------------------------------------------------------------------.

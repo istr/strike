@@ -46,7 +46,11 @@ func (e *podmanEngine) Ping(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("engine ping: %w", err)
 	}
-	defer closer.Warn(resp.Body, "engine ping")
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.Printf("WARN close response body: %v", err)
+		}
+	}()
 
 	e.captureTLSIdentity(resp)
 
@@ -120,7 +124,11 @@ func (e *podmanEngine) Info(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("engine info: %w", err)
 	}
-	defer closer.Warn(resp.Body, "engine info")
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.Printf("WARN close response body: %v", err)
+		}
+	}()
 
 	var raw struct {
 		Version struct {
@@ -163,7 +171,11 @@ func (e *podmanEngine) ImageExists(ctx context.Context, ref string) (bool, error
 	if err != nil {
 		return false, err
 	}
-	defer closer.Warn(resp.Body, "image exists")
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.Printf("WARN close response body: %v", err)
+		}
+	}()
 	return resp.StatusCode == http.StatusNoContent, nil
 }
 
@@ -178,7 +190,11 @@ func (e *podmanEngine) ImagePull(ctx context.Context, ref string) error {
 	if err != nil {
 		return fmt.Errorf("image pull %s: %w", ref, err)
 	}
-	defer closer.Warn(resp.Body, "image pull")
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.Printf("WARN close response body: %v", err)
+		}
+	}()
 	// The pull response is a stream of JSON objects. Read to completion.
 	if _, err := io.Copy(io.Discard, resp.Body); err != nil {
 		return fmt.Errorf("image pull %s: read response: %w", ref, err)
@@ -203,7 +219,11 @@ func (e *podmanEngine) ImagePush(ctx context.Context, name string) error {
 	if err != nil {
 		return fmt.Errorf("image push %s: %w", name, err)
 	}
-	defer closer.Warn(resp.Body, "image push")
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.Printf("WARN close response body: %v", err)
+		}
+	}()
 	if _, err := io.Copy(io.Discard, resp.Body); err != nil {
 		return err
 	}
@@ -224,7 +244,11 @@ func (e *podmanEngine) ImageLoad(ctx context.Context, input io.Reader) (string, 
 	if err != nil {
 		return "", fmt.Errorf("image load: %w", err)
 	}
-	defer closer.Warn(resp.Body, "image load")
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			log.Printf("WARN close response body: %v", closeErr)
+		}
+	}()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -271,7 +295,11 @@ func (e *podmanEngine) ImageInspect(ctx context.Context, ref string) (*ImageInfo
 	if err != nil {
 		return nil, fmt.Errorf("image inspect %s: %w", ref, err)
 	}
-	defer closer.Warn(resp.Body, "image inspect")
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.Printf("WARN close response body: %v", err)
+		}
+	}()
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, fmt.Errorf("image %s not found", ref)
 	}
@@ -309,7 +337,11 @@ func (e *podmanEngine) ImageTag(ctx context.Context, source, target string) erro
 	if err != nil {
 		return fmt.Errorf("image tag %s -> %s: %w", source, target, err)
 	}
-	defer closer.Warn(resp.Body, "image tag")
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.Printf("WARN close response body: %v", err)
+		}
+	}()
 	if resp.StatusCode != http.StatusCreated {
 		return fmt.Errorf("image tag: status %d", resp.StatusCode)
 	}
@@ -390,7 +422,11 @@ func (e *podmanEngine) containerCreate(ctx context.Context, opts RunOpts) (strin
 	if err != nil {
 		return "", err
 	}
-	defer closer.Warn(resp.Body, "container create")
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.Printf("WARN close response body: %v", err)
+		}
+	}()
 	var result struct {
 		ID string `json:"Id"`
 	}
@@ -410,7 +446,11 @@ func (e *podmanEngine) containerStart(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	defer closer.Warn(resp.Body, "container start")
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.Printf("WARN close response body: %v", err)
+		}
+	}()
 	if resp.StatusCode != http.StatusNoContent {
 		body, readErr := io.ReadAll(resp.Body)
 		if readErr != nil {
@@ -431,7 +471,11 @@ func (e *podmanEngine) containerWait(ctx context.Context, id string) (int, error
 	if err != nil {
 		return -1, err
 	}
-	defer closer.Warn(resp.Body, "container wait")
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			log.Printf("WARN close response body: %v", closeErr)
+		}
+	}()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -472,7 +516,11 @@ func (e *podmanEngine) containerLogs(ctx context.Context, id string, stdout, std
 	if err != nil {
 		return err
 	}
-	defer closer.Warn(resp.Body, "container logs")
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.Printf("WARN close response body: %v", err)
+		}
+	}()
 	// Libpod log stream: each frame has an 8-byte header (stream type + size),
 	// followed by the payload. Stream type: 0=stdin, 1=stdout, 2=stderr.
 	return demuxLogStream(resp.Body, stdout, stderr)
@@ -488,7 +536,11 @@ func (e *podmanEngine) containerRemove(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	defer closer.Warn(resp.Body, "container remove")
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.Printf("WARN close response body: %v", err)
+		}
+	}()
 	return nil
 }
 

@@ -57,7 +57,7 @@ func TestEndToEndChain(t *testing.T) {
 	t.Logf("packed image: %s", imageDigest)
 
 	regClient := &registry.Client{Engine: engine}
-	if _, loadErr := regClient.LoadOCITar(ctx, packRoot, "image.tar"); loadErr != nil {
+	if _, loadErr := loadOCITar(ctx, regClient, packRoot, "image.tar"); loadErr != nil {
 		t.Fatalf("load: %v", loadErr)
 	}
 	localTag := "localhost/strike:" + imageDigest.Hex[:12]

@@ -393,6 +393,12 @@ package lane
 	content_type?: string @go(ContentType)
 	metadata?:     [string]: string @go(Metadata)
 	rekor?:        #RekorEntry @go(Rekor,optional=nillable)
+	// signed: true if this artifact was cryptographically
+	// signed during its production. Currently set by pack
+	// steps when a signing key is configured. Read by
+	// guardUnsignedImages to reject unsigned OCI image
+	// inputs into steps that declare network peers.
+	signed?:       bool | *false @go(Signed)
 }
 
 // ---------------------------------------------------------------------------

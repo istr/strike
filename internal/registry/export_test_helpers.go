@@ -78,9 +78,14 @@ func BuildTestImageTar(fileName string, content []byte) ([]byte, lane.Digest, er
 }
 
 // SingleImageTarForTest wraps an arbitrary v1.Image into an OCI layout tar.
+// If annotations are provided, the first map is set on the index descriptor.
 // Exported for use in tests outside the registry package.
-func SingleImageTarForTest(img v1.Image) ([]byte, error) {
-	r, err := singleImageTar(img, nil)
+func SingleImageTarForTest(img v1.Image, annotations ...map[string]string) ([]byte, error) {
+	var ann map[string]string
+	if len(annotations) > 0 {
+		ann = annotations[0]
+	}
+	r, err := singleImageTar(img, ann)
 	if err != nil {
 		return nil, err
 	}

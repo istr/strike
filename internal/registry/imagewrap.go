@@ -27,6 +27,11 @@ import (
 // read by the cache-hit path to restore Artifact.Size without re-extraction.
 const ContentSizeAnnotation = "dev.strike.content-size"
 
+// SignedAnnotation is the OCI annotation key that records whether a pack
+// step signed this artifact. Written by executePack, read by the cache-hit
+// path to restore Artifact.Signed without re-inspection.
+const SignedAnnotation = "dev.strike.signed"
+
 // WrapFileAsImage packages a single file into an OCI image, loads it into
 // the engine's local store, tags it, and returns the manifest digest and
 // logical byte size. Symlinks are rejected. root is the output directory;
@@ -89,7 +94,9 @@ func (c *Client) WrapDirectoryAsImage(ctx context.Context, root *os.Root, name, 
 // store, tags it, and returns the manifest digest and the tar file size.
 // The controller-computed manifest digest is verified against the engine.
 // root is the output directory; name is the relative tar path within it.
-func (c *Client) WrapImageOutputAsImage(ctx context.Context, root *os.Root, name, tag string) (lane.Digest, int64, error) {
+// Optional extra annotations are merged into the manifest alongside the
+// standard created and content-size annotations.
+func (c *Client) WrapImageOutputAsImage(ctx context.Context, root *os.Root, name, tag string, extra ...map[string]string) (lane.Digest, int64, error) {
 	info, err := root.Stat(name)
 	if err != nil {
 		return lane.Digest{}, 0, fmt.Errorf("wrap image stat: %w", err)
@@ -108,10 +115,16 @@ func (c *Client) WrapImageOutputAsImage(ctx context.Context, root *os.Root, name
 	}
 	defer cleanup()
 
-	annotated, ok := mutate.Annotations(img, map[string]string{
+	ann := map[string]string{
 		"org.opencontainers.image.created": "1970-01-01T00:00:00Z",
 		ContentSizeAnnotation:              strconv.FormatInt(size, 10),
-	}).(v1.Image)
+	}
+	for _, m := range extra {
+		for k, v := range m {
+			ann[k] = v
+		}
+	}
+	annotated, ok := mutate.Annotations(img, ann).(v1.Image)
 	if !ok {
 		return lane.Digest{}, 0, fmt.Errorf("wrap image: annotate: unexpected type")
 	}

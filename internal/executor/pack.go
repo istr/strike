@@ -182,40 +182,61 @@ func addFileLayers(img v1.Image, files []lane.PackFile, inputPaths map[string]st
 		if err != nil {
 			return nil, "", fmt.Errorf("pack: stat %q: %w", dest, err)
 		}
-		var layer v1.Layer
 		switch {
 		case info.IsDir():
-			dirRoot, rootErr := os.OpenRoot(hostPath)
-			if rootErr != nil {
-				return nil, "", fmt.Errorf("pack: open dir %q: %w", dest, rootErr)
-			}
-			layer, err = dirLayer(dirRoot, dest)
-			closer.Warn(dirRoot, "pack dir root")
+			img, err = appendDirLayer(img, hostPath, dest)
 		case info.Mode().IsRegular():
 			if binaryPath == "" {
 				binaryPath = hostPath
 			}
-			if f.Mode < 0 || f.Mode > 0o7777 {
-				return nil, "", fmt.Errorf("pack: file %q: invalid mode %#o", dest, f.Mode)
-			}
-			fileRoot, rootErr := os.OpenRoot(filepath.Dir(hostPath))
-			if rootErr != nil {
-				return nil, "", fmt.Errorf("pack: open file dir %q: %w", dest, rootErr)
-			}
-			layer, err = fileLayer(fileRoot, filepath.Base(hostPath), dest, fs.FileMode(f.Mode))
-			closer.Warn(fileRoot, "pack file root")
+			img, err = appendRegularFileLayer(img, hostPath, dest, f.Mode)
 		default:
 			return nil, "", fmt.Errorf("pack: %q: unsupported file type %v", dest, info.Mode().Type())
 		}
 		if err != nil {
-			return nil, "", fmt.Errorf("pack: add %q: %w", dest, err)
-		}
-		img, err = mutate.AppendLayers(img, layer)
-		if err != nil {
-			return nil, "", fmt.Errorf("pack: append layer: %w", err)
+			return nil, "", fmt.Errorf("pack: %w", err)
 		}
 	}
 	return img, binaryPath, nil
+}
+
+// appendDirLayer creates a directory layer from hostPath and appends it to img.
+func appendDirLayer(img v1.Image, hostPath, dest string) (v1.Image, error) {
+	dirRoot, err := os.OpenRoot(hostPath)
+	if err != nil {
+		return nil, fmt.Errorf("open dir %q: %w", dest, err)
+	}
+	layer, layerErr := dirLayer(dirRoot, dest)
+	closer.Warn(dirRoot, "pack dir root")
+	if layerErr != nil {
+		return nil, fmt.Errorf("add %q: %w", dest, layerErr)
+	}
+	img, err = mutate.AppendLayers(img, layer)
+	if err != nil {
+		return nil, fmt.Errorf("append layer: %w", err)
+	}
+	return img, nil
+}
+
+// appendRegularFileLayer creates a single-file layer and appends it to img.
+func appendRegularFileLayer(img v1.Image, hostPath, dest string, mode int64) (v1.Image, error) {
+	if mode < 0 || mode > 0o7777 {
+		return nil, fmt.Errorf("file %q: invalid mode %#o", dest, mode)
+	}
+	fileRoot, err := os.OpenRoot(filepath.Dir(hostPath))
+	if err != nil {
+		return nil, fmt.Errorf("open file dir %q: %w", dest, err)
+	}
+	layer, layerErr := fileLayer(fileRoot, filepath.Base(hostPath), dest, fs.FileMode(mode))
+	closer.Warn(fileRoot, "pack file root")
+	if layerErr != nil {
+		return nil, fmt.Errorf("add %q: %w", dest, layerErr)
+	}
+	img, err = mutate.AppendLayers(img, layer)
+	if err != nil {
+		return nil, fmt.Errorf("append layer: %w", err)
+	}
+	return img, nil
 }
 
 // addConfigFileLayers appends a layer for each config file entry with literal content.

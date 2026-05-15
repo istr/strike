@@ -35,7 +35,7 @@ func TestPackPipeline(t *testing.T) {
 
 	// 4. Load into local store.
 	regClient := &registry.Client{Engine: engine}
-	digest, err := regClient.LoadOCITar(ctx, outRoot, "image.tar")
+	digest, err := loadOCITar(ctx, regClient, outRoot, "image.tar")
 	if err != nil {
 		t.Fatalf("load OCI tar: %v", err)
 	}

@@ -11,10 +11,10 @@ import (
 	"encoding/pem"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 
 	"github.com/istr/strike/internal/clock"
-	"github.com/istr/strike/internal/closer"
 	"github.com/istr/strike/internal/lane"
 )
 
@@ -87,7 +87,11 @@ func (c RekorClient) submit(ctx context.Context, reqBody map[string]any) (*lane.
 	if err != nil {
 		return nil, &RekorTransientError{Err: fmt.Errorf("submit: %w", err)}
 	}
-	defer closer.Warn(resp.Body, "rekor response")
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			log.Printf("WARN close response body: %v", closeErr)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusCreated {
 		respBody, readErr := io.ReadAll(io.LimitReader(resp.Body, 1024))
@@ -233,8 +237,8 @@ func parseSingleEntry(entryJSON json.RawMessage) (*parsedRekorEntry, error) {
 	var raw struct {
 		Verification struct {
 			InclusionProof *struct {
-				Hashes   []string `json:"hashes"`
 				RootHash string   `json:"rootHash"`
+				Hashes   []string `json:"hashes"`
 				LogIndex int64    `json:"logIndex"`
 				TreeSize int64    `json:"treeSize"`
 			} `json:"inclusionProof"`

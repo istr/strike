@@ -40,34 +40,6 @@ func TestSanitizeForLog(t *testing.T) {
 }
 
 // --------------------------------------------------------------------------.
-// sanitize
-// --------------------------------------------------------------------------.
-
-func TestSanitize(t *testing.T) {
-	tests := []struct {
-		name string
-		in   string
-		want string
-	}{
-		{"lowercase", "abc", "abc"},
-		{"digits", "123", "123"},
-		{"dash", "a-b", "a-b"},
-		{"uppercase", "ABC", "---"},
-		{"special", "a.b/c", "a-b-c"},
-		{"empty", "", ""},
-		{"mixed", "step-1_ok", "step-1-ok"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := sanitize(tt.in)
-			if got != tt.want {
-				t.Errorf("sanitize(%q) = %q, want %q", tt.in, got, tt.want)
-			}
-		})
-	}
-}
-
-// --------------------------------------------------------------------------.
 // writeToOutputDir
 // --------------------------------------------------------------------------.
 

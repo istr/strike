@@ -231,10 +231,10 @@ type sshKnownHostsVectorInputs struct {
 }
 
 type sshKnownHostsVector struct {
-	Inputs      sshKnownHostsVectorInputs   `json:"inputs"`
 	Description string                      `json:"description"`
 	Boundary    string                      `json:"boundary"`
 	Expected    sshKnownHostsVectorExpected `json:"expected"`
+	Inputs      sshKnownHostsVectorInputs   `json:"inputs"`
 }
 
 func TestRenderKnownHosts_Golden(t *testing.T) {

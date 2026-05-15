@@ -23,17 +23,11 @@ import (
 // runState holds accumulated state across steps during a lane execution.
 type runState struct {
 	specHashes map[string]lane.Digest
-	outputDirs map[string]string
-	ociDigests map[string]lane.Digest
-	ociSigned  map[string]bool
 }
 
 func newRunState() *runState {
 	return &runState{
 		specHashes: map[string]lane.Digest{},
-		outputDirs: map[string]string{},
-		ociDigests: map[string]lane.Digest{},
-		ociSigned:  map[string]bool{},
 	}
 }
 
@@ -136,6 +130,7 @@ func (rc *runContext) executeDeploy(ctx context.Context, step *lane.Step, stepNa
 	if err != nil {
 		return fmt.Errorf("%s: create temp dir: %w", safeName, err)
 	}
+	defer removeStrikeScratch(outDir)
 	if writeErr := writeToOutputDir(outDir, "attestation.json", attJSON); writeErr != nil {
 		return fmt.Errorf("%s: write attestation: %w", safeName, writeErr)
 	}
@@ -144,7 +139,6 @@ func (rc *runContext) executeDeploy(ctx context.Context, step *lane.Step, stepNa
 			return fmt.Errorf("%s: write signed attestation: %w", safeName, writeErr)
 		}
 	}
-	rc.state.outputDirs[stepName] = outDir
 	return nil
 }
 
@@ -157,14 +151,14 @@ func (rc *runContext) resolveImageDigest(ctx context.Context, step *lane.Step, s
 		return digest, nil
 	}
 	if edge, ok := rc.dag.ImageFromEdges[string(step.Name)]; ok {
-		key := string(edge.FromStep.Name) + "/" + edge.FromOutput.Name
-		digest, ok := rc.state.ociDigests[key]
-		if !ok {
-			return lane.Digest{}, fmt.Errorf("%s: image_from %s/%s: digest not available",
-				safeName, edge.FromStep.Name, edge.FromOutput.Name)
+		ref := string(edge.FromStep.Name) + "." + edge.FromOutput.Name
+		art, err := rc.laneState.Resolve(ref)
+		if err != nil {
+			return lane.Digest{}, fmt.Errorf("%s: image_from %s: %w",
+				safeName, ref, err)
 		}
-		step.Image = "localhost/strike:" + digest.Hex[:12]
-		return digest, nil
+		step.Image = "localhost/strike:" + art.Digest.Hex[:12]
+		return art.Digest, nil
 	}
 	digest, err := resolveDigest(ctx, rc.regClient, step.Image)
 	if err != nil {
@@ -205,20 +199,21 @@ func (rc *runContext) checkCache(ctx context.Context, step *lane.Step, stepName,
 		log.Printf("CACHE-NO-SIZE %s (annotation missing)", safeName)
 		return false, nil
 	}
-	size, parseErr := strconv.ParseInt(sizeStr, 10, 64)
-	if parseErr != nil {
+	size, sizeErr := strconv.ParseInt(sizeStr, 10, 64)
+	badSize := sizeErr != nil || size <= 0
+	if badSize {
 		log.Printf("CACHE-BAD-SIZE %s (%q)", safeName, sizeStr)
 		return false, nil
 	}
 
+	signed := info.Annotations[registry.SignedAnnotation] == "true"
 	digest := lane.MustParseDigest(info.Digest)
 	for _, out := range step.Outputs {
-		key := stepName + "/" + out.Name
-		rc.state.ociDigests[key] = digest
 		if regErr := rc.laneState.Register(stepName, out.Name, lane.Artifact{
 			Type:   lane.ArtifactType(out.Type),
 			Digest: digest,
 			Size:   size,
+			Signed: signed,
 		}); regErr != nil {
 			return false, fmt.Errorf("cache hit register %s/%s: %w", stepName, out.Name, regErr)
 		}
@@ -236,28 +231,33 @@ func (rc *runContext) guardUnsignedImages(step *lane.Step, safeName string) erro
 		if e.FromOutput.Type != artifactTypeImage {
 			continue
 		}
-		key := string(e.FromStep.Name) + "/" + e.FromOutput.Name
-		if !rc.state.ociSigned[key] {
-			return fmt.Errorf("%s: input %q is unsigned OCI image from %s.%s",
-				safeName, e.LocalName, e.FromStep.Name, e.FromOutput.Name)
+		ref := string(e.FromStep.Name) + "." + e.FromOutput.Name
+		art, err := rc.laneState.Resolve(ref)
+		if err != nil {
+			return fmt.Errorf("%s: input %q: %w", safeName, e.LocalName, err)
+		}
+		if !art.Signed {
+			return fmt.Errorf("%s: input %q is unsigned OCI image from %s",
+				safeName, e.LocalName, ref)
 		}
 	}
 	return nil
 }
 
 func (rc *runContext) executePack(ctx context.Context, step *lane.Step, stepName, safeName string) error {
-	inputPaths, err := rc.resolvePackInputPaths(step, safeName)
+	outDir, err := os.MkdirTemp("", "strike-"+stepName+"-")
+	if err != nil {
+		return fmt.Errorf("%s: create temp dir: %w", safeName, err)
+	}
+	defer removeStrikeScratch(outDir)
+
+	inputPaths, err := rc.resolvePackInputPaths(ctx, step, outDir, safeName)
 	if err != nil {
 		return err
 	}
 	signingKey, keyPassword, err := rc.resolvePackSecrets(step, safeName)
 	if err != nil {
 		return err
-	}
-
-	outDir, err := os.MkdirTemp("", "strike-"+stepName+"-")
-	if err != nil {
-		return fmt.Errorf("%s: create temp dir: %w", safeName, err)
 	}
 
 	outRoot, err := os.OpenRoot(outDir)
@@ -280,37 +280,75 @@ func (rc *runContext) executePack(ctx context.Context, step *lane.Step, stepName
 		return fmt.Errorf("%s: pack failed: %w", safeName, err)
 	}
 
-	rc.state.outputDirs[stepName] = outDir
-	outKey := stepName + "/" + step.Outputs[0].Name
-	rc.state.ociDigests[outKey] = result.Digest
-	rc.state.ociSigned[outKey] = signingKey != nil
-
+	signed := signingKey != nil
 	if regErr := rc.laneState.Register(stepName, step.Outputs[0].Name, lane.Artifact{
 		Type:   artifactTypeImage,
 		Digest: result.Digest,
 		Rekor:  result.Rekor,
+		Signed: signed,
 	}); regErr != nil {
 		return fmt.Errorf("%s: register artifact: %w", safeName, regErr)
 	}
 
-	if err := rc.regClient.LoadOCITarByDigest(ctx, outRoot, outputName, result.Digest); err != nil {
-		return fmt.Errorf("%s: load image: %w", safeName, err)
+	specHash := rc.state.specHashes[stepName]
+	tag := registry.WrapTag(rc.lane.LaneID, stepName, specHash)
+	var extra map[string]string
+	if signed {
+		extra = map[string]string{registry.SignedAnnotation: "true"}
+	}
+	if _, _, wrapErr := rc.regClient.WrapImageOutputAsImage(ctx, outRoot, outputName, tag, extra); wrapErr != nil {
+		return fmt.Errorf("%s: wrap image: %w", safeName, wrapErr)
 	}
 	log.Printf("OK     %s -> %s", safeName, result.Digest)
 	return nil
 }
 
-func (rc *runContext) resolvePackInputPaths(step *lane.Step, safeName string) (map[string]string, error) {
+func (rc *runContext) resolvePackInputPaths(ctx context.Context, step *lane.Step, scratchDir, safeName string) (map[string]string, error) {
 	edges := rc.dag.PackFileEdges[string(step.Name)]
 	inputPaths := make(map[string]string, len(edges))
-	for _, e := range edges {
-		hostPath := filepath.Join(
-			rc.state.outputDirs[string(e.FromStep.Name)],
-			filepath.Base(e.FromOutput.Path.String()),
-		)
-		inputPaths[e.Dest.String()] = hostPath
+
+	scratchRoot, rootErr := os.OpenRoot(scratchDir)
+	if rootErr != nil {
+		return nil, fmt.Errorf("%s: open scratch root: %w", safeName, rootErr)
 	}
-	_ = safeName // reserved for future error wrapping
+	defer func() {
+		if cerr := scratchRoot.Close(); cerr != nil {
+			log.Printf("WARN close scratch root: %v", cerr)
+		}
+	}()
+	if mkErr := scratchRoot.Mkdir("inputs", 0o750); mkErr != nil && !errors.Is(mkErr, os.ErrExist) {
+		return nil, fmt.Errorf("%s: create inputs dir: %w", safeName, mkErr)
+	}
+	inputsRoot := filepath.Join(scratchDir, "inputs")
+
+	for _, e := range edges {
+		fromStep := string(e.FromStep.Name)
+		fromOutput := e.FromOutput.Name
+
+		art, artErr := rc.laneState.Resolve(fromStep + "." + fromOutput)
+		if artErr != nil {
+			return nil, fmt.Errorf("%s: pack input %s.%s: %w", safeName, fromStep, fromOutput, artErr)
+		}
+
+		tag := registry.WrapTag(rc.lane.LaneID, fromStep, rc.state.specHashes[fromStep])
+
+		dedupDir := art.Digest.Hex[:16]
+		inputDir := filepath.Join(inputsRoot, dedupDir)
+		if mkErr := scratchRoot.Mkdir(filepath.Join("inputs", dedupDir), 0o750); mkErr == nil {
+			tarBytes, saveErr := registry.SaveImage(ctx, rc.engine, tag)
+			if saveErr != nil {
+				return nil, fmt.Errorf("%s: pack input %s save: %w", safeName, e.Dest, saveErr)
+			}
+			if extractErr := registry.ExtractSingleLayer(tarBytes, inputDir); extractErr != nil {
+				return nil, fmt.Errorf("%s: pack input %s extract: %w", safeName, e.Dest, extractErr)
+			}
+		} else if !errors.Is(mkErr, os.ErrExist) {
+			return nil, fmt.Errorf("%s: pack input mkdir: %w", safeName, mkErr)
+		}
+
+		baseName := filepath.Base(e.FromOutput.Path.String())
+		inputPaths[e.Dest.String()] = filepath.Join(inputDir, baseName)
+	}
 	return inputPaths, nil
 }
 
@@ -351,6 +389,7 @@ func (rc *runContext) executeContainerStep(ctx context.Context, step *lane.Step,
 	if err != nil {
 		return fmt.Errorf("%s: create temp dir: %w", safeName, err)
 	}
+	defer removeStrikeScratch(outDir)
 
 	secrets, err := lane.ResolveSecrets(step.Secrets, rc.lane.Secrets, rc.laneRoot)
 	if err != nil {
@@ -372,8 +411,6 @@ func (rc *runContext) executeContainerStep(ctx context.Context, step *lane.Step,
 	if execErr := run.Execute(ctx); execErr != nil {
 		return fmt.Errorf("%s: execution failed: %w", safeName, execErr)
 	}
-
-	rc.state.outputDirs[stepName] = outDir
 
 	outRoot, rootErr := os.OpenRoot(outDir)
 	if rootErr != nil {
@@ -413,8 +450,6 @@ func (rc *runContext) wrapOutputs(ctx context.Context, step *lane.Step, stepName
 		if err != nil {
 			return fmt.Errorf("%s: wrap output %q: %w", safeName, out.Name, err)
 		}
-		key := stepName + "/" + out.Name
-		rc.state.ociDigests[key] = digest
 		if regErr := rc.laneState.Register(stepName, out.Name, lane.Artifact{
 			Type:   lane.ArtifactType(out.Type),
 			Digest: digest,

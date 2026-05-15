@@ -70,12 +70,6 @@ func WrapTag(laneID, stepName string, specHash lane.Digest) string {
 	return fmt.Sprintf("localhost/strike/%s/%s:%s", laneID, stepName, specHash.Hex)
 }
 
-// HashDir computes SHA256 and total file size of a directory within the given
-// root scope. Size is the sum of regular file sizes.
-func HashDir(root *os.Root, laneDir, path string) (lane.Digest, int64, error) {
-	return lane.DirDigestWithSize(root, laneDir, path)
-}
-
 // hashReader computes SHA256 of the data from r.
 func hashReader(r io.Reader) (lane.Digest, error) {
 	h := sha256.New()
@@ -116,4 +110,3 @@ func sortedDigestMapKeys(m map[string]lane.Digest) []string {
 	sort.Strings(keys)
 	return keys
 }
-

@@ -5,9 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
-
-	"github.com/istr/strike/internal/closer"
 )
 
 // PodmanRawGet fetches a raw response from the engine for integration tests.
@@ -25,7 +24,11 @@ func PodmanRawGet(ctx context.Context, eng Engine, path string) ([]byte, error) 
 	if err != nil {
 		return nil, fmt.Errorf("raw get %s: %w", path, err)
 	}
-	defer closer.Warn(resp.Body, "raw get")
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.Printf("WARN close response body: %v", err)
+		}
+	}()
 	return io.ReadAll(resp.Body)
 }
 
@@ -79,7 +82,11 @@ func PodmanContainerInspect(ctx context.Context, eng Engine, id string) (*Contai
 	if err != nil {
 		return nil, fmt.Errorf("container inspect %s: %w", id, err)
 	}
-	defer closer.Warn(resp.Body, "container inspect")
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.Printf("WARN close response body: %v", err)
+		}
+	}()
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("container inspect %s: status %d", id, resp.StatusCode)
 	}

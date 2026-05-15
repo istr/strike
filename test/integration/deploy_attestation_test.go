@@ -33,7 +33,7 @@ func TestDeployAttestation(t *testing.T) {
 	defer testutil.CloseLog(t, packRoot, "deploy attestation packRoot")
 
 	regClient := &registry.Client{Engine: engine}
-	packedDigest, err := regClient.LoadOCITar(ctx, packRoot, "image.tar")
+	packedDigest, err := loadOCITar(ctx, regClient, packRoot, "image.tar")
 	if err != nil {
 		t.Fatalf("load OCI tar: %v", err)
 	}

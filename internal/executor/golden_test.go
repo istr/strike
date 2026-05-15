@@ -56,7 +56,10 @@ func writeVectorFiles(t *testing.T, specFiles []lane.PackFile, vecFiles map[stri
 		if err := os.WriteFile(hostPath, content, 0o600); err != nil {
 			t.Fatalf("write test file %s: %v", ref, err)
 		}
-		if err := os.Chmod(hostPath, os.FileMode(f.Mode)); err != nil {
+		if f.Mode < 0 || f.Mode > 0o7777 {
+			t.Fatalf("test file %s: invalid mode %d", ref, f.Mode)
+		}
+		if err := os.Chmod(hostPath, os.FileMode(f.Mode&0o7777)); err != nil {
 			t.Fatalf("chmod test file %s: %v", ref, err)
 		}
 		dest, ok := fromToDest[ref]

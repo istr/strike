@@ -8,14 +8,20 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"encoding/pem"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
+
+	v1 "github.com/google/go-containerregistry/pkg/v1"
+	"github.com/google/go-containerregistry/pkg/v1/layout"
 
 	"github.com/istr/strike/internal/closer"
 	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/executor"
 	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/registry"
 )
 
 // Digest-pinned image references matching lane.yaml.
@@ -173,4 +179,95 @@ func testPublicKeyFrom(t *testing.T, privPEM []byte) *ecdsa.PublicKey {
 		t.Fatal("test key is not ECDSA")
 	}
 	return &ecKey.PublicKey
+}
+
+// loadOCITar loads the main image from an OCI tar archive into the local
+// container store and returns the manifest digest. Reimplemented here
+// using only exported registry functions so that production code does not
+// carry test-only helpers.
+func loadOCITar(ctx context.Context, c *registry.Client, root *os.Root, relPath string) (lane.Digest, error) {
+	f, err := root.Open(relPath)
+	if err != nil {
+		return lane.Digest{}, err
+	}
+	data, err := io.ReadAll(f)
+	closer.Warn(f, "loadOCITar")
+	if err != nil {
+		return lane.Digest{}, err
+	}
+
+	tmpDir, err := os.MkdirTemp("", "strike-load-")
+	if err != nil {
+		return lane.Digest{}, err
+	}
+	defer closer.Remove(tmpDir, "loadOCITar")
+
+	tmpRoot, err := os.OpenRoot(tmpDir)
+	if err != nil {
+		return lane.Digest{}, err
+	}
+	defer closer.Warn(tmpRoot, "loadOCITar root")
+
+	if extractErr := registry.ExtractTarForTest(data, tmpRoot); extractErr != nil {
+		return lane.Digest{}, fmt.Errorf("extract layout: %w", extractErr)
+	}
+
+	lp, err := layout.FromPath(tmpDir)
+	if err != nil {
+		return lane.Digest{}, fmt.Errorf("open layout: %w", err)
+	}
+
+	idx, err := lp.ImageIndex()
+	if err != nil {
+		return lane.Digest{}, fmt.Errorf("read index: %w", err)
+	}
+
+	manifest, err := idx.IndexManifest()
+	if err != nil {
+		return lane.Digest{}, fmt.Errorf("read index manifest: %w", err)
+	}
+
+	var img v1.Image
+	var descAnn map[string]string
+	switch {
+	case len(manifest.Manifests) == 1:
+		img, err = idx.Image(manifest.Manifests[0].Digest)
+		descAnn = manifest.Manifests[0].Annotations
+	default:
+		for _, desc := range manifest.Manifests {
+			if _, ok := desc.Annotations["org.opencontainers.image.ref.name"]; ok {
+				img, err = idx.Image(desc.Digest)
+				descAnn = desc.Annotations
+				break
+			}
+		}
+	}
+	if err != nil {
+		return lane.Digest{}, err
+	}
+	if img == nil {
+		return lane.Digest{}, fmt.Errorf("no annotated main image in %d-manifest archive", len(manifest.Manifests))
+	}
+
+	tarData, err := registry.SingleImageTarForTest(img, descAnn)
+	if err != nil {
+		return lane.Digest{}, err
+	}
+
+	id, err := c.Engine.ImageLoad(ctx, bytes.NewReader(tarData))
+	if err != nil {
+		return lane.Digest{}, err
+	}
+
+	d, err := c.InspectDigest(ctx, id)
+	if err != nil {
+		return lane.Digest{}, err
+	}
+
+	localTag := "localhost/strike:" + d.Hex[:12]
+	if tagErr := c.Engine.ImageTag(ctx, id, localTag); tagErr != nil {
+		return lane.Digest{}, fmt.Errorf("image tag: %w", tagErr)
+	}
+
+	return d, nil
 }
