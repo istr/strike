@@ -131,6 +131,18 @@ package lane
 // Network peers -- declared trust contracts (ADR-005, ADR-007)
 // ---------------------------------------------------------------------------
 
+// Peer trust anchors are recorded for audit. Outbound traffic
+// enforcement is not uniform across peer types:
+//   - SSH peers: known_hosts and ssh-agent-proxy enforced.
+//   - HTTPS peers: kernel-level network switch only;
+//     per-peer enforcement (cert fingerprint, CA bundle) is
+//     not implemented at the connection layer.
+//   - OCI peers: digest-pinned references resolved through
+//     the engine and registry; declaration is part of the
+//     reproducibility chain.
+// Verifiers must read peer entries as declarations, not as
+// proofs of enforcement.
+//
 // Peer is a discriminated union over the supported network protocols.
 // A non-empty peers list opts the step into network access; absent or
 // empty means --network=none. Peers flow into the deploy attestation.
@@ -159,16 +171,16 @@ package lane
 #CABundleTrust: {
 	@go(CABundleTrust)
 	mode: "ca_bundle" @go(Mode)
-	// path is a container-internal path. The executor mounts the lane-
-	// relative bundle file there in Phase 2; in Phase 1 the field is
-	// declaratory only.
+	// path is a container-internal path.
+	// Currently, the field is declaratory only.
 	path: #AbsPath @go(Path)
 }
 
 // SSHPeer declares an SSH endpoint with explicit known_hosts entries.
-// Phase 1 is declaratory: ssh-agent socket forwarding and known_hosts
-// file mounting remain the lane author's responsibility via secrets and
-// inputs.
+// Strike creates and injects a global known_hosts entry in the
+// step container.
+// For client-side authentication, strike forwards an ssh-agent socket
+// if available.
 #SSHPeer: {
 	@go(SSHPeer)
 	type:        "ssh" @go(Type)

@@ -99,6 +99,16 @@ strike is designed with a minimal attack surface:
 - **No network by default** -- steps run with `--network=none` unless
   they declare a typed peer list (`peers: [...]`); see
   [ADR-022](docs/ADR-022-network-opt-in-as-peer-list.md).
+  Trust anchors are recorded in the deploy attestation for
+  audit. Outbound traffic enforcement is per peer type and not
+  uniform: SSH peers have known_hosts and ssh-agent-proxy
+  enforcement (ADR-024, ADR-025); HTTPS peers today have only
+  the kernel-level network on/off switch (peer list non-empty
+  -> bridge networking, empty -> `--network=none`), with
+  per-peer enforcement not implemented. A verifier reading the
+  attestation sees what the lane author declared, which is
+  independent of what the runtime enforced. Peer entries are
+  declarations, not proofs of enforcement.
 - **Digest pinning** -- all external images must be referenced by SHA-256
   manifest digest.
 - **Secrets via API request body** -- passed as JSON over Unix socket in the

@@ -98,6 +98,36 @@ internal tag-to-manifest-digest mapping). Strike does not
 maintain its own mapping; the tag is the cache key, the engine
 is the resolver.
 
+A second tag form is used when pushing or pulling cache
+artifacts through an external registry. The remote-cache tag
+is `<registry>:<step_name>-<first16hex>`, where `<first16hex>`
+is the first 16 hex characters of the step's spec hash. The
+16-character truncation keeps tags within OCI registry length
+conventions while preserving ample collision resistance for a
+per-lane cache (16 hex = 64 bits). The function is
+`internal/registry/cache.go::Tag`.
+
+The two forms target different name systems and intentionally
+differ in structure:
+
+- Local form (`localhost/strike/<lane_id>/<step_name>:<spec_hash>`,
+  produced by `registry.WrapTag`): used for the engine's local
+  image store. The `localhost/` prefix marks the image as
+  locally produced; the lane_id namespaces across lanes
+  co-existing on one engine; the full 64-character spec hash
+  tag is the cache key.
+- Remote form (`<registry>:<step_name>-<first16hex>`,
+  produced by `registry.Tag`): used when pushing cache
+  artifacts to or pulling them from an external registry.
+  The registry takes the place of `localhost/strike/<lane_id>/`
+  as the namespace, and the truncated hash respects tag-length
+  conventions.
+
+Both forms ultimately resolve to the same manifest digest,
+which is what attestations and inter-step DAG references
+actually record. Tags are lookup keys, not cryptographic
+anchors.
+
 Tags are not the cryptographic anchor. Attestations and
 inter-step DAG references record the **manifest digest** of
 each step's output, resolved from the engine after the image
