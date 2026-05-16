@@ -52,13 +52,11 @@ Every signed deploy attestation in strike is a DSSE envelope:
   and an ECDSA P-256 signature over the DSSE pre-authentication
   encoding (per ADR-008).
 
-The signed envelope is then submitted to Rekor:
-
-- Phase 1 (current): a `hashedrekord` entry containing the
-  signature and a hash of the payload. Rekor stores metadata; the
-  full envelope stays with the attestation consumer.
-- Phase 2 (planned): a `dsse` entry containing the full envelope.
-  Rekor becomes the source of truth for both signature and payload.
+The signed envelope is submitted to Rekor as a `dsse` entry:
+Rekor stores the full envelope and becomes the source of truth
+for both signature and payload. Image-signature submission is
+a separate concern and uses `hashedrekord` (cosign-compatible);
+that path is independent of the attestation flow.
 
 After Rekor accepts the entry, strike captures:
 
@@ -97,9 +95,6 @@ warning, not silently truncated.
   treatment: transient (network, 5xx) is fail-open with a warning,
   forged response (SET verification failure) is fail-closed with
   an error. Treating them the same would mask attacks.
-- Migration from Phase 1 (hashedrekord) to Phase 2 (dsse) is a
-  transparency-log content change but not a wire-format change for
-  attestations themselves.
 
 ## Principles
 

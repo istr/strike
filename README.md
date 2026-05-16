@@ -135,7 +135,7 @@ Steps resolve their execution image in one of three ways:
 | `image`      | Local bootstrap root         | Digest resolved via `podman inspect` |
 | `image_from` | Output of a previous step    | Digest extracted at load time        |
 
-`image_from` references an `oci-tar` output from an earlier step by name. The
+`image_from` references an `image` output from an earlier step by name. The
 executor loads the tar into the local container store and pins the image by its
 manifest digest, creating an implicit DAG edge:
 
@@ -168,14 +168,15 @@ Secrets are passed as environment variables, never written to process arguments.
 
 ```
 cmd/strike/main.go               CLI entry point (run, validate, dag, compare)
+specs/
+  lane.cue                        CUE schema (source of truth)
 internal/
   container/
     engine.go                     Engine interface, types, socket detection
     transport.go                  Unix socket and TCP HTTP transport
     podman.go                     Podman libpod REST API implementation
   lane/
-    schema.cue                    CUE schema (source of truth)
-    cue_types_lane_gen.go         Generated Go types (do not edit)
+    cue_types_lane_gen.go         Generated Go types (generated, not in git)
     parse.go                      YAML parsing and CUE validation
     dag.go                        DAG construction and topological sort
     state.go                      Artifact and step result tracking

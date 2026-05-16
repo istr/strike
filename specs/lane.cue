@@ -408,10 +408,12 @@ package lane
 // Rekor transparency log types
 // ---------------------------------------------------------------------------
 
-// RekorEntry holds the transparency log response from a Rekor
-// hashedrekord submission. When present, all subfields are required --
-// a partial Rekor entry is invalid. Used by both #Artifact (internal
-// carrier) and deploy.#SignedArtifact (attestation output).
+// RekorEntry holds a Rekor transparency log response. When present,
+// all subfields are required -- a partial Rekor entry is invalid.
+// Used as the carrier for both submission forms strike produces:
+// hashedrekord (image-signature submission, attached via #Artifact
+// and deploy.#SignedArtifact) and dsse (attestation submission,
+// attached via deploy.#Attestation).
 #RekorEntry: {
 	@go(RekorEntry)
 

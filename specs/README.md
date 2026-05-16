@@ -9,10 +9,13 @@ external audit tools) must conform to these specs.
 Strike uses [CUE](https://cuelang.org) as the single definition language
 for both input and output formats:
 
-| Schema | Location | Validates |
-|--------|----------|-----------|
-| Lane definition | `internal/lane/schema.cue` | YAML input (lane.yaml) |
-| Deploy attestation | `internal/deploy/attestation.cue` | JSON output (attestation) |
+| Schema                | Location                       | Validates                     |
+|-----------------------|--------------------------------|-------------------------------|
+| Lane definition       | `specs/lane.cue`               | YAML input (lane.yaml)        |
+| Deploy attestation    | `specs/attestation.cue`        | JSON output (attestation)     |
+| Artifact provenance   | `specs/artifact.cue`           | Artifact signing records      |
+| Source provenance     | `specs/source-provenance.cue`  | Git provenance records        |
+| Cross-val vectors     | `specs/crossval.cue`           | Cross-validation test vectors |
 
 CUE schemas are embedded in the Go binary via `//go:embed` and validated
 at runtime -- lane input before execution, attestation output before

@@ -225,5 +225,4 @@ Source provenance and attestation signing close the original open ends:
   references those artifacts also has a transparency log entry (dsse).
 
 Together, these complete the chain from developer keystroke to verified
-production state. The design is documented in
-`docs/END-TO-END-ATTESTATION.md`.
+production state.

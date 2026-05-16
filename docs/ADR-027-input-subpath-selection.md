@@ -3,7 +3,8 @@
 ## Status
 
 Accepted. Resolves the "subpath selection on inputs" deferral
-recorded in [ADR-021](ADR-021-deferred-extensions.md). Refines but
+recorded in [ADR-026](ADR-026-containers-as-sole-inter-step-storage.md)
+under "What is deferred". Refines but
 does not supersede [ADR-011](ADR-011-sources-elimination.md). The
 implementation path it relies on is the inter-step storage model
 established in [ADR-026](ADR-026-containers-as-sole-inter-step-storage.md).
@@ -84,8 +85,8 @@ field forces every lane author to choose a name, every test fixture
 to spell one out, and every diagnostic that references "input X" to
 disambiguate against a value the operator never thinks in terms of.
 
-[ADR-021](ADR-021-deferred-extensions.md) already flagged the
-subpath gap:
+[ADR-026](ADR-026-containers-as-sole-inter-step-storage.md)
+flagged the subpath gap under "What is deferred":
 
 > Subpath selection on inputs so a step can mount one file from a
 > multi-file producer image without an intermediate extract step.

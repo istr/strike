@@ -270,7 +270,7 @@ exclusions.
   GC simply re-runs the step.
 - **Subpath selection on inputs** so a step can mount one
   file from a multi-file producer image without an
-  intermediate extract step. Own ADR.
+  intermediate extract step. Own ADR (resolved by ADR-027).
 - **Multi-machine cache federation** beyond the basic push/pull
   pattern (e.g., pull-through caches, content-trust
   delegation). Own ADR when a concrete case appears.

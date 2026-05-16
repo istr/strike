@@ -40,6 +40,7 @@ shows how the architecture was built up.
 | 024 | [SSH peer server-trust enforcement](ADR-024-ssh-peer-server-trust-enforcement.md)              | Accepted | Peers are declared; Identity is asymmetric; No root; Code is liability |
 | 025 | [SSH peer client-identity enforcement](ADR-025-ssh-peer-client-identity-enforcement.md)        | Accepted | Identity is asymmetric; No root; Code is liability; Peers are declared |
 | 026 | [Containers as sole inter-step storage object](ADR-026-containers-as-sole-inter-step-storage.md) | Accepted | Containers are the only storage; Code is liability; Digest-pinned references; Reproducibility |
+| 027 | [Subpath selection on inputs](ADR-027-input-subpath-selection.md) | Accepted | Code is liability; CUE first; Digest-pinned references; Reproducibility |
 
 ## By principle
 
@@ -51,7 +52,7 @@ headings.
 
 ADR-001, ADR-002, ADR-004, ADR-005, ADR-006, ADR-008, ADR-010,
 ADR-011, ADR-013, ADR-014, ADR-015, ADR-016, ADR-017, ADR-018,
-ADR-019, ADR-020, ADR-021, ADR-023, ADR-024, ADR-025, ADR-026.
+ADR-019, ADR-020, ADR-021, ADR-023, ADR-024, ADR-025, ADR-026, ADR-027.
 
 ### No shell
 
@@ -67,7 +68,7 @@ ADR-003, ADR-005, ADR-020, ADR-022, ADR-024, ADR-025.
 
 ### CUE first
 
-ADR-004, ADR-010, ADR-015, ADR-017, ADR-022.
+ADR-004, ADR-010, ADR-015, ADR-017, ADR-022, ADR-027.
 
 ### Secrets are typed
 
@@ -89,11 +90,11 @@ ADR-025.
 ### External references are digest-pinned
 
 ADR-008, ADR-009, ADR-011, ADR-012, ADR-013, ADR-016, ADR-017,
-ADR-018, ADR-019, ADR-020, ADR-021, ADR-026.
+ADR-018, ADR-019, ADR-020, ADR-021, ADR-026, ADR-027.
 
 ### Reproducibility is enforced, not hoped for
 
-ADR-009, ADR-010, ADR-011, ADR-015, ADR-016, ADR-017, ADR-026.
+ADR-009, ADR-010, ADR-011, ADR-015, ADR-016, ADR-017, ADR-026, ADR-027.
 
 ### Containers are the only storage
 
