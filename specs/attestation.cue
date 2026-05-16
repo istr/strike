@@ -80,7 +80,7 @@ package deploy
 
 	// lane_ref is the digest of the lane definition file.
 	// Empty string when not yet computed.
-	lane_ref: string
+	lane_ref: #Digest | ""
 }
 
 // ---------------------------------------------------------------------------
