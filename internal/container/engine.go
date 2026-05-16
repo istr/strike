@@ -205,13 +205,13 @@ func detectSocket() (string, error) {
 	// 3. Fallback rootless socket
 	uid := strconv.Itoa(os.Getuid())
 	sock := filepath.Join("/run/user", uid, "podman", "podman.sock")
-	if _, err := os.Stat(sock); err == nil {
+	if _, err := probe.Stat(sock); err == nil {
 		return "unix://" + sock, nil
 	}
 
 	// 4. Rootful socket
 	sock = "/run/podman/podman.sock"
-	if _, err := os.Stat(sock); err == nil {
+	if _, err := probe.Stat(sock); err == nil {
 		return "unix://" + sock, nil
 	}
 
