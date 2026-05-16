@@ -3,6 +3,8 @@ package lane
 import (
 	"encoding/json"
 	"fmt"
+
+	"github.com/istr/strike/internal/transport"
 )
 
 const jsonNull = "null"
@@ -49,10 +51,10 @@ func unmarshalPeer(data []byte) (Peer, error) {
 	}
 }
 
-// unmarshalHTTPSTrust decodes a single trust JSON object into
+// unmarshalTLSTrust decodes a single trust JSON object into
 // the appropriate concrete branch type based on the "mode"
 // discriminator.
-func unmarshalHTTPSTrust(data []byte) (HTTPSTrust, error) {
+func unmarshalTLSTrust(data []byte) (transport.TLSTrust, error) {
 	if len(data) == 0 || string(data) == jsonNull {
 		return nil, fmt.Errorf("trust entry missing")
 	}
@@ -66,13 +68,13 @@ func unmarshalHTTPSTrust(data []byte) (HTTPSTrust, error) {
 
 	switch probe.Mode {
 	case "cert_fingerprint":
-		var t FingerprintTrust
+		var t transport.FingerprintTrust
 		if err := json.Unmarshal(data, &t); err != nil {
 			return nil, fmt.Errorf("decode cert_fingerprint trust: %w", err)
 		}
 		return t, nil
 	case "ca_bundle":
-		var t CABundleTrust
+		var t transport.CABundleTrust
 		if err := json.Unmarshal(data, &t); err != nil {
 			return nil, fmt.Errorf("decode ca_bundle trust: %w", err)
 		}
@@ -101,7 +103,7 @@ func (p *HTTPSPeer) UnmarshalJSON(data []byte) error {
 	if len(aux.Trust) == 0 {
 		return fmt.Errorf("https peer: trust required")
 	}
-	t, err := unmarshalHTTPSTrust(aux.Trust)
+	t, err := unmarshalTLSTrust(aux.Trust)
 	if err != nil {
 		return fmt.Errorf("https peer: %w", err)
 	}
@@ -126,7 +128,7 @@ func (p *OCIPeer) UnmarshalJSON(data []byte) error {
 		p.Trust = nil
 		return nil
 	}
-	t, err := unmarshalHTTPSTrust(aux.Trust)
+	t, err := unmarshalTLSTrust(aux.Trust)
 	if err != nil {
 		return fmt.Errorf("oci peer: %w", err)
 	}

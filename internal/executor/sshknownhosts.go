@@ -30,7 +30,7 @@ func RenderKnownHosts(peers []lane.Peer) []byte {
 		if !ok {
 			continue
 		}
-		host := formatHost(sp.Host)
+		host := formatHost(string(sp.Host))
 		for _, entry := range sp.KnownHosts {
 			records = append(records, record{
 				formattedHost: host,

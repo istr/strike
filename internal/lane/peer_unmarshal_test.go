@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/transport"
 )
 
 func TestUnmarshalPeer_Discriminator(t *testing.T) {
@@ -33,7 +34,7 @@ func TestUnmarshalPeer_Discriminator(t *testing.T) {
 				if h.Host != "example.com" {
 					t.Errorf("Host = %q, want example.com", h.Host)
 				}
-				ft, ok := h.Trust.(lane.FingerprintTrust)
+				ft, ok := h.Trust.(transport.FingerprintTrust)
 				if !ok {
 					t.Fatalf("Trust type = %T, want FingerprintTrust", h.Trust)
 				}
@@ -57,7 +58,7 @@ func TestUnmarshalPeer_Discriminator(t *testing.T) {
 				if !ok {
 					t.Fatalf("type = %T, want HTTPSPeer", p)
 				}
-				cb, ok := h.Trust.(lane.CABundleTrust)
+				cb, ok := h.Trust.(transport.CABundleTrust)
 				if !ok {
 					t.Fatalf("Trust type = %T, want CABundleTrust", h.Trust)
 				}
@@ -122,7 +123,7 @@ func TestUnmarshalPeer_Discriminator(t *testing.T) {
 				if !ok {
 					t.Fatalf("type = %T, want OCIPeer", p)
 				}
-				if _, ok := o.Trust.(lane.FingerprintTrust); !ok {
+				if _, ok := o.Trust.(transport.FingerprintTrust); !ok {
 					t.Errorf("Trust type = %T, want FingerprintTrust", o.Trust)
 				}
 			},

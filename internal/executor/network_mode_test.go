@@ -5,6 +5,7 @@ import (
 
 	"github.com/istr/strike/internal/executor"
 	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/transport"
 )
 
 func TestNetworkMode_NilIsNone(t *testing.T) {
@@ -22,8 +23,8 @@ func TestNetworkMode_EmptyIsNone(t *testing.T) {
 func TestNetworkMode_NonEmptyIsBridge(t *testing.T) {
 	peer := lane.HTTPSPeer{
 		Type: "https",
-		Host: "example.com",
-		Trust: lane.FingerprintTrust{
+		Host: transport.Host("example.com"),
+		Trust: transport.FingerprintTrust{
 			Mode:        "cert_fingerprint",
 			Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000",
 		},

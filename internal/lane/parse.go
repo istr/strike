@@ -3,6 +3,7 @@ package lane
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/istr/strike/internal/clock"
 
@@ -22,7 +23,20 @@ func ParseDuration(d *Duration, defaultVal clock.Duration) (clock.Duration, erro
 	return clock.ParseDuration(string(*d))
 }
 
-var schema = specs.LaneSchema
+var schema = buildSchema()
+
+func buildSchema() string {
+	// transport.cue shares package lane; strip the duplicate package
+	// declaration so the two files can be compiled as one CUE source.
+	var out []string
+	for _, line := range strings.Split(specs.TransportSchema, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "package ") {
+			continue
+		}
+		out = append(out, line)
+	}
+	return specs.LaneSchema + "\n" + strings.Join(out, "\n")
+}
 
 // Parse reads a lane YAML file, validates it against the embedded CUE schema,
 // and returns a typed Lane instance.

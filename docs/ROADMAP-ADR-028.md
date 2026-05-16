@@ -118,7 +118,7 @@ deleted.
 
 | PR | Title | Status | Depends on | Hash (after merge) |
 |----|-------|--------|-----------|-------------------|
-| PR-14 | Transport-package bootstrap (move/rename/generalize types) | Planned | -- | -- |
+| PR-14 | Transport-package bootstrap (move/rename/generalize types) | Done | -- | -- |
 | PR-15 | DNS-resolver declaration in lane schema | Planned | PR-14 | -- |
 | PR-16 | `internal/transport` TLS-primitive (`DialVerified`, `BuildTLSConfig`) | Planned | PR-14 | -- |
 | PR-17 | First production consumer (Rekor, container-engine TLS) | Planned | PR-16 | -- |
@@ -197,7 +197,8 @@ All conventions established in earlier PRs carry forward:
 
 ## Current status
 
-**Phase 1: not started.** Next PR is PR-14. Subsequent decisions
+**Phase 1: in progress.** PR-14 landed (transport-package bootstrap).
+Next PR is PR-15 (DNS-resolver declaration). Subsequent decisions
 (rootless backend spike, mTLS schema specifics, etc.) will be
 documented here as they're made.
 

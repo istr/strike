@@ -10,6 +10,7 @@ import (
 	"github.com/istr/strike/internal/executor"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/testutil"
+	"github.com/istr/strike/internal/transport"
 )
 
 // captureEngine records the RunOpts passed to ContainerRun.
@@ -68,7 +69,7 @@ func TestExecute_WithSSHPeer(t *testing.T) {
 			Peers: []lane.Peer{
 				lane.SSHPeer{
 					Type: "ssh",
-					Host: "git.example.com",
+					Host: transport.Host("git.example.com"),
 					KnownHosts: []lane.KnownHostEntry{
 						{KeyType: "ssh-ed25519", Key: "AAAAC3NzaC1lZDI1NTE5AAAAITestKey"},
 					},
@@ -120,8 +121,8 @@ func TestExecute_WithoutSSHPeer(t *testing.T) {
 			Peers: []lane.Peer{
 				lane.HTTPSPeer{
 					Type: "https",
-					Host: "api.example.com",
-					Trust: lane.FingerprintTrust{
+					Host: transport.Host("api.example.com"),
+					Trust: transport.FingerprintTrust{
 						Mode:        "cert_fingerprint",
 						Fingerprint: "sha256:abc",
 					},
@@ -169,7 +170,7 @@ func TestRunExecute_SSHAgentProxy_SpecGenerator(t *testing.T) {
 			Peers: []lane.Peer{
 				lane.SSHPeer{
 					Type: "ssh",
-					Host: "git.example.com",
+					Host: transport.Host("git.example.com"),
 					KnownHosts: []lane.KnownHostEntry{
 						{KeyType: "ssh-ed25519", Key: "AAAAC3NzaC1lZDI1NTE5AAAAITestKey"},
 					},
@@ -241,7 +242,7 @@ func TestRunExecute_SSHPeer_NoAuthSock(t *testing.T) {
 			Peers: []lane.Peer{
 				lane.SSHPeer{
 					Type: "ssh",
-					Host: "git.example.com",
+					Host: transport.Host("git.example.com"),
 					KnownHosts: []lane.KnownHostEntry{
 						{KeyType: "ssh-ed25519", Key: "AAAAC3NzaC1lZDI1NTE5AAAAITestKey"},
 					},

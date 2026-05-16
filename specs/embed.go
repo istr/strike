@@ -26,3 +26,9 @@ var ArtifactSchema string
 //
 //go:embed source-provenance.cue
 var ProvenanceSchema string
+
+// TransportSchema is the embedded CUE schema for transport-level types
+// (host constraint, TLS trust anchors). Same package lane as LaneSchema.
+//
+//go:embed transport.cue
+var TransportSchema string

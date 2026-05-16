@@ -28,7 +28,7 @@ import "github.com/istr/strike/specs:lane"
 #HTTPSPeer:        lane.#HTTPSPeer
 #SSHPeer:          lane.#SSHPeer
 #OCIPeer:          lane.#OCIPeer
-#HTTPSTrust:       lane.#HTTPSTrust
+#TLSTrust:         lane.#TLSTrust
 #FingerprintTrust: lane.#FingerprintTrust
 #CABundleTrust:    lane.#CABundleTrust
 #KnownHostEntry:   lane.#KnownHostEntry

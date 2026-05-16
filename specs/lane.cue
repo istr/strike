@@ -151,29 +151,9 @@ package lane
 // HTTPSPeer declares an HTTPS endpoint together with its server-trust anchor.
 #HTTPSPeer: {
 	@go(HTTPSPeer)
-	type: "https" @go(Type)
-	// host is hostname or IPv4 literal, optionally with :port.
-	// Lowercase ASCII; punycode required for internationalized domains.
-	host:  string & =~"^[a-z0-9.-]+(:[0-9]+)?$" @go(Host)
-	trust: #HTTPSTrust @go(Trust)
-}
-
-// HTTPSTrust selects between certificate-fingerprint pinning and CA-bundle
-// validation. The system trust store is not an option (deferred per ADR-021).
-#HTTPSTrust: (#FingerprintTrust | #CABundleTrust) @go(-)
-
-#FingerprintTrust: {
-	@go(FingerprintTrust)
-	mode:        "cert_fingerprint" @go(Mode)
-	fingerprint: =~"^sha256:[a-f0-9]{64}$" @go(Fingerprint)
-}
-
-#CABundleTrust: {
-	@go(CABundleTrust)
-	mode: "ca_bundle" @go(Mode)
-	// path is a container-internal path.
-	// Currently, the field is declaratory only.
-	path: #AbsPath @go(Path)
+	type:  "https" @go(Type)
+	host:  #Host @go(Host,type="github.com/istr/strike/internal/transport".Host)
+	trust: #TLSTrust @go(Trust,type="github.com/istr/strike/internal/transport".TLSTrust)
 }
 
 // SSHPeer declares an SSH endpoint with explicit known_hosts entries.
@@ -184,7 +164,7 @@ package lane
 #SSHPeer: {
 	@go(SSHPeer)
 	type:        "ssh" @go(Type)
-	host:        string & =~"^[a-z0-9.-]+(:[0-9]+)?$" @go(Host)
+	host:        #Host @go(Host,type="github.com/istr/strike/internal/transport".Host)
 	known_hosts: [...#KnownHostEntry] @go(KnownHosts)
 }
 
@@ -205,7 +185,7 @@ package lane
 	@go(OCIPeer)
 	type:     "oci" @go(Type)
 	registry: string & =~"^[a-z0-9.-]+(:[0-9]+)?$" @go(Registry)
-	trust?:   #HTTPSTrust @go(Trust,optional=nillable)
+	trust?:   #TLSTrust @go(Trust,type="github.com/istr/strike/internal/transport".TLSTrust,optional=nillable)
 }
 
 // ---------------------------------------------------------------------------

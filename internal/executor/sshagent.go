@@ -25,7 +25,7 @@ func StartAgentProxy(ctx context.Context, peers []lane.Peer, scratchDir string) 
 	var firstSSHHost string
 	for _, p := range peers {
 		if sp, ok := p.(lane.SSHPeer); ok {
-			firstSSHHost = sp.Host
+			firstSSHHost = string(sp.Host)
 			break
 		}
 	}

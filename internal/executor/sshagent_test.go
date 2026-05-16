@@ -15,6 +15,7 @@ import (
 	"github.com/istr/strike/internal/executor"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/testutil"
+	"github.com/istr/strike/internal/transport"
 )
 
 func startFakeAgent(t *testing.T) string {
@@ -25,7 +26,7 @@ func startFakeAgent(t *testing.T) string {
 func sshPeer(host string) lane.SSHPeer {
 	return lane.SSHPeer{
 		Type: "ssh",
-		Host: host,
+		Host: transport.Host(host),
 		KnownHosts: []lane.KnownHostEntry{
 			{KeyType: "ssh-ed25519", Key: "AAAAC3NzaC1lZDI1NTE5AAAAITestKey"},
 		},
@@ -35,7 +36,7 @@ func sshPeer(host string) lane.SSHPeer {
 func TestStartAgentProxy_NoSSHPeers(t *testing.T) {
 	dir := t.TempDir()
 	peers := []lane.Peer{
-		lane.HTTPSPeer{Type: "https", Host: "example.com", Trust: lane.FingerprintTrust{Mode: "cert_fingerprint", Fingerprint: "sha256:abc"}},
+		lane.HTTPSPeer{Type: "https", Host: transport.Host("example.com"), Trust: transport.FingerprintTrust{Mode: "cert_fingerprint", Fingerprint: "sha256:abc"}},
 		lane.OCIPeer{Type: "oci", Registry: "ghcr.io"},
 	}
 	mount, env, err := executor.StartAgentProxy(context.Background(), peers, dir)

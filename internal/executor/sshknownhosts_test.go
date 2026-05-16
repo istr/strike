@@ -10,6 +10,7 @@ import (
 
 	"github.com/istr/strike/internal/executor"
 	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/transport"
 	"github.com/istr/strike/test/crossval"
 )
 
@@ -27,7 +28,7 @@ func TestRenderKnownHosts_empty_peers(t *testing.T) {
 
 func TestRenderKnownHosts_non_ssh_only(t *testing.T) {
 	peers := []lane.Peer{
-		lane.HTTPSPeer{Type: "https", Host: "example.com", Trust: lane.FingerprintTrust{Mode: "cert_fingerprint", Fingerprint: "sha256:abc"}},
+		lane.HTTPSPeer{Type: "https", Host: transport.Host("example.com"), Trust: transport.FingerprintTrust{Mode: "cert_fingerprint", Fingerprint: "sha256:abc"}},
 		lane.OCIPeer{Type: "oci", Registry: "ghcr.io"},
 	}
 	if got := executor.RenderKnownHosts(peers); got != nil {
@@ -39,7 +40,7 @@ func TestRenderKnownHosts_single_peer_single_key(t *testing.T) {
 	peers := []lane.Peer{
 		lane.SSHPeer{
 			Type: "ssh",
-			Host: "git.example.com",
+			Host: transport.Host("git.example.com"),
 			KnownHosts: []lane.KnownHostEntry{
 				{KeyType: "ssh-ed25519", Key: "AAAAC3NzaC1lZDI1NTE5AAAAITestKey1"},
 			},
@@ -56,7 +57,7 @@ func TestRenderKnownHosts_single_peer_multiple_keys(t *testing.T) {
 	peers := []lane.Peer{
 		lane.SSHPeer{
 			Type: "ssh",
-			Host: "git.example.com",
+			Host: transport.Host("git.example.com"),
 			KnownHosts: []lane.KnownHostEntry{
 				{KeyType: "ssh-rsa", Key: "AAAAB3Rsa"},
 				{KeyType: "ecdsa-sha2-nistp256", Key: "AAAAE2VjZHNh"},
@@ -76,15 +77,15 @@ func TestRenderKnownHosts_single_peer_multiple_keys(t *testing.T) {
 func TestRenderKnownHosts_multiple_peers_sorted(t *testing.T) {
 	peers := []lane.Peer{
 		lane.SSHPeer{
-			Type: "ssh", Host: "zeta.example",
+			Type: "ssh", Host: transport.Host("zeta.example"),
 			KnownHosts: []lane.KnownHostEntry{{KeyType: "ssh-ed25519", Key: "ZetaKey"}},
 		},
 		lane.SSHPeer{
-			Type: "ssh", Host: "alpha.example",
+			Type: "ssh", Host: transport.Host("alpha.example"),
 			KnownHosts: []lane.KnownHostEntry{{KeyType: "ssh-ed25519", Key: "AlphaKey"}},
 		},
 		lane.SSHPeer{
-			Type: "ssh", Host: "mu.example",
+			Type: "ssh", Host: transport.Host("mu.example"),
 			KnownHosts: []lane.KnownHostEntry{{KeyType: "ssh-ed25519", Key: "MuKey"}},
 		},
 	}
@@ -101,7 +102,7 @@ func TestRenderKnownHosts_host_with_port(t *testing.T) {
 	peers := []lane.Peer{
 		lane.SSHPeer{
 			Type: "ssh",
-			Host: "git.example.com:2222",
+			Host: transport.Host("git.example.com:2222"),
 			KnownHosts: []lane.KnownHostEntry{
 				{KeyType: "ssh-ed25519", Key: "AAAAC3NzaC1lZDI1NTE5AAAAIPortKey"},
 			},
@@ -116,9 +117,9 @@ func TestRenderKnownHosts_host_with_port(t *testing.T) {
 
 func TestRenderKnownHosts_mixed_peer_list(t *testing.T) {
 	peers := []lane.Peer{
-		lane.HTTPSPeer{Type: "https", Host: "api.example.com", Trust: lane.FingerprintTrust{Mode: "cert_fingerprint", Fingerprint: "sha256:abc"}},
+		lane.HTTPSPeer{Type: "https", Host: transport.Host("api.example.com"), Trust: transport.FingerprintTrust{Mode: "cert_fingerprint", Fingerprint: "sha256:abc"}},
 		lane.SSHPeer{
-			Type: "ssh", Host: "git.example.com",
+			Type: "ssh", Host: transport.Host("git.example.com"),
 			KnownHosts: []lane.KnownHostEntry{{KeyType: "ssh-ed25519", Key: "MixedKey"}},
 		},
 		lane.OCIPeer{Type: "oci", Registry: "ghcr.io"},
@@ -132,15 +133,15 @@ func TestRenderKnownHosts_mixed_peer_list(t *testing.T) {
 
 func TestRenderKnownHosts_order_independence(t *testing.T) {
 	a := lane.SSHPeer{
-		Type: "ssh", Host: "alpha.example",
+		Type: "ssh", Host: transport.Host("alpha.example"),
 		KnownHosts: []lane.KnownHostEntry{{KeyType: "ssh-ed25519", Key: "AlphaKey"}},
 	}
 	b := lane.SSHPeer{
-		Type: "ssh", Host: "beta.example",
+		Type: "ssh", Host: transport.Host("beta.example"),
 		KnownHosts: []lane.KnownHostEntry{{KeyType: "ssh-ed25519", Key: "BetaKey"}},
 	}
 	c := lane.SSHPeer{
-		Type: "ssh", Host: "gamma.example",
+		Type: "ssh", Host: transport.Host("gamma.example"),
 		KnownHosts: []lane.KnownHostEntry{{KeyType: "ssh-ed25519", Key: "GammaKey"}},
 	}
 
@@ -155,7 +156,7 @@ func TestRenderKnownHosts_order_independence(t *testing.T) {
 func TestConfigureSSHPeers_no_ssh_peers(t *testing.T) {
 	dir := t.TempDir()
 	mount, env, err := executor.ConfigureSSHPeers([]lane.Peer{
-		lane.HTTPSPeer{Type: "https", Host: "example.com", Trust: lane.FingerprintTrust{Mode: "cert_fingerprint", Fingerprint: "sha256:abc"}},
+		lane.HTTPSPeer{Type: "https", Host: transport.Host("example.com"), Trust: transport.FingerprintTrust{Mode: "cert_fingerprint", Fingerprint: "sha256:abc"}},
 	}, dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -179,7 +180,7 @@ func TestConfigureSSHPeers_with_ssh_peers(t *testing.T) {
 	dir := t.TempDir()
 	peers := []lane.Peer{
 		lane.SSHPeer{
-			Type: "ssh", Host: "git.example.com",
+			Type: "ssh", Host: transport.Host("git.example.com"),
 			KnownHosts: []lane.KnownHostEntry{
 				{KeyType: "ssh-ed25519", Key: "AAAAC3NzaC1lZDI1NTE5AAAAITestKey"},
 			},
