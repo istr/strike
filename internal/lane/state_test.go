@@ -15,7 +15,7 @@ func TestRegisterAndResolve(t *testing.T) {
 		Type:      "file",
 		Digest:    lane.MustParseDigest("sha256:abc1230000000000000000000000000000000000000000000000000000000000"),
 		Size:      1024,
-		LocalPath: "/tmp/out/binary",
+		LocalPath: lane.Ptr("/tmp/out/binary"),
 	}
 
 	if err := s.Register("build", "binary", a); err != nil {

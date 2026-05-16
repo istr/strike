@@ -70,30 +70,15 @@ func (r Run) Execute(ctx context.Context) error {
 		Options: []string{"noexec", "nosuid"},
 	})
 
-	sshMount, sshEnv, err := ConfigureSSHPeers(r.Step.Peers, scratchDir)
+	mounts, err = appendSSHMounts(ctx, r.Step.Peers, scratchDir, mounts, env)
 	if err != nil {
-		return fmt.Errorf("ssh peer setup: %w", err)
-	}
-	if sshMount != nil {
-		mounts = append(mounts, *sshMount)
-	}
-	for k, v := range sshEnv {
-		env[k] = v
-	}
-
-	agentMount, agentEnv, err := StartAgentProxy(ctx, r.Step.Peers, scratchDir)
-	if err != nil {
-		return fmt.Errorf("ssh agent proxy setup: %w", err)
-	}
-	if agentMount != nil {
-		mounts = append(mounts, *agentMount)
-	}
-	for k, v := range agentEnv {
-		env[k] = v
+		return err
 	}
 
 	opts := container.DefaultSecureOpts()
-	opts.Image = r.Step.Image
+	if r.Step.Image != nil {
+		opts.Image = *r.Step.Image
+	}
 	if r.ImageRef != "" {
 		opts.Image = r.ImageRef
 	}
@@ -101,7 +86,9 @@ func (r Run) Execute(ctx context.Context) error {
 	opts.Env = env
 	opts.Mounts = mounts
 	opts.Network = NetworkMode(r.Step.Peers)
-	opts.Workdir = r.Step.Workdir.String()
+	if r.Step.Workdir != nil {
+		opts.Workdir = r.Step.Workdir.String()
+	}
 	opts.Stdout = os.Stdout
 	opts.Stderr = os.Stderr
 
@@ -113,6 +100,33 @@ func (r Run) Execute(ctx context.Context) error {
 		return fmt.Errorf("container exited with code %d", exitCode)
 	}
 	return nil
+}
+
+// appendSSHMounts configures SSH peer known_hosts and agent proxy,
+// appending any resulting mounts and injecting env vars.
+func appendSSHMounts(ctx context.Context, peers []lane.Peer, scratchDir string, mounts []container.Mount, env map[string]string) ([]container.Mount, error) {
+	sshMount, sshEnv, err := ConfigureSSHPeers(peers, scratchDir)
+	if err != nil {
+		return nil, fmt.Errorf("ssh peer setup: %w", err)
+	}
+	if sshMount != nil {
+		mounts = append(mounts, *sshMount)
+	}
+	for k, v := range sshEnv {
+		env[k] = v
+	}
+
+	agentMount, agentEnv, err := StartAgentProxy(ctx, peers, scratchDir)
+	if err != nil {
+		return nil, fmt.Errorf("ssh agent proxy setup: %w", err)
+	}
+	if agentMount != nil {
+		mounts = append(mounts, *agentMount)
+	}
+	for k, v := range agentEnv {
+		env[k] = v
+	}
+	return mounts, nil
 }
 
 // NetworkMode returns the container engine network mode string for the

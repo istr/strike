@@ -59,14 +59,14 @@ package lane
 #Step: {
 	@go(Step)
 	name:        string @go(Name)
-	image?:      (#ImageRef | #LocalImageRef) @go(Image)
+	image?:      (#ImageRef | #LocalImageRef) @go(Image,optional=nillable)
 	image_from?: #ImageFrom @go(ImageFrom,optional=nillable)
 	args:        [...string] @go(Args)
 	env:         [string]: string @go(Env)
 	inputs:      [...#InputRef] @go(Inputs)
 	outputs:     [...#OutputSpec] @go(Outputs)
 	secrets:     [...#SecretRef] @go(Secrets)
-	workdir?:    #AbsPath @go(Workdir)
+	workdir?:    #AbsPath @go(Workdir,optional=nillable)
 	peers?:      [...#Peer] @go(Peers)
 	// force_run: when true, strike bypasses the cache check
 	// and runs the step unconditionally. The explicit escape
@@ -75,7 +75,7 @@ package lane
 	// `latest` tag. Strike does not auto-detect
 	// non-determinism; lane authors declare it.
 	force_run?:  bool | *false @go(ForceRun)
-	timeout?:    #Duration @go(Timeout)
+	timeout?:    #Duration @go(Timeout,optional=nillable)
 	pack?:       #PackSpec @go(Pack,optional=nillable)
 	deploy?:     #DeploySpec @go(Deploy,optional=nillable)
 	provenance?: #ProvenanceSpec @go(Provenance,optional=nillable)
@@ -103,7 +103,7 @@ package lane
 #InputRef: {
 	@go(InputRef)
 	from:     string @go(From)            // "step_name.output_name"
-	subpath?: #RelPath @go(Subpath)   // path within producer output; "" mounts whole output
+	subpath?: #RelPath @go(Subpath,optional=nillable)   // path within producer output; nil mounts whole output
 	mount:    #AbsPath @go(Mount)
 	digest?:  #Digest @go(Digest,type=*Digest)
 }
@@ -124,9 +124,9 @@ package lane
 
 #OutputValidation: {
 	@go(OutputValidation)
-	content_type?: string @go(ContentType)
-	min_size?:     int @go(MinSize)
-	max_size?:     int @go(MaxSize)
+	content_type?: string @go(ContentType,optional=nillable)
+	min_size?:     int    @go(MinSize,optional=nillable)
+	max_size?:     int    @go(MaxSize,optional=nillable)
 }
 
 // ---------------------------------------------------------------------------
@@ -231,14 +231,14 @@ package lane
 	from: string @go(From)
 	dest: #AbsPath @go(Dest)
 	mode: *0o755 | int @go(Mode)
-	uid?: int @go(UID)
-	gid?: int @go(GID)
+	uid?: int @go(UID,optional=nillable)
+	gid?: int @go(GID,optional=nillable)
 }
 
 #Package: {
 	@go(Package)
 	name:     string @go(Name)
-	version?: string @go(Version)
+	version?: string @go(Version,optional=nillable)
 }
 
 #FileEntry: {
@@ -254,8 +254,8 @@ package lane
 	env?:        [string]: string @go(Env)
 	entrypoint?: [...string] @go(Entrypoint)
 	cmd?:        [...string] @go(Cmd)
-	workdir?:    string @go(Workdir)
-	user?:       string @go(User)
+	workdir?:    string @go(Workdir,optional=nillable)
+	user?:       string @go(User,optional=nillable)
 	labels?:     [string]: string @go(Labels)
 }
 
@@ -282,7 +282,7 @@ package lane
 	image:       #ImageRef @go(Image)
 	namespace:   string @go(Namespace)
 	strategy:    *"apply" | "replace" | "rollout" @go(Strategy)
-	kubeconfig?: string @go(Kubeconfig)
+	kubeconfig?: string @go(Kubeconfig,optional=nillable)
 }
 
 #DeployRegistry: {
@@ -314,8 +314,8 @@ package lane
 	id:          =~"^[a-z0-9][a-z0-9-]{0,62}$" @go(ID)
 	type:        string @go(Type)
 	description: string @go(Description)
-	url?:        string @go(URL)
-	namespace?:  string @go(Namespace)
+	url?:        string @go(URL,optional=nillable)
+	namespace?:  string @go(Namespace,optional=nillable)
 }
 
 // ---------------------------------------------------------------------------
@@ -366,7 +366,7 @@ package lane
 	@go(ProvenanceSpec)
 	type:            "git" | "tarball" | "oci" | "url" @go(Type)
 	path:            #AbsPath @go(Path)
-	require_signed?: bool @go(RequireSigned)
+	require_signed?: bool @go(RequireSigned,optional=nillable)
 }
 
 // ---------------------------------------------------------------------------
@@ -393,9 +393,9 @@ package lane
 	@go(Artifact)
 	type:          #ArtifactType @go(Type)
 	digest:        #Digest @go(Digest,type=Digest)
-	local_path?:   string @go(LocalPath)
+	local_path?:   string @go(LocalPath,optional=nillable)
 	size:          int & >=0 @go(Size)
-	content_type?: string @go(ContentType)
+	content_type?: string @go(ContentType,optional=nillable)
 	metadata?:     [string]: string @go(Metadata)
 	rekor?:        #RekorEntry @go(Rekor,optional=nillable)
 	// signed: true if this artifact was cryptographically

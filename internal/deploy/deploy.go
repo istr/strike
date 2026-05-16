@@ -264,7 +264,7 @@ func (d *Deployer) recordAttestation(att *Attestation, step *lane.Step, state *l
 		Type:        "file",
 		Digest:      attDigest,
 		Size:        int64(len(attJSON)),
-		ContentType: "application/vnd.strike.attestation+json",
+		ContentType: lane.Ptr("application/vnd.strike.attestation+json"),
 	}); err != nil {
 		return fmt.Errorf("register attestation: %w", err)
 	}
@@ -405,7 +405,11 @@ func (d *Deployer) executeKubernetesDeploy(ctx context.Context, m lane.DeployKub
 		return fmt.Errorf("kubernetes deploy: image required (digest-pinned kubectl image)")
 	}
 
-	kubeconfig, err := ResolveKubeconfig(m.Kubeconfig)
+	explicit := ""
+	if m.Kubeconfig != nil {
+		explicit = *m.Kubeconfig
+	}
+	kubeconfig, err := ResolveKubeconfig(explicit)
 	if err != nil {
 		return fmt.Errorf("kubernetes deploy: %w", err)
 	}

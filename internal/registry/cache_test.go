@@ -16,7 +16,7 @@ const testAlgoSHA256 = "sha256"
 func TestSpecHashDeterministic(t *testing.T) {
 	step := &lane.Step{
 		Name:  "build",
-		Image: "golang@sha256:abc",
+		Image: lane.Ptr("golang@sha256:abc"),
 		Args:  []string{"build", "-o", "/out/bin"},
 		Env:   map[string]string{"CGO_ENABLED": "0"},
 	}
@@ -36,7 +36,7 @@ func TestSpecHashDeterministic(t *testing.T) {
 func TestSpecHashChangesOnInput(t *testing.T) {
 	step := &lane.Step{
 		Name:  "build",
-		Image: "golang@sha256:abc",
+		Image: lane.Ptr("golang@sha256:abc"),
 		Args:  []string{"build"},
 		Env:   map[string]string{},
 	}

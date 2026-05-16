@@ -70,7 +70,7 @@ func TestPackPipeline(t *testing.T) {
 			},
 			Config: &lane.ImageConfig{
 				Entrypoint: []string{"/app"},
-				User:       "65534:65534",
+				User:       lane.Ptr("65534:65534"),
 			},
 		},
 		InputPaths:  map[string]string{"/app": binPath},

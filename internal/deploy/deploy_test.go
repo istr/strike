@@ -347,7 +347,7 @@ func TestRunStepDispatchesDeploy(t *testing.T) {
 	if step.Deploy == nil {
 		t.Fatal("expected deploy step to have non-nil Deploy field")
 	}
-	if step.Pack != nil || step.Image != "" {
+	if step.Pack != nil || step.Image != nil {
 		t.Fatal("deploy step must not have pack or image")
 	}
 }

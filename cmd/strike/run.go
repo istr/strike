@@ -59,7 +59,7 @@ func (rc *runContext) runStep(stepName string) error {
 
 	timeout, err := lane.ParseDuration(step.Timeout, 10*clock.Minute)
 	if err != nil {
-		return fmt.Errorf("%s: invalid timeout %q: %w", safeName, step.Timeout, err)
+		return fmt.Errorf("%s: invalid timeout %q: %w", safeName, *step.Timeout, err)
 	}
 	ctx, cancel := context.WithTimeout(rc.ctx, timeout)
 	defer cancel()
@@ -174,7 +174,7 @@ func (rc *runContext) resolveImageDigest(ctx context.Context, step *lane.Step, s
 			rc.lane.LaneID, fromStep, fromSpecHash)
 		return art.Digest, nil
 	}
-	digest, err := resolveDigest(ctx, rc.regClient, step.Image)
+	digest, err := resolveDigest(ctx, rc.regClient, *step.Image)
 	if err != nil {
 		return lane.Digest{}, fmt.Errorf("%s: image digest: %w", safeName, err)
 	}
@@ -189,7 +189,11 @@ func (rc *runContext) computeSpecHash(step *lane.Step, stepName string, imageDig
 	inputHashes := map[string]lane.Digest{}
 	for _, e := range rc.dag.InputEdges[string(step.Name)] {
 		from := string(e.FromStep.Name) + "." + e.FromOutput.Name
-		key := from + "|" + e.Mount.String() + "|" + string(e.Subpath)
+		subpath := ""
+		if e.Subpath != nil {
+			subpath = string(*e.Subpath)
+		}
+		key := from + "|" + e.Mount.String() + "|" + subpath
 		inputHashes[key] = rc.state.specHashes[string(e.FromStep.Name)]
 	}
 
@@ -507,7 +511,7 @@ func (rc *runContext) captureProvenance(step *lane.Step, safeName string, outRoo
 	if err != nil {
 		return fmt.Errorf("validate %s provenance: %w", spec.Type, err)
 	}
-	if spec.RequireSigned && !rec.IsSigned() {
+	if spec.RequireSigned != nil && *spec.RequireSigned && !rec.IsSigned() {
 		return fmt.Errorf("provenance requires signature.verified=true, but record is unsigned")
 	}
 	log.Printf("PROV   %s type=%s signed=%v", safeName, spec.Type, rec.IsSigned())
@@ -602,7 +606,7 @@ func resolveInputSubpath(e lane.InputEdge, inputDir string) (string, error) {
 		contentRoot = filepath.Join(inputDir, filepath.Base(e.FromOutput.Path.String()))
 	}
 
-	if e.Subpath == "" {
+	if e.Subpath == nil {
 		return contentRoot, nil
 	}
 
@@ -613,15 +617,15 @@ func resolveInputSubpath(e lane.InputEdge, inputDir string) (string, error) {
 	}
 	defer closer.Warn(root, "input content root")
 
-	if _, statErr := root.Stat(string(e.Subpath)); statErr != nil {
+	if _, statErr := root.Stat(string(*e.Subpath)); statErr != nil {
 		if os.IsNotExist(statErr) {
 			return "", fmt.Errorf("input at %q: subpath %q not found in %s output",
-				e.Mount, e.Subpath, ref)
+				e.Mount, *e.Subpath, ref)
 		}
-		return "", fmt.Errorf("input at %q: stat subpath %q: %w", e.Mount, e.Subpath, statErr)
+		return "", fmt.Errorf("input at %q: stat subpath %q: %w", e.Mount, *e.Subpath, statErr)
 	}
 
-	return filepath.Join(contentRoot, string(e.Subpath)), nil
+	return filepath.Join(contentRoot, string(*e.Subpath)), nil
 }
 
 func (rc *runContext) pushAndReport(ctx context.Context, step *lane.Step, safeName, tag string) error {

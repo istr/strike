@@ -13,13 +13,13 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// ParseDuration converts a lane duration string ("30s", "5m", "1h") to
-// clock.Duration. Returns defaultVal if d is empty.
-func ParseDuration(d Duration, defaultVal clock.Duration) (clock.Duration, error) {
-	if d == "" {
+// ParseDuration converts a lane duration pointer to clock.Duration.
+// Returns defaultVal if d is nil.
+func ParseDuration(d *Duration, defaultVal clock.Duration) (clock.Duration, error) {
+	if d == nil {
 		return defaultVal, nil
 	}
-	return clock.ParseDuration(string(d))
+	return clock.ParseDuration(string(*d))
 }
 
 var schema = specs.LaneSchema
@@ -59,7 +59,7 @@ func Parse(fp FilePath) (*Lane, error) {
 	// Validate: exactly one of image, image_from, pack, or deploy per step
 	for _, s := range p.Steps {
 		count := 0
-		if s.Image != "" {
+		if s.Image != nil {
 			count++
 		}
 		if s.ImageFrom != nil {
@@ -114,9 +114,9 @@ func validateStepPaths(s Step) error {
 			}
 		}
 	}
-	if s.Workdir != "" {
+	if s.Workdir != nil {
 		if err := s.Workdir.Validate(); err != nil {
-			return fmt.Errorf("step %q: workdir %q: %w", s.Name, s.Workdir, err)
+			return fmt.Errorf("step %q: workdir %q: %w", s.Name, *s.Workdir, err)
 		}
 	}
 	return nil

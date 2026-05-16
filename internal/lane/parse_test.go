@@ -22,26 +22,26 @@ func mustFilePath(t *testing.T, path string) lane.FilePath {
 
 func TestParseDuration(t *testing.T) {
 	tests := []struct {
-		input   lane.Duration
+		input   *lane.Duration
 		name    string
 		def     clock.Duration
 		want    clock.Duration
 		wantErr bool
 	}{
-		{input: "30s", name: "seconds", def: clock.Minute, want: 30 * clock.Second},
-		{input: "5m", name: "minutes", def: clock.Minute, want: 5 * clock.Minute},
-		{input: "1h", name: "hours", def: clock.Minute, want: clock.Hour},
-		{input: "", name: "empty uses default", def: clock.Minute, want: clock.Minute},
-		{input: "invalid", name: "invalid", def: clock.Minute, wantErr: true},
+		{input: lane.Ptr(lane.Duration("30s")), name: "seconds", def: clock.Minute, want: 30 * clock.Second},
+		{input: lane.Ptr(lane.Duration("5m")), name: "minutes", def: clock.Minute, want: 5 * clock.Minute},
+		{input: lane.Ptr(lane.Duration("1h")), name: "hours", def: clock.Minute, want: clock.Hour},
+		{input: nil, name: "nil uses default", def: clock.Minute, want: clock.Minute},
+		{input: lane.Ptr(lane.Duration("invalid")), name: "invalid", def: clock.Minute, wantErr: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := lane.ParseDuration(tt.input, tt.def)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("ParseDuration(%q) error = %v, wantErr %v", tt.input, err, tt.wantErr)
+				t.Errorf("ParseDuration(%v) error = %v, wantErr %v", tt.input, err, tt.wantErr)
 			}
 			if !tt.wantErr && got != tt.want {
-				t.Errorf("ParseDuration(%q) = %v, want %v", tt.input, got, tt.want)
+				t.Errorf("ParseDuration(%v) = %v, want %v", tt.input, got, tt.want)
 			}
 		})
 	}
@@ -65,8 +65,8 @@ func TestParse_ValidMinimal(t *testing.T) {
 	if p.Steps[0].Name != "build" {
 		t.Errorf("step name = %q, want build", p.Steps[0].Name)
 	}
-	if p.Steps[0].Image != "golang:1.22" {
-		t.Errorf("image = %q, want golang:1.22", p.Steps[0].Image)
+	if p.Steps[0].Image == nil || *p.Steps[0].Image != "golang:1.22" {
+		t.Errorf("image = %v, want golang:1.22", p.Steps[0].Image)
 	}
 	if len(p.Steps[0].Outputs) != 1 {
 		t.Errorf("output count = %d, want 1", len(p.Steps[0].Outputs))
@@ -177,42 +177,42 @@ func TestValidatePaths(t *testing.T) {
 		},
 		{
 			name:    "workdir absolute canonical",
-			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Image: "img", Workdir: "/src"}}},
+			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Image: lane.Ptr("img"), Workdir: lane.Ptr(lane.AbsPath("/src"))}}},
 			wantErr: "",
 		},
 		{
 			name:    "workdir root",
-			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Image: "img", Workdir: "/"}}},
+			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Image: lane.Ptr("img"), Workdir: lane.Ptr(lane.AbsPath("/"))}}},
 			wantErr: "",
 		},
 		{
 			name:    "workdir nested",
-			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Image: "img", Workdir: "/out/www"}}},
+			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Image: lane.Ptr("img"), Workdir: lane.Ptr(lane.AbsPath("/out/www"))}}},
 			wantErr: "",
 		},
 		{
 			name:    "workdir relative rejected",
-			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Image: "img", Workdir: "src"}}},
+			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Image: lane.Ptr("img"), Workdir: lane.Ptr(lane.AbsPath("src"))}}},
 			wantErr: "must be absolute",
 		},
 		{
 			name:    "workdir dot-dot rejected",
-			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Image: "img", Workdir: "/src/../etc"}}},
+			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Image: lane.Ptr("img"), Workdir: lane.Ptr(lane.AbsPath("/src/../etc"))}}},
 			wantErr: "must be canonical",
 		},
 		{
 			name:    "workdir dot rejected",
-			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Image: "img", Workdir: "/src/./build"}}},
+			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Image: lane.Ptr("img"), Workdir: lane.Ptr(lane.AbsPath("/src/./build"))}}},
 			wantErr: "must be canonical",
 		},
 		{
 			name:    "workdir double slash rejected",
-			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Image: "img", Workdir: "/src//out"}}},
+			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Image: lane.Ptr("img"), Workdir: lane.Ptr(lane.AbsPath("/src//out"))}}},
 			wantErr: "must be canonical",
 		},
 		{
 			name:    "workdir trailing slash rejected",
-			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Image: "img", Workdir: "/src/"}}},
+			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Image: lane.Ptr("img"), Workdir: lane.Ptr(lane.AbsPath("/src/"))}}},
 			wantErr: "must be canonical",
 		},
 	}

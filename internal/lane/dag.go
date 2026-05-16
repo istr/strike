@@ -19,12 +19,12 @@ func parseRef(ref string) (step, output string, err error) {
 
 // InputEdge is a fully resolved step.inputs[i] entry.
 // FromStep and FromOutput are guaranteed non-nil by Build.
-// Subpath is "" when the entire producer output is mounted.
+// Subpath is nil when the entire producer output is mounted.
 type InputEdge struct {
 	FromStep   *Step
 	FromOutput *OutputSpec
-	Mount      AbsPath // == InputRef.Mount
-	Subpath    RelPath // == InputRef.Subpath; "" means whole output
+	Subpath    *RelPath // == InputRef.Subpath; nil means whole output
+	Mount      AbsPath  // == InputRef.Mount
 }
 
 // PackFileEdge is a fully resolved step.pack.files[i] entry.
@@ -151,9 +151,9 @@ func (d *DAG) resolveInputEdges(p *Lane) error {
 				return fmt.Errorf("step %q: input at %q: output %q not found in step %q",
 					name, inp.Mount, refOutput, refStep)
 			}
-			if inp.Subpath != "" && out.Type == "file" {
+			if inp.Subpath != nil && out.Type == "file" {
 				return fmt.Errorf("step %q: input at %q: subpath %q not allowed on file output %q.%q",
-					name, inp.Mount, inp.Subpath, refStep, refOutput)
+					name, inp.Mount, *inp.Subpath, refStep, refOutput)
 			}
 			d.InputEdges[name] = append(d.InputEdges[name], InputEdge{
 				Mount:      inp.Mount,

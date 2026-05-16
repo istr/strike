@@ -85,7 +85,7 @@ func chainPackSpec() *lane.PackSpec {
 		},
 		Config: &lane.ImageConfig{
 			Entrypoint: []string{"/app"},
-			User:       "65534:65534",
+			User:       lane.Ptr("65534:65534"),
 		},
 		Annotations: map[string]string{
 			"org.opencontainers.image.source": "https://github.com/istr/strike",

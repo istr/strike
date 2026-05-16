@@ -63,7 +63,7 @@ func TestExecute_WithSSHPeer(t *testing.T) {
 		Secrets: nil,
 		Step: &lane.Step{
 			Name:  "test-step",
-			Image: "alpine:latest",
+			Image: lane.Ptr("alpine:latest"),
 			Args:  []string{"true"},
 			Peers: []lane.Peer{
 				lane.SSHPeer{
@@ -115,7 +115,7 @@ func TestExecute_WithoutSSHPeer(t *testing.T) {
 		Secrets: nil,
 		Step: &lane.Step{
 			Name:  "test-step",
-			Image: "alpine:latest",
+			Image: lane.Ptr("alpine:latest"),
 			Args:  []string{"true"},
 			Peers: []lane.Peer{
 				lane.HTTPSPeer{
@@ -164,7 +164,7 @@ func TestRunExecute_SSHAgentProxy_SpecGenerator(t *testing.T) {
 		Secrets: nil,
 		Step: &lane.Step{
 			Name:  "test-step",
-			Image: "alpine:latest",
+			Image: lane.Ptr("alpine:latest"),
 			Args:  []string{"true"},
 			Peers: []lane.Peer{
 				lane.SSHPeer{
@@ -236,7 +236,7 @@ func TestRunExecute_SSHPeer_NoAuthSock(t *testing.T) {
 		Secrets: nil,
 		Step: &lane.Step{
 			Name:  "test-step",
-			Image: "alpine:latest",
+			Image: lane.Ptr("alpine:latest"),
 			Args:  []string{"true"},
 			Peers: []lane.Peer{
 				lane.SSHPeer{
@@ -269,7 +269,7 @@ func TestRunExecute_InputMounts_FromImage_SpecGenerator(t *testing.T) {
 		Secrets: nil,
 		Step: &lane.Step{
 			Name:  "consumer",
-			Image: "alpine:latest",
+			Image: lane.Ptr("alpine:latest"),
 			Args:  []string{"cat", "/in/binary"},
 		},
 		OutputDir: outDir,
