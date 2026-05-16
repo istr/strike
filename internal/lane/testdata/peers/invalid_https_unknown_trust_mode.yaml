@@ -1,0 +1,21 @@
+name: peers-https-unknown-trust-mode
+lane_id: peers-https-unknown-trust-mode
+registry: localhost:5555/test
+secrets: {}
+steps:
+  - name: fetch
+    image: docker.io/library/alpine@sha256:abababababababababababababababababababababababababababababababab
+    args: [wget, "https://example.com/file"]
+    env: {}
+    inputs: []
+    secrets: []
+    outputs:
+      - name: file
+        type: file
+        path: /out/file
+    peers:
+      - type: https
+        host: example.com
+        trust:
+          mode: system_ca
+          path: /etc/ssl/certs/ca-certificates.crt

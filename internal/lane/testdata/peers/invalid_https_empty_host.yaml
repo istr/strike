@@ -1,0 +1,21 @@
+name: peers-https-empty-host
+lane_id: peers-https-empty-host
+registry: localhost:5555/test
+secrets: {}
+steps:
+  - name: fetch
+    image: docker.io/library/alpine@sha256:abababababababababababababababababababababababababababababababab
+    args: [wget, "https://example.com/file"]
+    env: {}
+    inputs: []
+    secrets: []
+    outputs:
+      - name: file
+        type: file
+        path: /out/file
+    peers:
+      - type: https
+        host: ""
+        trust:
+          mode: cert_fingerprint
+          fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
