@@ -57,9 +57,18 @@ func (rc *runContext) runStep(stepName string) error {
 	step := rc.dag.Steps[stepName]
 	safeName := sanitizeForLog(stepName)
 
-	timeout, err := lane.ParseDuration(step.Timeout, 10*clock.Minute)
+	// Timeout resolution: explicit step value > lane-wide default > hard floor.
+	var rawTimeout *lane.Duration
+	switch {
+	case step.Timeout != nil:
+		rawTimeout = step.Timeout
+	case rc.lane.Defaults != nil:
+		d := lane.Duration(rc.lane.Defaults.Timeout)
+		rawTimeout = &d
+	}
+	timeout, err := lane.ParseDuration(rawTimeout, 10*clock.Minute)
 	if err != nil {
-		return fmt.Errorf("%s: invalid timeout %q: %w", safeName, *step.Timeout, err)
+		return fmt.Errorf("%s: invalid timeout %q: %w", safeName, *rawTimeout, err)
 	}
 	ctx, cancel := context.WithTimeout(rc.ctx, timeout)
 	defer cancel()

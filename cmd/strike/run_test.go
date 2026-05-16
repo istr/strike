@@ -863,6 +863,27 @@ func TestRunStep_InvalidTimeout(t *testing.T) {
 	}
 }
 
+func TestRunStep_TimeoutFromLaneDefaults(t *testing.T) {
+	rc := newTestRC(t, &mockEngine{})
+	rc.lane.Defaults = &lane.LaneDefaults{Timeout: "invalid"}
+	rc.dag.Steps["bad"] = &lane.Step{
+		Image: lane.Ptr("img@sha256:abc0000000000000000000000000000000000000000000000000000000000000"),
+		Args:  []string{"run"},
+		Env:   map[string]string{},
+	}
+
+	err := rc.runStep("bad")
+	if err == nil {
+		t.Fatal("expected error for invalid lane-defaults timeout")
+	}
+	if !strings.Contains(err.Error(), "invalid timeout") {
+		t.Errorf("error should mention 'invalid timeout': %v", err)
+	}
+	if !strings.Contains(err.Error(), "invalid") {
+		t.Errorf("error should mention the offending value: %v", err)
+	}
+}
+
 // --------------------------------------------------------------------------.
 // newRunState
 // --------------------------------------------------------------------------.
