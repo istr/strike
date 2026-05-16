@@ -1,6 +1,6 @@
 {
   "boundary": "ValidateAttestation",
-  "description": "pre_state_digest not matching #Digest pattern fails validation",
+  "description": "provenance:null is no longer accepted; must be []",
   "inputs": {
     "attestation": {
       "lane_id": "test-lane",
@@ -11,14 +11,14 @@
         "description": "test"
       },
       "artifacts": {},
-      "pre_state_digest": "not-a-valid-digest",
+      "pre_state_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "post_state_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "lane_ref": "",
-      "provenance": []
+      "provenance": null
     }
   },
   "expected": {
     "valid": false,
-    "error_contains": "digest"
+    "error_contains": "provenance"
   }
 }

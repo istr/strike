@@ -84,7 +84,7 @@ func (s *State) Resolve(ref string) (Artifact, error) {
 // for deterministic attestation output.
 func (s *State) CollectProvenance(dag *DAG, fromStep string) []ProvenanceRecord {
 	if dag == nil {
-		return nil
+		return []ProvenanceRecord{}
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()

@@ -68,7 +68,7 @@ package deploy
 	// provenance collects validated provenance records from transitive
 	// predecessor steps. Sorted deterministically by step name.
 	// Empty array when no steps declare provenance.
-	provenance: [...#ProvenanceRecord] | null
+	provenance: [...#ProvenanceRecord]
 
 	// peers maps step name to the network peer declarations attached to
 	// that step. Only steps that declared at least one peer appear.

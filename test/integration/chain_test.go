@@ -152,9 +152,9 @@ func verifyChain(t *testing.T, att *deploy.Attestation, imageDigest string, keyP
 			att.Artifacts["app"].Digest, imageDigest)
 	}
 
-	// C. Provenance -- nil when no predecessor steps declare provenance.
-	if att.Provenance != nil {
-		t.Errorf("expected nil provenance (no predecessors with provenance), got %d records", len(att.Provenance))
+	// C. Provenance -- empty when no predecessor steps declare provenance.
+	if len(att.Provenance) != 0 {
+		t.Errorf("expected empty provenance (no predecessors with provenance), got %d records", len(att.Provenance))
 	}
 
 	// D. Engine identity present.

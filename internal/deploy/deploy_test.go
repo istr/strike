@@ -117,6 +117,7 @@ func TestAttestationJSON(t *testing.T) {
 		Artifacts:       map[string]deploy.SignedArtifact{"image": {Digest: "sha256:abc"}},
 		PreStateDigest:  lane.MustParseDigest("sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
 		PostStateDigest: lane.MustParseDigest("sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
+		Provenance:      []lane.ProvenanceRecord{},
 	}
 
 	data, err := att.JSON()
@@ -907,6 +908,7 @@ func TestValidateAttestation_InvalidLaneID(t *testing.T) {
 		PreStateDigest:  lane.MustParseDigest("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
 		PostStateDigest: lane.MustParseDigest("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
 		Peers:           map[string][]lane.Peer{},
+		Provenance:      []lane.ProvenanceRecord{},
 	}
 
 	if err := deploy.ValidateAttestation(att); err == nil {

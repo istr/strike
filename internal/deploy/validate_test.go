@@ -24,6 +24,7 @@ func TestValidateAttestation_Valid(t *testing.T) {
 		PreStateDigest:  lane.MustParseDigest("sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
 		PostStateDigest: lane.MustParseDigest("sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
 		Peers:           map[string][]lane.Peer{},
+		Provenance:      []lane.ProvenanceRecord{},
 	}
 
 	if err := deploy.ValidateAttestation(att); err != nil {
@@ -49,7 +50,8 @@ func TestValidateAttestation_WithEngine(t *testing.T) {
 			Rootless:              &rootless,
 			Version:               "5.3.1",
 		},
-		Peers: map[string][]lane.Peer{},
+		Peers:      map[string][]lane.Peer{},
+		Provenance: []lane.ProvenanceRecord{},
 	}
 
 	if err := deploy.ValidateAttestation(att); err != nil {
@@ -68,6 +70,8 @@ func TestValidateAttestation_InvalidEngineConnectionType(t *testing.T) {
 		Engine: &deploy.EngineRecord{
 			ConnectionType: "plaintext", // not in enum
 		},
+		Peers:      map[string][]lane.Peer{},
+		Provenance: []lane.ProvenanceRecord{},
 	}
 
 	if err := deploy.ValidateAttestation(att); err == nil {
@@ -102,6 +106,7 @@ func TestValidateAttestation_EmptyDigestsAllowed(t *testing.T) {
 		PreStateDigest:  lane.MustParseDigest("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
 		PostStateDigest: lane.MustParseDigest("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
 		Peers:           map[string][]lane.Peer{},
+		Provenance:      []lane.ProvenanceRecord{},
 	}
 
 	if err := deploy.ValidateAttestation(att); err != nil {
@@ -181,6 +186,7 @@ func TestValidateAttestation_WithPeers(t *testing.T) {
 		},
 		PreStateDigest:  lane.MustParseDigest("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
 		PostStateDigest: lane.MustParseDigest("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
+		Provenance:      []lane.ProvenanceRecord{},
 		Peers: map[string][]lane.Peer{
 			"build": {
 				lane.HTTPSPeer{
@@ -222,6 +228,7 @@ func TestValidateAttestation_InvalidPeer(t *testing.T) {
 		},
 		PreStateDigest:  lane.MustParseDigest("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
 		PostStateDigest: lane.MustParseDigest("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
+		Provenance:      []lane.ProvenanceRecord{},
 		Peers: map[string][]lane.Peer{
 			"build": {
 				lane.HTTPSPeer{
