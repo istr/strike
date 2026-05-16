@@ -13,15 +13,15 @@ func twoInputLane(mountA, mountB lane.AbsPath) *lane.Lane {
 	return &lane.Lane{
 		Steps: []lane.Step{
 			{
-				Name: "a", Image: lane.Ptr("img"), Args: []string{}, Env: map[string]string{},
+				Name: "a", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
 				Outputs: []lane.OutputSpec{{Name: "o", Type: "file", Path: "/out/o"}},
 			},
 			{
-				Name: "b", Image: lane.Ptr("img"), Args: []string{}, Env: map[string]string{},
+				Name: "b", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
 				Outputs: []lane.OutputSpec{{Name: "o", Type: "file", Path: "/out/o"}},
 			},
 			{
-				Name: "c", Image: lane.Ptr("img"), Args: []string{}, Env: map[string]string{},
+				Name: "c", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
 				Inputs: []lane.InputRef{
 					{From: "a.o", Mount: mountA},
 					{From: "b.o", Mount: mountB},
@@ -35,19 +35,19 @@ func TestBuild_NestedInputMountsRejected(t *testing.T) {
 	p := &lane.Lane{
 		Steps: []lane.Step{
 			{
-				Name: "src", Image: lane.Ptr("img"), Args: []string{}, Env: map[string]string{},
+				Name: "src", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
 				Outputs: []lane.OutputSpec{
 					{Name: "tree", Type: "directory", Path: "/out/tree"},
 				},
 			},
 			{
-				Name: "deps", Image: lane.Ptr("img"), Args: []string{}, Env: map[string]string{},
+				Name: "deps", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
 				Outputs: []lane.OutputSpec{
 					{Name: "node_modules", Type: "directory", Path: "/out/node_modules"},
 				},
 			},
 			{
-				Name: "build", Image: lane.Ptr("img"), Args: []string{}, Env: map[string]string{},
+				Name: "build", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
 				Inputs: []lane.InputRef{
 					{From: "src.tree", Mount: "/work"},
 					{From: "deps.node_modules", Mount: "/work/node_modules"},

@@ -65,11 +65,22 @@ func TestParse_ValidMinimal(t *testing.T) {
 	if p.Steps[0].Name != "build" {
 		t.Errorf("step name = %q, want build", p.Steps[0].Name)
 	}
-	if p.Steps[0].Image == nil || *p.Steps[0].Image != "golang:1.22" {
-		t.Errorf("image = %v, want golang:1.22", p.Steps[0].Image)
+	wantImage := lane.ImageRef("docker.io/library/golang@sha256:abababababababababababababababababababababababababababababababab")
+	if p.Steps[0].Image == nil || *p.Steps[0].Image != wantImage {
+		t.Errorf("image = %v, want %s", p.Steps[0].Image, wantImage)
 	}
 	if len(p.Steps[0].Outputs) != 1 {
 		t.Errorf("output count = %d, want 1", len(p.Steps[0].Outputs))
+	}
+}
+
+func TestParse_NonPinnedImageRejected(t *testing.T) {
+	_, err := lane.Parse(mustFilePath(t, "testdata/invalid_image_not_pinned.yaml"))
+	if err == nil {
+		t.Fatal("expected error for non-pinned image")
+	}
+	if !strings.Contains(err.Error(), "validation") {
+		t.Errorf("error should mention validation: %v", err)
 	}
 }
 
@@ -177,42 +188,42 @@ func TestValidatePaths(t *testing.T) {
 		},
 		{
 			name:    "workdir absolute canonical",
-			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Image: lane.Ptr("img"), Workdir: lane.Ptr(lane.AbsPath("/src"))}}},
+			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Image: lane.Ptr(lane.ImageRef("img")), Workdir: lane.Ptr(lane.AbsPath("/src"))}}},
 			wantErr: "",
 		},
 		{
 			name:    "workdir root",
-			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Image: lane.Ptr("img"), Workdir: lane.Ptr(lane.AbsPath("/"))}}},
+			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Image: lane.Ptr(lane.ImageRef("img")), Workdir: lane.Ptr(lane.AbsPath("/"))}}},
 			wantErr: "",
 		},
 		{
 			name:    "workdir nested",
-			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Image: lane.Ptr("img"), Workdir: lane.Ptr(lane.AbsPath("/out/www"))}}},
+			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Image: lane.Ptr(lane.ImageRef("img")), Workdir: lane.Ptr(lane.AbsPath("/out/www"))}}},
 			wantErr: "",
 		},
 		{
 			name:    "workdir relative rejected",
-			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Image: lane.Ptr("img"), Workdir: lane.Ptr(lane.AbsPath("src"))}}},
+			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Image: lane.Ptr(lane.ImageRef("img")), Workdir: lane.Ptr(lane.AbsPath("src"))}}},
 			wantErr: "must be absolute",
 		},
 		{
 			name:    "workdir dot-dot rejected",
-			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Image: lane.Ptr("img"), Workdir: lane.Ptr(lane.AbsPath("/src/../etc"))}}},
+			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Image: lane.Ptr(lane.ImageRef("img")), Workdir: lane.Ptr(lane.AbsPath("/src/../etc"))}}},
 			wantErr: "must be canonical",
 		},
 		{
 			name:    "workdir dot rejected",
-			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Image: lane.Ptr("img"), Workdir: lane.Ptr(lane.AbsPath("/src/./build"))}}},
+			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Image: lane.Ptr(lane.ImageRef("img")), Workdir: lane.Ptr(lane.AbsPath("/src/./build"))}}},
 			wantErr: "must be canonical",
 		},
 		{
 			name:    "workdir double slash rejected",
-			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Image: lane.Ptr("img"), Workdir: lane.Ptr(lane.AbsPath("/src//out"))}}},
+			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Image: lane.Ptr(lane.ImageRef("img")), Workdir: lane.Ptr(lane.AbsPath("/src//out"))}}},
 			wantErr: "must be canonical",
 		},
 		{
 			name:    "workdir trailing slash rejected",
-			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Image: lane.Ptr("img"), Workdir: lane.Ptr(lane.AbsPath("/src/"))}}},
+			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Image: lane.Ptr(lane.ImageRef("img")), Workdir: lane.Ptr(lane.AbsPath("/src/"))}}},
 			wantErr: "must be canonical",
 		},
 	}

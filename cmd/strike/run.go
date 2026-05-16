@@ -160,7 +160,7 @@ func (rc *runContext) executeDeploy(ctx context.Context, step *lane.Step, stepNa
 
 func (rc *runContext) resolveImageDigest(ctx context.Context, step *lane.Step, safeName string) (lane.Digest, error) {
 	if step.Pack != nil {
-		digest, err := resolveDigest(ctx, rc.regClient, string(step.Pack.Base))
+		digest, err := resolveDigest(ctx, rc.regClient, step.Pack.Base)
 		if err != nil {
 			return lane.Digest{}, fmt.Errorf("%s: pack base digest: %w", safeName, err)
 		}

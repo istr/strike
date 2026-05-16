@@ -25,7 +25,7 @@ func httpsPeer(host string) lane.Peer {
 func minStep(name string, peers []lane.Peer) lane.Step {
 	return lane.Step{
 		Name:    name,
-		Image:   lane.Ptr("alpine:3.20"),
+		Image:   lane.Ptr(lane.ImageRef("alpine:3.20")),
 		Args:    []string{"echo", "ok"},
 		Env:     map[string]string{},
 		Inputs:  []lane.InputRef{},

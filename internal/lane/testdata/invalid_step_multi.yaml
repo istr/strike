@@ -4,7 +4,7 @@ registry: localhost:5555/test
 secrets: {}
 steps:
   - name: both
-    image: golang:1.22
+    image: docker.io/library/golang@sha256:abababababababababababababababababababababababababababababababab
     pack:
       base: "docker.io/library/scratch@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
       files: []

@@ -62,11 +62,11 @@ func TestBuildInputMounts_Single(t *testing.T) {
 		Registry: "localhost:5555/test",
 		Steps: []lane.Step{
 			{
-				Name: "compile", Image: lane.Ptr("img"), Args: []string{}, Env: map[string]string{},
+				Name: "compile", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
 				Outputs: []lane.OutputSpec{{Name: "bin", Type: "file", Path: "/out/binary"}},
 			},
 			{
-				Name: "test", Image: lane.Ptr("img"), Args: []string{}, Env: map[string]string{},
+				Name: "test", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
 				Inputs: []lane.InputRef{{From: "compile.bin", Mount: "/input/binary"}},
 			},
 		},
@@ -117,15 +117,15 @@ func TestBuildInputMounts_Multiple(t *testing.T) {
 		Registry: "localhost:5555/test",
 		Steps: []lane.Step{
 			{
-				Name: "s1", Image: lane.Ptr("img"), Args: []string{}, Env: map[string]string{},
+				Name: "s1", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
 				Outputs: []lane.OutputSpec{{Name: "a", Type: "file", Path: "/out/a.tar"}},
 			},
 			{
-				Name: "s2", Image: lane.Ptr("img"), Args: []string{}, Env: map[string]string{},
+				Name: "s2", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
 				Outputs: []lane.OutputSpec{{Name: "b", Type: "file", Path: "/out/b.tar"}},
 			},
 			{
-				Name: "consumer", Image: lane.Ptr("img"), Args: []string{}, Env: map[string]string{},
+				Name: "consumer", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
 				Inputs: []lane.InputRef{
 					{From: "s1.a", Mount: "/in/a"},
 					{From: "s2.b", Mount: "/in/b"},
@@ -178,11 +178,11 @@ func TestBuildInputMounts_MissingSubpath(t *testing.T) {
 		Registry: "localhost:5555/test",
 		Steps: []lane.Step{
 			{
-				Name: "src", Image: lane.Ptr("img"), Args: []string{}, Env: map[string]string{},
+				Name: "src", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
 				Outputs: []lane.OutputSpec{{Name: "tree", Type: "directory", Path: "/out/tree"}},
 			},
 			{
-				Name: "consumer", Image: lane.Ptr("img"), Args: []string{}, Env: map[string]string{},
+				Name: "consumer", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
 				Inputs: []lane.InputRef{
 					{From: "src.tree", Subpath: lane.Ptr(lane.RelPath("nonexistent.json")), Mount: "/in/x"},
 				},
@@ -230,11 +230,11 @@ func TestGuardUnsignedImages_NoNetwork(t *testing.T) {
 		Registry: "localhost:5555/test",
 		Steps: []lane.Step{
 			{
-				Name: "pack", Image: lane.Ptr("img"), Args: []string{}, Env: map[string]string{},
+				Name: "pack", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
 				Outputs: []lane.OutputSpec{{Name: "img", Type: "image", Path: "/out/img.tar"}},
 			},
 			{
-				Name: "publish", Image: lane.Ptr("img"), Args: []string{}, Env: map[string]string{},
+				Name: "publish", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
 				Inputs: []lane.InputRef{{From: "pack.img", Mount: "/in/img"}},
 			},
 		},
@@ -251,11 +251,11 @@ func TestGuardUnsignedImages_SignedOK(t *testing.T) {
 		Registry: "localhost:5555/test",
 		Steps: []lane.Step{
 			{
-				Name: "pack", Image: lane.Ptr("img"), Args: []string{}, Env: map[string]string{},
+				Name: "pack", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
 				Outputs: []lane.OutputSpec{{Name: "img", Type: "image", Path: "/out/img.tar"}},
 			},
 			{
-				Name: "publish", Image: lane.Ptr("img"), Args: []string{}, Env: map[string]string{},
+				Name: "publish", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
 				Peers:  []lane.Peer{lane.OCIPeer{Type: "oci", Registry: "localhost:5555"}},
 				Inputs: []lane.InputRef{{From: "pack.img", Mount: "/in/img"}},
 			},
@@ -279,11 +279,11 @@ func TestGuardUnsignedImages_UnsignedError(t *testing.T) {
 		Registry: "localhost:5555/test",
 		Steps: []lane.Step{
 			{
-				Name: "pack", Image: lane.Ptr("img"), Args: []string{}, Env: map[string]string{},
+				Name: "pack", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
 				Outputs: []lane.OutputSpec{{Name: "img", Type: "image", Path: "/out/img.tar"}},
 			},
 			{
-				Name: "publish", Image: lane.Ptr("img"), Args: []string{}, Env: map[string]string{},
+				Name: "publish", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
 				Peers:  []lane.Peer{lane.OCIPeer{Type: "oci", Registry: "localhost:5555"}},
 				Inputs: []lane.InputRef{{From: "pack.img", Mount: "/in/img"}},
 			},
@@ -311,11 +311,11 @@ func TestGuardUnsignedImages_NonImageInput(t *testing.T) {
 		Registry: "localhost:5555/test",
 		Steps: []lane.Step{
 			{
-				Name: "compile", Image: lane.Ptr("img"), Args: []string{}, Env: map[string]string{},
+				Name: "compile", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
 				Outputs: []lane.OutputSpec{{Name: "bin", Type: "file", Path: "/out/bin"}},
 			},
 			{
-				Name: "run", Image: lane.Ptr("img"), Args: []string{}, Env: map[string]string{},
+				Name: "run", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
 				Peers:  []lane.Peer{lane.OCIPeer{Type: "oci", Registry: "localhost:5555"}},
 				Inputs: []lane.InputRef{{From: "compile.bin", Mount: "/in/bin"}},
 			},
@@ -595,7 +595,7 @@ func TestCheckCache_AbsentSignedAnnotationDefaultsFalse(t *testing.T) {
 
 func TestResolveImageDigest_FromRef(t *testing.T) {
 	rc := newTestRC(t, &mockEngine{})
-	step := &lane.Step{Image: lane.Ptr("docker.io/lib/golang@sha256:abcdef1234567890000000000000000000000000000000000000000000000000")}
+	step := &lane.Step{Image: lane.Ptr(lane.ImageRef("docker.io/lib/golang@sha256:abcdef1234567890000000000000000000000000000000000000000000000000"))}
 
 	digest, err := rc.resolveImageDigest(context.Background(), step, "test")
 	if err != nil {
@@ -613,7 +613,7 @@ func TestResolveImageDigest_FromInspect(t *testing.T) {
 		},
 	}
 	rc := newTestRC(t, eng)
-	step := &lane.Step{Image: lane.Ptr("docker.io/lib/golang:1.22")}
+	step := &lane.Step{Image: lane.Ptr(lane.ImageRef("docker.io/lib/golang:1.22"))}
 
 	digest, err := rc.resolveImageDigest(context.Background(), step, "test")
 	if err != nil {
@@ -631,7 +631,7 @@ func TestResolveImageDigest_ImageFrom(t *testing.T) {
 		Registry: "localhost:5555/test",
 		Steps: []lane.Step{
 			{
-				Name: "pack", Image: lane.Ptr("img"), Args: []string{}, Env: map[string]string{},
+				Name: "pack", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
 				Outputs: []lane.OutputSpec{{Name: "img", Type: "image", Path: "/out/img.tar"}},
 			},
 			{
@@ -676,7 +676,7 @@ func TestResolveImageDigest_ImageFromMissing(t *testing.T) {
 		Registry: "localhost:5555/test",
 		Steps: []lane.Step{
 			{
-				Name: "pack", Image: lane.Ptr("img"), Args: []string{}, Env: map[string]string{},
+				Name: "pack", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
 				Outputs: []lane.OutputSpec{{Name: "img", Type: "image", Path: "/out/img.tar"}},
 			},
 			{
@@ -708,7 +708,7 @@ func TestResolvePackInputPaths(t *testing.T) {
 		Registry: "localhost:5555/test",
 		Steps: []lane.Step{
 			{
-				Name: "compile", Image: lane.Ptr("img"), Args: []string{}, Env: map[string]string{},
+				Name: "compile", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
 				Outputs: []lane.OutputSpec{{Name: "bin", Type: "file", Path: "/out/binary"}},
 			},
 			{
@@ -849,7 +849,7 @@ func TestRunStep_InvalidTimeout(t *testing.T) {
 	rc := newTestRC(t, &mockEngine{})
 	rc.dag.Steps["bad"] = &lane.Step{
 		Timeout: lane.Ptr(lane.Duration("not-a-duration")),
-		Image:   lane.Ptr("img@sha256:abc0000000000000000000000000000000000000000000000000000000000000"),
+		Image:   lane.Ptr(lane.ImageRef("img@sha256:abc0000000000000000000000000000000000000000000000000000000000000")),
 		Args:    []string{"run"},
 		Env:     map[string]string{},
 	}
@@ -867,7 +867,7 @@ func TestRunStep_TimeoutFromLaneDefaults(t *testing.T) {
 	rc := newTestRC(t, &mockEngine{})
 	rc.lane.Defaults = &lane.LaneDefaults{Timeout: "invalid"}
 	rc.dag.Steps["bad"] = &lane.Step{
-		Image: lane.Ptr("img@sha256:abc0000000000000000000000000000000000000000000000000000000000000"),
+		Image: lane.Ptr(lane.ImageRef("img@sha256:abc0000000000000000000000000000000000000000000000000000000000000")),
 		Args:  []string{"run"},
 		Env:   map[string]string{},
 	}

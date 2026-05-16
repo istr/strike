@@ -18,17 +18,17 @@ func TestBuild_RejectsNestedInputMounts(t *testing.T) {
 		Registry: "localhost:5555/test",
 		Steps: []lane.Step{
 			{
-				Name: "src", Image: lane.Ptr("img@sha256:" + strings.Repeat("a", 64)),
+				Name: "src", Image: lane.Ptr(lane.ImageRef("img@sha256:" + strings.Repeat("a", 64))),
 				Args: []string{}, Env: map[string]string{},
 				Outputs: []lane.OutputSpec{{Name: "tree", Type: "directory", Path: "/out/tree"}},
 			},
 			{
-				Name: "deps", Image: lane.Ptr("img@sha256:" + strings.Repeat("b", 64)),
+				Name: "deps", Image: lane.Ptr(lane.ImageRef("img@sha256:" + strings.Repeat("b", 64))),
 				Args: []string{}, Env: map[string]string{},
 				Outputs: []lane.OutputSpec{{Name: "modules", Type: "directory", Path: "/out/modules"}},
 			},
 			{
-				Name: "build", Image: lane.Ptr("img@sha256:" + strings.Repeat("c", 64)),
+				Name: "build", Image: lane.Ptr(lane.ImageRef("img@sha256:" + strings.Repeat("c", 64))),
 				Args: []string{}, Env: map[string]string{},
 				Inputs: []lane.InputRef{
 					{From: "src.tree", Mount: "/work"},
@@ -50,7 +50,7 @@ func TestBuild_RejectsProvenancePathOutsideOutputs(t *testing.T) {
 	p := &lane.Lane{
 		Steps: []lane.Step{
 			{
-				Name: "src", Image: lane.Ptr("img@sha256:" + strings.Repeat("a", 64)),
+				Name: "src", Image: lane.Ptr(lane.ImageRef("img@sha256:" + strings.Repeat("a", 64))),
 				Args: []string{}, Env: map[string]string{},
 				Outputs: []lane.OutputSpec{{Name: "tree", Type: "directory", Path: "/out/tree"}},
 				Provenance: &lane.ProvenanceSpec{

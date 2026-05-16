@@ -1,0 +1,15 @@
+name: not-pinned
+lane_id: not-pinned
+registry: localhost:5555/test
+secrets: {}
+steps:
+  - name: build
+    image: golang:1.22
+    args: [go, build]
+    env: {}
+    inputs: []
+    secrets: []
+    outputs:
+      - name: binary
+        type: file
+        path: /out/binary

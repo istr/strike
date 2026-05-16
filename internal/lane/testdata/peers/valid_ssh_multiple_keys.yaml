@@ -4,7 +4,7 @@ registry: localhost:5555/test
 secrets: {}
 steps:
   - name: clone
-    image: alpine/git:2.45
+    image: docker.io/library/alpine@sha256:abababababababababababababababababababababababababababababababab
     args: [git, clone, "git@git.example.com:org/repo"]
     env: {}
     inputs: []

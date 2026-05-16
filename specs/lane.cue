@@ -59,7 +59,7 @@ package lane
 #Step: {
 	@go(Step)
 	name:        string @go(Name)
-	image?:      (#ImageRef | #LocalImageRef) @go(Image,optional=nillable)
+	image?:      #ImageRef @go(Image,optional=nillable)
 	image_from?: #ImageFrom @go(ImageFrom,optional=nillable)
 	args:        [...string] @go(Args)
 	env:         [string]: string @go(Env)
@@ -87,8 +87,6 @@ package lane
 // ---------------------------------------------------------------------------
 
 #ImageRef: =~"^.+@sha256:[a-f0-9]{64}$"
-
-#LocalImageRef: =~"^[a-z0-9][a-z0-9./_-]*(:[a-zA-Z0-9._-]+)?$"
 
 #ImageFrom: {
 	@go(ImageFrom)

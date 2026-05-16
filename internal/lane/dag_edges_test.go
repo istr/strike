@@ -15,11 +15,11 @@ func TestBuild_InputEdgesPopulated(t *testing.T) {
 	p := &lane.Lane{
 		Steps: []lane.Step{
 			{
-				Name: "a", Image: lane.Ptr("img"), Args: []string{}, Env: map[string]string{},
+				Name: "a", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
 				Outputs: []lane.OutputSpec{{Name: "out", Type: "file", Path: "/out/a"}},
 			},
 			{
-				Name: "b", Image: lane.Ptr("img"), Args: []string{}, Env: map[string]string{},
+				Name: "b", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
 				Inputs: []lane.InputRef{{From: "a.out", Mount: "/in"}},
 			},
 		},
@@ -50,11 +50,11 @@ func TestBuild_UnknownInputOutput(t *testing.T) {
 	p := &lane.Lane{
 		Steps: []lane.Step{
 			{
-				Name: "a", Image: lane.Ptr("img"), Args: []string{}, Env: map[string]string{},
+				Name: "a", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
 				Outputs: []lane.OutputSpec{{Name: "out", Type: "file", Path: "/out/a"}},
 			},
 			{
-				Name: "b", Image: lane.Ptr("img"), Args: []string{}, Env: map[string]string{},
+				Name: "b", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
 				Inputs: []lane.InputRef{{From: "a.missing", Mount: "/in"}},
 			},
 		},
@@ -76,7 +76,7 @@ func TestBuild_PackFileEdgesPopulated(t *testing.T) {
 	p := &lane.Lane{
 		Steps: []lane.Step{
 			{
-				Name: "compile", Image: lane.Ptr("img"), Args: []string{}, Env: map[string]string{},
+				Name: "compile", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
 				Outputs: []lane.OutputSpec{{Name: "binary", Type: "file", Path: "/out/binary"}},
 			},
 			{
@@ -112,7 +112,7 @@ func TestBuild_UnknownPackFileOutput(t *testing.T) {
 	p := &lane.Lane{
 		Steps: []lane.Step{
 			{
-				Name: "compile", Image: lane.Ptr("img"), Args: []string{}, Env: map[string]string{},
+				Name: "compile", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
 				Outputs: []lane.OutputSpec{{Name: "other", Type: "file", Path: "/out/other"}},
 			},
 			{
@@ -141,7 +141,7 @@ func TestBuild_DeployEdgesPopulated(t *testing.T) {
 	p := &lane.Lane{
 		Steps: []lane.Step{
 			{
-				Name: "pack", Image: lane.Ptr("img"), Args: []string{}, Env: map[string]string{},
+				Name: "pack", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
 				Outputs: []lane.OutputSpec{{Name: "img", Type: "image", Path: "/out/img.tar"}},
 			},
 			{
@@ -175,7 +175,7 @@ func TestBuild_UnknownDeployOutput(t *testing.T) {
 	p := &lane.Lane{
 		Steps: []lane.Step{
 			{
-				Name: "pack", Image: lane.Ptr("img"), Args: []string{}, Env: map[string]string{},
+				Name: "pack", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
 				Outputs: []lane.OutputSpec{{Name: "img", Type: "image", Path: "/out/img.tar"}},
 			},
 			{
@@ -203,7 +203,7 @@ func TestBuild_ImageFromEdgesPopulated(t *testing.T) {
 	p := &lane.Lane{
 		Steps: []lane.Step{
 			{
-				Name: "pack", Image: lane.Ptr("img"), Args: []string{"pack"}, Env: map[string]string{},
+				Name: "pack", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{"pack"}, Env: map[string]string{},
 				Outputs: []lane.OutputSpec{{Name: "img", Type: "image", Path: "/out/img.tar"}},
 			},
 			{
@@ -232,11 +232,11 @@ func TestBuild_InputRelPathPopulated(t *testing.T) {
 	p := &lane.Lane{
 		Steps: []lane.Step{
 			{
-				Name: "src", Image: lane.Ptr("img"), Args: []string{}, Env: map[string]string{},
+				Name: "src", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
 				Outputs: []lane.OutputSpec{{Name: "tree", Type: "directory", Path: "/out/tree"}},
 			},
 			{
-				Name: "consumer", Image: lane.Ptr("img"), Args: []string{}, Env: map[string]string{},
+				Name: "consumer", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
 				Inputs: []lane.InputRef{
 					{From: "src.tree", Subpath: lane.Ptr(lane.RelPath("package.json")), Mount: "/out/package.json"},
 				},
@@ -260,11 +260,11 @@ func TestBuild_SubpathOnFileOutputRejected(t *testing.T) {
 	p := &lane.Lane{
 		Steps: []lane.Step{
 			{
-				Name: "compile", Image: lane.Ptr("img"), Args: []string{}, Env: map[string]string{},
+				Name: "compile", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
 				Outputs: []lane.OutputSpec{{Name: "bin", Type: "file", Path: "/out/bin"}},
 			},
 			{
-				Name: "consumer", Image: lane.Ptr("img"), Args: []string{}, Env: map[string]string{},
+				Name: "consumer", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
 				Inputs: []lane.InputRef{
 					{From: "compile.bin", Subpath: lane.Ptr(lane.RelPath("anything")), Mount: "/in/bin"},
 				},
@@ -284,11 +284,11 @@ func TestBuild_SiblingSubpathsFromSameProducerAccepted(t *testing.T) {
 	p := &lane.Lane{
 		Steps: []lane.Step{
 			{
-				Name: "src", Image: lane.Ptr("img"), Args: []string{}, Env: map[string]string{},
+				Name: "src", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
 				Outputs: []lane.OutputSpec{{Name: "tree", Type: "directory", Path: "/out/tree"}},
 			},
 			{
-				Name: "consumer", Image: lane.Ptr("img"), Args: []string{}, Env: map[string]string{},
+				Name: "consumer", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
 				Inputs: []lane.InputRef{
 					{From: "src.tree", Subpath: lane.Ptr(lane.RelPath("a.json")), Mount: "/out/a.json"},
 					{From: "src.tree", Subpath: lane.Ptr(lane.RelPath("b.json")), Mount: "/out/b.json"},
@@ -305,7 +305,7 @@ func TestBuild_UnknownImageFromOutput(t *testing.T) {
 	p := &lane.Lane{
 		Steps: []lane.Step{
 			{
-				Name: "pack", Image: lane.Ptr("img"), Args: []string{}, Env: map[string]string{},
+				Name: "pack", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
 				Outputs: []lane.OutputSpec{{Name: "img", Type: "image", Path: "/out/img.tar"}},
 			},
 			{

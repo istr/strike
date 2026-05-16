@@ -66,14 +66,15 @@ func removeStrikeScratch(outDir string) {
 	}
 }
 
-func resolveDigest(ctx context.Context, client *registry.Client, imageRef string) (lane.Digest, error) {
+func resolveDigest(ctx context.Context, client *registry.Client, imageRef lane.ImageRef) (lane.Digest, error) {
 	// Image ref already contains @sha256: - extract the digest.
-	for i, c := range imageRef {
+	s := string(imageRef)
+	for i, c := range s {
 		if c == '@' {
-			return lane.ParseDigest(imageRef[i+1:])
+			return lane.ParseDigest(s[i+1:])
 		}
 	}
 
 	// Local image without digest (e.g. bootstrap root) - resolve via engine API.
-	return client.InspectDigest(ctx, imageRef)
+	return client.InspectDigest(ctx, s)
 }

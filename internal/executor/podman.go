@@ -77,7 +77,7 @@ func (r Run) Execute(ctx context.Context) error {
 
 	opts := container.DefaultSecureOpts()
 	if r.Step.Image != nil {
-		opts.Image = *r.Step.Image
+		opts.Image = string(*r.Step.Image)
 	}
 	if r.ImageRef != "" {
 		opts.Image = r.ImageRef

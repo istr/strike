@@ -4,7 +4,7 @@ registry: localhost:5555/test
 secrets: {}
 steps:
   - name: pull
-    image: alpine:3.20
+    image: docker.io/library/alpine@sha256:abababababababababababababababababababababababababababababababab
     args: [echo, "ok"]
     env: {}
     inputs: []
