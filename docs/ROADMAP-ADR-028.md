@@ -137,7 +137,7 @@ deleted.
 |----|-------|--------|-----------|-------------------|
 | PR-14 | Transport-package bootstrap (move/rename/generalize types) | Done | -- | -- |
 | PR-15 | DNS-resolver declaration in lane schema | Done | PR-14 | -- |
-| PR-16 | `internal/transport` TLS-primitive (`DialVerified`, `BuildTLSConfig`) | Planned | PR-14 | -- |
+| PR-16 | `internal/transport` TLS-primitive (`DialVerified`, `BuildTLSConfig`) | Done | PR-14 | -- |
 | PR-17 | First production consumer (Rekor, container-engine TLS) | Planned | PR-16 | -- |
 
 Phase 1 has independent value: PR-16 alone is consumed by
@@ -217,17 +217,30 @@ All conventions established in earlier PRs carry forward:
 
 ## Current status
 
-**Phase 1: in progress.** PR-14 and PR-15 landed (transport-package
-bootstrap, DNS-resolver declaration). Next PR is PR-16
-(`DialVerified`, `BuildTLSConfig`). Subsequent decisions (rootless
-backend spike, mTLS schema specifics, etc.) will be documented here
-as they're made.
+**Phase 1: in progress.** PR-14, PR-15, and PR-16 landed
+(transport-package bootstrap, DNS-resolver declaration, TLS-primitive).
+Next PR is PR-17 (first production consumer). Subsequent decisions
+(rootless backend spike, mTLS schema specifics, etc.) will be
+documented here as they're made.
 
-**Snapshot at roadmap creation**: `d17226dcd485ca61eacce8f46b11fc5c42cc0d4552b529dd0ea12ca235276992`
+**Snapshot at roadmap creation**: `2b7b3f7c4b7313ae17a70e98b175f2e0706578e1`
 (post-PR-13: peer-coverage gaps closed; inconsistency-review backlog
 empty except Cluster-1 bootstrap track).
 
-**Snapshot after PR-14**: `a35971bdb32544d2a927164e4f80618eeb7396d153f2b1311efd929764bc8630`
+**Snapshot after PR-14**: `041ce4a31c9615f054c468ad2280282f8b10174b`
 (post-PR-14: internal/transport package exists with TLSTrust/Host
 types; trust-anchor types moved from lane to transport; HTTPSTrust
 renamed to TLSTrust; #Host typed constraint introduced).
+
+**Snapshot after PR-15**: `36c6881b0b290a69e6659b8811d33a04cb815809`
+(post-PR-15): Every lane must now declare exactly one DNS resolver
+under a new top-level `resolver:` field. validateResolver runs in
+lane.Parse immediately after typed deserialisation, in the same
+position as ValidatePaths.
+
+**Snapshot after PR-16**: `5eac7e5a07031127742610fad6aacf02cdc18453`
+(post-PR-16: transport TLS-primitive available; DialVerified,
+BuildTLSConfig, VerifiedConn, ConnectionIdentity; TLS 1.3
+minimum hard-coded; SNI derived from addr; integration test
+behind build tag).
+
