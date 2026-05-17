@@ -66,6 +66,23 @@ deleted.
   identity (cert chain, fingerprint, TLS version, cipher suite)
   for attestation. The capture is part of the transport primitive's
   return contract, not optional.
+- **D14 (resolver host semantics: deferred).** Today the lane's
+  `resolver.host` field is an IP literal used both as connection
+  endpoint and as the only identifier; TLS verification is via
+  fingerprint pin or CA bundle without hostname check. Planned:
+  declare both IP (connection endpoint) and hostname (TLS SAN/CN
+  verification target plus DNS cross-check target), with strike
+  verifying that the declared hostname resolves to the declared
+  IP via the resolver itself. Documented in
+  `docs/DNS-RESOLVER-CONFIGURATION.md` under "Future direction".
+  Implementation deferred to a follow-up PR; basic Phase-2
+  functionality does not require it.
+- **D15 (port-853 default: deferred).** Today `resolver.host`
+  requires an explicit port (`1.1.1.1:853`). Planned: omit the
+  port and default to 853 per RFC 7858. Documented in
+  `docs/DNS-RESOLVER-CONFIGURATION.md` under "Future direction".
+  Implementation deferred; basic Phase-2 functionality does not
+  require it.
 
 ### SD-series (schema topology)
 
@@ -119,13 +136,16 @@ deleted.
 | PR | Title | Status | Depends on | Hash (after merge) |
 |----|-------|--------|-----------|-------------------|
 | PR-14 | Transport-package bootstrap (move/rename/generalize types) | Done | -- | -- |
-| PR-15 | DNS-resolver declaration in lane schema | Planned | PR-14 | -- |
+| PR-15 | DNS-resolver declaration in lane schema | Done | PR-14 | -- |
 | PR-16 | `internal/transport` TLS-primitive (`DialVerified`, `BuildTLSConfig`) | Planned | PR-14 | -- |
 | PR-17 | First production consumer (Rekor, container-engine TLS) | Planned | PR-16 | -- |
 
 Phase 1 has independent value: PR-16 alone is consumed by
 [ADR-014](ADR-014-audit-pipeline.md) hardening work and `strike
-verify`, even before Phase 2 lands.
+verify`, even before Phase 2 lands. PR-15's resolver surface has
+two deferred enhancements (D14: combined IP + hostname; D15:
+port-853 default) documented in
+[DNS-RESOLVER-CONFIGURATION.md](DNS-RESOLVER-CONFIGURATION.md).
 
 ### Phase 2: Mediation subsystem
 
@@ -152,7 +172,7 @@ or similar) that grounds the PR-21 implementation choice.
 | mTLS-ADR | Client-cert as typed Secret, mediator authenticates on behalf of step | Future |
 | ADR-014 hardening | Audit-sink transport consumes PR-16 primitive | Separate track |
 | `strike verify` | Consumes Phase-1 primitive plus PR-23 attestation schema | Separate track |
-| Documentation | Cloudflare/Quad9/Google/IPFire resolver examples | Tracked with PR-22 |
+| Documentation | Cloudflare/Quad9/Google/IPFire resolver examples; D14/D15 deferred decisions | Done (PR-16) |
 | ADR-022 update | Drop "Phase 1 is declaratory" once Phase 2 complete | Tracked with PR-22 |
 
 ## Conventions for instruction-writing
@@ -197,11 +217,17 @@ All conventions established in earlier PRs carry forward:
 
 ## Current status
 
-**Phase 1: in progress.** PR-14 landed (transport-package bootstrap).
-Next PR is PR-15 (DNS-resolver declaration). Subsequent decisions
-(rootless backend spike, mTLS schema specifics, etc.) will be
-documented here as they're made.
+**Phase 1: in progress.** PR-14 and PR-15 landed (transport-package
+bootstrap, DNS-resolver declaration). Next PR is PR-16
+(`DialVerified`, `BuildTLSConfig`). Subsequent decisions (rootless
+backend spike, mTLS schema specifics, etc.) will be documented here
+as they're made.
 
 **Snapshot at roadmap creation**: `d17226dcd485ca61eacce8f46b11fc5c42cc0d4552b529dd0ea12ca235276992`
 (post-PR-13: peer-coverage gaps closed; inconsistency-review backlog
 empty except Cluster-1 bootstrap track).
+
+**Snapshot after PR-14**: `a35971bdb32544d2a927164e4f80618eeb7396d153f2b1311efd929764bc8630`
+(post-PR-14: internal/transport package exists with TLSTrust/Host
+types; trust-anchor types moved from lane to transport; HTTPSTrust
+renamed to TLSTrust; #Host typed constraint introduced).
