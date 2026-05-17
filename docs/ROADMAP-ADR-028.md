@@ -133,6 +133,30 @@ deleted.
   the mount mechanics: bind-mount the ephemeral CA cert
   over each known system-bundle path in the container's
   filesystem.
+- **D19 (per-step resolver instance).** Each lane step gets
+  its own `*resolver.Resolver` instance, bound at
+  construction to that step's name and allowlist. There is
+  no lane-wide resolver with active-step demultiplexing.
+  Rationale: per-step instances bind step identity at
+  construction (no source-IP-spoofing surface), contain
+  failure blast radius to one step (a panic in one
+  resolver does not take out parallel steps), and match the
+  existing Step = Container = netns = Peer-Set containment
+  boundary. PR-20 (TLS mediator) and PR-21 (egress filter)
+  follow the same per-step-instance pattern; PR-22
+  aggregates the three into a "network capsule" type whose
+  lifecycle equals the step's. Implementation in
+  `internal/resolver/` (PR-19); per-step lifecycle wiring
+  in PR-22.
+- **D20 (synthesizing resolver).** The allowlist resolver
+  constructs DNS responses from the `[]netip.Addr` returned
+  by its upstream-lookup function, not by relaying upstream
+  wire-format responses. Rationale: bounds the wire-format-
+  construction code to a fixed set of record types (A, AAAA),
+  reducing the surface exposed to potentially-compromised
+  step containers; aligns the captured QueryRecord with the
+  decision a verifier later attests over (resolved IPs are
+  what the TLS mediator dials).
 
 ### SD-series (schema topology)
 
@@ -202,7 +226,7 @@ port-853 default) documented in
 | PR | Title | Status | Depends on | Hash (after merge) |
 |----|-------|--------|-----------|-------------------|
 | PR-18 | Ephemeral per-lane-run CA (in-memory) | Done | PR-14 | -- |
-| PR-19 | DNS allowlist resolver (DoT via transport) | Planned | PR-15, PR-16 | -- |
+| PR-19 | Per-step DNS allowlist resolver | Done | PR-17 | -- |
 | PR-20 | TLS mediator (terminate, verify upstream, re-establish) | Planned | PR-16, PR-18 | -- |
 | PR-21 | Netns egress filter (after backend spike) | Planned | engineering spike first | -- |
 | PR-22 | Integration: CA mount, filter setup, mediator wiring | Planned | PR-18..PR-21 | -- |
@@ -268,16 +292,17 @@ All conventions established in earlier PRs carry forward:
 ## Current status
 
 **Phase 1: complete; Phase 2: in progress.** PR-14 through
-PR-17 landed Phase 1 (transport-package bootstrap,
-DNS-resolver declaration, TLS-primitive, DoT resolver
-pre-flight). PR-18 lands the ephemeral per-lane-run CA in
-`internal/transport/ca.go`: the building block PR-20's TLS
-mediator will consume to terminate container-side TLS and
-PR-22 will mount into step containers. Next is PR-19 (DNS
-allowlist resolver, consuming `transport.LookupHost` from
-PR-17). Subsequent decisions (rootless backend spike, mTLS
-schema specifics, etc.) will be documented here as they're
-made.
+PR-17 landed Phase 1. PR-18 added the ephemeral per-lane-run
+CA. PR-19 adds the per-step DNS allowlist resolver in
+`internal/resolver/`: each lane step gets its own resolver
+instance bound at construction to that step's allowlist,
+consuming `transport.LookupHost` from PR-17 as upstream via
+an injected function. Library-only; PR-22 will wire the
+per-step lifecycle. Next is PR-20 (TLS mediator), which
+follows the same per-step-instance pattern and will be the
+second consumer of the ephemeral CA from PR-18. Subsequent
+decisions (rootless backend spike, mTLS schema specifics,
+etc.) will be documented here as they're made.
 
 **Snapshot at roadmap creation**: `2b7b3f7c4b7313ae17a70e98b175f2e0706578e1`
 (post-PR-13: peer-coverage gaps closed; inconsistency-review backlog
@@ -311,4 +336,9 @@ with New, GetCertificate, PublicCertPEM, Fingerprint, Close;
 per-lane-run lifetime, ECDSA P-256, 1h validity, in-memory
 keys; mount-agnostic surface defers materialisation to
 PR-22; D17 and D18 ratified).
+
+**Snapshot after PR-19**: `f90c286b0042001a6d7c7b8d7225982ce2bc9c7b`
+(post-PR-19: internal/resolver/ provides per-step Resolver
+with New, Serve, Records, Close; synthesizing server,
+stdlib-only wire format; D19 and D20 ratified).
 
