@@ -99,6 +99,40 @@ deleted.
   governs input properties, not environment. Operator-facing
   reasoning is documented in
   `docs/DNS-RESOLVER-CONFIGURATION.md` ("Probe behavior").
+- **D17 (ephemeral CA design).** The TLS mediator (PR-20)
+  presents server certificates signed by an ephemeral
+  Certificate Authority generated in the strike controller.
+  The CA is per-lane-run (a fresh instance per `strike run`
+  invocation), uses ECDSA P-256 for both CA and leaf certs,
+  and has a 1h validity window starting at lane begin. The
+  private key is held in process memory only and never
+  written to disk; `EphemeralCA.Close` at lane end disposes
+  the key material. Leaf certs inherit the CA's NotBefore
+  and NotAfter, so all certs in a lane run expire together.
+  Lanes running longer than 1h will see TLS validation
+  failures mid-run; the TTL is hard-coded and not currently
+  configurable, on the rationale that lanes are short by
+  design and the in-memory-only key lifetime makes the
+  validity window security-irrelevant. Implementation
+  lives in `internal/transport/ca.go` (PR-18).
+- **D18 (system CA bundle replacement).** Step containers
+  in the strike architecture only legitimately reach
+  strike-mediated peers. The system CA bundle pre-installed
+  in a base image (`/etc/ssl/certs/ca-certificates.crt`,
+  `/etc/pki/tls/certs/ca-bundle.crt`, and equivalents) has
+  no value in this architecture: any TLS endpoint a step
+  container talks to is mediated by strike's controller,
+  verified against a lane-declared trust anchor, and
+  re-presented to the container with a cert signed by the
+  ephemeral CA. The system CA bundle therefore must be
+  replaced by the ephemeral CA's public cert, not augmented
+  with it. Augmenting would leave the system CAs in place,
+  preserving a class of bypass if a netns-filter gap ever
+  opened (a step reaches a non-mediated endpoint that
+  happens to be signed by a system-bundle CA). PR-22 owns
+  the mount mechanics: bind-mount the ephemeral CA cert
+  over each known system-bundle path in the container's
+  filesystem.
 
 ### SD-series (schema topology)
 
@@ -165,15 +199,15 @@ port-853 default) documented in
 
 ### Phase 2: Mediation subsystem
 
-| PR | Title | Status | Depends on |
-|----|-------|--------|-----------|
-| PR-18 | Ephemeral per-lane-run CA (in-memory) | Planned | PR-14 |
-| PR-19 | DNS allowlist resolver (DoT via transport) | Planned | PR-15, PR-16 |
-| PR-20 | TLS mediator (terminate, verify upstream, re-establish) | Planned | PR-16, PR-18 |
-| PR-21 | Netns egress filter (after backend spike) | Planned | engineering spike first |
-| PR-22 | Integration: CA mount, filter setup, mediator wiring | Planned | PR-18..PR-21 |
-| PR-23 | Attestation surface extension | Planned | PR-22 |
-| PR-24 | SSH mediation under unified architectural roof | Planned | PR-21 |
+| PR | Title | Status | Depends on | Hash (after merge) |
+|----|-------|--------|-----------|-------------------|
+| PR-18 | Ephemeral per-lane-run CA (in-memory) | Done | PR-14 | -- |
+| PR-19 | DNS allowlist resolver (DoT via transport) | Planned | PR-15, PR-16 | -- |
+| PR-20 | TLS mediator (terminate, verify upstream, re-establish) | Planned | PR-16, PR-18 | -- |
+| PR-21 | Netns egress filter (after backend spike) | Planned | engineering spike first | -- |
+| PR-22 | Integration: CA mount, filter setup, mediator wiring | Planned | PR-18..PR-21 | -- |
+| PR-23 | Attestation surface extension | Planned | PR-22 | -- |
+| PR-24 | SSH mediation under unified architectural roof | Planned | PR-21 | -- |
 
 Phase 2 requires an engineering spike before PR-21: netavark vs.
 custom CNI plugin vs. pasta evaluation, with criteria (rootless
@@ -233,13 +267,17 @@ All conventions established in earlier PRs carry forward:
 
 ## Current status
 
-**Phase 1: complete.** PR-14, PR-15, PR-16, and PR-17 landed
-(transport-package bootstrap, DNS-resolver declaration,
-TLS-primitive, DoT resolver pre-flight as first production
-consumer). Phase 2 begins with PR-18 (ephemeral per-lane-run
-CA, in-memory). Subsequent decisions (rootless backend spike,
-mTLS schema specifics, etc.) will be documented here as
-they're made.
+**Phase 1: complete; Phase 2: in progress.** PR-14 through
+PR-17 landed Phase 1 (transport-package bootstrap,
+DNS-resolver declaration, TLS-primitive, DoT resolver
+pre-flight). PR-18 lands the ephemeral per-lane-run CA in
+`internal/transport/ca.go`: the building block PR-20's TLS
+mediator will consume to terminate container-side TLS and
+PR-22 will mount into step containers. Next is PR-19 (DNS
+allowlist resolver, consuming `transport.LookupHost` from
+PR-17). Subsequent decisions (rootless backend spike, mTLS
+schema specifics, etc.) will be documented here as they're
+made.
 
 **Snapshot at roadmap creation**: `2b7b3f7c4b7313ae17a70e98b175f2e0706578e1`
 (post-PR-13: peer-coverage gaps closed; inconsistency-review backlog
@@ -266,4 +304,11 @@ behind build tag).
 (post-PR-17: transport DoT client available; LookupHost and
 ProbeResolver added; strike run performs pre-flight resolver
 probe after lane.Parse; D16 records placement rationale).
+
+**Snapshot after PR-18**: `e3aa2b60b95d402e7b721da4eb0b11a7cbba2999`
+(post-PR-18: internal/transport/ca.go provides EphemeralCA
+with New, GetCertificate, PublicCertPEM, Fingerprint, Close;
+per-lane-run lifetime, ECDSA P-256, 1h validity, in-memory
+keys; mount-agnostic surface defers materialisation to
+PR-22; D17 and D18 ratified).
 
