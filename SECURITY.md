@@ -54,6 +54,47 @@ past its exit.
 compromised registry could serve valid-looking but malicious content for
 unverified artifact types.
 
+### Wallclock trust
+
+strike trusts the wallclock of the host it runs on. This assumption
+affects two concrete security surfaces:
+
+- **Peer certificate validity windows.** When strike dials a declared
+  peer over TLS, Go's standard library checks the certificate's
+  `NotBefore` and `NotAfter` against the host clock, even in
+  fingerprint-pinned mode. A clock advanced past a pinned
+  certificate's expiry could cause strike to accept an
+  otherwise-correctly-pinned but revoked-then-expired certificate.
+- **Ephemeral CA validity windows.** strike issues short-lived
+  certificates (per [ADR-015](docs/adr/ADR-015-internal-clock-dispatch.md)
+  and the per-lane-run ephemeral CA introduced in PR-18) with
+  timestamps from the host clock. A skew large enough that
+  container processes see strike's certificates as not-yet-valid
+  or already-expired causes denial-of-service rather than
+  compromise, but is a real failure mode.
+
+The deploy-attestation timestamps strike writes into predicate
+fields are not, by themselves, security-relevant: the canonical
+time of an attestation event is what Rekor records in its
+`integratedTime` field at log inclusion. Verifiers cross-check
+predicate timestamps against the Rekor inclusion proof; a
+strike-side wallclock error is detectable downstream and does not
+forge a cryptographic claim.
+
+strike does not currently implement
+[RFC 8915 NTS](https://www.rfc-editor.org/info/rfc8915) directly.
+Operators concerned with wallclock manipulation by a network
+adversary should configure the host's time daemon to use
+NTS-secured sources -- e.g., the PTB `ptbtime1-4.ptb.de` servers,
+or equivalent services operated by national metrology institutes.
+Direct NTS integration in strike is intentionally deferred: the
+attack surface is bounded by lane TTL (1h per the ephemeral-CA
+validity window), and Rekor anchors the canonical time
+of attestation events externally to strike. A lane-declared NTS
+time source -- mirroring the `resolver` schema with `host` and
+`trust` fields -- remains an option if a concrete operational
+need emerges.
+
 ### OWASP Top 10 mapping
 
 The highest-risk categories for a CI/CD executor like strike:
