@@ -2,6 +2,11 @@ name: traversal-lane
 lane_id: traversal-lane
 registry: localhost:5555/test
 secrets: {}
+resolver:
+  host: "1.1.1.1:853"
+  trust:
+    mode: cert_fingerprint
+    fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 steps:
   - name: build
     image: docker.io/library/golang@sha256:abababababababababababababababababababababababababababababababab

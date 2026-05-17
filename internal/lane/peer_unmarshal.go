@@ -196,6 +196,32 @@ func (sc *StateCapture) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// UnmarshalJSON implements json.Unmarshaler for Lane. It
+// decodes the resolver field through unmarshalDNSResolver,
+// which dispatches the TLSTrust discriminator. All other
+// fields fall through to the default decoder via the alias trick.
+func (p *Lane) UnmarshalJSON(data []byte) error {
+	type alias Lane
+	aux := struct {
+		*alias
+		Resolver json.RawMessage `json:"resolver"`
+	}{
+		alias: (*alias)(p),
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	if len(aux.Resolver) == 0 {
+		return fmt.Errorf("lane: resolver required")
+	}
+	r, err := unmarshalDNSResolver(aux.Resolver)
+	if err != nil {
+		return fmt.Errorf("lane: %w", err)
+	}
+	p.Resolver = r
+	return nil
+}
+
 // UnmarshalPeer decodes a peer JSON object using the type
 // discriminator. Exported for callers in other packages
 // (e.g. internal/deploy) that need the same dispatch logic

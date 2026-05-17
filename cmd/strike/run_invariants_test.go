@@ -71,6 +71,11 @@ func TestParse_RejectsSourcesField(t *testing.T) {
 name: bad
 registry: localhost:5555/test
 secrets: {}
+resolver:
+  host: "1.1.1.1:853"
+  trust:
+    mode: cert_fingerprint
+    fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 steps:
   - name: build
     image: img@sha256:` + strings.Repeat("a", 64) + `

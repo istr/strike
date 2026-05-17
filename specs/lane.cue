@@ -23,6 +23,7 @@ package lane
 	registry: string & =~"^[a-z0-9./-]+" @go(Registry)
 	secrets: [Name=string]: #SecretSource @go(Secrets)
 	steps: [#Step, ...#Step] @go(Steps)
+	resolver: #DNSResolver @go(Resolver,type="github.com/istr/strike/internal/transport".DNSResolver)
 	defaults?: #LaneDefaults @go(Defaults,optional=nillable)
 }
 

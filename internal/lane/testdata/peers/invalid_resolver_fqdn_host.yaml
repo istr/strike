@@ -1,9 +1,9 @@
-name: peers-https-fp
-lane_id: peers-https-fp
+name: peers-resolver-fqdn
+lane_id: peers-resolver-fqdn
 registry: localhost:5555/test
 secrets: {}
 resolver:
-  host: "1.1.1.1:853"
+  host: "dns.example.com:853"
   trust:
     mode: cert_fingerprint
     fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
@@ -20,7 +20,7 @@ steps:
         path: /out/file
     peers:
       - type: https
-        host: bad_host.example.com
+        host: example.com
         trust:
           mode: cert_fingerprint
           fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000

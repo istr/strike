@@ -1,12 +1,7 @@
-name: peers-https-fp
-lane_id: peers-https-fp
+name: peers-missing-resolver
+lane_id: peers-missing-resolver
 registry: localhost:5555/test
 secrets: {}
-resolver:
-  host: "1.1.1.1:853"
-  trust:
-    mode: cert_fingerprint
-    fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 steps:
   - name: fetch
     image: docker.io/library/alpine@sha256:abababababababababababababababababababababababababababababababab
@@ -20,7 +15,7 @@ steps:
         path: /out/file
     peers:
       - type: https
-        host: bad_host.example.com
+        host: example.com
         trust:
           mode: cert_fingerprint
           fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000

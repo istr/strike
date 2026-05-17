@@ -267,6 +267,11 @@ func TestParse_DisjunctionErrorIsReadable(t *testing.T) {
 name: test
 registry: localhost:5555/test
 secrets: {}
+resolver:
+  host: "1.1.1.1:853"
+  trust:
+    mode: cert_fingerprint
+    fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 steps:
   - name: bad-deploy
     deploy:
@@ -309,6 +314,11 @@ name: test
 lane_id: test
 registry: localhost:5555/test
 secrets: {}
+resolver:
+  host: "1.1.1.1:853"
+  trust:
+    mode: cert_fingerprint
+    fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 steps:
   - name: src
     image: img@sha256:abababababababababababababababababababababababababababababababab

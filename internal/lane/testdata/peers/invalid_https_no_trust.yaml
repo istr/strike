@@ -2,6 +2,11 @@ name: peers-bad-https-1
 lane_id: peers-bad-https-1
 registry: localhost:5555/test
 secrets: {}
+resolver:
+  host: "1.1.1.1:853"
+  trust:
+    mode: cert_fingerprint
+    fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 steps:
   - name: fetch
     image: docker.io/library/alpine@sha256:abababababababababababababababababababababababababababababababab

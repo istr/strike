@@ -41,3 +41,13 @@ type CABundleTrust struct {
 
 // TrustMode implements TLSTrust.
 func (t CABundleTrust) TrustMode() string { return t.Mode }
+
+// DNSResolver declares the DoT resolver strike uses for all
+// peer hostname resolution within a lane run. Mandatory per
+// ADR-028; every lane has exactly one. The trust anchor follows
+// the same TLSTrust vocabulary as HTTPS peers, so verification
+// mechanics are reused.
+type DNSResolver struct {
+	Trust TLSTrust `json:"trust"`
+	Host  Host     `json:"host"`
+}
