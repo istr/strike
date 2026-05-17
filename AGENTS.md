@@ -572,6 +572,10 @@ make check      # lint + test + vuln + build (CI entry point)
   the specific rule code and a written justification in the code
   comment (e.g., `//nolint:gosec // G304: path is from MkdirTemp,
   not user input`).
+- Field ordering for fieldalignment follows the table and
+  decision procedure in `docs/CODE-STYLE.md#fieldalignment-default`;
+  consult it before declaring a new struct, not after the linter
+  flags it.
 - Do not embed configuration files other than the CUE schemas in `specs/`.
 - Do not use `init()` functions.
 - Do not use global mutable state (package-level `var` with mutation).
