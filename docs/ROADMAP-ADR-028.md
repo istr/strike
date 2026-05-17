@@ -83,6 +83,22 @@ deleted.
   `docs/DNS-RESOLVER-CONFIGURATION.md` under "Future direction".
   Implementation deferred; basic Phase-2 functionality does not
   require it.
+- **D16 (resolver probe placement).** The DoT-resolver
+  pre-flight probe (PR-17) runs at `strike run` time, after
+  `lane.Parse` returns successfully, not inside `lane.Parse`.
+  Rationale: `lane.Parse` is a pure offline syntactic and
+  semantic check whose result is a property of the lane file
+  alone. The probe outcome is a property of the environment
+  at probe time (resolver reachability, cert validity at that
+  moment). Folding the probe into Parse would make
+  `strike validate` network-dependent, would silently
+  invalidate today's validation result when tomorrow's
+  resolver cert rotates, and would conflate input properties
+  with environmental state. The "same input fails identically"
+  principle from PR-15 (D-series predecessor formulation)
+  governs input properties, not environment. Operator-facing
+  reasoning is documented in
+  `docs/DNS-RESOLVER-CONFIGURATION.md` ("Probe behavior").
 
 ### SD-series (schema topology)
 
@@ -138,7 +154,7 @@ deleted.
 | PR-14 | Transport-package bootstrap (move/rename/generalize types) | Done | -- | -- |
 | PR-15 | DNS-resolver declaration in lane schema | Done | PR-14 | -- |
 | PR-16 | `internal/transport` TLS-primitive (`DialVerified`, `BuildTLSConfig`) | Done | PR-14 | -- |
-| PR-17 | First production consumer (Rekor, container-engine TLS) | Planned | PR-16 | -- |
+| PR-17 | First production consumer (DoT resolver pre-flight) | Done | PR-16 | -- |
 
 Phase 1 has independent value: PR-16 alone is consumed by
 [ADR-014](ADR-014-audit-pipeline.md) hardening work and `strike
@@ -172,7 +188,7 @@ or similar) that grounds the PR-21 implementation choice.
 | mTLS-ADR | Client-cert as typed Secret, mediator authenticates on behalf of step | Future |
 | ADR-014 hardening | Audit-sink transport consumes PR-16 primitive | Separate track |
 | `strike verify` | Consumes Phase-1 primitive plus PR-23 attestation schema | Separate track |
-| Documentation | Cloudflare/Quad9/Google/IPFire resolver examples; D14/D15 deferred decisions | Done (PR-16) |
+| Documentation | Cloudflare/Quad9/Google/IPFire resolver examples; D14/D15 deferred decisions | Done (PR-15) |
 | ADR-022 update | Drop "Phase 1 is declaratory" once Phase 2 complete | Tracked with PR-22 |
 
 ## Conventions for instruction-writing
@@ -217,11 +233,13 @@ All conventions established in earlier PRs carry forward:
 
 ## Current status
 
-**Phase 1: in progress.** PR-14, PR-15, and PR-16 landed
-(transport-package bootstrap, DNS-resolver declaration, TLS-primitive).
-Next PR is PR-17 (first production consumer). Subsequent decisions
-(rootless backend spike, mTLS schema specifics, etc.) will be
-documented here as they're made.
+**Phase 1: complete.** PR-14, PR-15, PR-16, and PR-17 landed
+(transport-package bootstrap, DNS-resolver declaration,
+TLS-primitive, DoT resolver pre-flight as first production
+consumer). Phase 2 begins with PR-18 (ephemeral per-lane-run
+CA, in-memory). Subsequent decisions (rootless backend spike,
+mTLS schema specifics, etc.) will be documented here as
+they're made.
 
 **Snapshot at roadmap creation**: `2b7b3f7c4b7313ae17a70e98b175f2e0706578e1`
 (post-PR-13: peer-coverage gaps closed; inconsistency-review backlog
@@ -243,4 +261,9 @@ position as ValidatePaths.
 BuildTLSConfig, VerifiedConn, ConnectionIdentity; TLS 1.3
 minimum hard-coded; SNI derived from addr; integration test
 behind build tag).
+
+**Snapshot after PR-17**: `eaeb68ea6f9a0bcabcb223945cdc84027fd5fce9`
+(post-PR-17: transport DoT client available; LookupHost and
+ProbeResolver added; strike run performs pre-flight resolver
+probe after lane.Parse; D16 records placement rationale).
 
