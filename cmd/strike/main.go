@@ -9,11 +9,13 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/closer"
 	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/executor"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/registry"
+	"github.com/istr/strike/internal/transport"
 )
 
 // fatalWriter terminates the process if a write fails.
@@ -200,6 +202,17 @@ func cmdRun(ctx context.Context, path string, engine container.Engine) {
 	p, err := lane.Parse(fp)
 	if err != nil {
 		log.Fatalf("error: %v", err)
+	}
+
+	// Pre-flight resolver probe. lane.Parse is a pure offline
+	// check; resolver reachability is an environmental property
+	// and therefore lives here, at run start, not in Parse. See
+	// docs/ROADMAP-ADR-028.md D16 for the rationale.
+	probeCtx, probeCancel := context.WithTimeout(ctx, 5*clock.Second)
+	probeErr := transport.ProbeResolver(probeCtx, p.Resolver)
+	probeCancel()
+	if probeErr != nil {
+		log.Fatalf("error: %v", probeErr)
 	}
 
 	laneDir := filepath.Dir(fp.String())

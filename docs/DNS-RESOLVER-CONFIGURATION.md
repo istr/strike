@@ -150,6 +150,71 @@ Re-run the openssl command and update the lane when:
 Use `ca_bundle` mode instead of fingerprint pinning if cert
 rotation cadence makes fingerprint maintenance burdensome.
 
+## Probe behavior
+
+At the start of every `strike run`, strike performs a one-shot
+DNS-over-TLS roundtrip against the declared resolver as a
+pre-flight check. The probe verifies, in a single TLS
+handshake plus one DNS query, that:
+
+- the resolver's TLS endpoint is reachable on the declared port
+- the declared trust anchor (fingerprint pin or CA bundle)
+  matches the certificate the resolver currently presents
+- the resolver responds to DNS queries over the established
+  TLS connection
+
+The probe target is an NS query on `.` (the DNS root zone),
+which every standards-compliant DoT resolver answers. This
+avoids encoding any provider-specific sanity name in strike's
+code or in the lane schema.
+
+If the probe fails, the lane run aborts before any DAG
+construction, before any step container starts, with a single
+error line identifying which resolver was probed.
+
+### Probe runs at `strike run`, not at `strike validate`
+
+`strike validate` is a pure offline syntactic and semantic
+check of the lane file. Its result is a property of the lane
+file alone: schema conformance, path canonicalization, peer
+trust-mode discrimination, image-pinning constraints. Two
+invocations on the same file, on the same machine or
+different machines, in this hour or in five years, will
+return the same answer.
+
+The probe's outcome is a property of the environment at probe
+time -- whether the resolver IP is reachable from this
+network at this moment, whether the pinned certificate is
+still the one the resolver presents (leaf certs rotate
+monthly to yearly on public DoT providers), whether
+intervening middleboxes pass TLS 1.3 on port 853. None of
+these are functions of the lane file.
+
+Folding the probe into validation would make `strike validate`
+network-dependent, would silently invalidate today's
+validation result when tomorrow's resolver cert rotates, and
+would conflate input properties with environmental state.
+The probe therefore lives at `strike run`, where the network
+is required anyway and where a probe failure prevents wasted
+setup work for a run that could not have succeeded.
+
+Operators who want explicit resolver reachability checking
+outside of a run -- for example as part of a CI pipeline that
+verifies lane configurations before scheduling them -- can
+invoke `strike run` with a no-op lane or, in the future, may
+use an explicit opt-in flag on `strike validate`. The
+automatic-probe-in-validate path is not supported by design.
+
+### Probe is not attested
+
+The probe's roundtrip result does not enter any signed payload.
+It is an operational pre-flight check: did the resolver answer
+at startup? The per-step DNS resolutions that DO feed deploy
+attestation -- FQDN-to-IP records, the resolver's captured TLS
+identity at the moment of resolution -- are produced by the
+Phase-2 allowlist resolver and are separate from the pre-flight
+probe.
+
 ## Future direction
 
 Two enhancements are architecturally agreed but not yet
