@@ -7,6 +7,8 @@ require (
 	github.com/CycloneDX/cyclonedx-go v0.10.0
 	github.com/google/go-containerregistry v0.21.5
 	golang.org/x/crypto v0.51.0
+	golang.org/x/net v0.54.0
+	golang.org/x/sync v0.20.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -31,8 +33,6 @@ require (
 	github.com/vbatts/tar-split v0.12.3 // indirect
 	github.com/xeipuuv/gojsonpointer v0.0.0-20190905194746-02993c407bfb // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
-	golang.org/x/net v0.54.0 // indirect
-	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.44.0 // indirect
 	golang.org/x/text v0.37.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
