@@ -143,7 +143,7 @@ func DialVerified(ctx context.Context, addr string, trust TLSTrust) (*VerifiedCo
 		return nil, fmt.Errorf("transport: dialer returned non-TLS connection %T", nc)
 	}
 
-	identity := captureIdentity(conn.ConnectionState(), addr)
+	identity := CaptureIdentity(conn.ConnectionState(), addr)
 	return &VerifiedConn{Conn: conn, identity: identity}, nil
 }
 
@@ -202,9 +202,11 @@ func loadCABundle(path string) (*x509.CertPool, error) {
 	return pool, nil
 }
 
-// captureIdentity extracts the connection identity from a
-// completed TLS handshake.
-func captureIdentity(state tls.ConnectionState, addr string) ConnectionIdentity {
+// CaptureIdentity extracts the connection identity from a
+// completed TLS handshake. The addr parameter populates
+// PeerAddress (typically host:port or the SNI, depending on
+// the caller's context).
+func CaptureIdentity(state tls.ConnectionState, addr string) ConnectionIdentity {
 	id := ConnectionIdentity{
 		PeerCertificates: state.PeerCertificates,
 		TLSVersion:       state.Version,
