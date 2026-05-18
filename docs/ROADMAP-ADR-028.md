@@ -157,6 +157,35 @@ deleted.
   step containers; aligns the captured QueryRecord with the
   decision a verifier later attests over (resolved IPs are
   what the TLS mediator dials).
+- **D21 (per-step mediator instance).** Each lane step gets
+  its own `*mediator.Mediator` instance, bound at
+  construction to that step's peer-trust map and its
+  ephemeral CA. There is no shared lane-wide mediator with
+  active-step demultiplexing. Rationale parallels D19
+  (per-step resolver): permissions baked in at construction
+  (no per-connection step lookup), attestation correctness
+  (step identity is the instance's identity, no source-IP
+  indirection), failure isolation (a handshake-handler
+  panic does not affect parallel steps), and capsule
+  alignment (PR-22 aggregates per-step resolver + mediator
+  + filter). Implementation in `internal/mediator/`
+  (PR-20).
+- **D22 (SNI-preserving split TLS).** The mediator
+  decrypts container-side TLS using ephemeral-CA-signed
+  leaves and re-encrypts upstream-side TLS against the
+  lane-declared trust anchor; the SNI from the container's
+  ClientHello drives both the leaf-cert issuance and the
+  upstream handshake's `ServerName`. Pass-through TCP
+  proxying is architecturally impossible because the
+  container's trust store contains only the ephemeral CA;
+  a direct container-to-upstream handshake would fail
+  cert verification. Split TLS also enables per-peer
+  attestation (capturing the upstream's verified identity
+  requires that the mediator perform the upstream
+  handshake) at the cost of plaintext flowing through the
+  controller, which is consistent with strike's existing
+  trust posture (the controller already holds signing
+  keys, secrets, and runtime attestations in memory).
 
 ### SD-series (schema topology)
 
@@ -227,7 +256,7 @@ port-853 default) documented in
 |----|-------|--------|-----------|-------------------|
 | PR-18 | Ephemeral per-lane-run CA (in-memory) | Done | PR-14 | -- |
 | PR-19 | Per-step DNS allowlist resolver | Done | PR-17 | -- |
-| PR-20 | TLS mediator (terminate, verify upstream, re-establish) | Planned | PR-16, PR-18 | -- |
+| PR-20 | Per-step TLS mediator | Done | PR-17, PR-18 | -- |
 | PR-21 | Netns egress filter (after backend spike) | Planned | engineering spike first | -- |
 | PR-22 | Integration: CA mount, filter setup, mediator wiring | Planned | PR-18..PR-21 | -- |
 | PR-23 | Attestation surface extension | Planned | PR-22 | -- |
@@ -293,16 +322,19 @@ All conventions established in earlier PRs carry forward:
 
 **Phase 1: complete; Phase 2: in progress.** PR-14 through
 PR-17 landed Phase 1. PR-18 added the ephemeral per-lane-run
-CA. PR-19 adds the per-step DNS allowlist resolver in
-`internal/resolver/`: each lane step gets its own resolver
-instance bound at construction to that step's allowlist,
-consuming `transport.LookupHost` from PR-17 as upstream via
-an injected function. Library-only; PR-22 will wire the
-per-step lifecycle. Next is PR-20 (TLS mediator), which
-follows the same per-step-instance pattern and will be the
-second consumer of the ephemeral CA from PR-18. Subsequent
-decisions (rootless backend spike, mTLS schema specifics,
-etc.) will be documented here as they're made.
+CA. PR-19 added the per-step DNS allowlist resolver. PR-20
+adds the per-step TLS mediator in `internal/mediator/`: each
+lane step gets its own mediator instance bound at construction
+to that step's peer-trust map and the ephemeral CA,
+terminating container-side TLS and re-establishing upstream
+TLS against the lane-declared trust anchor with SNI
+preservation. Library-only; PR-22 will wire the per-step
+lifecycle. Next is PR-21 (egress filter), the third per-step
+component; with PR-21 the rule-of-three triggers and a shared
+`internal/policy` package for `StepPermissions` becomes the
+natural refactor. Subsequent decisions (rootless backend
+spike, mTLS schema specifics, etc.) will be documented here
+as they're made.
 
 **Snapshot at roadmap creation**: `2b7b3f7c4b7313ae17a70e98b175f2e0706578e1`
 (post-PR-13: peer-coverage gaps closed; inconsistency-review backlog
@@ -341,4 +373,11 @@ PR-22; D17 and D18 ratified).
 (post-PR-19: internal/resolver/ provides per-step Resolver
 with New, Serve, Records, Close; synthesizing server,
 stdlib-only wire format; D19 and D20 ratified).
+
+**Snapshot after PR-20**: `c7cc86fcce667df3cc1739453735885953feb9ca`
+(post-PR-20: internal/mediator/ provides per-step Mediator
+with New, Serve, Records, Close; split-TLS proxy with
+SNI-allowlist gate, ephemeral-CA-signed container-side
+leaves, lane-trust-anchor-verified upstream side, identity
+capture per connection; D21 and D22 ratified).
 
