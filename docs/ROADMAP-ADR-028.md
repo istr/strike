@@ -186,6 +186,31 @@ deleted.
   controller, which is consistent with strike's existing
   trust posture (the controller already holds signing
   keys, secrets, and runtime attestations in memory).
+- **D23 (rootless backend: pasta; Podman >= 5.0).** Strike
+  uses pasta (from the passt project) as its rootless
+  network backend, configured per step via
+  `--network=pasta:<options>` in the Podman REST API.
+  Minimum Podman version is 5.0; older versions are not
+  supported. Rationale documented in
+  [SPIKE-rootless-netns-backend.md](SPIKE-rootless-netns-backend.md).
+  Implementation in `internal/egress/` (PR-21); version
+  gate at runtime in PR-22.
+- **D24 (egress filter mechanism: splice-only + selective
+  port forwarding).** The per-step egress filter is
+  implemented by launching pasta with `--splice-only` (no
+  tap interface in the container's namespace; only
+  loopback) and two `-T <addr>/<port>` forwards: one for
+  the step's resolver, one for the step's mediator. With
+  no tap device, the container's namespace has no route
+  to any non-loopback address; the only paths out of the
+  namespace are the two splice forwards. This produces
+  the operationally-desired property (container egress
+  restricted to resolver and mediator) without any
+  explicit deny-list: there is nothing to deny because
+  there is nothing to permit. Implementation in
+  `internal/egress/` (PR-21). IPv6 egress is out of scope
+  for the initial implementation; the builder function
+  panics on IPv6 inputs as a programming-error contract.
 
 ### SD-series (schema topology)
 
@@ -252,21 +277,17 @@ port-853 default) documented in
 
 ### Phase 2: Mediation subsystem
 
-| PR | Title | Status | Depends on | Hash (after merge) |
-|----|-------|--------|-----------|-------------------|
-| PR-18 | Ephemeral per-lane-run CA (in-memory) | Done | PR-14 | -- |
-| PR-19 | Per-step DNS allowlist resolver | Done | PR-17 | -- |
-| PR-20 | Per-step TLS mediator | Done | PR-17, PR-18 | -- |
-| PR-21 | Netns egress filter (after backend spike) | Planned | engineering spike first | -- |
-| PR-22 | Integration: CA mount, filter setup, mediator wiring | Planned | PR-18..PR-21 | -- |
-| PR-23 | Attestation surface extension | Planned | PR-22 | -- |
-| PR-24 | SSH mediation under unified architectural roof | Planned | PR-21 | -- |
+| PR | Title | Status | Depends on |
+|----|-------|--------|-----------|
+| PR-18 | Ephemeral per-lane-run CA (in-memory) | Done | PR-14 |
+| PR-19 | Per-step DNS allowlist resolver | Done | PR-17 |
+| PR-20 | Per-step TLS mediator | Done | PR-17, PR-18 |
+| PR-21 | Per-step egress filter (pasta args) | Done | PR-19, PR-20 |
+| PR-22 | Integration: CA mount, filter setup, mediator wiring | Planned | PR-18..PR-21 |
+| PR-23 | Attestation surface extension | Planned | PR-22 |
+| PR-24 | SSH mediation under unified architectural roof | Planned | PR-21 |
 
-Phase 2 requires an engineering spike before PR-21: netavark vs.
-custom CNI plugin vs. pasta evaluation, with criteria (rootless
-maturity, test coverage, host-OS compatibility). The spike is not
-a code PR; it produces a short evaluation document (`docs/SPIKE-rootless-netns-backend.md`
-or similar) that grounds the PR-21 implementation choice.
+The Phase-2 library work is complete.
 
 ### Phase 3: Cross-cutting and downstream
 
@@ -320,21 +341,22 @@ All conventions established in earlier PRs carry forward:
 
 ## Current status
 
-**Phase 1: complete; Phase 2: in progress.** PR-14 through
-PR-17 landed Phase 1. PR-18 added the ephemeral per-lane-run
-CA. PR-19 added the per-step DNS allowlist resolver. PR-20
-adds the per-step TLS mediator in `internal/mediator/`: each
-lane step gets its own mediator instance bound at construction
-to that step's peer-trust map and the ephemeral CA,
-terminating container-side TLS and re-establishing upstream
-TLS against the lane-declared trust anchor with SNI
-preservation. Library-only; PR-22 will wire the per-step
-lifecycle. Next is PR-21 (egress filter), the third per-step
-component; with PR-21 the rule-of-three triggers and a shared
-`internal/policy` package for `StepPermissions` becomes the
-natural refactor. Subsequent decisions (rootless backend
-spike, mTLS schema specifics, etc.) will be documented here
-as they're made.
+**Phase 1: complete; Phase 2 library shelf: complete.**
+PR-14 through PR-17 landed Phase 1. PR-18 added the
+ephemeral per-lane-run CA. PR-19 added the per-step DNS
+allowlist resolver. PR-20 added the per-step TLS mediator.
+PR-21 added the per-step egress filter as a pasta argument
+builder. Next is PR-22 (integration): wire resolver,
+mediator, ephemeral CA, and egress builder together into a
+NetworkCapsule aggregate, allocate per-step loopback
+addresses, configure step containers via the Podman REST
+API, and land the Podman 5.0+ version gate. PR-22 is also
+where the rule-of-three refactor lands: with three per-step
+components (resolver, mediator, egress) now consuming
+related inputs, the shared `internal/policy` package for
+StepPermissions becomes natural. Subsequent decisions (mTLS
+schema specifics, audit-sink transport hardening, etc.)
+will be documented here as they're made.
 
 **Snapshot at roadmap creation**: `2b7b3f7c4b7313ae17a70e98b175f2e0706578e1`
 (post-PR-13: peer-coverage gaps closed; inconsistency-review backlog
@@ -380,4 +402,10 @@ with New, Serve, Records, Close; split-TLS proxy with
 SNI-allowlist gate, ephemeral-CA-signed container-side
 leaves, lane-trust-anchor-verified upstream side, identity
 capture per connection; D21 and D22 ratified).
+
+**Snapshot after PR-21**: `344d92de1de20fd69370e1290bb739af58e07903`
+(post-PR-21: internal/egress/ provides BuildPastaArgs as a
+pure function from (resolverAddr, mediatorAddr) to pasta
+argument list; D24 ratified; Phase 2 library shelf
+complete; PR-22 is the integration PR).
 
