@@ -6,9 +6,11 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/netip"
 	"os"
 	"path/filepath"
 
+	"github.com/istr/strike/internal/capsule"
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/closer"
 	"github.com/istr/strike/internal/container"
@@ -92,7 +94,12 @@ func initEngine(ctx context.Context) container.Engine {
 	}
 
 	if err := engine.Info(ctx); err != nil {
-		log.Printf("WARN   engine info unavailable: %v", err)
+		log.Fatalf("error: container engine info: %v "+
+			"(strike requires Podman >= 5.0; the version gate cannot run without engine info)", err)
+	}
+
+	if err := container.RequireVersion(engine, "5.0.0"); err != nil {
+		log.Fatalf("error: %v", err)
 	}
 
 	if id := engine.Identity(); id != nil {
@@ -228,18 +235,32 @@ func cmdRun(ctx context.Context, path string, engine container.Engine) {
 		log.Fatalf("error: %v", err)
 	}
 
+	ca, caBundlePath, caCleanup := initLaneCA(p)
+	defer caCleanup()
+
+	stepAddrs := allocateMediatedAddrs(p)
+
+	upstreamLook := capsule.UpstreamLookupFunc(func(ctx context.Context, name string) ([]netip.Addr, error) {
+		return transport.LookupHost(ctx, p.Resolver, name)
+	})
+
 	rc := &runContext{
-		ctx:       ctx,
-		engine:    engine,
-		lane:      p,
-		dag:       dag,
-		regClient: &registry.Client{Engine: engine},
-		engineID:  engine.Identity(),
-		state:     newRunState(),
-		laneState: lane.NewState(),
-		laneRoot:  laneRoot,
-		rekor:     initRekor(),
-		laneDir:   laneDir,
+		ctx:            ctx,
+		engine:         engine,
+		lane:           p,
+		dag:            dag,
+		regClient:      &registry.Client{Engine: engine},
+		engineID:       engine.Identity(),
+		ca:             ca,
+		upstreamLook:   upstreamLook,
+		state:          newRunState(),
+		laneState:      lane.NewState(),
+		stepAddrs:      stepAddrs,
+		networkRecords: map[string]capsule.Records{},
+		laneRoot:       laneRoot,
+		rekor:          initRekor(),
+		laneDir:        laneDir,
+		caBundlePath:   caBundlePath,
 	}
 	for _, stepName := range dag.Order {
 		if stepErr := rc.runStep(stepName); stepErr != nil {
@@ -253,6 +274,49 @@ func cmdRun(ctx context.Context, path string, engine container.Engine) {
 		log.Fatalf("error: marshal lane state: %v", err)
 	}
 	log.Printf("STATE  %s", stateJSON)
+}
+
+// initLaneCA creates the lane-wide ephemeral CA and writes its
+// public PEM to a temp directory. The returned cleanup function
+// closes the CA and removes the temp directory.
+func initLaneCA(p *lane.Lane) (*transport.EphemeralCA, string, func()) {
+	ca, caErr := transport.New(string(p.LaneID))
+	if caErr != nil {
+		log.Fatalf("error: ephemeral CA: %v", caErr)
+	}
+
+	caBundleDir, mkErr := os.MkdirTemp("", "strike-lane-"+string(p.LaneID)+"-")
+	if mkErr != nil {
+		log.Fatalf("error: ca temp dir: %v", mkErr)
+	}
+
+	cleanDir := filepath.Clean(caBundleDir)
+	caBundlePath := filepath.Join(cleanDir, "ca.pem")
+	if writeErr := os.WriteFile(caBundlePath, ca.PublicCertPEM(), 0o600); writeErr != nil { // #nosec G703 -- caBundleDir from os.MkdirTemp, no user input
+		log.Fatalf("error: write ca pem: %v", writeErr)
+	}
+
+	cleanup := func() {
+		closer.Warn(ca, "ephemeral CA")
+		closer.Remove(cleanDir, "ca temp dir")
+	}
+	return ca, caBundlePath, cleanup
+}
+
+// allocateMediatedAddrs pre-allocates loopback addresses for all
+// mediated steps in lane-file order.
+func allocateMediatedAddrs(p *lane.Lane) map[string]netip.Addr {
+	var names []string
+	for i := range p.Steps {
+		if mediates(p.Steps[i].Peers) {
+			names = append(names, string(p.Steps[i].Name))
+		}
+	}
+	addrs, err := capsule.AllocateAddresses(names)
+	if err != nil {
+		log.Fatalf("error: %v", err)
+	}
+	return addrs
 }
 
 func cmdCompare(file1, file2, output string) {

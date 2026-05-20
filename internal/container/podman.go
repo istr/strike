@@ -567,40 +567,22 @@ func buildSpecGenerator(opts RunOpts) map[string]any {
 		spec["env"] = opts.Env
 	}
 
-	// Mounts
-	var mounts []map[string]any
-	for _, m := range opts.Mounts {
-		mount := map[string]any{
-			"destination": m.Target,
-			"source":      m.Source,
-			"type":        "bind",
-		}
-		mountOpts := append([]string{}, m.Options...)
-		if m.ReadOnly {
-			mountOpts = append(mountOpts, "ro")
-		}
-		if len(mountOpts) > 0 {
-			mount["options"] = mountOpts
-		}
-		mounts = append(mounts, mount)
-	}
-
-	// Tmpfs
-	for path, options := range opts.Tmpfs {
-		mounts = append(mounts, map[string]any{
-			"destination": path,
-			"type":        "tmpfs",
-			"options":     strings.Split(options, ","),
-		})
-	}
-
-	if len(mounts) > 0 {
+	// Mounts (bind + tmpfs)
+	if mounts := buildMounts(opts); len(mounts) > 0 {
 		spec["mounts"] = mounts
 	}
 
 	// Network
 	if opts.Network != "" {
 		spec["netns"] = map[string]string{"nsmode": opts.Network}
+		if opts.Network == "pasta" && len(opts.PastaArgs) > 0 {
+			spec["network_options"] = map[string]any{"pasta": opts.PastaArgs}
+		}
+	}
+	// DNS server overrides (mediated steps point at the capsule's
+	// resolver loopback address).
+	if len(opts.DNSServers) > 0 {
+		spec["dns_server"] = opts.DNSServers
 	}
 
 	// Security
@@ -620,6 +602,33 @@ func buildSpecGenerator(opts RunOpts) map[string]any {
 	}
 
 	return spec
+}
+
+func buildMounts(opts RunOpts) []map[string]any {
+	var mounts []map[string]any
+	for _, m := range opts.Mounts {
+		mount := map[string]any{
+			"destination": m.Target,
+			"source":      m.Source,
+			"type":        "bind",
+		}
+		mountOpts := append([]string{}, m.Options...)
+		if m.ReadOnly {
+			mountOpts = append(mountOpts, "ro")
+		}
+		if len(mountOpts) > 0 {
+			mount["options"] = mountOpts
+		}
+		mounts = append(mounts, mount)
+	}
+	for path, options := range opts.Tmpfs {
+		mounts = append(mounts, map[string]any{
+			"destination": path,
+			"type":        "tmpfs",
+			"options":     strings.Split(options, ","),
+		})
+	}
+	return mounts
 }
 
 // demuxLogStream reads the Docker/libpod multiplexed log stream.

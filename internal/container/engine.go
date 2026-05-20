@@ -87,6 +87,8 @@ type RunOpts struct {
 	CapDrop     []string
 	Cmd         []string
 	Entrypoint  []string
+	PastaArgs   []string // pasta options when Network == "pasta"
+	DNSServers  []string // resolv.conf nameservers in the container
 	ReadOnly    bool
 	Remove      bool
 }

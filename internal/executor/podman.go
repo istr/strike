@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 
+	"github.com/istr/strike/internal/capsule"
 	"github.com/istr/strike/internal/closer"
 	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/lane"
@@ -14,6 +15,7 @@ import (
 // Run holds the configuration for executing a step container.
 type Run struct {
 	Engine    container.Engine
+	Capsule   *capsule.NetworkCapsule // non-nil for HTTPS-mediated steps
 	Secrets   map[string]lane.SecretString
 	Step      *lane.Step
 	OutputDir string
@@ -21,8 +23,9 @@ type Run struct {
 	// caller for image_from steps so that Step.Image remains the
 	// parsed YAML value and the executor sees the producer's
 	// local WrapTag. When empty, Step.Image is used unchanged.
-	ImageRef    string
-	InputMounts []Mount
+	ImageRef     string
+	CABundlePath string // host path of the lane-wide CA PEM; required when Capsule != nil
+	InputMounts  []Mount
 }
 
 // Mount describes a bind mount from host to container.
@@ -84,8 +87,29 @@ func (r Run) Execute(ctx context.Context) error {
 	}
 	opts.Cmd = r.Step.Args
 	opts.Env = env
+
+	if r.Capsule != nil {
+		if r.CABundlePath == "" {
+			return fmt.Errorf("executor: Capsule set without CABundlePath")
+		}
+		// Bind-mount the ephemeral CA over the three common system
+		// CA-bundle paths. The base image will have one or two of
+		// these; Podman creates the target file if missing. See D18.
+		for _, target := range caBundleTargets {
+			mounts = append(mounts, container.Mount{
+				Source:   r.CABundlePath,
+				Target:   target,
+				ReadOnly: true,
+			})
+		}
+		opts.Network = "pasta"
+		opts.PastaArgs = r.Capsule.PastaArgs()
+		opts.DNSServers = []string{r.Capsule.ResolverAddr().Addr().String()}
+	} else {
+		opts.Network = NetworkMode(r.Step.Peers)
+	}
+
 	opts.Mounts = mounts
-	opts.Network = NetworkMode(r.Step.Peers)
 	if r.Step.Workdir != nil {
 		opts.Workdir = r.Step.Workdir.String()
 	}
@@ -100,6 +124,16 @@ func (r Run) Execute(ctx context.Context) error {
 		return fmt.Errorf("container exited with code %d", exitCode)
 	}
 	return nil
+}
+
+// caBundleTargets is the set of system CA-bundle paths strike
+// bind-mounts when a step uses pasta-mediation. The ephemeral CA
+// is mounted to all three; the base image populates one or two.
+// See docs/ROADMAP-ADR-028.md D18 (system CA bundle replacement).
+var caBundleTargets = []string{
+	"/etc/ssl/certs/ca-certificates.crt",                // Debian/Ubuntu/Alpine
+	"/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem", // Fedora/RHEL/CentOS
+	"/etc/ssl/cert.pem",                                 // Alpine (alt path)
 }
 
 // appendSSHMounts configures SSH peer known_hosts and agent proxy,

@@ -6,18 +6,22 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 
+	"github.com/istr/strike/internal/capsule"
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/closer"
 	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/deploy"
 	"github.com/istr/strike/internal/executor"
 	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/mediator"
 	"github.com/istr/strike/internal/registry"
+	"github.com/istr/strike/internal/transport"
 )
 
 // runState holds accumulated state across steps during a lane execution.
@@ -40,17 +44,22 @@ func newRunState() *runState {
 
 // runContext bundles everything needed to execute steps.
 type runContext struct {
-	ctx       context.Context
-	engine    container.Engine
-	lane      *lane.Lane
-	dag       *lane.DAG
-	regClient *registry.Client
-	engineID  *container.EngineIdentity
-	state     *runState
-	laneState *lane.State // artifact graph for deploy attestations
-	laneRoot  *os.Root
-	rekor     *executor.RekorClient // optional Rekor transparency log client
-	laneDir   string
+	ctx            context.Context
+	engine         container.Engine
+	lane           *lane.Lane
+	dag            *lane.DAG
+	regClient      *registry.Client
+	engineID       *container.EngineIdentity
+	ca             *transport.EphemeralCA
+	upstreamLook   capsule.UpstreamLookupFunc
+	state          *runState
+	laneState      *lane.State                // artifact graph for deploy attestations
+	stepAddrs      map[string]netip.Addr      // mediated step name -> loopback addr
+	networkRecords map[string]capsule.Records // step name -> records
+	laneRoot       *os.Root
+	rekor          *executor.RekorClient // optional Rekor transparency log client
+	laneDir        string
+	caBundlePath   string // lane-wide CA PEM path on host
 }
 
 func (rc *runContext) runStep(stepName string) error {
@@ -434,13 +443,33 @@ func (rc *runContext) executeContainerStep(ctx context.Context, step *lane.Step,
 		return fmt.Errorf("%s: input mounts: %w", safeName, err)
 	}
 
+	caps, capsErr := rc.maybeStartCapsule(ctx, step, stepName, safeName)
+	if capsErr != nil {
+		return capsErr
+	}
+	if caps != nil {
+		defer func() {
+			rc.networkRecords[stepName] = caps.Records()
+			if stopErr := caps.Stop(); stopErr != nil {
+				log.Printf("WARN   %s: capsule stop: %v", safeName, stopErr)
+			}
+		}()
+	}
+
+	caBundlePath := ""
+	if caps != nil {
+		caBundlePath = rc.caBundlePath
+	}
+
 	run := executor.Run{
-		Engine:      rc.engine,
-		Step:        step,
-		InputMounts: inputMounts,
-		OutputDir:   outDir,
-		Secrets:     secrets,
-		ImageRef:    rc.state.imageFromTags[stepName],
+		Engine:       rc.engine,
+		Step:         step,
+		InputMounts:  inputMounts,
+		OutputDir:    outDir,
+		Secrets:      secrets,
+		ImageRef:     rc.state.imageFromTags[stepName],
+		Capsule:      caps,
+		CABundlePath: caBundlePath,
 	}
 	if execErr := run.Execute(ctx); execErr != nil {
 		return fmt.Errorf("%s: execution failed: %w", safeName, execErr)
@@ -654,4 +683,63 @@ func (rc *runContext) pushAndReport(ctx context.Context, step *lane.Step, safeNa
 		log.Printf("OK     %s", safeName)
 	}
 	return nil
+}
+
+// maybeStartCapsule constructs and starts a NetworkCapsule for the
+// step if D-b dispatch applies (HTTPS peers, no SSH peers). Returns
+// nil if the step does not qualify; the caller treats nil as "use
+// existing network behaviour".
+func (rc *runContext) maybeStartCapsule(ctx context.Context, step *lane.Step, stepName, safeName string) (*capsule.NetworkCapsule, error) {
+	if !mediates(step.Peers) {
+		return nil, nil
+	}
+
+	stepAddr, ok := rc.stepAddrs[stepName]
+	if !ok {
+		// Should not happen: mediates(step.Peers) was true at
+		// pre-allocation. Defensive.
+		return nil, fmt.Errorf("%s: no pre-allocated loopback address", safeName)
+	}
+
+	httpsPeers := httpsPeersOf(step.Peers)
+	peerTrusts := make([]mediator.PeerTrust, len(httpsPeers))
+	for i, p := range httpsPeers {
+		peerTrusts[i] = mediator.PeerTrust{Host: p.Host, Trust: p.Trust}
+	}
+
+	caps, capsErr := capsule.New(stepName, stepAddr, peerTrusts, rc.ca, rc.upstreamLook)
+	if capsErr != nil {
+		return nil, fmt.Errorf("%s: construct capsule: %w", safeName, capsErr)
+	}
+	if startErr := caps.Start(ctx); startErr != nil {
+		return nil, fmt.Errorf("%s: start capsule: %w", safeName, startErr)
+	}
+	log.Printf("CAPSULE %s @ %s (peers=%d)", safeName, stepAddr, len(httpsPeers))
+	return caps, nil
+}
+
+// mediates reports whether a step qualifies for HTTPS-mediation
+// per D26: at least one HTTPS peer and no SSH peer.
+func mediates(peers []lane.Peer) bool {
+	var hasHTTPS, hasSSH bool
+	for _, p := range peers {
+		switch p.(type) {
+		case lane.HTTPSPeer:
+			hasHTTPS = true
+		case lane.SSHPeer:
+			hasSSH = true
+		}
+	}
+	return hasHTTPS && !hasSSH
+}
+
+// httpsPeersOf returns the HTTPS peers from a step's peer list.
+func httpsPeersOf(peers []lane.Peer) []lane.HTTPSPeer {
+	var out []lane.HTTPSPeer
+	for _, p := range peers {
+		if h, ok := p.(lane.HTTPSPeer); ok {
+			out = append(out, h)
+		}
+	}
+	return out
 }

@@ -18,32 +18,33 @@ import (
 	"net/netip"
 )
 
-// BuildPastaArgs returns the pasta command-line options for a
-// step container whose DNS resolver listens at resolverAddr and
-// whose TLS mediator listens at mediatorAddr (both in the
-// strike controller's init namespace, on loopback).
+// BuildPastaArgs returns the pasta options for a step container
+// whose resolver listens at stepAddr:resolverPort (UDP+TCP) and
+// whose mediator listens at stepAddr:mediatorPort (TCP). Both bind
+// the same loopback address; ports disambiguate.
 //
-// The returned slice is in the exact order pasta expects:
+// Output order:
 //
 //	--splice-only
-//	-T <resolverIP>/<resolverPort>
-//	-T <mediatorIP>/<mediatorPort>
+//	-T <stepAddr>/<resolverPort>
+//	-T <stepAddr>/<mediatorPort>
+//	-U <stepAddr>/<resolverPort>
 //
-// The slice is byte-identical for byte-identical inputs.
+// The -U forward for the resolver port is essential: DNS clients
+// try UDP first, falling back to TCP only on truncation. Without
+// it, container DNS queries time out on UDP.
 //
-// Panics if either address is IPv6. IPv6 egress is out of
-// scope for this PR (see D24's "address family" note in the
-// roadmap).
-func BuildPastaArgs(resolverAddr, mediatorAddr netip.AddrPort) []string {
-	if !resolverAddr.Addr().Is4() {
-		panic(fmt.Sprintf("egress: resolverAddr must be IPv4, got %s", resolverAddr))
+// Byte-identical for byte-identical inputs. Panics if stepAddr is
+// IPv6 (out of scope; see ROADMAP-ADR-028.md D24).
+func BuildPastaArgs(stepAddr netip.Addr, resolverPort, mediatorPort uint16) []string {
+	if !stepAddr.Is4() {
+		panic(fmt.Sprintf("egress: stepAddr must be IPv4, got %s", stepAddr))
 	}
-	if !mediatorAddr.Addr().Is4() {
-		panic(fmt.Sprintf("egress: mediatorAddr must be IPv4, got %s", mediatorAddr))
-	}
+	addr := stepAddr.String()
 	return []string{
 		"--splice-only",
-		"-T", fmt.Sprintf("%s/%d", resolverAddr.Addr(), resolverAddr.Port()),
-		"-T", fmt.Sprintf("%s/%d", mediatorAddr.Addr(), mediatorAddr.Port()),
+		"-T", fmt.Sprintf("%s/%d", addr, resolverPort),
+		"-T", fmt.Sprintf("%s/%d", addr, mediatorPort),
+		"-U", fmt.Sprintf("%s/%d", addr, resolverPort),
 	}
 }
