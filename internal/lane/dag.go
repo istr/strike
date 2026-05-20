@@ -5,6 +5,7 @@ package lane
 import (
 	"fmt"
 	"path"
+	"sort"
 	"strings"
 )
 
@@ -56,7 +57,14 @@ type DAG struct {
 	ImageFromEdges map[string]ImageFromEdge // one per step, if any
 	edges          map[string][]string      // step -> []dependencies
 	reverse        map[string][]string      // dep -> []dependents
-	Order          []string
+	// Order is the lexicographically smallest valid topological
+	// execution order of the lane's steps, computed by
+	// kahnSort. The same step graph always produces the same
+	// Order across runs, machines, Go versions, and
+	// implementation languages; see kahnSort's doc comment and
+	// DESIGN-PRINCIPLES.md "Reproducibility is enforced, not
+	// hoped for".
+	Order []string
 }
 
 // Build constructs a DAG from a Lane definition, resolving all inter-step edges.
@@ -343,31 +351,75 @@ func (d *DAG) addEdge(from, to string) {
 	d.reverse[to] = append(d.reverse[to], from)
 }
 
+// kahnSort computes the lexicographically smallest valid
+// topological order of d's steps.
+//
+// Algorithm. Kahn's topological sort with a ready set sorted
+// at every extraction. The ready set initially contains all
+// zero-in-degree steps. At each iteration, the
+// lexicographically smallest member is extracted and appended
+// to the order; its dependents have their in-degrees
+// decremented, and any dependent whose in-degree reaches zero
+// joins the ready set. The loop terminates when the ready set
+// is empty.
+//
+// String comparison is byte-wise (Go sort.Strings semantics).
+// Strike step names are constrained to printable ASCII by the
+// CUE schema, so byte-wise ordering is equivalent to
+// lexicographic ordering for any valid input. The comparator
+// is intentionally identical to Rust's default Ord on &str
+// (also byte-wise), so cross-implementation verifiers match
+// without depending on locale or Unicode collation tables.
+//
+// Property. The same step graph -- defined by the set of step
+// names and the set of edges between them -- always produces
+// the same Order, regardless of YAML declaration order, Go
+// map-iteration randomness, runtime, machine, or
+// implementation language. See docs/DESIGN-PRINCIPLES.md
+// "Reproducibility is enforced, not hoped for".
+//
+// Returns an error if the graph is cyclic.
 func kahnSort(d *DAG) ([]string, error) {
+	// Compute in-degree for every step from its declared
+	// inputs. The map-iteration here is read-only and does
+	// not leak into the output.
 	inDegree := make(map[string]int, len(d.Steps))
 	for name := range d.Steps {
 		inDegree[name] = len(d.edges[name])
 	}
 
-	// Roots: steps without dependencies
-	queue := []string{}
+	// Collect initially-ready steps. The map-iteration order
+	// here also does not affect the output, because the ready
+	// slice is sorted at every extraction below.
+	ready := make([]string, 0, len(d.Steps))
 	for name, deg := range inDegree {
 		if deg == 0 {
-			queue = append(queue, name)
+			ready = append(ready, name)
 		}
 	}
 
-	var order []string
-	for len(queue) > 0 {
-		node := queue[0]
-		queue = queue[1:]
+	order := make([]string, 0, len(d.Steps))
+	for len(ready) > 0 {
+		// Sort the ready set and extract its smallest member.
+		// This is the single point where the lex-smallest
+		// property is enforced; do not remove this sort even
+		// if "ready was already sorted last iteration" appears
+		// to be invariant. New dependents are appended without
+		// re-sorting, so the invariant does not hold.
+		sort.Strings(ready)
+		node := ready[0]
+		ready = ready[1:]
 		order = append(order, node)
 
-		// Unlock dependents of this node
+		// Decrement dependents' in-degrees; any that reach
+		// zero join the ready set for the next iteration.
+		// The iteration order over d.reverse[node] does not
+		// affect the output, because joining the ready set is
+		// commutative.
 		for _, dependent := range d.reverse[node] {
 			inDegree[dependent]--
 			if inDegree[dependent] == 0 {
-				queue = append(queue, dependent)
+				ready = append(ready, dependent)
 			}
 		}
 	}

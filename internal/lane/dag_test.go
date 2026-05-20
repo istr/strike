@@ -1,6 +1,7 @@
 package lane_test
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
@@ -453,6 +454,170 @@ func TestBuild_ProvenancePathRelative(t *testing.T) {
 	}
 	_, err := lane.Build(p)
 	assertErrContains(t, err, "must be absolute")
+}
+
+// --------------------------------------------------------------------------.
+// Deterministic order.
+// --------------------------------------------------------------------------.
+
+// TestBuild_DeterministicOrder asserts that lane.Build
+// produces a byte-identical dag.Order across many invocations
+// of the same input. With three independent root steps and
+// Go's non-deterministic map iteration, a naive Kahn
+// implementation would produce different orderings on
+// different runs.
+func TestBuild_DeterministicOrder(t *testing.T) {
+	p := &lane.Lane{
+		Steps: []lane.Step{
+			{
+				Name: "zebra", Image: lane.Ptr(lane.ImageRef("img")),
+				Args: []string{"z"}, Env: map[string]string{},
+				Outputs: []lane.OutputSpec{{Name: "out", Type: "file", Path: "/out/z"}},
+			},
+			{
+				Name: "alpha", Image: lane.Ptr(lane.ImageRef("img")),
+				Args: []string{"a"}, Env: map[string]string{},
+				Outputs: []lane.OutputSpec{{Name: "out", Type: "file", Path: "/out/a"}},
+			},
+			{
+				Name: "middle", Image: lane.Ptr(lane.ImageRef("img")),
+				Args: []string{"m"}, Env: map[string]string{},
+				Outputs: []lane.OutputSpec{{Name: "out", Type: "file", Path: "/out/m"}},
+			},
+		},
+	}
+
+	want := []string{"alpha", "middle", "zebra"}
+	for i := range 100 {
+		dag, err := lane.Build(p)
+		if err != nil {
+			t.Fatalf("iteration %d: Build: %v", i, err)
+		}
+		if !reflect.DeepEqual(dag.Order, want) {
+			t.Fatalf("iteration %d: Order = %v, want %v "+
+				"(alphabetic among independent roots)",
+				i, dag.Order, want)
+		}
+	}
+}
+
+// TestBuild_DeterministicOrder_Diamond asserts the property
+// holds for a non-trivial graph where multiple valid
+// topological orderings exist: root -> {left, right} -> bottom.
+func TestBuild_DeterministicOrder_Diamond(t *testing.T) {
+	p := &lane.Lane{
+		Steps: []lane.Step{
+			{
+				Name: "root", Image: lane.Ptr(lane.ImageRef("img")),
+				Args: []string{"r"}, Env: map[string]string{},
+				Outputs: []lane.OutputSpec{{Name: "out", Type: "file", Path: "/out/r"}},
+			},
+			{
+				Name: "right", Image: lane.Ptr(lane.ImageRef("img")),
+				Args: []string{"rt"}, Env: map[string]string{},
+				Inputs:  []lane.InputRef{{From: "root.out", Mount: "/in"}},
+				Outputs: []lane.OutputSpec{{Name: "out", Type: "file", Path: "/out/rt"}},
+			},
+			{
+				Name: "left", Image: lane.Ptr(lane.ImageRef("img")),
+				Args: []string{"l"}, Env: map[string]string{},
+				Inputs:  []lane.InputRef{{From: "root.out", Mount: "/in"}},
+				Outputs: []lane.OutputSpec{{Name: "out", Type: "file", Path: "/out/l"}},
+			},
+			{
+				Name: "bottom", Image: lane.Ptr(lane.ImageRef("img")),
+				Args: []string{"b"}, Env: map[string]string{},
+				Inputs: []lane.InputRef{
+					{From: "left.out", Mount: "/in/l"},
+					{From: "right.out", Mount: "/in/r"},
+				},
+			},
+		},
+	}
+
+	// root first; left before right (alphabetic); bottom last.
+	want := []string{"root", "left", "right", "bottom"}
+	for i := range 100 {
+		dag, err := lane.Build(p)
+		if err != nil {
+			t.Fatalf("iteration %d: Build: %v", i, err)
+		}
+		if !reflect.DeepEqual(dag.Order, want) {
+			t.Fatalf("iteration %d: Order = %v, want %v", i, dag.Order, want)
+		}
+	}
+}
+
+// TestBuild_DeterministicOrder_LexSmallestNotFIFO pins the
+// specific algorithmic contract: strike's kahnSort produces
+// the lexicographically smallest valid topological order, not
+// merely some deterministic order.
+//
+// On the graph below, two deterministic algorithms could
+// legitimately produce different orders:
+//
+//   - "FIFO Kahn with sorted-at-insertion dependents":
+//     [A, B, P, R, Q, S]. After processing A, P and R enter
+//     the queue; after processing B, Q and S enter. The FIFO
+//     does not interleave the two waves.
+//   - "Lex-smallest Kahn (ready set sorted at extraction)":
+//     [A, B, P, Q, R, S]. After both roots are processed, the
+//     ready set is {P, Q, R, S}; the next extraction picks P
+//     because it sorts first overall.
+//
+// Strike commits to the second behaviour for cross-
+// implementation clarity. A future refactor that silently
+// switches to FIFO semantics would fail this test, surfacing
+// the spec drift before it could leak into attestation.
+func TestBuild_DeterministicOrder_LexSmallestNotFIFO(t *testing.T) {
+	p := &lane.Lane{
+		Steps: []lane.Step{
+			{
+				Name: "A", Image: lane.Ptr(lane.ImageRef("img")),
+				Args: []string{"a"}, Env: map[string]string{},
+				Outputs: []lane.OutputSpec{{Name: "out", Type: "file", Path: "/out/a"}},
+			},
+			{
+				Name: "B", Image: lane.Ptr(lane.ImageRef("img")),
+				Args: []string{"b"}, Env: map[string]string{},
+				Outputs: []lane.OutputSpec{{Name: "out", Type: "file", Path: "/out/b"}},
+			},
+			{
+				Name: "P", Image: lane.Ptr(lane.ImageRef("img")),
+				Args: []string{"p"}, Env: map[string]string{},
+				Inputs: []lane.InputRef{{From: "A.out", Mount: "/in"}},
+			},
+			{
+				Name: "R", Image: lane.Ptr(lane.ImageRef("img")),
+				Args: []string{"r"}, Env: map[string]string{},
+				Inputs: []lane.InputRef{{From: "A.out", Mount: "/in"}},
+			},
+			{
+				Name: "Q", Image: lane.Ptr(lane.ImageRef("img")),
+				Args: []string{"q"}, Env: map[string]string{},
+				Inputs: []lane.InputRef{{From: "B.out", Mount: "/in"}},
+			},
+			{
+				Name: "S", Image: lane.Ptr(lane.ImageRef("img")),
+				Args: []string{"s"}, Env: map[string]string{},
+				Inputs: []lane.InputRef{{From: "B.out", Mount: "/in"}},
+			},
+		},
+	}
+
+	want := []string{"A", "B", "P", "Q", "R", "S"}
+	for i := range 100 {
+		dag, err := lane.Build(p)
+		if err != nil {
+			t.Fatalf("iteration %d: Build: %v", i, err)
+		}
+		if !reflect.DeepEqual(dag.Order, want) {
+			t.Fatalf("iteration %d: Order = %v, want %v "+
+				"(lex-smallest valid topology, not FIFO Kahn -- "+
+				"see test doc comment for the algorithmic contract)",
+				i, dag.Order, want)
+		}
+	}
 }
 
 // assertErrContains checks that err is non-nil and contains substr.

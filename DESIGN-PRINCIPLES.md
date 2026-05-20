@@ -236,7 +236,14 @@ validation cannot be reproducibly attested.
 
 Output artifacts must be byte-identical for byte-identical inputs.
 Timestamps follow `SOURCE_DATE_EPOCH`, file enumeration is
-canonicalized, and layer ordering is stable. All time access in strike
+canonicalized, layer ordering is stable, and the lane's
+execution order is the **lexicographically smallest valid
+topological order** of the step graph -- computed by Kahn's
+algorithm with byte-wise string comparison (Go
+`sort.Strings`, equivalent to Rust's default `Ord` on
+`&str`), so the same step graph always produces the same
+`dag.Order` across runs, machines, languages, and
+implementations. All time access in strike
 is dispatched through the `internal/clock` package: `clock.Reproducible()`
 for values that end up in artifact content bytes, `clock.Wall()` for
 event receipts and telemetry. Direct imports of the standard-library
