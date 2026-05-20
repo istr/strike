@@ -211,6 +211,40 @@ deleted.
   `internal/egress/` (PR-21). IPv6 egress is out of scope
   for the initial implementation; the builder function
   panics on IPv6 inputs as a programming-error contract.
+- **D25 (NetworkCapsule aggregate).** PR-22 introduces
+  `internal/capsule/NetworkCapsule`, a per-step aggregate
+  bundling the allowlist DNS resolver (PR-19), the TLS mediator
+  (PR-20), and the pasta egress filter args (PR-21) into a
+  single lifecycle. Constructed per mediated step (see D26);
+  shares the lane-wide ephemeral CA (PR-18, D17) by pointer.
+  The capsule owns the resolver/mediator listener lifecycle,
+  the errgroup running their serve goroutines, and the records
+  aggregation; it does not own the container lifecycle. Per-step
+  loopback addresses are pre-computed by the pure function
+  `capsule.AllocateAddresses`, in lane-file order, so the same
+  lane yields the same step-to-IP mapping every run (no
+  stateful allocator, no mutex; the determinism rests on
+  Instruction 36's deterministic DAG plus pure pre-allocation).
+  Rationale: the Phase-2 components have orthogonal
+  responsibilities but a shared per-step lifecycle, and
+  centralising it into one tested unit beats inlining ~30 lines
+  of listener-binding and errgroup coordination per step,
+  especially under parallel execution.
+- **D26 (HTTPS-only mediation dispatch).** A step in PR-22 uses
+  pasta-mediation iff it has at least one HTTPS peer AND no SSH
+  peers. Pasta `--splice-only` removes the tap interface,
+  leaving only loopback and declared splice forwards: HTTPS
+  flows through the mediator's loopback splice (works), OCI is
+  controller-side (no container network needed), but SSH needs
+  outbound TCP/22 to the peer host (incompatible with
+  splice-only without extra forwards). PR-22 takes the
+  conservative scope: HTTPS-without-SSH steps get mediation;
+  any-SSH steps keep existing bridge-network behaviour (ADR-024
+  known_hosts, ADR-025 agent proxy); OCI-only or no-peer steps
+  keep `--network=none`. Lane authors mixing HTTPS and SSH in
+  one step can split into two steps to mediate the HTTPS half.
+  PR-23 extends dispatch to mixed HTTPS+SSH steps via
+  per-SSH-peer splice forwards (resolved IP plus port 22).
 
 ### SD-series (schema topology)
 
@@ -283,8 +317,8 @@ port-853 default) documented in
 | PR-19 | Per-step DNS allowlist resolver | Done | PR-17 |
 | PR-20 | Per-step TLS mediator | Done | PR-17, PR-18 |
 | PR-21 | Per-step egress filter (pasta args) | Done | PR-19, PR-20 |
-| PR-22 | Integration: CA mount, filter setup, mediator wiring | Planned | PR-18..PR-21 |
-| PR-23 | Attestation surface extension | Planned | PR-22 |
+| PR-22 | Integration: NetworkCapsule, executor wiring, version gate | Done | PR-17 .. PR-21 |
+| PR-23 | SSH-peer pasta integration (mixed HTTPS+SSH steps) | Planned | PR-22 |
 | PR-24 | SSH mediation under unified architectural roof | Planned | PR-21 |
 
 The Phase-2 library work is complete.
@@ -341,22 +375,21 @@ All conventions established in earlier PRs carry forward:
 
 ## Current status
 
-**Phase 1: complete; Phase 2 library shelf: complete.**
-PR-14 through PR-17 landed Phase 1. PR-18 added the
-ephemeral per-lane-run CA. PR-19 added the per-step DNS
-allowlist resolver. PR-20 added the per-step TLS mediator.
-PR-21 added the per-step egress filter as a pasta argument
-builder. Next is PR-22 (integration): wire resolver,
-mediator, ephemeral CA, and egress builder together into a
-NetworkCapsule aggregate, allocate per-step loopback
-addresses, configure step containers via the Podman REST
-API, and land the Podman 5.0+ version gate. PR-22 is also
-where the rule-of-three refactor lands: with three per-step
-components (resolver, mediator, egress) now consuming
-related inputs, the shared `internal/policy` package for
-StepPermissions becomes natural. Subsequent decisions (mTLS
-schema specifics, audit-sink transport hardening, etc.)
-will be documented here as they're made.
+**Phase 1: complete; Phase 2: integrated.** PR-14 through PR-17
+landed Phase 1. PR-18 added the ephemeral per-lane-run CA. PR-19
+added the per-step DNS allowlist resolver. PR-20 added the
+per-step TLS mediator. PR-21 added the per-step egress filter.
+PR-22 wires them together: a `NetworkCapsule` aggregate per
+HTTPS-mediated step (D25), deterministic per-step loopback
+addresses via `capsule.AllocateAddresses`, a lane-wide ephemeral
+CA written to `/tmp/strike-lane-<id>-*/ca.pem` and bind-mounted
+into each mediated container, a Podman 5.0+ version gate in
+`initEngine`, and dispatch in `executeContainerStep` (D26:
+HTTPS-without-SSH -> capsule; otherwise existing behaviour).
+Next is PR-23 (SSH-peer pasta integration), extending dispatch
+to mixed HTTPS+SSH steps. Subsequent decisions (mTLS schema
+specifics, audit-sink transport hardening, Rekor via
+DialVerified) remain on the Phase-3 track.
 
 **Snapshot at roadmap creation**: `2b7b3f7c4b7313ae17a70e98b175f2e0706578e1`
 (post-PR-13: peer-coverage gaps closed; inconsistency-review backlog
@@ -408,4 +441,12 @@ capture per connection; D21 and D22 ratified).
 pure function from (resolverAddr, mediatorAddr) to pasta
 argument list; D24 ratified; Phase 2 library shelf
 complete; PR-22 is the integration PR).
+
+**Snapshot after PR-22**: `a0e63ddf1947513481e744ec52bfe97302d9bdc3`
+(post-PR-22: internal/capsule/ provides NetworkCapsule plus the
+pure AllocateAddresses; container.RunOpts gains PastaArgs and
+DNSServers; container.RequireVersion fail-fasts on Podman < 5.0;
+executor.Run integrates Capsule + CABundlePath; cmdRun builds
+the lane-wide CA and pre-allocates mediated-step addresses; D25
+and D26 ratified).
 
