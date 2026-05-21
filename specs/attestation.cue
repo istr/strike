@@ -65,6 +65,12 @@ package deploy
 	// Verifiers use this to assess the trust level of the environment.
 	engine?: #EngineRecord
 
+	// resolver records the DoT resolver's observed TLS identity,
+	// captured once per lane run at the pre-flight handshake. Per
+	// ADR-030 this is the one controller-side connection whose channel
+	// identity is part of the trust chain (DNS has no content anchor).
+	resolver?: #ResolverRecord
+
 	// provenance collects validated provenance records from transitive
 	// predecessor steps. Sorted deterministically by step name.
 	// Empty array when no steps declare provenance.
@@ -105,6 +111,29 @@ package deploy
 
 	// version is the engine's self-reported version string.
 	version?: string
+}
+
+// ---------------------------------------------------------------------------
+// Resolver identity
+// ---------------------------------------------------------------------------
+
+#ResolverRecord: {
+	// host is the declared DoT resolver endpoint (host:port).
+	host: string
+
+	// server_cert_fingerprint is sha256:<hex> of the resolver's leaf
+	// certificate, observed at the pre-flight handshake.
+	server_cert_fingerprint: string
+
+	// tls_version is the negotiated TLS version, human-readable.
+	tls_version: string
+
+	// cipher_suite is the negotiated cipher suite, human-readable.
+	cipher_suite: string
+
+	// server_name is the SNI sent during the handshake. Empty for
+	// IP-literal resolver hosts (RFC 6066 forbids IP-literal SNI).
+	server_name?: string
 }
 
 // #DeployTarget is re-exported from lane via artifact.cue.

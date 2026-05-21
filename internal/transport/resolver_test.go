@@ -222,8 +222,15 @@ func TestProbeResolver_HappyPath(t *testing.T) {
 			Fingerprint: fingerprint,
 		},
 	}
-	if err := transport.ProbeResolver(ctx, decl); err != nil {
+	id, err := transport.ProbeResolver(ctx, decl)
+	if err != nil {
 		t.Fatalf("ProbeResolver: %v", err)
+	}
+	if id.LeafFingerprint == "" {
+		t.Error("expected non-empty leaf fingerprint from probe handshake")
+	}
+	if id.PeerAddress != string(decl.Host) {
+		t.Errorf("PeerAddress = %q, want %q", id.PeerAddress, string(decl.Host))
 	}
 }
 
@@ -239,7 +246,7 @@ func TestProbeResolver_FingerprintMismatch(t *testing.T) {
 			Fingerprint: "sha256:" + strings.Repeat("0", 64),
 		},
 	}
-	if err := transport.ProbeResolver(ctx, decl); err == nil {
+	if _, err := transport.ProbeResolver(ctx, decl); err == nil {
 		t.Fatal("expected error for fingerprint mismatch, got nil")
 	}
 }
@@ -256,7 +263,7 @@ func TestProbeResolver_NoResponse(t *testing.T) {
 			Fingerprint: fingerprint,
 		},
 	}
-	if err := transport.ProbeResolver(ctx, decl); err == nil {
+	if _, err := transport.ProbeResolver(ctx, decl); err == nil {
 		t.Fatal("expected error for SERVFAIL response, got nil")
 	}
 }
@@ -281,7 +288,7 @@ func TestProbeResolver_ErrorChainHasNoSystemResolverReference(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*clock.Second)
 	defer cancel()
 
-	err := transport.ProbeResolver(ctx, decl)
+	_, err := transport.ProbeResolver(ctx, decl)
 	if err == nil {
 		t.Fatal("expected error from unreachable resolver")
 	}

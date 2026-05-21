@@ -6,7 +6,35 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"sync"
 )
+
+// identityCapture collects the ConnectionIdentity observed by a
+// net.Resolver Dial callback. The Go resolver may invoke Dial more
+// than once (retry, dual-stack); for DoT the dial target is always
+// the single declared resolver, so repeats observe the same
+// identity. The capture keeps the first non-empty identity and is
+// mutex-guarded for race-cleanliness under concurrent dials.
+type identityCapture struct {
+	id  ConnectionIdentity
+	mu  sync.Mutex
+	set bool
+}
+
+func (c *identityCapture) record(id ConnectionIdentity) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if !c.set {
+		c.id = id
+		c.set = true
+	}
+}
+
+func (c *identityCapture) get() (ConnectionIdentity, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.id, c.set
+}
 
 // dotResolver builds a net.Resolver whose dial path goes
 // through the declared DoT endpoint via DialVerified. The
@@ -46,12 +74,12 @@ func LookupHost(ctx context.Context, decl DNSResolver, name string) ([]netip.Add
 	return addrs, nil
 }
 
-// ProbeResolver performs a one-shot DNS-over-TLS roundtrip
-// against the declared resolver, used as a pre-flight check at
-// strike run start. The probe target is an NS query on "." (the
-// root zone), which every standards-compliant DoT resolver
-// answers; this avoids encoding any provider-specific sanity
-// name.
+// ProbeResolver performs a one-shot DNS-over-TLS roundtrip against
+// the declared resolver, used as a pre-flight check at strike run
+// start, and returns the ConnectionIdentity observed at the TLS
+// handshake. The probe target is an NS query on "." (the root
+// zone), which every standards-compliant DoT resolver answers; this
+// avoids encoding any provider-specific sanity name.
 //
 // The probe verifies, in one round trip:
 //   - the resolver's TLS endpoint is reachable on the declared port
@@ -60,20 +88,39 @@ func LookupHost(ctx context.Context, decl DNSResolver, name string) ([]netip.Add
 //   - the resolver responds to DNS queries over the established
 //     TLS connection
 //
-// The probe is operational, not attested. Per-query DNS
-// resolutions that DO feed deploy attestation are introduced in
-// PR-19 (allowlist resolver).
+// The returned identity is the observed resolver identity from this
+// handshake. Per ADR-030 it is recorded in the deploy attestation:
+// DNS has no content anchor, so the resolver's channel identity is
+// part of the trust chain. The trust anchor was already enforced by
+// DialVerified during this same handshake; the returned identity is
+// what that verified handshake observed.
 //
-// Probe placement: see docs/ROADMAP-ADR-028.md D16. The probe
-// runs at strike run time, after lane.Parse, not in lane.Parse,
-// because probe outcome is an environmental property and
-// lane.Parse must stay an offline check of input properties.
-func ProbeResolver(ctx context.Context, decl DNSResolver) error {
-	if _, err := dotResolver(decl).LookupNS(ctx, "."); err != nil {
-		clearMisleadingServerField(err)
-		return fmt.Errorf("transport: resolver probe via %s: %w", decl.Host, err)
+// Probe placement: see docs/ROADMAP-ADR-028.md D16. The probe runs
+// at strike run time, after lane.Parse, not in lane.Parse, because
+// probe outcome is an environmental property and lane.Parse must
+// stay an offline check of input properties.
+func ProbeResolver(ctx context.Context, decl DNSResolver) (ConnectionIdentity, error) {
+	var ic identityCapture
+	r := &net.Resolver{
+		PreferGo: true,
+		Dial: func(ctx context.Context, _, _ string) (net.Conn, error) {
+			conn, err := DialVerified(ctx, string(decl.Host), decl.Trust)
+			if err != nil {
+				return nil, err
+			}
+			ic.record(conn.Identity())
+			return conn, nil
+		},
 	}
-	return nil
+	if _, err := r.LookupNS(ctx, "."); err != nil {
+		clearMisleadingServerField(err)
+		return ConnectionIdentity{}, fmt.Errorf("transport: resolver probe via %s: %w", decl.Host, err)
+	}
+	id, ok := ic.get()
+	if !ok {
+		return ConnectionIdentity{}, fmt.Errorf("transport: resolver probe via %s: no TLS identity captured", decl.Host)
+	}
+	return id, nil
 }
 
 // clearMisleadingServerField clears net.DNSError.Server on any

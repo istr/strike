@@ -46,20 +46,21 @@ func newRunState() *runState {
 type runContext struct {
 	ctx            context.Context
 	engine         container.Engine
-	lane           *lane.Lane
-	dag            *lane.DAG
+	state          *runState
+	laneState      *lane.State // artifact graph for deploy attestations
 	regClient      *registry.Client
 	engineID       *container.EngineIdentity
 	ca             *transport.EphemeralCA
 	upstreamLook   capsule.UpstreamLookupFunc
-	state          *runState
-	laneState      *lane.State                // artifact graph for deploy attestations
+	lane           *lane.Lane
+	dag            *lane.DAG
 	stepAddrs      map[string]netip.Addr      // mediated step name -> loopback addr
 	networkRecords map[string]capsule.Records // step name -> records
 	laneRoot       *os.Root
 	rekor          *executor.RekorClient // optional Rekor transparency log client
+	caBundlePath   string                // lane-wide CA PEM path on host
 	laneDir        string
-	caBundlePath   string // lane-wide CA PEM path on host
+	resolverID     transport.ConnectionIdentity
 }
 
 func (rc *runContext) runStep(stepName string) error {
@@ -132,6 +133,7 @@ func (rc *runContext) executeDeploy(ctx context.Context, step *lane.Step, stepNa
 	d := &deploy.Deployer{
 		Engine:       rc.engine,
 		EngineID:     rc.engineID,
+		ResolverID:   &rc.resolverID,
 		Rekor:        rc.rekor,
 		DAG:          rc.dag,
 		ArtifactRefs: artifactRefs,

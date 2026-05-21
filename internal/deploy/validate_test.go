@@ -177,6 +177,29 @@ func runAttestationVector(t *testing.T, name string) {
 	}
 }
 
+func TestValidateAttestation_WithResolverRecord(t *testing.T) {
+	att := &deploy.Attestation{
+		LaneID:          "test-lane",
+		Timestamp:       clock.Reproducible(),
+		Target:          lane.DeployTarget{ID: "staging-1", Type: "kubernetes", Description: "staging"},
+		Artifacts:       map[string]deploy.SignedArtifact{},
+		PreStateDigest:  lane.MustParseDigest("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
+		PostStateDigest: lane.MustParseDigest("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
+		Resolver: &deploy.ResolverRecord{
+			Host:                  "1.1.1.1:853",
+			ServerCertFingerprint: "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+			TLSVersion:            "TLS 1.3",
+			CipherSuite:           "TLS_AES_128_GCM_SHA256",
+		},
+		Peers:      map[string][]lane.Peer{},
+		Provenance: []lane.ProvenanceRecord{},
+	}
+
+	if err := deploy.ValidateAttestation(att); err != nil {
+		t.Fatalf("attestation with resolver record rejected: %v", err)
+	}
+}
+
 func TestValidateAttestation_WithPeers(t *testing.T) {
 	att := &deploy.Attestation{
 		LaneID:    "test-lane",

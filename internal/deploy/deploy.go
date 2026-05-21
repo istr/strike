@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -24,6 +25,7 @@ import (
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/probe"
 	"github.com/istr/strike/internal/registry"
+	"github.com/istr/strike/internal/transport"
 )
 
 // Attestation is the signed record produced by every deploy step.
@@ -34,6 +36,7 @@ type Attestation struct {
 	PreStateDigest  lane.Digest               `json:"pre_state_digest"`
 	PostStateDigest lane.Digest               `json:"post_state_digest"`
 	Engine          *EngineRecord             `json:"engine,omitempty"`
+	Resolver        *ResolverRecord           `json:"resolver,omitempty"`
 	Rekor           *lane.RekorEntry          `json:"rekor,omitempty"`
 	Provenance      []lane.ProvenanceRecord   `json:"provenance"`
 	Peers           map[string][]lane.Peer    `json:"peers"`
@@ -88,6 +91,38 @@ type EngineRecord struct {
 	Version string `json:"version,omitempty"`
 }
 
+// ResolverRecord captures the DoT resolver's observed TLS identity,
+// recorded once per lane run from the pre-flight handshake. Per
+// ADR-030, the DoT resolver is the one controller-side connection
+// whose channel identity is part of the trust chain: DNS answers are
+// not content-addressable, so the resolver's identity is the trust
+// anchor for resolution. The declared anchor (resolver.trust) was
+// enforced at the handshake; this record stores what that verified
+// handshake observed, for a verifier to compare against the declared
+// anchor.
+type ResolverRecord struct {
+	// Host is the declared resolver endpoint (host:port) the probe
+	// connected to and verified.
+	Host string `json:"host"`
+
+	// ServerCertFingerprint is sha256:<hex> of the resolver's leaf
+	// certificate, observed at the handshake.
+	ServerCertFingerprint string `json:"server_cert_fingerprint"`
+
+	// TLSVersion is the negotiated TLS version, human-readable
+	// (e.g. "TLS 1.3").
+	TLSVersion string `json:"tls_version"`
+
+	// CipherSuite is the negotiated cipher suite, human-readable
+	// (e.g. "TLS_AES_128_GCM_SHA256").
+	CipherSuite string `json:"cipher_suite"`
+
+	// ServerName is the SNI sent during the handshake. Empty for
+	// IP-literal resolver hosts (RFC 6066 forbids IP-literal SNI),
+	// which is the common case for DoT endpoints like "1.1.1.1:853".
+	ServerName string `json:"server_name,omitempty"`
+}
+
 // HardenedRunOpts returns a RunOpts with the standard security profile.
 // Callers override specific fields (Image, Cmd, Network, Mounts) as needed.
 func HardenedRunOpts() container.RunOpts {
@@ -99,6 +134,7 @@ type Deployer struct {
 	Engine       container.Engine
 	ArtifactRefs map[string]string // pre-resolved: artifact name -> "step.output" state ref
 	EngineID     *container.EngineIdentity
+	ResolverID   *transport.ConnectionIdentity // DoT resolver identity from the pre-flight probe; nil if unavailable
 	Rekor        *executor.RekorClient
 	DAG          *lane.DAG
 	LaneID       string
@@ -158,6 +194,7 @@ func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.Sta
 		PreStateDigest:  preDigest,
 		PostStateDigest: postDigest,
 		Engine:          d.engineRecord(),
+		Resolver:        d.resolverRecord(),
 		Provenance:      provenance,
 		Peers:           d.DAG.CollectPeers(string(step.Name)),
 	}
@@ -578,4 +615,21 @@ func (d *Deployer) engineRecord() *EngineRecord {
 		rec.Version = d.EngineID.Runtime.Version
 	}
 	return rec
+}
+
+// resolverRecord builds the ResolverRecord from the captured DoT
+// resolver identity. Returns nil when no resolver identity was
+// captured (e.g. ResolverID is nil). Parallel to engineRecord.
+func (d *Deployer) resolverRecord() *ResolverRecord {
+	if d.ResolverID == nil {
+		return nil
+	}
+	id := d.ResolverID
+	return &ResolverRecord{
+		Host:                  id.PeerAddress,
+		ServerCertFingerprint: id.LeafFingerprint,
+		TLSVersion:            tls.VersionName(id.TLSVersion),
+		CipherSuite:           tls.CipherSuiteName(id.CipherSuite),
+		ServerName:            id.ServerName,
+	}
 }

@@ -215,6 +215,17 @@ identity at the moment of resolution -- are produced by the
 Phase-2 allowlist resolver and are separate from the pre-flight
 probe.
 
+### Probe identity capture
+
+Beginning with ADR-030, the probe also captures the resolver's
+observed TLS identity -- leaf certificate fingerprint, negotiated
+TLS version and cipher suite, and SNI -- and records it in the
+deploy attestation under `resolver`. DNS answers are not
+content-addressable, so the resolver's channel identity is part of
+the trust chain; the attestation records what the verified
+handshake observed, for a verifier to compare against the lane's
+declared resolver trust anchor.
+
 ## Future direction
 
 Two enhancements are architecturally agreed but not yet

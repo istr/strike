@@ -34,7 +34,7 @@ func TestProbeResolver_CloudflareDoT_INTEGRATION(t *testing.T) {
 			Fingerprint: fingerprint,
 		},
 	}
-	if err := transport.ProbeResolver(ctx, decl); err != nil {
+	if _, err := transport.ProbeResolver(ctx, decl); err != nil {
 		t.Fatalf("ProbeResolver: %v", err)
 	}
 }

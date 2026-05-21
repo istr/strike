@@ -450,3 +450,10 @@ executor.Run integrates Capsule + CABundlePath; cmdRun builds
 the lane-wide CA and pre-allocates mediated-step addresses; D25
 and D26 ratified).
 
+The DoT resolver's observed identity is now recorded in the deploy
+attestation as `resolver` (`#ResolverRecord`), captured once per
+lane run at the pre-flight probe handshake (ADR-030). This is the
+one controller-side connection record beyond the engine record;
+OCI registries are not recorded (content trust via digest pin).
+The per-peer container `connections` surface remains future work.
+

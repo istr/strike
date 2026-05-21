@@ -214,9 +214,11 @@ func cmdRun(ctx context.Context, path string, engine container.Engine) {
 	// Pre-flight resolver probe. lane.Parse is a pure offline
 	// check; resolver reachability is an environmental property
 	// and therefore lives here, at run start, not in Parse. See
-	// docs/ROADMAP-ADR-028.md D16 for the rationale.
+	// docs/ROADMAP-ADR-028.md D16 for the rationale. The probe also
+	// captures the resolver's observed TLS identity, recorded in the
+	// deploy attestation per ADR-030.
 	probeCtx, probeCancel := context.WithTimeout(ctx, 5*clock.Second)
-	probeErr := transport.ProbeResolver(probeCtx, p.Resolver)
+	resolverID, probeErr := transport.ProbeResolver(probeCtx, p.Resolver)
 	probeCancel()
 	if probeErr != nil {
 		log.Fatalf("error: %v", probeErr)
@@ -259,6 +261,7 @@ func cmdRun(ctx context.Context, path string, engine container.Engine) {
 		networkRecords: map[string]capsule.Records{},
 		laneRoot:       laneRoot,
 		rekor:          initRekor(),
+		resolverID:     resolverID,
 		laneDir:        laneDir,
 		caBundlePath:   caBundlePath,
 	}

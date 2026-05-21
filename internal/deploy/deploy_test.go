@@ -616,6 +616,99 @@ func TestEngineRecord_WithoutRuntime(t *testing.T) {
 	}
 }
 
+// resolverRecord tests.
+// --------------------------------------------------------------------------.
+
+func TestResolverRecord_NilResolverID(t *testing.T) {
+	eng := newTLSTestEngine(t, containerMock(t, "v1.0"))
+	state := lane.NewState()
+	if err := state.Register("build", "image", lane.Artifact{
+		Type:   "image",
+		Digest: lane.MustParseDigest("sha256:abc1230000000000000000000000000000000000000000000000000000000000"),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	step := &lane.Step{
+		Name: "deploy-nil-resolver",
+		Deploy: &lane.DeploySpec{
+			Method: lane.DeployCustom{
+				Type:  "custom",
+				Image: "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+			},
+			Artifacts: map[string]lane.ArtifactRef{
+				"image": {From: "build.image"},
+			},
+			Target:      lane.DeployTarget{ID: "test-1", Type: "registry", Description: "test"},
+			Attestation: lane.AttestationSpec{},
+		},
+	}
+
+	d := &deploy.Deployer{Engine: eng, ResolverID: nil, ArtifactRefs: map[string]string{"image": "build.image"}, LaneID: "test-lane"}
+	att, err := d.Execute(context.Background(), step, state)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if att.Resolver != nil {
+		t.Error("expected nil Resolver record when ResolverID is nil")
+	}
+}
+
+func TestResolverRecord_Populated(t *testing.T) {
+	rid := &transport.ConnectionIdentity{
+		LeafFingerprint: "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+		TLSVersion:      0x0304, // TLS 1.3
+		CipherSuite:     0x1301, // TLS_AES_128_GCM_SHA256
+		ServerName:      "",
+		PeerAddress:     "1.1.1.1:853",
+	}
+
+	eng := newTLSTestEngine(t, containerMock(t, "v1.0"))
+	state := lane.NewState()
+	if err := state.Register("build", "image", lane.Artifact{
+		Type:   "image",
+		Digest: lane.MustParseDigest("sha256:abc1230000000000000000000000000000000000000000000000000000000000"),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	step := &lane.Step{
+		Name: "deploy-resolver",
+		Deploy: &lane.DeploySpec{
+			Method: lane.DeployCustom{
+				Type:  "custom",
+				Image: "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+			},
+			Artifacts: map[string]lane.ArtifactRef{
+				"image": {From: "build.image"},
+			},
+			Target:      lane.DeployTarget{ID: "test-1", Type: "registry", Description: "test"},
+			Attestation: lane.AttestationSpec{},
+		},
+	}
+
+	d := &deploy.Deployer{Engine: eng, ResolverID: rid, ArtifactRefs: map[string]string{"image": "build.image"}, LaneID: "test-lane"}
+	att, err := d.Execute(context.Background(), step, state)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if att.Resolver == nil {
+		t.Fatal("expected non-nil Resolver record")
+	}
+	if att.Resolver.Host != "1.1.1.1:853" {
+		t.Errorf("Host = %q, want 1.1.1.1:853", att.Resolver.Host)
+	}
+	if att.Resolver.ServerCertFingerprint != rid.LeafFingerprint {
+		t.Errorf("ServerCertFingerprint = %q, want %q", att.Resolver.ServerCertFingerprint, rid.LeafFingerprint)
+	}
+	if att.Resolver.TLSVersion != "TLS 1.3" {
+		t.Errorf("TLSVersion = %q, want TLS 1.3", att.Resolver.TLSVersion)
+	}
+	if att.Resolver.CipherSuite == "" {
+		t.Error("expected non-empty CipherSuite")
+	}
+}
+
 // --------------------------------------------------------------------------.
 // Execute edge cases.
 // --------------------------------------------------------------------------.
