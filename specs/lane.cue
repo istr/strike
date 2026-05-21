@@ -132,22 +132,28 @@ package lane
 // Network peers -- declared trust contracts (ADR-005, ADR-007)
 // ---------------------------------------------------------------------------
 
-// Peer trust anchors are recorded for audit. Outbound traffic
-// enforcement is not uniform across peer types:
-//   - SSH peers: known_hosts and ssh-agent-proxy enforced.
-//   - HTTPS peers: kernel-level network switch only;
-//     per-peer enforcement (cert fingerprint, CA bundle) is
-//     not implemented at the connection layer.
-//   - OCI peers: digest-pinned references resolved through
-//     the engine and registry; declaration is part of the
-//     reproducibility chain.
-// Verifiers must read peer entries as declarations, not as
-// proofs of enforcement.
+// Peers are container-egress trust contracts: each declares a
+// destination the step container may reach during execution,
+// together with the trust anchor strike uses to verify that
+// destination's identity. Two protocols are supported:
+//   - HTTPS peers: mediated through strike's per-step TLS
+//     mediator (ADR-028); the container's egress is restricted to
+//     declared peers and their connections are attested.
+//   - SSH peers: known_hosts injection and ssh-agent-proxy
+//     forwarding (ADR-024, ADR-025).
 //
-// Peer is a discriminated union over the supported network protocols.
-// A non-empty peers list opts the step into network access; absent or
-// empty means --network=none. Peers flow into the deploy attestation.
-#Peer: (#HTTPSPeer | #SSHPeer | #OCIPeer) @go(-)
+// There is no OCI peer type. A step's own image is pulled
+// controller-side and verified against its pinned digest
+// (#ImageRef); the digest is the integrity anchor, so no peer
+// declaration is needed for it. A container that itself performs
+// registry operations (DinD) reaches the registry over HTTPS and
+// declares it as an HTTPS peer. See ADR-029.
+//
+// Peer is a discriminated union over the supported protocols. A
+// non-empty peers list opts the step into network access; absent
+// or empty means --network=none. Peers flow into the deploy
+// attestation.
+#Peer: (#HTTPSPeer | #SSHPeer) @go(-)
 
 // HTTPSPeer declares an HTTPS endpoint together with its server-trust anchor.
 #HTTPSPeer: {
@@ -177,16 +183,6 @@ package lane
 		"rsa-sha2-512" | "rsa-sha2-256" @go(KeyType)
 	// key is the base64-encoded public key body (no PEM armor).
 	key: =~"^[A-Za-z0-9+/]+={0,2}$" @go(Key)
-}
-
-// OCIPeer declares an OCI registry. Content trust is enforced via image
-// digest pinning (#ImageRef); the optional trust field covers the
-// registry's TLS connection.
-#OCIPeer: {
-	@go(OCIPeer)
-	type:     "oci" @go(Type)
-	registry: string & =~"^[a-z0-9.-]+(:[0-9]+)?$" @go(Registry)
-	trust?:   #TLSTrust @go(Trust,type="github.com/istr/strike/internal/transport".TLSTrust,optional=nillable)
 }
 
 // ---------------------------------------------------------------------------

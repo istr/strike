@@ -109,6 +109,6 @@ package deploy
 
 // #DeployTarget is re-exported from lane via artifact.cue.
 
-// Peer types (#Peer, #HTTPSPeer, #SSHPeer, #OCIPeer, #TLSTrust,
+// Peer types (#Peer, #HTTPSPeer, #SSHPeer, #TLSTrust,
 // #FingerprintTrust, #CABundleTrust, #KnownHostEntry) are re-exported
 // from lane via artifact.cue.

@@ -53,7 +53,6 @@ func TestParse_PeersReject(t *testing.T) {
 		{"invalid_https_ca_bundle_relative_path.yaml", "path"},
 		{"invalid_https_ca_bundle_dotdot.yaml", "path"},
 		{"invalid_missing_resolver.yaml", "resolver"},
-		{"invalid_oci_uppercase_registry.yaml", "registry"},
 		{"invalid_peer_unknown_type.yaml", "type"},
 		{"invalid_resolver_fqdn_host.yaml", "must be IP literal"},
 		{"invalid_ssh_invalid_key_type.yaml", "type"},

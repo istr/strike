@@ -25,6 +25,7 @@ import (
 	"github.com/istr/strike/internal/deploy"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/testutil"
+	"github.com/istr/strike/internal/transport"
 )
 
 const connTypeTLS = "tls"
@@ -272,7 +273,7 @@ func TestDeployerExecute(t *testing.T) {
 						Name:    "version",
 						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 						Command: []string{"cat", "/version"},
-						Peers:   []lane.Peer{lane.OCIPeer{Type: "oci", Registry: "localhost:5555"}},
+						Peers:   []lane.Peer{lane.HTTPSPeer{Type: "https", Host: "localhost:5555", Trust: transport.FingerprintTrust{Mode: "cert_fingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}},
 					}},
 				},
 				PostState: lane.StateCaptureSpec{
@@ -280,7 +281,7 @@ func TestDeployerExecute(t *testing.T) {
 						Name:    "version",
 						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 						Command: []string{"cat", "/version"},
-						Peers:   []lane.Peer{lane.OCIPeer{Type: "oci", Registry: "localhost:5555"}},
+						Peers:   []lane.Peer{lane.HTTPSPeer{Type: "https", Host: "localhost:5555", Trust: transport.FingerprintTrust{Mode: "cert_fingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}},
 					}},
 				},
 			},
@@ -413,7 +414,7 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 						Name:    "version",
 						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 						Command: []string{"cat", "/version"},
-						Peers:   []lane.Peer{lane.OCIPeer{Type: "oci", Registry: "localhost:5555"}},
+						Peers:   []lane.Peer{lane.HTTPSPeer{Type: "https", Host: "localhost:5555", Trust: transport.FingerprintTrust{Mode: "cert_fingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}},
 					}},
 				},
 				PostState: lane.StateCaptureSpec{
@@ -421,7 +422,7 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 						Name:    "version",
 						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 						Command: []string{"cat", "/version"},
-						Peers:   []lane.Peer{lane.OCIPeer{Type: "oci", Registry: "localhost:5555"}},
+						Peers:   []lane.Peer{lane.HTTPSPeer{Type: "https", Host: "localhost:5555", Trust: transport.FingerprintTrust{Mode: "cert_fingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}},
 					}},
 				},
 			},
@@ -882,7 +883,7 @@ func deployStep() *lane.Step {
 						Name:    "version",
 						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 						Command: []string{"cat", "/version"},
-						Peers:   []lane.Peer{lane.OCIPeer{Type: "oci", Registry: "localhost:5555"}},
+						Peers:   []lane.Peer{lane.HTTPSPeer{Type: "https", Host: "localhost:5555", Trust: transport.FingerprintTrust{Mode: "cert_fingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}},
 					}},
 				},
 				PostState: lane.StateCaptureSpec{
@@ -890,7 +891,7 @@ func deployStep() *lane.Step {
 						Name:    "version",
 						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 						Command: []string{"cat", "/version"},
-						Peers:   []lane.Peer{lane.OCIPeer{Type: "oci", Registry: "localhost:5555"}},
+						Peers:   []lane.Peer{lane.HTTPSPeer{Type: "https", Host: "localhost:5555", Trust: transport.FingerprintTrust{Mode: "cert_fingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}},
 					}},
 				},
 			},

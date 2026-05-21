@@ -10,6 +10,7 @@ import (
 	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/registry"
+	"github.com/istr/strike/internal/transport"
 )
 
 const testAlgoSHA256 = "sha256"
@@ -256,7 +257,7 @@ func TestGuardUnsignedImages_SignedOK(t *testing.T) {
 			},
 			{
 				Name: "publish", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Peers:  []lane.Peer{lane.OCIPeer{Type: "oci", Registry: "localhost:5555"}},
+				Peers:  []lane.Peer{lane.HTTPSPeer{Type: "https", Host: "localhost:5555", Trust: transport.FingerprintTrust{Mode: "cert_fingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}},
 				Inputs: []lane.InputRef{{From: "pack.img", Mount: "/in/img"}},
 			},
 		},
@@ -284,7 +285,7 @@ func TestGuardUnsignedImages_UnsignedError(t *testing.T) {
 			},
 			{
 				Name: "publish", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Peers:  []lane.Peer{lane.OCIPeer{Type: "oci", Registry: "localhost:5555"}},
+				Peers:  []lane.Peer{lane.HTTPSPeer{Type: "https", Host: "localhost:5555", Trust: transport.FingerprintTrust{Mode: "cert_fingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}},
 				Inputs: []lane.InputRef{{From: "pack.img", Mount: "/in/img"}},
 			},
 		},
@@ -316,7 +317,7 @@ func TestGuardUnsignedImages_NonImageInput(t *testing.T) {
 			},
 			{
 				Name: "run", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Peers:  []lane.Peer{lane.OCIPeer{Type: "oci", Registry: "localhost:5555"}},
+				Peers:  []lane.Peer{lane.HTTPSPeer{Type: "https", Host: "localhost:5555", Trust: transport.FingerprintTrust{Mode: "cert_fingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}},
 				Inputs: []lane.InputRef{{From: "compile.bin", Mount: "/in/bin"}},
 			},
 		},

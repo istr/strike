@@ -5,6 +5,12 @@
 Accepted. Updates the network-opt-in surface described in ADR-005;
 realises the "Peers are declared" principle from ADR-007.
 
+> **Amended by [ADR-029](ADR-029-peers-are-container-egress.md):**
+> the OCI peer variant introduced here has been withdrawn. Peers
+> are container-egress contracts (HTTPS, SSH); inbound image trust
+> is digest pinning, not a peer. The core decision -- network
+> interaction as a typed contract, not a boolean -- stands.
+
 ## Context
 
 ADR-005 set the per-step security profile and described the network

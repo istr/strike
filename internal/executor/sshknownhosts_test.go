@@ -29,7 +29,6 @@ func TestRenderKnownHosts_empty_peers(t *testing.T) {
 func TestRenderKnownHosts_non_ssh_only(t *testing.T) {
 	peers := []lane.Peer{
 		lane.HTTPSPeer{Type: "https", Host: transport.Host("example.com"), Trust: transport.FingerprintTrust{Mode: "cert_fingerprint", Fingerprint: "sha256:abc"}},
-		lane.OCIPeer{Type: "oci", Registry: "ghcr.io"},
 	}
 	if got := executor.RenderKnownHosts(peers); got != nil {
 		t.Fatalf("got %q, want nil", got)
@@ -122,7 +121,6 @@ func TestRenderKnownHosts_mixed_peer_list(t *testing.T) {
 			Type: "ssh", Host: transport.Host("git.example.com"),
 			KnownHosts: []lane.KnownHostEntry{{KeyType: "ssh-ed25519", Key: "MixedKey"}},
 		},
-		lane.OCIPeer{Type: "oci", Registry: "ghcr.io"},
 	}
 	want := "git.example.com ssh-ed25519 MixedKey\n"
 	got := executor.RenderKnownHosts(peers)

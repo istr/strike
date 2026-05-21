@@ -38,12 +38,6 @@ func unmarshalPeer(data []byte) (Peer, error) {
 			return nil, fmt.Errorf("decode ssh peer: %w", err)
 		}
 		return p, nil
-	case "oci":
-		var p OCIPeer
-		if err := json.Unmarshal(data, &p); err != nil {
-			return nil, fmt.Errorf("decode oci peer: %w", err)
-		}
-		return p, nil
 	case "":
 		return nil, fmt.Errorf("peer missing type discriminator")
 	default:
@@ -106,31 +100,6 @@ func (p *HTTPSPeer) UnmarshalJSON(data []byte) error {
 	t, err := unmarshalTLSTrust(aux.Trust)
 	if err != nil {
 		return fmt.Errorf("https peer: %w", err)
-	}
-	p.Trust = t
-	return nil
-}
-
-// UnmarshalJSON implements json.Unmarshaler for OCIPeer. The
-// trust field is optional; if absent, Trust remains nil.
-func (p *OCIPeer) UnmarshalJSON(data []byte) error {
-	type alias OCIPeer
-	aux := struct {
-		*alias
-		Trust json.RawMessage `json:"trust,omitempty"`
-	}{
-		alias: (*alias)(p),
-	}
-	if err := json.Unmarshal(data, &aux); err != nil {
-		return err
-	}
-	if len(aux.Trust) == 0 || string(aux.Trust) == jsonNull {
-		p.Trust = nil
-		return nil
-	}
-	t, err := unmarshalTLSTrust(aux.Trust)
-	if err != nil {
-		return fmt.Errorf("oci peer: %w", err)
 	}
 	p.Trust = t
 	return nil

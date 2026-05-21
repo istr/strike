@@ -37,7 +37,6 @@ func TestStartAgentProxy_NoSSHPeers(t *testing.T) {
 	dir := t.TempDir()
 	peers := []lane.Peer{
 		lane.HTTPSPeer{Type: "https", Host: transport.Host("example.com"), Trust: transport.FingerprintTrust{Mode: "cert_fingerprint", Fingerprint: "sha256:abc"}},
-		lane.OCIPeer{Type: "oci", Registry: "ghcr.io"},
 	}
 	mount, env, err := executor.StartAgentProxy(context.Background(), peers, dir)
 	if err != nil {

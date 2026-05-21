@@ -90,43 +90,9 @@ func TestUnmarshalPeer_Discriminator(t *testing.T) {
 			},
 		},
 		{
-			name: "oci minimal",
-			input: `{
-				"type": "oci",
-				"registry": "registry.example.com"
-			}`,
-			check: func(t *testing.T, p lane.Peer) {
-				o, ok := p.(lane.OCIPeer)
-				if !ok {
-					t.Fatalf("type = %T, want OCIPeer", p)
-				}
-				if o.Registry != "registry.example.com" {
-					t.Errorf("Registry = %q, want registry.example.com", o.Registry)
-				}
-				if o.Trust != nil {
-					t.Errorf("Trust = %v, want nil for minimal OCI peer", o.Trust)
-				}
-			},
-		},
-		{
-			name: "oci with trust",
-			input: `{
-				"type": "oci",
-				"registry": "registry.example.com",
-				"trust": {
-					"mode": "cert_fingerprint",
-					"fingerprint": "sha256:` + strings.Repeat("b", 64) + `"
-				}
-			}`,
-			check: func(t *testing.T, p lane.Peer) {
-				o, ok := p.(lane.OCIPeer)
-				if !ok {
-					t.Fatalf("type = %T, want OCIPeer", p)
-				}
-				if _, ok := o.Trust.(transport.FingerprintTrust); !ok {
-					t.Errorf("Trust type = %T, want FingerprintTrust", o.Trust)
-				}
-			},
+			name:    "oci rejected",
+			input:   `{"type": "oci", "registry": "registry.example.com"}`,
+			wantErr: "unknown peer type",
 		},
 		{
 			name:    "unknown type",
@@ -196,10 +162,6 @@ func TestStep_UnmarshalJSON_Peers(t *testing.T) {
 				"type": "ssh",
 				"host": "git.example",
 				"known_hosts": [{"key_type": "ssh-ed25519", "key": "AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl"}]
-			},
-			{
-				"type": "oci",
-				"registry": "registry.example.com"
 			}
 		]
 	}`
@@ -208,17 +170,14 @@ func TestStep_UnmarshalJSON_Peers(t *testing.T) {
 	if err := json.Unmarshal([]byte(input), &s); err != nil {
 		t.Fatalf("Step UnmarshalJSON: %v", err)
 	}
-	if len(s.Peers) != 3 {
-		t.Fatalf("Peers len = %d, want 3", len(s.Peers))
+	if len(s.Peers) != 2 {
+		t.Fatalf("Peers len = %d, want 2", len(s.Peers))
 	}
 	if _, ok := s.Peers[0].(lane.HTTPSPeer); !ok {
 		t.Errorf("Peers[0] type = %T, want HTTPSPeer", s.Peers[0])
 	}
 	if _, ok := s.Peers[1].(lane.SSHPeer); !ok {
 		t.Errorf("Peers[1] type = %T, want SSHPeer", s.Peers[1])
-	}
-	if _, ok := s.Peers[2].(lane.OCIPeer); !ok {
-		t.Errorf("Peers[2] type = %T, want OCIPeer", s.Peers[2])
 	}
 }
 
@@ -235,7 +194,7 @@ func TestStep_RoundTrip(t *testing.T) {
 		"outputs": [],
 		"secrets": [],
 		"peers": [
-			{"type": "oci", "registry": "registry.example.com"}
+			{"type": "https", "host": "registry.example.com", "trust": {"mode": "cert_fingerprint", "fingerprint": "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}
 		]
 	}`)
 
@@ -256,7 +215,32 @@ func TestStep_RoundTrip(t *testing.T) {
 	if len(s2.Peers) != 1 {
 		t.Fatalf("round-tripped Peers len = %d, want 1", len(s2.Peers))
 	}
-	if _, ok := s2.Peers[0].(lane.OCIPeer); !ok {
-		t.Errorf("round-tripped Peers[0] type = %T, want OCIPeer", s2.Peers[0])
+	if _, ok := s2.Peers[0].(lane.HTTPSPeer); !ok {
+		t.Errorf("round-tripped Peers[0] type = %T, want HTTPSPeer", s2.Peers[0])
+	}
+}
+
+// TestUnmarshalPeer_OCIRejected confirms the oci peer type was
+// removed: a step declaring it fails to parse. See ADR-029.
+func TestUnmarshalPeer_OCIRejected(t *testing.T) {
+	raw := []byte(`{
+		"name": "fetch",
+		"image": "alpine:3.20",
+		"args": [],
+		"env": {},
+		"inputs": [],
+		"outputs": [],
+		"secrets": [],
+		"peers": [
+			{"type": "oci", "registry": "docker.io"}
+		]
+	}`)
+	var s lane.Step
+	err := json.Unmarshal(raw, &s)
+	if err == nil {
+		t.Fatal("expected error for oci peer type, got nil")
+	}
+	if !strings.Contains(err.Error(), "oci") {
+		t.Errorf("error %q does not mention the rejected type", err)
 	}
 }
