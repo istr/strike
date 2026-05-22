@@ -61,7 +61,8 @@ deleted.
   any strike code.
 - **D12 (TLS version).** TLS 1.3 minimum. All TLS connections (the
   transport primitive, the DoT resolver, the TLS mediator's
-  container-side and upstream sides) require TLS 1.3.
+  container-side and upstream sides) require TLS 1.3. Superseded in
+  part by ADR-032: external-peer hops now floor at TLS 1.2.
 - **D13 (identity capture).** Every TLS connection captures peer
   identity (cert chain, fingerprint, TLS version, cipher suite)
   for attestation. The capture is part of the transport primitive's
