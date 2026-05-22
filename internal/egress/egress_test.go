@@ -1,7 +1,6 @@
 package egress_test
 
 import (
-	"net/netip"
 	"reflect"
 	"testing"
 
@@ -9,35 +8,32 @@ import (
 )
 
 func TestBuildPastaArgs_HappyPath(t *testing.T) {
-	addr := netip.MustParseAddr("127.0.0.40")
-	got := egress.BuildPastaArgs(addr, 53, 5353, 443, 8443)
+	got := egress.BuildPastaArgs(53, 5353, 443, 5354)
 	want := []string{
 		"--splice-only",
-		"-T", "127.0.0.40/53:5353",
-		"-T", "127.0.0.40/443:8443",
-		"-U", "127.0.0.40/53:5353",
+		"-T", "53:5353",
+		"-T", "443:5354",
+		"-U", "53:5353",
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("BuildPastaArgs() = %#v, want %#v", got, want)
 	}
 }
 
-func TestBuildPastaArgs_DistinctPerStepAddresses(t *testing.T) {
-	// Two parallel steps with distinct loopback allocations
-	// produce distinct argument lists. Verifies that the
-	// function's output discriminates step-to-step.
-	args1 := egress.BuildPastaArgs(netip.MustParseAddr("127.0.0.40"), 53, 5353, 443, 8443)
-	args2 := egress.BuildPastaArgs(netip.MustParseAddr("127.0.0.41"), 53, 5353, 443, 8443)
+func TestBuildPastaArgs_DistinctPerStepPorts(t *testing.T) {
+	// Two steps with distinct host-port pairs produce distinct
+	// argument lists. Verifies that the function's output
+	// discriminates step-to-step.
+	args1 := egress.BuildPastaArgs(53, 5353, 443, 5354)
+	args2 := egress.BuildPastaArgs(53, 5355, 443, 5356)
 	if reflect.DeepEqual(args1, args2) {
-		t.Error("expected distinct argument lists for distinct addresses, got identical")
+		t.Error("expected distinct argument lists for distinct host ports, got identical")
 	}
 }
 
 func TestBuildPastaArgs_Deterministic(t *testing.T) {
-	// Same inputs produce byte-identical outputs across calls.
-	addr := netip.MustParseAddr("127.0.0.40")
-	a := egress.BuildPastaArgs(addr, 53, 5353, 443, 8443)
-	b := egress.BuildPastaArgs(addr, 53, 5353, 443, 8443)
+	a := egress.BuildPastaArgs(53, 5353, 443, 5354)
+	b := egress.BuildPastaArgs(53, 5353, 443, 5354)
 	if !reflect.DeepEqual(a, b) {
 		t.Errorf("non-deterministic output: %#v vs %#v", a, b)
 	}
@@ -45,41 +41,29 @@ func TestBuildPastaArgs_Deterministic(t *testing.T) {
 
 func TestBuildPastaArgs_HighPort(t *testing.T) {
 	// The port formatter must handle the full uint16 range.
-	addr := netip.MustParseAddr("127.0.0.40")
-	got := egress.BuildPastaArgs(addr, 65535, 65535, 8443, 8443)
+	got := egress.BuildPastaArgs(65535, 65535, 443, 65534)
 	want := []string{
 		"--splice-only",
-		"-T", "127.0.0.40/65535:65535",
-		"-T", "127.0.0.40/8443:8443",
-		"-U", "127.0.0.40/65535:65535",
+		"-T", "65535:65535",
+		"-T", "443:65534",
+		"-U", "65535:65535",
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("BuildPastaArgs() = %#v, want %#v", got, want)
 	}
 }
 
-func TestBuildPastaArgs_PanicsOnIPv6(t *testing.T) {
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("expected panic on IPv6 address, got none")
-		}
-	}()
-	_ = egress.BuildPastaArgs(netip.MustParseAddr("::1"), 53, 5353, 443, 8443)
-}
-
 func TestBuildPastaArgs_StructuralInvariants(t *testing.T) {
 	// The argument list always starts with --splice-only and
-	// contains exactly two -T entries and one -U entry.
-	addr := netip.MustParseAddr("127.0.0.40")
-	args := egress.BuildPastaArgs(addr, 53, 5353, 443, 8443)
+	// contains exactly two -T entries and one -U entry, no address.
+	args := egress.BuildPastaArgs(53, 5353, 443, 5354)
 	if len(args) != 7 {
 		t.Fatalf("expected exactly 7 arguments, got %d: %#v", len(args), args)
 	}
 	if args[0] != "--splice-only" {
 		t.Errorf("args[0] = %q, want %q", args[0], "--splice-only")
 	}
-	tCount := 0
-	uCount := 0
+	tCount, uCount := 0, 0
 	for _, a := range args {
 		if a == "-T" {
 			tCount++

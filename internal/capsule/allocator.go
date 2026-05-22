@@ -2,44 +2,55 @@ package capsule
 
 import (
 	"fmt"
-	"net/netip"
 )
 
-// Synthetic loopback range. The whole 127.0.0.0/8 is loopback on
-// Linux; 127.64.0.0/16 sits clear of the collision-prone bottom
-// (127.0.0.0/24 carries 127.0.0.1 localhost, 127.0.0.53
-// systemd-resolved, 127.0.0.11 docker DNS) and clear of the "127.1"
-// shorthand. The second octet 64 is arbitrary-but-fixed. The /16
-// gives 65535 usable addresses (index 0 maps to 127.64.0.1). The
-// address is a routing identifier only and carries no semantics.
+// Host-port allocation. Each mediated step consumes two contiguous
+// unprivileged host ports: the resolver at base+2i and the mediator at
+// base+2i+1, assigned in lane-file order. strike runs rootless and
+// cannot bind <1024; base sits well above that. The container always
+// sees 127.0.0.1:53 (DNS) and 127.0.0.1:443 (HTTPS); pasta -T/-U
+// forward those to the step's host ports. Per-step distinctness lives
+// in the host port because pasta -T/-U accept no listening address
+// (only -t/-u do); the loopback address is shared across steps and
+// never collides, since each step has its own netns.
 const (
-	loopbackOctet2 = 64
-	loopbackCap    = 1<<16 - 1
+	hostPortBase uint16 = 5353
+	// hostPortCap is the maximum mediated-step count: two ports per
+	// step, staying within the uint16 range above hostPortBase.
+	hostPortCap = (65535 - int(hostPortBase)) / 2
 )
 
-// AllocateAddresses maps each step name to a distinct IPv4
-// loopback address, assigned 127.0.0.40, 127.0.0.41, ... in input
-// order. The function is pure: the same input slice always
-// produces the same output map, on every run and machine.
+// HostPorts is the per-step pair of host-side bind ports.
+type HostPorts struct {
+	Resolver uint16
+	Mediator uint16
+}
+
+// AllocatePorts maps each step name to a distinct HostPorts pair,
+// assigned base+2i / base+2i+1 in input order. The function is pure:
+// the same input slice always produces the same output map, on every
+// run and machine.
 //
-// Called once per lane run from cmdRun, after dispatch
-// classification has identified the mediated step names (in
-// lane-file order). The result is stored on runContext and read
-// when each step executes.
+// Called once per lane run from cmdRun, after dispatch classification
+// has identified the mediated step names (in lane-file order). The
+// result is stored on runContext and read when each step executes.
 //
 // Returns an error if len(stepNames) exceeds the available range.
-// Duplicate names in the input collapse to one map entry; callers
-// pass distinct step names (lane step names are unique by schema).
-func AllocateAddresses(stepNames []string) (map[string]netip.Addr, error) {
-	if len(stepNames) > loopbackCap {
+// Duplicate names collapse to one map entry; callers pass distinct
+// step names (lane step names are unique by schema).
+func AllocatePorts(stepNames []string) (map[string]HostPorts, error) {
+	if len(stepNames) > hostPortCap {
 		return nil, fmt.Errorf(
-			"capsule: %d mediated steps exceeds 127.64.0.0/16 capacity %d",
-			len(stepNames), loopbackCap)
+			"capsule: %d mediated steps exceeds host-port capacity %d",
+			len(stepNames), hostPortCap)
 	}
-	out := make(map[string]netip.Addr, len(stepNames))
+	out := make(map[string]HostPorts, len(stepNames))
 	for i, name := range stepNames {
-		n := uint16(i + 1) // index 0 -> 127.64.0.1, avoiding the .0.0 base
-		out[name] = netip.AddrFrom4([4]byte{127, loopbackOctet2, byte(n >> 8), byte(n)})
+		n := uint16(i)
+		out[name] = HostPorts{
+			Resolver: hostPortBase + 2*n,
+			Mediator: hostPortBase + 2*n + 1,
+		}
 	}
 	return out, nil
 }

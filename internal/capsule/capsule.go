@@ -29,20 +29,19 @@ import (
 
 const (
 	// resolverPort and mediatorPort are the ports the container
-	// sees: standard DNS (53) and HTTPS (443). pasta remaps them to
-	// the host-side bind ports below.
+	// sees: standard DNS (53) and HTTPS (443). pasta's -T/-U forwards
+	// remap them to the per-step unprivileged host ports from
+	// AllocatePorts.
 	resolverPort uint16 = 53
 	mediatorPort uint16 = 443
-
-	// resolverHostPort and mediatorHostPort are the unprivileged
-	// ports strike actually binds host-side. strike runs rootless
-	// without CAP_NET_BIND_SERVICE and cannot bind <1024; pasta's
-	// -T/-U forwards remap the container-visible 53/443 to these.
-	// Each step binds its own stepAddr, so a fixed host port is
-	// unique per step. See instruction 39b.
-	resolverHostPort uint16 = 5353
-	mediatorHostPort uint16 = 8443
 )
+
+// loopbackV4 is the address every step's resolver and mediator listen
+// on and the container reaches. pasta -T/-U forward the container's
+// 53/443 to the step's host ports, so per-step distinctness lives in
+// the port, not the address. Each step has its own netns, so the
+// shared loopback never collides.
+var loopbackV4 = netip.AddrFrom4([4]byte{127, 0, 0, 1})
 
 // UpstreamLookupFunc resolves a name to addresses via the lane's
 // declared DoT resolver. Identical signature to
@@ -70,7 +69,6 @@ var ErrCapsuleClosed = errors.New("capsule: closed")
 // internal mutex. The underlying resolver and mediator handle
 // concurrent queries/connections themselves.
 type NetworkCapsule struct {
-	stepAddr    netip.Addr
 	resolverUDP net.PacketConn
 	mediatorTCP net.Listener
 	resolverTCP net.Listener
@@ -81,6 +79,7 @@ type NetworkCapsule struct {
 	serveCancel context.CancelFunc
 	stepName    string
 	pastaArgs   []string
+	hostPorts   HostPorts
 	state       capsuleState
 	mu          sync.Mutex
 }
@@ -96,9 +95,10 @@ const (
 // New constructs a NetworkCapsule for one step.
 //
 //   - stepName identifies the step in records and logs.
-//   - stepAddr is the loopback address allocated for this step.
-//     Resolver listens on stepAddr:53 (UDP+TCP); mediator on
-//     stepAddr:443 (TCP).
+//   - hostPorts is the per-step host-port pair allocated by
+//     AllocatePorts. The resolver binds 127.0.0.1:hostPorts.Resolver,
+//     the mediator 127.0.0.1:hostPorts.Mediator; the container
+//     reaches both via pasta on 127.0.0.1:53 and :443.
 //   - peers enumerates the HTTPS peers the step may reach. Their
 //     hosts become the resolver's allowlist; their full trust
 //     configs become the mediator's peer map.
@@ -109,16 +109,13 @@ const (
 //     Must be non-nil and concurrency-safe.
 func New(
 	stepName string,
-	stepAddr netip.Addr,
+	hostPorts HostPorts,
 	peers []mediator.PeerTrust,
 	ca *transport.EphemeralCA,
 	upstreamLook UpstreamLookupFunc,
 ) (*NetworkCapsule, error) {
 	if stepName == "" {
 		return nil, errors.New("capsule: stepName must not be empty")
-	}
-	if !stepAddr.Is4() {
-		return nil, fmt.Errorf("capsule: stepAddr must be IPv4, got %s", stepAddr)
 	}
 	if ca == nil {
 		return nil, errors.New("capsule: ca must not be nil")
@@ -132,7 +129,7 @@ func New(
 		allowlist[i] = p.Host
 	}
 
-	res, err := resolver.New(stepName, allowlist, stepAddr)
+	res, err := resolver.New(stepName, allowlist, loopbackV4)
 	if err != nil {
 		return nil, fmt.Errorf("capsule: resolver: %w", err)
 	}
@@ -143,11 +140,11 @@ func New(
 
 	return &NetworkCapsule{
 		stepName:  stepName,
-		stepAddr:  stepAddr,
+		hostPorts: hostPorts,
 		resolver:  res,
 		mediator:  med,
 		ca:        ca,
-		pastaArgs: egress.BuildPastaArgs(stepAddr, resolverPort, resolverHostPort, mediatorPort, mediatorHostPort),
+		pastaArgs: egress.BuildPastaArgs(resolverPort, hostPorts.Resolver, mediatorPort, hostPorts.Mediator),
 		state:     stateNew,
 	}, nil
 }
@@ -162,7 +159,7 @@ func (c *NetworkCapsule) PastaArgs() []string {
 // ResolverAddr returns the resolver's listening address, for use
 // as the container's --dns flag.
 func (c *NetworkCapsule) ResolverAddr() netip.AddrPort {
-	return netip.AddrPortFrom(c.stepAddr, resolverPort)
+	return netip.AddrPortFrom(loopbackV4, resolverPort)
 }
 
 // Start binds the resolver and mediator listeners and launches
@@ -180,14 +177,15 @@ func (c *NetworkCapsule) Start(ctx context.Context) error {
 		return errors.New("capsule: already started")
 	}
 
-	resolverAddrStr := netip.AddrPortFrom(c.stepAddr, resolverHostPort).String()
-	mediatorAddrStr := netip.AddrPortFrom(c.stepAddr, mediatorHostPort).String()
+	resolverAddrStr := netip.AddrPortFrom(loopbackV4, c.hostPorts.Resolver).String()
+	mediatorAddrStr := netip.AddrPortFrom(loopbackV4, c.hostPorts.Mediator).String()
 
-	// SO_REUSEADDR on the UDP socket allows binding a specific
-	// loopback address even when another process (e.g. avahi-daemon)
-	// holds a wildcard bind on the same port. Safe because our bind
-	// is address-specific (stepAddr) and the packets are routed by
-	// destination address.
+	// SO_REUSEADDR on the UDP socket allows binding 127.0.0.1 on the
+	// resolver port even when another process (e.g. avahi-daemon on
+	// mDNS port 5353, which the first mediated step's resolver port
+	// coincides with) holds a wildcard bind on that port. Safe because
+	// our bind is to a specific address (127.0.0.1) and a distinct
+	// per-step port.
 	reuseLC := net.ListenConfig{
 		Control: func(_, _ string, c syscall.RawConn) error {
 			var opErr error

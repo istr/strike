@@ -1,112 +1,48 @@
 package capsule_test
 
 import (
-	"fmt"
-	"net/netip"
+	"reflect"
 	"testing"
 
 	"github.com/istr/strike/internal/capsule"
 )
 
-func TestAllocateAddresses_StartsAt127_64_0_1(t *testing.T) {
-	m, err := capsule.AllocateAddresses([]string{"first"})
+func TestAllocatePorts_Empty(t *testing.T) {
+	ports, err := capsule.AllocatePorts(nil)
 	if err != nil {
-		t.Fatalf("AllocateAddresses: %v", err)
+		t.Fatalf("AllocatePorts(nil): %v", err)
 	}
-	want := netip.MustParseAddr("127.64.0.1")
-	if got := m["first"]; got != want {
-		t.Errorf("first = %s, want %s", got, want)
+	if len(ports) != 0 {
+		t.Errorf("expected empty map, got %d entries", len(ports))
 	}
 }
 
-func TestAllocateAddresses_SequentialInInputOrder(t *testing.T) {
-	names := []string{"a", "b", "c"}
-	m, err := capsule.AllocateAddresses(names)
+func TestAllocatePorts_Contiguous(t *testing.T) {
+	ports, err := capsule.AllocatePorts([]string{"a", "b", "c"})
 	if err != nil {
-		t.Fatalf("AllocateAddresses: %v", err)
+		t.Fatalf("AllocatePorts: %v", err)
 	}
-	wants := map[string]string{
-		"a": "127.64.0.1",
-		"b": "127.64.0.2",
-		"c": "127.64.0.3",
+	want := map[string]capsule.HostPorts{
+		"a": {Resolver: 5353, Mediator: 5354},
+		"b": {Resolver: 5355, Mediator: 5356},
+		"c": {Resolver: 5357, Mediator: 5358},
 	}
-	for name, want := range wants {
-		if got := m[name].String(); got != want {
-			t.Errorf("%s = %s, want %s", name, got, want)
-		}
+	if !reflect.DeepEqual(ports, want) {
+		t.Errorf("AllocatePorts = %#v, want %#v", ports, want)
 	}
 }
 
-func TestAllocateAddresses_Deterministic(t *testing.T) {
-	names := []string{"build", "test", "deploy"}
-	a, err := capsule.AllocateAddresses(names)
+func TestAllocatePorts_Deterministic(t *testing.T) {
+	in := []string{"x", "y", "z"}
+	a, err := capsule.AllocatePorts(in)
 	if err != nil {
-		t.Fatalf("AllocateAddresses: %v", err)
+		t.Fatalf("AllocatePorts: %v", err)
 	}
-	b, err := capsule.AllocateAddresses(names)
+	b, err := capsule.AllocatePorts(in)
 	if err != nil {
-		t.Fatalf("AllocateAddresses: %v", err)
+		t.Fatalf("AllocatePorts: %v", err)
 	}
-	for name := range a {
-		if a[name] != b[name] {
-			t.Errorf("non-deterministic for %s: %s vs %s", name, a[name], b[name])
-		}
-	}
-}
-
-func TestAllocateAddresses_AllDistinct(t *testing.T) {
-	names := make([]string, 100)
-	for i := range names {
-		names[i] = fmt.Sprintf("step-%03d", i)
-	}
-	m, err := capsule.AllocateAddresses(names)
-	if err != nil {
-		t.Fatalf("AllocateAddresses: %v", err)
-	}
-	seen := make(map[netip.Addr]struct{}, len(m))
-	for _, addr := range m {
-		if _, dup := seen[addr]; dup {
-			t.Errorf("duplicate address %s", addr)
-		}
-		seen[addr] = struct{}{}
-	}
-	if len(seen) != 100 {
-		t.Errorf("expected 100 distinct addresses, got %d", len(seen))
-	}
-}
-
-func TestAllocateAddresses_Exhaustion(t *testing.T) {
-	names := make([]string, 65536) // loopbackCap (65535) + 1
-	for i := range names {
-		names[i] = fmt.Sprintf("step-%05d", i)
-	}
-	if _, err := capsule.AllocateAddresses(names); err == nil {
-		t.Error("expected exhaustion error, got nil")
-	}
-}
-
-func TestAllocateAddresses_Empty(t *testing.T) {
-	m, err := capsule.AllocateAddresses(nil)
-	if err != nil {
-		t.Fatalf("AllocateAddresses(nil): %v", err)
-	}
-	if len(m) != 0 {
-		t.Errorf("expected empty map, got %d entries", len(m))
-	}
-}
-
-func TestAllocateAddresses_CrossesOctetBoundary(t *testing.T) {
-	names := make([]string, 256)
-	for i := range names {
-		names[i] = fmt.Sprintf("step-%03d", i)
-	}
-	m, err := capsule.AllocateAddresses(names)
-	if err != nil {
-		t.Fatalf("AllocateAddresses: %v", err)
-	}
-	// index 255 -> n = 256 -> 127.64.1.0
-	want := netip.MustParseAddr("127.64.1.0")
-	if got := m["step-255"]; got != want {
-		t.Errorf("step-255 = %s, want %s", got, want)
+	if !reflect.DeepEqual(a, b) {
+		t.Errorf("non-deterministic: %#v vs %#v", a, b)
 	}
 }

@@ -240,7 +240,7 @@ func cmdRun(ctx context.Context, path string, engine container.Engine) {
 	ca, caBundlePath, caCleanup := initLaneCA(p)
 	defer caCleanup()
 
-	stepAddrs := allocateMediatedAddrs(p)
+	stepPorts := allocateMediatedPorts(p)
 
 	upstreamLook := capsule.UpstreamLookupFunc(func(ctx context.Context, name string) ([]netip.Addr, error) {
 		return transport.LookupHost(ctx, p.Resolver, name)
@@ -257,7 +257,7 @@ func cmdRun(ctx context.Context, path string, engine container.Engine) {
 		upstreamLook:   upstreamLook,
 		state:          newRunState(),
 		laneState:      lane.NewState(),
-		stepAddrs:      stepAddrs,
+		stepPorts:      stepPorts,
 		networkRecords: map[string]capsule.Records{},
 		laneRoot:       laneRoot,
 		rekor:          initRekor(),
@@ -306,20 +306,20 @@ func initLaneCA(p *lane.Lane) (*transport.EphemeralCA, string, func()) {
 	return ca, caBundlePath, cleanup
 }
 
-// allocateMediatedAddrs pre-allocates loopback addresses for all
+// allocateMediatedPorts pre-allocates host-port pairs for all
 // mediated steps in lane-file order.
-func allocateMediatedAddrs(p *lane.Lane) map[string]netip.Addr {
+func allocateMediatedPorts(p *lane.Lane) map[string]capsule.HostPorts {
 	var names []string
 	for i := range p.Steps {
 		if mediates(p.Steps[i].Peers) {
 			names = append(names, string(p.Steps[i].Name))
 		}
 	}
-	addrs, err := capsule.AllocateAddresses(names)
+	ports, err := capsule.AllocatePorts(names)
 	if err != nil {
 		log.Fatalf("error: %v", err)
 	}
-	return addrs
+	return ports
 }
 
 func cmdCompare(file1, file2, output string) {

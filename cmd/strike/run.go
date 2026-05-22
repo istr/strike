@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"net/netip"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -54,8 +53,8 @@ type runContext struct {
 	upstreamLook   capsule.UpstreamLookupFunc
 	lane           *lane.Lane
 	dag            *lane.DAG
-	stepAddrs      map[string]netip.Addr      // mediated step name -> loopback addr
-	networkRecords map[string]capsule.Records // step name -> records
+	stepPorts      map[string]capsule.HostPorts // mediated step name -> host ports
+	networkRecords map[string]capsule.Records   // step name -> records
 	laneRoot       *os.Root
 	rekor          *executor.RekorClient // optional Rekor transparency log client
 	caBundlePath   string                // lane-wide CA PEM path on host
@@ -696,11 +695,11 @@ func (rc *runContext) maybeStartCapsule(ctx context.Context, step *lane.Step, st
 		return nil, nil
 	}
 
-	stepAddr, ok := rc.stepAddrs[stepName]
+	ports, ok := rc.stepPorts[stepName]
 	if !ok {
 		// Should not happen: mediates(step.Peers) was true at
 		// pre-allocation. Defensive.
-		return nil, fmt.Errorf("%s: no pre-allocated loopback address", safeName)
+		return nil, fmt.Errorf("%s: no pre-allocated host ports", safeName)
 	}
 
 	httpsPeers := httpsPeersOf(step.Peers)
@@ -709,14 +708,14 @@ func (rc *runContext) maybeStartCapsule(ctx context.Context, step *lane.Step, st
 		peerTrusts[i] = mediator.PeerTrust{Host: p.Host, Trust: p.Trust}
 	}
 
-	caps, capsErr := capsule.New(stepName, stepAddr, peerTrusts, rc.ca, rc.upstreamLook)
+	caps, capsErr := capsule.New(stepName, ports, peerTrusts, rc.ca, rc.upstreamLook)
 	if capsErr != nil {
 		return nil, fmt.Errorf("%s: construct capsule: %w", safeName, capsErr)
 	}
 	if startErr := caps.Start(ctx); startErr != nil {
 		return nil, fmt.Errorf("%s: start capsule: %w", safeName, startErr)
 	}
-	log.Printf("CAPSULE %s @ %s (peers=%d)", safeName, stepAddr, len(httpsPeers))
+	log.Printf("CAPSULE %s @ 127.0.0.1 r:%d m:%d (peers=%d)", safeName, ports.Resolver, ports.Mediator, len(httpsPeers))
 	return caps, nil
 }
 

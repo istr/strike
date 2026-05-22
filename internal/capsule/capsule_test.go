@@ -45,24 +45,21 @@ func testCA(t *testing.T) *transport.EphemeralCA {
 	return ca
 }
 
+// testPorts returns a HostPorts suitable for tests that do not call Start.
+func testPorts() capsule.HostPorts {
+	return capsule.HostPorts{Resolver: 5353, Mediator: 5354}
+}
+
 func TestNew_RejectsEmptyStepName(t *testing.T) {
 	ca := testCA(t)
-	_, err := capsule.New("", netip.MustParseAddr("127.64.0.1"), nil, ca, testUpstream())
+	_, err := capsule.New("", testPorts(), nil, ca, testUpstream())
 	if err == nil {
 		t.Error("expected error for empty stepName, got nil")
 	}
 }
 
-func TestNew_RejectsIPv6Address(t *testing.T) {
-	ca := testCA(t)
-	_, err := capsule.New("step", netip.MustParseAddr("::1"), nil, ca, testUpstream())
-	if err == nil {
-		t.Error("expected error for IPv6 address, got nil")
-	}
-}
-
 func TestNew_RejectsNilCA(t *testing.T) {
-	_, err := capsule.New("step", netip.MustParseAddr("127.64.0.1"), nil, nil, testUpstream())
+	_, err := capsule.New("step", testPorts(), nil, nil, testUpstream())
 	if err == nil {
 		t.Error("expected error for nil CA, got nil")
 	}
@@ -70,7 +67,7 @@ func TestNew_RejectsNilCA(t *testing.T) {
 
 func TestNew_RejectsNilUpstreamLookup(t *testing.T) {
 	ca := testCA(t)
-	_, err := capsule.New("step", netip.MustParseAddr("127.64.0.1"), nil, ca, nil)
+	_, err := capsule.New("step", testPorts(), nil, ca, nil)
 	if err == nil {
 		t.Error("expected error for nil upstreamLook, got nil")
 	}
@@ -78,7 +75,7 @@ func TestNew_RejectsNilUpstreamLookup(t *testing.T) {
 
 func TestNew_EmptyPeersIsValid(t *testing.T) {
 	ca := testCA(t)
-	c, err := capsule.New("step", netip.MustParseAddr("127.64.0.1"), nil, ca, testUpstream())
+	c, err := capsule.New("step", testPorts(), nil, ca, testUpstream())
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -90,7 +87,7 @@ func TestNew_EmptyPeersIsValid(t *testing.T) {
 
 func TestPastaArgs_ContainsSpliceOnly(t *testing.T) {
 	ca := testCA(t)
-	c, err := capsule.New("step", netip.MustParseAddr("127.64.0.1"), nil, ca, testUpstream())
+	c, err := capsule.New("step", testPorts(), nil, ca, testUpstream())
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -117,7 +114,7 @@ func TestPastaArgs_ContainsSpliceOnly(t *testing.T) {
 
 func TestPastaArgs_IsSnapshot(t *testing.T) {
 	ca := testCA(t)
-	c, err := capsule.New("step", netip.MustParseAddr("127.64.0.1"), nil, ca, testUpstream())
+	c, err := capsule.New("step", testPorts(), nil, ca, testUpstream())
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -131,7 +128,7 @@ func TestPastaArgs_IsSnapshot(t *testing.T) {
 
 func TestResolverAddr_UsesPort53(t *testing.T) {
 	ca := testCA(t)
-	c, err := capsule.New("step", netip.MustParseAddr("127.64.0.1"), nil, ca, testUpstream())
+	c, err := capsule.New("step", testPorts(), nil, ca, testUpstream())
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -139,15 +136,15 @@ func TestResolverAddr_UsesPort53(t *testing.T) {
 	if got.Port() != 53 {
 		t.Errorf("ResolverAddr port = %d, want 53", got.Port())
 	}
-	if got.Addr() != netip.MustParseAddr("127.64.0.1") {
-		t.Errorf("ResolverAddr addr = %s, want 127.64.0.1", got.Addr())
+	if got.Addr() != netip.MustParseAddr("127.0.0.1") {
+		t.Errorf("ResolverAddr addr = %s, want 127.0.0.1", got.Addr())
 	}
 }
 
 func TestStart_BindsListeners(t *testing.T) {
 	ca := testCA(t)
-	addr := netip.MustParseAddr("127.64.0.1")
-	c, err := capsule.New("step", addr, nil, ca, testUpstream())
+	hp := capsule.HostPorts{Resolver: 15353, Mediator: 15354}
+	c, err := capsule.New("step", hp, nil, ca, testUpstream())
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -166,24 +163,24 @@ func TestStart_BindsListeners(t *testing.T) {
 
 	// Verify the addresses are in use (a duplicate bind gets EADDRINUSE).
 	lc := net.ListenConfig{}
-	_, err = lc.ListenPacket(ctx, "udp", "127.64.0.1:5353")
+	_, err = lc.ListenPacket(ctx, "udp", "127.0.0.1:15353")
 	if err == nil {
-		t.Error("expected EADDRINUSE on UDP 127.64.0.1:5353")
+		t.Error("expected EADDRINUSE on UDP 127.0.0.1:15353")
 	}
-	_, err = lc.Listen(ctx, "tcp", "127.64.0.1:5353")
+	_, err = lc.Listen(ctx, "tcp", "127.0.0.1:15353")
 	if err == nil {
-		t.Error("expected EADDRINUSE on TCP 127.64.0.1:5353")
+		t.Error("expected EADDRINUSE on TCP 127.0.0.1:15353")
 	}
-	_, err = lc.Listen(ctx, "tcp", "127.64.0.1:8443")
+	_, err = lc.Listen(ctx, "tcp", "127.0.0.1:15354")
 	if err == nil {
-		t.Error("expected EADDRINUSE on TCP 127.64.0.1:8443")
+		t.Error("expected EADDRINUSE on TCP 127.0.0.1:15354")
 	}
 }
 
 func TestStop_ReleasesListeners(t *testing.T) {
 	ca := testCA(t)
-	addr := netip.MustParseAddr("127.64.0.1")
-	c, err := capsule.New("step", addr, nil, ca, testUpstream())
+	hp := capsule.HostPorts{Resolver: 15355, Mediator: 15356}
+	c, err := capsule.New("step", hp, nil, ca, testUpstream())
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -200,7 +197,7 @@ func TestStop_ReleasesListeners(t *testing.T) {
 
 	// After Stop, re-bind should succeed.
 	lc := net.ListenConfig{}
-	ln, err := lc.Listen(context.Background(), "tcp", "127.64.0.1:8443")
+	ln, err := lc.Listen(context.Background(), "tcp", "127.0.0.1:15356")
 	if err != nil {
 		t.Errorf("expected re-bind to succeed after Stop, got: %v", err)
 	} else {
@@ -210,7 +207,8 @@ func TestStop_ReleasesListeners(t *testing.T) {
 
 func TestStop_Idempotent(t *testing.T) {
 	ca := testCA(t)
-	c, err := capsule.New("step", netip.MustParseAddr("127.64.0.1"), nil, ca, testUpstream())
+	hp := capsule.HostPorts{Resolver: 15357, Mediator: 15358}
+	c, err := capsule.New("step", hp, nil, ca, testUpstream())
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -231,7 +229,7 @@ func TestStop_Idempotent(t *testing.T) {
 
 func TestStop_BeforeStart(t *testing.T) {
 	ca := testCA(t)
-	c, err := capsule.New("step", netip.MustParseAddr("127.64.0.1"), nil, ca, testUpstream())
+	c, err := capsule.New("step", testPorts(), nil, ca, testUpstream())
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -242,7 +240,7 @@ func TestStop_BeforeStart(t *testing.T) {
 
 func TestStartAfterStop_ReturnsError(t *testing.T) {
 	ca := testCA(t)
-	c, err := capsule.New("step", netip.MustParseAddr("127.64.0.1"), nil, ca, testUpstream())
+	c, err := capsule.New("step", testPorts(), nil, ca, testUpstream())
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -256,7 +254,8 @@ func TestStartAfterStop_ReturnsError(t *testing.T) {
 
 func TestStartTwice_ReturnsError(t *testing.T) {
 	ca := testCA(t)
-	c, err := capsule.New("step", netip.MustParseAddr("127.64.0.1"), nil, ca, testUpstream())
+	hp := capsule.HostPorts{Resolver: 15359, Mediator: 15360}
+	c, err := capsule.New("step", hp, nil, ca, testUpstream())
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -280,7 +279,7 @@ func TestStartTwice_ReturnsError(t *testing.T) {
 
 func TestRecords_BeforeStart(t *testing.T) {
 	ca := testCA(t)
-	c, err := capsule.New("step", netip.MustParseAddr("127.64.0.1"), nil, ca, testUpstream())
+	c, err := capsule.New("step", testPorts(), nil, ca, testUpstream())
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -293,7 +292,8 @@ func TestRecords_BeforeStart(t *testing.T) {
 
 func TestRecords_AfterStop_PreservesData(t *testing.T) {
 	ca := testCA(t)
-	c, err := capsule.New("step", netip.MustParseAddr("127.64.0.1"), nil, ca, testUpstream())
+	hp := capsule.HostPorts{Resolver: 15361, Mediator: 15362}
+	c, err := capsule.New("step", hp, nil, ca, testUpstream())
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -313,12 +313,12 @@ func TestRecords_AfterStop_PreservesData(t *testing.T) {
 	_ = rec // no assertion on content; the test verifies the call does not panic.
 }
 
-func TestTwoCapsules_DistinctAddresses(t *testing.T) {
+func TestTwoCapsules_DistinctPorts(t *testing.T) {
 	ca := testCA(t)
 
-	addrs, err := capsule.AllocateAddresses([]string{"step-a", "step-b"})
+	ports, err := capsule.AllocatePorts([]string{"step-a", "step-b"})
 	if err != nil {
-		t.Fatalf("AllocateAddresses: %v", err)
+		t.Fatalf("AllocatePorts: %v", err)
 	}
 
 	peers := []mediator.PeerTrust{{
@@ -326,11 +326,11 @@ func TestTwoCapsules_DistinctAddresses(t *testing.T) {
 		Trust: transport.FingerprintTrust{Mode: "fingerprint", Fingerprint: "sha256:aaaa"},
 	}}
 
-	c1, err := capsule.New("step-a", addrs["step-a"], peers, ca, testUpstream())
+	c1, err := capsule.New("step-a", ports["step-a"], peers, ca, testUpstream())
 	if err != nil {
 		t.Fatalf("New c1: %v", err)
 	}
-	c2, err := capsule.New("step-b", addrs["step-b"], peers, ca, testUpstream())
+	c2, err := capsule.New("step-b", ports["step-b"], peers, ca, testUpstream())
 	if err != nil {
 		t.Fatalf("New c2: %v", err)
 	}
@@ -515,15 +515,16 @@ func startTestUpstreamTLS(t *testing.T, sni string) (fingerprint string, addr st
 
 func TestCapsule_ResolverSynthesizesStepAddr(t *testing.T) {
 	ca := testCA(t)
-	stepAddr := netip.MustParseAddr("127.64.0.1")
+	loopback := netip.MustParseAddr("127.0.0.1")
 	sni := testPeerSNI
+	hp := capsule.HostPorts{Resolver: 15363, Mediator: 15364}
 
 	peers := []mediator.PeerTrust{{
 		Host:  transport.Host(sni),
 		Trust: transport.FingerprintTrust{Mode: "cert_fingerprint", Fingerprint: "sha256:aaaa"},
 	}}
 
-	c, err := capsule.New("synth-step", stepAddr, peers, ca, testUpstream())
+	c, err := capsule.New("synth-step", hp, peers, ca, testUpstream())
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -542,21 +543,22 @@ func TestCapsule_ResolverSynthesizesStepAddr(t *testing.T) {
 
 	// DNS A query for the allowed peer.
 	query := buildDNSQuery(t, sni, dnsmessage.TypeA)
-	resp := udpDNSQuery(t, netip.AddrPortFrom(stepAddr, 5353).String(), query)
+	resp := udpDNSQuery(t, netip.AddrPortFrom(loopback, hp.Resolver).String(), query)
 
 	rcode, addrs := parseAAnswers(t, resp)
 	if rcode != dnsmessage.RCodeSuccess {
 		t.Fatalf("RCode = %v, want Success", rcode)
 	}
-	if len(addrs) != 1 || addrs[0] != stepAddr {
-		t.Fatalf("answer = %v, want [%s]", addrs, stepAddr)
+	if len(addrs) != 1 || addrs[0] != loopback {
+		t.Fatalf("answer = %v, want [%s]", addrs, loopback)
 	}
 }
 
 func TestCapsule_DNSThenConnect_EndToEnd(t *testing.T) {
 	ca := testCA(t)
-	stepAddr := netip.MustParseAddr("127.64.0.1")
+	loopback := netip.MustParseAddr("127.0.0.1")
 	sni := testPeerSNI
+	hp := capsule.HostPorts{Resolver: 15365, Mediator: 15366}
 
 	fp, upAddr, upCleanup := startTestUpstreamTLS(t, sni)
 	defer upCleanup()
@@ -631,7 +633,7 @@ func TestCapsule_DNSThenConnect_EndToEnd(t *testing.T) {
 		return []netip.Addr{upIP}, nil
 	}
 
-	c, err := capsule.New("e2e-step", stepAddr, peers, ca, lookup)
+	c, err := capsule.New("e2e-step", hp, peers, ca, lookup)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -648,24 +650,24 @@ func TestCapsule_DNSThenConnect_EndToEnd(t *testing.T) {
 		}
 	}()
 
-	// (1) DNS A query -> receive stepAddr.
+	// (1) DNS A query -> receive loopback.
 	query := buildDNSQuery(t, sni, dnsmessage.TypeA)
-	resp := udpDNSQuery(t, netip.AddrPortFrom(stepAddr, 5353).String(), query)
+	resp := udpDNSQuery(t, netip.AddrPortFrom(loopback, hp.Resolver).String(), query)
 	rcode, addrs := parseAAnswers(t, resp)
 	if rcode != dnsmessage.RCodeSuccess {
 		t.Fatalf("RCode = %v, want Success", rcode)
 	}
-	if len(addrs) != 1 || addrs[0] != stepAddr {
-		t.Fatalf("DNS answer = %v, want [%s]", addrs, stepAddr)
+	if len(addrs) != 1 || addrs[0] != loopback {
+		t.Fatalf("DNS answer = %v, want [%s]", addrs, loopback)
 	}
 
-	// (2) TLS connect to stepAddr:8443 (host-side mediator port) with SNI.
+	// (2) TLS connect to loopback:mediatorHostPort with SNI.
 	pool := x509.NewCertPool()
 	if !pool.AppendCertsFromPEM(ca.PublicCertPEM()) {
 		t.Fatal("failed to append CA cert")
 	}
 
-	mediatorAddr := netip.AddrPortFrom(stepAddr, 8443).String()
+	mediatorAddr := netip.AddrPortFrom(loopback, hp.Mediator).String()
 	raw, err := new(net.Dialer).DialContext(ctx, "tcp", mediatorAddr)
 	if err != nil {
 		t.Fatalf("dial mediator: %v", err)
@@ -712,14 +714,15 @@ func TestCapsule_DNSThenConnect_EndToEnd(t *testing.T) {
 
 func TestCapsule_DeniedName_NXDOMAIN(t *testing.T) {
 	ca := testCA(t)
-	stepAddr := netip.MustParseAddr("127.64.0.1")
+	loopback := netip.MustParseAddr("127.0.0.1")
+	hp := capsule.HostPorts{Resolver: 15367, Mediator: 15368}
 
 	peers := []mediator.PeerTrust{{
 		Host:  "allowed.example",
 		Trust: transport.FingerprintTrust{Mode: "cert_fingerprint", Fingerprint: "sha256:aaaa"},
 	}}
 
-	c, err := capsule.New("deny-step", stepAddr, peers, ca, testUpstream())
+	c, err := capsule.New("deny-step", hp, peers, ca, testUpstream())
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -737,7 +740,7 @@ func TestCapsule_DeniedName_NXDOMAIN(t *testing.T) {
 	}()
 
 	query := buildDNSQuery(t, "denied.example", dnsmessage.TypeA)
-	resp := udpDNSQuery(t, netip.AddrPortFrom(stepAddr, 5353).String(), query)
+	resp := udpDNSQuery(t, netip.AddrPortFrom(loopback, hp.Resolver).String(), query)
 
 	rcode, _ := parseAAnswers(t, resp)
 	if rcode != dnsmessage.RCodeNameError {
@@ -747,15 +750,16 @@ func TestCapsule_DeniedName_NXDOMAIN(t *testing.T) {
 
 func TestCapsule_AAAA_AllowedName_Empty(t *testing.T) {
 	ca := testCA(t)
-	stepAddr := netip.MustParseAddr("127.64.0.1")
+	loopback := netip.MustParseAddr("127.0.0.1")
 	sni := testPeerSNI
+	hp := capsule.HostPorts{Resolver: 15369, Mediator: 15370}
 
 	peers := []mediator.PeerTrust{{
 		Host:  transport.Host(sni),
 		Trust: transport.FingerprintTrust{Mode: "cert_fingerprint", Fingerprint: "sha256:aaaa"},
 	}}
 
-	c, err := capsule.New("aaaa-step", stepAddr, peers, ca, testUpstream())
+	c, err := capsule.New("aaaa-step", hp, peers, ca, testUpstream())
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -773,7 +777,7 @@ func TestCapsule_AAAA_AllowedName_Empty(t *testing.T) {
 	}()
 
 	query := buildDNSQuery(t, sni, dnsmessage.TypeAAAA)
-	resp := udpDNSQuery(t, netip.AddrPortFrom(stepAddr, 5353).String(), query)
+	resp := udpDNSQuery(t, netip.AddrPortFrom(loopback, hp.Resolver).String(), query)
 
 	var p dnsmessage.Parser
 	h, err := p.Start(resp)

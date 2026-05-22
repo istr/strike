@@ -234,6 +234,7 @@ func (m *Mediator) handleConn(ctx context.Context, raw net.Conn) {
 
 	upstreamConn, identity, err := m.dialUpstream(handshakeCtx, sni, trust)
 	if err != nil {
+		log.Printf("WARN   mediator[%s]: upstream %s failed: %v", m.stepName, sni, err)
 		m.appendRecord(ConnectionRecord{
 			Time: clock.Wall(), SNI: sni, Decision: DecisionError, Err: err.Error(),
 		})
