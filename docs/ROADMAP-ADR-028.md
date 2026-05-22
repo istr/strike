@@ -457,3 +457,19 @@ one controller-side connection record beyond the engine record;
 OCI registries are not recorded (content trust via digest pin).
 The per-peer container `connections` surface remains future work.
 
+The per-step resolver synthesizes the loopback address 127.0.0.1
+for allowed names rather than returning the real upstream IP:
+under pasta `--splice-only` the container can reach only that
+loopback address, where the step's mediator listens, and the
+mediator performs the real upstream resolution. The container
+always sees the resolver at 127.0.0.1:53 and the mediator at
+127.0.0.1:443; pasta `-T`/`-U` forward those to the step's distinct
+unprivileged host ports. Per-step distinctness lives in the host
+port, not the address, because pasta `-T`/`-U` accept no listening
+address (only `-t`/`-u` do); host ports are allocated
+deterministically in lane-file order, which keeps them collision-
+free under step parallelism and byte-stable per lane. Each step
+has its own netns, so the shared loopback never collides.
+SSH/non-demultiplexable peer port-mux and the removal of the
+`--network=none`/`--network=bridge` fallbacks follow in the next PR.
+
