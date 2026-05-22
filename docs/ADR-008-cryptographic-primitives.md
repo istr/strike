@@ -1,5 +1,8 @@
 # ADR-008: Cryptographic Primitives -- ECDSA P-256, scrypt + secretbox, crypto/rand
 
+Superseded in part by ADR-032 (peer TLS version floor): external-peer
+hops now floor at TLS 1.2, not 1.3.
+
 ## Status
 
 Accepted.

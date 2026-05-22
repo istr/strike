@@ -277,15 +277,40 @@ func TestDialVerified_CABundleWrongCA(t *testing.T) {
 	}
 }
 
-func TestDialVerified_TLS12Rejected(t *testing.T) {
+func TestDialVerified_TLS12Accepted(t *testing.T) {
 	cert, fingerprint := testCertPair(t, "127.0.0.1")
-	// Intentionally force TLS 1.2 on the server to verify the
-	// client rejects the downgraded handshake.
+	// A TLS 1.2-only server must handshake successfully now that
+	// the floor is 1.2.
 	serverCfg := &tls.Config{
 		Certificates: []tls.Certificate{*cert},
 		MinVersion:   tls.VersionTLS12,
 	}
 	serverCfg.MaxVersion = tls.VersionTLS12
+	addr := startTLSServer(t, serverCfg)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
+	defer cancel()
+	trust := transport.FingerprintTrust{
+		Mode:        "cert_fingerprint",
+		Fingerprint: fingerprint,
+	}
+	conn, err := transport.DialVerified(ctx, addr, trust)
+	if err != nil {
+		t.Fatalf("DialVerified: %v", err)
+	}
+	defer closer.Warn(conn, "test verified conn")
+	if conn.Identity().TLSVersion != tls.VersionTLS12 {
+		t.Errorf("TLSVersion = 0x%x, want 0x%x (TLS 1.2)", conn.Identity().TLSVersion, tls.VersionTLS12)
+	}
+}
+
+func TestDialVerified_TLS11Rejected(t *testing.T) {
+	cert, fingerprint := testCertPair(t, "127.0.0.1")
+	// A TLS 1.1-only server must be rejected: below the floor.
+	serverCfg := &tls.Config{
+		Certificates: []tls.Certificate{*cert},
+	}
+	serverCfg.MinVersion = tls.VersionTLS10
+	serverCfg.MaxVersion = tls.VersionTLS11
 	addr := startTLSServer(t, serverCfg)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
 	defer cancel()

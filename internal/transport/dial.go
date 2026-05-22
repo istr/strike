@@ -16,6 +16,21 @@ import (
 	"github.com/istr/strike/internal/closer"
 )
 
+// bsiTLS12CipherSuites is the set of TLS 1.2 cipher suites strike
+// offers to external peers: the AEAD/ECDHE (Perfect Forward Secrecy)
+// suites recommended by BSI TR-02102-2 that Go's crypto/tls supports.
+// CBC suites (BSI-recommended only with Encrypt-then-MAC; Lucky-13 /
+// padding-oracle surface), AES-CCM (not implemented by Go for TLS
+// 1.2), and ChaCha20-Poly1305 (not on the BSI list) are deliberately
+// excluded. This governs the TLS 1.2 path only; Go fixes the TLS 1.3
+// suite set and ignores CipherSuites for it.
+var bsiTLS12CipherSuites = []uint16{
+	tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+	tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+	tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+	tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+}
+
 // ConnectionIdentity captures the verified peer identity from
 // a TLS handshake. Every TLS connection strike establishes
 // (DoT resolver, TLS mediator upstream, controller direct
@@ -43,9 +58,10 @@ type ConnectionIdentity struct {
 	// inspection).
 	PeerCertificates []*x509.Certificate
 
-	// TLSVersion is the negotiated TLS version. Always
-	// tls.VersionTLS13 in current strike code (TLS 1.3 minimum
-	// per D12).
+	// TLSVersion is the negotiated TLS version. External-peer hops
+	// (DoT resolver, mediator upstream) floor at TLS 1.2 and prefer
+	// 1.3; controlled hops (engine, mediator client) remain 1.3.
+	// See the peer-TLS-floor ADR.
 	TLSVersion uint16
 
 	// CipherSuite is the negotiated cipher suite. TLS 1.3 has
@@ -69,9 +85,12 @@ func (c *VerifiedConn) Identity() ConnectionIdentity {
 }
 
 // BuildTLSConfig produces a *tls.Config that verifies a peer
-// against the supplied TLSTrust. TLS 1.3 minimum. No caller-
-// facing options; the returned config is wired for exactly the
-// trust mode declared.
+// against the supplied TLSTrust. Minimum TLS 1.2 (external peers
+// such as public registries are not always 1.3-capable; see the
+// peer-TLS-floor ADR), with the TLS 1.2 path restricted to the BSI
+// TR-02102-2 AEAD/PFS cipher suites; TLS 1.3 is preferred and used
+// whenever the peer supports it. No caller-facing options; the
+// returned config is wired for exactly the trust mode declared.
 //
 // For FingerprintTrust: standard chain verification is bypassed
 // (InsecureSkipVerify=true) and replaced with a SHA-256
@@ -84,7 +103,8 @@ func (c *VerifiedConn) Identity() ConnectionIdentity {
 // installed as RootCAs. Standard chain verification applies.
 func BuildTLSConfig(trust TLSTrust) (*tls.Config, error) {
 	config := &tls.Config{
-		MinVersion: tls.VersionTLS13,
+		MinVersion:   tls.VersionTLS12,
+		CipherSuites: bsiTLS12CipherSuites,
 	}
 	switch t := trust.(type) {
 	case FingerprintTrust:
@@ -103,7 +123,8 @@ func BuildTLSConfig(trust TLSTrust) (*tls.Config, error) {
 	return config, nil
 }
 
-// DialVerified opens a TLS 1.3 connection to addr and verifies
+// DialVerified opens a verified TLS connection to addr (minimum
+// TLS 1.2, 1.3 preferred) and verifies
 // the peer per trust. Returns a VerifiedConn with captured
 // identity. The address format is host:port; IPv6 hosts must be
 // bracketed (e.g. "[2606:4700:4700::1111]:853").
