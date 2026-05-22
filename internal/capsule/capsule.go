@@ -12,9 +12,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"net"
 	"net/netip"
 	"sync"
+	"syscall"
 
 	"golang.org/x/sync/errgroup"
 
@@ -26,14 +28,26 @@ import (
 )
 
 const (
+	// resolverPort and mediatorPort are the ports the container
+	// sees: standard DNS (53) and HTTPS (443). pasta remaps them to
+	// the host-side bind ports below.
 	resolverPort uint16 = 53
 	mediatorPort uint16 = 443
+
+	// resolverHostPort and mediatorHostPort are the unprivileged
+	// ports strike actually binds host-side. strike runs rootless
+	// without CAP_NET_BIND_SERVICE and cannot bind <1024; pasta's
+	// -T/-U forwards remap the container-visible 53/443 to these.
+	// Each step binds its own stepAddr, so a fixed host port is
+	// unique per step. See instruction 39b.
+	resolverHostPort uint16 = 5353
+	mediatorHostPort uint16 = 8443
 )
 
 // UpstreamLookupFunc resolves a name to addresses via the lane's
 // declared DoT resolver. Identical signature to
-// resolver.UpstreamFunc and mediator.UpstreamLookupFunc; PR-22
-// passes the same closure to both.
+// mediator.UpstreamLookupFunc; the mediator uses this to resolve
+// and dial real upstreams.
 type UpstreamLookupFunc func(ctx context.Context, name string) ([]netip.Addr, error)
 
 // Records aggregates the per-step records the capsule collects for
@@ -118,7 +132,7 @@ func New(
 		allowlist[i] = p.Host
 	}
 
-	res, err := resolver.New(stepName, allowlist, resolver.UpstreamFunc(upstreamLook))
+	res, err := resolver.New(stepName, allowlist, stepAddr)
 	if err != nil {
 		return nil, fmt.Errorf("capsule: resolver: %w", err)
 	}
@@ -133,7 +147,7 @@ func New(
 		resolver:  res,
 		mediator:  med,
 		ca:        ca,
-		pastaArgs: egress.BuildPastaArgs(stepAddr, resolverPort, mediatorPort),
+		pastaArgs: egress.BuildPastaArgs(stepAddr, resolverPort, resolverHostPort, mediatorPort, mediatorHostPort),
 		state:     stateNew,
 	}, nil
 }
@@ -166,11 +180,31 @@ func (c *NetworkCapsule) Start(ctx context.Context) error {
 		return errors.New("capsule: already started")
 	}
 
-	resolverAddrStr := netip.AddrPortFrom(c.stepAddr, resolverPort).String()
-	mediatorAddrStr := netip.AddrPortFrom(c.stepAddr, mediatorPort).String()
+	resolverAddrStr := netip.AddrPortFrom(c.stepAddr, resolverHostPort).String()
+	mediatorAddrStr := netip.AddrPortFrom(c.stepAddr, mediatorHostPort).String()
 
+	// SO_REUSEADDR on the UDP socket allows binding a specific
+	// loopback address even when another process (e.g. avahi-daemon)
+	// holds a wildcard bind on the same port. Safe because our bind
+	// is address-specific (stepAddr) and the packets are routed by
+	// destination address.
+	reuseLC := net.ListenConfig{
+		Control: func(_, _ string, c syscall.RawConn) error {
+			var opErr error
+			if err := c.Control(func(fd uintptr) {
+				if fd > math.MaxInt {
+					opErr = errors.New("capsule: fd exceeds int range")
+					return
+				}
+				opErr = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1)
+			}); err != nil {
+				return err
+			}
+			return opErr
+		},
+	}
 	lc := net.ListenConfig{}
-	udp, err := lc.ListenPacket(ctx, "udp", resolverAddrStr)
+	udp, err := reuseLC.ListenPacket(ctx, "udp", resolverAddrStr)
 	if err != nil {
 		return fmt.Errorf("capsule: bind resolver UDP %s: %w", resolverAddrStr, err)
 	}

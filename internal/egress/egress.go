@@ -18,17 +18,20 @@ import (
 	"net/netip"
 )
 
-// BuildPastaArgs returns the pasta options for a step container
-// whose resolver listens at stepAddr:resolverPort (UDP+TCP) and
-// whose mediator listens at stepAddr:mediatorPort (TCP). Both bind
-// the same loopback address; ports disambiguate.
+// BuildPastaArgs returns the pasta options for a step container.
+// The container sees the resolver on resolverPort (53) and the
+// mediator on mediatorPort (443); strike binds these listeners
+// host-side on the unprivileged resolverHostPort and
+// mediatorHostPort (strike is rootless and cannot bind <1024).
+// pasta's forward spec remaps container port to host port with the
+// "container:host" syntax.
 //
 // Output order:
 //
 //	--splice-only
-//	-T <stepAddr>/<resolverPort>
-//	-T <stepAddr>/<mediatorPort>
-//	-U <stepAddr>/<resolverPort>
+//	-T <stepAddr>/<resolverPort>:<resolverHostPort>
+//	-T <stepAddr>/<mediatorPort>:<mediatorHostPort>
+//	-U <stepAddr>/<resolverPort>:<resolverHostPort>
 //
 // The -U forward for the resolver port is essential: DNS clients
 // try UDP first, falling back to TCP only on truncation. Without
@@ -36,15 +39,15 @@ import (
 //
 // Byte-identical for byte-identical inputs. Panics if stepAddr is
 // IPv6 (out of scope; see ROADMAP-ADR-028.md D24).
-func BuildPastaArgs(stepAddr netip.Addr, resolverPort, mediatorPort uint16) []string {
+func BuildPastaArgs(stepAddr netip.Addr, resolverPort, resolverHostPort, mediatorPort, mediatorHostPort uint16) []string {
 	if !stepAddr.Is4() {
 		panic(fmt.Sprintf("egress: stepAddr must be IPv4, got %s", stepAddr))
 	}
 	addr := stepAddr.String()
 	return []string{
 		"--splice-only",
-		"-T", fmt.Sprintf("%s/%d", addr, resolverPort),
-		"-T", fmt.Sprintf("%s/%d", addr, mediatorPort),
-		"-U", fmt.Sprintf("%s/%d", addr, resolverPort),
+		"-T", fmt.Sprintf("%s/%d:%d", addr, resolverPort, resolverHostPort),
+		"-T", fmt.Sprintf("%s/%d:%d", addr, mediatorPort, mediatorHostPort),
+		"-U", fmt.Sprintf("%s/%d:%d", addr, resolverPort, resolverHostPort),
 	}
 }

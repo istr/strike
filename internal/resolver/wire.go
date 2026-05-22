@@ -14,17 +14,14 @@ import (
 	"github.com/istr/strike/internal/clock"
 )
 
-const (
-	responseTTL     = 60 // seconds; D19 / hard-coded
-	upstreamTimeout = 2 * clock.Second
-)
+const responseTTL = 60 // seconds; D19 / hard-coded
 
 // processQuery parses a raw DNS query, applies the allowlist
 // decision, calls upstream when permitted, builds a response,
 // and appends a QueryRecord. Returns the response wire bytes or
 // nil if the query was unparseable (in which case no response
 // is sent; an unparseable query has no valid ID to echo).
-func (r *Resolver) processQuery(ctx context.Context, raw []byte) []byte {
+func (r *Resolver) processQuery(_ context.Context, raw []byte) []byte {
 	var parser dnsmessage.Parser
 	header, err := parser.Start(raw)
 	if err != nil {
@@ -59,32 +56,26 @@ func (r *Resolver) processQuery(ctx context.Context, raw []byte) []byte {
 		return buildResponse(header, q, dnsmessage.RCodeNameError, nil) // NXDOMAIN
 	}
 
-	// Upstream lookup with per-query timeout.
-	upCtx, cancel := context.WithTimeout(ctx, upstreamTimeout)
-	addrs, upErr := r.upstream(upCtx, qname)
-	cancel()
-	if upErr != nil {
-		r.appendRecord(QueryRecord{
-			Time:     clock.Wall(),
-			QName:    qname,
-			QType:    qtype,
-			Decision: DecisionError,
-			Err:      upErr.Error(),
-		})
-		return buildResponse(header, q, dnsmessage.RCodeServerFailure, nil)
+	// Synthesize the step's loopback address for allowed names. The
+	// resolver contacts no upstream: the container connects to
+	// synthAddr, where the step's mediator listens, and the mediator
+	// performs the real upstream resolution and dial. For an A query
+	// we answer synthAddr; for AAAA we answer NOERROR with no record
+	// (synthAddr is IPv4; the empty AAAA nudges the container to the
+	// A record under splice-only). See instruction 39.
+	var answers []netip.Addr
+	if q.Type == dnsmessage.TypeA {
+		answers = []netip.Addr{r.synthAddr}
 	}
-
-	// Filter by query family.
-	filtered := filterByFamily(addrs, q.Type)
 
 	r.appendRecord(QueryRecord{
 		Time:     clock.Wall(),
 		QName:    qname,
 		QType:    qtype,
 		Decision: DecisionAllowed,
-		Answers:  filtered,
+		Answers:  answers,
 	})
-	return buildResponse(header, q, dnsmessage.RCodeSuccess, filtered)
+	return buildResponse(header, q, dnsmessage.RCodeSuccess, answers)
 }
 
 func canonicalQName(n dnsmessage.Name) string {
@@ -114,23 +105,6 @@ func qTypeString(t dnsmessage.Type) string {
 	default:
 		return "OTHER"
 	}
-}
-
-func filterByFamily(addrs []netip.Addr, qt dnsmessage.Type) []netip.Addr {
-	out := make([]netip.Addr, 0, len(addrs))
-	for _, a := range addrs {
-		switch qt {
-		case dnsmessage.TypeA:
-			if a.Is4() || a.Is4In6() {
-				out = append(out, a.Unmap())
-			}
-		case dnsmessage.TypeAAAA:
-			if a.Is6() && !a.Is4In6() {
-				out = append(out, a)
-			}
-		}
-	}
-	return out
 }
 
 func buildResponse(reqHdr dnsmessage.Header, q dnsmessage.Question, rcode dnsmessage.RCode, answers []netip.Addr) []byte {

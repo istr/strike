@@ -1,13 +1,13 @@
 // Package resolver provides a per-step DNS allowlist resolver.
 //
 // Each lane step gets its own *Resolver instance, bound at
-// construction to that step's name and allowlist. The resolver
-// answers A and AAAA queries for allowlisted FQDNs via an
-// injected upstream-lookup function (composed by PR-22 with
-// transport.LookupHost) and synthesizes minimal DNS responses
-// from the returned []netip.Addr. Names outside the allowlist
-// return NXDOMAIN; non-A/AAAA query types return NOTIMP;
-// upstream errors on allowed names return SERVFAIL.
+// construction to that step's name, allowlist, and synthesized
+// address. The resolver is a pure allowlist gate: allowed names
+// resolve to the step's loopback address (where the mediator
+// listens); other names get NXDOMAIN; non-A/AAAA query types
+// return NOTIMP. The resolver contacts no upstream -- the
+// mediator performs real upstream resolution. See instruction 39
+// and ADR-030.
 //
 // The resolver captures one QueryRecord per processed query for
 // attestation; records are step-scoped because the resolver
@@ -33,12 +33,6 @@ import (
 	"github.com/istr/strike/internal/transport"
 )
 
-// UpstreamFunc resolves a name to A/AAAA addresses via whatever
-// upstream the caller composes. PR-22 will pass a closure over
-// transport.LookupHost; tests pass a synthetic function. The
-// function must be safe for concurrent use.
-type UpstreamFunc func(ctx context.Context, name string) ([]netip.Addr, error)
-
 // Decision is the resolver's policy outcome for a single query.
 type Decision string
 
@@ -62,10 +56,14 @@ type QueryRecord struct {
 // ErrResolverClosed is returned by Serve after Close.
 var ErrResolverClosed = errors.New("resolver: closed")
 
-// Resolver is a per-step DNS server.
+// Resolver is a per-step DNS server. It is a pure allowlist gate:
+// allowed names resolve to synthAddr (the step's loopback address,
+// where the mediator listens); other names get NXDOMAIN. The
+// resolver contacts no upstream -- the mediator performs real
+// upstream resolution. See instruction 39 / ADR-030.
 type Resolver struct {
+	synthAddr netip.Addr
 	allowlist map[string]struct{}
-	upstream  UpstreamFunc
 	stepName  string
 	records   []QueryRecord
 	mu        sync.Mutex
@@ -79,14 +77,15 @@ type Resolver struct {
 //     resolve. Entries are normalized (lowercase, trailing dot
 //     stripped) and de-duplicated; passing an empty allowlist is
 //     valid and yields a resolver that denies every name.
-//   - upstream resolves allowlisted names. Must be non-nil and
-//     safe for concurrent use.
-func New(stepName string, allowlist []transport.Host, upstream UpstreamFunc) (*Resolver, error) {
+//   - synthAddr is the step's loopback address. Allowed names
+//     resolve to it (A record); the container then connects there,
+//     reaching the step's mediator. Must be IPv4.
+func New(stepName string, allowlist []transport.Host, synthAddr netip.Addr) (*Resolver, error) {
 	if stepName == "" {
 		return nil, errors.New("resolver: stepName must not be empty")
 	}
-	if upstream == nil {
-		return nil, errors.New("resolver: upstream must not be nil")
+	if !synthAddr.Is4() {
+		return nil, fmt.Errorf("resolver: synthAddr must be IPv4, got %s", synthAddr)
 	}
 
 	set := make(map[string]struct{}, len(allowlist))
@@ -101,7 +100,7 @@ func New(stepName string, allowlist []transport.Host, upstream UpstreamFunc) (*R
 	return &Resolver{
 		stepName:  stepName,
 		allowlist: set,
-		upstream:  upstream,
+		synthAddr: synthAddr,
 	}, nil
 }
 

@@ -8,12 +8,12 @@ import (
 	"github.com/istr/strike/internal/capsule"
 )
 
-func TestAllocateAddresses_StartsAt40(t *testing.T) {
+func TestAllocateAddresses_StartsAt127_64_0_1(t *testing.T) {
 	m, err := capsule.AllocateAddresses([]string{"first"})
 	if err != nil {
 		t.Fatalf("AllocateAddresses: %v", err)
 	}
-	want := netip.MustParseAddr("127.0.0.40")
+	want := netip.MustParseAddr("127.64.0.1")
 	if got := m["first"]; got != want {
 		t.Errorf("first = %s, want %s", got, want)
 	}
@@ -26,9 +26,9 @@ func TestAllocateAddresses_SequentialInInputOrder(t *testing.T) {
 		t.Fatalf("AllocateAddresses: %v", err)
 	}
 	wants := map[string]string{
-		"a": "127.0.0.40",
-		"b": "127.0.0.41",
-		"c": "127.0.0.42",
+		"a": "127.64.0.1",
+		"b": "127.64.0.2",
+		"c": "127.64.0.3",
 	}
 	for name, want := range wants {
 		if got := m[name].String(); got != want {
@@ -76,9 +76,9 @@ func TestAllocateAddresses_AllDistinct(t *testing.T) {
 }
 
 func TestAllocateAddresses_Exhaustion(t *testing.T) {
-	names := make([]string, 216) // 215 available + 1
+	names := make([]string, 65536) // loopbackCap (65535) + 1
 	for i := range names {
-		names[i] = fmt.Sprintf("step-%03d", i)
+		names[i] = fmt.Sprintf("step-%05d", i)
 	}
 	if _, err := capsule.AllocateAddresses(names); err == nil {
 		t.Error("expected exhaustion error, got nil")
@@ -92,5 +92,21 @@ func TestAllocateAddresses_Empty(t *testing.T) {
 	}
 	if len(m) != 0 {
 		t.Errorf("expected empty map, got %d entries", len(m))
+	}
+}
+
+func TestAllocateAddresses_CrossesOctetBoundary(t *testing.T) {
+	names := make([]string, 256)
+	for i := range names {
+		names[i] = fmt.Sprintf("step-%03d", i)
+	}
+	m, err := capsule.AllocateAddresses(names)
+	if err != nil {
+		t.Fatalf("AllocateAddresses: %v", err)
+	}
+	// index 255 -> n = 256 -> 127.64.1.0
+	want := netip.MustParseAddr("127.64.1.0")
+	if got := m["step-255"]; got != want {
+		t.Errorf("step-255 = %s, want %s", got, want)
 	}
 }

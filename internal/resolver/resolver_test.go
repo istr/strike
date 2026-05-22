@@ -17,31 +17,15 @@ import (
 	"github.com/istr/strike/internal/transport"
 )
 
-// Helpers for test setup.
-
-func staticUpstream(addrs []netip.Addr) resolver.UpstreamFunc {
-	return func(_ context.Context, _ string) ([]netip.Addr, error) {
-		return addrs, nil
-	}
-}
-
-func failingUpstream(msg string) resolver.UpstreamFunc {
-	return func(_ context.Context, _ string) ([]netip.Addr, error) {
-		return nil, errors.New(msg)
-	}
-}
-
-func nopUpstream() resolver.UpstreamFunc {
-	return staticUpstream(nil)
-}
+var testSynthAddr = netip.MustParseAddr("127.64.0.1")
 
 // startResolver creates a Resolver with ephemeral listeners and
 // starts Serve in a goroutine. Returns the resolver, a
 // stdlib *net.Resolver wired to the test DNS server's TCP
 // listener, the UDP address, and a cancel function.
-func startResolver(t *testing.T, allowlist []transport.Host, upstream resolver.UpstreamFunc) (*resolver.Resolver, *net.Resolver, string, context.CancelFunc) {
+func startResolver(t *testing.T, allowlist []transport.Host, synthAddr netip.Addr) (*resolver.Resolver, *net.Resolver, string, context.CancelFunc) {
 	t.Helper()
-	r, err := resolver.New("test-step", allowlist, upstream)
+	r, err := resolver.New("test-step", allowlist, synthAddr)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -137,21 +121,28 @@ func parseRCode(t *testing.T, raw []byte) dnsmessage.RCode {
 // Tests.
 
 func TestNew_RejectsEmptyStepName(t *testing.T) {
-	_, err := resolver.New("", nil, nopUpstream())
+	_, err := resolver.New("", nil, testSynthAddr)
 	if err == nil {
 		t.Fatal("expected error for empty stepName")
 	}
 }
 
-func TestNew_RejectsNilUpstream(t *testing.T) {
-	_, err := resolver.New("step", nil, nil)
+func TestNew_RejectsIPv6SynthAddr(t *testing.T) {
+	_, err := resolver.New("step", nil, netip.MustParseAddr("::1"))
 	if err == nil {
-		t.Fatal("expected error for nil upstream")
+		t.Fatal("expected error for IPv6 synthAddr")
+	}
+}
+
+func TestNew_RejectsZeroSynthAddr(t *testing.T) {
+	_, err := resolver.New("step", nil, netip.Addr{})
+	if err == nil {
+		t.Fatal("expected error for zero synthAddr")
 	}
 }
 
 func TestNew_EmptyAllowlistIsValid(t *testing.T) {
-	r, stdRes, _, cleanup := startResolver(t, nil, nopUpstream())
+	r, stdRes, _, cleanup := startResolver(t, nil, testSynthAddr)
 	defer cleanup()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*clock.Second)
@@ -175,7 +166,7 @@ func TestNew_NormalizesAllowlist(t *testing.T) {
 	// All three entries should normalize to the same key.
 	_, stdRes, _, cleanup := startResolver(t,
 		[]transport.Host{"Example.COM", "example.com.", " example.com "},
-		staticUpstream([]netip.Addr{netip.MustParseAddr("1.2.3.4")}),
+		testSynthAddr,
 	)
 	defer cleanup()
 
@@ -192,14 +183,9 @@ func TestNew_NormalizesAllowlist(t *testing.T) {
 }
 
 func TestServe_AllowedNameA(t *testing.T) {
-	upstream := staticUpstream([]netip.Addr{
-		netip.MustParseAddr("1.2.3.4"),
-		netip.MustParseAddr("1.2.3.5"),
-		netip.MustParseAddr("::1"),
-	})
 	r, _, udpAddr, cleanup := startResolver(t,
 		[]transport.Host{"allowed.example.com"},
-		upstream,
+		testSynthAddr,
 	)
 	defer cleanup()
 
@@ -225,26 +211,19 @@ func TestServe_AllowedNameA(t *testing.T) {
 	if rec.QType != "A" {
 		t.Errorf("QType = %q, want A", rec.QType)
 	}
-	// Should have exactly 2 IPv4 addresses, no IPv6.
-	if len(rec.Answers) != 2 {
-		t.Errorf("got %d answers, want 2: %v", len(rec.Answers), rec.Answers)
+	// Should have exactly 1 answer: the synthesized address.
+	if len(rec.Answers) != 1 {
+		t.Fatalf("got %d answers, want 1: %v", len(rec.Answers), rec.Answers)
 	}
-	for _, a := range rec.Answers {
-		if !a.Is4() {
-			t.Errorf("expected IPv4, got %v", a)
-		}
+	if rec.Answers[0] != testSynthAddr {
+		t.Errorf("answer = %v, want %v", rec.Answers[0], testSynthAddr)
 	}
 }
 
-func TestServe_AllowedNameAAAA(t *testing.T) {
-	upstream := staticUpstream([]netip.Addr{
-		netip.MustParseAddr("1.2.3.4"),
-		netip.MustParseAddr("1.2.3.5"),
-		netip.MustParseAddr("2001:db8::1"),
-	})
+func TestServe_AllowedNameAAAA_EmptyAnswer(t *testing.T) {
 	r, _, udpAddr, cleanup := startResolver(t,
 		[]transport.Host{"allowed.example.com"},
-		upstream,
+		testSynthAddr,
 	)
 	defer cleanup()
 
@@ -254,35 +233,7 @@ func TestServe_AllowedNameAAAA(t *testing.T) {
 	}
 	resp := udpQuery(t, udpAddr, query)
 	rcode := parseRCode(t, resp)
-	if rcode != dnsmessage.RCodeSuccess {
-		t.Fatalf("RCode = %v, want Success", rcode)
-	}
-	recs := r.Records()
-	if len(recs) == 0 {
-		t.Fatal("expected at least one record")
-	}
-	if len(recs[0].Answers) != 1 {
-		t.Errorf("got %d AAAA answers, want 1", len(recs[0].Answers))
-	}
-}
-
-func TestServe_AllowedNameNoMatchingFamily(t *testing.T) {
-	upstream := staticUpstream([]netip.Addr{
-		netip.MustParseAddr("1.2.3.4"),
-	})
-	r, _, udpAddr, cleanup := startResolver(t,
-		[]transport.Host{"v4only.example.com"},
-		upstream,
-	)
-	defer cleanup()
-
-	query, err := buildRawQuery("v4only.example.com", dnsmessage.TypeAAAA)
-	if err != nil {
-		t.Fatalf("buildRawQuery: %v", err)
-	}
-	resp := udpQuery(t, udpAddr, query)
-	rcode := parseRCode(t, resp)
-	// NODATA: NOERROR with empty answer section.
+	// NOERROR with empty answer (synthAddr is IPv4).
 	if rcode != dnsmessage.RCodeSuccess {
 		t.Fatalf("RCode = %v, want Success (NODATA)", rcode)
 	}
@@ -301,7 +252,7 @@ func TestServe_AllowedNameNoMatchingFamily(t *testing.T) {
 func TestServe_DeniedName_NXDOMAIN(t *testing.T) {
 	r, _, udpAddr, cleanup := startResolver(t,
 		[]transport.Host{"allowed.example.com"},
-		nopUpstream(),
+		testSynthAddr,
 	)
 	defer cleanup()
 
@@ -326,7 +277,7 @@ func TestServe_DeniedName_NXDOMAIN(t *testing.T) {
 func TestServe_NotImplementedType_MX(t *testing.T) {
 	r, _, udpAddr, cleanup := startResolver(t,
 		[]transport.Host{"allowed.example.com"},
-		nopUpstream(),
+		testSynthAddr,
 	)
 	defer cleanup()
 
@@ -351,44 +302,10 @@ func TestServe_NotImplementedType_MX(t *testing.T) {
 	}
 }
 
-func TestServe_UpstreamError_SERVFAIL(t *testing.T) {
-	r, _, udpAddr, cleanup := startResolver(t,
-		[]transport.Host{"fail.example.com"},
-		failingUpstream("upstream boom"),
-	)
-	defer cleanup()
-
-	query, err := buildRawQuery("fail.example.com", dnsmessage.TypeA)
-	if err != nil {
-		t.Fatalf("buildRawQuery: %v", err)
-	}
-	resp := udpQuery(t, udpAddr, query)
-	rcode := parseRCode(t, resp)
-	if rcode != dnsmessage.RCodeServerFailure {
-		t.Fatalf("RCode = %v, want ServerFailure", rcode)
-	}
-	recs := r.Records()
-	if len(recs) == 0 {
-		t.Fatal("expected at least one record")
-	}
-	if recs[0].Decision != resolver.DecisionError {
-		t.Errorf("Decision = %q, want error", recs[0].Decision)
-	}
-	if recs[0].Err == "" {
-		t.Error("Err should be populated")
-	}
-}
-
 func TestServe_RecordsCaptured(t *testing.T) {
-	upstream := func(_ context.Context, name string) ([]netip.Addr, error) {
-		if name == "fail.example.com" {
-			return nil, errors.New("upstream fail")
-		}
-		return []netip.Addr{netip.MustParseAddr("1.2.3.4")}, nil
-	}
 	r, _, udpAddr, cleanup := startResolver(t,
-		[]transport.Host{"allowed.example.com", "fail.example.com"},
-		upstream,
+		[]transport.Host{"allowed.example.com"},
+		testSynthAddr,
 	)
 	defer cleanup()
 
@@ -398,7 +315,6 @@ func TestServe_RecordsCaptured(t *testing.T) {
 	}{
 		{"allowed.example.com", dnsmessage.TypeA},
 		{"denied.example.com", dnsmessage.TypeA},
-		{"fail.example.com", dnsmessage.TypeA},
 	} {
 		q, err := buildRawQuery(tc.name, tc.qtype)
 		if err != nil {
@@ -408,8 +324,8 @@ func TestServe_RecordsCaptured(t *testing.T) {
 	}
 
 	recs := r.Records()
-	if len(recs) != 3 {
-		t.Fatalf("got %d records, want 3", len(recs))
+	if len(recs) != 2 {
+		t.Fatalf("got %d records, want 2", len(recs))
 	}
 
 	decisions := map[resolver.Decision]int{}
@@ -422,16 +338,12 @@ func TestServe_RecordsCaptured(t *testing.T) {
 	if decisions[resolver.DecisionDenied] != 1 {
 		t.Errorf("denied count = %d, want 1", decisions[resolver.DecisionDenied])
 	}
-	if decisions[resolver.DecisionError] != 1 {
-		t.Errorf("error count = %d, want 1", decisions[resolver.DecisionError])
-	}
 }
 
 func TestServe_ConcurrentQueries(t *testing.T) {
-	upstream := staticUpstream([]netip.Addr{netip.MustParseAddr("1.2.3.4")})
 	r, _, udpAddr, cleanup := startResolver(t,
 		[]transport.Host{"a.example.com", "b.example.com"},
-		upstream,
+		testSynthAddr,
 	)
 	defer cleanup()
 
@@ -460,7 +372,7 @@ func TestServe_ConcurrentQueries(t *testing.T) {
 }
 
 func TestServe_ContextCancellation(t *testing.T) {
-	r, err := resolver.New("test-step", nil, nopUpstream())
+	r, err := resolver.New("test-step", nil, testSynthAddr)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -494,7 +406,7 @@ func TestServe_ContextCancellation(t *testing.T) {
 }
 
 func TestServe_NilListenersRejected(t *testing.T) {
-	r, err := resolver.New("test-step", nil, nopUpstream())
+	r, err := resolver.New("test-step", nil, testSynthAddr)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -504,7 +416,7 @@ func TestServe_NilListenersRejected(t *testing.T) {
 }
 
 func TestClose_Idempotent(t *testing.T) {
-	r, err := resolver.New("test-step", nil, nopUpstream())
+	r, err := resolver.New("test-step", nil, testSynthAddr)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -517,7 +429,7 @@ func TestClose_Idempotent(t *testing.T) {
 }
 
 func TestClose_BeforeServe_ServeReturnsError(t *testing.T) {
-	r, err := resolver.New("test-step", nil, nopUpstream())
+	r, err := resolver.New("test-step", nil, testSynthAddr)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -544,11 +456,9 @@ func TestClose_BeforeServe_ServeReturnsError(t *testing.T) {
 }
 
 func TestTCPQuery_LengthPrefixed(t *testing.T) {
-	upstream := staticUpstream([]netip.Addr{netip.MustParseAddr("10.0.0.1")})
-
 	r, err := resolver.New("test-step",
 		[]transport.Host{"tcp.example.com"},
-		upstream,
+		testSynthAddr,
 	)
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -616,7 +526,7 @@ func TestTCPQuery_LengthPrefixed(t *testing.T) {
 		t.Fatalf("RCode = %v, want Success", rcode)
 	}
 
-	// Verify answer contains 10.0.0.1.
+	// Verify answer contains synthAddr.
 	var p dnsmessage.Parser
 	if _, parseErr := p.Start(resp); parseErr != nil {
 		t.Fatalf("parser Start: %v", parseErr)
@@ -636,9 +546,8 @@ func TestTCPQuery_LengthPrefixed(t *testing.T) {
 		t.Fatal("answer body is not *dnsmessage.AResource")
 	}
 	got := netip.AddrFrom4(aBody.A)
-	want := netip.MustParseAddr("10.0.0.1")
-	if got != want {
-		t.Errorf("A record = %v, want %v", got, want)
+	if got != testSynthAddr {
+		t.Errorf("A record = %v, want %v", got, testSynthAddr)
 	}
 
 	cancel()

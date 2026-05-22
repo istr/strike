@@ -6,7 +6,6 @@ import (
 	"context"
 	"net"
 	"net/netip"
-	"os"
 	"testing"
 
 	"github.com/istr/strike/internal/clock"
@@ -15,27 +14,14 @@ import (
 	"github.com/istr/strike/internal/transport"
 )
 
-// TestResolver_CloudflareDoT_INTEGRATION wires a Resolver with
-// a transport.LookupHost-backed upstream pointed at Cloudflare
-// DoT; queries `one.one.one.one` (always resolvable, returns
-// known addresses) through the allowlist resolver; asserts the
-// response contains 1.1.1.1 or 1.0.0.1.
-func TestResolver_CloudflareDoT_INTEGRATION(t *testing.T) {
-	fingerprint := os.Getenv("STRIKE_CLOUDFLARE_DOT_FINGERPRINT")
-	if fingerprint == "" {
-		t.Skip("STRIKE_CLOUDFLARE_DOT_FINGERPRINT not set; skipping")
-	}
-	decl := transport.DNSResolver{
-		Host: "1.1.1.1:853",
-		Trust: transport.FingerprintTrust{
-			Mode:        "cert_fingerprint",
-			Fingerprint: fingerprint,
-		},
-	}
-	upstream := func(ctx context.Context, name string) ([]netip.Addr, error) {
-		return transport.LookupHost(ctx, decl, name)
-	}
-	r, err := resolver.New("integration-test", []transport.Host{"one.one.one.one"}, upstream)
+// TestResolver_Synthesis_INTEGRATION verifies that the resolver
+// synthesizes the step address for an allowlisted name. This is
+// the integration-level equivalent of the unit test: it uses real
+// listeners and a real net.Resolver client, but does not contact
+// any upstream (the resolver is a pure allowlist gate).
+func TestResolver_Synthesis_INTEGRATION(t *testing.T) {
+	synthAddr := netip.MustParseAddr("127.64.0.1")
+	r, err := resolver.New("integration-test", []transport.Host{"one.one.one.one"}, synthAddr)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -58,7 +44,7 @@ func TestResolver_CloudflareDoT_INTEGRATION(t *testing.T) {
 	res := &net.Resolver{
 		PreferGo: true,
 		Dial: func(dialCtx context.Context, _, _ string) (net.Conn, error) {
-			return new(net.Dialer).DialContext(dialCtx, "tcp", udp.LocalAddr().String())
+			return new(net.Dialer).DialContext(dialCtx, "tcp", tcp.Addr().String())
 		},
 	}
 	addrs, err := res.LookupNetIP(ctx, "ip4", "one.one.one.one")
@@ -69,15 +55,9 @@ func TestResolver_CloudflareDoT_INTEGRATION(t *testing.T) {
 	if sErr := <-serveErr; sErr != nil {
 		t.Fatalf("Serve: %v", sErr)
 	}
-	found := false
-	for _, a := range addrs {
-		if a == netip.MustParseAddr("1.1.1.1") || a == netip.MustParseAddr("1.0.0.1") {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Errorf("expected 1.1.1.1 or 1.0.0.1 in resolved addresses, got %v", addrs)
+
+	if len(addrs) != 1 || addrs[0] != synthAddr {
+		t.Errorf("expected [%s], got %v", synthAddr, addrs)
 	}
 
 	records := r.Records()
