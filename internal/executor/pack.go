@@ -465,7 +465,20 @@ func dirWalkFunc(root *os.Root, tw *tar.Writer, dest string) fs.WalkDirFunc {
 			return nil
 		}
 		if d.Type()&fs.ModeSymlink != 0 {
-			return fmt.Errorf("symlink at %q: not supported", path)
+			target, linkErr := root.Readlink(path)
+			if linkErr != nil {
+				return fmt.Errorf("read symlink %q: %w", path, linkErr)
+			}
+			if lane.SymlinkEscapes(path, target) {
+				return fmt.Errorf("symlink %q escapes packed tree (target %q)", path, target)
+			}
+			return tw.WriteHeader(&tar.Header{
+				Typeflag: tar.TypeSymlink,
+				Name:     filepath.Join(dest, path),
+				Linkname: target,
+				Mode:     0o777,
+				// Uid, Gid, ModTime intentionally zero for determinism.
+			})
 		}
 		return writeDirEntry(tw, root, path, d, filepath.Join(dest, path))
 	}

@@ -359,6 +359,24 @@ func wrapDirLayer(root *os.Root, dirName, destPath string) (v1.Layer, int64, err
 	return layer, totalSize, nil
 }
 
+// wrapSymlinkEntry validates containment and writes a symlink tar header.
+func wrapSymlinkEntry(root *os.Root, tw *tar.Writer, path, rel, dest string) error {
+	target, err := root.Readlink(path)
+	if err != nil {
+		return fmt.Errorf("read symlink %q: %w", rel, err)
+	}
+	if lane.SymlinkEscapes(rel, target) {
+		return fmt.Errorf("symlink %q escapes output tree (target %q)", rel, target)
+	}
+	return tw.WriteHeader(&tar.Header{
+		Typeflag: tar.TypeSymlink,
+		Name:     filepath.Join(dest, rel),
+		Linkname: target,
+		Mode:     0o777,
+		// Uid, Gid, ModTime intentionally zero for determinism.
+	})
+}
+
 // wrapDirWalkFunc returns a WalkDir callback that writes each entry under
 // dirName into a tar at the given dest prefix. totalSize accumulates the
 // logical byte count of regular file contents.
@@ -375,7 +393,7 @@ func wrapDirWalkFunc(root *os.Root, tw *tar.Writer, dirName, dest string, totalS
 			return nil
 		}
 		if d.Type()&fs.ModeSymlink != 0 {
-			return fmt.Errorf("symlink at %q: not supported", rel)
+			return wrapSymlinkEntry(root, tw, path, rel, dest)
 		}
 
 		info, infoErr := d.Info()

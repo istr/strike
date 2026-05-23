@@ -309,7 +309,7 @@ func TestWrapFileAsImage_RejectsSymlink(t *testing.T) {
 	}
 }
 
-func TestWrapDirectoryAsImage_RejectsSymlink(t *testing.T) {
+func TestWrapDirectoryAsImage_AcceptsContainedSymlink(t *testing.T) {
 	dir := t.TempDir()
 	subDir := filepath.Join(dir, "mydir")
 	if err := os.MkdirAll(subDir, 0o750); err != nil {
@@ -318,16 +318,79 @@ func TestWrapDirectoryAsImage_RejectsSymlink(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(subDir, "real.txt"), []byte("data"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Symlink(filepath.Join(subDir, "real.txt"), filepath.Join(subDir, "link.txt")); err != nil {
+	// Relative target within the wrapped tree -> contained.
+	if err := os.Symlink("real.txt", filepath.Join(subDir, "link.txt")); err != nil {
 		t.Fatal(err)
 	}
 
 	root := mustOpenRoot(t, dir)
 	eng := &wrapEngine{}
 	client := &registry.Client{Engine: eng}
-	_, _, err := client.WrapDirectoryAsImage(context.Background(), root, "mydir", "localhost/strike/l/s:h")
-	if err == nil {
-		t.Fatal("expected error for directory containing symlink")
+	if _, _, err := client.WrapDirectoryAsImage(context.Background(), root, "mydir", "localhost/strike/l/s:h"); err != nil {
+		t.Fatalf("contained symlink should wrap: %v", err)
+	}
+}
+
+func TestWrapDirectoryAsImage_RejectsEscapingSymlink(t *testing.T) {
+	dir := t.TempDir()
+	subDir := filepath.Join(dir, "mydir")
+	if err := os.MkdirAll(subDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	// Relative target that climbs out of the wrapped tree.
+	if err := os.Symlink("../escape.txt", filepath.Join(subDir, "link.txt")); err != nil {
+		t.Fatal(err)
+	}
+
+	root := mustOpenRoot(t, dir)
+	eng := &wrapEngine{}
+	client := &registry.Client{Engine: eng}
+	if _, _, err := client.WrapDirectoryAsImage(context.Background(), root, "mydir", "localhost/strike/l/s:h"); err == nil {
+		t.Fatal("expected error for escaping symlink")
+	}
+}
+
+func TestWrapDirectoryAsImage_RejectsAbsoluteSymlink(t *testing.T) {
+	dir := t.TempDir()
+	subDir := filepath.Join(dir, "mydir")
+	if err := os.MkdirAll(subDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("/etc/passwd", filepath.Join(subDir, "link.txt")); err != nil {
+		t.Fatal(err)
+	}
+
+	root := mustOpenRoot(t, dir)
+	eng := &wrapEngine{}
+	client := &registry.Client{Engine: eng}
+	if _, _, err := client.WrapDirectoryAsImage(context.Background(), root, "mydir", "localhost/strike/l/s:h"); err == nil {
+		t.Fatal("expected error for absolute symlink")
+	}
+}
+
+func TestWrapDirectoryAsImage_SymlinkDeterministic(t *testing.T) {
+	build := func() []byte {
+		dir := t.TempDir()
+		subDir := filepath.Join(dir, "mydir")
+		if err := os.MkdirAll(subDir, 0o750); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(subDir, "real.txt"), []byte("data"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink("real.txt", filepath.Join(subDir, "link.txt")); err != nil {
+			t.Fatal(err)
+		}
+		root := mustOpenRoot(t, dir)
+		eng := &wrapEngine{}
+		client := &registry.Client{Engine: eng}
+		if _, _, err := client.WrapDirectoryAsImage(context.Background(), root, "mydir", "localhost/strike/l/s:h"); err != nil {
+			t.Fatal(err)
+		}
+		return eng.loadBodies[0]
+	}
+	if !bytes.Equal(build(), build()) {
+		t.Error("symlink-bearing directory image tar is not deterministic")
 	}
 }
 
