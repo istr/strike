@@ -1,11 +1,11 @@
-// Package capsule aggregates the per-step network components
-// produced by Phase 2: the allowlist DNS resolver, the TLS
-// mediator, and the pasta egress filter argument list. A
+// Package capsule aggregates the per-step network components: the
+// allowlist DNS resolver, the TLS mediator, the per-SSH-peer raw-TCP
+// forwards, and the pasta egress filter argument list. A
 // NetworkCapsule represents one step's bundled lifecycle.
 //
 // Architectural decisions: see docs/ROADMAP-ADR-028.md D25
-// (NetworkCapsule aggregate) and D26 (HTTPS-only mediation
-// dispatch).
+// (NetworkCapsule aggregate) and D28 (universal capsule; no
+// network-mode switch), and docs/ADR-033 for SSH peer egress.
 package capsule
 
 import (
@@ -50,8 +50,10 @@ var loopbackV4 = netip.AddrFrom4([4]byte{127, 0, 0, 1})
 type UpstreamLookupFunc func(ctx context.Context, name string) ([]netip.Addr, error)
 
 // Records aggregates the per-step records the capsule collects for
-// attestation. PR-22 stores these; PR-24 (or later) wires them
-// into the deploy attestation envelope.
+// attestation: DNS queries, mediated TLS connections, and SSH forward
+// attempts. Wiring these into the signed deploy attestation envelope
+// (the per-peer connections surface) is an open follow-up tracked in
+// docs/ADR-033 and ADR-028.
 type Records struct {
 	DNS         []resolver.QueryRecord
 	Connections []mediator.ConnectionRecord

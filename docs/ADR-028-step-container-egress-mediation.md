@@ -11,6 +11,16 @@ but does not supersede [ADR-005](ADR-005-per-step-security-profile.md),
 [ADR-024](ADR-024-ssh-known-hosts.md),
 [ADR-025](ADR-025-ssh-agent-proxy.md).
 
+> **Completed by [ADR-033](ADR-033-ssh-peer-egress-and-unified-mediation.md):**
+> this architecture is realized by the per-step NetworkCapsule. The
+> concrete egress mechanism is pasta `--splice-only` with per-unit port
+> forwards (ADR-031, ADR-033), not the DNAT-redirect model sketched
+> under Component 3, which was left "deferred to engineering" here.
+> ADR-033 also supersedes the interim "HTTPS-without-SSH only" dispatch
+> (ROADMAP-ADR-028.md D26): every step container runs under a capsule,
+> SSH peers are mediated by per-peer raw-TCP forwards, and the
+> `--network=none`/`--network=bridge` modes are removed.
+
 ## Context
 
 [ADR-022](ADR-022-network-opt-in-as-peer-list.md) replaced the

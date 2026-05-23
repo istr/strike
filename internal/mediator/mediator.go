@@ -39,8 +39,9 @@ type PeerTrust struct {
 
 // UpstreamLookupFunc resolves a name to addresses via the lane's
 // allowlisted DoT resolver. Identical signature to
-// resolver.UpstreamFunc; PR-22 passes the same closure to both.
-// The function must be safe for concurrent use.
+// resolver.UpstreamFunc and capsule.UpstreamLookupFunc; the capsule
+// passes the same closure to all three. The function must be safe for
+// concurrent use.
 type UpstreamLookupFunc func(ctx context.Context, name string) ([]netip.Addr, error)
 
 // Decision is the mediator's policy outcome for a connection.

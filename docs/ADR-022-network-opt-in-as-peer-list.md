@@ -11,6 +11,16 @@ realises the "Peers are declared" principle from ADR-007.
 > is digest pinning, not a peer. The core decision -- network
 > interaction as a typed contract, not a boolean -- stands.
 
+> **Amended by [ADR-028](ADR-028-step-container-egress-mediation.md)
+> and [ADR-033](ADR-033-ssh-peer-egress-and-unified-mediation.md):**
+> the "Phase 1 is declaratory" posture in the Decision section is now
+> historical. Per-peer enforcement is implemented: every step container
+> runs under a per-step capsule that restricts egress to declared peers
+> (HTTPS through the TLS mediator, SSH through per-peer raw-TCP
+> forwards). The `--network=none`/`--network=bridge` description no
+> longer reflects the runtime; the typed-peer-list contract this ADR
+> establishes stands unchanged.
+
 ## Context
 
 ADR-005 set the per-step security profile and described the network

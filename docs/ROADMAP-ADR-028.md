@@ -234,6 +234,11 @@ deleted.
   centralising it into one tested unit beats inlining ~30 lines
   of listener-binding and errgroup coordination per step,
   especially under parallel execution.
+  Superseded in part by ADR-033: the pure pre-allocation function
+  is now `capsule.AllocatePorts([]StepPortReq)`, returning a per-unit
+  host-port block (resolver, mediator, and one port per declared SSH
+  peer) rather than a loopback address. The determinism property is
+  unchanged; the distinctness it encodes lives in the host port.
 - **D26 (HTTPS-only mediation dispatch).** A step in PR-22 uses
   pasta-mediation iff it has at least one HTTPS peer AND no SSH
   peers. Pasta `--splice-only` removes the tap interface,
@@ -353,7 +358,7 @@ The Phase-2 work is complete.
 | ADR-014 hardening | Audit-sink transport consumes PR-16 primitive | Separate track |
 | `strike verify` | Consumes Phase-1 primitive plus PR-23 attestation schema | Separate track |
 | Documentation | Cloudflare/Quad9/Google/IPFire resolver examples; D14/D15 deferred decisions | Done (PR-15) |
-| ADR-022 update | Drop "Phase 1 is declaratory" once Phase 2 complete | Tracked with PR-22 |
+| ADR-022 update | Drop "Phase 1 is declaratory" once Phase 2 complete | Done (instruction 41) |
 
 ## Conventions for instruction-writing
 
@@ -397,21 +402,18 @@ All conventions established in earlier PRs carry forward:
 
 ## Current status
 
-**Phase 1: complete; Phase 2: integrated.** PR-14 through PR-17
-landed Phase 1. PR-18 added the ephemeral per-lane-run CA. PR-19
-added the per-step DNS allowlist resolver. PR-20 added the
-per-step TLS mediator. PR-21 added the per-step egress filter.
-PR-22 wires them together: a `NetworkCapsule` aggregate per
-HTTPS-mediated step (D25), deterministic per-step loopback
-addresses via `capsule.AllocateAddresses`, a lane-wide ephemeral
-CA written to `/tmp/strike-lane-<id>-*/ca.pem` and bind-mounted
-into each mediated container, a Podman 5.0+ version gate in
-`initEngine`, and dispatch in `executeContainerStep` (D26:
-HTTPS-without-SSH -> capsule; otherwise existing behaviour).
-Next is PR-23 (SSH-peer pasta integration), extending dispatch
-to mixed HTTPS+SSH steps. Subsequent decisions (mTLS schema
-specifics, audit-sink transport hardening, Rekor via
-DialVerified) remain on the Phase-3 track.
+**Phase 1 and Phase 2: complete; ADR-028 roadmap closed.** PR-14
+through PR-17 landed Phase 1 (the transport primitive). PR-18 through
+PR-22 landed the Phase-2 mediation subsystem: the ephemeral per-lane-run
+CA, the per-step DNS allowlist resolver, the per-step TLS mediator, the
+per-step egress filter, and the `NetworkCapsule` integration. ADR-033
+(instruction 40) then added SSH peer egress via per-peer raw-TCP
+forwards and unified every step container under a capsule, subsuming
+PR-23 and PR-24 and removing the `--network=none`/`--network=bridge`
+modes. No further egress mediation is built. The remaining cross-cutting
+items (mTLS via a controller-held client cert, ADR-014 audit-sink
+transport hardening, Rekor via `DialVerified`, and `strike verify`) are
+separate tracks, not part of this roadmap.
 
 **Snapshot at roadmap creation**: `2b7b3f7c4b7313ae17a70e98b175f2e0706578e1`
 (post-PR-13: peer-coverage gaps closed; inconsistency-review backlog
@@ -471,6 +473,14 @@ DNSServers; container.RequireVersion fail-fasts on Podman < 5.0;
 executor.Run integrates Capsule + CABundlePath; cmdRun builds
 the lane-wide CA and pre-allocates mediated-step addresses; D25
 and D26 ratified).
+
+**Snapshot after instruction 40 (ADR-033)**: `7a02a324b1150f6dfa90aa8fa9c86a538630d3c21621b610bd9a85f3d83f6fb0`
+(SSH peer egress via per-peer capsule raw-TCP forwards; every step
+container runs under a capsule; `--network=none`/`--network=bridge`
+removed; allocator is now `AllocatePorts([]StepPortReq)` with per-unit
+host-port blocks; the Deployer carries the capsule infrastructure for
+all three deploy-container paths; D27 and D28 ratified; PR-23 and PR-24
+subsumed).
 
 The DoT resolver's observed identity is now recorded in the deploy
 attestation as `resolver` (`#ResolverRecord`), captured once per

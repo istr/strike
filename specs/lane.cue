@@ -140,7 +140,8 @@ package lane
 //     mediator (ADR-028); the container's egress is restricted to
 //     declared peers and their connections are attested.
 //   - SSH peers: known_hosts injection and ssh-agent-proxy
-//     forwarding (ADR-024, ADR-025).
+//     forwarding (ADR-024, ADR-025), with egress restricted to
+//     declared peers via per-peer capsule forwards (ADR-033).
 //
 // There is no OCI peer type. A step's own image is pulled
 // controller-side and verified against its pinned digest
@@ -150,8 +151,9 @@ package lane
 // declares it as an HTTPS peer. See ADR-029.
 //
 // Peer is a discriminated union over the supported protocols. A
-// non-empty peers list opts the step into network access; absent
-// or empty means --network=none. Peers flow into the deploy
+// non-empty peers list enumerates the destinations the step may
+// reach; an absent or empty list yields an empty-allowlist capsule
+// that permits no egress (ADR-033). Peers flow into the deploy
 // attestation.
 #Peer: (#HTTPSPeer | #SSHPeer) @go(-)
 
