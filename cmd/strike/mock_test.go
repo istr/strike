@@ -70,6 +70,16 @@ func (m *mockEngine) TLSIdentity() *container.TLSIdentity { return nil }
 func (m *mockEngine) Identity() *container.EngineIdentity { return m.identity }
 
 func (m *mockEngine) Info(context.Context) error { return nil }
+func (m *mockEngine) ContainerRunHeld(_ context.Context, _ container.RunOpts) (string, int, error) {
+	return "", 0, nil
+}
+
+func (m *mockEngine) ContainerArchive(_ context.Context, _, _ string) (io.ReadCloser, error) {
+	return io.NopCloser(bytes.NewReader(nil)), nil
+}
+func (m *mockEngine) ContainerRemove(_ context.Context, _ string) error { return nil }
+func (m *mockEngine) VolumeCreate(_ context.Context, _ string) error    { return nil }
+func (m *mockEngine) VolumeRemove(_ context.Context, _ string) error    { return nil }
 
 // buildTestDAG runs lane.Build on p and fails the test on error.
 func buildTestDAG(t *testing.T, p *lane.Lane) *lane.DAG {

@@ -107,6 +107,17 @@ func (e *wrapEngine) ContainerRun(_ context.Context, _ container.RunOpts) (int, 
 	return 0, nil
 }
 
+func (e *wrapEngine) ContainerRunHeld(_ context.Context, _ container.RunOpts) (string, int, error) {
+	return "", 0, nil
+}
+
+func (e *wrapEngine) ContainerArchive(_ context.Context, _, _ string) (io.ReadCloser, error) {
+	return io.NopCloser(bytes.NewReader(nil)), nil
+}
+func (e *wrapEngine) ContainerRemove(_ context.Context, _ string) error { return nil }
+func (e *wrapEngine) VolumeCreate(_ context.Context, _ string) error    { return nil }
+func (e *wrapEngine) VolumeRemove(_ context.Context, _ string) error    { return nil }
+
 func TestWrapFileAsImage_LoadsAndTags(t *testing.T) {
 	dir := t.TempDir()
 	content := []byte("hello")

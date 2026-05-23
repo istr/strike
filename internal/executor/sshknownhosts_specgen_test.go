@@ -1,6 +1,7 @@
 package executor_test
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"net/netip"
@@ -42,6 +43,16 @@ func (e *captureEngine) Ping(context.Context) error          { return nil }
 func (e *captureEngine) TLSIdentity() *container.TLSIdentity { return nil }
 func (e *captureEngine) Identity() *container.EngineIdentity { return nil }
 func (e *captureEngine) Info(context.Context) error          { return nil }
+func (e *captureEngine) ContainerRunHeld(_ context.Context, _ container.RunOpts) (string, int, error) {
+	return "", 0, nil
+}
+
+func (e *captureEngine) ContainerArchive(_ context.Context, _, _ string) (io.ReadCloser, error) {
+	return io.NopCloser(bytes.NewReader(nil)), nil
+}
+func (e *captureEngine) ContainerRemove(_ context.Context, _ string) error { return nil }
+func (e *captureEngine) VolumeCreate(_ context.Context, _ string) error    { return nil }
+func (e *captureEngine) VolumeRemove(_ context.Context, _ string) error    { return nil }
 
 const (
 	sshKnownHostsTarget  = "/etc/ssh/ssh_known_hosts"

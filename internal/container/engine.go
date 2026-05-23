@@ -45,6 +45,28 @@ type Engine interface {
 	// Returns the exit code.
 	ContainerRun(ctx context.Context, opts RunOpts) (int, error)
 
+	// ContainerRunHeld creates, starts, streams logs from, and waits for a
+	// container but does NOT remove it. Auto-removal is forced off so the
+	// stopped container survives for extraction. Returns the container id
+	// (valid for cleanup even on a post-create error) and the exit code.
+	// The caller owns removal (ContainerRemove) and extraction
+	// (ContainerArchive).
+	ContainerRunHeld(ctx context.Context, opts RunOpts) (string, int, error)
+
+	// ContainerArchive returns a tar stream of path from the container's
+	// filesystem. The container may be stopped. The caller must close the
+	// returned reader.
+	ContainerArchive(ctx context.Context, id, path string) (io.ReadCloser, error)
+
+	// ContainerRemove force-removes a container by id.
+	ContainerRemove(ctx context.Context, id string) error
+
+	// VolumeCreate creates a named engine-managed volume.
+	VolumeCreate(ctx context.Context, name string) error
+
+	// VolumeRemove removes a named engine-managed volume.
+	VolumeRemove(ctx context.Context, name string) error
+
 	// Ping verifies the engine is reachable.
 	Ping(ctx context.Context) error
 
@@ -83,6 +105,7 @@ type RunOpts struct {
 	UsernsMode  string
 	Workdir     string
 	Mounts      []Mount
+	Volume      *VolumeMount
 	SecurityOpt []string
 	CapDrop     []string
 	Cmd         []string
@@ -99,6 +122,16 @@ type Mount struct {
 	Target   string
 	Options  []string
 	ReadOnly bool
+}
+
+// VolumeMount describes the named engine-managed volume mounted into the
+// container as its single writable surface (the workdir), required under
+// the read-only root profile. Unlike Mount (a host bind), the source is an
+// engine volume, so no host path is involved.
+type VolumeMount struct {
+	Name    string
+	Dest    string
+	Options []string
 }
 
 // DefaultSecureOpts returns a RunOpts with the standard hardened security

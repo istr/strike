@@ -1,6 +1,8 @@
 package container
 
-import "testing"
+import (
+	"testing"
+)
 
 func TestParseLoadedImageID(t *testing.T) {
 	tests := []struct {
@@ -47,5 +49,29 @@ func TestParseLoadedImageID(t *testing.T) {
 					tt.stream, got, tt.expected)
 			}
 		})
+	}
+}
+
+func TestBuildSpecGenerator_NamedVolume(t *testing.T) {
+	opts := RunOpts{
+		Image:   "img",
+		Workdir: "/out/build",
+		Volume:  &VolumeMount{Name: "vol1", Dest: "/out/build"},
+	}
+	spec := buildSpecGenerator(opts)
+
+	raw, ok := spec["volumes"]
+	if !ok {
+		t.Fatal("spec has no volumes key")
+	}
+	vols, ok := raw.([]map[string]any)
+	if !ok || len(vols) != 1 {
+		t.Fatalf("volumes shape = %T len? want one entry", raw)
+	}
+	if vols[0]["Name"] != "vol1" || vols[0]["Dest"] != "/out/build" {
+		t.Errorf("volume entry = %v, want Name=vol1 Dest=/out/build", vols[0])
+	}
+	if spec["work_dir"] != "/out/build" {
+		t.Errorf("work_dir = %v, want /out/build", spec["work_dir"])
 	}
 }

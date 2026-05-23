@@ -366,44 +366,57 @@ func (e *podmanEngine) ImageSave(ctx context.Context, tag string) (io.ReadCloser
 	return resp.Body, nil
 }
 
-// ContainerRun creates, starts, waits for, and removes a container.
-func (e *podmanEngine) ContainerRun(ctx context.Context, opts RunOpts) (int, error) {
-	// 1. Create
+// runContainer creates, starts, streams logs from, and waits for a
+// container. It does not remove the container. It returns the container id
+// (valid for cleanup even when a post-create step errors) and the exit
+// code. ContainerRun and ContainerRunHeld share this body.
+func (e *podmanEngine) runContainer(ctx context.Context, opts RunOpts) (string, int, error) {
 	id, err := e.containerCreate(ctx, opts)
 	if err != nil {
-		return -1, fmt.Errorf("container create: %w", err)
+		return "", -1, fmt.Errorf("container create: %w", err)
 	}
-
-	// 2. Start
 	if startErr := e.containerStart(ctx, id); startErr != nil {
-		return -1, fmt.Errorf("container start: %w", startErr)
+		return id, -1, fmt.Errorf("container start: %w", startErr)
 	}
-
-	// 3. Stream logs (stdout/stderr) in background
 	done := make(chan error, 1)
 	go func() {
 		done <- e.containerLogs(ctx, id, opts.Stdout, opts.Stderr)
 	}()
-
-	// 4. Wait for exit
 	exitCode, err := e.containerWait(ctx, id)
 	if err != nil {
-		return -1, fmt.Errorf("container wait: %w", err)
+		return id, -1, fmt.Errorf("container wait: %w", err)
 	}
-
-	// 5. Wait for log streaming to finish
 	if logErr := <-done; logErr != nil {
 		log.Printf("WARN log streaming: %v", logErr)
 	}
+	return id, exitCode, nil
+}
 
-	// 6. Remove
+// ContainerRun creates, starts, waits for, and removes a container.
+func (e *podmanEngine) ContainerRun(ctx context.Context, opts RunOpts) (int, error) {
+	id, exitCode, err := e.runContainer(ctx, opts)
+	if err != nil {
+		return exitCode, err
+	}
 	if opts.Remove {
 		if rmErr := e.containerRemove(ctx, id); rmErr != nil {
 			return exitCode, fmt.Errorf("container remove: %w", rmErr)
 		}
 	}
-
 	return exitCode, nil
+}
+
+// ContainerRunHeld runs the container without removing it, returning its id.
+// Auto-removal is forced off (overriding opts.Remove) so the stopped
+// container survives for extraction by the caller.
+func (e *podmanEngine) ContainerRunHeld(ctx context.Context, opts RunOpts) (string, int, error) {
+	opts.Remove = false
+	return e.runContainer(ctx, opts)
+}
+
+// ContainerRemove force-removes a container by id.
+func (e *podmanEngine) ContainerRemove(ctx context.Context, id string) error {
+	return e.containerRemove(ctx, id)
 }
 
 func (e *podmanEngine) containerCreate(ctx context.Context, opts RunOpts) (string, error) {
@@ -544,6 +557,96 @@ func (e *podmanEngine) containerRemove(ctx context.Context, id string) error {
 	return nil
 }
 
+// ContainerArchive returns a tar stream of path from the container's
+// filesystem. The caller must close the returned reader.
+func (e *podmanEngine) ContainerArchive(ctx context.Context, id, path string) (io.ReadCloser, error) {
+	// VERIFY AGAINST LIVE ENGINE -- confirmed podman 5.4.2: libpod GET
+	// /containers/{id}/archive?path= returns a tar archive of path.
+	// Succeeds on a stopped container; query parameter is "path".
+	u := e.base + "/containers/" + id + "/archive?path=" + url.QueryEscape(path)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := e.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("container archive %s: %w", path, err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		body, readErr := io.ReadAll(resp.Body)
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			log.Printf("WARN close response body: %v", closeErr)
+		}
+		if readErr != nil {
+			return nil, fmt.Errorf("container archive %s: status %d: (body read failed)", path, resp.StatusCode)
+		}
+		return nil, fmt.Errorf("container archive %s: status %d: %s", path, resp.StatusCode, body)
+	}
+	return resp.Body, nil
+}
+
+// VolumeCreate creates a named engine-managed volume.
+func (e *podmanEngine) VolumeCreate(ctx context.Context, name string) error {
+	// VERIFY AGAINST LIVE ENGINE -- confirmed podman 5.4.2: libpod POST
+	// /volumes/create with body {"Name":"..."} returns 201 and the volume
+	// JSON. Body key casing is "Name"; success status is 201.
+	body, err := json.Marshal(map[string]string{"Name": name})
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		e.base+"/volumes/create", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := e.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("volume create %s: %w", name, err)
+	}
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			log.Printf("WARN close response body: %v", closeErr)
+		}
+	}()
+	if resp.StatusCode != http.StatusCreated {
+		b, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			return fmt.Errorf("volume create %s: status %d: (body read failed)", name, resp.StatusCode)
+		}
+		return fmt.Errorf("volume create %s: status %d: %s", name, resp.StatusCode, b)
+	}
+	return nil
+}
+
+// VolumeRemove removes a named engine-managed volume.
+func (e *podmanEngine) VolumeRemove(ctx context.Context, name string) error {
+	// VERIFY AGAINST LIVE ENGINE -- confirmed podman 5.4.2: libpod DELETE
+	// /volumes/{name}?force=true returns 204. Force is accepted.
+	u := e.base + "/volumes/" + url.PathEscape(name) + "?force=true"
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, u, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := e.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("volume remove %s: %w", name, err)
+	}
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			log.Printf("WARN close response body: %v", closeErr)
+		}
+	}()
+	if resp.StatusCode != http.StatusNoContent {
+		b, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			return fmt.Errorf("volume remove %s: status %d: (body read failed)", name, resp.StatusCode)
+		}
+		return fmt.Errorf("volume remove %s: status %d: %s", name, resp.StatusCode, b)
+	}
+	return nil
+}
+
 // buildSpecGenerator constructs the libpod SpecGenerator JSON from RunOpts.
 func buildSpecGenerator(opts RunOpts) map[string]any {
 	spec := map[string]any{
@@ -570,6 +673,11 @@ func buildSpecGenerator(opts RunOpts) map[string]any {
 	// Mounts (bind + tmpfs)
 	if mounts := buildMounts(opts); len(mounts) > 0 {
 		spec["mounts"] = mounts
+	}
+
+	// Named volume (the engine-managed writable workdir surface).
+	if opts.Volume != nil {
+		spec["volumes"] = buildVolumes(opts)
 	}
 
 	// Network
@@ -629,6 +737,20 @@ func buildMounts(opts RunOpts) []map[string]any {
 		})
 	}
 	return mounts
+}
+
+// buildVolumes wraps the single named volume into the array shape the
+// libpod SpecGenerator expects under the "volumes" key.
+func buildVolumes(opts RunOpts) []map[string]any {
+	// VERIFY AGAINST LIVE ENGINE -- confirmed podman 5.4.2: the libpod
+	// SpecGenerator names this key "volumes", with entries
+	// {"Name","Dest","Options"}.
+	v := opts.Volume
+	entry := map[string]any{"Name": v.Name, "Dest": v.Dest}
+	if len(v.Options) > 0 {
+		entry["Options"] = v.Options
+	}
+	return []map[string]any{entry}
 }
 
 // demuxLogStream reads the Docker/libpod multiplexed log stream.
