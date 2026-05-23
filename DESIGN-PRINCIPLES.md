@@ -274,6 +274,50 @@ path.
 *See: [ADR-026](docs/ADR-026-containers-as-sole-inter-step-storage.md).*
 
 
+## Restricted by default, relaxed only with reason
+
+strike's default posture for every capability is the most restricted one
+that still functions: no network egress, TLS 1.3, all capabilities
+dropped, read-only root filesystem, mutable references rejected. A
+capability is widened only when a concrete need requires it, and every
+widening is explicit, scoped to the narrowest surface that satisfies the
+need, justified by a named reason, and -- where the reason has a horizon
+-- given an expiry.
+
+The pattern recurs throughout the architecture:
+
+- Network egress is denied by default. A step reaches the network only by
+  enumerating peers; a step with no declared peers runs under an
+  empty-allowlist capsule that permits no egress. The capsule still
+  exists for the peer-less step rather than falling back to a bare
+  `--network=none`, so a denied connection attempt becomes an observable,
+  attested refusal instead of an opaque kernel drop.
+- TLS is pinned to 1.3 on every controller-side connection (engine mTLS,
+  the DoT resolver). The floor is lowered to TLS 1.2 on exactly one path
+  -- the external-peer dial -- because real registries cap at 1.2; the
+  relaxation is bounded (only the version floor moves, the cipher set
+  stays GCM-only), standards-backed (BSI TR-02102-2), and carries a 2031
+  horizon.
+- The system CA store is never trusted implicitly; using it is an
+  explicit per-peer opt-in.
+- Mutable image references are a parse error, not a silently resolved
+  convenience.
+
+A relaxation without a named reason is a defect, not a feature. The
+discipline is the same one that makes attestations meaningful: a declared
+restriction the runtime does not actually impose is a false anchor, and a
+relaxation no one can point to a reason for is indistinguishable from an
+accident.
+
+*See: [ADR-005](docs/ADR-005-hardened-container-profile-non-configurable.md),
+[ADR-007](docs/ADR-007-asymmetric-identity.md),
+[ADR-021](docs/ADR-021-deferred-extensions.md),
+[ADR-022](docs/ADR-022-network-opt-in-as-peer-list.md),
+[ADR-028](docs/ADR-028-step-container-egress-mediation.md),
+[ADR-029](docs/ADR-029-peers-are-container-egress.md),
+[ADR-033](docs/ADR-033-ssh-peer-egress-and-unified-mediation.md).*
+
+
 ## How the principles interact
 
 The principles reinforce each other in ways worth naming explicitly:
@@ -308,3 +352,6 @@ an afterthought.
 - [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) -- code quality, style,
   and toolchain rules that implement these principles.
 - [AGENTS.md](AGENTS.md) -- instructions for AI coding agents.
+- [docs/AI-WORKFLOW.md](docs/AI-WORKFLOW.md) -- the human-AI
+  collaboration model, neutral-checkpoint reviews, and retrospective
+  practice.
