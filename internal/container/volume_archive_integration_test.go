@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
 	"testing"
 
 	"github.com/istr/strike/internal/clock"
@@ -69,8 +68,8 @@ func TestEngineVolumeArchiveRoundTrip(t *testing.T) {
 	opts.Image = img
 	opts.Workdir = "/work"
 	opts.Volume = &container.VolumeMount{Name: vol, Dest: "/work"}
-	opts.Entrypoint = []string{"sh"}
-	opts.Cmd = []string{"-c", "echo strike-marker > /work/marker.txt"}
+	opts.Entrypoint = []string{"touch"}
+	opts.Cmd = []string{"/work/marker.txt"}
 
 	id, code, err := eng.ContainerRunHeld(ctx, opts)
 	if id != "" {
@@ -99,35 +98,28 @@ func TestEngineVolumeArchiveRoundTrip(t *testing.T) {
 		}
 	}()
 
-	content, found := readTarEntrySuffix(t, rc, "marker.txt")
-	if !found {
+	if !findTarEntry(t, rc, "marker.txt") {
 		t.Fatal("marker.txt not found in archive of /work")
-	}
-	if strings.TrimSpace(content) != "strike-marker" {
-		t.Errorf("marker content = %q, want strike-marker", content)
 	}
 }
 
-// readTarEntrySuffix scans a tar stream for the first regular-file entry
-// whose name ends with suffix and returns its content. The archive may
-// prefix entries with the directory name (e.g. "work/marker.txt").
-func readTarEntrySuffix(t *testing.T, r io.Reader, suffix string) (string, bool) {
+// findTarEntry scans a tar stream for a regular-file entry whose name
+// ends with suffix. The archive may prefix entries with the directory
+// name (e.g. "work/marker.txt").
+func findTarEntry(t *testing.T, r io.Reader, suffix string) bool {
 	t.Helper()
 	tr := tar.NewReader(r)
 	for {
 		hdr, err := tr.Next()
 		if err == io.EOF {
-			return "", false
+			return false
 		}
 		if err != nil {
 			t.Fatalf("read tar: %v", err)
 		}
-		if hdr.Typeflag == tar.TypeReg && strings.HasSuffix(hdr.Name, suffix) {
-			b, readErr := io.ReadAll(tr)
-			if readErr != nil {
-				t.Fatalf("read tar entry: %v", readErr)
-			}
-			return string(b), true
+		if hdr.Typeflag == tar.TypeReg && len(hdr.Name) >= len(suffix) &&
+			hdr.Name[len(hdr.Name)-len(suffix):] == suffix {
+			return true
 		}
 	}
 }

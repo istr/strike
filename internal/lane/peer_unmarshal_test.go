@@ -147,7 +147,7 @@ func TestStep_UnmarshalJSON_Peers(t *testing.T) {
 	input := `{
 		"name": "fetch",
 		"image": "alpine:3.20",
-		"args": ["sh", "-c", "true"],
+		"args": ["/bin/true"],
 		"env": {},
 		"inputs": [],
 		"outputs": [],
