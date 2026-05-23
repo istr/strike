@@ -212,6 +212,9 @@ deleted.
   `internal/egress/` (PR-21). IPv6 egress is out of scope
   for the initial implementation; the builder function
   panics on IPv6 inputs as a programming-error contract.
+  Superseded in part by ADR-033: the two fixed `-T` forwards are now a
+  variable set (resolver, mediator, plus one per SSH peer), and per-step
+  distinctness lives in the host port, not a per-step address.
 - **D25 (NetworkCapsule aggregate).** PR-22 introduces
   `internal/capsule/NetworkCapsule`, a per-step aggregate
   bundling the allowlist DNS resolver (PR-19), the TLS mediator
@@ -246,6 +249,24 @@ deleted.
   one step can split into two steps to mediate the HTTPS half.
   PR-23 extends dispatch to mixed HTTPS+SSH steps via
   per-SSH-peer splice forwards (resolved IP plus port 22).
+  Superseded by ADR-033 D28: the HTTPS-without-SSH restriction is
+  removed. Every step container runs under a capsule; SSH peers are
+  mediated by per-peer raw-TCP forwards (D27), and peer-less steps get
+  an empty-allowlist capsule in place of `--network=none`.
+- **D27 (SSH peer egress port-mux).** Each SSH peer of a step gets a
+  strike-assigned container-side loopback port (`SSHContainerPortBase +
+  k`, never 22) and a host-side raw-TCP forward through the capsule.
+  strike resolves the upstream via the DoT resolver, dials it, and
+  splices bytes; it does not terminate or inspect SSH. The per-peer
+  port mapping is injected as an `ssh_config` referenced via `-F`. Port
+  22 is unforwarded so a config-ignoring connection fails closed. See
+  ADR-033.
+- **D28 (universal capsule; no network-mode switch).** `--network=none`
+  and `--network=bridge` are removed. Every step container runs under a
+  per-step capsule with pasta `--splice-only`; peer-less steps get an
+  empty allowlist (resolver NXDOMAIN-all, mediator deny-all). Applies to
+  all four container paths (run, state-capture, Kubernetes deploy,
+  custom deploy). See ADR-033.
 
 ### SD-series (schema topology)
 
@@ -319,10 +340,10 @@ port-853 default) documented in
 | PR-20 | Per-step TLS mediator | Done | PR-17, PR-18 |
 | PR-21 | Per-step egress filter (pasta args) | Done | PR-19, PR-20 |
 | PR-22 | Integration: NetworkCapsule, executor wiring, version gate | Done | PR-17 .. PR-21 |
-| PR-23 | SSH-peer pasta integration (mixed HTTPS+SSH steps) | Planned | PR-22 |
-| PR-24 | SSH mediation under unified architectural roof | Planned | PR-21 |
+| PR-23 | SSH-peer pasta integration (mixed HTTPS+SSH steps) | Done (subsumed by ADR-033) | PR-22 |
+| PR-24 | SSH mediation under unified architectural roof | Done (subsumed by ADR-033) | PR-22 |
 
-The Phase-2 library work is complete.
+The Phase-2 work is complete.
 
 ### Phase 3: Cross-cutting and downstream
 
@@ -471,6 +492,12 @@ address (only `-t`/`-u` do); host ports are allocated
 deterministically in lane-file order, which keeps them collision-
 free under step parallelism and byte-stable per lane. Each step
 has its own netns, so the shared loopback never collides.
-SSH/non-demultiplexable peer port-mux and the removal of the
-`--network=none`/`--network=bridge` fallbacks follow in the next PR.
+SSH peer egress is now mediated by per-peer raw-TCP forwards through
+the capsule (ADR-033 D27), and the `--network=none`/`--network=bridge`
+fallbacks are removed: every step container runs under a capsule, with
+an empty allowlist for peer-less steps (D28). This holds across all
+four container paths. Phase 2 is complete. Phase 3 (mTLS via
+controller-held client cert, audit-sink transport hardening, Rekor via
+DialVerified) is a closing/documentation track: no further egress
+mediation is built.
 
