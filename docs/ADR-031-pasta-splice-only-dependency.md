@@ -274,3 +274,6 @@ date threshold.
 - **Code is liability.** strike grows no platform-detection code.
   The matrix is documentation; the only runtime enforcement is a
   single flat fail-fast capability check.
+- **Enforcement is structural, not discretionary.** `--splice-only` is
+  the structural realization of default-deny egress; the backend exists
+  to enforce that boundary, not to soften it.

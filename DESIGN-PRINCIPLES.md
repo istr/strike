@@ -14,6 +14,14 @@ The project is in pre-beta. Breaking changes at the schema and
 implementation layer are expected and deliberate; principle-level drift
 is not.
 
+Principles are not designed up front; they crystallize. A pattern is
+noticed across several decisions, and once it is recognized as invariant
+it is captured here. The set is strictly curated. This document *defines*
+the principles; it does not enumerate which ADRs concretize them. That
+mapping lives in each ADR's `## Principles` section and is aggregated in
+`docs/ADR-INDEX.md`, so the relation runs one way -- ADR to principle --
+and the documentation does not form a cycle.
+
 strike is built in an AI-heavy development workflow. Architectural
 decisions are made by an operator working with general-purpose
 language models; implementation is delegated to coding agents
@@ -60,27 +68,6 @@ These are not aesthetic guidelines. They are the structural form
 through which every other principle in this document survives
 contact with everyday development.
 
-*See: [ADR-001](docs/ADR-001-engine-via-api-not-exec.md),
-[ADR-002](docs/ADR-002-no-shell-in-execution-path.md),
-[ADR-004](docs/ADR-004-cue-as-single-source-of-truth.md),
-[ADR-005](docs/ADR-005-hardened-container-profile-non-configurable.md),
-[ADR-006](docs/ADR-006-secrets-as-typed-primitive.md),
-[ADR-008](docs/ADR-008-cryptographic-primitives.md),
-[ADR-010](docs/ADR-010-typed-dag-edges.md),
-[ADR-011](docs/ADR-011-sources-elimination.md),
-[ADR-013](docs/ADR-013-dsse-envelope-and-rekor.md),
-[ADR-014](docs/ADR-014-audit-transport.md),
-[ADR-015](docs/ADR-015-internal-clock-dispatch.md),
-[ADR-016](docs/ADR-016-drift-recording-posture.md),
-[ADR-017](docs/ADR-017-cross-validation-vectors.md),
-[ADR-018](docs/ADR-018-ephemeral-test-material.md),
-[ADR-019](docs/ADR-019-sbom-as-oci-referrer.md),
-[ADR-020](docs/ADR-020-storage-driver-and-host-plumbing.md),
-[ADR-021](docs/ADR-021-deferred-extensions.md),
-[ADR-024](docs/ADR-024-ssh-peer-server-trust-enforcement.md),
-[ADR-025](docs/ADR-025-ssh-peer-client-identity-enforcement.md),
-[ADR-026](docs/ADR-026-containers-as-sole-inter-step-storage.md).*
-
 
 ## No shell
 
@@ -91,10 +78,6 @@ attacks, and lateral movement. Step definitions specify an image and an
 args array; there is no `run:` block, no `bash -c`, no string
 interpolation. Using containers with a shell is an anti-pattern.
 
-*See: [ADR-001](docs/ADR-001-engine-via-api-not-exec.md),
-[ADR-002](docs/ADR-002-no-shell-in-execution-path.md),
-[ADR-009](docs/ADR-009-bootstrap-reproducibility-proof.md).*
-
 
 ## No exec
 
@@ -104,9 +87,6 @@ execution, state capture, probes, deploys -- happens inside containers
 reached through the container engine REST API. This eliminates an entire
 class of command-injection and path-hijacking vulnerabilities by design.
 
-*See: [ADR-001](docs/ADR-001-engine-via-api-not-exec.md),
-[ADR-003](docs/ADR-003-rootless-end-to-end.md).*
-
 
 ## No root
 
@@ -115,12 +95,6 @@ privileged helper, no setuid binary, no daemon. Every step container
 additionally drops all Linux capabilities, mounts its root filesystem
 read-only, disallows privilege escalation, and runs with the network
 disabled unless explicitly declared.
-
-*See: [ADR-003](docs/ADR-003-rootless-end-to-end.md),
-[ADR-005](docs/ADR-005-hardened-container-profile-non-configurable.md),
-[ADR-020](docs/ADR-020-storage-driver-and-host-plumbing.md),
-[ADR-024](docs/ADR-024-ssh-peer-server-trust-enforcement.md),
-[ADR-025](docs/ADR-025-ssh-peer-client-identity-enforcement.md).*
 
 
 ## Declarative type enforcement (CUE first)
@@ -134,11 +108,6 @@ verification approach: a secondary implementation in a different
 language can consume the exported schemas and verify strike's outputs
 independently.
 
-*See: [ADR-004](docs/ADR-004-cue-as-single-source-of-truth.md),
-[ADR-010](docs/ADR-010-typed-dag-edges.md),
-[ADR-015](docs/ADR-015-internal-clock-dispatch.md),
-[ADR-017](docs/ADR-017-cross-validation-vectors.md).*
-
 
 ## Secrets are typed
 
@@ -148,11 +117,6 @@ only in process memory, are passed to step containers via the engine
 API request body, and never appear in strike's own environment, in
 process arguments, in logs, or on disk. Leakage prevention is a
 property of the type, not a discipline of the caller.
-
-*See: [ADR-006](docs/ADR-006-secrets-as-typed-primitive.md),
-[ADR-014](docs/ADR-014-audit-transport.md),
-[ADR-016](docs/ADR-016-drift-recording-posture.md),
-[ADR-018](docs/ADR-018-ephemeral-test-material.md).*
 
 
 ## Runtime is attested
@@ -164,12 +128,6 @@ post-action state snapshots for deploy steps, and the full DAG
 predecessor chain. Attestations are signed as DSSE envelopes and
 submitted to a transparency log. The resulting chain is designed to be
 verifiable without contacting strike or the original engine.
-
-*See: [ADR-012](docs/ADR-012-engine-identity-capture.md),
-[ADR-013](docs/ADR-013-dsse-envelope-and-rekor.md),
-[ADR-014](docs/ADR-014-audit-transport.md),
-[ADR-016](docs/ADR-016-drift-recording-posture.md),
-[ADR-019](docs/ADR-019-sbom-as-oci-referrer.md).*
 
 
 ## Peers are declared
@@ -183,12 +141,6 @@ bounds both the outbound egress surface and the set of accepted
 upstream identities, and it becomes part of the step's attestation.
 Binary `network: true` is not a valid expression.
 
-*See: [ADR-005](docs/ADR-005-hardened-container-profile-non-configurable.md),
-[ADR-007](docs/ADR-007-asymmetric-identity.md),
-[ADR-022](docs/ADR-022-network-opt-in-as-peer-list.md),
-[ADR-024](docs/ADR-024-ssh-peer-server-trust-enforcement.md),
-[ADR-025](docs/ADR-025-ssh-peer-client-identity-enforcement.md).*
-
 
 ## Identity is asymmetric
 
@@ -201,14 +153,6 @@ not own the keys. Bundling the two identities into a single trust
 configuration would produce a false-consolidated anchor that no
 underlying protocol actually supports.
 
-*See: [ADR-007](docs/ADR-007-asymmetric-identity.md),
-[ADR-008](docs/ADR-008-cryptographic-primitives.md),
-[ADR-012](docs/ADR-012-engine-identity-capture.md),
-[ADR-013](docs/ADR-013-dsse-envelope-and-rekor.md),
-[ADR-019](docs/ADR-019-sbom-as-oci-referrer.md),
-[ADR-024](docs/ADR-024-ssh-peer-server-trust-enforcement.md),
-[ADR-025](docs/ADR-025-ssh-peer-client-identity-enforcement.md).*
-
 
 ## External references are digest-pinned
 
@@ -217,19 +161,6 @@ content address. `image:latest` is a parse error, not a
 silently-resolved convenience. Mutable references are rejected before
 the DAG is built, because a build whose inputs can drift after
 validation cannot be reproducibly attested.
-
-*See: [ADR-008](docs/ADR-008-cryptographic-primitives.md),
-[ADR-009](docs/ADR-009-bootstrap-reproducibility-proof.md),
-[ADR-011](docs/ADR-011-sources-elimination.md),
-[ADR-012](docs/ADR-012-engine-identity-capture.md),
-[ADR-013](docs/ADR-013-dsse-envelope-and-rekor.md),
-[ADR-016](docs/ADR-016-drift-recording-posture.md),
-[ADR-017](docs/ADR-017-cross-validation-vectors.md),
-[ADR-018](docs/ADR-018-ephemeral-test-material.md),
-[ADR-019](docs/ADR-019-sbom-as-oci-referrer.md),
-[ADR-020](docs/ADR-020-storage-driver-and-host-plumbing.md),
-[ADR-021](docs/ADR-021-deferred-extensions.md),
-[ADR-026](docs/ADR-026-containers-as-sole-inter-step-storage.md).*
 
 
 ## Reproducibility is enforced, not hoped for
@@ -252,14 +183,6 @@ property, the cross-implementation verification that the CUE-first
 principle exists to support cannot distinguish correctness from
 coincidence.
 
-*See: [ADR-009](docs/ADR-009-bootstrap-reproducibility-proof.md),
-[ADR-010](docs/ADR-010-typed-dag-edges.md),
-[ADR-011](docs/ADR-011-sources-elimination.md),
-[ADR-015](docs/ADR-015-internal-clock-dispatch.md),
-[ADR-016](docs/ADR-016-drift-recording-posture.md),
-[ADR-017](docs/ADR-017-cross-validation-vectors.md),
-[ADR-026](docs/ADR-026-containers-as-sole-inter-step-storage.md).*
-
 
 ## Containers are the only storage
 
@@ -270,8 +193,6 @@ and cache layer; an OCI registry provides optional cross-machine and
 long-term persistence. Strike's storage interface is the container engine
 API; registry interaction is an explicit operation, not the default storage
 path.
-
-*See: [ADR-026](docs/ADR-026-containers-as-sole-inter-step-storage.md).*
 
 
 ## Restricted by default, relaxed only with reason
@@ -309,13 +230,43 @@ restriction the runtime does not actually impose is a false anchor, and a
 relaxation no one can point to a reason for is indistinguishable from an
 accident.
 
-*See: [ADR-005](docs/ADR-005-hardened-container-profile-non-configurable.md),
-[ADR-007](docs/ADR-007-asymmetric-identity.md),
-[ADR-021](docs/ADR-021-deferred-extensions.md),
-[ADR-022](docs/ADR-022-network-opt-in-as-peer-list.md),
-[ADR-028](docs/ADR-028-step-container-egress-mediation.md),
-[ADR-029](docs/ADR-029-peers-are-container-egress.md),
-[ADR-033](docs/ADR-033-ssh-peer-egress-and-unified-mediation.md).*
+
+## Enforcement is structural, not discretionary
+
+Where strike imposes a security boundary, the boundary is enforced by the
+controller, in code and types, on a path that cannot be opted out of.
+There is no parallel configuration that disables it, no per-lane escape
+hatch that weakens it, and no bypass channel beside it. A lane can request
+more within a boundary -- more declared peers, a wider input set -- but it
+cannot route around the mechanism that enforces the boundary, and it
+cannot reach a capability by configuring strike to stop enforcing.
+
+The pattern recurs throughout the architecture:
+
+- Egress is mediated universally. Every container outbound connection
+  passes through a controller-mediated path with a declared trust anchor;
+  there is no raw-TCP allowlist, no plain-HTTP exception, and no
+  compatibility mode. A new protocol is supported by adding
+  controller-side mediator code, never by a lane-level opt-out.
+- The hardened container profile is not lane-configurable. Capability
+  drops, the read-only root filesystem, and no-new-privileges are fixed by
+  the controller; a lane cannot weaken them.
+- Secret non-leakage is a property of the type, not a rule the caller must
+  remember. The boundary holds by construction, so a forgetful caller
+  cannot cross it.
+- Peer trust has no per-peer opt-out. The declared peer list is the single
+  source of truth for enforcement and attestation alike; there is no
+  separate enforcement switch that could drift from it or be set to bypass
+  it.
+
+This is the complement of "restricted by default, relaxed only with
+reason": that principle governs how tight a boundary's default is and on
+what terms its scope may be widened; this one governs the mechanism, which
+is never widened, disabled, or bypassed. A boundary a lane can configure
+away is not a boundary -- it is a suggestion, and a suggestion cannot be
+attested. Enforcement that lives in the controller, with no opt-out, is
+what lets an attestation record what the runtime actually imposed rather
+than what a configuration hoped it would.
 
 
 ## How the principles interact

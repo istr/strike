@@ -86,3 +86,6 @@ They control nothing else about the security profile.
 - Code is liability (no configuration knobs to misuse)
 - Peers are declared (network is opt-in, with the opt-in visible in
   the lane source)
+- **Enforcement is structural, not discretionary.** The hardened profile
+  is fixed by the controller; a lane cannot weaken capability drops, the
+  read-only root, or no-new-privileges.

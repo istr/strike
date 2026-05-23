@@ -59,3 +59,6 @@ POST to a Unix socket). They never appear in:
 
 - Secrets are typed
 - Code is liability (redaction is structural, not procedural)
+- **Enforcement is structural, not discretionary.** Secret non-leakage
+  is a property of the type, enforced by construction rather than by
+  caller discipline.

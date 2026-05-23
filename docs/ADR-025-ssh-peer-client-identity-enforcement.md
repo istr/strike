@@ -170,3 +170,6 @@ exclusions:
   re-implementation, no key handling, no payload inspection)
 - Peers are declared (the SSH peer declaration is the opt-in;
   agent forwarding follows mechanically)
+- **Enforcement is structural, not discretionary.** Client identity
+  stays at the controller via the agent proxy; the container never holds
+  key material and cannot opt out.

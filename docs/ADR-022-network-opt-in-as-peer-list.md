@@ -108,3 +108,6 @@ appropriate trust anchor.
 - Identity is asymmetric
 - CUE first
 - No root (the network opt-in cannot weaken the hardening profile)
+- **Enforcement is structural, not discretionary.** The peer list is the
+  only enforcement input; there is no parallel network switch a lane can
+  set to bypass it.

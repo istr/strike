@@ -112,3 +112,6 @@ out of scope.
   operation needed)
 - Code is liability (one rendering function, one mount, one env
   injection; no SSH client logic in strike)
+- **Enforcement is structural, not discretionary.** Server-key
+  verification against the declared known_hosts is mandatory; there is no
+  per-peer opt-out.

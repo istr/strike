@@ -87,3 +87,21 @@ network interaction is a typed trust contract rather than a boolean
 container-egress contract with a concrete enforcement story (HTTPS
 mediation, SSH known_hosts/agent), with no declaratory-only
 variant remaining.
+
+## Principles
+
+- **Peers are declared.** A peer is exclusively a container-egress
+  contract; the declared list bounds egress and is the single source of
+  truth for both enforcement and attestation.
+- **Identity is asymmetric.** The peer vocabulary stays at the two
+  protocols (HTTPS, SSH) where client identity stays at the controller and
+  server identity is governed by the declared anchor.
+- **External references are digest-pinned.** Inbound image trust is the
+  pinned digest, not a peer declaration; the registry in a reference is a
+  location, the digest is the integrity anchor.
+- **Enforcement is structural, not discretionary.** No declaratory-only
+  peer variant remains; every peer type has a concrete enforcement story,
+  so a declared peer cannot be a trust claim the runtime does not impose.
+- **Code is liability.** The peer discriminated union loses a branch; the
+  schema, Go types, JSON dispatch, and attestation re-export all drop the
+  OCI variant.

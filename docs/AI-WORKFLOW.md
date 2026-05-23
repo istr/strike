@@ -62,6 +62,13 @@ caught error. Pinning the before-snippets to a named working-tree hash
 turns the project's own determinism discipline inward onto its
 development process.
 
+Instruction files are ephemeral working papers, not tracked history. They
+exist to move one change from analysis to execution and are discarded once
+it lands; their numbering carries no meaning and need not be contiguous or
+even consistent. This is the opposite of an ADR, which is permanent,
+strictly monotonic, and never renumbered. Nothing downstream may depend on
+an instruction file's name or number.
+
 ## Decisions are ratified before instructions exist
 
 Schema and structural decisions are resolved with the operator and

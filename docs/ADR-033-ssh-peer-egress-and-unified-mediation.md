@@ -145,3 +145,6 @@ dependency.
 - Runtime is attested (SSH connection metadata captured per attempt).
 - Code is liability (one raw-TCP forwarder; no SSH parsing, no protocol
   re-implementation, no inspection).
+- **Enforcement is structural, not discretionary.** Every step container
+  runs under a capsule; there is no `--network=none`/`bridge` escape and
+  no unmediated egress path.

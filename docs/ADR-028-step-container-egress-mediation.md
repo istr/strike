@@ -648,10 +648,10 @@ implementation reaches it:
   anchor. Both TLS mediation and SSH mediation enforce this; no
   pattern is supported that would allow container-held client
   identity material.
-- **Universal mediation.** Every container outbound connection
-  passes through a strike-mediated path with declared trust anchors.
-  There is no per-peer opt-out, no raw-TCP allowlist, no plain-HTTP
-  exception, no compatibility mode. New protocols join via
+- **Enforcement is structural, not discretionary.** Every container
+  outbound connection passes through a strike-mediated path with declared
+  trust anchors. There is no per-peer opt-out, no raw-TCP allowlist, no
+  plain-HTTP exception, no compatibility mode. New protocols join via
   controller-side mediator code, not via lane configuration.
 - **Runtime is attested.** TLS identities, resolved IPs, resolver
   identity, and connection metadata are captured and signed;

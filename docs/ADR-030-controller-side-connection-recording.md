@@ -228,3 +228,19 @@ here are: recording tracks the trust chain; the resolver's channel
 identity is the one new recorded controller-side trust artifact; OCI
 records content (the digest), never connection identity; the engine
 record stays informational.
+
+## Principles
+
+- **Runtime is attested.** The DoT resolver's observed TLS identity is
+  captured at the pre-flight handshake and signed into the deploy
+  attestation; the record states what was observed, not what was intended.
+- **Identity is asymmetric.** Resolver and engine identities are recorded
+  as distinct controller-side anchors; neither is conflated with a peer's
+  server identity.
+- **External references are digest-pinned.** OCI trust is the content
+  digest, so no registry-connection record exists or is added; the
+  registry identity is neither observable through the engine API nor
+  trust-bearing.
+- **Code is liability.** The resolver record reuses the engine-record
+  shape (`resolverRecord()` parallel to `engineRecord()`); no second
+  handshake and no per-record TLS code.

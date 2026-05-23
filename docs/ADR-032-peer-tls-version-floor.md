@@ -60,3 +60,16 @@ quantum-safe mechanisms BSI will recommend.
   applied elsewhere.
 - The asymmetry (1.3 controlled, 1.2 external) is deliberate and
   localised to one function; controlled hops are unweakened.
+
+## Principles
+
+- **Restricted by default, relaxed only with reason.** Controlled hops
+  keep a TLS 1.3 minimum; the floor drops to TLS 1.2 only on external-peer
+  hops, only because real peers (e.g. registry.npmjs.org) cap at 1.2, with
+  the cipher set bounded to the BSI TR-02102-2 AEAD/ECDHE suites and a 2031
+  horizon. Anything below TLS 1.2 is rejected, with a diagnosed failure.
+- **Peers are declared.** The relaxation applies precisely to the
+  declared-peer dial path (DoT resolver, mediator upstream), not to
+  controller-internal hops.
+- **Code is liability.** Both relaxed hops share one
+  `transport.BuildTLSConfig`; there is no per-consumer TLS configuration.

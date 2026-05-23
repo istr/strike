@@ -39,7 +39,14 @@ lint-ascii:
 		&& echo "ascii-only: ok" \
 		|| { echo "non-ASCII found in source files (see above)"; exit 1; }
 
-lint: lint-from lint-ascii
+lint-adr-index:
+	@for f in docs/ADR-[0-9]*.md; do \
+		b=$$(basename "$$f"); \
+		grep -q "$$b" docs/ADR-INDEX.md \
+			|| { echo "ADR on disk but missing from ADR-INDEX.md: $$b"; exit 1; }; \
+	done; echo "adr-index: ok"
+
+lint: lint-from lint-ascii lint-adr-index
 	golangci-lint run ./...
 
 test:
