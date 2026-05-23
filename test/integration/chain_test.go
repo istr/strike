@@ -122,6 +122,8 @@ func chainDeploy(
 		},
 	}
 
+	ca, look, caPath, ports := integrationCapsuleFields(t, "deploy-e2e")
+
 	deployer := &deploy.Deployer{
 		Engine:       engine,
 		EngineID:     engine.Identity(),
@@ -129,6 +131,11 @@ func chainDeploy(
 		SigningKey:   keyPEM,
 		KeyPassword:  nil,
 		LaneID:       "e2e-chain",
+		CA:           ca,
+		UpstreamLook: look,
+		CABundlePath: caPath,
+		StepName:     "deploy-e2e",
+		StepPorts:    ports,
 	}
 
 	att, err := deployer.Execute(ctx, step, state)

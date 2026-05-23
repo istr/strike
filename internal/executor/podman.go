@@ -73,7 +73,8 @@ func (r Run) Execute(ctx context.Context) error {
 		Options: []string{"noexec", "nosuid"},
 	})
 
-	mounts, err = appendSSHMounts(ctx, r.Step.Peers, scratchDir, mounts, env)
+	sshContainerPorts := SSHContainerPorts(r.Step.Peers)
+	mounts, err = appendSSHMounts(ctx, r.Step.Peers, scratchDir, sshContainerPorts, mounts, env)
 	if err != nil {
 		return err
 	}
@@ -88,26 +89,25 @@ func (r Run) Execute(ctx context.Context) error {
 	opts.Cmd = r.Step.Args
 	opts.Env = env
 
-	if r.Capsule != nil {
-		if r.CABundlePath == "" {
-			return fmt.Errorf("executor: Capsule set without CABundlePath")
-		}
-		// Bind-mount the ephemeral CA over the three common system
-		// CA-bundle paths. The base image will have one or two of
-		// these; Podman creates the target file if missing. See D18.
-		for _, target := range caBundleTargets {
-			mounts = append(mounts, container.Mount{
-				Source:   r.CABundlePath,
-				Target:   target,
-				ReadOnly: true,
-			})
-		}
-		opts.Network = "pasta"
-		opts.PastaArgs = r.Capsule.PastaArgs()
-		opts.DNSServers = []string{r.Capsule.ResolverAddr().Addr().String()}
-	} else {
-		opts.Network = NetworkMode(r.Step.Peers)
+	if r.Capsule == nil {
+		return fmt.Errorf("executor: container step requires a capsule")
 	}
+	if r.CABundlePath == "" {
+		return fmt.Errorf("executor: Capsule set without CABundlePath")
+	}
+	// Bind-mount the ephemeral CA over the three common system
+	// CA-bundle paths. The base image will have one or two of
+	// these; Podman creates the target file if missing. See D18.
+	for _, target := range caBundleTargets {
+		mounts = append(mounts, container.Mount{
+			Source:   r.CABundlePath,
+			Target:   target,
+			ReadOnly: true,
+		})
+	}
+	opts.Network = "pasta"
+	opts.PastaArgs = r.Capsule.PastaArgs()
+	opts.DNSServers = []string{r.Capsule.ResolverAddr().Addr().String()}
 
 	opts.Mounts = mounts
 	if r.Step.Workdir != nil {
@@ -136,16 +136,25 @@ var caBundleTargets = []string{
 	"/etc/ssl/cert.pem",                                 // Alpine (alt path)
 }
 
-// appendSSHMounts configures SSH peer known_hosts and agent proxy,
-// appending any resulting mounts and injecting env vars.
-func appendSSHMounts(ctx context.Context, peers []lane.Peer, scratchDir string, mounts []container.Mount, env map[string]string) ([]container.Mount, error) {
-	sshMount, sshEnv, err := ConfigureSSHPeers(peers, scratchDir)
+// CABundleTargets returns the system CA-bundle paths strike bind-mounts
+// the ephemeral CA over for capsule-mediated containers. Exposed for
+// the deploy package, which mediates its own container paths.
+func CABundleTargets() []string {
+	out := make([]string, len(caBundleTargets))
+	copy(out, caBundleTargets)
+	return out
+}
+
+// appendSSHMounts configures SSH peer known_hosts, the strike ssh_config
+// (per-peer Port directives), and the agent proxy, appending any
+// resulting mounts and injecting env vars. containerPorts maps each SSH
+// peer host (no port) to its container-side port.
+func appendSSHMounts(ctx context.Context, peers []lane.Peer, scratchDir string, containerPorts map[string]uint16, mounts []container.Mount, env map[string]string) ([]container.Mount, error) {
+	sshMounts, sshEnv, err := ConfigureSSHPeers(peers, scratchDir, containerPorts)
 	if err != nil {
 		return nil, fmt.Errorf("ssh peer setup: %w", err)
 	}
-	if sshMount != nil {
-		mounts = append(mounts, *sshMount)
-	}
+	mounts = append(mounts, sshMounts...)
 	for k, v := range sshEnv {
 		env[k] = v
 	}
@@ -163,14 +172,27 @@ func appendSSHMounts(ctx context.Context, peers []lane.Peer, scratchDir string, 
 	return mounts, nil
 }
 
-// NetworkMode returns the container engine network mode string for the
-// given peer list. An empty list means --network=none; a non-empty list
-// means --network=bridge. Phase 1 enforcement is declaratory: the peer
-// list itself flows into the deploy attestation; the kernel sees only
-// the bridge/none switch.
-func NetworkMode(peers []lane.Peer) string {
-	if len(peers) == 0 {
-		return "none"
+// SSHContainerPorts maps each SSH peer host (no port) to the
+// container-side loopback port the step's SSH client must use,
+// assigned capsule.SSHContainerPortBase + k in peer-list order. The
+// mapping is consumed by ConfigureSSHPeers (ssh_config Port directives)
+// and is consistent by construction with the capsule's SSH forwards,
+// which use the same base and order. Returns nil when no SSH peers are
+// present.
+func SSHContainerPorts(peers []lane.Peer) map[string]uint16 {
+	var out map[string]uint16
+	k := 0
+	for _, p := range peers {
+		sp, ok := p.(lane.SSHPeer)
+		if !ok {
+			continue
+		}
+		if out == nil {
+			out = map[string]uint16{}
+		}
+		host, _ := capsule.SplitSSHHostPort(string(sp.Host))
+		out[host] = capsule.SSHContainerPortBase + uint16(k)
+		k++
 	}
-	return "bridge"
+	return out
 }

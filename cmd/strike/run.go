@@ -139,6 +139,11 @@ func (rc *runContext) executeDeploy(ctx context.Context, step *lane.Step, stepNa
 		SigningKey:   signingKey,
 		KeyPassword:  keyPassword,
 		LaneID:       rc.lane.LaneID,
+		CA:           rc.ca,
+		UpstreamLook: rc.upstreamLook,
+		CABundlePath: rc.caBundlePath,
+		StepName:     stepName,
+		StepPorts:    rc.stepPorts,
 	}
 
 	att, err := d.Execute(ctx, step, rc.laneState)
@@ -444,23 +449,16 @@ func (rc *runContext) executeContainerStep(ctx context.Context, step *lane.Step,
 		return fmt.Errorf("%s: input mounts: %w", safeName, err)
 	}
 
-	caps, capsErr := rc.maybeStartCapsule(ctx, step, stepName, safeName)
+	caps, capsErr := rc.startCapsule(ctx, stepName, safeName, step.Peers)
 	if capsErr != nil {
 		return capsErr
 	}
-	if caps != nil {
-		defer func() {
-			rc.networkRecords[stepName] = caps.Records()
-			if stopErr := caps.Stop(); stopErr != nil {
-				log.Printf("WARN   %s: capsule stop: %v", safeName, stopErr)
-			}
-		}()
-	}
-
-	caBundlePath := ""
-	if caps != nil {
-		caBundlePath = rc.caBundlePath
-	}
+	defer func() {
+		rc.networkRecords[stepName] = caps.Records()
+		if stopErr := caps.Stop(); stopErr != nil {
+			log.Printf("WARN   %s: capsule stop: %v", safeName, stopErr)
+		}
+	}()
 
 	run := executor.Run{
 		Engine:       rc.engine,
@@ -470,7 +468,7 @@ func (rc *runContext) executeContainerStep(ctx context.Context, step *lane.Step,
 		Secrets:      secrets,
 		ImageRef:     rc.state.imageFromTags[stepName],
 		Capsule:      caps,
-		CABundlePath: caBundlePath,
+		CABundlePath: rc.caBundlePath,
 	}
 	if execErr := run.Execute(ctx); execErr != nil {
 		return fmt.Errorf("%s: execution failed: %w", safeName, execErr)
@@ -686,52 +684,33 @@ func (rc *runContext) pushAndReport(ctx context.Context, step *lane.Step, safeNa
 	return nil
 }
 
-// maybeStartCapsule constructs and starts a NetworkCapsule for the
-// step if D-b dispatch applies (HTTPS peers, no SSH peers). Returns
-// nil if the step does not qualify; the caller treats nil as "use
-// existing network behaviour".
-func (rc *runContext) maybeStartCapsule(ctx context.Context, step *lane.Step, stepName, safeName string) (*capsule.NetworkCapsule, error) {
-	if !mediates(step.Peers) {
-		return nil, nil
-	}
-
-	ports, ok := rc.stepPorts[stepName]
+// startCapsule constructs and starts a NetworkCapsule for one container
+// unit, looked up by name in the pre-allocated host-port map. Every
+// container unit gets a capsule: peer-less units get an empty allowlist
+// (resolver denies every name, mediator denies every SNI), which
+// replaces the former --network=none.
+func (rc *runContext) startCapsule(ctx context.Context, name, safeName string, peers []lane.Peer) (*capsule.NetworkCapsule, error) {
+	ports, ok := rc.stepPorts[name]
 	if !ok {
-		// Should not happen: mediates(step.Peers) was true at
-		// pre-allocation. Defensive.
 		return nil, fmt.Errorf("%s: no pre-allocated host ports", safeName)
 	}
 
-	httpsPeers := httpsPeersOf(step.Peers)
+	httpsPeers := httpsPeersOf(peers)
 	peerTrusts := make([]mediator.PeerTrust, len(httpsPeers))
 	for i, p := range httpsPeers {
 		peerTrusts[i] = mediator.PeerTrust{Host: p.Host, Trust: p.Trust}
 	}
+	sshTargets := sshTargetsOf(peers)
 
-	caps, capsErr := capsule.New(stepName, ports, peerTrusts, rc.ca, rc.upstreamLook)
+	caps, capsErr := capsule.New(name, ports, peerTrusts, sshTargets, rc.ca, rc.upstreamLook)
 	if capsErr != nil {
 		return nil, fmt.Errorf("%s: construct capsule: %w", safeName, capsErr)
 	}
 	if startErr := caps.Start(ctx); startErr != nil {
 		return nil, fmt.Errorf("%s: start capsule: %w", safeName, startErr)
 	}
-	log.Printf("CAPSULE %s @ 127.0.0.1 r:%d m:%d (peers=%d)", safeName, ports.Resolver, ports.Mediator, len(httpsPeers))
+	log.Printf("CAPSULE %s @ 127.0.0.1 r:%d m:%d (https=%d ssh=%d)", safeName, ports.Resolver, ports.Mediator, len(httpsPeers), len(sshTargets))
 	return caps, nil
-}
-
-// mediates reports whether a step qualifies for HTTPS-mediation
-// per D26: at least one HTTPS peer and no SSH peer.
-func mediates(peers []lane.Peer) bool {
-	var hasHTTPS, hasSSH bool
-	for _, p := range peers {
-		switch p.(type) {
-		case lane.HTTPSPeer:
-			hasHTTPS = true
-		case lane.SSHPeer:
-			hasSSH = true
-		}
-	}
-	return hasHTTPS && !hasSSH
 }
 
 // httpsPeersOf returns the HTTPS peers from a step's peer list.
@@ -743,4 +722,27 @@ func httpsPeersOf(peers []lane.Peer) []lane.HTTPSPeer {
 		}
 	}
 	return out
+}
+
+// sshTargetsOf returns the SSH peers of a step as capsule SSH targets,
+// in peer-list order.
+func sshTargetsOf(peers []lane.Peer) []capsule.SSHTarget {
+	var out []capsule.SSHTarget
+	for _, p := range peers {
+		if sp, ok := p.(lane.SSHPeer); ok {
+			out = append(out, capsule.SSHTarget{Host: string(sp.Host)})
+		}
+	}
+	return out
+}
+
+// sshCount returns the number of SSH peers in a peer list.
+func sshCount(peers []lane.Peer) int {
+	n := 0
+	for _, p := range peers {
+		if _, ok := p.(lane.SSHPeer); ok {
+			n++
+		}
+	}
+	return n
 }

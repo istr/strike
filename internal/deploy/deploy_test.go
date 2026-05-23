@@ -15,11 +15,13 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/istr/strike/internal/capsule"
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/deploy"
@@ -29,6 +31,40 @@ import (
 )
 
 const connTypeTLS = "tls"
+
+// deployCapsuleFields populates the capsule-related Deployer fields needed
+// by tests that exercise captureOne or method execution. portKeys lists
+// every StepPorts key the test's step will look up (capture keys and/or
+// the step name itself).
+func deployCapsuleFields(t *testing.T, portKeys ...string) (ca *transport.EphemeralCA, look capsule.UpstreamLookupFunc, caPath string, ports map[string]capsule.HostPorts) {
+	t.Helper()
+	var err error
+	ca, err = transport.New("deploy-test")
+	if err != nil {
+		t.Fatalf("transport.New: %v", err)
+	}
+	t.Cleanup(func() { testutil.CloseLog(t, ca, "deploy test CA") })
+
+	dir := t.TempDir()
+	caPath = filepath.Join(dir, "ca.pem")
+	if wErr := os.WriteFile(caPath, ca.PublicCertPEM(), 0o600); wErr != nil {
+		t.Fatalf("write CA: %v", wErr)
+	}
+
+	look = func(_ context.Context, _ string) ([]netip.Addr, error) {
+		return []netip.Addr{netip.MustParseAddr("127.0.0.1")}, nil
+	}
+
+	ports = make(map[string]capsule.HostPorts, len(portKeys))
+	base := uint16(16000)
+	for i, k := range portKeys {
+		ports[k] = capsule.HostPorts{
+			Resolver: base + uint16(i)*2,
+			Mediator: base + uint16(i)*2 + 1,
+		}
+	}
+	return ca, look, caPath, ports
+}
 
 func newTLSTestEngine(t *testing.T, handler http.Handler) container.Engine {
 	t.Helper()
@@ -288,10 +324,18 @@ func TestDeployerExecute(t *testing.T) {
 		},
 	}
 
+	ca, look, caPath, ports := deployCapsuleFields(t,
+		"capture:deploy-prod:version", "deploy-prod")
+
 	d := &deploy.Deployer{
 		Engine:       eng,
 		ArtifactRefs: map[string]string{"image": "build.image"},
 		LaneID:       "test-lane",
+		CA:           ca,
+		UpstreamLook: look,
+		CABundlePath: caPath,
+		StepName:     "deploy-prod",
+		StepPorts:    ports,
 	}
 	att, err := d.Execute(context.Background(), step, state)
 	if err != nil {
@@ -429,7 +473,19 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 		},
 	}
 
-	d := &deploy.Deployer{Engine: eng, EngineID: eng.Identity(), ArtifactRefs: map[string]string{"image": "build.image"}, LaneID: "test-lane"}
+	ca, look, caPath, ports := deployCapsuleFields(t,
+		"capture:deploy-prod:version", "deploy-prod")
+
+	d := &deploy.Deployer{
+		Engine: eng, EngineID: eng.Identity(),
+		ArtifactRefs: map[string]string{"image": "build.image"},
+		LaneID:       "test-lane",
+		CA:           ca,
+		UpstreamLook: look,
+		CABundlePath: caPath,
+		StepName:     "deploy-prod",
+		StepPorts:    ports,
+	}
 	att, err := d.Execute(context.Background(), step, state)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -492,8 +548,19 @@ func TestEngineRecord_NilEngineID(t *testing.T) {
 		},
 	}
 
+	ca, look, caPath, ports := deployCapsuleFields(t, "deploy-nil-engine")
+
 	// EngineID is nil -- engineRecord should return nil.
-	d := &deploy.Deployer{Engine: eng, EngineID: nil, ArtifactRefs: map[string]string{"image": "build.image"}, LaneID: "test-lane"}
+	d := &deploy.Deployer{
+		Engine: eng, EngineID: nil,
+		ArtifactRefs: map[string]string{"image": "build.image"},
+		LaneID:       "test-lane",
+		CA:           ca,
+		UpstreamLook: look,
+		CABundlePath: caPath,
+		StepName:     "deploy-nil-engine",
+		StepPorts:    ports,
+	}
 	att, err := d.Execute(context.Background(), step, state)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -541,7 +608,18 @@ func TestEngineRecord_WithRuntime(t *testing.T) {
 		},
 	}
 
-	d := &deploy.Deployer{Engine: eng, EngineID: id, ArtifactRefs: map[string]string{"image": "build.image"}, LaneID: "test-lane"}
+	ca, look, caPath, ports := deployCapsuleFields(t, "deploy-runtime")
+
+	d := &deploy.Deployer{
+		Engine: eng, EngineID: id,
+		ArtifactRefs: map[string]string{"image": "build.image"},
+		LaneID:       "test-lane",
+		CA:           ca,
+		UpstreamLook: look,
+		CABundlePath: caPath,
+		StepName:     "deploy-runtime",
+		StepPorts:    ports,
+	}
 	att, err := d.Execute(context.Background(), step, state)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -597,7 +675,18 @@ func TestEngineRecord_WithoutRuntime(t *testing.T) {
 		},
 	}
 
-	d := &deploy.Deployer{Engine: eng, EngineID: id, ArtifactRefs: map[string]string{"image": "build.image"}, LaneID: "test-lane"}
+	ca, look, caPath, ports := deployCapsuleFields(t, "deploy-no-runtime")
+
+	d := &deploy.Deployer{
+		Engine: eng, EngineID: id,
+		ArtifactRefs: map[string]string{"image": "build.image"},
+		LaneID:       "test-lane",
+		CA:           ca,
+		UpstreamLook: look,
+		CABundlePath: caPath,
+		StepName:     "deploy-no-runtime",
+		StepPorts:    ports,
+	}
 	att, err := d.Execute(context.Background(), step, state)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -644,7 +733,18 @@ func TestResolverRecord_NilResolverID(t *testing.T) {
 		},
 	}
 
-	d := &deploy.Deployer{Engine: eng, ResolverID: nil, ArtifactRefs: map[string]string{"image": "build.image"}, LaneID: "test-lane"}
+	ca, look, caPath, ports := deployCapsuleFields(t, "deploy-nil-resolver")
+
+	d := &deploy.Deployer{
+		Engine: eng, ResolverID: nil,
+		ArtifactRefs: map[string]string{"image": "build.image"},
+		LaneID:       "test-lane",
+		CA:           ca,
+		UpstreamLook: look,
+		CABundlePath: caPath,
+		StepName:     "deploy-nil-resolver",
+		StepPorts:    ports,
+	}
 	att, err := d.Execute(context.Background(), step, state)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -687,7 +787,18 @@ func TestResolverRecord_Populated(t *testing.T) {
 		},
 	}
 
-	d := &deploy.Deployer{Engine: eng, ResolverID: rid, ArtifactRefs: map[string]string{"image": "build.image"}, LaneID: "test-lane"}
+	ca, look, caPath, ports := deployCapsuleFields(t, "deploy-resolver")
+
+	d := &deploy.Deployer{
+		Engine: eng, ResolverID: rid,
+		ArtifactRefs: map[string]string{"image": "build.image"},
+		LaneID:       "test-lane",
+		CA:           ca,
+		UpstreamLook: look,
+		CABundlePath: caPath,
+		StepName:     "deploy-resolver",
+		StepPorts:    ports,
+	}
 	att, err := d.Execute(context.Background(), step, state)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -770,7 +881,18 @@ func TestDeployerExecute_RequiredPreStateFails(t *testing.T) {
 		},
 	}
 
-	d := &deploy.Deployer{Engine: eng, LaneID: "test-lane"}
+	ca, look, caPath, ports := deployCapsuleFields(t,
+		"capture:deploy-fail-pre:version", "deploy-fail-pre")
+
+	d := &deploy.Deployer{
+		Engine:       eng,
+		LaneID:       "test-lane",
+		CA:           ca,
+		UpstreamLook: look,
+		CABundlePath: caPath,
+		StepName:     "deploy-fail-pre",
+		StepPorts:    ports,
+	}
 	_, err := d.Execute(context.Background(), step, state)
 	if err == nil {
 		t.Fatal("expected error for required pre-state failure")
@@ -800,6 +922,9 @@ func TestDeployerExecute_WithRekor(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	ca, look, caPath, ports := deployCapsuleFields(t,
+		"capture:deploy-prod:version", "deploy-prod")
+
 	step := deployStep()
 	d := &deploy.Deployer{
 		Engine:       eng,
@@ -809,6 +934,11 @@ func TestDeployerExecute_WithRekor(t *testing.T) {
 		SigningKey:   keyPEM,
 		KeyPassword:  nil,
 		LaneID:       "test-lane",
+		CA:           ca,
+		UpstreamLook: look,
+		CABundlePath: caPath,
+		StepName:     "deploy-prod",
+		StepPorts:    ports,
 	}
 
 	att, err := d.Execute(context.Background(), step, state)
@@ -839,6 +969,9 @@ func TestDeployerExecute_NoRekor(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	ca, look, caPath, ports := deployCapsuleFields(t,
+		"capture:deploy-prod:version", "deploy-prod")
+
 	step := deployStep()
 	d := &deploy.Deployer{
 		Engine:       eng,
@@ -846,6 +979,11 @@ func TestDeployerExecute_NoRekor(t *testing.T) {
 		SigningKey:   keyPEM,
 		KeyPassword:  nil,
 		LaneID:       "test-lane",
+		CA:           ca,
+		UpstreamLook: look,
+		CABundlePath: caPath,
+		StepName:     "deploy-prod",
+		StepPorts:    ports,
 	}
 
 	att, err := d.Execute(context.Background(), step, state)
@@ -880,6 +1018,9 @@ func TestDeployerExecute_RekorTransient(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	ca, look, caPath, ports := deployCapsuleFields(t,
+		"capture:deploy-prod:version", "deploy-prod")
+
 	step := deployStep()
 	d := &deploy.Deployer{
 		Engine:       eng,
@@ -888,6 +1029,11 @@ func TestDeployerExecute_RekorTransient(t *testing.T) {
 		SigningKey:   keyPEM,
 		KeyPassword:  nil,
 		LaneID:       "test-lane",
+		CA:           ca,
+		UpstreamLook: look,
+		CABundlePath: caPath,
+		StepName:     "deploy-prod",
+		StepPorts:    ports,
 	}
 
 	att, err := d.Execute(context.Background(), step, state)
@@ -919,6 +1065,9 @@ func TestDeployerExecute_RekorSignedContentNoRekorField(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	ca, look, caPath, ports := deployCapsuleFields(t,
+		"capture:deploy-prod:version", "deploy-prod")
+
 	step := deployStep()
 	d := &deploy.Deployer{
 		Engine:       eng,
@@ -928,6 +1077,11 @@ func TestDeployerExecute_RekorSignedContentNoRekorField(t *testing.T) {
 		SigningKey:   keyPEM,
 		KeyPassword:  nil,
 		LaneID:       "test-lane",
+		CA:           ca,
+		UpstreamLook: look,
+		CABundlePath: caPath,
+		StepName:     "deploy-prod",
+		StepPorts:    ports,
 	}
 
 	att, err := d.Execute(context.Background(), step, state)

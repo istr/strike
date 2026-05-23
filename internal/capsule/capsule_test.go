@@ -10,6 +10,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/hex"
+	"fmt"
 	"io"
 	"math/big"
 	"net"
@@ -52,14 +53,14 @@ func testPorts() capsule.HostPorts {
 
 func TestNew_RejectsEmptyStepName(t *testing.T) {
 	ca := testCA(t)
-	_, err := capsule.New("", testPorts(), nil, ca, testUpstream())
+	_, err := capsule.New("", testPorts(), nil, nil, ca, testUpstream())
 	if err == nil {
 		t.Error("expected error for empty stepName, got nil")
 	}
 }
 
 func TestNew_RejectsNilCA(t *testing.T) {
-	_, err := capsule.New("step", testPorts(), nil, nil, testUpstream())
+	_, err := capsule.New("step", testPorts(), nil, nil, nil, testUpstream())
 	if err == nil {
 		t.Error("expected error for nil CA, got nil")
 	}
@@ -67,7 +68,7 @@ func TestNew_RejectsNilCA(t *testing.T) {
 
 func TestNew_RejectsNilUpstreamLookup(t *testing.T) {
 	ca := testCA(t)
-	_, err := capsule.New("step", testPorts(), nil, ca, nil)
+	_, err := capsule.New("step", testPorts(), nil, nil, ca, nil)
 	if err == nil {
 		t.Error("expected error for nil upstreamLook, got nil")
 	}
@@ -75,7 +76,7 @@ func TestNew_RejectsNilUpstreamLookup(t *testing.T) {
 
 func TestNew_EmptyPeersIsValid(t *testing.T) {
 	ca := testCA(t)
-	c, err := capsule.New("step", testPorts(), nil, ca, testUpstream())
+	c, err := capsule.New("step", testPorts(), nil, nil, ca, testUpstream())
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -87,7 +88,7 @@ func TestNew_EmptyPeersIsValid(t *testing.T) {
 
 func TestPastaArgs_ContainsSpliceOnly(t *testing.T) {
 	ca := testCA(t)
-	c, err := capsule.New("step", testPorts(), nil, ca, testUpstream())
+	c, err := capsule.New("step", testPorts(), nil, nil, ca, testUpstream())
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -114,7 +115,7 @@ func TestPastaArgs_ContainsSpliceOnly(t *testing.T) {
 
 func TestPastaArgs_IsSnapshot(t *testing.T) {
 	ca := testCA(t)
-	c, err := capsule.New("step", testPorts(), nil, ca, testUpstream())
+	c, err := capsule.New("step", testPorts(), nil, nil, ca, testUpstream())
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -128,7 +129,7 @@ func TestPastaArgs_IsSnapshot(t *testing.T) {
 
 func TestResolverAddr_UsesPort53(t *testing.T) {
 	ca := testCA(t)
-	c, err := capsule.New("step", testPorts(), nil, ca, testUpstream())
+	c, err := capsule.New("step", testPorts(), nil, nil, ca, testUpstream())
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -144,7 +145,7 @@ func TestResolverAddr_UsesPort53(t *testing.T) {
 func TestStart_BindsListeners(t *testing.T) {
 	ca := testCA(t)
 	hp := capsule.HostPorts{Resolver: 15353, Mediator: 15354}
-	c, err := capsule.New("step", hp, nil, ca, testUpstream())
+	c, err := capsule.New("step", hp, nil, nil, ca, testUpstream())
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -180,7 +181,7 @@ func TestStart_BindsListeners(t *testing.T) {
 func TestStop_ReleasesListeners(t *testing.T) {
 	ca := testCA(t)
 	hp := capsule.HostPorts{Resolver: 15355, Mediator: 15356}
-	c, err := capsule.New("step", hp, nil, ca, testUpstream())
+	c, err := capsule.New("step", hp, nil, nil, ca, testUpstream())
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -208,7 +209,7 @@ func TestStop_ReleasesListeners(t *testing.T) {
 func TestStop_Idempotent(t *testing.T) {
 	ca := testCA(t)
 	hp := capsule.HostPorts{Resolver: 15357, Mediator: 15358}
-	c, err := capsule.New("step", hp, nil, ca, testUpstream())
+	c, err := capsule.New("step", hp, nil, nil, ca, testUpstream())
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -229,7 +230,7 @@ func TestStop_Idempotent(t *testing.T) {
 
 func TestStop_BeforeStart(t *testing.T) {
 	ca := testCA(t)
-	c, err := capsule.New("step", testPorts(), nil, ca, testUpstream())
+	c, err := capsule.New("step", testPorts(), nil, nil, ca, testUpstream())
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -240,7 +241,7 @@ func TestStop_BeforeStart(t *testing.T) {
 
 func TestStartAfterStop_ReturnsError(t *testing.T) {
 	ca := testCA(t)
-	c, err := capsule.New("step", testPorts(), nil, ca, testUpstream())
+	c, err := capsule.New("step", testPorts(), nil, nil, ca, testUpstream())
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -255,7 +256,7 @@ func TestStartAfterStop_ReturnsError(t *testing.T) {
 func TestStartTwice_ReturnsError(t *testing.T) {
 	ca := testCA(t)
 	hp := capsule.HostPorts{Resolver: 15359, Mediator: 15360}
-	c, err := capsule.New("step", hp, nil, ca, testUpstream())
+	c, err := capsule.New("step", hp, nil, nil, ca, testUpstream())
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -279,7 +280,7 @@ func TestStartTwice_ReturnsError(t *testing.T) {
 
 func TestRecords_BeforeStart(t *testing.T) {
 	ca := testCA(t)
-	c, err := capsule.New("step", testPorts(), nil, ca, testUpstream())
+	c, err := capsule.New("step", testPorts(), nil, nil, ca, testUpstream())
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -293,7 +294,7 @@ func TestRecords_BeforeStart(t *testing.T) {
 func TestRecords_AfterStop_PreservesData(t *testing.T) {
 	ca := testCA(t)
 	hp := capsule.HostPorts{Resolver: 15361, Mediator: 15362}
-	c, err := capsule.New("step", hp, nil, ca, testUpstream())
+	c, err := capsule.New("step", hp, nil, nil, ca, testUpstream())
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -316,7 +317,7 @@ func TestRecords_AfterStop_PreservesData(t *testing.T) {
 func TestTwoCapsules_DistinctPorts(t *testing.T) {
 	ca := testCA(t)
 
-	ports, err := capsule.AllocatePorts([]string{"step-a", "step-b"})
+	ports, err := capsule.AllocatePorts([]capsule.StepPortReq{{Name: "step-a"}, {Name: "step-b"}})
 	if err != nil {
 		t.Fatalf("AllocatePorts: %v", err)
 	}
@@ -326,11 +327,11 @@ func TestTwoCapsules_DistinctPorts(t *testing.T) {
 		Trust: transport.FingerprintTrust{Mode: "fingerprint", Fingerprint: "sha256:aaaa"},
 	}}
 
-	c1, err := capsule.New("step-a", ports["step-a"], peers, ca, testUpstream())
+	c1, err := capsule.New("step-a", ports["step-a"], peers, nil, ca, testUpstream())
 	if err != nil {
 		t.Fatalf("New c1: %v", err)
 	}
-	c2, err := capsule.New("step-b", ports["step-b"], peers, ca, testUpstream())
+	c2, err := capsule.New("step-b", ports["step-b"], peers, nil, ca, testUpstream())
 	if err != nil {
 		t.Fatalf("New c2: %v", err)
 	}
@@ -524,7 +525,7 @@ func TestCapsule_ResolverSynthesizesStepAddr(t *testing.T) {
 		Trust: transport.FingerprintTrust{Mode: "cert_fingerprint", Fingerprint: "sha256:aaaa"},
 	}}
 
-	c, err := capsule.New("synth-step", hp, peers, ca, testUpstream())
+	c, err := capsule.New("synth-step", hp, peers, nil, ca, testUpstream())
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -633,7 +634,7 @@ func TestCapsule_DNSThenConnect_EndToEnd(t *testing.T) {
 		return []netip.Addr{upIP}, nil
 	}
 
-	c, err := capsule.New("e2e-step", hp, peers, ca, lookup)
+	c, err := capsule.New("e2e-step", hp, peers, nil, ca, lookup)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -722,7 +723,7 @@ func TestCapsule_DeniedName_NXDOMAIN(t *testing.T) {
 		Trust: transport.FingerprintTrust{Mode: "cert_fingerprint", Fingerprint: "sha256:aaaa"},
 	}}
 
-	c, err := capsule.New("deny-step", hp, peers, ca, testUpstream())
+	c, err := capsule.New("deny-step", hp, peers, nil, ca, testUpstream())
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -759,7 +760,7 @@ func TestCapsule_AAAA_AllowedName_Empty(t *testing.T) {
 		Trust: transport.FingerprintTrust{Mode: "cert_fingerprint", Fingerprint: "sha256:aaaa"},
 	}}
 
-	c, err := capsule.New("aaaa-step", hp, peers, ca, testUpstream())
+	c, err := capsule.New("aaaa-step", hp, peers, nil, ca, testUpstream())
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -793,5 +794,30 @@ func TestCapsule_AAAA_AllowedName_Empty(t *testing.T) {
 	// No answer records expected.
 	if _, ansErr := p.Answer(); ansErr == nil {
 		t.Error("expected no AAAA answer records, but got at least one")
+	}
+}
+
+func TestCapsule_SSHForward_PastaArgs(t *testing.T) {
+	ca := testCA(t)
+	sshHostPort := uint16(15375)
+	hp := capsule.HostPorts{Resolver: 15373, Mediator: 15374, SSH: []uint16{sshHostPort}}
+	targets := []capsule.SSHTarget{{Host: "git.example.com"}}
+
+	c, err := capsule.New("ssh-step", hp, nil, targets, ca, testUpstream())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	args := c.PastaArgs()
+	// The SSH forward should appear as -T <containerPort>:<hostPort>.
+	found := false
+	want := fmt.Sprintf("%d:%d", capsule.SSHContainerPortBase, sshHostPort)
+	for i, a := range args {
+		if a == "-T" && i+1 < len(args) && args[i+1] == want {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("PastaArgs %v does not contain -T %s", args, want)
 	}
 }

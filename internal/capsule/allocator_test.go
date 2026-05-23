@@ -18,7 +18,9 @@ func TestAllocatePorts_Empty(t *testing.T) {
 }
 
 func TestAllocatePorts_Contiguous(t *testing.T) {
-	ports, err := capsule.AllocatePorts([]string{"a", "b", "c"})
+	ports, err := capsule.AllocatePorts([]capsule.StepPortReq{
+		{Name: "a"}, {Name: "b"}, {Name: "c"},
+	})
 	if err != nil {
 		t.Fatalf("AllocatePorts: %v", err)
 	}
@@ -33,7 +35,7 @@ func TestAllocatePorts_Contiguous(t *testing.T) {
 }
 
 func TestAllocatePorts_Deterministic(t *testing.T) {
-	in := []string{"x", "y", "z"}
+	in := []capsule.StepPortReq{{Name: "x"}, {Name: "y"}, {Name: "z"}}
 	a, err := capsule.AllocatePorts(in)
 	if err != nil {
 		t.Fatalf("AllocatePorts: %v", err)
@@ -44,5 +46,24 @@ func TestAllocatePorts_Deterministic(t *testing.T) {
 	}
 	if !reflect.DeepEqual(a, b) {
 		t.Errorf("non-deterministic: %#v vs %#v", a, b)
+	}
+}
+
+func TestAllocatePorts_SSHBlocks(t *testing.T) {
+	ports, err := capsule.AllocatePorts([]capsule.StepPortReq{
+		{Name: "a", SSHCount: 0},
+		{Name: "b", SSHCount: 2},
+		{Name: "c", SSHCount: 1},
+	})
+	if err != nil {
+		t.Fatalf("AllocatePorts: %v", err)
+	}
+	want := map[string]capsule.HostPorts{
+		"a": {Resolver: 5353, Mediator: 5354},
+		"b": {Resolver: 5355, Mediator: 5356, SSH: []uint16{5357, 5358}},
+		"c": {Resolver: 5359, Mediator: 5360, SSH: []uint16{5361}},
+	}
+	if !reflect.DeepEqual(ports, want) {
+		t.Errorf("AllocatePorts = %#v, want %#v", ports, want)
 	}
 }

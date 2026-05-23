@@ -18,11 +18,13 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/istr/strike/internal/capsule"
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/closer"
 	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/executor"
 	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/mediator"
 	"github.com/istr/strike/internal/probe"
 	"github.com/istr/strike/internal/registry"
 	"github.com/istr/strike/internal/transport"
@@ -129,6 +131,59 @@ func HardenedRunOpts() container.RunOpts {
 	return container.DefaultSecureOpts()
 }
 
+// startUnitCapsule constructs and starts a capsule for one deploy
+// container unit, keyed by name in d.StepPorts. Returns the capsule
+// (always non-nil on success) for the caller to Stop. Mirrors the
+// run-path dispatch: every container unit runs under pasta with a
+// per-unit allowlist (empty for peer-less units).
+func (d *Deployer) startUnitCapsule(ctx context.Context, name string, peers []lane.Peer) (*capsule.NetworkCapsule, error) {
+	ports, ok := d.StepPorts[name]
+	if !ok {
+		return nil, fmt.Errorf("deploy %q: no pre-allocated host ports", name)
+	}
+	var trusts []mediator.PeerTrust
+	for _, p := range peers {
+		if hp, ok := p.(lane.HTTPSPeer); ok {
+			trusts = append(trusts, mediator.PeerTrust{Host: hp.Host, Trust: hp.Trust})
+		}
+	}
+	var targets []capsule.SSHTarget
+	for _, p := range peers {
+		if sp, ok := p.(lane.SSHPeer); ok {
+			targets = append(targets, capsule.SSHTarget{Host: string(sp.Host)})
+		}
+	}
+	caps, err := capsule.New(name, ports, trusts, targets, d.CA, d.UpstreamLook)
+	if err != nil {
+		return nil, fmt.Errorf("deploy %q: construct capsule: %w", name, err)
+	}
+	if err := caps.Start(ctx); err != nil {
+		return nil, fmt.Errorf("deploy %q: start capsule: %w", name, err)
+	}
+	return caps, nil
+}
+
+// applyCapsule sets the pasta network options and appends the CA
+// bind-mounts onto opts for a capsule-mediated deploy container.
+func (d *Deployer) applyCapsule(opts *container.RunOpts, caps *capsule.NetworkCapsule) {
+	opts.Network = "pasta"
+	opts.PastaArgs = caps.PastaArgs()
+	opts.DNSServers = []string{caps.ResolverAddr().Addr().String()}
+	for _, target := range executor.CABundleTargets() {
+		opts.Mounts = append(opts.Mounts, container.Mount{
+			Source:   d.CABundlePath,
+			Target:   target,
+			ReadOnly: true,
+		})
+	}
+}
+
+// captureKey is the stepPorts key for a state-capture container; it
+// must match cmd/strike/run.go captureKey.
+func captureKey(stepName, captureName string) string {
+	return "capture:" + stepName + ":" + captureName
+}
+
 // Deployer executes deploy steps and produces attestations.
 type Deployer struct {
 	Engine       container.Engine
@@ -137,7 +192,12 @@ type Deployer struct {
 	ResolverID   *transport.ConnectionIdentity // DoT resolver identity from the pre-flight probe; nil if unavailable
 	Rekor        *executor.RekorClient
 	DAG          *lane.DAG
+	CA           *transport.EphemeralCA
+	UpstreamLook capsule.UpstreamLookupFunc
+	StepPorts    map[string]capsule.HostPorts // unit name -> host ports
 	LaneID       string
+	StepName     string // deploy step name; method-container port key and capture-key prefix
+	CABundlePath string // lane-wide CA PEM path on host
 	SigningKey   []byte
 	KeyPassword  []byte
 }
@@ -361,13 +421,22 @@ func (d *Deployer) captureOne(ctx context.Context, sc lane.StateCapture) (captur
 		})
 	}
 
-	sshMount, sshEnv, err := executor.ConfigureSSHPeers(sc.Peers, scratchDir)
+	caps, err := d.startUnitCapsule(ctx, captureKey(d.StepName, sc.Name), sc.Peers)
+	if err != nil {
+		return captureSnap{}, err
+	}
+	defer func() {
+		if stopErr := caps.Stop(); stopErr != nil {
+			log.Printf("WARN   capture %s: capsule stop: %v", sc.Name, stopErr)
+		}
+	}()
+
+	sshContainerPorts := executor.SSHContainerPorts(sc.Peers)
+	sshMounts, sshEnv, err := executor.ConfigureSSHPeers(sc.Peers, scratchDir, sshContainerPorts)
 	if err != nil {
 		return captureSnap{}, fmt.Errorf("ssh peer setup: %w", err)
 	}
-	if sshMount != nil {
-		mounts = append(mounts, *sshMount)
-	}
+	mounts = append(mounts, sshMounts...)
 
 	agentMount, agentEnv, err := executor.StartAgentProxy(ctx, sc.Peers, scratchDir)
 	if err != nil {
@@ -389,10 +458,10 @@ func (d *Deployer) captureOne(ctx context.Context, sc lane.StateCapture) (captur
 	opts.Image = string(sc.Image)
 	opts.Cmd = sc.Command
 	opts.Mounts = mounts
-	opts.Network = executor.NetworkMode(sc.Peers)
 	opts.Env = env
 	opts.Stdout = &stdout
 	opts.Stderr = &stderr
+	d.applyCapsule(&opts, caps)
 
 	exitCode, err := d.Engine.ContainerRun(ctx, opts)
 	if err != nil {
@@ -465,13 +534,22 @@ func (d *Deployer) executeKubernetesDeploy(ctx context.Context, m lane.DeployKub
 		{Source: kubeconfig, Target: "/root/.kube/config", ReadOnly: true},
 	}
 
-	sshMount, sshEnv, err := executor.ConfigureSSHPeers(peers, scratchDir)
+	caps, err := d.startUnitCapsule(ctx, d.StepName, peers)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if stopErr := caps.Stop(); stopErr != nil {
+			log.Printf("WARN   deploy %s: capsule stop: %v", d.StepName, stopErr)
+		}
+	}()
+
+	sshContainerPorts := executor.SSHContainerPorts(peers)
+	sshMounts, sshEnv, err := executor.ConfigureSSHPeers(peers, scratchDir, sshContainerPorts)
 	if err != nil {
 		return fmt.Errorf("ssh peer setup: %w", err)
 	}
-	if sshMount != nil {
-		mounts = append(mounts, *sshMount)
-	}
+	mounts = append(mounts, sshMounts...)
 
 	agentMount, agentEnv, err := executor.StartAgentProxy(ctx, peers, scratchDir)
 	if err != nil {
@@ -492,12 +570,12 @@ func (d *Deployer) executeKubernetesDeploy(ctx context.Context, m lane.DeployKub
 	opts := HardenedRunOpts()
 	opts.Image = string(m.Image)
 	opts.Cmd = kubectlArgs
-	opts.Network = executor.NetworkMode(peers)
 	opts.Mounts = mounts
 	opts.Env = env
 	opts.Stdin = os.Stdin
 	opts.Stdout = os.Stdout
 	opts.Stderr = os.Stderr
+	d.applyCapsule(&opts, caps)
 
 	exitCode, err := d.Engine.ContainerRun(ctx, opts)
 	if err != nil {
@@ -520,7 +598,18 @@ func (d *Deployer) executeCustomDeploy(ctx context.Context, m lane.DeployCustom,
 		return fmt.Errorf("custom deploy: image required")
 	}
 
-	sshMount, sshEnv, err := executor.ConfigureSSHPeers(peers, scratchDir)
+	caps, err := d.startUnitCapsule(ctx, d.StepName, peers)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if stopErr := caps.Stop(); stopErr != nil {
+			log.Printf("WARN   deploy %s: capsule stop: %v", d.StepName, stopErr)
+		}
+	}()
+
+	sshContainerPorts := executor.SSHContainerPorts(peers)
+	sshMounts, sshEnv, err := executor.ConfigureSSHPeers(peers, scratchDir, sshContainerPorts)
 	if err != nil {
 		return fmt.Errorf("ssh peer setup: %w", err)
 	}
@@ -531,9 +620,7 @@ func (d *Deployer) executeCustomDeploy(ctx context.Context, m lane.DeployCustom,
 	}
 
 	var mounts []container.Mount
-	if sshMount != nil {
-		mounts = append(mounts, *sshMount)
-	}
+	mounts = append(mounts, sshMounts...)
 	if agentMount != nil {
 		mounts = append(mounts, *agentMount)
 	}
@@ -554,10 +641,10 @@ func (d *Deployer) executeCustomDeploy(ctx context.Context, m lane.DeployCustom,
 	opts.Entrypoint = m.Entrypoint
 	opts.Cmd = m.Args
 	opts.Env = env
-	opts.Network = executor.NetworkMode(peers)
 	opts.Mounts = mounts
 	opts.Stdout = os.Stdout
 	opts.Stderr = os.Stderr
+	d.applyCapsule(&opts, caps)
 
 	exitCode, err := d.Engine.ContainerRun(ctx, opts)
 	if err != nil {

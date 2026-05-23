@@ -85,6 +85,8 @@ func executeDeploy(t *testing.T, engine container.Engine, keyPEM []byte, state *
 		},
 	}
 
+	ca, look, caPath, ports := integrationCapsuleFields(t, "deploy-test")
+
 	deployer := &deploy.Deployer{
 		Engine:       engine,
 		EngineID:     engine.Identity(),
@@ -92,6 +94,11 @@ func executeDeploy(t *testing.T, engine container.Engine, keyPEM []byte, state *
 		SigningKey:   keyPEM,
 		KeyPassword:  nil,
 		LaneID:       "integration-test",
+		CA:           ca,
+		UpstreamLook: look,
+		CABundlePath: caPath,
+		StepName:     "deploy-test",
+		StepPorts:    ports,
 	}
 
 	att, err := deployer.Execute(ctx, step, state)

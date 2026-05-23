@@ -55,6 +55,7 @@ type UpstreamLookupFunc func(ctx context.Context, name string) ([]netip.Addr, er
 type Records struct {
 	DNS         []resolver.QueryRecord
 	Connections []mediator.ConnectionRecord
+	SSH         []SSHConnectionRecord
 }
 
 // ErrCapsuleClosed is returned by Start after Close/Stop.
@@ -79,6 +80,8 @@ type NetworkCapsule struct {
 	serveCancel context.CancelFunc
 	stepName    string
 	pastaArgs   []string
+	sshForwards []*sshForwarder
+	sshTCP      []net.Listener
 	hostPorts   HostPorts
 	state       capsuleState
 	mu          sync.Mutex
@@ -111,6 +114,7 @@ func New(
 	stepName string,
 	hostPorts HostPorts,
 	peers []mediator.PeerTrust,
+	sshTargets []SSHTarget,
 	ca *transport.EphemeralCA,
 	upstreamLook UpstreamLookupFunc,
 ) (*NetworkCapsule, error) {
@@ -123,10 +127,17 @@ func New(
 	if upstreamLook == nil {
 		return nil, errors.New("capsule: upstreamLook must not be nil")
 	}
+	if len(sshTargets) != len(hostPorts.SSH) {
+		return nil, fmt.Errorf("capsule: %d ssh targets but %d ssh host ports",
+			len(sshTargets), len(hostPorts.SSH))
+	}
 
-	allowlist := make([]transport.Host, len(peers))
-	for i, p := range peers {
-		allowlist[i] = p.Host
+	allowlist := make([]transport.Host, 0, len(peers)+len(sshTargets))
+	for _, p := range peers {
+		allowlist = append(allowlist, p.Host)
+	}
+	for _, t := range sshTargets {
+		allowlist = append(allowlist, transport.Host(t.Host))
 	}
 
 	res, err := resolver.New(stepName, allowlist, loopbackV4)
@@ -138,14 +149,29 @@ func New(
 		return nil, fmt.Errorf("capsule: mediator: %w", err)
 	}
 
+	forwarders := make([]*sshForwarder, len(sshTargets))
+	sshFwds := make([]egress.SSHForward, len(sshTargets))
+	for k, t := range sshTargets {
+		fwd, fErr := newSSHForwarder(stepName, t, upstreamLook)
+		if fErr != nil {
+			return nil, fmt.Errorf("capsule: ssh forwarder: %w", fErr)
+		}
+		forwarders[k] = fwd
+		sshFwds[k] = egress.SSHForward{
+			ContainerPort: SSHContainerPortBase + uint16(k),
+			HostPort:      hostPorts.SSH[k],
+		}
+	}
+
 	return &NetworkCapsule{
-		stepName:  stepName,
-		hostPorts: hostPorts,
-		resolver:  res,
-		mediator:  med,
-		ca:        ca,
-		pastaArgs: egress.BuildPastaArgs(resolverPort, hostPorts.Resolver, mediatorPort, hostPorts.Mediator),
-		state:     stateNew,
+		stepName:    stepName,
+		hostPorts:   hostPorts,
+		resolver:    res,
+		mediator:    med,
+		sshForwards: forwarders,
+		ca:          ca,
+		pastaArgs:   egress.BuildPastaArgs(resolverPort, hostPorts.Resolver, mediatorPort, hostPorts.Mediator, sshFwds),
+		state:       stateNew,
 	}, nil
 }
 
@@ -222,6 +248,22 @@ func (c *NetworkCapsule) Start(ctx context.Context) error {
 	c.resolverTCP = tcp
 	c.mediatorTCP = mtcp
 
+	c.sshTCP = make([]net.Listener, len(c.sshForwards))
+	for k := range c.sshForwards {
+		addr := netip.AddrPortFrom(loopbackV4, c.hostPorts.SSH[k]).String()
+		sl, slErr := lc.Listen(ctx, "tcp", addr)
+		if slErr != nil {
+			closer.Warn(udp, "capsule resolver UDP")
+			closer.Warn(tcp, "capsule resolver TCP")
+			closer.Warn(mtcp, "capsule mediator TCP")
+			for j := 0; j < k; j++ {
+				closer.Warn(c.sshTCP[j], "capsule ssh TCP")
+			}
+			return fmt.Errorf("capsule: bind ssh TCP %s: %w", addr, slErr)
+		}
+		c.sshTCP[k] = sl
+	}
+
 	serveCtx, cancel := context.WithCancel(ctx)
 	c.serveCancel = cancel
 	g, gctx := errgroup.WithContext(serveCtx)
@@ -229,6 +271,10 @@ func (c *NetworkCapsule) Start(ctx context.Context) error {
 
 	g.Go(func() error { return c.resolver.Serve(gctx, c.resolverUDP, c.resolverTCP) })
 	g.Go(func() error { return c.mediator.Serve(gctx, c.mediatorTCP) })
+	for k := range c.sshForwards {
+		fwd, l := c.sshForwards[k], c.sshTCP[k]
+		g.Go(func() error { return fwd.serve(gctx, l) })
+	}
 
 	c.state = stateStarted
 	return nil
@@ -263,6 +309,11 @@ func (c *NetworkCapsule) Stop() error {
 	if err := c.mediatorTCP.Close(); err != nil && firstErr == nil {
 		firstErr = fmt.Errorf("capsule: mediator TCP close: %w", err)
 	}
+	for _, l := range c.sshTCP {
+		if err := l.Close(); err != nil && firstErr == nil {
+			firstErr = fmt.Errorf("capsule: ssh TCP close: %w", err)
+		}
+	}
 	if serveErr != nil && firstErr == nil {
 		firstErr = fmt.Errorf("capsule: serve: %w", serveErr)
 	}
@@ -275,8 +326,13 @@ func (c *NetworkCapsule) Stop() error {
 // records collected during serve. Callable before Start (empty),
 // during, or after Stop (final).
 func (c *NetworkCapsule) Records() Records {
+	var ssh []SSHConnectionRecord
+	for _, f := range c.sshForwards {
+		ssh = append(ssh, f.Records()...)
+	}
 	return Records{
 		DNS:         c.resolver.Records(),
 		Connections: c.mediator.Records(),
+		SSH:         ssh,
 	}
 }

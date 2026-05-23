@@ -17,12 +17,20 @@ import (
 	"fmt"
 )
 
+// SSHForward is one SSH peer's TCP port pair: the container-side port
+// the step's SSH client connects to and the host-side port strike's
+// per-peer raw-TCP forwarder listens on.
+type SSHForward struct {
+	ContainerPort uint16
+	HostPort      uint16
+}
+
 // BuildPastaArgs returns the pasta options for a step container.
-// The container sees the resolver on resolverPort (53) and the
-// mediator on mediatorPort (443); strike binds these listeners
-// host-side on the unprivileged resolverHostPort and mediatorHostPort
-// (strike is rootless and cannot bind <1024). pasta's -T/-U forward
-// spec remaps the container port to the host port with the
+// The container sees the resolver on resolverPort (53), the mediator
+// on mediatorPort (443), and each SSH peer on its container port;
+// strike binds these listeners host-side on the unprivileged host
+// ports (strike is rootless and cannot bind <1024). pasta's -T/-U
+// forward spec remaps the container port to the host port with the
 // "container:host" syntax and accepts no listening address (only
 // -t/-u do), which is why per-step distinctness lives in the host
 // port rather than a per-step address.
@@ -33,17 +41,22 @@ import (
 //	-T <resolverPort>:<resolverHostPort>
 //	-T <mediatorPort>:<mediatorHostPort>
 //	-U <resolverPort>:<resolverHostPort>
+//	-T <sshContainerPort>:<sshHostPort>   (one per SSH peer, in order)
 //
 // The -U forward for the resolver port is essential: DNS clients try
 // UDP first, falling back to TCP only on truncation. Without it,
-// container DNS queries time out on UDP.
+// container DNS queries time out on UDP. SSH forwards are TCP-only.
 //
 // Byte-identical for byte-identical inputs.
-func BuildPastaArgs(resolverPort, resolverHostPort, mediatorPort, mediatorHostPort uint16) []string {
-	return []string{
+func BuildPastaArgs(resolverPort, resolverHostPort, mediatorPort, mediatorHostPort uint16, ssh []SSHForward) []string {
+	args := []string{
 		"--splice-only",
 		"-T", fmt.Sprintf("%d:%d", resolverPort, resolverHostPort),
 		"-T", fmt.Sprintf("%d:%d", mediatorPort, mediatorHostPort),
 		"-U", fmt.Sprintf("%d:%d", resolverPort, resolverHostPort),
 	}
+	for _, f := range ssh {
+		args = append(args, "-T", fmt.Sprintf("%d:%d", f.ContainerPort, f.HostPort))
+	}
+	return args
 }

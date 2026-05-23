@@ -306,20 +306,44 @@ func initLaneCA(p *lane.Lane) (*transport.EphemeralCA, string, func()) {
 	return ca, caBundlePath, cleanup
 }
 
-// allocateMediatedPorts pre-allocates host-port pairs for all
-// mediated steps in lane-file order.
+// allocateMediatedPorts pre-allocates a host-port block for every
+// container unit in lane-file order: each run step, each deploy step's
+// method container (keyed by the step name), and each pre/post
+// state-capture container (keyed "capture:<stepName>:<captureName>" to
+// stay collision-free across parallel deploy steps). Pack steps launch
+// no step container and are skipped.
 func allocateMediatedPorts(p *lane.Lane) map[string]capsule.HostPorts {
-	var names []string
+	var reqs []capsule.StepPortReq
 	for i := range p.Steps {
-		if mediates(p.Steps[i].Peers) {
-			names = append(names, string(p.Steps[i].Name))
+		s := &p.Steps[i]
+		switch {
+		case s.Pack != nil:
+			continue
+		case s.Deploy != nil:
+			reqs = append(reqs, capsule.StepPortReq{Name: string(s.Name), SSHCount: sshCount(s.Peers)})
+			for _, sc := range s.Deploy.Attestation.PreState.Capture {
+				reqs = append(reqs, capsule.StepPortReq{Name: captureKey(string(s.Name), sc.Name), SSHCount: sshCount(sc.Peers)})
+			}
+			for _, sc := range s.Deploy.Attestation.PostState.Capture {
+				reqs = append(reqs, capsule.StepPortReq{Name: captureKey(string(s.Name), sc.Name), SSHCount: sshCount(sc.Peers)})
+			}
+		default:
+			reqs = append(reqs, capsule.StepPortReq{Name: string(s.Name), SSHCount: sshCount(s.Peers)})
 		}
 	}
-	ports, err := capsule.AllocatePorts(names)
+	ports, err := capsule.AllocatePorts(reqs)
 	if err != nil {
 		log.Fatalf("error: %v", err)
 	}
 	return ports
+}
+
+// captureKey is the stepPorts map key for a state-capture container.
+// Pre and post captures of the same name within one deploy step share
+// a key (they run sequentially), but captures in different deploy
+// steps do not collide.
+func captureKey(stepName, captureName string) string {
+	return "capture:" + stepName + ":" + captureName
 }
 
 func cmdCompare(file1, file2, output string) {

@@ -3,9 +3,12 @@ package executor_test
 import (
 	"context"
 	"io"
+	"net/netip"
+	"os"
 	"strings"
 	"testing"
 
+	"github.com/istr/strike/internal/capsule"
 	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/executor"
 	"github.com/istr/strike/internal/lane"
@@ -42,9 +45,38 @@ func (e *captureEngine) Info(context.Context) error          { return nil }
 
 const (
 	sshKnownHostsTarget  = "/etc/ssh/ssh_known_hosts"
+	sshConfigTarget      = "/etc/ssh/strike_config"
 	containerAgentTarget = "/run/strike/ssh-agent.sock"
-	wantGitSSHCommand    = "ssh -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/etc/ssh/ssh_known_hosts -o GlobalKnownHostsFile=/etc/ssh/ssh_known_hosts -o PasswordAuthentication=no -o BatchMode=yes"
+	wantGitSSHCommand    = "ssh -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/etc/ssh/ssh_known_hosts -o GlobalKnownHostsFile=/etc/ssh/ssh_known_hosts -o PasswordAuthentication=no -o BatchMode=yes -F /etc/ssh/strike_config"
 )
+
+// specgenTestCapsule creates a minimal capsule for specgen tests.
+// The capsule is not Start()ed; Execute only calls PastaArgs() and
+// ResolverAddr(), which work without binding listeners.
+func specgenTestCapsule(t *testing.T) (*capsule.NetworkCapsule, string) {
+	t.Helper()
+	ca, err := transport.New("specgen-test")
+	if err != nil {
+		t.Fatalf("transport.New: %v", err)
+	}
+	t.Cleanup(func() { testutil.CloseLog(t, ca, "specgen CA") })
+
+	dir := t.TempDir()
+	caPath := dir + "/ca.pem"
+	if wErr := os.WriteFile(caPath, ca.PublicCertPEM(), 0o600); wErr != nil {
+		t.Fatalf("write CA bundle: %v", wErr)
+	}
+
+	c, err := capsule.New("specgen", capsule.HostPorts{Resolver: 15353, Mediator: 15354},
+		nil, nil, ca,
+		func(_ context.Context, _ string) ([]netip.Addr, error) {
+			return []netip.Addr{netip.MustParseAddr("127.0.0.1")}, nil
+		})
+	if err != nil {
+		t.Fatalf("capsule.New: %v", err)
+	}
+	return c, caPath
+}
 
 // specgenFakeAgent creates a minimal echo socket for tests that need SSH_AUTH_SOCK.
 func specgenFakeAgent(t *testing.T) string {
@@ -58,10 +90,13 @@ func TestExecute_WithSSHPeer(t *testing.T) {
 
 	eng := &captureEngine{}
 	outDir := t.TempDir()
+	caps, caPath := specgenTestCapsule(t)
 
 	r := executor.Run{
-		Engine:  eng,
-		Secrets: nil,
+		Engine:       eng,
+		Capsule:      caps,
+		CABundlePath: caPath,
+		Secrets:      nil,
 		Step: &lane.Step{
 			Name:  "test-step",
 			Image: lane.Ptr(lane.ImageRef("alpine:latest")),
@@ -84,7 +119,7 @@ func TestExecute_WithSSHPeer(t *testing.T) {
 	}
 
 	// Verify known_hosts mount
-	var foundKnownHosts bool
+	var foundKnownHosts, foundSSHConfig bool
 	for _, m := range eng.captured.Mounts {
 		if m.Target == sshKnownHostsTarget {
 			foundKnownHosts = true
@@ -92,9 +127,18 @@ func TestExecute_WithSSHPeer(t *testing.T) {
 				t.Error("ssh_known_hosts mount should be ReadOnly")
 			}
 		}
+		if m.Target == sshConfigTarget {
+			foundSSHConfig = true
+			if !m.ReadOnly {
+				t.Error("strike_config mount should be ReadOnly")
+			}
+		}
 	}
 	if !foundKnownHosts {
 		t.Error("expected mount with Target=/etc/ssh/ssh_known_hosts")
+	}
+	if !foundSSHConfig {
+		t.Error("expected mount with Target=/etc/ssh/strike_config")
 	}
 
 	// Verify GIT_SSH_COMMAND
@@ -110,10 +154,13 @@ func TestExecute_WithSSHPeer(t *testing.T) {
 func TestExecute_WithoutSSHPeer(t *testing.T) {
 	eng := &captureEngine{}
 	outDir := t.TempDir()
+	caps, caPath := specgenTestCapsule(t)
 
 	r := executor.Run{
-		Engine:  eng,
-		Secrets: nil,
+		Engine:       eng,
+		Capsule:      caps,
+		CABundlePath: caPath,
+		Secrets:      nil,
 		Step: &lane.Step{
 			Name:  "test-step",
 			Image: lane.Ptr(lane.ImageRef("alpine:latest")),
@@ -159,10 +206,13 @@ func TestRunExecute_SSHAgentProxy_SpecGenerator(t *testing.T) {
 
 	eng := &captureEngine{}
 	outDir := t.TempDir()
+	caps, caPath := specgenTestCapsule(t)
 
 	r := executor.Run{
-		Engine:  eng,
-		Secrets: nil,
+		Engine:       eng,
+		Capsule:      caps,
+		CABundlePath: caPath,
+		Secrets:      nil,
 		Step: &lane.Step{
 			Name:  "test-step",
 			Image: lane.Ptr(lane.ImageRef("alpine:latest")),
@@ -264,10 +314,13 @@ func TestRunExecute_SSHPeer_NoAuthSock(t *testing.T) {
 func TestRunExecute_InputMounts_FromImage_SpecGenerator(t *testing.T) {
 	eng := &captureEngine{}
 	outDir := t.TempDir()
+	caps, caPath := specgenTestCapsule(t)
 
 	r := executor.Run{
-		Engine:  eng,
-		Secrets: nil,
+		Engine:       eng,
+		Capsule:      caps,
+		CABundlePath: caPath,
+		Secrets:      nil,
 		Step: &lane.Step{
 			Name:  "consumer",
 			Image: lane.Ptr(lane.ImageRef("alpine:latest")),

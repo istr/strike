@@ -153,14 +153,14 @@ func TestRenderKnownHosts_order_independence(t *testing.T) {
 
 func TestConfigureSSHPeers_no_ssh_peers(t *testing.T) {
 	dir := t.TempDir()
-	mount, env, err := executor.ConfigureSSHPeers([]lane.Peer{
+	mounts, env, err := executor.ConfigureSSHPeers([]lane.Peer{
 		lane.HTTPSPeer{Type: "https", Host: transport.Host("example.com"), Trust: transport.FingerprintTrust{Mode: "cert_fingerprint", Fingerprint: "sha256:abc"}},
-	}, dir)
+	}, dir, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if mount != nil {
-		t.Errorf("mount = %v, want nil", mount)
+	if mounts != nil {
+		t.Errorf("mounts = %v, want nil", mounts)
 	}
 	if env != nil {
 		t.Errorf("env = %v, want nil", env)
@@ -184,21 +184,28 @@ func TestConfigureSSHPeers_with_ssh_peers(t *testing.T) {
 			},
 		},
 	}
-	mount, env, err := executor.ConfigureSSHPeers(peers, dir)
+	containerPorts := map[string]uint16{"git.example.com": 2200}
+	mounts, env, err := executor.ConfigureSSHPeers(peers, dir, containerPorts)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if mount == nil {
-		t.Fatal("mount is nil")
+	if len(mounts) != 2 {
+		t.Fatalf("got %d mounts, want 2", len(mounts))
 	}
-	if mount.Target != "/etc/ssh/ssh_known_hosts" {
-		t.Errorf("mount.Target = %q, want /etc/ssh/ssh_known_hosts", mount.Target)
+	if mounts[0].Target != "/etc/ssh/ssh_known_hosts" {
+		t.Errorf("mounts[0].Target = %q, want /etc/ssh/ssh_known_hosts", mounts[0].Target)
 	}
-	if !mount.ReadOnly {
-		t.Error("mount.ReadOnly = false, want true")
+	if !mounts[0].ReadOnly {
+		t.Error("mounts[0].ReadOnly = false, want true")
+	}
+	if mounts[1].Target != "/etc/ssh/strike_config" {
+		t.Errorf("mounts[1].Target = %q, want /etc/ssh/strike_config", mounts[1].Target)
+	}
+	if !mounts[1].ReadOnly {
+		t.Error("mounts[1].ReadOnly = false, want true")
 	}
 
-	fileBytes, err := os.ReadFile(mount.Source)
+	fileBytes, err := os.ReadFile(mounts[0].Source)
 	if err != nil {
 		t.Fatalf("read file: %v", err)
 	}
@@ -210,7 +217,7 @@ func TestConfigureSSHPeers_with_ssh_peers(t *testing.T) {
 	if env == nil {
 		t.Fatal("env is nil")
 	}
-	const wantCmd = "ssh -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/etc/ssh/ssh_known_hosts -o GlobalKnownHostsFile=/etc/ssh/ssh_known_hosts -o PasswordAuthentication=no -o BatchMode=yes"
+	const wantCmd = "ssh -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/etc/ssh/ssh_known_hosts -o GlobalKnownHostsFile=/etc/ssh/ssh_known_hosts -o PasswordAuthentication=no -o BatchMode=yes -F /etc/ssh/strike_config"
 	if env["GIT_SSH_COMMAND"] != wantCmd {
 		t.Errorf("GIT_SSH_COMMAND =\n  %q\nwant:\n  %q", env["GIT_SSH_COMMAND"], wantCmd)
 	}
