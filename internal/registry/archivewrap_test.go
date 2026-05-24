@@ -3,7 +3,10 @@ package registry_test
 import (
 	"archive/tar"
 	"bytes"
+	"context"
 	"io"
+	"os"
+	"path/filepath"
 	"sort"
 	"testing"
 
@@ -163,4 +166,65 @@ func headerKeys(m map[string]*tar.Header) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+func TestWrapArchiveAsImage_LeadingSlashEntriesAreKept(t *testing.T) {
+	// The engine archive roots entries at "/" (archiving /out yields
+	// "/lib/a.js", not "out/lib/a.js"). With stripPrefix="" every entry must
+	// be kept and re-rooted under destPrefix. A regression that strips a
+	// nonexistent base prefix drops all entries -> empty layer, size 0
+	// (the whole-workdir output bug).
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+	write := func(name, content string) {
+		if err := tw.WriteHeader(&tar.Header{
+			Typeflag: tar.TypeReg,
+			Name:     name,
+			Size:     int64(len(content)),
+			Mode:     0o644,
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tw.Write([]byte(content)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("/lib/a.js", "alpha")
+	write("/top.txt", "beta")
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	eng := &wrapEngine{}
+	client := &registry.Client{Engine: eng}
+	_, size, err := client.WrapArchiveAsImage(context.Background(), &buf, "", "layer", "localhost/strike/l/s:h")
+	if err != nil {
+		t.Fatalf("wrap: %v", err)
+	}
+	if want := int64(len("alpha") + len("beta")); size != want {
+		t.Fatalf("size = %d, want %d (entries dropped?)", size, want)
+	}
+	if len(eng.loadBodies) == 0 {
+		t.Fatal("engine received no image load")
+	}
+
+	dest := filepath.Join(t.TempDir(), "out")
+	if mkErr := os.MkdirAll(dest, 0o750); mkErr != nil {
+		t.Fatalf("mkdir: %v", mkErr)
+	}
+	if extractErr := registry.ExtractSingleLayer(eng.loadBodies[0], dest); extractErr != nil {
+		t.Fatalf("extract: %v", extractErr)
+	}
+	for rel, want := range map[string]string{
+		"layer/lib/a.js": "alpha",
+		"layer/top.txt":  "beta",
+	} {
+		got, readErr := os.ReadFile(filepath.Clean(filepath.Join(dest, rel)))
+		if readErr != nil {
+			t.Fatalf("read %s: %v", rel, readErr)
+		}
+		if string(got) != want {
+			t.Errorf("%s = %q, want %q", rel, got, want)
+		}
+	}
 }

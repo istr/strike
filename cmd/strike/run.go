@@ -531,18 +531,17 @@ func (rc *runContext) wrapArchivedOutput(ctx context.Context, step *lane.Step, s
 	workdir := step.Workdir.String()
 	tag := registry.WrapTag(rc.lane.LaneID, stepName, specHash)
 
-	// The engine prefixes archive entries with the base name of the archived
-	// path. For a named subpath that base name already equals the layer name
-	// consumers expect, so we pass through. For a whole-workdir output we
-	// strip the workdir base name and re-root under the output name.
+	// The engine archive roots entries at "/" -- the archived directory's own
+	// name is dropped, so archiving /out yields "/node_modules/...", not
+	// "out/node_modules/...". There is no base-name prefix to strip. Re-root
+	// every output under its layer name so the consumer finds it at
+	// inputDir/<OutputLayerName> (resolveInputSubpath); path.Join absorbs the
+	// leading slash because OutputLayerName is non-empty.
 	archivePath := workdir
-	stripPrefix, destPrefix := "", ""
 	if out.Path != nil {
 		archivePath = path.Join(workdir, out.Path.String())
-	} else {
-		stripPrefix = path.Base(workdir)
-		destPrefix = lane.OutputLayerName(out)
 	}
+	stripPrefix, destPrefix := "", lane.OutputLayerName(out)
 
 	stream, archErr := rc.engine.ContainerArchive(ctx, containerID, archivePath)
 	if archErr != nil {

@@ -80,17 +80,36 @@ func TestWrapArchiveAsImage_RealSymlink(t *testing.T) {
 		}
 	}()
 
-	// stripPrefix is the base name of the archived path; this assertion is
-	// what fixes the real engine prefix. If WrapArchiveAsImage produces an
-	// empty layer or an error, the prefix assumption is wrong -- report the
-	// actual entry names the archive emits.
+	// The engine archive roots entries at "/" (archiving /work yields
+	// "/website", not "work/website"), so the correct stripPrefix is "".
+	// A non-zero digest alone does NOT prove the layer is non-empty -- an
+	// empty layer also has a valid digest, which is exactly how this
+	// regressed. Re-wrap the same archive with the former base-name prefix
+	// ("work"); it cannot match the engine's "/"-rooted entries and so drops
+	// everything. The two digests must differ.
 	client := &registry.Client{Engine: eng}
-	tag := "localhost/strike/itest/arch:sym"
-	digest, _, wrapErr := client.WrapArchiveAsImage(ctx, rc, "work", "", tag)
+	good, _, wrapErr := client.WrapArchiveAsImage(ctx, rc, "", "site", "localhost/strike/itest/arch:good")
 	if wrapErr != nil {
 		t.Fatalf("wrap archive: %v", wrapErr)
 	}
-	if digest.IsZero() {
+	if good.IsZero() {
 		t.Fatal("expected non-zero digest")
+	}
+
+	rc2, archErr2 := eng.ContainerArchive(ctx, id, "/work")
+	if archErr2 != nil {
+		t.Fatalf("re-archive: %v", archErr2)
+	}
+	defer func() {
+		if closeErr := rc2.Close(); closeErr != nil {
+			t.Logf("WARN archive close: %v", closeErr)
+		}
+	}()
+	empty, _, wrapErr2 := client.WrapArchiveAsImage(ctx, rc2, "work", "site", "localhost/strike/itest/arch:basemiss")
+	if wrapErr2 != nil {
+		t.Fatalf("wrap archive (base prefix): %v", wrapErr2)
+	}
+	if good == empty {
+		t.Fatal("stripPrefix had no effect: entries dropped (engine prefix is not the workdir base name)")
 	}
 }
