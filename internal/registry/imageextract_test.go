@@ -224,15 +224,61 @@ func TestExtractSingleLayer_RejectsAbsolutePaths(t *testing.T) {
 	}
 }
 
-func TestExtractSingleLayer_RejectsSymlinks(t *testing.T) {
+func TestExtractSingleLayer_PreservesSymlink(t *testing.T) {
 	layerTar := buildLayerTar(t, []tar.Header{
-		{Typeflag: tar.TypeSymlink, Name: "link", Linkname: "/etc/passwd", Mode: 0o777},
+		{Typeflag: tar.TypeSymlink, Name: "link", Linkname: "target.txt", Mode: 0o777},
 	}, nil)
 
 	imgTar := buildSingleLayerImageTar(t, layerTar)
 	dest := t.TempDir()
-	if err := registry.ExtractSingleLayer(imgTar, dest); err == nil {
-		t.Fatal("expected error for symlink")
+	if err := registry.ExtractSingleLayer(imgTar, dest); err != nil {
+		t.Fatalf("extract: %v", err)
+	}
+	got, err := os.Readlink(filepath.Join(dest, "link"))
+	if err != nil {
+		t.Fatalf("expected a symlink: %v", err)
+	}
+	if got != "target.txt" {
+		t.Errorf("link target = %q, want %q", got, "target.txt")
+	}
+}
+
+func TestExtractSingleLayer_PreservesContainedSymlink(t *testing.T) {
+	src := t.TempDir()
+	sub := filepath.Join(src, "mydir")
+	if err := os.MkdirAll(sub, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sub, "real.txt"), []byte("data"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("real.txt", filepath.Join(sub, "link.txt")); err != nil {
+		t.Fatal(err)
+	}
+
+	root := mustOpenRoot(t, src)
+	eng := &wrapEngine{}
+	client := &registry.Client{Engine: eng}
+	if _, _, err := client.WrapDirectoryAsImage(context.Background(), root, "mydir", "localhost/strike/l/s:h"); err != nil {
+		t.Fatalf("wrap: %v", err)
+	}
+	if len(eng.loadBodies) == 0 {
+		t.Fatal("engine received no image load")
+	}
+
+	dest := filepath.Join(t.TempDir(), "out")
+	if err := os.MkdirAll(dest, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := registry.ExtractSingleLayer(eng.loadBodies[0], dest); err != nil {
+		t.Fatalf("extract: %v", err)
+	}
+	got, err := os.Readlink(filepath.Join(dest, "mydir", "link.txt"))
+	if err != nil {
+		t.Fatalf("expected a symlink: %v", err)
+	}
+	if got != "real.txt" {
+		t.Errorf("link target = %q, want %q", got, "real.txt")
 	}
 }
 

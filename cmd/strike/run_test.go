@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -893,5 +894,105 @@ func TestNewRunState(t *testing.T) {
 	s := newRunState()
 	if s.specHashes == nil {
 		t.Fatal("specHashes should be initialized")
+	}
+}
+
+// --------------------------------------------------------------------------.
+// validateMountSymlinks
+// --------------------------------------------------------------------------.
+
+func TestValidateMountSymlinks(t *testing.T) {
+	cases := []struct {
+		build   func(t *testing.T, dir string) string // returns the srcPath to validate
+		name    string
+		wantErr bool
+	}{
+		{
+			name: "contained sibling link",
+			build: func(t *testing.T, dir string) string {
+				if err := os.WriteFile(filepath.Join(dir, "real.txt"), []byte("x"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Symlink("real.txt", filepath.Join(dir, "link.txt")); err != nil {
+					t.Fatal(err)
+				}
+				return dir
+			},
+			wantErr: false,
+		},
+		{
+			name: "escaping relative link",
+			build: func(t *testing.T, dir string) string {
+				if err := os.Symlink("../escape", filepath.Join(dir, "link")); err != nil {
+					t.Fatal(err)
+				}
+				return dir
+			},
+			wantErr: true,
+		},
+		{
+			name: "absolute link",
+			build: func(t *testing.T, dir string) string {
+				if err := os.Symlink("/etc/passwd", filepath.Join(dir, "link")); err != nil {
+					t.Fatal(err)
+				}
+				return dir
+			},
+			wantErr: true,
+		},
+		{
+			name: "subpath severs a contained link",
+			build: func(t *testing.T, dir string) string {
+				// Full tree: pkg/website -> ../shared/x, with shared/x present.
+				// Contained in the full tree, severed when only pkg is mounted.
+				if err := os.MkdirAll(filepath.Join(dir, "shared", "x"), 0o750); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.MkdirAll(filepath.Join(dir, "pkg"), 0o750); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Symlink("../shared/x", filepath.Join(dir, "pkg", "website")); err != nil {
+					t.Fatal(err)
+				}
+				return filepath.Join(dir, "pkg") // validate as the mounted subpath
+			},
+			wantErr: true,
+		},
+		{
+			name: "mount source is itself a symlink",
+			build: func(t *testing.T, dir string) string {
+				if err := os.MkdirAll(filepath.Join(dir, "target"), 0o750); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Symlink("target", filepath.Join(dir, "linkdir")); err != nil {
+					t.Fatal(err)
+				}
+				return filepath.Join(dir, "linkdir")
+			},
+			wantErr: true,
+		},
+		{
+			name: "regular file mount",
+			build: func(t *testing.T, dir string) string {
+				p := filepath.Join(dir, "file.txt")
+				if err := os.WriteFile(p, []byte("x"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+				return p
+			},
+			wantErr: false,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			src := c.build(t, t.TempDir())
+			err := validateMountSymlinks(src)
+			if c.wantErr && err == nil {
+				t.Fatal("expected error, got nil")
+			}
+			if !c.wantErr && err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
 	}
 }

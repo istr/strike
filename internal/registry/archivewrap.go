@@ -114,8 +114,8 @@ func collectArchiveEntries(r io.Reader, stripPrefix, destPrefix string) ([]canon
 			entries = append(entries, canonicalEntry{name: name, content: data, mode: mode, typeflag: tar.TypeReg})
 			totalSize += int64(len(data))
 		case tar.TypeSymlink:
-			if lane.SymlinkEscapes(rel, hdr.Linkname) {
-				return nil, 0, fmt.Errorf("symlink %q escapes output tree (target %q)", rel, hdr.Linkname)
+			if err := lane.SymlinkContainmentError(rel, hdr.Linkname, "output tree"); err != nil {
+				return nil, 0, err
 			}
 			entries = append(entries, canonicalEntry{name: name, linkname: hdr.Linkname, mode: 0o777, typeflag: tar.TypeSymlink})
 		default:

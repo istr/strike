@@ -150,8 +150,29 @@ func extractEntry(root *os.Root, hdr *tar.Header, tr io.Reader) error {
 		if err := extractRegularFile(root, hdr.Name, tr, hdr.Size, mode); err != nil {
 			return err
 		}
+	case tar.TypeSymlink:
+		if err := extractSymlink(root, hdr.Name, hdr.Linkname); err != nil {
+			return err
+		}
 	default:
 		return fmt.Errorf("layer entry %q has unsupported type %d", hdr.Name, hdr.Typeflag)
+	}
+	return nil
+}
+
+// extractSymlink creates a symlink entry within root. The link is created,
+// never followed: os.Root.Symlink confines the link's location to root and
+// refuses to traverse it for later writes, and the target is stored verbatim
+// without inspection. Containment of the target is not decided here -- a link
+// valid in the full artifact must survive extraction so a whole-artifact
+// mount works. Whether the target stays inside a given consuming mount is
+// decided per mountpoint at mount construction (validateMountSymlinks).
+func extractSymlink(root *os.Root, name, target string) error {
+	if err := root.MkdirAll(filepath.Dir(name), 0o755); err != nil {
+		return fmt.Errorf("mkdir parent %s: %w", name, err)
+	}
+	if err := root.Symlink(target, name); err != nil {
+		return fmt.Errorf("symlink %s: %w", name, err)
 	}
 	return nil
 }

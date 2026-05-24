@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"os"
 	"path"
@@ -657,7 +658,54 @@ func (rc *runContext) resolveInputEdge(ctx context.Context, e lane.InputEdge, sc
 		return "", err
 	}
 
-	return resolveInputSubpath(e, inputDir)
+	srcPath, err := resolveInputSubpath(e, inputDir)
+	if err != nil {
+		return "", err
+	}
+	if vErr := validateMountSymlinks(srcPath); vErr != nil {
+		return "", fmt.Errorf("input at %q: %w", e.Mount, vErr)
+	}
+	return srcPath, nil
+}
+
+// validateMountSymlinks rejects any symlink within the mount source that
+// resolves outside it (ADR-034 consume side). Containment is measured against
+// srcPath -- the exact subtree bind-mounted into the step -- so a link that is
+// contained in the full producer artifact but severed by a selected subpath is
+// caught here, mirroring the per-output check on the produce side. Evaluation
+// is lexical (lane.SymlinkContainmentError); the tree is walked only to
+// enumerate links, never followed. An escaping link is a hard error: it
+// propagates through buildInputMounts and aborts the step before its
+// container starts.
+func validateMountSymlinks(srcPath string) error {
+	info, err := os.Lstat(srcPath)
+	if err != nil {
+		return fmt.Errorf("stat mount source: %w", err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("mount source %q is itself a symlink", filepath.Base(srcPath))
+	}
+	if !info.IsDir() {
+		return nil // a regular file has no contained links
+	}
+	root, err := os.OpenRoot(srcPath)
+	if err != nil {
+		return fmt.Errorf("open mount source: %w", err)
+	}
+	defer closer.Warn(root, "mount symlink scan")
+	return fs.WalkDir(root.FS(), ".", func(p string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.Type()&fs.ModeSymlink == 0 {
+			return nil
+		}
+		target, linkErr := root.Readlink(p)
+		if linkErr != nil {
+			return fmt.Errorf("read symlink %q: %w", p, linkErr)
+		}
+		return lane.SymlinkContainmentError(p, target, "mount tree")
+	})
 }
 
 // extractInputArtifact ensures the producer output is extracted exactly
