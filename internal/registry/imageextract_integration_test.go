@@ -7,44 +7,41 @@ import (
 	"context"
 	"io"
 	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/istr/strike/internal/registry"
+	"github.com/istr/strike/internal/registry/regtest"
 )
 
 func TestExtractSingleLayer_Integration(t *testing.T) {
 	engine := needsEngine(t)
-	client := &registry.Client{Engine: engine}
 	ctx := context.Background()
 
-	// Create a test file to wrap.
-	dir := t.TempDir()
 	content := []byte("extract integration test")
-	srcPath := filepath.Join(dir, "data.txt")
-	if err := os.WriteFile(srcPath, content, 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	srcRoot := mustOpenRoot(t, dir)
-	tag := "localhost/strike/test-extract/step:" + randomHex(t)
-	_, _, err := client.WrapFileAsImage(ctx, srcRoot, "data.txt", tag)
+	tarBytes, _, err := regtest.BuildImageTar("data.txt", content)
 	if err != nil {
-		t.Fatalf("WrapFileAsImage: %v", err)
+		t.Fatalf("BuildImageTar: %v", err)
 	}
 
-	// SaveImage from the real engine.
-	tarBytes, err := registry.SaveImage(ctx, engine, tag)
+	tag := "localhost/strike/test-extract/step:" + randomHex(t)
+	id, err := engine.ImageLoad(ctx, bytes.NewReader(tarBytes))
+	if err != nil {
+		t.Fatalf("ImageLoad: %v", err)
+	}
+	if err := engine.ImageTag(ctx, id, tag); err != nil {
+		t.Fatalf("ImageTag: %v", err)
+	}
+
+	saved, err := registry.SaveImage(ctx, engine, tag)
 	if err != nil {
 		t.Fatalf("SaveImage: %v", err)
 	}
-	if len(tarBytes) == 0 {
+	if len(saved) == 0 {
 		t.Fatal("SaveImage returned empty tar")
 	}
 
-	// Extract and verify content.
 	destDir := t.TempDir()
-	if err := registry.ExtractSingleLayer(tarBytes, destDir); err != nil {
+	if err := registry.ExtractSingleLayer(saved, destDir); err != nil {
 		t.Fatalf("ExtractSingleLayer: %v", err)
 	}
 

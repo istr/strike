@@ -18,6 +18,7 @@ import (
 
 	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/registry"
+	"github.com/istr/strike/internal/registry/regtest"
 )
 
 // stubSaveEngine implements container.Engine with only ImageSave functional.
@@ -104,9 +105,9 @@ func buildOCIImageTar(t *testing.T, layers ...v1.Layer) []byte {
 	if err != nil {
 		t.Fatalf("AppendLayers: %v", err)
 	}
-	data, tarErr := registry.SingleImageTarForTest(img)
+	data, tarErr := regtest.LayoutTar(img)
 	if tarErr != nil {
-		t.Fatalf("SingleImageTarForTest: %v", tarErr)
+		t.Fatalf("LayoutTar: %v", tarErr)
 	}
 	return data
 }
@@ -244,34 +245,48 @@ func TestExtractSingleLayer_PreservesSymlink(t *testing.T) {
 }
 
 func TestExtractSingleLayer_PreservesContainedSymlink(t *testing.T) {
-	src := t.TempDir()
-	sub := filepath.Join(src, "mydir")
-	if err := os.MkdirAll(sub, 0o750); err != nil {
-		t.Fatal(err)
+	// Build a tar with a contained symlink, wrap it via WrapArchiveAsImage,
+	// then extract and verify the symlink survives.
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+	entries := []struct {
+		hdr     tar.Header
+		content []byte
+	}{
+		{tar.Header{Typeflag: tar.TypeDir, Name: "mydir/", Mode: 0o755}, nil},
+		{tar.Header{Typeflag: tar.TypeReg, Name: "mydir/real.txt", Size: 4, Mode: 0o644}, []byte("data")},
+		{tar.Header{Typeflag: tar.TypeSymlink, Name: "mydir/link.txt", Linkname: "real.txt", Mode: 0o777}, nil},
 	}
-	if err := os.WriteFile(filepath.Join(sub, "real.txt"), []byte("data"), 0o600); err != nil {
-		t.Fatal(err)
+	for _, e := range entries {
+		if err := tw.WriteHeader(&e.hdr); err != nil {
+			t.Fatal(err)
+		}
+		if e.content != nil {
+			if _, err := tw.Write(e.content); err != nil {
+				t.Fatal(err)
+			}
+		}
 	}
-	if err := os.Symlink("real.txt", filepath.Join(sub, "link.txt")); err != nil {
+	if err := tw.Close(); err != nil {
 		t.Fatal(err)
 	}
 
-	root := mustOpenRoot(t, src)
 	eng := &wrapEngine{}
 	client := &registry.Client{Engine: eng}
-	if _, _, err := client.WrapDirectoryAsImage(context.Background(), root, "mydir", "localhost/strike/l/s:h"); err != nil {
-		t.Fatalf("wrap: %v", err)
+	_, _, wrapErr := client.WrapArchiveAsImage(context.Background(), &buf, "", "", "localhost/strike/l/s:h")
+	if wrapErr != nil {
+		t.Fatalf("wrap: %v", wrapErr)
 	}
 	if len(eng.loadBodies) == 0 {
 		t.Fatal("engine received no image load")
 	}
 
 	dest := filepath.Join(t.TempDir(), "out")
-	if err := os.MkdirAll(dest, 0o750); err != nil {
-		t.Fatal(err)
+	if mkErr := os.MkdirAll(dest, 0o750); mkErr != nil {
+		t.Fatal(mkErr)
 	}
-	if err := registry.ExtractSingleLayer(eng.loadBodies[0], dest); err != nil {
-		t.Fatalf("extract: %v", err)
+	if exErr := registry.ExtractSingleLayer(eng.loadBodies[0], dest); exErr != nil {
+		t.Fatalf("extract: %v", exErr)
 	}
 	got, err := os.Readlink(filepath.Join(dest, "mydir", "link.txt"))
 	if err != nil {

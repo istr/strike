@@ -11,6 +11,7 @@ import (
 	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/registry"
+	"github.com/istr/strike/internal/registry/regtest"
 	"github.com/istr/strike/internal/transport"
 )
 
@@ -85,9 +86,9 @@ func TestBuildInputMounts_Single(t *testing.T) {
 	rc.state.specHashes["compile"] = lane.MustParseDigest("sha256:1111111111111111000000000000000000000000000000000000000000000000")
 
 	// Build a test OCI tar with a "binary" file inside.
-	tarBytes, _, err := registry.BuildTestImageTar("binary", []byte("data"))
+	tarBytes, _, err := regtest.BuildImageTar("binary", []byte("data"))
 	if err != nil {
-		t.Fatalf("BuildTestImageTar: %v", err)
+		t.Fatalf("BuildImageTar: %v", err)
 	}
 	tag := registry.WrapTag(rc.lane.LaneID, "compile", rc.state.specHashes["compile"])
 	eng.saveTars = map[string][]byte{tag: tarBytes}
@@ -150,13 +151,13 @@ func TestBuildInputMounts_Multiple(t *testing.T) {
 	rc.state.specHashes["s2"] = lane.MustParseDigest("sha256:3333333333333333000000000000000000000000000000000000000000000000")
 
 	// Build test image tars for both steps.
-	tar1, _, err := registry.BuildTestImageTar("a.tar", []byte("a"))
+	tar1, _, err := regtest.BuildImageTar("a.tar", []byte("a"))
 	if err != nil {
-		t.Fatalf("BuildTestImageTar s1: %v", err)
+		t.Fatalf("BuildImageTar s1: %v", err)
 	}
-	tar2, _, err := registry.BuildTestImageTar("b.tar", []byte("b"))
+	tar2, _, err := regtest.BuildImageTar("b.tar", []byte("b"))
 	if err != nil {
-		t.Fatalf("BuildTestImageTar s2: %v", err)
+		t.Fatalf("BuildImageTar s2: %v", err)
 	}
 	tag1 := registry.WrapTag(rc.lane.LaneID, "s1", rc.state.specHashes["s1"])
 	tag2 := registry.WrapTag(rc.lane.LaneID, "s2", rc.state.specHashes["s2"])
@@ -202,9 +203,9 @@ func TestBuildInputMounts_MissingSubpath(t *testing.T) {
 	rc.state.specHashes["src"] = lane.MustParseDigest("sha256:1111111111111111000000000000000000000000000000000000000000000000")
 
 	// Build a test OCI tar with a "tree" directory containing only "actual.json".
-	tarBytes, _, err := registry.BuildTestImageTar("tree/actual.json", []byte("{}"))
+	tarBytes, _, err := regtest.BuildImageTar("tree/actual.json", []byte("{}"))
 	if err != nil {
-		t.Fatalf("BuildTestImageTar: %v", err)
+		t.Fatalf("BuildImageTar: %v", err)
 	}
 	tag := registry.WrapTag(rc.lane.LaneID, "src", rc.state.specHashes["src"])
 	eng.saveTars = map[string][]byte{tag: tarBytes}
@@ -733,9 +734,9 @@ func TestResolvePackInputPaths(t *testing.T) {
 	}
 	rc.state.specHashes["compile"] = lane.MustParseDigest("sha256:1111111111111111000000000000000000000000000000000000000000000000")
 
-	tarBytes, _, err := registry.BuildTestImageTar("binary", []byte("bin"))
+	tarBytes, _, err := regtest.BuildImageTar("binary", []byte("bin"))
 	if err != nil {
-		t.Fatalf("BuildTestImageTar: %v", err)
+		t.Fatalf("BuildImageTar: %v", err)
 	}
 	tag := registry.WrapTag(rc.lane.LaneID, "compile", rc.state.specHashes["compile"])
 	eng.saveTars = map[string][]byte{tag: tarBytes}

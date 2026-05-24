@@ -24,6 +24,7 @@ import (
 	"github.com/istr/strike/internal/executor"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/registry"
+	"github.com/istr/strike/internal/registry/regtest"
 	"github.com/istr/strike/internal/testutil"
 	"github.com/istr/strike/internal/transport"
 )
@@ -245,7 +246,7 @@ func loadOCITar(ctx context.Context, c *registry.Client, root *os.Root, relPath 
 	}
 	defer closer.Warn(tmpRoot, "loadOCITar root")
 
-	if extractErr := registry.ExtractTarForTest(data, tmpRoot); extractErr != nil {
+	if extractErr := regtest.ExtractTar(data, tmpRoot); extractErr != nil {
 		return lane.Digest{}, fmt.Errorf("extract layout: %w", extractErr)
 	}
 
@@ -286,7 +287,7 @@ func loadOCITar(ctx context.Context, c *registry.Client, root *os.Root, relPath 
 		return lane.Digest{}, fmt.Errorf("no annotated main image in %d-manifest archive", len(manifest.Manifests))
 	}
 
-	tarData, err := registry.SingleImageTarForTest(img, descAnn)
+	tarData, err := regtest.LayoutTar(img, descAnn)
 	if err != nil {
 		return lane.Digest{}, err
 	}
