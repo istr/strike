@@ -84,6 +84,12 @@ func BuildTestImageTar(fileName string, content []byte) ([]byte, lane.Digest, er
 	return data, lane.Digest{Algorithm: h.Algorithm, Hex: h.Hex}, nil
 }
 
+// CanonicalLayerFromTarForTest is an exported wrapper around
+// canonicalLayerFromTar for use in tests outside the registry package.
+func CanonicalLayerFromTarForTest(r io.Reader, stripPrefix, destPrefix string) (v1.Layer, int64, error) {
+	return canonicalLayerFromTar(r, stripPrefix, destPrefix)
+}
+
 // SingleImageTarForTest wraps an arbitrary v1.Image into an OCI layout tar.
 // If annotations are provided, the first map is set on the index descriptor.
 // Exported for use in tests outside the registry package.
