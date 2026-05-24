@@ -109,15 +109,23 @@ func openSingleLayer(layoutDir string) (v1.Layer, error) {
 	return layers[0], nil
 }
 
-// extractLayer extracts an uncompressed OCI layer tar into root.
+// extractLayer extracts an uncompressed OCI layer tar into root. Layer tars
+// are user content and may carry contained symlinks.
 func extractLayer(layer v1.Layer, root *os.Root) error {
 	rc, err := layer.Uncompressed()
 	if err != nil {
 		return fmt.Errorf("uncompress layer: %w", err)
 	}
 	defer closer.Warn(rc, "extract layer")
+	return extractTarStream(rc, root, true)
+}
 
-	tr := tar.NewReader(rc)
+// extractTarStream extracts a tar stream into root. Every entry path must be
+// local (filepath.IsLocal). Directories and regular files preserve their tar
+// mode. Symlinks are created verbatim when allowSymlinks is true and rejected
+// otherwise; os.Root never follows them. Any other entry type is rejected.
+func extractTarStream(r io.Reader, root *os.Root, allowSymlinks bool) error {
+	tr := tar.NewReader(r)
 	for {
 		hdr, nextErr := tr.Next()
 		if errors.Is(nextErr, io.EOF) {
@@ -128,17 +136,18 @@ func extractLayer(layer v1.Layer, root *os.Root) error {
 		}
 
 		if !filepath.IsLocal(hdr.Name) {
-			return fmt.Errorf("layer entry %q is not a local path", hdr.Name)
+			return fmt.Errorf("tar entry %q is not a local path", hdr.Name)
 		}
 
-		if entryErr := extractEntry(root, hdr, tr); entryErr != nil {
+		if entryErr := extractEntry(root, hdr, tr, allowSymlinks); entryErr != nil {
 			return entryErr
 		}
 	}
 }
 
-// extractEntry writes a single tar entry into root.
-func extractEntry(root *os.Root, hdr *tar.Header, tr io.Reader) error {
+// extractEntry writes a single tar entry into root. Symlinks are honored only
+// when allowSymlinks is true; otherwise a symlink entry is rejected.
+func extractEntry(root *os.Root, hdr *tar.Header, tr io.Reader, allowSymlinks bool) error {
 	mode := hdr.FileInfo().Mode().Perm()
 
 	switch hdr.Typeflag {
@@ -151,11 +160,14 @@ func extractEntry(root *os.Root, hdr *tar.Header, tr io.Reader) error {
 			return err
 		}
 	case tar.TypeSymlink:
+		if !allowSymlinks {
+			return fmt.Errorf("tar entry %q is a symlink, which is not allowed here", hdr.Name)
+		}
 		if err := extractSymlink(root, hdr.Name, hdr.Linkname); err != nil {
 			return err
 		}
 	default:
-		return fmt.Errorf("layer entry %q has unsupported type %d", hdr.Name, hdr.Typeflag)
+		return fmt.Errorf("tar entry %q has unsupported type %d", hdr.Name, hdr.Typeflag)
 	}
 	return nil
 }

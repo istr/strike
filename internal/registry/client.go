@@ -8,7 +8,6 @@ import (
 	"io"
 	"io/fs"
 	"os"
-	"strings"
 
 	"github.com/istr/strike/internal/closer"
 
@@ -69,66 +68,11 @@ func singleImageTar(img v1.Image, annotations map[string]string) (io.Reader, err
 	return &buf, nil
 }
 
-// extractTar extracts a tar archive into the given root-scoped directory.
+// extractTar extracts an OCI layout tar into the given root-scoped directory.
+// Layout tars carry only directories and regular files; symlinks and any
+// other entry type are rejected.
 func extractTar(r io.Reader, root *os.Root) error {
-	tr := tar.NewReader(r)
-	for {
-		hdr, err := tr.Next()
-		if err == io.EOF {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		switch hdr.Typeflag {
-		case tar.TypeDir:
-			if mkErr := mkdirAllRoot(root, hdr.Name); mkErr != nil {
-				return mkErr
-			}
-		case tar.TypeReg:
-			if writeErr := extractFile(tr, root, hdr.Name); writeErr != nil {
-				return writeErr
-			}
-		}
-	}
-}
-
-// extractFile writes a single tar entry to the root-scoped filesystem.
-func extractFile(tr *tar.Reader, root *os.Root, name string) error {
-	if idx := strings.LastIndex(name, "/"); idx > 0 {
-		if mkErr := mkdirAllRoot(root, name[:idx]); mkErr != nil {
-			return mkErr
-		}
-	}
-	out, err := root.Create(name)
-	if err != nil {
-		return err
-	}
-	if _, cpErr := io.Copy(out, tr); cpErr != nil {
-		closer.Warn(out, "registry extract file")
-		return cpErr
-	}
-	return out.Close()
-}
-
-// mkdirAllRoot creates a directory and all parents within the root scope.
-func mkdirAllRoot(root *os.Root, path string) error {
-	parts := strings.Split(strings.TrimRight(path, "/"), "/")
-	cur := ""
-	for _, p := range parts {
-		if p == "" {
-			continue
-		}
-		if cur == "" {
-			cur = p
-		} else {
-			cur = cur + "/" + p
-		}
-		if err := root.Mkdir(cur, 0o750); err != nil && !os.IsExist(err) {
-			return err
-		}
-	}
-	return nil
+	return extractTarStream(r, root, false)
 }
 
 // tarDirectory writes the contents of dir as a tar archive to w.
