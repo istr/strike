@@ -11,10 +11,11 @@ steps:
   - name: peerless
     image: docker.io/library/alpine@sha256:abababababababababababababababababababababababababababababababab
     args: [echo, "ok"]
+    workdir: /out
     env: {}
     inputs: []
     secrets: []
     outputs:
       - name: ok
         type: file
-        path: /out/ok
+        path: ok

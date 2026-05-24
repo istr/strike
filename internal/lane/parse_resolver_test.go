@@ -67,11 +67,12 @@ steps:
   - name: build
     image: docker.io/library/alpine@sha256:abababababababababababababababababababababababababababababababab
     args: ["true"]
+    workdir: /work
     env: {}
     inputs: []
     secrets: []
     outputs:
-      - { name: out, type: file, path: /out/x }
+      - { name: out, type: file, path: x }
 `)
 	dir := t.TempDir()
 	path := filepath.Join(dir, "lane.yaml")
@@ -104,11 +105,12 @@ steps:
   - name: build
     image: docker.io/library/alpine@sha256:abababababababababababababababababababababababababababababababab
     args: ["true"]
+    workdir: /work
     env: {}
     inputs: []
     secrets: []
     outputs:
-      - { name: out, type: file, path: /out/x }
+      - { name: out, type: file, path: x }
 `)
 	dir := t.TempDir()
 	path := filepath.Join(dir, "lane.yaml")

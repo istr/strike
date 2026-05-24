@@ -11,6 +11,7 @@ steps:
   - name: clone
     image: docker.io/library/alpine@sha256:abababababababababababababababababababababababababababababababab
     args: ["git", "clone", "https://example.com/repo"]
+    workdir: /out
     env: {}
     inputs: []
     secrets: []
@@ -18,4 +19,4 @@ steps:
     outputs:
       - name: src
         type: directory
-        path: /out/src
+        path: src

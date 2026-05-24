@@ -11,13 +11,14 @@ steps:
   - name: build
     image: docker.io/library/golang@sha256:abababababababababababababababababababababababababababababababab
     args: ["go", "build"]
+    workdir: /out
     env: {}
     inputs: []
     secrets: []
     outputs:
       - name: binary
         type: file
-        path: /out/binary
+        path: binary
   - name: deploy
     deploy:
       method:

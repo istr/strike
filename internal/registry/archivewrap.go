@@ -156,6 +156,40 @@ func writeCanonicalTar(entries []canonicalEntry) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// FirstRegularFile scans a tar stream and returns a reader positioned at the
+// first regular-file entry, together with its size. The returned reader is
+// valid only until the next read from the underlying stream; callers must
+// consume it before reading further. Used to pull a single produced file
+// (an OCI-layout tar, or a provenance document) out of an engine container
+// archive, which wraps even a single file in a one-entry tar.
+func FirstRegularFile(r io.Reader) (io.Reader, int64, error) {
+	tr := tar.NewReader(r)
+	for {
+		hdr, err := tr.Next()
+		if errors.Is(err, io.EOF) {
+			return nil, 0, fmt.Errorf("archive contains no regular file")
+		}
+		if err != nil {
+			return nil, 0, fmt.Errorf("read archive: %w", err)
+		}
+		if hdr.Typeflag == tar.TypeReg {
+			return tr, hdr.Size, nil
+		}
+	}
+}
+
+// WrapImageArchiveAsImage pulls the single OCI-layout tar file out of an
+// engine container-archive stream and loads it as an image (the image
+// output type under the engine flow). It reuses the image-load core shared
+// with WrapImageOutputAsImage.
+func (c *Client) WrapImageArchiveAsImage(ctx context.Context, r io.Reader, tag string, extra ...map[string]string) (lane.Digest, int64, error) {
+	inner, size, err := FirstRegularFile(r)
+	if err != nil {
+		return lane.Digest{}, 0, fmt.Errorf("image output: %w", err)
+	}
+	return c.wrapImageFromReader(ctx, inner, size, tag, extra...)
+}
+
 // relUnderPrefix returns the portion of a tar entry name below prefix, and
 // whether the entry is under prefix at all. prefix == "" or "." means the
 // whole stream is under the root. The returned path has no leading or

@@ -18,6 +18,7 @@ steps:
   - name: build_binary
     image: cgr.dev/chainguard/go@sha256:4ec098b553c8d74d9f01925578660b2bfcdee4ef45e5ab082250cf9675a0e28b
     args: [build, -C, /src, -trimpath, "-buildvcs=false", "-ldflags=-s -w", -o, /out/strike, ./cmd/strike]
+    workdir: /out
     env:
       CGO_ENABLED: "0"
     peers:
@@ -37,7 +38,7 @@ steps:
     outputs:
       - name: binary
         type: file
-        path: /out/strike
+        path: strike
 
   - name: build_image
     pack:
@@ -54,4 +55,4 @@ steps:
     outputs:
       - name: image
         type: image
-        path: /out/image.tar
+        path: image.tar

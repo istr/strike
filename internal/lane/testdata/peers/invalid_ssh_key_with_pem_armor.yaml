@@ -11,13 +11,14 @@ steps:
   - name: clone
     image: docker.io/library/alpine@sha256:abababababababababababababababababababababababababababababababab
     args: [git, clone, "git@git.example.com:org/repo"]
+    workdir: /out
     env: {}
     inputs: []
     secrets: []
     outputs:
       - name: tree
         type: directory
-        path: /out/tree
+        path: tree
     peers:
       - type: ssh
         host: git.example.com

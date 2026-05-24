@@ -64,7 +64,7 @@ func TestBuildInputMounts_Single(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				Name: "compile", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{Name: "bin", Type: "file", Path: "/out/binary"}},
+				Outputs: []lane.OutputSpec{{Name: "bin", Type: "file", Path: lane.Ptr(lane.RelPath("binary"))}},
 			},
 			{
 				Name: "test", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
@@ -119,11 +119,11 @@ func TestBuildInputMounts_Multiple(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				Name: "s1", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{Name: "a", Type: "file", Path: "/out/a.tar"}},
+				Outputs: []lane.OutputSpec{{Name: "a", Type: "file", Path: lane.Ptr(lane.RelPath("a.tar"))}},
 			},
 			{
 				Name: "s2", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{Name: "b", Type: "file", Path: "/out/b.tar"}},
+				Outputs: []lane.OutputSpec{{Name: "b", Type: "file", Path: lane.Ptr(lane.RelPath("b.tar"))}},
 			},
 			{
 				Name: "consumer", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
@@ -180,7 +180,7 @@ func TestBuildInputMounts_MissingSubpath(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				Name: "src", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{Name: "tree", Type: "directory", Path: "/out/tree"}},
+				Outputs: []lane.OutputSpec{{Name: "tree", Type: "directory", Path: lane.Ptr(lane.RelPath("tree"))}},
 			},
 			{
 				Name: "consumer", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
@@ -232,7 +232,7 @@ func TestGuardUnsignedImages_NoNetwork(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				Name: "pack", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{Name: "img", Type: "image", Path: "/out/img.tar"}},
+				Outputs: []lane.OutputSpec{{Name: "img", Type: "image", Path: lane.Ptr(lane.RelPath("img.tar"))}},
 			},
 			{
 				Name: "publish", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
@@ -253,7 +253,7 @@ func TestGuardUnsignedImages_SignedOK(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				Name: "pack", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{Name: "img", Type: "image", Path: "/out/img.tar"}},
+				Outputs: []lane.OutputSpec{{Name: "img", Type: "image", Path: lane.Ptr(lane.RelPath("img.tar"))}},
 			},
 			{
 				Name: "publish", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
@@ -281,7 +281,7 @@ func TestGuardUnsignedImages_UnsignedError(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				Name: "pack", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{Name: "img", Type: "image", Path: "/out/img.tar"}},
+				Outputs: []lane.OutputSpec{{Name: "img", Type: "image", Path: lane.Ptr(lane.RelPath("img.tar"))}},
 			},
 			{
 				Name: "publish", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
@@ -313,7 +313,7 @@ func TestGuardUnsignedImages_NonImageInput(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				Name: "compile", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{Name: "bin", Type: "file", Path: "/out/bin"}},
+				Outputs: []lane.OutputSpec{{Name: "bin", Type: "file", Path: lane.Ptr(lane.RelPath("bin"))}},
 			},
 			{
 				Name: "run", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
@@ -405,7 +405,7 @@ func TestCheckCache_Miss(t *testing.T) {
 	rc := newTestRC(t, eng)
 	step := &lane.Step{
 		Name:    "step1",
-		Outputs: []lane.OutputSpec{{Name: "bin", Type: "file", Path: "/out/bin"}},
+		Outputs: []lane.OutputSpec{{Name: "bin", Type: "file", Path: lane.Ptr(lane.RelPath("bin"))}},
 	}
 	rc.state.specHashes["step1"] = lane.MustParseDigest("sha256:abc0000000000000000000000000000000000000000000000000000000000000")
 
@@ -431,7 +431,7 @@ func TestCheckCache_Hit(t *testing.T) {
 	rc := newTestRC(t, eng)
 	step := &lane.Step{
 		Name:    "step1",
-		Outputs: []lane.OutputSpec{{Name: "bin", Type: "file", Path: "/out/bin"}},
+		Outputs: []lane.OutputSpec{{Name: "bin", Type: "file", Path: lane.Ptr(lane.RelPath("bin"))}},
 	}
 
 	hit, err := rc.checkCache(context.Background(), step, "step1", "step1", lane.MustParseDigest("sha256:abc0000000000000000000000000000000000000000000000000000000000000"))
@@ -539,7 +539,7 @@ func TestCheckCache_HitRestoresSignedFromAnnotation(t *testing.T) {
 	rc := newTestRC(t, eng)
 	step := &lane.Step{
 		Name:    "step1",
-		Outputs: []lane.OutputSpec{{Name: "img", Type: "image", Path: "/out/img.tar"}},
+		Outputs: []lane.OutputSpec{{Name: "img", Type: "image", Path: lane.Ptr(lane.RelPath("img.tar"))}},
 	}
 
 	hit, err := rc.checkCache(context.Background(), step, "step1", "step1", lane.MustParseDigest("sha256:abc0000000000000000000000000000000000000000000000000000000000000"))
@@ -571,7 +571,7 @@ func TestCheckCache_AbsentSignedAnnotationDefaultsFalse(t *testing.T) {
 	rc := newTestRC(t, eng)
 	step := &lane.Step{
 		Name:    "step1",
-		Outputs: []lane.OutputSpec{{Name: "bin", Type: "file", Path: "/out/bin"}},
+		Outputs: []lane.OutputSpec{{Name: "bin", Type: "file", Path: lane.Ptr(lane.RelPath("bin"))}},
 	}
 
 	hit, err := rc.checkCache(context.Background(), step, "step1", "step1", lane.MustParseDigest("sha256:abc0000000000000000000000000000000000000000000000000000000000000"))
@@ -633,7 +633,7 @@ func TestResolveImageDigest_ImageFrom(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				Name: "pack", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{Name: "img", Type: "image", Path: "/out/img.tar"}},
+				Outputs: []lane.OutputSpec{{Name: "img", Type: "image", Path: lane.Ptr(lane.RelPath("img.tar"))}},
 			},
 			{
 				Name: "run", Env: map[string]string{}, Args: []string{"run"},
@@ -678,7 +678,7 @@ func TestResolveImageDigest_ImageFromMissing(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				Name: "pack", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{Name: "img", Type: "image", Path: "/out/img.tar"}},
+				Outputs: []lane.OutputSpec{{Name: "img", Type: "image", Path: lane.Ptr(lane.RelPath("img.tar"))}},
 			},
 			{
 				Name: "run", Env: map[string]string{}, Args: []string{"run"},
@@ -710,7 +710,7 @@ func TestResolvePackInputPaths(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				Name: "compile", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{Name: "bin", Type: "file", Path: "/out/binary"}},
+				Outputs: []lane.OutputSpec{{Name: "bin", Type: "file", Path: lane.Ptr(lane.RelPath("binary"))}},
 			},
 			{
 				Name: "pack", Env: map[string]string{}, Args: []string{},
@@ -718,7 +718,7 @@ func TestResolvePackInputPaths(t *testing.T) {
 					Base:  "scratch",
 					Files: []lane.PackFile{{From: "compile.bin", Dest: "/app"}},
 				},
-				Outputs: []lane.OutputSpec{{Name: "img", Type: "image", Path: "/out/img.tar"}},
+				Outputs: []lane.OutputSpec{{Name: "img", Type: "image", Path: lane.Ptr(lane.RelPath("img.tar"))}},
 			},
 		},
 	}
@@ -809,7 +809,7 @@ func TestResolvePackSecrets_MissingDef(t *testing.T) {
 func TestPushAndReport_NoImage(t *testing.T) {
 	rc := newTestRC(t, &mockEngine{})
 	step := &lane.Step{
-		Outputs: []lane.OutputSpec{{Name: "bin", Type: "file", Path: "/out/bin"}},
+		Outputs: []lane.OutputSpec{{Name: "bin", Type: "file", Path: lane.Ptr(lane.RelPath("bin"))}},
 	}
 	if err := rc.pushAndReport(context.Background(), step, "test", "tag"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -820,7 +820,7 @@ func TestPushAndReport_ImagePushError(t *testing.T) {
 	eng := &mockEngine{pushErr: fmt.Errorf("network down")}
 	rc := newTestRC(t, eng)
 	step := &lane.Step{
-		Outputs: []lane.OutputSpec{{Name: "img", Type: "image", Path: "/out/img.tar"}},
+		Outputs: []lane.OutputSpec{{Name: "img", Type: "image", Path: lane.Ptr(lane.RelPath("img.tar"))}},
 	}
 	err := rc.pushAndReport(context.Background(), step, "test", "tag")
 	if err == nil {
@@ -835,7 +835,7 @@ func TestPushAndReport_ImagePushOK(t *testing.T) {
 	eng := &mockEngine{}
 	rc := newTestRC(t, eng)
 	step := &lane.Step{
-		Outputs: []lane.OutputSpec{{Name: "img", Type: "image", Path: "/out/img.tar"}},
+		Outputs: []lane.OutputSpec{{Name: "img", Type: "image", Path: lane.Ptr(lane.RelPath("img.tar"))}},
 	}
 	if err := rc.pushAndReport(context.Background(), step, "test", "tag"); err != nil {
 		t.Fatalf("unexpected error: %v", err)

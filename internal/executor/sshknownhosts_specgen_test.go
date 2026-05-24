@@ -43,8 +43,9 @@ func (e *captureEngine) Ping(context.Context) error          { return nil }
 func (e *captureEngine) TLSIdentity() *container.TLSIdentity { return nil }
 func (e *captureEngine) Identity() *container.EngineIdentity { return nil }
 func (e *captureEngine) Info(context.Context) error          { return nil }
-func (e *captureEngine) ContainerRunHeld(_ context.Context, _ container.RunOpts) (string, int, error) {
-	return "", 0, nil
+func (e *captureEngine) ContainerRunHeld(_ context.Context, opts container.RunOpts) (string, int, error) {
+	e.captured = opts
+	return "test-container-id", 0, nil
 }
 
 func (e *captureEngine) ContainerArchive(_ context.Context, _, _ string) (io.ReadCloser, error) {
@@ -100,7 +101,6 @@ func TestExecute_WithSSHPeer(t *testing.T) {
 	t.Setenv("SSH_AUTH_SOCK", fakeSock)
 
 	eng := &captureEngine{}
-	outDir := t.TempDir()
 	caps, caPath := specgenTestCapsule(t)
 
 	r := executor.Run{
@@ -122,10 +122,10 @@ func TestExecute_WithSSHPeer(t *testing.T) {
 				},
 			},
 		},
-		OutputDir: outDir,
+		VolumeName: "",
 	}
 
-	if err := r.Execute(context.Background()); err != nil {
+	if _, err := r.Execute(context.Background()); err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
 
@@ -164,7 +164,6 @@ func TestExecute_WithSSHPeer(t *testing.T) {
 
 func TestExecute_WithoutSSHPeer(t *testing.T) {
 	eng := &captureEngine{}
-	outDir := t.TempDir()
 	caps, caPath := specgenTestCapsule(t)
 
 	r := executor.Run{
@@ -187,10 +186,10 @@ func TestExecute_WithoutSSHPeer(t *testing.T) {
 				},
 			},
 		},
-		OutputDir: outDir,
+		VolumeName: "",
 	}
 
-	if err := r.Execute(context.Background()); err != nil {
+	if _, err := r.Execute(context.Background()); err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
 
@@ -216,7 +215,6 @@ func TestRunExecute_SSHAgentProxy_SpecGenerator(t *testing.T) {
 	t.Setenv("SSH_AUTH_SOCK", fakeSock)
 
 	eng := &captureEngine{}
-	outDir := t.TempDir()
 	caps, caPath := specgenTestCapsule(t)
 
 	r := executor.Run{
@@ -238,10 +236,10 @@ func TestRunExecute_SSHAgentProxy_SpecGenerator(t *testing.T) {
 				},
 			},
 		},
-		OutputDir: outDir,
+		VolumeName: "",
 	}
 
-	if err := r.Execute(context.Background()); err != nil {
+	if _, err := r.Execute(context.Background()); err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
 
@@ -291,7 +289,6 @@ func TestRunExecute_SSHPeer_NoAuthSock(t *testing.T) {
 	t.Setenv("SSH_AUTH_SOCK", "")
 
 	eng := &captureEngine{}
-	outDir := t.TempDir()
 
 	r := executor.Run{
 		Engine:  eng,
@@ -310,10 +307,10 @@ func TestRunExecute_SSHPeer_NoAuthSock(t *testing.T) {
 				},
 			},
 		},
-		OutputDir: outDir,
+		VolumeName: "",
 	}
 
-	err := r.Execute(context.Background())
+	_, err := r.Execute(context.Background())
 	if err == nil {
 		t.Fatal("expected error when SSH_AUTH_SOCK not set")
 	}
@@ -324,7 +321,6 @@ func TestRunExecute_SSHPeer_NoAuthSock(t *testing.T) {
 
 func TestRunExecute_InputMounts_FromImage_SpecGenerator(t *testing.T) {
 	eng := &captureEngine{}
-	outDir := t.TempDir()
 	caps, caPath := specgenTestCapsule(t)
 
 	r := executor.Run{
@@ -337,7 +333,7 @@ func TestRunExecute_InputMounts_FromImage_SpecGenerator(t *testing.T) {
 			Image: lane.Ptr(lane.ImageRef("alpine:latest")),
 			Args:  []string{"cat", "/in/binary"},
 		},
-		OutputDir: outDir,
+		VolumeName: "",
 		InputMounts: []executor.Mount{
 			{
 				Host:      "/tmp/inputs/aabbccdd11223344/binary",
@@ -347,7 +343,7 @@ func TestRunExecute_InputMounts_FromImage_SpecGenerator(t *testing.T) {
 		},
 	}
 
-	if err := r.Execute(context.Background()); err != nil {
+	if _, err := r.Execute(context.Background()); err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
 

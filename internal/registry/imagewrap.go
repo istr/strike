@@ -109,7 +109,15 @@ func (c *Client) WrapImageOutputAsImage(ctx context.Context, root *os.Root, name
 	}
 	defer closer.Warn(f, "wrap image")
 
-	img, cleanup, err := extractMainImage(f)
+	return c.wrapImageFromReader(ctx, f, size, tag, extra...)
+}
+
+// wrapImageFromReader loads an OCI-layout tar from r (size bytes), annotates
+// it, loads it into the engine, tags it, and verifies the controller digest
+// against the engine. Shared by WrapImageOutputAsImage (host file) and
+// WrapImageArchiveAsImage (engine archive stream).
+func (c *Client) wrapImageFromReader(ctx context.Context, r io.Reader, size int64, tag string, extra ...map[string]string) (lane.Digest, int64, error) {
+	img, cleanup, err := extractMainImage(r)
 	if err != nil {
 		return lane.Digest{}, 0, fmt.Errorf("wrap image: %w", err)
 	}
@@ -135,12 +143,12 @@ func (c *Client) WrapImageOutputAsImage(ctx context.Context, root *os.Root, name
 		return lane.Digest{}, 0, fmt.Errorf("wrap image digest: %w", err)
 	}
 
-	r, err := singleImageTar(img, nil)
+	tarReader, err := singleImageTar(img, nil)
 	if err != nil {
 		return lane.Digest{}, 0, fmt.Errorf("wrap image tar: %w", err)
 	}
 
-	id, err := c.Engine.ImageLoad(ctx, r)
+	id, err := c.Engine.ImageLoad(ctx, tarReader)
 	if err != nil {
 		return lane.Digest{}, 0, fmt.Errorf("wrap image load: %w", err)
 	}

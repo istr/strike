@@ -121,9 +121,14 @@ func ValidatePaths(p *Lane) error {
 
 // validateStepPaths checks one step's output, pack-dest, and workdir paths.
 func validateStepPaths(s Step) error {
+	if len(s.Outputs) > 0 && s.Workdir == nil && s.Pack == nil {
+		return fmt.Errorf("step %q: declares outputs but no workdir", s.Name)
+	}
 	for _, out := range s.Outputs {
-		if err := out.Path.Validate(); err != nil {
-			return fmt.Errorf("step %q: output path %q: %w", s.Name, out.Path, err)
+		if out.Path != nil {
+			if err := out.Path.Validate(); err != nil {
+				return fmt.Errorf("step %q: output path %q: %w", s.Name, *out.Path, err)
+			}
 		}
 	}
 	if s.Pack != nil {

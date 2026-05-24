@@ -17,4 +17,4 @@ steps:
     outputs:
       - name: binary
         type: file
-        path: /out/binary
+        path: binary

@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -314,6 +315,9 @@ func (rc *runContext) executePack(ctx context.Context, step *lane.Step, stepName
 	}
 	defer closer.Warn(outRoot, "step output root")
 
+	if step.Outputs[0].Path == nil {
+		return fmt.Errorf("%s: pack output requires a path", safeName)
+	}
 	outputName := filepath.Base(step.Outputs[0].Path.String())
 	result, err := executor.Pack(ctx, executor.PackOpts{
 		Spec:        step.Pack,
@@ -394,8 +398,7 @@ func (rc *runContext) resolvePackInputPaths(ctx context.Context, step *lane.Step
 			return nil, fmt.Errorf("%s: pack input mkdir: %w", safeName, mkErr)
 		}
 
-		baseName := filepath.Base(e.FromOutput.Path.String())
-		inputPaths[e.Dest.String()] = filepath.Join(inputDir, baseName)
+		inputPaths[e.Dest.String()] = filepath.Join(inputDir, lane.OutputLayerName(*e.FromOutput))
 	}
 	return inputPaths, nil
 }
@@ -433,20 +436,37 @@ func (rc *runContext) resolveSigningSecrets(step *lane.Step, safeName string) ([
 }
 
 func (rc *runContext) executeContainerStep(ctx context.Context, step *lane.Step, stepName, safeName, tag string) error {
-	outDir, err := os.MkdirTemp("", "strike-"+stepName+"-")
+	// Host scratch is now input-only: producer artifacts are extracted here
+	// and bind-mounted read-only. The output payload never touches the host
+	// (ADR-035); it lives in the workdir volume and is read via the archive
+	// API. The input-mirror (engine-native input mounts) is a named
+	// follow-up.
+	inputDir, err := os.MkdirTemp("", "strike-"+stepName+"-")
 	if err != nil {
 		return fmt.Errorf("%s: create temp dir: %w", safeName, err)
 	}
-	defer removeStrikeScratch(outDir)
+	defer removeStrikeScratch(inputDir)
 
 	secrets, err := lane.ResolveSecrets(step.Secrets, rc.lane.Secrets, rc.laneRoot)
 	if err != nil {
 		return fmt.Errorf("%s: secrets: %w", safeName, err)
 	}
 
-	inputMounts, err := rc.buildInputMounts(ctx, step, outDir)
+	inputMounts, err := rc.buildInputMounts(ctx, step, inputDir)
 	if err != nil {
 		return fmt.Errorf("%s: input mounts: %w", safeName, err)
+	}
+
+	volName, volErr := rc.createWorkdirVolume(ctx, step, safeName)
+	if volErr != nil {
+		return volErr
+	}
+	if volName != "" {
+		defer func() {
+			if rmErr := rc.engine.VolumeRemove(ctx, volName); rmErr != nil {
+				log.Printf("WARN   %s: workdir volume remove: %v", safeName, rmErr)
+			}
+		}()
 	}
 
 	caps, capsErr := rc.startCapsule(ctx, stepName, safeName, step.Peers)
@@ -464,83 +484,116 @@ func (rc *runContext) executeContainerStep(ctx context.Context, step *lane.Step,
 		Engine:       rc.engine,
 		Step:         step,
 		InputMounts:  inputMounts,
-		OutputDir:    outDir,
+		VolumeName:   volName,
 		Secrets:      secrets,
 		ImageRef:     rc.state.imageFromTags[stepName],
 		Capsule:      caps,
 		CABundlePath: rc.caBundlePath,
 	}
-	if execErr := run.Execute(ctx); execErr != nil {
+	containerID, execErr := run.Execute(ctx)
+	if containerID != "" {
+		defer func() {
+			if rmErr := rc.engine.ContainerRemove(ctx, containerID); rmErr != nil {
+				log.Printf("WARN   %s: container remove: %v", safeName, rmErr)
+			}
+		}()
+	}
+	if execErr != nil {
 		return fmt.Errorf("%s: execution failed: %w", safeName, execErr)
 	}
 
-	outRoot, rootErr := os.OpenRoot(outDir)
-	if rootErr != nil {
-		return fmt.Errorf("%s: open output root: %w", safeName, rootErr)
-	}
-	defer closer.Warn(outRoot, "container step output root")
-
-	if err := rc.wrapOutputs(ctx, step, stepName, safeName, outRoot); err != nil {
+	if err := rc.wrapOutputs(ctx, step, stepName, safeName, containerID); err != nil {
 		return err
 	}
 	if step.Provenance != nil {
-		if err := rc.captureProvenance(step, safeName, outRoot); err != nil {
+		if err := rc.captureProvenance(ctx, step, safeName, containerID); err != nil {
 			return fmt.Errorf("%s: provenance: %w", safeName, err)
 		}
 	}
 	return rc.pushAndReport(ctx, step, safeName, tag)
 }
 
-func (rc *runContext) wrapOutputs(ctx context.Context, step *lane.Step, stepName, safeName string, outRoot *os.Root) error {
+func (rc *runContext) wrapOutputs(ctx context.Context, step *lane.Step, stepName, safeName, containerID string) error {
 	specHash := rc.state.specHashes[stepName]
 	for _, out := range step.Outputs {
-		tag := registry.WrapTag(rc.lane.LaneID, stepName, specHash)
-		outName := filepath.Base(out.Path.String())
-		var digest lane.Digest
-		var size int64
-		var err error
-		switch out.Type {
-		case "file":
-			digest, size, err = rc.regClient.WrapFileAsImage(ctx, outRoot, outName, tag)
-		case "directory":
-			digest, size, err = rc.regClient.WrapDirectoryAsImage(ctx, outRoot, outName, tag)
-		case artifactTypeImage:
-			digest, size, err = rc.regClient.WrapImageOutputAsImage(ctx, outRoot, outName, tag)
-		default:
-			return fmt.Errorf("%s: unknown output type %q", safeName, out.Type)
-		}
-		if err != nil {
-			return fmt.Errorf("%s: wrap output %q: %w", safeName, out.Name, err)
-		}
-		if regErr := rc.laneState.Register(stepName, out.Name, lane.Artifact{
-			Type:   lane.ArtifactType(out.Type),
-			Digest: digest,
-			Size:   size,
-		}); regErr != nil {
-			return fmt.Errorf("%s: register artifact: %w", safeName, regErr)
+		if wrapErr := rc.wrapArchivedOutput(ctx, step, stepName, safeName, containerID, out, specHash); wrapErr != nil {
+			return wrapErr
 		}
 	}
 	return nil
 }
 
-// outputMountTarget is the fixed container path where the output directory is mounted.
-const outputMountTarget = "/out"
+// wrapArchivedOutput archives one output from the held container, wraps it
+// into a content-addressed image (a canonicalized layer for file/directory,
+// a loaded image for the image type), and registers the artifact.
+func (rc *runContext) wrapArchivedOutput(ctx context.Context, step *lane.Step, stepName, safeName, containerID string, out lane.OutputSpec, specHash lane.Digest) error {
+	workdir := step.Workdir.String()
+	tag := registry.WrapTag(rc.lane.LaneID, stepName, specHash)
 
-func (rc *runContext) captureProvenance(step *lane.Step, safeName string, outRoot *os.Root) error {
-	spec := step.Provenance
-	// Map container path to relative path within the output root.
-	// The output directory is mounted at /out, so /out/provenance.json -> provenance.json.
-	rel, err := filepath.Rel(outputMountTarget, spec.Path.String())
-	if err != nil || strings.HasPrefix(rel, "..") {
-		return fmt.Errorf("provenance path %q is not within %s", spec.Path, outputMountTarget)
+	// The engine prefixes archive entries with the base name of the archived
+	// path. For a named subpath that base name already equals the layer name
+	// consumers expect, so we pass through. For a whole-workdir output we
+	// strip the workdir base name and re-root under the output name.
+	archivePath := workdir
+	stripPrefix, destPrefix := "", ""
+	if out.Path != nil {
+		archivePath = path.Join(workdir, out.Path.String())
+	} else {
+		stripPrefix = path.Base(workdir)
+		destPrefix = lane.OutputLayerName(out)
 	}
 
-	f, err := outRoot.Open(rel)
+	stream, archErr := rc.engine.ContainerArchive(ctx, containerID, archivePath)
+	if archErr != nil {
+		return fmt.Errorf("%s: archive output %q: %w", safeName, out.Name, archErr)
+	}
+	defer closer.Warn(stream, "output archive stream")
+
+	var (
+		digest lane.Digest
+		size   int64
+		err    error
+	)
+	switch out.Type {
+	case "file", "directory":
+		digest, size, err = rc.regClient.WrapArchiveAsImage(ctx, stream, stripPrefix, destPrefix, tag)
+	case artifactTypeImage:
+		digest, size, err = rc.regClient.WrapImageArchiveAsImage(ctx, stream, tag)
+	default:
+		return fmt.Errorf("%s: unknown output type %q", safeName, out.Type)
+	}
+	if err != nil {
+		return fmt.Errorf("%s: wrap output %q: %w", safeName, out.Name, err)
+	}
+
+	if regErr := rc.laneState.Register(stepName, out.Name, lane.Artifact{
+		Type:   lane.ArtifactType(out.Type),
+		Digest: digest,
+		Size:   size,
+	}); regErr != nil {
+		return fmt.Errorf("%s: register artifact: %w", safeName, regErr)
+	}
+	return nil
+}
+
+func (rc *runContext) captureProvenance(ctx context.Context, step *lane.Step, safeName, containerID string) error {
+	spec := step.Provenance
+	if step.Workdir == nil {
+		return fmt.Errorf("provenance declared without a workdir")
+	}
+	archivePath := path.Join(step.Workdir.String(), spec.Path.String())
+
+	stream, err := rc.engine.ContainerArchive(ctx, containerID, archivePath)
 	if err != nil {
 		return fmt.Errorf("read provenance file %q: %w", spec.Path, err)
 	}
-	raw, err := io.ReadAll(f)
-	closer.Warn(f, "provenance file")
+	defer closer.Warn(stream, "provenance archive")
+
+	fileReader, _, err := registry.FirstRegularFile(stream)
+	if err != nil {
+		return fmt.Errorf("read provenance file %q: %w", spec.Path, err)
+	}
+	raw, err := io.ReadAll(fileReader)
 	if err != nil {
 		return fmt.Errorf("read provenance file %q: %w", spec.Path, err)
 	}
@@ -640,7 +693,7 @@ func resolveInputSubpath(e lane.InputEdge, inputDir string) (string, error) {
 	//   - file/directory output: layer entry is at inputDir/<basename>
 	contentRoot := inputDir
 	if e.FromOutput.Type != artifactTypeImage {
-		contentRoot = filepath.Join(inputDir, filepath.Base(e.FromOutput.Path.String()))
+		contentRoot = filepath.Join(inputDir, lane.OutputLayerName(*e.FromOutput))
 	}
 
 	if e.Subpath == nil {
@@ -682,6 +735,19 @@ func (rc *runContext) pushAndReport(ctx context.Context, step *lane.Step, safeNa
 		log.Printf("OK     %s", safeName)
 	}
 	return nil
+}
+
+// createWorkdirVolume provisions an engine volume for the step's workdir.
+// Returns ("", nil) when no workdir is set (pack steps, no outputs).
+func (rc *runContext) createWorkdirVolume(ctx context.Context, step *lane.Step, safeName string) (string, error) {
+	if step.Workdir == nil {
+		return "", nil
+	}
+	volName := fmt.Sprintf("strike-wd-%s-%d", safeName, clock.Wall().UnixNano())
+	if err := rc.engine.VolumeCreate(ctx, volName); err != nil {
+		return "", fmt.Errorf("%s: create workdir volume: %w", safeName, err)
+	}
+	return volName, nil
 }
 
 // startCapsule constructs and starts a NetworkCapsule for one container

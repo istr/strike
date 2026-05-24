@@ -11,13 +11,14 @@ steps:
   - name: build
     image: docker.io/library/alpine@sha256:abababababababababababababababababababababababababababababababab
     args: [touch, /out/binary]
+    workdir: /out
     env: {}
     inputs: []
     secrets: []
     outputs:
       - name: image
         type: image
-        path: /out/image
+        path: image
   - name: deploy
     deploy:
       method:

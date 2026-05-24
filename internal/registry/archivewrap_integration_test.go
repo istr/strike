@@ -50,8 +50,10 @@ func TestWrapArchiveAsImage_RealSymlink(t *testing.T) {
 	opts.Image = img
 	opts.Workdir = "/work"
 	opts.Volume = &container.VolumeMount{Name: vol, Dest: "/work"}
+	// Override entrypoint: chainguard/go has entrypoint=["go"].
+	opts.Entrypoint = []string{"ln"}
 	// Single shell-free command: create a contained symlink in the volume.
-	opts.Cmd = []string{"ln", "-s", "sibling", "/work/website"}
+	opts.Cmd = []string{"-s", "sibling", "/work/website"}
 
 	id, code, runErr := eng.ContainerRunHeld(ctx, opts)
 	if id != "" {

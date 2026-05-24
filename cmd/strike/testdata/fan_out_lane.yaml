@@ -11,19 +11,20 @@ steps:
   - name: generate
     image: docker.io/library/alpine@sha256:abababababababababababababababababababababababababababababababab
     args: [sh, -c, "echo ok"]
+    workdir: /out
     env: {}
     inputs: []
     secrets: []
     outputs:
       - name: data
         type: file
-        path: /out/data.json
+        path: data.json
       - name: config
         type: file
-        path: /out/config.yaml
+        path: config.yaml
       - name: manifest
         type: file
-        path: /out/manifest.txt
+        path: manifest.txt
   - name: consumer_a
     image: docker.io/library/alpine@sha256:cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd
     args: [cat, /input/data.json]

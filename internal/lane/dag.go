@@ -258,7 +258,8 @@ func (d *DAG) resolveDeployEdges(p *Lane) error {
 }
 
 // validateProvenancePaths checks that each step's provenance.path
-// (if declared) is absolute, canonical, and lies within an output directory.
+// (if declared) is relative, canonical, and lies within a declared output.
+// A whole-workdir output (path absent) contains any provenance file.
 func (d *DAG) validateProvenancePaths(p *Lane) error {
 	for _, s := range p.Steps {
 		if s.Provenance == nil {
@@ -270,7 +271,11 @@ func (d *DAG) validateProvenancePaths(p *Lane) error {
 		}
 		found := false
 		for _, out := range s.Outputs {
-			if provPath.HasPrefix(out.Path.Dir()+"/") || provPath == out.Path {
+			if out.Path == nil { // whole workdir contains everything
+				found = true
+				break
+			}
+			if provPath == *out.Path || provPath.HasPrefix(string(*out.Path)+"/") {
 				found = true
 				break
 			}

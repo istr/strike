@@ -172,19 +172,24 @@ func TestValidatePaths(t *testing.T) {
 		wantErr string
 	}{
 		{
-			name:    "absolute output path is valid",
-			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Outputs: []lane.OutputSpec{{Path: "/src/node_modules"}}}}},
+			name:    "relative output path is valid",
+			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Workdir: lane.Ptr(lane.AbsPath("/work")), Outputs: []lane.OutputSpec{{Path: lane.Ptr(lane.RelPath("node_modules"))}}}}},
 			wantErr: "",
 		},
 		{
-			name:    "relative output path rejected",
-			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Outputs: []lane.OutputSpec{{Path: "out.txt"}}}}},
-			wantErr: "must be absolute",
+			name:    "absolute output path rejected",
+			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Workdir: lane.Ptr(lane.AbsPath("/work")), Outputs: []lane.OutputSpec{{Path: lane.Ptr(lane.RelPath("/out.txt"))}}}}},
+			wantErr: "must be relative",
 		},
 		{
 			name:    "non-canonical output path rejected",
-			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Outputs: []lane.OutputSpec{{Path: "/src/../etc/passwd"}}}}},
+			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Workdir: lane.Ptr(lane.AbsPath("/work")), Outputs: []lane.OutputSpec{{Path: lane.Ptr(lane.RelPath("src/../etc/passwd"))}}}}},
 			wantErr: "must be canonical",
+		},
+		{
+			name:    "outputs without workdir rejected",
+			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Outputs: []lane.OutputSpec{{Path: lane.Ptr(lane.RelPath("out"))}}}}},
+			wantErr: "declares outputs but no workdir",
 		},
 		{
 			name:    "workdir absolute canonical",
@@ -323,11 +328,12 @@ steps:
   - name: src
     image: img@sha256:abababababababababababababababababababababababababababababababab
     args: ["true"]
+    workdir: /work
     env: {}
     inputs: []
     secrets: []
     outputs:
-      - { name: tree, type: directory, path: /out/tree }
+      - { name: tree, type: directory, path: tree }
   - name: consumer
     image: img@sha256:cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd
     args: ["true"]

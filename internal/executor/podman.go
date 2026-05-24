@@ -14,11 +14,14 @@ import (
 
 // Run holds the configuration for executing a step container.
 type Run struct {
-	Engine    container.Engine
-	Capsule   *capsule.NetworkCapsule // non-nil for HTTPS-mediated steps
-	Secrets   map[string]lane.SecretString
-	Step      *lane.Step
-	OutputDir string
+	Engine  container.Engine
+	Capsule *capsule.NetworkCapsule // non-nil for HTTPS-mediated steps
+	Secrets map[string]lane.SecretString
+	Step    *lane.Step
+	// VolumeName is the engine-managed writable workdir volume. Empty for a
+	// step with no workdir (no writable surface, no outputs). The caller
+	// owns the volume lifecycle (create before, remove after extraction).
+	VolumeName string
 	// ImageRef overrides Step.Image when non-empty. Set by the
 	// caller for image_from steps so that Step.Image remains the
 	// parsed YAML value and the executor sees the producer's
@@ -35,13 +38,14 @@ type Mount struct {
 	ReadOnly  bool
 }
 
-// Execute runs the step container via the container engine API.
-// Secrets are passed as env vars in the API request body (JSON over Unix
-// socket), never via os.Setenv or process arguments.
-func (r Run) Execute(ctx context.Context) error {
+// Execute runs the step container held (not auto-removed) and returns the
+// container id so the caller can extract outputs via the engine archive API
+// and then purge it. The id is returned even on error when the container was
+// created, so the caller can always clean up.
+func (r Run) Execute(ctx context.Context) (string, error) {
 	scratchDir, err := os.MkdirTemp("", "strike-ssh-")
 	if err != nil {
-		return fmt.Errorf("ssh scratch: %w", err)
+		return "", fmt.Errorf("ssh scratch: %w", err)
 	}
 	defer closer.Remove(scratchDir, "executor scratch")
 
@@ -66,17 +70,10 @@ func (r Run) Execute(ctx context.Context) error {
 			Source: m.Host, Target: m.Container, ReadOnly: m.ReadOnly,
 		})
 	}
-	// Output directory
-	mounts = append(mounts, container.Mount{
-		Source:  r.OutputDir,
-		Target:  "/out",
-		Options: []string{"noexec", "nosuid"},
-	})
-
 	sshContainerPorts := SSHContainerPorts(r.Step.Peers)
 	mounts, err = appendSSHMounts(ctx, r.Step.Peers, scratchDir, sshContainerPorts, mounts, env)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	opts := container.DefaultSecureOpts()
@@ -90,10 +87,10 @@ func (r Run) Execute(ctx context.Context) error {
 	opts.Env = env
 
 	if r.Capsule == nil {
-		return fmt.Errorf("executor: container step requires a capsule")
+		return "", fmt.Errorf("executor: container step requires a capsule")
 	}
 	if r.CABundlePath == "" {
-		return fmt.Errorf("executor: Capsule set without CABundlePath")
+		return "", fmt.Errorf("executor: Capsule set without CABundlePath")
 	}
 	// Bind-mount the ephemeral CA over the three common system
 	// CA-bundle paths. The base image will have one or two of
@@ -112,18 +109,24 @@ func (r Run) Execute(ctx context.Context) error {
 	opts.Mounts = mounts
 	if r.Step.Workdir != nil {
 		opts.Workdir = r.Step.Workdir.String()
+		if r.VolumeName != "" {
+			opts.Volume = &container.VolumeMount{
+				Name: r.VolumeName,
+				Dest: r.Step.Workdir.String(),
+			}
+		}
 	}
 	opts.Stdout = os.Stdout
 	opts.Stderr = os.Stderr
 
-	exitCode, err := r.Engine.ContainerRun(ctx, opts)
+	id, exitCode, err := r.Engine.ContainerRunHeld(ctx, opts)
 	if err != nil {
-		return fmt.Errorf("container execution: %w", err)
+		return id, fmt.Errorf("container execution: %w", err)
 	}
 	if exitCode != 0 {
-		return fmt.Errorf("container exited with code %d", exitCode)
+		return id, fmt.Errorf("container exited with code %d", exitCode)
 	}
-	return nil
+	return id, nil
 }
 
 // caBundleTargets is the set of system CA-bundle paths strike

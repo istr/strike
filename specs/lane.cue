@@ -115,9 +115,13 @@ package lane
 
 #OutputSpec: {
 	@go(OutputSpec)
-	name:      string @go(Name)
-	type:      #ArtifactType @go(Type)
-	path:      #AbsPath @go(Path)
+	name: string @go(Name)
+	type: #ArtifactType @go(Type)
+	// path is relative to the step workdir (the single writable volume).
+	// Absent means the whole workdir is the artifact; a value selects a
+	// subpath within it. An absolute path is a type error: outputs are
+	// projections of the workdir, never of the read-only base image.
+	path?:     #RelPath @go(Path,optional=nillable)
 	expected?: #OutputValidation @go(Expected,optional=nillable)
 }
 
@@ -353,8 +357,9 @@ package lane
 // -- cryptographic verification happens inside the container, not in strike.
 #ProvenanceSpec: {
 	@go(ProvenanceSpec)
-	type:            "git" | "tarball" | "oci" | "url" @go(Type)
-	path:            #AbsPath @go(Path)
+	type: "git" | "tarball" | "oci" | "url" @go(Type)
+	// path is the provenance file, relative to the step workdir.
+	path:            #RelPath @go(Path)
 	require_signed?: bool @go(RequireSigned,optional=nillable)
 }
 

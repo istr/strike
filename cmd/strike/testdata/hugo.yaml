@@ -10,7 +10,8 @@ resolver:
 steps:
   - name: source
     image: docker.io/library/busybox@sha256:abababababababababababababababababababababababababababababababab
-    args: [git, clone, --depth, "1", "https://example.com/site.git", /out/tree]
+    args: [git, clone, --depth, "1", "https://example.com/site.git", /work/tree]
+    workdir: /work
     peers:
       - type: https
         host: example.com
@@ -21,15 +22,15 @@ steps:
     inputs: []
     secrets: []
     outputs:
-      - { name: tree, type: directory, path: /out/tree }
+      - { name: tree, type: directory, path: tree }
     provenance:
       type: git
-      path: /out/provenance.json
+      path: tree/provenance.json
 
   - name: npm_install
     image: docker.io/library/node@sha256:cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd
     args: [npm, ci, --ignore-scripts, --no-bin-links]
-    workdir: /out
+    workdir: /work
     peers:
       - type: https
         host: registry.npmjs.org
@@ -39,11 +40,11 @@ steps:
     env:
       npm_config_cache: /tmp/.npm
     inputs:
-      - { from: source.tree, subpath: package.json, mount: /out/package.json }
-      - { from: source.tree, subpath: package-lock.json, mount: /out/package-lock.json }
+      - { from: source.tree, subpath: package.json, mount: /work/package.json }
+      - { from: source.tree, subpath: package-lock.json, mount: /work/package-lock.json }
     secrets: []
     outputs:
-      - { name: node_modules, type: directory, path: /out/node_modules }
+      - { name: node_modules, type: directory, path: node_modules }
 
   - name: workspace
     args: []
@@ -56,19 +57,19 @@ steps:
         - { from: source.tree, dest: /work }
         - { from: npm_install.node_modules, dest: /work/node_modules }
     outputs:
-      - { name: image, type: image, path: /out/workspace.tar }
+      - { name: image, type: image, path: workspace.tar }
 
   - name: build
     image_from:
       step: workspace
       output: image
-    args: [hugo, --gc, --minify, -d, /out/public]
+    args: [hugo, --gc, --minify, -d, /work/public]
     workdir: /work
     env: {}
     inputs: []
     secrets: []
     outputs:
-      - { name: site, type: directory, path: /out/public }
+      - { name: site, type: directory, path: public }
 
   - name: pack_site
     args: []
@@ -82,7 +83,7 @@ steps:
       config:
         entrypoint: [nginx, -g, "daemon off;"]
     outputs:
-      - { name: image, type: image, path: /out/image.tar }
+      - { name: image, type: image, path: image.tar }
 
   - name: deploy
     deploy:

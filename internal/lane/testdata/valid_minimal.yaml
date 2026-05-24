@@ -11,6 +11,7 @@ steps:
   - name: build
     image: docker.io/library/golang@sha256:abababababababababababababababababababababababababababababababab
     args: ["go", "build", "-o", "/out/binary"]
+    workdir: /out
     env:
       CGO_ENABLED: "0"
     inputs: []
@@ -18,4 +19,4 @@ steps:
     outputs:
       - name: binary
         type: file
-        path: /out/binary
+        path: binary

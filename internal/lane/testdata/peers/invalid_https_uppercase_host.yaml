@@ -11,13 +11,14 @@ steps:
   - name: fetch
     image: docker.io/library/alpine@sha256:abababababababababababababababababababababababababababababababab
     args: [wget, "https://example.com/file"]
+    workdir: /out
     env: {}
     inputs: []
     secrets: []
     outputs:
       - name: file
         type: file
-        path: /out/file
+        path: file
     peers:
       - type: https
         host: Example.COM

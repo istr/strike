@@ -11,16 +11,18 @@ steps:
   - name: npm_install
     image: docker.io/library/node@sha256:abababababababababababababababababababababababababababababababab
     args: [npm, ci]
+    workdir: /out
     env: {}
     inputs: []
     secrets: []
     outputs:
       - name: node_modules
         type: directory
-        path: /out/node_modules
+        path: node_modules
   - name: build
     image: docker.io/library/hugo@sha256:cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd
     args: [hugo]
+    workdir: /out
     env: {}
     inputs:
       - from: npm_install.node_modules
@@ -29,4 +31,4 @@ steps:
     outputs:
       - name: site
         type: directory
-        path: /out/www
+        path: www
