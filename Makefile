@@ -46,8 +46,10 @@ lint-adr-index:
 			|| { echo "ADR on disk but missing from ADR-INDEX.md: $$b"; exit 1; }; \
 	done; echo "adr-index: ok"
 
-lint: lint-from lint-ascii lint-adr-index
+lint-ci:
 	golangci-lint run ./...
+
+lint: lint-ci lint-from lint-ascii lint-adr-index
 
 test:
 	go test -race -coverprofile=coverage.out -covermode=atomic ./...

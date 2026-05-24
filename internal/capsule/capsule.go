@@ -258,7 +258,7 @@ func (c *NetworkCapsule) Start(ctx context.Context) error {
 			closer.Warn(udp, "capsule resolver UDP")
 			closer.Warn(tcp, "capsule resolver TCP")
 			closer.Warn(mtcp, "capsule mediator TCP")
-			for j := 0; j < k; j++ {
+			for j := range k {
 				closer.Warn(c.sshTCP[j], "capsule ssh TCP")
 			}
 			return fmt.Errorf("capsule: bind ssh TCP %s: %w", addr, slErr)

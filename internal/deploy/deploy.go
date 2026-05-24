@@ -409,8 +409,7 @@ func (d *Deployer) captureOne(ctx context.Context, sc lane.StateCapture) (captur
 		return captureSnap{}, fmt.Errorf("capture %q: command is required", sc.Name)
 	}
 
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
+	var stdout, stderr bytes.Buffer
 
 	var mounts []container.Mount
 	for _, m := range sc.Mounts {
@@ -431,28 +430,11 @@ func (d *Deployer) captureOne(ctx context.Context, sc lane.StateCapture) (captur
 		}
 	}()
 
-	sshContainerPorts := executor.SSHContainerPorts(sc.Peers)
-	sshMounts, sshEnv, err := executor.ConfigureSSHPeers(sc.Peers, scratchDir, sshContainerPorts)
+	sshMounts, env, err := setupSSHEnv(ctx, sc.Peers, scratchDir)
 	if err != nil {
-		return captureSnap{}, fmt.Errorf("ssh peer setup: %w", err)
+		return captureSnap{}, err
 	}
 	mounts = append(mounts, sshMounts...)
-
-	agentMount, agentEnv, err := executor.StartAgentProxy(ctx, sc.Peers, scratchDir)
-	if err != nil {
-		return captureSnap{}, fmt.Errorf("ssh agent proxy setup: %w", err)
-	}
-	if agentMount != nil {
-		mounts = append(mounts, *agentMount)
-	}
-
-	env := make(map[string]string, len(sshEnv)+len(agentEnv))
-	for k, v := range sshEnv {
-		env[k] = v
-	}
-	for k, v := range agentEnv {
-		env[k] = v
-	}
 
 	opts := HardenedRunOpts()
 	opts.Image = string(sc.Image)
@@ -544,28 +526,11 @@ func (d *Deployer) executeKubernetesDeploy(ctx context.Context, m lane.DeployKub
 		}
 	}()
 
-	sshContainerPorts := executor.SSHContainerPorts(peers)
-	sshMounts, sshEnv, err := executor.ConfigureSSHPeers(peers, scratchDir, sshContainerPorts)
+	sshMounts, env, err := setupSSHEnv(ctx, peers, scratchDir)
 	if err != nil {
-		return fmt.Errorf("ssh peer setup: %w", err)
+		return err
 	}
 	mounts = append(mounts, sshMounts...)
-
-	agentMount, agentEnv, err := executor.StartAgentProxy(ctx, peers, scratchDir)
-	if err != nil {
-		return fmt.Errorf("ssh agent proxy setup: %w", err)
-	}
-	if agentMount != nil {
-		mounts = append(mounts, *agentMount)
-	}
-
-	env := make(map[string]string, len(sshEnv)+len(agentEnv))
-	for k, v := range sshEnv {
-		env[k] = v
-	}
-	for k, v := range agentEnv {
-		env[k] = v
-	}
 
 	opts := HardenedRunOpts()
 	opts.Image = string(m.Image)
@@ -608,31 +573,11 @@ func (d *Deployer) executeCustomDeploy(ctx context.Context, m lane.DeployCustom,
 		}
 	}()
 
-	sshContainerPorts := executor.SSHContainerPorts(peers)
-	sshMounts, sshEnv, err := executor.ConfigureSSHPeers(peers, scratchDir, sshContainerPorts)
+	sshMounts, env, err := setupSSHEnv(ctx, peers, scratchDir)
 	if err != nil {
-		return fmt.Errorf("ssh peer setup: %w", err)
+		return err
 	}
-
-	agentMount, agentEnv, err := executor.StartAgentProxy(ctx, peers, scratchDir)
-	if err != nil {
-		return fmt.Errorf("ssh agent proxy setup: %w", err)
-	}
-
-	var mounts []container.Mount
-	mounts = append(mounts, sshMounts...)
-	if agentMount != nil {
-		mounts = append(mounts, *agentMount)
-	}
-
-	env := make(map[string]string, len(m.Env)+len(sshEnv)+len(agentEnv))
 	for k, v := range m.Env {
-		env[k] = v
-	}
-	for k, v := range sshEnv {
-		env[k] = v
-	}
-	for k, v := range agentEnv {
 		env[k] = v
 	}
 
@@ -641,7 +586,7 @@ func (d *Deployer) executeCustomDeploy(ctx context.Context, m lane.DeployCustom,
 	opts.Entrypoint = m.Entrypoint
 	opts.Cmd = m.Args
 	opts.Env = env
-	opts.Mounts = mounts
+	opts.Mounts = sshMounts
 	opts.Stdout = os.Stdout
 	opts.Stderr = os.Stderr
 	d.applyCapsule(&opts, caps)
@@ -654,6 +599,36 @@ func (d *Deployer) executeCustomDeploy(ctx context.Context, m lane.DeployCustom,
 		return fmt.Errorf("custom deploy: exit code %d", exitCode)
 	}
 	return nil
+}
+
+// setupSSHEnv configures SSH peer forwarding and agent proxy for a
+// container unit, returning the mounts and merged environment.
+func setupSSHEnv(ctx context.Context, peers []lane.Peer, scratchDir string) ([]container.Mount, map[string]string, error) {
+	sshContainerPorts := executor.SSHContainerPorts(peers)
+	sshMounts, sshEnv, err := executor.ConfigureSSHPeers(peers, scratchDir, sshContainerPorts)
+	if err != nil {
+		return nil, nil, fmt.Errorf("ssh peer setup: %w", err)
+	}
+
+	agentMount, agentEnv, err := executor.StartAgentProxy(ctx, peers, scratchDir)
+	if err != nil {
+		return nil, nil, fmt.Errorf("ssh agent proxy setup: %w", err)
+	}
+
+	var mounts []container.Mount
+	mounts = append(mounts, sshMounts...)
+	if agentMount != nil {
+		mounts = append(mounts, *agentMount)
+	}
+
+	env := make(map[string]string, len(sshEnv)+len(agentEnv))
+	for k, v := range sshEnv {
+		env[k] = v
+	}
+	for k, v := range agentEnv {
+		env[k] = v
+	}
+	return mounts, env, nil
 }
 
 func sha256Sum(data []byte) []byte {

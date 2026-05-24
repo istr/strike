@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"net/netip"
 	"strconv"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/closer"
+	"github.com/istr/strike/internal/copier"
 	"github.com/istr/strike/internal/mediator"
 )
 
@@ -109,27 +109,24 @@ func (f *sshForwarder) serve(ctx context.Context, l net.Listener) error {
 	type deadliner interface {
 		SetDeadline(t clock.Time) error
 	}
-	for {
-		if err := ctx.Err(); err != nil {
-			return nil
-		}
+	for ctx.Err() == nil {
 		if d, ok := l.(deadliner); ok {
 			if err := d.SetDeadline(clock.Wall().Add(pollInterval)); err != nil {
 				return fmt.Errorf("capsule: sshforward set deadline: %w", err)
 			}
 		}
-		conn, err := l.Accept()
-		if isTimeoutErr(err) {
+		conn, acceptErr := l.Accept()
+		switch {
+		case isTimeoutErr(acceptErr):
 			continue
-		}
-		if err != nil {
-			if ctx.Err() != nil {
-				return nil
-			}
-			return fmt.Errorf("capsule: sshforward accept: %w", err)
+		case acceptErr != nil && ctx.Err() != nil:
+			return nil
+		case acceptErr != nil:
+			return fmt.Errorf("capsule: sshforward accept: %w", acceptErr)
 		}
 		go f.handle(ctx, conn)
 	}
+	return nil
 }
 
 func (f *sshForwarder) handle(ctx context.Context, client net.Conn) {
@@ -175,20 +172,8 @@ func (f *sshForwarder) handle(ctx context.Context, client net.Conn) {
 func splice(a, b net.Conn) {
 	var wg sync.WaitGroup
 	wg.Add(2)
-	go func() {
-		defer wg.Done()
-		_, _ = io.Copy(a, b)
-		if c, ok := a.(interface{ CloseWrite() error }); ok {
-			_ = c.CloseWrite()
-		}
-	}()
-	go func() {
-		defer wg.Done()
-		_, _ = io.Copy(b, a)
-		if c, ok := b.(interface{ CloseWrite() error }); ok {
-			_ = c.CloseWrite()
-		}
-	}()
+	go func() { defer wg.Done(); copier.Forward(a, b, "sshforward a<-b") }()
+	go func() { defer wg.Done(); copier.Forward(b, a, "sshforward b<-a") }()
 	wg.Wait()
 }
 

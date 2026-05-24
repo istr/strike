@@ -36,9 +36,9 @@ type StepPortReq struct {
 // host port per declared SSH peer, in peer-list order; it is nil or
 // empty when the unit declares no SSH peers.
 type HostPorts struct {
+	SSH      []uint16
 	Resolver uint16
 	Mediator uint16
-	SSH      []uint16
 }
 
 // AllocatePorts maps each unit name to a distinct HostPorts block,
@@ -65,17 +65,17 @@ func AllocatePorts(reqs []StepPortReq) (map[string]HostPorts, error) {
 			total, hostPortBudget)
 	}
 	out := make(map[string]HostPorts, len(reqs))
-	next := hostPortBase
+	next := int(hostPortBase)
 	for _, r := range reqs {
 		hp := HostPorts{
-			Resolver: next,
-			Mediator: next + 1,
+			Resolver: uint16(next),
+			Mediator: uint16(next + 1),
 		}
-		for k := 0; k < r.SSHCount; k++ {
-			hp.SSH = append(hp.SSH, next+2+uint16(k))
+		for k := range r.SSHCount {
+			hp.SSH = append(hp.SSH, uint16(next+2+k))
 		}
 		out[r.Name] = hp
-		next += uint16(2 + r.SSHCount)
+		next += 2 + r.SSHCount
 	}
 	return out, nil
 }
