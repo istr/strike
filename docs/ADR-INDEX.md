@@ -68,6 +68,7 @@ referenced here at all.
 | 032 | [Peer TLS version floor](ADR-032-peer-tls-version-floor.md) | Accepted | Restricted by default; Peers are declared; Code is liability |
 | 033 | [SSH Peer Egress and Unified Capsule Mediation](ADR-033-ssh-peer-egress-and-unified-mediation.md) | Accepted | Peers are declared; Identity is asymmetric; No root; Runtime is attested; Code is liability; Enforcement is structural |
 | 034 | [Symlink Containment at Wrap and Mount](ADR-034-symlink-containment.md) | Accepted | Restricted by default; Reproducibility; Digest-pinned references; Code is liability; Enforcement is structural |
+| 035 | [Build payload stays in the engine; outputs are workdir-volume projections](ADR-035-build-payload-in-engine.md) | Accepted | Containers are the only storage; Enforcement is structural; Reproducibility; Digest-pinned references; CUE first; Code is liability |
 
 ## By principle
 
@@ -80,7 +81,7 @@ headings.
 ADR-001, ADR-002, ADR-004, ADR-005, ADR-006, ADR-008, ADR-010,
 ADR-011, ADR-013, ADR-014, ADR-015, ADR-016, ADR-017, ADR-018,
 ADR-019, ADR-020, ADR-021, ADR-023, ADR-024, ADR-025, ADR-026, ADR-027,
-ADR-028, ADR-029, ADR-030, ADR-031, ADR-032, ADR-033, ADR-034.
+ADR-028, ADR-029, ADR-030, ADR-031, ADR-032, ADR-033, ADR-034, ADR-035.
 
 ### No shell
 
@@ -97,7 +98,7 @@ ADR-031, ADR-033.
 
 ### CUE first
 
-ADR-004, ADR-010, ADR-015, ADR-017, ADR-022, ADR-027.
+ADR-004, ADR-010, ADR-015, ADR-017, ADR-022, ADR-027, ADR-035.
 
 ### Secrets are typed
 
@@ -122,16 +123,16 @@ ADR-025, ADR-028, ADR-029, ADR-030, ADR-033.
 
 ADR-008, ADR-009, ADR-011, ADR-012, ADR-013, ADR-016, ADR-017,
 ADR-018, ADR-019, ADR-020, ADR-021, ADR-026, ADR-027, ADR-029,
-ADR-030, ADR-031, ADR-034.
+ADR-030, ADR-031, ADR-034, ADR-035.
 
 ### Reproducibility is enforced, not hoped for
 
 ADR-009, ADR-010, ADR-011, ADR-015, ADR-016, ADR-017, ADR-026, ADR-027,
-ADR-031, ADR-034.
+ADR-031, ADR-034, ADR-035.
 
 ### Containers are the only storage
 
-ADR-026.
+ADR-026, ADR-035.
 
 ### Restricted by default, relaxed only with reason
 
@@ -140,7 +141,7 @@ ADR-032, ADR-034.
 ### Enforcement is structural, not discretionary
 
 ADR-005, ADR-006, ADR-022, ADR-024, ADR-025, ADR-028, ADR-029,
-ADR-031, ADR-033, ADR-034.
+ADR-031, ADR-033, ADR-034, ADR-035.
 
 ## Format
 
