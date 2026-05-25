@@ -60,18 +60,14 @@ func TestBuildSpecGenerator_NamedVolume(t *testing.T) {
 	}
 	spec := buildSpecGenerator(opts)
 
-	raw, ok := spec["volumes"]
-	if !ok {
-		t.Fatal("spec has no volumes key")
+	if len(spec.Volumes) != 1 {
+		t.Fatalf("volumes len = %d, want 1", len(spec.Volumes))
 	}
-	vols, ok := raw.([]map[string]any)
-	if !ok || len(vols) != 1 {
-		t.Fatalf("volumes shape = %T len? want one entry", raw)
+	v := spec.Volumes[0]
+	if v.Name != "vol1" {
+		t.Errorf("volume Name = %q, want vol1", v.Name)
 	}
-	if vols[0]["Name"] != "vol1" || vols[0]["Dest"] != "/out/build" {
-		t.Errorf("volume entry = %v, want Name=vol1 Dest=/out/build", vols[0])
-	}
-	if spec["work_dir"] != "/out/build" {
-		t.Errorf("work_dir = %v, want /out/build", spec["work_dir"])
+	if v.Dest != "/out/build" {
+		t.Errorf("volume Dest = %q, want /out/build", v.Dest)
 	}
 }

@@ -647,93 +647,124 @@ func (e *podmanEngine) VolumeRemove(ctx context.Context, name string) error {
 	return nil
 }
 
-// buildSpecGenerator constructs the libpod SpecGenerator JSON from RunOpts.
-func buildSpecGenerator(opts RunOpts) map[string]any {
-	spec := map[string]any{
-		"image":   opts.Image,
-		"command": opts.Cmd,
-		"remove":  opts.Remove,
-	}
+// specGen is the libpod SpecGenerator wire payload for container create.
+// The json tags are the version-pinned wire contract: key names and casing
+// matter and are non-uniform across nested types (the OCI runtime Mount is
+// lowercase; the podman NamedVolume is PascalCase). Conditional inclusion is
+// expressed by omitempty/pointer fields, not by builder branching. image,
+// command, and remove are emitted unconditionally (no omitempty); remove must
+// carry false so ContainerRunHeld suppresses engine auto-removal.
+// VERIFY AGAINST LIVE ENGINE -- confirmed podman 5.4.2.
+type specGen struct {
+	Env                map[string]string   `json:"env,omitempty"`
+	Netns              *specNamespace      `json:"netns,omitempty"`
+	Userns             *specNamespace      `json:"userns,omitempty"`
+	NetworkOptions     *specNetworkOptions `json:"network_options,omitempty"`
+	Image              string              `json:"image"`
+	WorkDir            string              `json:"work_dir,omitempty"`
+	Command            []string            `json:"command"`
+	Entrypoint         []string            `json:"entrypoint,omitempty"`
+	Mounts             []specMount         `json:"mounts,omitempty"`
+	Volumes            []specNamedVolume   `json:"volumes,omitempty"`
+	DNSServer          []string            `json:"dns_server,omitempty"`
+	CapDrop            []string            `json:"cap_drop,omitempty"`
+	SecurityOpt        []string            `json:"security_opt,omitempty"`
+	ReadOnlyFilesystem bool                `json:"read_only_filesystem,omitempty"`
+	Remove             bool                `json:"remove"`
+}
 
-	// Entrypoint override
-	if len(opts.Entrypoint) > 0 {
-		spec["entrypoint"] = opts.Entrypoint
-	}
+// specNamespace is a libpod netns/userns entry: {"nsmode": "..."}.
+type specNamespace struct {
+	NSMode string `json:"nsmode"`
+}
 
-	// Working directory
-	if opts.Workdir != "" {
-		spec["work_dir"] = opts.Workdir
-	}
+// specNetworkOptions carries per-backend network options. Only pasta is wired
+// today: {"pasta": [...]}.
+type specNetworkOptions struct {
+	Pasta []string `json:"pasta,omitempty"`
+}
 
-	// Environment
-	if len(opts.Env) > 0 {
-		spec["env"] = opts.Env
-	}
+// specMount is one entry of the SpecGenerator "mounts" array, following the
+// OCI runtime Mount spec (lowercase keys). A bind entry carries Source and
+// type "bind"; a tmpfs entry omits Source and carries type "tmpfs".
+type specMount struct {
+	Destination string   `json:"destination"`
+	Source      string   `json:"source,omitempty"`
+	Type        string   `json:"type"`
+	Options     []string `json:"options,omitempty"`
+}
 
-	// Mounts (bind + tmpfs)
-	if mounts := buildMounts(opts); len(mounts) > 0 {
-		spec["mounts"] = mounts
+// specNamedVolume is one entry of the SpecGenerator "volumes" array, the
+// podman NamedVolume struct (PascalCase keys).
+type specNamedVolume struct {
+	Name    string   `json:"Name"`
+	Dest    string   `json:"Dest"`
+	Options []string `json:"Options,omitempty"`
+}
+
+// buildSpecGenerator constructs the libpod SpecGenerator wire payload from
+// RunOpts. Empty/zero fields are dropped by the omitempty tags on specGen;
+// the only branches that remain are the ones that must avoid a nil
+// dereference (Volume) or that populate a typed sub-object only under a
+// semantic condition (netns/userns/network_options).
+func buildSpecGenerator(opts RunOpts) specGen {
+	spec := specGen{
+		Image:              opts.Image,
+		Command:            opts.Cmd,
+		Entrypoint:         opts.Entrypoint,
+		WorkDir:            opts.Workdir,
+		Env:                opts.Env,
+		Mounts:             buildMounts(opts),
+		DNSServer:          opts.DNSServers,
+		CapDrop:            opts.CapDrop,
+		SecurityOpt:        opts.SecurityOpt,
+		ReadOnlyFilesystem: opts.ReadOnly,
+		Remove:             opts.Remove,
 	}
 
 	// Named volume (the engine-managed writable workdir surface).
 	if opts.Volume != nil {
-		spec["volumes"] = buildVolumes(opts)
+		spec.Volumes = buildVolumes(opts)
 	}
 
 	// Network
 	if opts.Network != "" {
-		spec["netns"] = map[string]string{"nsmode": opts.Network}
+		spec.Netns = &specNamespace{NSMode: opts.Network}
 		if opts.Network == "pasta" && len(opts.PastaArgs) > 0 {
-			spec["network_options"] = map[string]any{"pasta": opts.PastaArgs}
+			spec.NetworkOptions = &specNetworkOptions{Pasta: opts.PastaArgs}
 		}
-	}
-	// DNS server overrides (mediated steps point at the capsule's
-	// resolver loopback address).
-	if len(opts.DNSServers) > 0 {
-		spec["dns_server"] = opts.DNSServers
-	}
-
-	// Security
-	if len(opts.CapDrop) > 0 {
-		spec["cap_drop"] = opts.CapDrop
-	}
-	if opts.ReadOnly {
-		spec["read_only_filesystem"] = true
-	}
-	if len(opts.SecurityOpt) > 0 {
-		spec["security_opt"] = opts.SecurityOpt
 	}
 
 	// User namespace
 	if opts.UsernsMode != "" {
-		spec["userns"] = map[string]string{"nsmode": opts.UsernsMode}
+		spec.Userns = &specNamespace{NSMode: opts.UsernsMode}
 	}
 
 	return spec
 }
 
-func buildMounts(opts RunOpts) []map[string]any {
-	var mounts []map[string]any
+func buildMounts(opts RunOpts) []specMount {
+	var mounts []specMount
 	for _, m := range opts.Mounts {
-		mount := map[string]any{
-			"destination": m.Target,
-			"source":      m.Source,
-			"type":        "bind",
+		mount := specMount{
+			Destination: m.Target,
+			Source:      m.Source,
+			Type:        "bind",
 		}
 		mountOpts := append([]string{}, m.Options...)
 		if m.ReadOnly {
 			mountOpts = append(mountOpts, "ro")
 		}
 		if len(mountOpts) > 0 {
-			mount["options"] = mountOpts
+			mount.Options = mountOpts
 		}
 		mounts = append(mounts, mount)
 	}
 	for path, options := range opts.Tmpfs {
-		mounts = append(mounts, map[string]any{
-			"destination": path,
-			"type":        "tmpfs",
-			"options":     strings.Split(options, ","),
+		mounts = append(mounts, specMount{
+			Destination: path,
+			Type:        "tmpfs",
+			Options:     strings.Split(options, ","),
 		})
 	}
 	return mounts
@@ -741,16 +772,16 @@ func buildMounts(opts RunOpts) []map[string]any {
 
 // buildVolumes wraps the single named volume into the array shape the
 // libpod SpecGenerator expects under the "volumes" key.
-func buildVolumes(opts RunOpts) []map[string]any {
+func buildVolumes(opts RunOpts) []specNamedVolume {
 	// VERIFY AGAINST LIVE ENGINE -- confirmed podman 5.4.2: the libpod
 	// SpecGenerator names this key "volumes", with entries
 	// {"Name","Dest","Options"}.
 	v := opts.Volume
-	entry := map[string]any{"Name": v.Name, "Dest": v.Dest}
+	entry := specNamedVolume{Name: v.Name, Dest: v.Dest}
 	if len(v.Options) > 0 {
-		entry["Options"] = v.Options
+		entry.Options = v.Options
 	}
-	return []map[string]any{entry}
+	return []specNamedVolume{entry}
 }
 
 // demuxLogStream reads the Docker/libpod multiplexed log stream.
