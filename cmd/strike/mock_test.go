@@ -70,7 +70,7 @@ func (m *mockEngine) TLSIdentity() *container.TLSIdentity { return nil }
 func (m *mockEngine) Identity() *container.EngineIdentity { return m.identity }
 
 func (m *mockEngine) Info(context.Context) error { return nil }
-func (m *mockEngine) ContainerRunHeld(_ context.Context, _ container.RunOpts) (string, int, error) {
+func (m *mockEngine) ContainerRunHeld(_ context.Context, _ container.RunOpts, _ []container.Seed) (string, int, error) {
 	return "", 0, nil
 }
 

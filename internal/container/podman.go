@@ -366,14 +366,23 @@ func (e *podmanEngine) ImageSave(ctx context.Context, tag string) (io.ReadCloser
 	return resp.Body, nil
 }
 
-// runContainer creates, starts, streams logs from, and waits for a
-// container. It does not remove the container. It returns the container id
-// (valid for cleanup even when a post-create step errors) and the exit
-// code. ContainerRun and ContainerRunHeld share this body.
-func (e *podmanEngine) runContainer(ctx context.Context, opts RunOpts) (string, int, error) {
+// runContainer creates, optionally seeds, starts, streams logs from, and
+// waits for a container. It does not remove the container. It returns the
+// container id (valid for cleanup even when a post-create step errors) and
+// the exit code. ContainerRun and ContainerRunHeld share this body.
+func (e *podmanEngine) runContainer(ctx context.Context, opts RunOpts, seeds []Seed) (string, int, error) {
 	id, err := e.containerCreate(ctx, opts)
 	if err != nil {
 		return "", -1, fmt.Errorf("container create: %w", err)
+	}
+	// Seed input content into the created (not yet started) container's
+	// writable volume before start. The container has not run, so nothing
+	// observes a partial seed; a failed PUT aborts before start with the id
+	// returned for cleanup. See ADR-036 seed delivery.
+	for _, s := range seeds {
+		if putErr := e.containerArchivePut(ctx, id, s.Path, s.Tar); putErr != nil {
+			return id, -1, fmt.Errorf("container seed %q: %w", s.Path, putErr)
+		}
 	}
 	if startErr := e.containerStart(ctx, id); startErr != nil {
 		return id, -1, fmt.Errorf("container start: %w", startErr)
@@ -394,7 +403,7 @@ func (e *podmanEngine) runContainer(ctx context.Context, opts RunOpts) (string, 
 
 // ContainerRun creates, starts, waits for, and removes a container.
 func (e *podmanEngine) ContainerRun(ctx context.Context, opts RunOpts) (int, error) {
-	id, exitCode, err := e.runContainer(ctx, opts)
+	id, exitCode, err := e.runContainer(ctx, opts, nil)
 	if err != nil {
 		return exitCode, err
 	}
@@ -408,10 +417,11 @@ func (e *podmanEngine) ContainerRun(ctx context.Context, opts RunOpts) (int, err
 
 // ContainerRunHeld runs the container without removing it, returning its id.
 // Auto-removal is forced off (overriding opts.Remove) so the stopped
-// container survives for extraction by the caller.
-func (e *podmanEngine) ContainerRunHeld(ctx context.Context, opts RunOpts) (string, int, error) {
+// container survives for extraction by the caller. seeds are extracted into
+// the container before start (ADR-036 input delivery); pass nil for none.
+func (e *podmanEngine) ContainerRunHeld(ctx context.Context, opts RunOpts, seeds []Seed) (string, int, error) {
 	opts.Remove = false
-	return e.runContainer(ctx, opts)
+	return e.runContainer(ctx, opts, seeds)
 }
 
 // ContainerRemove force-removes a container by id.
@@ -583,6 +593,38 @@ func (e *podmanEngine) ContainerArchive(ctx context.Context, id, path string) (i
 		return nil, fmt.Errorf("container archive %s: status %d: %s", path, resp.StatusCode, body)
 	}
 	return resp.Body, nil
+}
+
+// containerArchivePut extracts a tar stream into dstPath inside a container.
+// It succeeds on a created-but-not-started container, which is how step
+// inputs are seeded into the writable workdir volume before start.
+func (e *podmanEngine) containerArchivePut(ctx context.Context, id, dstPath string, tar io.Reader) error {
+	// VERIFY AGAINST LIVE ENGINE -- confirmed podman 5.4.2: libpod PUT
+	// /containers/{id}/archive?path= extracts a tar into path and returns
+	// 200. Succeeds on a created (not started) container; query param "path".
+	u := e.base + "/containers/" + id + "/archive?path=" + url.QueryEscape(dstPath)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, u, tar)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/x-tar")
+	resp, err := e.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("container archive put %s: %w", dstPath, err)
+	}
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			log.Printf("WARN close response body: %v", closeErr)
+		}
+	}()
+	if resp.StatusCode != http.StatusOK {
+		body, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			return fmt.Errorf("container archive put %s: status %d: (body read failed)", dstPath, resp.StatusCode)
+		}
+		return fmt.Errorf("container archive put %s: status %d: %s", dstPath, resp.StatusCode, body)
+	}
+	return nil
 }
 
 // VolumeCreate creates a named engine-managed volume.

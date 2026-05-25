@@ -55,7 +55,7 @@ func TestWrapArchiveAsImage_RealSymlink(t *testing.T) {
 	// Single shell-free command: create a contained symlink in the volume.
 	opts.Cmd = []string{"-s", "sibling", "/work/website"}
 
-	id, code, runErr := eng.ContainerRunHeld(ctx, opts)
+	id, code, runErr := eng.ContainerRunHeld(ctx, opts, nil)
 	if id != "" {
 		defer func() {
 			if rmErr := eng.ContainerRemove(ctx, id); rmErr != nil {

@@ -119,7 +119,7 @@ func (r Run) Execute(ctx context.Context) (string, error) {
 	opts.Stdout = os.Stdout
 	opts.Stderr = os.Stderr
 
-	id, exitCode, err := r.Engine.ContainerRunHeld(ctx, opts)
+	id, exitCode, err := r.Engine.ContainerRunHeld(ctx, opts, nil)
 	if err != nil {
 		return id, fmt.Errorf("container execution: %w", err)
 	}

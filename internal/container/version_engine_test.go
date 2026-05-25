@@ -28,7 +28,7 @@ func (s *stubEngine) Ping(context.Context) error                                
 func (s *stubEngine) TLSIdentity() *container.TLSIdentity                          { return nil }
 func (s *stubEngine) Identity() *container.EngineIdentity                          { return s.identity }
 func (s *stubEngine) Info(context.Context) error                                   { return nil }
-func (s *stubEngine) ContainerRunHeld(_ context.Context, _ container.RunOpts) (string, int, error) {
+func (s *stubEngine) ContainerRunHeld(_ context.Context, _ container.RunOpts, _ []container.Seed) (string, int, error) {
 	return "", 0, nil
 }
 

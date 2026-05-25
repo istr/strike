@@ -2,6 +2,7 @@ package container_test
 
 import (
 	"archive/tar"
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -71,7 +72,7 @@ func TestEngineVolumeArchiveRoundTrip(t *testing.T) {
 	opts.Entrypoint = []string{"touch"}
 	opts.Cmd = []string{"/work/marker.txt"}
 
-	id, code, err := eng.ContainerRunHeld(ctx, opts)
+	id, code, err := eng.ContainerRunHeld(ctx, opts, nil)
 	if id != "" {
 		defer func() {
 			if rmErr := eng.ContainerRemove(ctx, id); rmErr != nil {
@@ -121,5 +122,98 @@ func findTarEntry(t *testing.T, r io.Reader, suffix string) bool {
 			hdr.Name[len(hdr.Name)-len(suffix):] == suffix {
 			return true
 		}
+	}
+}
+
+// TestEngineSeedThenRun exercises the ADR-036 seed primitive end to end:
+// create a workdir volume, seed a file into it via the archive PUT on the
+// created-but-not-started container, run held under the hardened profile,
+// then read the workdir back and confirm the seeded file landed before start.
+// Mirrors probe 43 (Probe 1).
+func TestEngineSeedThenRun(t *testing.T) {
+	eng := requireEngine(t)
+	ctx := context.Background()
+
+	const img = "cgr.dev/chainguard/go@sha256:4ec098b553c8d74d9f01925578660b2bfcdee4ef45e5ab082250cf9675a0e28b"
+	exists, existsErr := eng.ImageExists(ctx, img)
+	if existsErr != nil {
+		t.Fatalf("image exists: %v", existsErr)
+	}
+	if !exists {
+		if pullErr := eng.ImagePull(ctx, img); pullErr != nil {
+			t.Fatalf("pull %s: %v", img, pullErr)
+		}
+	}
+
+	vol := fmt.Sprintf("strike-seed-itest-%d", clock.Wall().UnixNano())
+	if err := eng.VolumeCreate(ctx, vol); err != nil {
+		t.Fatalf("volume create: %v", err)
+	}
+	defer func() {
+		if rmErr := eng.VolumeRemove(ctx, vol); rmErr != nil {
+			t.Logf("WARN volume remove: %v", rmErr)
+		}
+	}()
+
+	// Seed tar: one regular file, seeded.txt, at the volume root.
+	const seedContent = "seeded\n"
+	var seedBuf bytes.Buffer
+	tw := tar.NewWriter(&seedBuf)
+	if err := tw.WriteHeader(&tar.Header{
+		Name:     "seeded.txt",
+		Mode:     0o644,
+		Size:     int64(len(seedContent)),
+		Typeflag: tar.TypeReg,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tw.Write([]byte(seedContent)); err != nil {
+		t.Fatal(err)
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	opts := container.DefaultSecureOpts()
+	opts.Image = img
+	opts.Workdir = "/work"
+	opts.Volume = &container.VolumeMount{Name: vol, Dest: "/work"}
+	// Read back the seeded file to prove the content landed before start.
+	// Writing new files after a pre-start PUT is a separate concern (the
+	// archive PUT suppresses the volume's CopyUp, which changes the
+	// effective write permissions); the seed primitive's contract is that
+	// existing seeded content is present at runtime.
+	opts.Entrypoint = []string{"cat"}
+	opts.Cmd = []string{"/work/seeded.txt"}
+
+	seeds := []container.Seed{{Path: "/work", Tar: bytes.NewReader(seedBuf.Bytes())}}
+
+	id, code, err := eng.ContainerRunHeld(ctx, opts, seeds)
+	if id != "" {
+		defer func() {
+			if rmErr := eng.ContainerRemove(ctx, id); rmErr != nil {
+				t.Logf("WARN container remove: %v", rmErr)
+			}
+		}()
+	}
+	if err != nil {
+		t.Fatalf("run held: %v", err)
+	}
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (seeded content not readable at runtime)", code)
+	}
+
+	rc, err := eng.ContainerArchive(ctx, id, "/work")
+	if err != nil {
+		t.Fatalf("archive: %v", err)
+	}
+	defer func() {
+		if closeErr := rc.Close(); closeErr != nil {
+			t.Logf("WARN archive close: %v", closeErr)
+		}
+	}()
+
+	if !findTarEntry(t, rc, "seeded.txt") {
+		t.Fatal("seeded.txt not found in /work archive: the seed PUT before start did not land in the volume")
 	}
 }

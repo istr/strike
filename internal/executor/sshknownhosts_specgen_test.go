@@ -43,7 +43,7 @@ func (e *captureEngine) Ping(context.Context) error          { return nil }
 func (e *captureEngine) TLSIdentity() *container.TLSIdentity { return nil }
 func (e *captureEngine) Identity() *container.EngineIdentity { return nil }
 func (e *captureEngine) Info(context.Context) error          { return nil }
-func (e *captureEngine) ContainerRunHeld(_ context.Context, opts container.RunOpts) (string, int, error) {
+func (e *captureEngine) ContainerRunHeld(_ context.Context, opts container.RunOpts, _ []container.Seed) (string, int, error) {
 	e.captured = opts
 	return "test-container-id", 0, nil
 }

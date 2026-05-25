@@ -45,13 +45,14 @@ type Engine interface {
 	// Returns the exit code.
 	ContainerRun(ctx context.Context, opts RunOpts) (int, error)
 
-	// ContainerRunHeld creates, starts, streams logs from, and waits for a
-	// container but does NOT remove it. Auto-removal is forced off so the
-	// stopped container survives for extraction. Returns the container id
-	// (valid for cleanup even on a post-create error) and the exit code.
-	// The caller owns removal (ContainerRemove) and extraction
-	// (ContainerArchive).
-	ContainerRunHeld(ctx context.Context, opts RunOpts) (string, int, error)
+	// ContainerRunHeld creates, optionally seeds, starts, streams logs from,
+	// and waits for a container but does NOT remove it. Seeds are tar streams
+	// the engine extracts into the container before start (ADR-036 input
+	// delivery); pass nil for none. Auto-removal is forced off so the stopped
+	// container survives for extraction. Returns the container id (valid for
+	// cleanup even on a post-create error) and the exit code. The caller owns
+	// removal (ContainerRemove) and extraction (ContainerArchive).
+	ContainerRunHeld(ctx context.Context, opts RunOpts, seeds []Seed) (string, int, error)
 
 	// ContainerArchive returns a tar stream of path from the container's
 	// filesystem. The container may be stopped. The caller must close the
@@ -122,6 +123,17 @@ type Mount struct {
 	Target   string
 	Options  []string
 	ReadOnly bool
+}
+
+// Seed is content delivered into a created-but-not-started container
+// before it starts. Tar is a tar stream the engine extracts at Path inside
+// the container (typically a writable named volume mounted there). It carries
+// step inputs into the workdir volume without host materialization (ADR-036
+// seed delivery). Pass a length-known reader (e.g. *bytes.Reader) so the
+// request carries Content-Length.
+type Seed struct {
+	Tar  io.Reader
+	Path string
 }
 
 // VolumeMount describes the named engine-managed volume mounted into the

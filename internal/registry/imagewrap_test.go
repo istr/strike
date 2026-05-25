@@ -108,7 +108,7 @@ func (e *wrapEngine) ContainerRun(_ context.Context, _ container.RunOpts) (int, 
 	return 0, nil
 }
 
-func (e *wrapEngine) ContainerRunHeld(_ context.Context, _ container.RunOpts) (string, int, error) {
+func (e *wrapEngine) ContainerRunHeld(_ context.Context, _ container.RunOpts, _ []container.Seed) (string, int, error) {
 	return "", 0, nil
 }
 
