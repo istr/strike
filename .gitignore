@@ -9,3 +9,10 @@ coverage.out
 # No private key material in repository
 *.pem
 *.key
+/*.md
+!/AGENTS.md
+!/ARCHITECTURE.md
+!/CONTRIBUTING.md
+!/DESIGN-PRINCIPLES.md
+!/README.md
+!/SECURITY.md
