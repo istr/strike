@@ -80,13 +80,12 @@ func TestWrapArchiveAsImage_RealSymlink(t *testing.T) {
 		}
 	}()
 
-	// The engine archive roots entries at "/" (archiving /work yields
-	// "/website", not "work/website"), so the correct stripPrefix is "".
+	// The engine archive prefixes entries with the basename of the archived
+	// path (archiving /work yields "work/website", not "/website").
 	// A non-zero digest alone does NOT prove the layer is non-empty -- an
-	// empty layer also has a valid digest, which is exactly how this
-	// regressed. Re-wrap the same archive with the former base-name prefix
-	// ("work"); it cannot match the engine's "/"-rooted entries and so drops
-	// everything. The two digests must differ.
+	// empty layer also has a valid digest. Wrapping with two different strip
+	// prefixes ("" vs "work") must produce different digests, confirming
+	// that stripPrefix affects the layer content.
 	client := &registry.Client{Engine: eng}
 	good, _, wrapErr := client.WrapArchiveAsImage(ctx, rc, "", "site", "localhost/strike/itest/arch:good")
 	if wrapErr != nil {

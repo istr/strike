@@ -520,17 +520,13 @@ func (rc *runContext) wrapArchivedOutput(ctx context.Context, step *lane.Step, s
 	workdir := step.Workdir.String()
 	tag := registry.WrapTag(rc.lane.LaneID, stepName, specHash)
 
-	// The engine archive roots entries at "/" -- the archived directory's own
-	// name is dropped, so archiving /out yields "/node_modules/...", not
-	// "out/node_modules/...". There is no base-name prefix to strip. Re-root
-	// every output under its layer name so the consumer finds it at
-	// <OutputLayerName>/... (inputContentPath); path.Join absorbs the
-	// leading slash because OutputLayerName is non-empty.
-	archivePath := workdir
-	if out.Path != nil {
-		archivePath = path.Join(workdir, out.Path.String())
-	}
-	stripPrefix, destPrefix := "", lane.OutputLayerName(out)
+	// Podman's ContainerArchive prefixes entries with the archived path's
+	// basename (probe-confirmed, podman 5.4.2): /out -> "out/...", /out/tree
+	// -> "tree/...", a single file -> the bare basename. archiveReroot strips
+	// that prefix and re-roots under OutputLayerName (directory), or keeps the
+	// single file entry as-is (file), so the layer is rooted at
+	// <OutputLayerName> for both consumer and pack.
+	archivePath, stripPrefix, destPrefix := archiveReroot(workdir, out)
 
 	stream, archErr := rc.engine.ContainerArchive(ctx, containerID, archivePath)
 	if archErr != nil {
@@ -650,6 +646,38 @@ func (rc *runContext) buildInputSeeds(ctx context.Context, step *lane.Step) ([]c
 		})
 	}
 	return seeds, nil
+}
+
+// archiveReroot returns the path to archive from the container and the
+// (stripPrefix, destPrefix) for re-rooting that archive stream into the
+// output's OCI layer.
+//
+// Podman's ContainerArchive prefixes every entry with the basename of the
+// archived path (probe-confirmed, podman 5.4.2): /out -> "out/...",
+// /out/tree -> "tree/...", and a single file /out/f -> the bare entry "f".
+// The layer must end rooted at OutputLayerName so the consumer
+// (buildInputSeeds) and pack (resolvePackInputPaths) find content at
+// <OutputLayerName>/... .
+//
+//   - directory: strip the basename podman prepended, then re-root under
+//     OutputLayerName. For a path-bearing output basename == OutputLayerName
+//     (a no-op net of strip+add); for a whole-workdir output they differ --
+//     strip the workdir basename, add the output name.
+//   - file: the archive is a single bare entry already named
+//     basename(out.Path) == OutputLayerName; keep it (stripPrefix="",
+//     destPrefix=""). Stripping its own name would drop the only entry.
+//
+// stripPrefix/destPrefix are unused for image outputs (wrapped via
+// WrapImageArchiveAsImage); archivePath is used for all types.
+func archiveReroot(workdir string, out lane.OutputSpec) (archivePath, stripPrefix, destPrefix string) {
+	archivePath = workdir
+	if out.Path != nil {
+		archivePath = path.Join(workdir, out.Path.String())
+	}
+	if out.Type == "file" {
+		return archivePath, "", ""
+	}
+	return archivePath, path.Base(archivePath), lane.OutputLayerName(out)
 }
 
 // inputContentPath returns the in-image path within the producer's single

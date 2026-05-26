@@ -944,3 +944,56 @@ func TestNewRunState(t *testing.T) {
 		t.Fatal("specHashes should be initialized")
 	}
 }
+
+// --------------------------------------------------------------------------.
+// archiveReroot
+// --------------------------------------------------------------------------.
+
+func TestArchiveReroot(t *testing.T) {
+	tests := []struct {
+		name                             string
+		workdir                          string
+		out                              lane.OutputSpec
+		wantArchive, wantStrip, wantDest string
+	}{
+		{
+			name:        "directory with path",
+			workdir:     "/out",
+			out:         lane.OutputSpec{Name: "tree", Type: "directory", Path: lane.Ptr(lane.RelPath("tree"))},
+			wantArchive: "/out/tree", wantStrip: "tree", wantDest: "tree",
+		},
+		{
+			name:        "directory nested path",
+			workdir:     "/out",
+			out:         lane.OutputSpec{Name: "web", Type: "directory", Path: lane.Ptr(lane.RelPath("dist/web"))},
+			wantArchive: "/out/dist/web", wantStrip: "web", wantDest: "web",
+		},
+		{
+			name:        "directory whole workdir (no path)",
+			workdir:     "/out",
+			out:         lane.OutputSpec{Name: "site", Type: "directory"},
+			wantArchive: "/out", wantStrip: "out", wantDest: "site",
+		},
+		{
+			name:        "file with path",
+			workdir:     "/out",
+			out:         lane.OutputSpec{Name: "bin", Type: "file", Path: lane.Ptr(lane.RelPath("binary"))},
+			wantArchive: "/out/binary", wantStrip: "", wantDest: "",
+		},
+		{
+			name:        "file nested path",
+			workdir:     "/out",
+			out:         lane.OutputSpec{Name: "bin", Type: "file", Path: lane.Ptr(lane.RelPath("build/app.bin"))},
+			wantArchive: "/out/build/app.bin", wantStrip: "", wantDest: "",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a, s, d := archiveReroot(tt.workdir, tt.out)
+			if a != tt.wantArchive || s != tt.wantStrip || d != tt.wantDest {
+				t.Errorf("archiveReroot = (%q, %q, %q), want (%q, %q, %q)",
+					a, s, d, tt.wantArchive, tt.wantStrip, tt.wantDest)
+			}
+		})
+	}
+}

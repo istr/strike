@@ -171,6 +171,9 @@ func collectSeedEntries(r io.Reader, inImagePath, destPrefix string) ([]canonica
 		}
 
 		name := path.Join(destPrefix, rel)
+		if name == "" || name == "." {
+			name = path.Base(path.Clean(inImagePath))
+		}
 		mode := int64(hdr.FileInfo().Mode().Perm())
 
 		switch hdr.Typeflag {
@@ -196,15 +199,16 @@ func collectSeedEntries(r io.Reader, inImagePath, destPrefix string) ([]canonica
 
 // seedEntryRel resolves the relative path for a seed entry at the subtree
 // root. For directories, the root itself is skipped (matching
-// collectArchiveEntries). For a single-file match (inImagePath names a file
-// exactly), the base name of inImagePath is returned so the file is emitted
-// under destPrefix.
-func seedEntryRel(rel, inImagePath string, typeflag byte) (string, bool) {
+// collectArchiveEntries). For a single-file match (inImagePath names a
+// file exactly), rel is "" so path.Join(destPrefix, "") == destPrefix --
+// the caller passes the full destination path. When destPrefix is also
+// empty, collectSeedEntries falls back to the file's basename.
+func seedEntryRel(rel, _ string, typeflag byte) (string, bool) {
 	if rel != "" && rel != "." {
 		return rel, false
 	}
 	if typeflag == tar.TypeDir {
 		return "", true // skip directory root
 	}
-	return path.Base(path.Clean(inImagePath)), false
+	return "", false
 }

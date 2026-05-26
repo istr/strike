@@ -168,12 +168,57 @@ func headerKeys(m map[string]*tar.Header) []string {
 	return out
 }
 
+func TestCanonicalLayer_NoDoublePrefix_Directory(t *testing.T) {
+	// Real engine shape for archiving /out/tree: entries prefixed "tree/".
+	in := buildTar(t, []archiveEntry{
+		{name: "tree/", typeflag: tar.TypeDir, mode: 0o755},
+		{name: "tree/package.json", typeflag: tar.TypeReg, mode: 0o644, content: "pkg"},
+		{name: "tree/nested/", typeflag: tar.TypeDir, mode: 0o755},
+		{name: "tree/nested/a.txt", typeflag: tar.TypeReg, mode: 0o644, content: "a"},
+	})
+
+	// archiveReroot for a path "tree" directory: strip "tree", dest "tree".
+	layer, _, err := registry.CanonicalLayerFromTarForTest(bytes.NewReader(in), "tree", "tree")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := readLayer(t, layer)
+	if _, ok := got["tree/package.json"]; !ok {
+		t.Errorf("missing tree/package.json; got keys %v", headerKeys(got))
+	}
+	if _, ok := got["tree/nested/a.txt"]; !ok {
+		t.Errorf("missing tree/nested/a.txt; got keys %v", headerKeys(got))
+	}
+	if _, ok := got["tree/tree/package.json"]; ok {
+		t.Error("double prefix tree/tree/ present")
+	}
+}
+
+func TestCanonicalLayer_NoDoublePrefix_File(t *testing.T) {
+	// Real engine shape for archiving a single file /out/binary: bare entry.
+	in := buildTar(t, []archiveEntry{
+		{name: "binary", typeflag: tar.TypeReg, mode: 0o755, content: "bin"},
+	})
+
+	// archiveReroot for a path "binary" file: strip "", dest "".
+	layer, _, err := registry.CanonicalLayerFromTarForTest(bytes.NewReader(in), "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := readLayer(t, layer)
+	if _, ok := got["binary"]; !ok {
+		t.Errorf("missing binary; got keys %v", headerKeys(got))
+	}
+	if _, ok := got["binary/binary"]; ok {
+		t.Error("double prefix binary/binary present")
+	}
+}
+
 func TestWrapArchiveAsImage_LeadingSlashEntriesAreKept(t *testing.T) {
-	// The engine archive roots entries at "/" (archiving /out yields
-	// "/lib/a.js", not "out/lib/a.js"). With stripPrefix="" every entry must
-	// be kept and re-rooted under destPrefix. A regression that strips a
-	// nonexistent base prefix drops all entries -> empty layer, size 0
-	// (the whole-workdir output bug).
+	// Given "/"-rooted input (as from a hypothetical archive), stripPrefix=""
+	// keeps every entry and re-roots under destPrefix. A regression that
+	// strips a nonexistent base prefix drops all entries -> empty layer,
+	// size 0 (the whole-workdir output bug).
 	var buf bytes.Buffer
 	tw := tar.NewWriter(&buf)
 	write := func(name, content string) {

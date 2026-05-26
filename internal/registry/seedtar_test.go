@@ -108,6 +108,8 @@ func TestSeedTarFromImage_SingleFile(t *testing.T) {
 	})
 	imgTar := buildSingleLayerImageTar(t, layerTar)
 
+	// destPrefix is the full destination name; a single-file selection
+	// emits exactly one entry named destPrefix.
 	got, err := registry.SeedTarFromImage(imgTar, "package.json", "work")
 	if err != nil {
 		t.Fatal(err)
@@ -116,8 +118,72 @@ func TestSeedTarFromImage_SingleFile(t *testing.T) {
 	if len(files) != 1 {
 		t.Fatalf("expected 1 file, got %d: %v", len(files), files)
 	}
-	if files["work/package.json"] != `{"name":"test"}` {
-		t.Errorf("got %q", files["work/package.json"])
+	if files["work"] != `{"name":"test"}` {
+		t.Errorf("got files %v, want entry at %q", files, "work")
+	}
+}
+
+func TestSeedTarFromImage_SingleFile_FullPathDestPrefix(t *testing.T) {
+	// Producer layer shaped like a directory output: tree/package.json.
+	layerTar := buildLayerTar(t, []tar.Header{
+		{Typeflag: tar.TypeDir, Name: "tree/", Mode: 0o755},
+		{Typeflag: tar.TypeReg, Name: "tree/package.json", Mode: 0o644},
+	}, map[string][]byte{"tree/package.json": []byte(`{"name":"x"}`)})
+	imgTar := buildSingleLayerImageTar(t, layerTar)
+
+	// Caller passes destPrefix = the input's workdir-relative mount path.
+	seed, err := registry.SeedTarFromImage(imgTar, "tree/package.json", "package.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	files, _, _ := tarEntries(t, seed)
+	if files["package.json"] != `{"name":"x"}` {
+		t.Errorf("files = %v, want entry at %q", files, "package.json")
+	}
+	if _, ok := files["package.json/package.json"]; ok {
+		t.Error("double naming package.json/package.json present")
+	}
+}
+
+func TestSeedTarFromImage_SingleFile_BareDestPrefix(t *testing.T) {
+	// destPrefix "" or "." -> file keeps its basename.
+	layerTar := buildLayerTar(t, []tar.Header{
+		{Typeflag: tar.TypeReg, Name: "solo.txt", Mode: 0o644},
+	}, map[string][]byte{"solo.txt": []byte("x")})
+	imgTar := buildSingleLayerImageTar(t, layerTar)
+
+	seed, err := registry.SeedTarFromImage(imgTar, "solo.txt", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	files, _, _ := tarEntries(t, seed)
+	if files["solo.txt"] != "x" {
+		t.Errorf("files = %v, want entry at %q", files, "solo.txt")
+	}
+	if _, ok := files["solo.txt/solo.txt"]; ok {
+		t.Error("double naming solo.txt/solo.txt present")
+	}
+}
+
+func TestSeedTarFromImage_Directory_NoDoubling(t *testing.T) {
+	// Directory selection re-rooted under a full destPrefix: children only.
+	layerTar := buildLayerTar(t, []tar.Header{
+		{Typeflag: tar.TypeDir, Name: "tree/", Mode: 0o755},
+		{Typeflag: tar.TypeDir, Name: "tree/packages/", Mode: 0o755},
+		{Typeflag: tar.TypeReg, Name: "tree/packages/a.js", Mode: 0o644},
+	}, map[string][]byte{"tree/packages/a.js": []byte("a")})
+	imgTar := buildSingleLayerImageTar(t, layerTar)
+
+	seed, err := registry.SeedTarFromImage(imgTar, "tree/packages", "packages")
+	if err != nil {
+		t.Fatal(err)
+	}
+	files, _, _ := tarEntries(t, seed)
+	if files["packages/a.js"] != "a" {
+		t.Errorf("files = %v, want entry at %q", files, "packages/a.js")
+	}
+	if _, ok := files["packages/packages/a.js"]; ok {
+		t.Error("double prefix packages/packages/ present")
 	}
 }
 
