@@ -17,9 +17,10 @@ import (
 	"github.com/istr/strike/internal/transport"
 )
 
-// captureEngine records the RunOpts passed to ContainerRun.
+// captureEngine records the RunOpts and seeds passed to ContainerRunHeld.
 type captureEngine struct {
-	captured container.RunOpts
+	capturedSeeds []container.Seed
+	captured      container.RunOpts
 }
 
 func (e *captureEngine) ContainerRun(_ context.Context, opts container.RunOpts) (int, error) {
@@ -43,8 +44,9 @@ func (e *captureEngine) Ping(context.Context) error          { return nil }
 func (e *captureEngine) TLSIdentity() *container.TLSIdentity { return nil }
 func (e *captureEngine) Identity() *container.EngineIdentity { return nil }
 func (e *captureEngine) Info(context.Context) error          { return nil }
-func (e *captureEngine) ContainerRunHeld(_ context.Context, opts container.RunOpts, _ []container.Seed) (string, int, error) {
+func (e *captureEngine) ContainerRunHeld(_ context.Context, opts container.RunOpts, seeds []container.Seed) (string, int, error) {
 	e.captured = opts
+	e.capturedSeeds = seeds
 	return "test-container-id", 0, nil
 }
 
@@ -319,27 +321,25 @@ func TestRunExecute_SSHPeer_NoAuthSock(t *testing.T) {
 	}
 }
 
-func TestRunExecute_InputMounts_FromImage_SpecGenerator(t *testing.T) {
+func TestRunExecute_Seeds_PassedThrough(t *testing.T) {
 	eng := &captureEngine{}
 	caps, caPath := specgenTestCapsule(t)
 
+	seedTar := bytes.NewReader([]byte("seed-content"))
 	r := executor.Run{
 		Engine:       eng,
 		Capsule:      caps,
 		CABundlePath: caPath,
 		Secrets:      nil,
 		Step: &lane.Step{
-			Name:  "consumer",
-			Image: lane.Ptr(lane.ImageRef("alpine:latest")),
-			Args:  []string{"cat", "/in/binary"},
+			Name:    "consumer",
+			Image:   lane.Ptr(lane.ImageRef("alpine:latest")),
+			Args:    []string{"cat", "/work/binary"},
+			Workdir: lane.Ptr(lane.AbsPath("/work")),
 		},
-		VolumeName: "",
-		InputMounts: []executor.Mount{
-			{
-				Host:      "/tmp/inputs/aabbccdd11223344/binary",
-				Container: "/in/binary",
-				ReadOnly:  true,
-			},
+		VolumeName: "test-vol",
+		Seeds: []container.Seed{
+			{Tar: seedTar, Path: "/work"},
 		},
 	}
 
@@ -347,19 +347,10 @@ func TestRunExecute_InputMounts_FromImage_SpecGenerator(t *testing.T) {
 		t.Fatalf("Execute: %v", err)
 	}
 
-	var found bool
-	for _, m := range eng.captured.Mounts {
-		if m.Target == "/in/binary" {
-			found = true
-			if m.Source != "/tmp/inputs/aabbccdd11223344/binary" {
-				t.Errorf("Source = %q, want /tmp/inputs/aabbccdd11223344/binary", m.Source)
-			}
-			if !m.ReadOnly {
-				t.Error("input mount should be ReadOnly")
-			}
-		}
+	if len(eng.capturedSeeds) != 1 {
+		t.Fatalf("expected 1 seed, got %d", len(eng.capturedSeeds))
 	}
-	if !found {
-		t.Error("expected mount with Target=/in/binary")
+	if eng.capturedSeeds[0].Path != "/work" {
+		t.Errorf("seed path = %q, want /work", eng.capturedSeeds[0].Path)
 	}
 }

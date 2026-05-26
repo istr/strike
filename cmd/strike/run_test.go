@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -54,10 +53,10 @@ func newTestRC(t *testing.T, engine *mockEngine) *runContext {
 }
 
 // --------------------------------------------------------------------------.
-// buildInputMounts
+// buildInputSeeds
 // --------------------------------------------------------------------------.
 
-func TestBuildInputMounts_Single(t *testing.T) {
+func TestBuildInputSeeds_Single(t *testing.T) {
 	eng := &mockEngine{}
 	rc := newTestRC(t, eng)
 
@@ -70,13 +69,13 @@ func TestBuildInputMounts_Single(t *testing.T) {
 			},
 			{
 				Name: "test", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Inputs: []lane.InputRef{{From: "compile.bin", Mount: "/input/binary"}},
+				Workdir: lane.Ptr(lane.AbsPath("/work")),
+				Inputs:  []lane.InputRef{{From: "compile.bin", Mount: "/work/binary"}},
 			},
 		},
 	}
 	rc.dag = buildTestDAG(t, p)
 
-	// Register the artifact and spec hash for the producing step.
 	compileDigest := lane.MustParseDigest("sha256:aabbccdd11223344000000000000000000000000000000000000000000000000")
 	if err := rc.laneState.Register("compile", "bin", lane.Artifact{
 		Type: "file", Digest: compileDigest,
@@ -85,7 +84,6 @@ func TestBuildInputMounts_Single(t *testing.T) {
 	}
 	rc.state.specHashes["compile"] = lane.MustParseDigest("sha256:1111111111111111000000000000000000000000000000000000000000000000")
 
-	// Build a test OCI tar with a "binary" file inside.
 	tarBytes, _, err := regtest.BuildImageTar("binary", []byte("data"))
 	if err != nil {
 		t.Fatalf("BuildImageTar: %v", err)
@@ -93,26 +91,19 @@ func TestBuildInputMounts_Single(t *testing.T) {
 	tag := registry.WrapTag(rc.lane.LaneID, "compile", rc.state.specHashes["compile"])
 	eng.saveTars = map[string][]byte{tag: tarBytes}
 
-	scratchDir := t.TempDir()
-	mounts, mountErr := rc.buildInputMounts(context.Background(), rc.dag.Steps["test"], scratchDir)
-	if mountErr != nil {
-		t.Fatalf("buildInputMounts: %v", mountErr)
+	seeds, seedErr := rc.buildInputSeeds(context.Background(), rc.dag.Steps["test"])
+	if seedErr != nil {
+		t.Fatalf("buildInputSeeds: %v", seedErr)
 	}
-	if len(mounts) != 1 {
-		t.Fatalf("expected 1 mount, got %d", len(mounts))
+	if len(seeds) != 1 {
+		t.Fatalf("expected 1 seed, got %d", len(seeds))
 	}
-	if mounts[0].Container != "/input/binary" {
-		t.Errorf("mount container = %q, want /input/binary", mounts[0].Container)
-	}
-	if !mounts[0].ReadOnly {
-		t.Error("expected mount to be read-only")
-	}
-	if !strings.HasSuffix(mounts[0].Host, "binary") {
-		t.Errorf("host path should end in 'binary', got %q", mounts[0].Host)
+	if seeds[0].Path != "/work" {
+		t.Errorf("seed path = %q, want /work", seeds[0].Path)
 	}
 }
 
-func TestBuildInputMounts_Multiple(t *testing.T) {
+func TestBuildInputSeeds_Multiple(t *testing.T) {
 	eng := &mockEngine{}
 	rc := newTestRC(t, eng)
 
@@ -129,16 +120,16 @@ func TestBuildInputMounts_Multiple(t *testing.T) {
 			},
 			{
 				Name: "consumer", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
+				Workdir: lane.Ptr(lane.AbsPath("/work")),
 				Inputs: []lane.InputRef{
-					{From: "s1.a", Mount: "/in/a"},
-					{From: "s2.b", Mount: "/in/b"},
+					{From: "s1.a", Mount: "/work/a"},
+					{From: "s2.b", Mount: "/work/b"},
 				},
 			},
 		},
 	}
 	rc.dag = buildTestDAG(t, p)
 
-	// Register artifacts and spec hashes for both producing steps.
 	d1 := lane.MustParseDigest("sha256:aaaa111122223333000000000000000000000000000000000000000000000000")
 	d2 := lane.MustParseDigest("sha256:bbbb444455556666000000000000000000000000000000000000000000000000")
 	if err := rc.laneState.Register("s1", "a", lane.Artifact{Type: "file", Digest: d1}); err != nil {
@@ -150,7 +141,6 @@ func TestBuildInputMounts_Multiple(t *testing.T) {
 	rc.state.specHashes["s1"] = lane.MustParseDigest("sha256:2222222222222222000000000000000000000000000000000000000000000000")
 	rc.state.specHashes["s2"] = lane.MustParseDigest("sha256:3333333333333333000000000000000000000000000000000000000000000000")
 
-	// Build test image tars for both steps.
 	tar1, _, err := regtest.BuildImageTar("a.tar", []byte("a"))
 	if err != nil {
 		t.Fatalf("BuildImageTar s1: %v", err)
@@ -163,17 +153,16 @@ func TestBuildInputMounts_Multiple(t *testing.T) {
 	tag2 := registry.WrapTag(rc.lane.LaneID, "s2", rc.state.specHashes["s2"])
 	eng.saveTars = map[string][]byte{tag1: tar1, tag2: tar2}
 
-	scratchDir := t.TempDir()
-	mounts, mountErr := rc.buildInputMounts(context.Background(), rc.dag.Steps["consumer"], scratchDir)
-	if mountErr != nil {
-		t.Fatalf("buildInputMounts: %v", mountErr)
+	seeds, seedErr := rc.buildInputSeeds(context.Background(), rc.dag.Steps["consumer"])
+	if seedErr != nil {
+		t.Fatalf("buildInputSeeds: %v", seedErr)
 	}
-	if len(mounts) != 2 {
-		t.Fatalf("expected 2 mounts, got %d", len(mounts))
+	if len(seeds) != 2 {
+		t.Fatalf("expected 2 seeds, got %d", len(seeds))
 	}
 }
 
-func TestBuildInputMounts_MissingSubpath(t *testing.T) {
+func TestBuildInputSeeds_MissingSubpath(t *testing.T) {
 	eng := &mockEngine{}
 	rc := newTestRC(t, eng)
 
@@ -186,8 +175,9 @@ func TestBuildInputMounts_MissingSubpath(t *testing.T) {
 			},
 			{
 				Name: "consumer", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
+				Workdir: lane.Ptr(lane.AbsPath("/work")),
 				Inputs: []lane.InputRef{
-					{From: "src.tree", Subpath: lane.Ptr(lane.RelPath("nonexistent.json")), Mount: "/in/x"},
+					{From: "src.tree", Subpath: lane.Ptr(lane.RelPath("nonexistent.json")), Mount: "/work/x"},
 				},
 			},
 		},
@@ -202,7 +192,6 @@ func TestBuildInputMounts_MissingSubpath(t *testing.T) {
 	}
 	rc.state.specHashes["src"] = lane.MustParseDigest("sha256:1111111111111111000000000000000000000000000000000000000000000000")
 
-	// Build a test OCI tar with a "tree" directory containing only "actual.json".
 	tarBytes, _, err := regtest.BuildImageTar("tree/actual.json", []byte("{}"))
 	if err != nil {
 		t.Fatalf("BuildImageTar: %v", err)
@@ -210,16 +199,74 @@ func TestBuildInputMounts_MissingSubpath(t *testing.T) {
 	tag := registry.WrapTag(rc.lane.LaneID, "src", rc.state.specHashes["src"])
 	eng.saveTars = map[string][]byte{tag: tarBytes}
 
-	scratchDir := t.TempDir()
-	_, mountErr := rc.buildInputMounts(context.Background(), rc.dag.Steps["consumer"], scratchDir)
-	if mountErr == nil {
+	_, seedErr := rc.buildInputSeeds(context.Background(), rc.dag.Steps["consumer"])
+	if seedErr == nil {
 		t.Fatal("expected error for missing subpath")
 	}
-	if !strings.Contains(mountErr.Error(), "subpath") {
-		t.Errorf("error should mention 'subpath': %v", mountErr)
+	if !strings.Contains(seedErr.Error(), "subpath") {
+		t.Errorf("error should mention 'subpath': %v", seedErr)
 	}
-	if !strings.Contains(mountErr.Error(), "src.tree") {
-		t.Errorf("error should mention producer ref 'src.tree': %v", mountErr)
+}
+
+func TestBuildInputSeeds_OutsideWorkdir(t *testing.T) {
+	rc := newTestRC(t, &mockEngine{})
+
+	p := &lane.Lane{
+		Registry: "localhost:5555/test",
+		Steps: []lane.Step{
+			{
+				Name: "src", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
+				Outputs: []lane.OutputSpec{{Name: "bin", Type: "file", Path: lane.Ptr(lane.RelPath("binary"))}},
+			},
+			{
+				Name: "consumer", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
+				Workdir: lane.Ptr(lane.AbsPath("/work")),
+				Inputs:  []lane.InputRef{{From: "src.bin", Mount: "/outside/binary"}},
+			},
+		},
+	}
+	rc.dag = buildTestDAG(t, p)
+
+	if err := rc.laneState.Register("src", "bin", lane.Artifact{
+		Type: "file", Digest: lane.MustParseDigest("sha256:aabbccdd11223344000000000000000000000000000000000000000000000000"),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	rc.state.specHashes["src"] = lane.MustParseDigest("sha256:1111111111111111000000000000000000000000000000000000000000000000")
+
+	_, err := rc.buildInputSeeds(context.Background(), rc.dag.Steps["consumer"])
+	if err == nil {
+		t.Fatal("expected error for input outside workdir")
+	}
+	if !strings.Contains(err.Error(), "outside the workdir") {
+		t.Errorf("error should mention 'outside the workdir': %v", err)
+	}
+}
+
+func TestBuildInputSeeds_NoWorkdir(t *testing.T) {
+	rc := newTestRC(t, &mockEngine{})
+
+	p := &lane.Lane{
+		Registry: "localhost:5555/test",
+		Steps: []lane.Step{
+			{
+				Name: "src", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
+				Outputs: []lane.OutputSpec{{Name: "bin", Type: "file", Path: lane.Ptr(lane.RelPath("binary"))}},
+			},
+			{
+				Name: "consumer", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
+				Inputs: []lane.InputRef{{From: "src.bin", Mount: "/in/binary"}},
+			},
+		},
+	}
+	rc.dag = buildTestDAG(t, p)
+
+	_, err := rc.buildInputSeeds(context.Background(), rc.dag.Steps["consumer"])
+	if err == nil {
+		t.Fatal("expected error for input on step without workdir")
+	}
+	if !strings.Contains(err.Error(), "no workdir") {
+		t.Errorf("error should mention 'no workdir': %v", err)
 	}
 }
 
@@ -895,105 +942,5 @@ func TestNewRunState(t *testing.T) {
 	s := newRunState()
 	if s.specHashes == nil {
 		t.Fatal("specHashes should be initialized")
-	}
-}
-
-// --------------------------------------------------------------------------.
-// validateMountSymlinks
-// --------------------------------------------------------------------------.
-
-func TestValidateMountSymlinks(t *testing.T) {
-	cases := []struct {
-		build   func(t *testing.T, dir string) string // returns the srcPath to validate
-		name    string
-		wantErr bool
-	}{
-		{
-			name: "contained sibling link",
-			build: func(t *testing.T, dir string) string {
-				if err := os.WriteFile(filepath.Join(dir, "real.txt"), []byte("x"), 0o600); err != nil {
-					t.Fatal(err)
-				}
-				if err := os.Symlink("real.txt", filepath.Join(dir, "link.txt")); err != nil {
-					t.Fatal(err)
-				}
-				return dir
-			},
-			wantErr: false,
-		},
-		{
-			name: "escaping relative link",
-			build: func(t *testing.T, dir string) string {
-				if err := os.Symlink("../escape", filepath.Join(dir, "link")); err != nil {
-					t.Fatal(err)
-				}
-				return dir
-			},
-			wantErr: true,
-		},
-		{
-			name: "absolute link",
-			build: func(t *testing.T, dir string) string {
-				if err := os.Symlink("/etc/passwd", filepath.Join(dir, "link")); err != nil {
-					t.Fatal(err)
-				}
-				return dir
-			},
-			wantErr: true,
-		},
-		{
-			name: "subpath severs a contained link",
-			build: func(t *testing.T, dir string) string {
-				// Full tree: pkg/website -> ../shared/x, with shared/x present.
-				// Contained in the full tree, severed when only pkg is mounted.
-				if err := os.MkdirAll(filepath.Join(dir, "shared", "x"), 0o750); err != nil {
-					t.Fatal(err)
-				}
-				if err := os.MkdirAll(filepath.Join(dir, "pkg"), 0o750); err != nil {
-					t.Fatal(err)
-				}
-				if err := os.Symlink("../shared/x", filepath.Join(dir, "pkg", "website")); err != nil {
-					t.Fatal(err)
-				}
-				return filepath.Join(dir, "pkg") // validate as the mounted subpath
-			},
-			wantErr: true,
-		},
-		{
-			name: "mount source is itself a symlink",
-			build: func(t *testing.T, dir string) string {
-				if err := os.MkdirAll(filepath.Join(dir, "target"), 0o750); err != nil {
-					t.Fatal(err)
-				}
-				if err := os.Symlink("target", filepath.Join(dir, "linkdir")); err != nil {
-					t.Fatal(err)
-				}
-				return filepath.Join(dir, "linkdir")
-			},
-			wantErr: true,
-		},
-		{
-			name: "regular file mount",
-			build: func(t *testing.T, dir string) string {
-				p := filepath.Join(dir, "file.txt")
-				if err := os.WriteFile(p, []byte("x"), 0o600); err != nil {
-					t.Fatal(err)
-				}
-				return p
-			},
-			wantErr: false,
-		},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			src := c.build(t, t.TempDir())
-			err := validateMountSymlinks(src)
-			if c.wantErr && err == nil {
-				t.Fatal("expected error, got nil")
-			}
-			if !c.wantErr && err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-		})
 	}
 }

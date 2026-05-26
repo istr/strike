@@ -1,11 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"log"
 	"os"
 	"path"
@@ -437,25 +437,14 @@ func (rc *runContext) resolveSigningSecrets(step *lane.Step, safeName string) ([
 }
 
 func (rc *runContext) executeContainerStep(ctx context.Context, step *lane.Step, stepName, safeName, tag string) error {
-	// Host scratch is now input-only: producer artifacts are extracted here
-	// and bind-mounted read-only. The output payload never touches the host
-	// (ADR-035); it lives in the workdir volume and is read via the archive
-	// API. The input-mirror (engine-native input mounts) is a named
-	// follow-up.
-	inputDir, err := os.MkdirTemp("", "strike-"+stepName+"-")
-	if err != nil {
-		return fmt.Errorf("%s: create temp dir: %w", safeName, err)
-	}
-	defer removeStrikeScratch(inputDir)
-
 	secrets, err := lane.ResolveSecrets(step.Secrets, rc.lane.Secrets, rc.laneRoot)
 	if err != nil {
 		return fmt.Errorf("%s: secrets: %w", safeName, err)
 	}
 
-	inputMounts, err := rc.buildInputMounts(ctx, step, inputDir)
+	inputSeeds, err := rc.buildInputSeeds(ctx, step)
 	if err != nil {
-		return fmt.Errorf("%s: input mounts: %w", safeName, err)
+		return fmt.Errorf("%s: inputs: %w", safeName, err)
 	}
 
 	volName, volErr := rc.createWorkdirVolume(ctx, step, safeName)
@@ -484,7 +473,7 @@ func (rc *runContext) executeContainerStep(ctx context.Context, step *lane.Step,
 	run := executor.Run{
 		Engine:       rc.engine,
 		Step:         step,
-		InputMounts:  inputMounts,
+		Seeds:        inputSeeds,
 		VolumeName:   volName,
 		Secrets:      secrets,
 		ImageRef:     rc.state.imageFromTags[stepName],
@@ -535,7 +524,7 @@ func (rc *runContext) wrapArchivedOutput(ctx context.Context, step *lane.Step, s
 	// name is dropped, so archiving /out yields "/node_modules/...", not
 	// "out/node_modules/...". There is no base-name prefix to strip. Re-root
 	// every output under its layer name so the consumer finds it at
-	// inputDir/<OutputLayerName> (resolveInputSubpath); path.Join absorbs the
+	// <OutputLayerName>/... (inputContentPath); path.Join absorbs the
 	// leading slash because OutputLayerName is non-empty.
 	archivePath := workdir
 	if out.Path != nil {
@@ -608,161 +597,90 @@ func (rc *runContext) captureProvenance(ctx context.Context, step *lane.Step, sa
 	return rc.laneState.RecordProvenance(string(step.Name), rec)
 }
 
-func (rc *runContext) buildInputMounts(ctx context.Context, step *lane.Step, scratchDir string) ([]executor.Mount, error) {
+// buildInputSeeds resolves each input edge to a seed: the producer content,
+// selected by subpath and re-rooted under the workdir, packed as a tar to be
+// written into the workdir volume before the container starts (ADR-036
+// inside-workdir delivery). It does not touch the host filesystem.
+//
+// Only inputs inside the step's workdir are delivered here. An input mounted
+// outside the workdir, or any input on a step without a workdir, is rejected
+// fail-closed: delivering inputs outside the workdir is a committed follow-up
+// and not yet implemented. The error speaks of the workdir, never of the
+// delivery mechanism.
+func (rc *runContext) buildInputSeeds(ctx context.Context, step *lane.Step) ([]container.Seed, error) {
 	edges := rc.dag.InputEdges[string(step.Name)]
 	if len(edges) == 0 {
 		return nil, nil
 	}
-
-	scratchRoot, rootErr := os.OpenRoot(scratchDir)
-	if rootErr != nil {
-		return nil, fmt.Errorf("open scratch root: %w", rootErr)
+	if step.Workdir == nil {
+		return nil, fmt.Errorf("step %q declares inputs but no workdir; "+
+			"inputs outside a workdir are not yet supported", step.Name)
 	}
-	defer closer.Warn(scratchRoot, "scratch root")
-	if mkErr := scratchRoot.Mkdir("inputs", 0o750); mkErr != nil && !errors.Is(mkErr, os.ErrExist) {
-		return nil, fmt.Errorf("create inputs dir: %w", mkErr)
-	}
-	inputsRoot := filepath.Join(scratchDir, "inputs")
+	workdir := step.Workdir.String()
 
-	mounts := make([]executor.Mount, 0, len(edges))
+	seeds := make([]container.Seed, 0, len(edges))
 	for _, e := range edges {
-		srcPath, err := rc.resolveInputEdge(ctx, e, scratchRoot, inputsRoot)
-		if err != nil {
-			return nil, err
+		rel, inside := relWithinWorkdir(workdir, e.Mount.String())
+		if !inside {
+			return nil, fmt.Errorf("input at %q lies outside the workdir %q; "+
+				"inputs outside the workdir are not yet supported", e.Mount, workdir)
 		}
-		mounts = append(mounts, executor.Mount{
-			Host:      srcPath,
-			Container: e.Mount.String(),
-			ReadOnly:  true,
-		})
-	}
-	return mounts, nil
-}
 
-// resolveInputEdge extracts the producer output for a single input edge
-// and returns the host path to bind-mount. It deduplicates extractions
-// by digest prefix and validates subpath existence via *os.Root.
-func (rc *runContext) resolveInputEdge(ctx context.Context, e lane.InputEdge, scratchRoot *os.Root, inputsRoot string) (string, error) {
-	fromStep := string(e.FromStep.Name)
-	ref := fromStep + "." + e.FromOutput.Name
-
-	art, artErr := rc.laneState.Resolve(ref)
-	if artErr != nil {
-		return "", fmt.Errorf("input at %q: source artifact %s not found: %w",
-			e.Mount, ref, artErr)
-	}
-
-	inputDir, err := rc.extractInputArtifact(ctx, e.Mount, ref, fromStep, art, scratchRoot, inputsRoot)
-	if err != nil {
-		return "", err
-	}
-
-	srcPath, err := resolveInputSubpath(e, inputDir)
-	if err != nil {
-		return "", err
-	}
-	if vErr := validateMountSymlinks(srcPath); vErr != nil {
-		return "", fmt.Errorf("input at %q: %w", e.Mount, vErr)
-	}
-	return srcPath, nil
-}
-
-// validateMountSymlinks rejects any symlink within the mount source that
-// resolves outside it (ADR-034 consume side). Containment is measured against
-// srcPath -- the exact subtree bind-mounted into the step -- so a link that is
-// contained in the full producer artifact but severed by a selected subpath is
-// caught here, mirroring the per-output check on the produce side. Evaluation
-// is lexical (lane.SymlinkContainmentError); the tree is walked only to
-// enumerate links, never followed. An escaping link is a hard error: it
-// propagates through buildInputMounts and aborts the step before its
-// container starts.
-func validateMountSymlinks(srcPath string) error {
-	info, err := os.Lstat(srcPath)
-	if err != nil {
-		return fmt.Errorf("stat mount source: %w", err)
-	}
-	if info.Mode()&os.ModeSymlink != 0 {
-		return fmt.Errorf("mount source %q is itself a symlink", filepath.Base(srcPath))
-	}
-	if !info.IsDir() {
-		return nil // a regular file has no contained links
-	}
-	root, err := os.OpenRoot(srcPath)
-	if err != nil {
-		return fmt.Errorf("open mount source: %w", err)
-	}
-	defer closer.Warn(root, "mount symlink scan")
-	return fs.WalkDir(root.FS(), ".", func(p string, d fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
+		ref := string(e.FromStep.Name) + "." + e.FromOutput.Name
+		_, artErr := rc.laneState.Resolve(ref)
+		if artErr != nil {
+			return nil, fmt.Errorf("input at %q: source artifact %s not found: %w",
+				e.Mount, ref, artErr)
 		}
-		if d.Type()&fs.ModeSymlink == 0 {
-			return nil
-		}
-		target, linkErr := root.Readlink(p)
-		if linkErr != nil {
-			return fmt.Errorf("read symlink %q: %w", p, linkErr)
-		}
-		return lane.SymlinkContainmentError(p, target, "mount tree")
-	})
-}
-
-// extractInputArtifact ensures the producer output is extracted exactly
-// once (dedup by digest prefix) and returns the extraction directory.
-func (rc *runContext) extractInputArtifact(ctx context.Context, mount lane.AbsPath, ref, fromStep string, art lane.Artifact, scratchRoot *os.Root, inputsRoot string) (string, error) {
-	tag := registry.WrapTag(rc.lane.LaneID, fromStep, rc.state.specHashes[fromStep])
-
-	// Dedup by digest prefix: hex-only chars, no traversal possible.
-	dedupDir := art.Digest.Hex[:16]
-	inputDir := filepath.Join(inputsRoot, dedupDir)
-	if mkErr := scratchRoot.Mkdir(filepath.Join("inputs", dedupDir), 0o750); mkErr == nil {
+		tag := registry.WrapTag(rc.lane.LaneID, string(e.FromStep.Name),
+			rc.state.specHashes[string(e.FromStep.Name)])
 		tarBytes, saveErr := registry.SaveImage(ctx, rc.engine, tag)
 		if saveErr != nil {
-			return "", fmt.Errorf("input at %q: save %s: %w", mount, ref, saveErr)
+			return nil, fmt.Errorf("input at %q: save %s: %w", e.Mount, ref, saveErr)
 		}
-		if extractErr := registry.ExtractSingleLayer(tarBytes, inputDir); extractErr != nil {
-			return "", fmt.Errorf("input at %q: extract %s: %w", mount, ref, extractErr)
+
+		inImagePath := inputContentPath(e)
+		seedTar, buildErr := registry.SeedTarFromImage(tarBytes, inImagePath, rel)
+		if buildErr != nil {
+			return nil, fmt.Errorf("input at %q: %w", e.Mount, buildErr)
 		}
-	} else if !errors.Is(mkErr, os.ErrExist) {
-		return "", fmt.Errorf("input at %q: mkdir: %w", mount, mkErr)
+		seeds = append(seeds, container.Seed{
+			Tar:  bytes.NewReader(seedTar),
+			Path: workdir,
+		})
 	}
-	return inputDir, nil
+	return seeds, nil
 }
 
-// resolveInputSubpath resolves the content root within the extracted
-// directory, applies an optional subpath, and verifies existence using
-// *os.Root for path-confined I/O (CODE-STYLE.md#path-confined-io).
-func resolveInputSubpath(e lane.InputEdge, inputDir string) (string, error) {
-	ref := string(e.FromStep.Name) + "." + e.FromOutput.Name
-
-	// Content root:
-	//   - image output: rootfs root == inputDir
-	//   - file/directory output: layer entry is at inputDir/<basename>
-	contentRoot := inputDir
+// inputContentPath returns the in-image path within the producer's single
+// content layer that the input selects: the optional subpath, offset by the
+// output-type layer convention. Image outputs are rooted at the layer root;
+// file/directory outputs sit under OutputLayerName. This is the caller-side
+// re-rooting the engine boundary must not know about (Record 4).
+func inputContentPath(e lane.InputEdge) string {
+	base := ""
 	if e.FromOutput.Type != artifactTypeImage {
-		contentRoot = filepath.Join(inputDir, lane.OutputLayerName(*e.FromOutput))
+		base = lane.OutputLayerName(*e.FromOutput)
 	}
-
 	if e.Subpath == nil {
-		return contentRoot, nil
+		return base
 	}
+	return path.Join(base, string(*e.Subpath))
+}
 
-	// Stat via *os.Root so the subpath cannot escape contentRoot.
-	root, err := os.OpenRoot(contentRoot)
-	if err != nil {
-		return "", fmt.Errorf("input at %q: open content root: %w", e.Mount, err)
+// relWithinWorkdir returns the path of mount relative to workdir, and whether
+// mount is at or inside workdir. Lexical, component-wise: "/work" contains
+// "/work" (".") and "/work/x", but not "/workspace".
+func relWithinWorkdir(workdir, mount string) (string, bool) {
+	w := path.Clean(workdir)
+	m := path.Clean(mount)
+	if m == w {
+		return ".", true
 	}
-	defer closer.Warn(root, "input content root")
-
-	if _, statErr := root.Stat(string(*e.Subpath)); statErr != nil {
-		if os.IsNotExist(statErr) {
-			return "", fmt.Errorf("input at %q: subpath %q not found in %s output",
-				e.Mount, *e.Subpath, ref)
-		}
-		return "", fmt.Errorf("input at %q: stat subpath %q: %w", e.Mount, *e.Subpath, statErr)
+	if rest, ok := strings.CutPrefix(m, w+"/"); ok {
+		return rest, true
 	}
-
-	return filepath.Join(contentRoot, string(*e.Subpath)), nil
+	return "", false
 }
 
 func (rc *runContext) pushAndReport(ctx context.Context, step *lane.Step, safeName, tag string) error {

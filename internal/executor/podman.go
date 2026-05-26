@@ -28,14 +28,10 @@ type Run struct {
 	// local WrapTag. When empty, Step.Image is used unchanged.
 	ImageRef     string
 	CABundlePath string // host path of the lane-wide CA PEM; required when Capsule != nil
-	InputMounts  []Mount
-}
-
-// Mount describes a bind mount from host to container.
-type Mount struct {
-	Host      string
-	Container string
-	ReadOnly  bool
+	// Seeds carry input content into the workdir volume before start
+	// (ADR-036 inside-workdir delivery). Built by the caller; the executor
+	// passes them through to ContainerRunHeld unchanged.
+	Seeds []container.Seed
 }
 
 // Execute runs the step container held (not auto-removed) and returns the
@@ -63,13 +59,9 @@ func (r Run) Execute(ctx context.Context) (string, error) {
 	env["XDG_RUNTIME_DIR"] = "/tmp/run"
 	env["XDG_DATA_HOME"] = "/tmp/data"
 
-	// Build mounts
+	// Inputs are delivered by seeding the workdir volume before start
+	// (r.Seeds), not by bind mounts. Only CA and SSH mounts remain.
 	var mounts []container.Mount
-	for _, m := range r.InputMounts {
-		mounts = append(mounts, container.Mount{
-			Source: m.Host, Target: m.Container, ReadOnly: m.ReadOnly,
-		})
-	}
 	sshContainerPorts := SSHContainerPorts(r.Step.Peers)
 	mounts, err = appendSSHMounts(ctx, r.Step.Peers, scratchDir, sshContainerPorts, mounts, env)
 	if err != nil {
@@ -119,7 +111,7 @@ func (r Run) Execute(ctx context.Context) (string, error) {
 	opts.Stdout = os.Stdout
 	opts.Stderr = os.Stderr
 
-	id, exitCode, err := r.Engine.ContainerRunHeld(ctx, opts, nil)
+	id, exitCode, err := r.Engine.ContainerRunHeld(ctx, opts, r.Seeds)
 	if err != nil {
 		return id, fmt.Errorf("container execution: %w", err)
 	}
