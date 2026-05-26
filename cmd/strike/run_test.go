@@ -270,6 +270,59 @@ func TestBuildInputSeeds_NoWorkdir(t *testing.T) {
 	}
 }
 
+func TestBuildInputSeeds_ExportsProducerOnce(t *testing.T) {
+	eng := &mockEngine{}
+	rc := newTestRC(t, eng)
+
+	p := &lane.Lane{
+		Registry: "localhost:5555/test",
+		Steps: []lane.Step{
+			{
+				Name: "src", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
+				Outputs: []lane.OutputSpec{{Name: "tree", Type: "directory", Path: lane.Ptr(lane.RelPath("tree"))}},
+			},
+			{
+				Name: "consumer", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
+				Workdir: lane.Ptr(lane.AbsPath("/work")),
+				Inputs: []lane.InputRef{
+					{From: "src.tree", Subpath: lane.Ptr(lane.RelPath("a.txt")), Mount: "/work/a.txt"},
+					{From: "src.tree", Subpath: lane.Ptr(lane.RelPath("b.txt")), Mount: "/work/b.txt"},
+				},
+			},
+		},
+	}
+	rc.dag = buildTestDAG(t, p)
+
+	if err := rc.laneState.Register("src", "tree", lane.Artifact{
+		Type:   "directory",
+		Digest: lane.MustParseDigest("sha256:aabbccdd11223344000000000000000000000000000000000000000000000000"),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	rc.state.specHashes["src"] = lane.MustParseDigest("sha256:1111111111111111000000000000000000000000000000000000000000000000")
+
+	tarBytes, err := regtest.BuildMultiFileImageTar(map[string][]byte{
+		"tree/a.txt": []byte("a"),
+		"tree/b.txt": []byte("b"),
+	})
+	if err != nil {
+		t.Fatalf("BuildMultiFileImageTar: %v", err)
+	}
+	tag := registry.WrapTag(rc.lane.LaneID, "src", rc.state.specHashes["src"])
+	eng.saveTars = map[string][]byte{tag: tarBytes}
+
+	seeds, seedErr := rc.buildInputSeeds(context.Background(), rc.dag.Steps["consumer"])
+	if seedErr != nil {
+		t.Fatalf("buildInputSeeds: %v", seedErr)
+	}
+	if len(seeds) != 2 {
+		t.Fatalf("expected 2 seeds, got %d", len(seeds))
+	}
+	if got := eng.saveCalls[tag]; got != 1 {
+		t.Errorf("SaveImage for %s called %d times, want 1 (one export per producer)", tag, got)
+	}
+}
+
 // --------------------------------------------------------------------------.
 // guardUnsignedImages
 // --------------------------------------------------------------------------.

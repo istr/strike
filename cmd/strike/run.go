@@ -615,6 +615,7 @@ func (rc *runContext) buildInputSeeds(ctx context.Context, step *lane.Step) ([]c
 	workdir := step.Workdir.String()
 
 	seeds := make([]container.Seed, 0, len(edges))
+	imageCache := make(map[string][]byte) // producer tag -> image tar, exported once
 	for _, e := range edges {
 		rel, inside := relWithinWorkdir(workdir, e.Mount.String())
 		if !inside {
@@ -630,9 +631,14 @@ func (rc *runContext) buildInputSeeds(ctx context.Context, step *lane.Step) ([]c
 		}
 		tag := registry.WrapTag(rc.lane.LaneID, string(e.FromStep.Name),
 			rc.state.specHashes[string(e.FromStep.Name)])
-		tarBytes, saveErr := registry.SaveImage(ctx, rc.engine, tag)
-		if saveErr != nil {
-			return nil, fmt.Errorf("input at %q: save %s: %w", e.Mount, ref, saveErr)
+		tarBytes, ok := imageCache[tag]
+		if !ok {
+			var saveErr error
+			tarBytes, saveErr = registry.SaveImage(ctx, rc.engine, tag)
+			if saveErr != nil {
+				return nil, fmt.Errorf("input at %q: save %s: %w", e.Mount, ref, saveErr)
+			}
+			imageCache[tag] = tarBytes
 		}
 
 		inImagePath := inputContentPath(e)

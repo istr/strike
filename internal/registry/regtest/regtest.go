@@ -63,6 +63,54 @@ func BuildImageTar(fileName string, content []byte) ([]byte, lane.Digest, error)
 	return tarBytes, lane.Digest{Algorithm: h.Algorithm, Hex: h.Hex}, nil
 }
 
+// BuildMultiFileImageTar builds a deterministic single-layer OCI image layout
+// tar containing the given files, and returns the tar bytes. Entries are
+// written in iteration order; dirs must be created explicitly by the caller
+// if needed (the layer is a flat name -> content map).
+func BuildMultiFileImageTar(files map[string][]byte) ([]byte, error) {
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+	for name, content := range files {
+		if err := tw.WriteHeader(&tar.Header{
+			Typeflag: tar.TypeReg,
+			Name:     name,
+			Size:     int64(len(content)),
+			Mode:     0o644,
+		}); err != nil {
+			return nil, err
+		}
+		if _, err := tw.Write(content); err != nil {
+			return nil, err
+		}
+	}
+	if err := tw.Close(); err != nil {
+		return nil, err
+	}
+	opener := func() (io.ReadCloser, error) {
+		return io.NopCloser(bytes.NewReader(buf.Bytes())), nil
+	}
+	layer, err := tarball.LayerFromOpener(opener, tarball.WithMediaType(types.OCILayer))
+	if err != nil {
+		return nil, err
+	}
+
+	img := mutate.ConfigMediaType(
+		mutate.MediaType(empty.Image, types.OCIManifestSchema1),
+		types.OCIConfigJSON,
+	)
+	img, err = mutate.AppendLayers(img, layer)
+	if err != nil {
+		return nil, err
+	}
+	annotated, ok := mutate.Annotations(img, map[string]string{
+		"org.opencontainers.image.created": "1970-01-01T00:00:00Z",
+	}).(v1.Image)
+	if !ok {
+		return nil, fmt.Errorf("annotate: unexpected image type")
+	}
+	return LayoutTar(annotated)
+}
+
 // singleFileLayer builds a deterministic OCI layer with one regular file.
 func singleFileLayer(name string, content []byte) (v1.Layer, error) {
 	var buf bytes.Buffer

@@ -24,6 +24,7 @@ type mockEngine struct {
 	inspectRV      *container.ImageInfo
 	identity       *container.EngineIdentity
 	saveTars       map[string][]byte // tag -> OCI tar bytes for ImageSave
+	saveCalls      map[string]int    // tag -> number of ImageSave calls
 	loadRV         string
 	runExitCode    int
 	imageExistsRV  bool
@@ -50,6 +51,10 @@ func (m *mockEngine) ImageInspect(_ context.Context, _ string) (*container.Image
 func (m *mockEngine) ImageTag(context.Context, string, string) error { return m.tagErr }
 
 func (m *mockEngine) ImageSave(_ context.Context, tag string) (io.ReadCloser, error) {
+	if m.saveCalls == nil {
+		m.saveCalls = map[string]int{}
+	}
+	m.saveCalls[tag]++
 	if m.saveErr != nil {
 		return nil, m.saveErr
 	}
