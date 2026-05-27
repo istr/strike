@@ -3,36 +3,35 @@
   "description": "valid attestation with provenance records",
   "inputs": {
     "attestation": {
-      "lane_id": "test-lane",
-      "timestamp": "2024-01-01T00:00:00Z",
-      "target": {
-        "id": "prod-registry",
-        "type": "registry",
-        "description": "production registry"
-      },
-      "artifacts": {
-        "app": {
-          "digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-        }
-      },
-      "pre_state_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "post_state_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "lane_ref": "",
-      "provenance": [
-        {
-          "type": "git",
-          "uri": "https://github.com/foo/bar.git",
-          "commit": "abc123def456abc123def456abc123def456abc1",
-          "ref": "refs/heads/main",
-          "signature": {
-            "method": "gpg",
-            "verified": true,
-            "signer": "dev@example.com",
-            "fingerprint": "ABCD1234"
+      "sealed": {
+        "lane_id": "test-lane",
+        "target": {
+          "id": "prod-registry",
+          "type": "registry",
+          "description": "production registry"
+        },
+        "artifacts": {
+          "app": {
+            "digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
           }
-        }
-      ],
-      "peers": {}
+        },
+        "lane_ref": "",
+        "peers": {}
+      },
+      "engine_dependent": {},
+      "informational": {
+        "timestamp": "2024-01-01T00:00:00Z",
+        "pre_state_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "post_state_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "provenance": [
+          {
+            "type": "git",
+            "uri": "https://github.com/foo/bar.git",
+            "commit": "abc123def456abc123def456abc123def456abc1",
+            "ref": "refs/heads/main"
+          }
+        ]
+      }
     }
   },
   "expected": {

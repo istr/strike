@@ -106,19 +106,19 @@ func executeDeploy(t *testing.T, engine container.Engine, keyPEM []byte, state *
 		t.Fatalf("deploy: %v", err)
 	}
 
-	if att.LaneID == "" {
+	if att.Sealed.LaneID == "" {
 		t.Error("empty lane ID")
 	}
-	if att.Target.ID == "" {
+	if att.Sealed.Target.ID == "" {
 		t.Error("empty target ID")
 	}
-	if att.Artifacts["app"].Digest != packedDigest {
-		t.Errorf("artifact digest: got %s, want %s", att.Artifacts["app"].Digest, packedDigest)
+	if att.Sealed.Artifacts["app"].Digest != packedDigest {
+		t.Errorf("artifact digest: got %s, want %s", att.Sealed.Artifacts["app"].Digest, packedDigest)
 	}
 	if valErr := deploy.ValidateAttestation(att); valErr != nil {
 		t.Errorf("attestation validation: %v", valErr)
 	}
-	t.Logf("lane: %s/%s", att.LaneID, att.Target.ID)
+	t.Logf("lane: %s/%s", att.Sealed.LaneID, att.Sealed.Target.ID)
 	return att
 }
 
@@ -182,7 +182,7 @@ func verifyDSSE(t *testing.T, att *deploy.Attestation, keyPEM []byte) {
 	if string(recovered) != string(attJSON) {
 		t.Error("recovered DSSE payload does not match attestation JSON")
 	}
-	if !strings.Contains(string(recovered), att.LaneID) {
+	if !strings.Contains(string(recovered), att.Sealed.LaneID) {
 		t.Error("lane ID not found in attestation payload")
 	}
 }

@@ -7,24 +7,24 @@ import (
 	"github.com/istr/strike/internal/lane"
 )
 
-// UnmarshalJSON implements json.Unmarshaler for Attestation.
+// UnmarshalJSON implements json.Unmarshaler for Sealed.
 // The peers field is a map of step names to peer slices; each
 // peer entry needs discriminator-based dispatch into the
 // appropriate concrete branch type. All other fields fall
 // through to the default decoder.
-func (a *Attestation) UnmarshalJSON(data []byte) error {
-	type alias Attestation
+func (s *Sealed) UnmarshalJSON(data []byte) error {
+	type alias Sealed
 	aux := struct {
 		*alias
 		Peers map[string][]json.RawMessage `json:"peers,omitempty"`
 	}{
-		alias: (*alias)(a),
+		alias: (*alias)(s),
 	}
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return err
 	}
 	if len(aux.Peers) == 0 {
-		a.Peers = nil
+		s.Peers = nil
 		return nil
 	}
 	out := make(map[string][]lane.Peer, len(aux.Peers))
@@ -39,6 +39,6 @@ func (a *Attestation) UnmarshalJSON(data []byte) error {
 		}
 		out[stepName] = peers
 	}
-	a.Peers = out
+	s.Peers = out
 	return nil
 }

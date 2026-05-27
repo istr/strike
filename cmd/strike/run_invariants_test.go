@@ -147,9 +147,6 @@ func TestProvenanceCapture_EndToEnd(t *testing.T) {
 	if records[0].ProvenanceType() != "git" {
 		t.Errorf("expected git provenance, got %q", records[0].ProvenanceType())
 	}
-	if records[0].IsSigned() {
-		t.Error("expected IsSigned() == false for unsigned record")
-	}
 }
 
 func fakeProvenanceJSON(t *testing.T, typ string) []byte {

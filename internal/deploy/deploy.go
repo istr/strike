@@ -31,20 +31,43 @@ import (
 )
 
 // Attestation is the signed record produced by every deploy step.
+//
+// The three top-level sections classify every recorded field by the trust
+// the consumer must supply to rely on it. See
+// docs/ATTESTATION-SOUNDNESS-AND-THE-TRUST-BOUNDARY.md and
+// ADR-037 for the trust-layer theory.
 type Attestation struct {
-	Timestamp       clock.Time                `json:"timestamp"`
-	Target          lane.DeployTarget         `json:"target"`
-	Artifacts       map[string]SignedArtifact `json:"artifacts"`
-	PreStateDigest  lane.Digest               `json:"pre_state_digest"`
-	PostStateDigest lane.Digest               `json:"post_state_digest"`
-	Engine          *EngineRecord             `json:"engine,omitempty"`
-	Resolver        *ResolverRecord           `json:"resolver,omitempty"`
-	Rekor           *lane.RekorEntry          `json:"rekor,omitempty"`
-	Provenance      []lane.ProvenanceRecord   `json:"provenance"`
-	Peers           map[string][]lane.Peer    `json:"peers"`
-	LaneID          string                    `json:"lane_id"`
-	LaneRef         string                    `json:"lane_ref"` // digest of lane definition
-	SignedEnvelope  []byte                    `json:"-"`        // DSSE envelope, not part of attestation JSON
+	Sealed          Sealed          `json:"sealed"`
+	EngineDependent EngineDependent `json:"engine_dependent"`
+	Informational   *Informational  `json:"informational,omitempty"`
+	SignedEnvelope  []byte          `json:"-"` // DSSE envelope, not part of attestation JSON
+}
+
+// Sealed -- CP-bound claims, sound to any verifier without engine trust.
+type Sealed struct {
+	LaneID    string                    `json:"lane_id"`
+	Target    lane.DeployTarget         `json:"target"`
+	LaneRef   string                    `json:"lane_ref"`
+	Artifacts map[string]SignedArtifact `json:"artifacts"`
+	Resolver  *ResolverRecord           `json:"resolver,omitempty"`
+	Peers     map[string][]lane.Peer    `json:"peers"`
+	Rekor     *lane.RekorEntry          `json:"rekor,omitempty"`
+	Engine    *EngineConnection         `json:"engine,omitempty"`
+}
+
+// EngineDependent -- claims sound only under trust(E).
+//
+// Empty by structural design in Phase 1; Phase-2 capsule-observed
+// attribution will populate this. See ADR-037 / foundation note.
+type EngineDependent struct{}
+
+// Informational -- recorded for audit and IoC; no trust claim.
+type Informational struct {
+	Timestamp       clock.Time              `json:"timestamp,omitempty"`
+	EngineMetadata  *EngineMetadata         `json:"engine_metadata,omitempty"`
+	PreStateDigest  lane.Digest             `json:"pre_state_digest"`
+	PostStateDigest lane.Digest             `json:"post_state_digest"`
+	Provenance      []lane.ProvenanceRecord `json:"provenance"`
 }
 
 // SignedArtifact is the provenance record for one artifact.
@@ -68,9 +91,9 @@ type SBOMRecord struct {
 	Digest string `json:"digest"`
 }
 
-// EngineRecord captures the engine's identity at deploy time.
-// Verifiers use this to assess the trust level of the build environment.
-type EngineRecord struct {
+// EngineConnection -- CP-observed/controlled connection facts about the
+// engine. Lives under Sealed.Engine.
+type EngineConnection struct {
 	// ConnectionType is "unix", "tls", or "mtls".
 	ConnectionType string `json:"connection_type"`
 
@@ -85,7 +108,11 @@ type EngineRecord struct {
 	// ClientCertFingerprint is sha256:<hex> of the controller's certificate.
 	// Empty unless mTLS is configured.
 	ClientCertFingerprint string `json:"client_cert_fingerprint,omitempty"`
+}
 
+// EngineMetadata -- engine self-reports about itself. Lives under
+// Informational.EngineMetadata.
+type EngineMetadata struct {
 	// Rootless is true if the engine reported rootless mode.
 	Rootless *bool `json:"rootless,omitempty"`
 
@@ -246,17 +273,24 @@ func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.Sta
 	postDigest := StateDigest(postCaptures)
 
 	// 6. Build attestation.
+	engineConn, engineMeta := d.engineRecords()
 	att := &Attestation{
-		LaneID:          d.LaneID,
-		Timestamp:       started,
-		Target:          spec.Target,
-		Artifacts:       artifactDigests,
-		PreStateDigest:  preDigest,
-		PostStateDigest: postDigest,
-		Engine:          d.engineRecord(),
-		Resolver:        d.resolverRecord(),
-		Provenance:      provenance,
-		Peers:           d.DAG.CollectPeers(string(step.Name)),
+		Sealed: Sealed{
+			LaneID:    d.LaneID,
+			Target:    spec.Target,
+			Artifacts: artifactDigests,
+			Resolver:  d.resolverRecord(),
+			Peers:     d.DAG.CollectPeers(string(step.Name)),
+			Engine:    engineConn,
+		},
+		EngineDependent: EngineDependent{},
+		Informational: &Informational{
+			Timestamp:       started,
+			EngineMetadata:  engineMeta,
+			PreStateDigest:  preDigest,
+			PostStateDigest: postDigest,
+			Provenance:      provenance,
+		},
 	}
 
 	// 7. Validate attestation against CUE schema.
@@ -275,7 +309,7 @@ func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.Sta
 		if rekorErr != nil {
 			return nil, rekorErr
 		}
-		att.Rekor = rekorEntry
+		att.Sealed.Rekor = rekorEntry
 	}
 
 	// 10. Record in lane state.
@@ -311,7 +345,7 @@ const rekorMaxEnvelopeSize = 100 * 1024 // 100KB Rekor upload limit
 func submitAttestationToRekor(ctx context.Context, d *Deployer, att *Attestation) (*lane.RekorEntry, error) {
 	if len(att.SignedEnvelope) > rekorMaxEnvelopeSize {
 		log.Printf("WARN   deploy %s/%s: DSSE envelope %d bytes exceeds Rekor %d byte limit, skipping",
-			att.LaneID, att.Target.ID, len(att.SignedEnvelope), rekorMaxEnvelopeSize)
+			att.Sealed.LaneID, att.Sealed.Target.ID, len(att.SignedEnvelope), rekorMaxEnvelopeSize)
 		return nil, nil
 	}
 
@@ -323,7 +357,7 @@ func submitAttestationToRekor(ctx context.Context, d *Deployer, att *Attestation
 	if err != nil {
 		var w *executor.RekorTransientError
 		if errors.As(err, &w) {
-			log.Printf("WARN   deploy %s/%s: rekor dsse: %v", att.LaneID, att.Target.ID, err)
+			log.Printf("WARN   deploy %s/%s: rekor dsse: %v", att.Sealed.LaneID, att.Sealed.Target.ID, err)
 			return nil, nil
 		}
 		return nil, err
@@ -662,21 +696,24 @@ func ResolveKubeconfig(override string) (string, error) {
 	return path, nil
 }
 
-func (d *Deployer) engineRecord() *EngineRecord {
+// engineRecords returns the sealed engine connection facts (CP-observed)
+// and the informational engine metadata (engine self-reports).
+func (d *Deployer) engineRecords() (*EngineConnection, *EngineMetadata) {
 	if d.EngineID == nil {
-		return nil
+		return nil, nil
 	}
-	rec := &EngineRecord{
+	conn := &EngineConnection{
 		ConnectionType:        d.EngineID.Connection.Type,
 		CATrustMode:           d.EngineID.Connection.CATrustMode,
 		ServerCertFingerprint: d.EngineID.Connection.ServerCertFingerprint,
 		ClientCertFingerprint: d.EngineID.Connection.ClientCertFingerprint,
 	}
+	meta := &EngineMetadata{}
 	if d.EngineID.Runtime != nil {
-		rec.Rootless = &d.EngineID.Runtime.Rootless
-		rec.Version = d.EngineID.Runtime.Version
+		meta.Rootless = &d.EngineID.Runtime.Rootless
+		meta.Version = d.EngineID.Runtime.Version
 	}
-	return rec
+	return conn, meta
 }
 
 // resolverRecord builds the ResolverRecord from the captured DoT

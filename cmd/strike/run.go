@@ -157,7 +157,7 @@ func (rc *runContext) executeDeploy(ctx context.Context, step *lane.Step, stepNa
 	if err != nil {
 		return fmt.Errorf("%s: attestation marshal: %w", safeName, err)
 	}
-	log.Printf("OK     %s -> %s/%s", safeName, att.LaneID, att.Target.ID)
+	log.Printf("OK     %s -> %s/%s", safeName, att.Sealed.LaneID, att.Sealed.Target.ID)
 
 	outDir, err := os.MkdirTemp("", "strike-"+stepName+"-")
 	if err != nil {
@@ -586,10 +586,7 @@ func (rc *runContext) captureProvenance(ctx context.Context, step *lane.Step, sa
 	if err != nil {
 		return fmt.Errorf("validate %s provenance: %w", spec.Type, err)
 	}
-	if spec.RequireSigned != nil && *spec.RequireSigned && !rec.IsSigned() {
-		return fmt.Errorf("provenance requires signature.verified=true, but record is unsigned")
-	}
-	log.Printf("PROV   %s type=%s signed=%v", safeName, spec.Type, rec.IsSigned())
+	log.Printf("PROV   %s type=%s", safeName, spec.Type)
 	return rc.laneState.RecordProvenance(string(step.Name), rec)
 }
 

@@ -3,18 +3,24 @@
   "description": "pre_state_digest not matching #Digest pattern fails validation",
   "inputs": {
     "attestation": {
-      "lane_id": "test-lane",
-      "timestamp": "2024-01-01T00:00:00Z",
-      "target": {
-        "id": "test-target",
-        "type": "registry",
-        "description": "test"
+      "sealed": {
+        "lane_id": "test-lane",
+        "target": {
+          "id": "test-target",
+          "type": "registry",
+          "description": "test"
+        },
+        "artifacts": {},
+        "lane_ref": "",
+        "peers": {}
       },
-      "artifacts": {},
-      "pre_state_digest": "not-a-valid-digest",
-      "post_state_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "lane_ref": "",
-      "provenance": []
+      "engine_dependent": {},
+      "informational": {
+        "timestamp": "2024-01-01T00:00:00Z",
+        "pre_state_digest": "not-a-valid-digest",
+        "post_state_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "provenance": []
+      }
     }
   },
   "expected": {

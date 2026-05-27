@@ -27,7 +27,6 @@ package lane
 	uri:         string @go(URI)
 	commit:      string & =~"^[a-f0-9]{40}$|^[a-f0-9]{64}$" @go(Commit)
 	ref?:        string @go(Ref)
-	signature?:  #SignatureInfo @go(Signature,optional=nillable)
 	fetched_at?: string @go(FetchedAt)
 }
 
@@ -40,7 +39,6 @@ package lane
 	type:        "tarball" @go(Type)
 	uri:         string @go(URI)
 	sha256:      string & =~"^[a-f0-9]{64}$" @go(SHA256)
-	signature?:  #SignatureInfo @go(Signature,optional=nillable)
 	fetched_at?: string @go(FetchedAt)
 }
 
@@ -53,7 +51,6 @@ package lane
 	type:        "oci" @go(Type)
 	uri:         string @go(URI)
 	digest:      string & =~"^sha256:[a-f0-9]{64}$" @go(Digest)
-	signature?:  #SignatureInfo @go(Signature,optional=nillable)
 	fetched_at?: string @go(FetchedAt)
 }
 
@@ -66,18 +63,5 @@ package lane
 	type:        "url" @go(Type)
 	uri:         string @go(URI)
 	sha256:      string & =~"^[a-f0-9]{64}$" @go(SHA256)
-	signature?:  #SignatureInfo @go(Signature,optional=nillable)
 	fetched_at?: string @go(FetchedAt)
-}
-
-// ---------------------------------------------------------------------------
-// Signature information (cross-cutting, applies to all types above)
-// ---------------------------------------------------------------------------
-
-#SignatureInfo: {
-	@go(SignatureInfo)
-	method:       "gpg" | "ssh" | "sigstore" | "x509" @go(Method)
-	verified:     bool @go(Verified)
-	signer?:      string @go(Signer)
-	fingerprint?: string @go(Fingerprint)
 }

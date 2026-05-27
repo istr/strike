@@ -3,33 +3,38 @@
   "description": "valid attestation with non-empty peers map",
   "inputs": {
     "attestation": {
-      "lane_id": "test-lane",
-      "timestamp": "2024-01-01T00:00:00Z",
-      "target": {
-        "id": "prod-registry",
-        "type": "registry",
-        "description": "production registry"
-      },
-      "artifacts": {
-        "app": {
-          "digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      "sealed": {
+        "lane_id": "test-lane",
+        "target": {
+          "id": "prod-registry",
+          "type": "registry",
+          "description": "production registry"
+        },
+        "artifacts": {
+          "app": {
+            "digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        "lane_ref": "sha256:def456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0",
+        "peers": {
+          "build": [
+            {
+              "type": "https",
+              "host": "api.example.com",
+              "trust": {
+                "mode": "cert_fingerprint",
+                "fingerprint": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+              }
+            }
+          ]
         }
       },
-      "pre_state_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "post_state_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "lane_ref": "sha256:def456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0",
-      "provenance": [],
-      "peers": {
-        "build": [
-          {
-            "type": "https",
-            "host": "api.example.com",
-            "trust": {
-              "mode": "cert_fingerprint",
-              "fingerprint": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
-            }
-          }
-        ]
+      "engine_dependent": {},
+      "informational": {
+        "timestamp": "2024-01-01T00:00:00Z",
+        "pre_state_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "post_state_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "provenance": []
       }
     }
   },

@@ -13,7 +13,6 @@ func TestValidateProvenance_Git_Valid(t *testing.T) {
 		"uri": "https://github.com/foo/bar.git",
 		"commit": "0123456789abcdef0123456789abcdef01234567",
 		"ref": "refs/heads/main",
-		"signature": {"method": "gpg", "verified": true, "signer": "alice@example.com", "fingerprint": "ABCD1234"},
 		"fetched_at": "2026-04-21T10:00:00Z"
 	}`)
 	rec, err := lane.ValidateProvenance("git", raw)
@@ -23,9 +22,6 @@ func TestValidateProvenance_Git_Valid(t *testing.T) {
 	if rec.ProvenanceType() != "git" {
 		t.Errorf("type = %q, want git", rec.ProvenanceType())
 	}
-	if !rec.IsSigned() {
-		t.Error("expected IsSigned() == true")
-	}
 }
 
 func TestValidateProvenance_Git_Minimal(t *testing.T) {
@@ -34,12 +30,9 @@ func TestValidateProvenance_Git_Minimal(t *testing.T) {
 		"uri": "https://github.com/foo/bar.git",
 		"commit": "0123456789abcdef0123456789abcdef01234567"
 	}`)
-	rec, err := lane.ValidateProvenance("git", raw)
+	_, err := lane.ValidateProvenance("git", raw)
 	if err != nil {
 		t.Fatal(err)
-	}
-	if rec.IsSigned() {
-		t.Error("expected IsSigned() == false for record without signature")
 	}
 }
 
@@ -125,21 +118,5 @@ func TestValidateProvenance_InvalidJSON(t *testing.T) {
 	_, err := lane.ValidateProvenance("git", []byte(`{not json`))
 	if err == nil {
 		t.Fatal("expected error on invalid JSON")
-	}
-}
-
-func TestValidateProvenance_SignedFalse(t *testing.T) {
-	raw := []byte(`{
-		"type": "git",
-		"uri": "https://github.com/foo/bar.git",
-		"commit": "0123456789abcdef0123456789abcdef01234567",
-		"signature": {"method": "gpg", "verified": false, "signer": "alice@example.com"}
-	}`)
-	rec, err := lane.ValidateProvenance("git", raw)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if rec.IsSigned() {
-		t.Error("expected IsSigned() == false when verified=false")
 	}
 }

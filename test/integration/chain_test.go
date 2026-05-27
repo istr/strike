@@ -154,26 +154,26 @@ func verifyChain(t *testing.T, att *deploy.Attestation, imageDigest string, keyP
 	}
 
 	// B. Artifact digest matches packed image.
-	if att.Artifacts["app"].Digest != imageDigest {
+	if att.Sealed.Artifacts["app"].Digest != imageDigest {
 		t.Errorf("artifact digest mismatch:\n  attestation: %s\n  packed:      %s",
-			att.Artifacts["app"].Digest, imageDigest)
+			att.Sealed.Artifacts["app"].Digest, imageDigest)
 	}
 
 	// C. Provenance -- empty when no predecessor steps declare provenance.
-	if len(att.Provenance) != 0 {
-		t.Errorf("expected empty provenance (no predecessors with provenance), got %d records", len(att.Provenance))
+	if att.Informational != nil && len(att.Informational.Provenance) != 0 {
+		t.Errorf("expected empty provenance (no predecessors with provenance), got %d records", len(att.Informational.Provenance))
 	}
 
 	// D. Engine identity present.
-	if att.Engine == nil {
+	if att.Sealed.Engine == nil {
 		t.Error("engine identity missing")
 	}
 
 	// E. Lane and target IDs present.
-	if att.LaneID == "" {
+	if att.Sealed.LaneID == "" {
 		t.Error("empty lane ID")
 	}
-	if att.Target.ID == "" {
+	if att.Sealed.Target.ID == "" {
 		t.Error("empty target ID")
 	}
 
@@ -182,7 +182,7 @@ func verifyChain(t *testing.T, att *deploy.Attestation, imageDigest string, keyP
 
 	t.Logf("=== End-to-end chain verified ===")
 	t.Logf("  image:       %s", imageDigest[:19])
-	t.Logf("  lane:        %s/%s", att.LaneID, att.Target.ID)
+	t.Logf("  lane:        %s/%s", att.Sealed.LaneID, att.Sealed.Target.ID)
 	t.Logf("  signed:      yes (DSSE verified)")
 }
 
@@ -199,10 +199,10 @@ func chainVerifySignature(t *testing.T, att *deploy.Attestation, imageDigest str
 	if err := json.Unmarshal(payload, &roundTripped); err != nil {
 		t.Fatalf("unmarshal round-tripped attestation: %v", err)
 	}
-	if roundTripped.LaneID != att.LaneID {
-		t.Errorf("round-trip lane ID mismatch: %s vs %s", roundTripped.LaneID, att.LaneID)
+	if roundTripped.Sealed.LaneID != att.Sealed.LaneID {
+		t.Errorf("round-trip lane ID mismatch: %s vs %s", roundTripped.Sealed.LaneID, att.Sealed.LaneID)
 	}
-	if roundTripped.Artifacts["app"].Digest != imageDigest {
+	if roundTripped.Sealed.Artifacts["app"].Digest != imageDigest {
 		t.Error("round-trip artifact digest mismatch")
 	}
 }

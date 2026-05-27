@@ -149,12 +149,16 @@ func newTLSTestEngine(t *testing.T, handler http.Handler) container.Engine {
 
 func TestAttestationJSON(t *testing.T) {
 	att := &deploy.Attestation{
-		LaneID:          "test-lane",
-		Target:          lane.DeployTarget{ID: "prod-1", Type: "registry", Description: "test"},
-		Artifacts:       map[string]deploy.SignedArtifact{"image": {Digest: "sha256:abc"}},
-		PreStateDigest:  lane.MustParseDigest("sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
-		PostStateDigest: lane.MustParseDigest("sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
-		Provenance:      []lane.ProvenanceRecord{},
+		Sealed: deploy.Sealed{
+			LaneID:    "test-lane",
+			Target:    lane.DeployTarget{ID: "prod-1", Type: "registry", Description: "test"},
+			Artifacts: map[string]deploy.SignedArtifact{"image": {Digest: "sha256:abc"}},
+		},
+		Informational: &deploy.Informational{
+			PreStateDigest:  lane.MustParseDigest("sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+			PostStateDigest: lane.MustParseDigest("sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
+			Provenance:      []lane.ProvenanceRecord{},
+		},
 	}
 
 	data, err := att.JSON()
@@ -166,14 +170,22 @@ func TestAttestationJSON(t *testing.T) {
 	if err := json.Unmarshal(data, &m); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if m["lane_id"] != "test-lane" {
-		t.Errorf("lane_id = %v, want test-lane", m["lane_id"])
+	sealed, ok := m["sealed"].(map[string]any)
+	if !ok {
+		t.Fatal("missing sealed object in JSON")
 	}
-	if _, ok := m["pre_state_digest"]; !ok {
-		t.Error("missing pre_state_digest")
+	if sealed["lane_id"] != "test-lane" {
+		t.Errorf("sealed.lane_id = %v, want test-lane", sealed["lane_id"])
 	}
-	if _, ok := m["post_state_digest"]; !ok {
-		t.Error("missing post_state_digest")
+	info, ok := m["informational"].(map[string]any)
+	if !ok {
+		t.Fatal("missing informational object in JSON")
+	}
+	if _, ok := info["pre_state_digest"]; !ok {
+		t.Error("missing informational.pre_state_digest")
+	}
+	if _, ok := info["post_state_digest"]; !ok {
+		t.Error("missing informational.post_state_digest")
 	}
 }
 
@@ -341,19 +353,19 @@ func TestDeployerExecute(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
-	if att.LaneID != "test-lane" {
-		t.Errorf("LaneID = %q, want test-lane", att.LaneID)
+	if att.Sealed.LaneID != "test-lane" {
+		t.Errorf("LaneID = %q, want test-lane", att.Sealed.LaneID)
 	}
-	if len(att.Artifacts) == 0 {
+	if len(att.Sealed.Artifacts) == 0 {
 		t.Error("expected artifact digests in attestation")
 	}
-	if att.Artifacts["image"].Digest != "sha256:abc1230000000000000000000000000000000000000000000000000000000000" {
-		t.Errorf("artifact digest = %q, want sha256:abc1230000000000000000000000000000000000000000000000000000000000", att.Artifacts["image"].Digest)
+	if att.Sealed.Artifacts["image"].Digest != "sha256:abc1230000000000000000000000000000000000000000000000000000000000" {
+		t.Errorf("artifact digest = %q, want sha256:abc1230000000000000000000000000000000000000000000000000000000000", att.Sealed.Artifacts["image"].Digest)
 	}
-	if att.PreStateDigest.IsZero() {
+	if att.Informational.PreStateDigest.IsZero() {
 		t.Error("expected non-zero pre-state digest")
 	}
-	if att.PostStateDigest.IsZero() {
+	if att.Informational.PostStateDigest.IsZero() {
 		t.Error("expected non-zero post-state digest")
 	}
 }
@@ -491,14 +503,14 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 		t.Fatalf("Execute: %v", err)
 	}
 
-	if att.Engine == nil {
+	if att.Sealed.Engine == nil {
 		t.Fatal("expected non-nil Engine record in attestation")
 	}
-	if att.Engine.ConnectionType != connTypeTLS {
-		t.Errorf("Engine.ConnectionType = %q, want tls", att.Engine.ConnectionType)
+	if att.Sealed.Engine.ConnectionType != connTypeTLS {
+		t.Errorf("Engine.ConnectionType = %q, want tls", att.Sealed.Engine.ConnectionType)
 	}
-	if !strings.HasPrefix(att.Engine.ServerCertFingerprint, "sha256:") {
-		t.Errorf("Engine.ServerCertFingerprint = %q, want sha256: prefix", att.Engine.ServerCertFingerprint)
+	if !strings.HasPrefix(att.Sealed.Engine.ServerCertFingerprint, "sha256:") {
+		t.Errorf("Engine.ServerCertFingerprint = %q, want sha256: prefix", att.Sealed.Engine.ServerCertFingerprint)
 	}
 
 	// Verify it round-trips through JSON
@@ -510,12 +522,16 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 	if err := json.Unmarshal(data, &m); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	engMap, ok := m["engine"].(map[string]any)
+	sealed, ok := m["sealed"].(map[string]any)
 	if !ok {
-		t.Fatal("expected engine object in JSON")
+		t.Fatal("expected sealed object in JSON")
+	}
+	engMap, ok := sealed["engine"].(map[string]any)
+	if !ok {
+		t.Fatal("expected sealed.engine object in JSON")
 	}
 	if engMap["connection_type"] != connTypeTLS {
-		t.Errorf("JSON engine.connection_type = %v, want tls", engMap["connection_type"])
+		t.Errorf("JSON sealed.engine.connection_type = %v, want tls", engMap["connection_type"])
 	}
 }
 
@@ -565,7 +581,7 @@ func TestEngineRecord_NilEngineID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
-	if att.Engine != nil {
+	if att.Sealed.Engine != nil {
 		t.Error("expected nil Engine record when EngineID is nil")
 	}
 }
@@ -624,23 +640,26 @@ func TestEngineRecord_WithRuntime(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
-	if att.Engine == nil {
-		t.Fatal("expected non-nil Engine record")
+	if att.Sealed.Engine == nil {
+		t.Fatal("expected non-nil Engine connection record")
 	}
-	if att.Engine.Version != "5.2.1" {
-		t.Errorf("Engine.Version = %q, want 5.2.1", att.Engine.Version)
+	if att.Sealed.Engine.ConnectionType != connTypeTLS {
+		t.Errorf("ConnectionType = %q, want tls", att.Sealed.Engine.ConnectionType)
 	}
-	if att.Engine.Rootless == nil || !*att.Engine.Rootless {
+	if att.Sealed.Engine.ServerCertFingerprint != "sha256:abc" {
+		t.Errorf("ServerCertFingerprint = %q, want sha256:abc", att.Sealed.Engine.ServerCertFingerprint)
+	}
+	if att.Sealed.Engine.ClientCertFingerprint != "sha256:def" {
+		t.Errorf("ClientCertFingerprint = %q, want sha256:def", att.Sealed.Engine.ClientCertFingerprint)
+	}
+	if att.Informational.EngineMetadata == nil {
+		t.Fatal("expected non-nil EngineMetadata")
+	}
+	if att.Informational.EngineMetadata.Version != "5.2.1" {
+		t.Errorf("EngineMetadata.Version = %q, want 5.2.1", att.Informational.EngineMetadata.Version)
+	}
+	if att.Informational.EngineMetadata.Rootless == nil || !*att.Informational.EngineMetadata.Rootless {
 		t.Error("expected Rootless=true")
-	}
-	if att.Engine.ConnectionType != connTypeTLS {
-		t.Errorf("ConnectionType = %q, want tls", att.Engine.ConnectionType)
-	}
-	if att.Engine.ServerCertFingerprint != "sha256:abc" {
-		t.Errorf("ServerCertFingerprint = %q, want sha256:abc", att.Engine.ServerCertFingerprint)
-	}
-	if att.Engine.ClientCertFingerprint != "sha256:def" {
-		t.Errorf("ClientCertFingerprint = %q, want sha256:def", att.Engine.ClientCertFingerprint)
 	}
 }
 
@@ -691,17 +710,20 @@ func TestEngineRecord_WithoutRuntime(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
-	if att.Engine == nil {
-		t.Fatal("expected non-nil Engine record")
+	if att.Sealed.Engine == nil {
+		t.Fatal("expected non-nil Engine connection record")
 	}
-	if att.Engine.ConnectionType != "unix" {
-		t.Errorf("ConnectionType = %q, want unix", att.Engine.ConnectionType)
+	if att.Sealed.Engine.ConnectionType != "unix" {
+		t.Errorf("ConnectionType = %q, want unix", att.Sealed.Engine.ConnectionType)
 	}
-	if att.Engine.Rootless != nil {
+	if att.Informational.EngineMetadata == nil {
+		t.Fatal("expected non-nil EngineMetadata")
+	}
+	if att.Informational.EngineMetadata.Rootless != nil {
 		t.Error("expected nil Rootless when Runtime is nil")
 	}
-	if att.Engine.Version != "" {
-		t.Errorf("Version = %q, want empty", att.Engine.Version)
+	if att.Informational.EngineMetadata.Version != "" {
+		t.Errorf("Version = %q, want empty", att.Informational.EngineMetadata.Version)
 	}
 }
 
@@ -749,7 +771,7 @@ func TestResolverRecord_NilResolverID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
-	if att.Resolver != nil {
+	if att.Sealed.Resolver != nil {
 		t.Error("expected nil Resolver record when ResolverID is nil")
 	}
 }
@@ -803,19 +825,19 @@ func TestResolverRecord_Populated(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
-	if att.Resolver == nil {
+	if att.Sealed.Resolver == nil {
 		t.Fatal("expected non-nil Resolver record")
 	}
-	if att.Resolver.Host != "1.1.1.1:853" {
-		t.Errorf("Host = %q, want 1.1.1.1:853", att.Resolver.Host)
+	if att.Sealed.Resolver.Host != "1.1.1.1:853" {
+		t.Errorf("Host = %q, want 1.1.1.1:853", att.Sealed.Resolver.Host)
 	}
-	if att.Resolver.ServerCertFingerprint != rid.LeafFingerprint {
-		t.Errorf("ServerCertFingerprint = %q, want %q", att.Resolver.ServerCertFingerprint, rid.LeafFingerprint)
+	if att.Sealed.Resolver.ServerCertFingerprint != rid.LeafFingerprint {
+		t.Errorf("ServerCertFingerprint = %q, want %q", att.Sealed.Resolver.ServerCertFingerprint, rid.LeafFingerprint)
 	}
-	if att.Resolver.TLSVersion != "TLS 1.3" {
-		t.Errorf("TLSVersion = %q, want TLS 1.3", att.Resolver.TLSVersion)
+	if att.Sealed.Resolver.TLSVersion != "TLS 1.3" {
+		t.Errorf("TLSVersion = %q, want TLS 1.3", att.Sealed.Resolver.TLSVersion)
 	}
-	if att.Resolver.CipherSuite == "" {
+	if att.Sealed.Resolver.CipherSuite == "" {
 		t.Error("expected non-empty CipherSuite")
 	}
 }
@@ -946,11 +968,11 @@ func TestDeployerExecute_WithRekor(t *testing.T) {
 		t.Fatalf("Execute: %v", err)
 	}
 
-	if att.Rekor == nil {
-		t.Fatal("expected non-nil att.Rekor when RekorClient is configured")
+	if att.Sealed.Rekor == nil {
+		t.Fatal("expected non-nil att.Sealed.Rekor when RekorClient is configured")
 	}
-	if att.Rekor.LogIndex != 42 {
-		t.Errorf("att.Rekor.LogIndex = %d, want 42", att.Rekor.LogIndex)
+	if att.Sealed.Rekor.LogIndex != 42 {
+		t.Errorf("att.Sealed.Rekor.LogIndex = %d, want 42", att.Sealed.Rekor.LogIndex)
 	}
 	if att.SignedEnvelope == nil {
 		t.Error("expected non-nil SignedEnvelope")
@@ -991,8 +1013,8 @@ func TestDeployerExecute_NoRekor(t *testing.T) {
 		t.Fatalf("Execute: %v", err)
 	}
 
-	if att.Rekor != nil {
-		t.Errorf("expected nil att.Rekor when no RekorClient, got %+v", att.Rekor)
+	if att.Sealed.Rekor != nil {
+		t.Errorf("expected nil att.Sealed.Rekor when no RekorClient, got %+v", att.Sealed.Rekor)
 	}
 	if att.SignedEnvelope == nil {
 		t.Error("expected non-nil SignedEnvelope (signing should still work)")
@@ -1041,8 +1063,8 @@ func TestDeployerExecute_RekorTransient(t *testing.T) {
 		t.Fatalf("Execute: %v (expected fail-open on transient Rekor error)", err)
 	}
 
-	if att.Rekor != nil {
-		t.Errorf("expected nil att.Rekor on transient failure, got %+v", att.Rekor)
+	if att.Sealed.Rekor != nil {
+		t.Errorf("expected nil att.Sealed.Rekor on transient failure, got %+v", att.Sealed.Rekor)
 	}
 	if att.SignedEnvelope == nil {
 		t.Error("expected non-nil SignedEnvelope (signing should still work)")
@@ -1106,8 +1128,12 @@ func TestDeployerExecute_RekorSignedContentNoRekorField(t *testing.T) {
 		t.Fatalf("unmarshal payload: %v", unmarshalErr)
 	}
 
-	if _, hasRekor := attMap["rekor"]; hasRekor {
-		t.Error("DSSE-signed payload must NOT contain 'rekor' field")
+	sealedMap, ok := attMap["sealed"].(map[string]any)
+	if !ok {
+		t.Fatal("expected sealed object in DSSE payload")
+	}
+	if _, hasRekor := sealedMap["rekor"]; hasRekor {
+		t.Error("DSSE-signed payload must NOT contain 'sealed.rekor' field")
 	}
 }
 
@@ -1149,14 +1175,18 @@ func deployStep() *lane.Step {
 // TestValidateAttestation_InvalidLaneID checks that an invalid lane_id is rejected.
 func TestValidateAttestation_InvalidLaneID(t *testing.T) {
 	att := &deploy.Attestation{
-		LaneID:          "INVALID_LANE_ID",
-		Timestamp:       clock.Reproducible(),
-		Target:          lane.DeployTarget{ID: "prod-1", Type: "registry", Description: "test"},
-		Artifacts:       map[string]deploy.SignedArtifact{},
-		PreStateDigest:  lane.MustParseDigest("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
-		PostStateDigest: lane.MustParseDigest("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
-		Peers:           map[string][]lane.Peer{},
-		Provenance:      []lane.ProvenanceRecord{},
+		Sealed: deploy.Sealed{
+			LaneID:    "INVALID_LANE_ID",
+			Target:    lane.DeployTarget{ID: "prod-1", Type: "registry", Description: "test"},
+			Artifacts: map[string]deploy.SignedArtifact{},
+			Peers:     map[string][]lane.Peer{},
+		},
+		Informational: &deploy.Informational{
+			Timestamp:       clock.Reproducible(),
+			PreStateDigest:  lane.MustParseDigest("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
+			PostStateDigest: lane.MustParseDigest("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
+			Provenance:      []lane.ProvenanceRecord{},
+		},
 	}
 
 	if err := deploy.ValidateAttestation(att); err == nil {

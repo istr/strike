@@ -351,16 +351,12 @@ package lane
 // After step exit, strike reads the file, validates against the schema
 // for the declared type, and stores the resulting record in lane state.
 //
-// path is an absolute container path that must lie within an output mount.
-// require_signed enforces that the produced record's signature.verified
-// is true; otherwise the step fails. Strike trusts the container's claim
-// -- cryptographic verification happens inside the container, not in strike.
+// path is the provenance file, relative to the step workdir.
 #ProvenanceSpec: {
 	@go(ProvenanceSpec)
 	type: "git" | "tarball" | "oci" | "url" @go(Type)
 	// path is the provenance file, relative to the step workdir.
-	path:            #RelPath @go(Path)
-	require_signed?: bool @go(RequireSigned,optional=nillable)
+	path: #RelPath @go(Path)
 }
 
 // ---------------------------------------------------------------------------

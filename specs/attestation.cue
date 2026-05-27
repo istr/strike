@@ -36,80 +36,145 @@ package deploy
 // Top-level attestation
 // ---------------------------------------------------------------------------
 
+// #Attestation is the deploy attestation envelope. The three top-level
+// sections classify every recorded field by the trust the consumer must
+// supply to rely on it:
+//
+//   sealed           - sound to any verifier without engine trust. CP makes
+//                      the claim true by its own action (signing, observing
+//                      against declared anchors, lane-anchoring) and binds
+//                      the consumer through a signed digest the consumer
+//                      itself dereferences.
+//   engine_dependent - sound only to a verifier who trusts the engine.
+//                      Engine-action claims (step run, egress confinement,
+//                      connection routing). Empty in Phase 1; populated by
+//                      capsule-observed attribution in Phase 2.
+//   informational    - recorded for audit and IoC purposes; the attestation
+//                      puts forward no trust claim. Includes container-
+//                      asserted content (containers are untrusted by threat
+//                      model regardless of engine trust) and engine self-
+//                      reports that do not participate in the source-to-
+//                      deploy chain.
+//
+// See docs/ATTESTATION-SOUNDNESS-AND-THE-TRUST-BOUNDARY.md and
+// ADR-037 for the trust-layer theory.
 #Attestation: {
+	sealed:           #Sealed
+	engine_dependent: #EngineDependent
+	informational?:   #Informational
+}
+
+// Sealed -- CP-bound claims, sound under both trust(E) and ~trust(E).
+#Sealed: {
 	// lane_id is the stable identifier from the lane definition.
 	lane_id: =~"^[a-z0-9][a-z0-9-]{0,62}$"
 
-	// timestamp is the wall-clock time when the deploy started.
-	timestamp: #Timestamp
-
-	// target describes what was deployed to.
+	// target describes what was deployed to. Declared, lane-anchored.
 	target: #DeployTarget
 
+	// lane_ref is the digest of the lane definition file, computed by CP.
+	lane_ref: #Digest | ""
+
 	// artifacts maps artifact names to their signed provenance records.
-	// Every artifact listed here was verified against the lane state
-	// before the deploy action executed.
+	// Each artifact's digest is consumer-dereferenceable from the registry
+	// (C3 sealed boundary).
 	artifacts: [Name=string]: #SignedArtifact
 
-	// pre_state_digest is the canonical SHA-256 digest of all configured
-	// pre-deploy state captures. Computed by internal/deploy/digest_state.go
-	// over name-sorted captures with length-prefixed encoding. Independent
-	// of capture order and capture timestamps.
-	pre_state_digest: #Digest
-
-	// post_state_digest is the canonical SHA-256 digest of all configured
-	// post-deploy state captures. Same encoding as pre_state_digest.
-	post_state_digest: #Digest
-
-	// engine records the container engine identity at deploy time.
-	// Verifiers use this to assess the trust level of the environment.
-	engine?: #EngineRecord
-
-	// resolver records the DoT resolver's observed TLS identity,
-	// captured once per lane run at the pre-flight handshake. Per
-	// ADR-030 this is the one controller-side connection whose channel
-	// identity is part of the trust chain (DNS has no content anchor).
+	// resolver records the DoT resolver's observed TLS identity, matched
+	// against the declared anchor at the pre-flight handshake.
 	resolver?: #ResolverRecord
 
-	// provenance collects validated provenance records from transitive
-	// predecessor steps. Sorted deterministically by step name.
-	// Empty array when no steps declare provenance.
-	provenance: [...#ProvenanceRecord]
-
 	// peers maps step name to the network peer declarations attached to
-	// that step. Only steps that declared at least one peer appear.
+	// that step. Declared, lane-anchored.
 	peers: [Step=string]: [...#Peer]
 
-	// rekor is the transparency log entry from a Rekor hashedrekord
-	// submission. Present only when REKOR_URL is configured.
+	// rekor is the transparency log entry from a Rekor hashedrekord or
+	// dsse submission, SET-verified before acceptance.
 	rekor?: #RekorEntry
 
-	// lane_ref is the digest of the lane definition file.
-	// Empty string when not yet computed.
-	lane_ref: #Digest | ""
+	// engine carries the CP-observed connection facts about the engine.
+	// The engine's self-reports (version, rootless) live in
+	// informational.engine_metadata.
+	engine?: #EngineConnection
+}
+
+// EngineDependent -- claims sound only under trust(E).
+//
+// Empty by structural design in Phase 1. The empty section is the
+// structural form of "best effort": strike currently notarizes no
+// engine-action claims, so a verifier reads accurately that this
+// attestation does not assert anything about engine behavior beyond
+// what is sealed in #Sealed.
+//
+// Phase-2 populates this section with capsule-observed engine-action
+// attribution (per-peer connection routing, step run, egress confinement
+// per ADR-038). That work is tracked separately; do not pre-populate.
+#EngineDependent: {
+}
+
+// Informational -- recorded for audit and IoC purposes; no trust claim.
+//
+// Container-asserted content lives here because containers are untrusted
+// by threat-model definition (orthogonal to trust(E)). Engine self-
+// reports about itself live here because they do not participate in the
+// source-to-deploy chain.
+#Informational: {
+	// timestamp is CP's wall-clock at deploy start. Not security-relevant
+	// per SECURITY.md: Rekor integratedTime is canonical.
+	timestamp?: #Timestamp
+
+	// engine_metadata carries the engine's self-reports about itself.
+	engine_metadata?: #EngineMetadata
+
+	// pre_state_digest is CP's canonical SHA-256 digest of pre-deploy
+	// state captures. The bytes were produced by the (untrusted) capture
+	// container and relayed by the engine; CP's hash transports them,
+	// it does not lift them out of the container-asserted class.
+	pre_state_digest: #Digest
+
+	// post_state_digest -- symmetric to pre_state_digest.
+	post_state_digest: #Digest
+
+	// provenance collects validated provenance records from transitive
+	// predecessor steps. Each record is container-written at step exit
+	// and engine-relayed; recorded for audit and IoC cross-check against
+	// future capsule-observed peer/command records.
+	provenance: [...#ProvenanceRecord]
 }
 
 // ---------------------------------------------------------------------------
 // Engine identity
 // ---------------------------------------------------------------------------
 
-#EngineRecord: {
-	// connection_type is "unix", "tls", or "mtls".
+// EngineConnection -- CP-observed/controlled connection facts about the
+// engine. Lives under sealed.engine.
+#EngineConnection: {
+	// connection_type is "unix", "tls", or "mtls". CP-determined.
 	connection_type: "unix" | "tls" | "mtls"
 
 	// ca_trust_mode is "pinned" (explicit CA) or "system" (OS trust store).
+	// Empty for Unix socket connections. CP-configured.
 	ca_trust_mode?: "pinned" | "system" | ""
 
-	// server_cert_fingerprint is sha256:<hex> of the engine's leaf cert.
+	// server_cert_fingerprint is sha256:<hex> of the engine's leaf cert,
+	// observed by CP during the TLS handshake.
 	server_cert_fingerprint?: string
 
-	// client_cert_fingerprint is sha256:<hex> of the controller's cert.
+	// client_cert_fingerprint is sha256:<hex> of the controller's own cert.
 	client_cert_fingerprint?: string
+}
 
-	// rootless indicates whether the engine runs in rootless mode.
+// EngineMetadata -- engine self-reports about itself. Lives under
+// informational.engine_metadata. These claims are the engine's word
+// about its own properties; they do not participate in the source-to-
+// deploy chain and are recorded only for audit context.
+#EngineMetadata: {
+	// rootless indicates whether the engine runs in rootless mode
+	// (engine self-report).
 	rootless?: bool
 
-	// version is the engine's self-reported version string.
+	// version is the engine's self-reported version string
+	// (engine self-report).
 	version?: string
 }
 
