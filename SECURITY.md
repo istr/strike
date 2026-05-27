@@ -54,6 +54,32 @@ past its exit.
 compromised registry could serve valid-looking but malicious content for
 unverified artifact types.
 
+### Attestation soundness: best-effort vs end-to-end
+
+strike attests claims about the build environment by recording observations
+made by its non-executing control plane. The control plane sees the build
+environment only through the container engine; its observations are therefore
+as honest as the engine is. This places a structural ceiling on what strike
+can attest:
+
+- **Best effort** -- engine in a separate trust domain (remote engine reached
+  over TCP per `CONTAINER_TLS_*`). strike soundly attests the claims it seals
+  by its own action: declared lane scalars, the published artifact's digest
+  and signature, control-plane-generated SBOM, front-observed peer identity,
+  Rekor-anchored timestamps. Other links (build provenance, egress
+  completeness, intra-run handoffs, runtime state) are recorded but marked as
+  engine-dependent, sound only to a verifier who trusts the engine.
+- **End-to-end** -- engine in the same trust domain as the control plane
+  (local rootless, or remote with engine TCB attested via TEE). All links
+  close; the chain from signed source to deployment outcome is sound.
+
+A malicious step container is tolerated by the threat model: it is the
+*subject* of attestation and is contained by the seals strike places around
+it. A malicious engine is not tolerated: it is the *substrate* of attestation,
+and breaks of complete ingress/egress mediation or honest reporting cannot be
+detected by a non-executing control plane. The structural argument and the
+proof-strategy sketch are in [the attestation-soundness foundation note](docs/ATTESTATION-SOUNDNESS-AND-THE-TRUST-BOUNDARY.md).
+
 ### Wallclock trust
 
 strike trusts the wallclock of the host it runs on. This assumption
