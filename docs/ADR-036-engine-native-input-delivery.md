@@ -12,6 +12,12 @@ to admission, and rests on the read-only root of
 change and no new attestation field: the mount mechanism is not part of the
 attested step spec, and inputs remain referenced by their producer image tag.
 
+> Implementation status: both delivery paths have landed. The Consequences
+> below describe the seed path and the read-only image-mount path as
+> "separate, sequenced strands" and "implemented as separate strands" --
+> those strands are now complete (see docs/ADR-036-ROADMAP.md). The
+> decision text is unchanged; only this status note is added.
+
 ## Context
 
 ADR-035 corrected the output side: build payload stays in the engine, outputs

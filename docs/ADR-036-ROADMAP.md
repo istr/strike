@@ -1,55 +1,46 @@
 # ADR-036 Implementation Roadmap
 
-## Status: PARTIALLY IMPLEMENTED
+## Status: IMPLEMENTED
 
 ## What has landed
 
 - **Inside-workdir seed delivery (path 3).** `SeedTarFromImage()` in
-  `internal/registry/seedtar.go`, `ContainerRunHeld()` with `[]ContainerSeed`
-  in `internal/container/engine.go`, `buildInputSeeds` wiring in
+  `internal/registry/seedtar.go`, `ContainerRunHeld()` with `[]Seed`
+  in `internal/container/engine.go`, `buildInputDelivery` wiring in
   `cmd/strike/run.go`. Inside-workdir inputs are delivered by seeding the
   workdir named volume before container start.
 - **Single-file seed naming fix.** Single-file selection emits one entry
   named `destPrefix`, not `destPrefix/basename` (commit `ca28047`).
 - **Pull-once optimization.** Each producer image exported at most once per
-  `buildInputSeeds` call (commit `704b9db`).
+  `buildInputDelivery` call (commit `704b9db`); the shared producer-export
+  cache covers both seed and mount delivery paths.
 - **ADR-034 containment at admission.** Symlink containment enforced in
   `collectSeedEntries()` via `lane.SymlinkEscapes()`.
-- **Single-file outside-workdir rejection.** Fail-closed with strike's own
-  diagnostic before the engine sees the OCI runtime error.
-
-## What is NOT yet implemented
-
-### 1. Outside-workdir read-only image mount (ADR-036 path 1)
-
-The primary open item. An input mounted outside the workdir should be
-delivered as a read-only `image_volumes` entry referencing the producer's
-image tag with the engine `SubPath` carrying the resolved subpath. Currently
-**fail-closed** in `buildInputSeeds`.
-
-Concrete work (from `HANDOVER_OUTSIDE_WORKDIR_MOUNT_PLANNING.md`):
-
-- Add `specImageVolume{Source, Destination, ReadWrite, SubPath}` to the
-  typed `specGen` in `internal/container/podman.go`.
-- Add an `ImageVolumes` field to `executor.Run` / `RunOpts`.
-- Restructure `buildInputSeeds` to return `(seeds, mounts)` -- inside-workdir
-  inputs become seeds, outside-workdir inputs become image-volume mounts.
-- Implement producer-layer validation for the mount path: inspect the
-  producer layer to confirm the subpath is a directory and enforce ADR-034
-  containment, then mount (no content walk at delivery, but validation
-  requires an export+walk before mount).
-- Retire the fail-closed branch for outside-workdir and workdir-less inputs.
-
-### 2. No-workdir consumer subsumption
-
-Steps with inputs but no workdir (test/lint steps) are currently fail-closed.
-Their inputs are by nature outside any workdir and should be served via
-read-only image mounts. Folds into the outside-workdir mount work.
+- **Single-file outside-workdir rejection.** Rejected with strike's own
+  lane-surface diagnostic before the engine sees the OCI runtime error,
+  statically when the producing output is `type: file` and at the validation
+  walk when a subpath resolves to a regular file.
+- **Outside-workdir read-only image mount (path 1).** Inputs mounted
+  outside the workdir, and every input on a step with no workdir, are
+  delivered as read-only `image_volumes` entries referencing the producer
+  image tag, with the engine `SubPath` carrying the resolved subpath.
+  `container.ImageVolume` + `specImageVolume` (the typed `specGen` field),
+  `RunOpts.ImageVolumes` threaded through `executor.Run`, and the
+  `buildInputDelivery` classifier returning `(seeds, mounts)`. Producer
+  layers are validated before mount by `registry.ValidateImageMount`
+  (directory-or-file kind + ADR-034 containment), sharing one walk kernel
+  with the seed path. Confirmed end to end against rootless podman.
+- **No-workdir consumer.** A step with inputs but no workdir is served by
+  read-only image mounts; the previously fail-closed branch is retired.
+  The no-workdir path reaches the executor with mounts and no writable
+  volume.
 
 ## Sequencing
 
-Instruction numbering continues from 54 per the handover. The outside-workdir
-mount strand is the immediate next work item on the input-delivery front.
+The outside-workdir mount strand landed across four instructions (the
+image-volume engine primitive, the shared producer-layer walker plus
+image-mount validator, the input-delivery split, and this integration
+and closure). The input-delivery front of ADR-036 is complete.
 
 ## References
 
