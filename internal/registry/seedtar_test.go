@@ -272,3 +272,98 @@ func TestSeedTarFromImage_MultiLayerRejected(t *testing.T) {
 		t.Errorf("error %q should mention expected layer count", err)
 	}
 }
+
+func TestValidateImageMount_Directory(t *testing.T) {
+	layerTar := buildLayerTar(t, []tar.Header{
+		{Typeflag: tar.TypeDir, Name: "packages/", Mode: 0o755},
+		{Typeflag: tar.TypeReg, Name: "packages/a.js", Mode: 0o644},
+	}, map[string][]byte{"packages/a.js": []byte("a")})
+	imgTar := buildSingleLayerImageTar(t, layerTar)
+
+	kind, err := registry.ValidateImageMount(imgTar, "packages")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if kind != registry.MountKindDirectory {
+		t.Errorf("kind = %v, want directory", kind)
+	}
+}
+
+func TestValidateImageMount_SingleFile(t *testing.T) {
+	layerTar := buildLayerTar(t, []tar.Header{
+		{Typeflag: tar.TypeReg, Name: "binary", Mode: 0o755},
+	}, map[string][]byte{"binary": []byte("bin")})
+	imgTar := buildSingleLayerImageTar(t, layerTar)
+
+	kind, err := registry.ValidateImageMount(imgTar, "binary")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if kind != registry.MountKindFile {
+		t.Errorf("kind = %v, want file", kind)
+	}
+}
+
+func TestValidateImageMount_SubpathDirectory(t *testing.T) {
+	layerTar := buildLayerTar(t, []tar.Header{
+		{Typeflag: tar.TypeDir, Name: "tree/", Mode: 0o755},
+		{Typeflag: tar.TypeDir, Name: "tree/sub/", Mode: 0o755},
+		{Typeflag: tar.TypeReg, Name: "tree/sub/f.txt", Mode: 0o644},
+	}, map[string][]byte{"tree/sub/f.txt": []byte("x")})
+	imgTar := buildSingleLayerImageTar(t, layerTar)
+
+	kind, err := registry.ValidateImageMount(imgTar, "tree/sub")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if kind != registry.MountKindDirectory {
+		t.Errorf("kind = %v, want directory", kind)
+	}
+}
+
+func TestValidateImageMount_SubpathResolvesToFile(t *testing.T) {
+	layerTar := buildLayerTar(t, []tar.Header{
+		{Typeflag: tar.TypeDir, Name: "tree/", Mode: 0o755},
+		{Typeflag: tar.TypeReg, Name: "tree/package.json", Mode: 0o644},
+	}, map[string][]byte{"tree/package.json": []byte("{}")})
+	imgTar := buildSingleLayerImageTar(t, layerTar)
+
+	kind, err := registry.ValidateImageMount(imgTar, "tree/package.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if kind != registry.MountKindFile {
+		t.Errorf("kind = %v, want file", kind)
+	}
+}
+
+func TestValidateImageMount_Missing(t *testing.T) {
+	layerTar := buildLayerTar(t, []tar.Header{
+		{Typeflag: tar.TypeReg, Name: "hello.txt", Mode: 0o644},
+	}, map[string][]byte{"hello.txt": []byte("hi")})
+	imgTar := buildSingleLayerImageTar(t, layerTar)
+
+	_, err := registry.ValidateImageMount(imgTar, "missing")
+	if err == nil {
+		t.Fatal("expected missing-subpath error")
+	}
+	if !strings.Contains(err.Error(), "missing") {
+		t.Errorf("error %q should mention 'missing'", err)
+	}
+}
+
+func TestValidateImageMount_EscapingSymlinkRejected(t *testing.T) {
+	layerTar := buildLayerTar(t, []tar.Header{
+		{Typeflag: tar.TypeDir, Name: "d/", Mode: 0o755},
+		{Typeflag: tar.TypeSymlink, Name: "d/link", Linkname: "../../etc/passwd", Mode: 0o777},
+	}, nil)
+	imgTar := buildSingleLayerImageTar(t, layerTar)
+
+	_, err := registry.ValidateImageMount(imgTar, "d")
+	if err == nil {
+		t.Fatal("expected containment error")
+	}
+	if !strings.Contains(err.Error(), "input tree") {
+		t.Errorf("error %q should use the lane-surface frame 'input tree'", err)
+	}
+}

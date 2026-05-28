@@ -53,6 +53,38 @@ func SeedTarFromImage(tarBytes []byte, inImagePath, destPrefix string) ([]byte, 
 	return writeCanonicalTar(entries)
 }
 
+// ValidateImageMount inspects a producer image's selected subtree for the
+// outside-workdir mount path (ADR-036), without emitting a tar. tarBytes is
+// the OCI-layout archive from SaveImage; inImagePath is the caller-resolved
+// path within the single content layer ("" or "." selects the whole layer).
+//
+// It walks the same producer layer the seed path walks, enforcing ADR-034
+// containment, and returns the resolved kind of the subtree root:
+//
+//   - MountKindDirectory: mountable as a read-only image volume.
+//   - MountKindFile: a single regular file, which the OCI runtime cannot
+//     mount as a directory-granular overlay; the caller rejects this in
+//     lane terms before constructing a mount.
+//   - MountKindMissing: returned as a not-found error here, so the caller
+//     surfaces strike's own diagnostic rather than an engine mount failure.
+//
+// The bytes are not copied; only headers and symlink targets are inspected.
+func ValidateImageMount(tarBytes []byte, inImagePath string) (MountKind, error) {
+	layerBytes, err := singleLayerFromOCITar(tarBytes)
+	if err != nil {
+		return MountKindMissing, err
+	}
+	noop := func(_ *tar.Header, _ string, _ *tar.Reader) error { return nil }
+	kind, err := walkProducerLayer(bytes.NewReader(layerBytes), inImagePath, noop)
+	if err != nil {
+		return MountKindMissing, err
+	}
+	if kind == MountKindMissing && path.Clean(inImagePath) != "." && inImagePath != "" {
+		return MountKindMissing, fmt.Errorf("subpath %q not found in producer content", inImagePath)
+	}
+	return kind, nil
+}
+
 // singleLayerFromOCITar reads an OCI-layout tar archive in memory and
 // returns the uncompressed content of the single layer. No temp dir is used.
 func singleLayerFromOCITar(tarBytes []byte) ([]byte, error) {
@@ -143,13 +175,49 @@ func isGzip(data []byte) bool {
 	return len(data) >= 2 && data[0] == 0x1f && data[1] == 0x8b
 }
 
-// collectSeedEntries walks a layer tar, selects entries under inImagePath,
-// re-roots them under destPrefix, and validates symlink containment.
-func collectSeedEntries(r io.Reader, inImagePath, destPrefix string) ([]canonicalEntry, bool, error) {
-	var (
-		entries []canonicalEntry
-		matched bool
-	)
+// MountKind is the resolved shape of a selected producer subtree. The zero
+// value is MountKindMissing, so an unset MountKind is fail-closed: no match
+// means no mount, never accidentally readable as "directory, therefore
+// mountable".
+type MountKind int
+
+// MountKind values for the three resolved subtree shapes.
+const (
+	MountKindMissing   MountKind = iota // subpath matched nothing
+	MountKindFile                       // subtree root is a single regular file
+	MountKindDirectory                  // subtree root is a directory tree
+)
+
+// rootKind returns the kind for a subtree root entry. A directory root
+// promotes missing to directory but does not demote an already-resolved
+// kind; a regular-file root is the single-file selection.
+func rootKind(typeflag byte, current MountKind) MountKind {
+	switch typeflag {
+	case tar.TypeDir:
+		if current == MountKindMissing {
+			return MountKindDirectory
+		}
+		return current
+	case tar.TypeReg:
+		return MountKindFile
+	default:
+		return current
+	}
+}
+
+// walkProducerLayer walks a single producer content layer, selecting the
+// subtree under inImagePath. It enforces ADR-034 symlink containment with
+// the lane-surface "input tree" frame, regardless of delivery path. For
+// each selected, non-root entry it invokes emit; a seed pass collects the
+// entry, a validate pass ignores it. It returns the resolved kind of the
+// subtree root: a lone matched regular file is MountKindFile, any matched
+// directory content is MountKindDirectory, no match is MountKindMissing.
+//
+// The kind detection mirrors seedEntryRel: a directory subtree root is the
+// skipped entry whose rel is "" with TypeDir; a single-file selection is
+// the matched entry whose rel is "" with TypeReg.
+func walkProducerLayer(r io.Reader, inImagePath string, emit func(hdr *tar.Header, rel string, tr *tar.Reader) error) (MountKind, error) {
+	kind := MountKindMissing
 	tr := tar.NewReader(r)
 	for {
 		hdr, err := tr.Next()
@@ -157,58 +225,79 @@ func collectSeedEntries(r io.Reader, inImagePath, destPrefix string) ([]canonica
 			break
 		}
 		if err != nil {
-			return nil, false, fmt.Errorf("read layer: %w", err)
+			return MountKindMissing, fmt.Errorf("read layer: %w", err)
 		}
 
-		rel, ok := relUnderPrefix(hdr.Name, inImagePath)
-		if !ok {
-			continue
+		kind, err = walkEntry(hdr, inImagePath, kind, emit, tr)
+		if err != nil {
+			return MountKindMissing, err
 		}
-		rel, skip := seedEntryRel(rel, inImagePath, hdr.Typeflag)
-		matched = true
-		if skip {
-			continue
-		}
+	}
+	return kind, nil
+}
 
+// walkEntry processes one tar entry for walkProducerLayer. It returns the
+// updated kind and any error. Factored out to keep the loop body under the
+// cognitive-complexity threshold.
+func walkEntry(hdr *tar.Header, inImagePath string, kind MountKind, emit func(*tar.Header, string, *tar.Reader) error, tr *tar.Reader) (MountKind, error) {
+	rel, ok := relUnderPrefix(hdr.Name, inImagePath)
+	if !ok {
+		return kind, nil
+	}
+
+	if hdr.Typeflag == tar.TypeSymlink {
+		if cErr := lane.SymlinkContainmentError(rel, hdr.Linkname, "input tree"); cErr != nil {
+			return MountKindMissing, cErr
+		}
+	}
+
+	isRoot := rel == "" || rel == "."
+	if isRoot {
+		kind = rootKind(hdr.Typeflag, kind)
+		if hdr.Typeflag == tar.TypeDir {
+			return kind, nil // skip directory root entry
+		}
+	} else {
+		kind = MountKindDirectory
+	}
+
+	if emitErr := emit(hdr, rel, tr); emitErr != nil {
+		return MountKindMissing, emitErr
+	}
+	return kind, nil
+}
+
+// collectSeedEntries walks a producer layer and collects the selected
+// entries, re-rooted under destPrefix, for the canonical seed tar. It is a
+// thin wrapper over walkProducerLayer that performs the entry collection;
+// matched reports whether the subpath resolved to anything.
+func collectSeedEntries(r io.Reader, inImagePath, destPrefix string) ([]canonicalEntry, bool, error) {
+	var entries []canonicalEntry
+	emit := func(hdr *tar.Header, rel string, tr *tar.Reader) error {
 		name := path.Join(destPrefix, rel)
 		if name == "" || name == "." {
 			name = path.Base(path.Clean(inImagePath))
 		}
 		mode := int64(hdr.FileInfo().Mode().Perm())
-
 		switch hdr.Typeflag {
 		case tar.TypeDir:
 			entries = append(entries, canonicalEntry{name: name, mode: mode, typeflag: tar.TypeDir})
 		case tar.TypeReg:
 			data, readErr := io.ReadAll(tr)
 			if readErr != nil {
-				return nil, false, fmt.Errorf("read %q: %w", rel, readErr)
+				return fmt.Errorf("read %q: %w", rel, readErr)
 			}
 			entries = append(entries, canonicalEntry{name: name, content: data, mode: mode, typeflag: tar.TypeReg})
 		case tar.TypeSymlink:
-			if err := lane.SymlinkContainmentError(rel, hdr.Linkname, "seed tree"); err != nil {
-				return nil, false, err
-			}
 			entries = append(entries, canonicalEntry{name: name, linkname: hdr.Linkname, mode: 0o777, typeflag: tar.TypeSymlink})
 		default:
-			return nil, false, fmt.Errorf("unsupported archive entry type %d at %q", hdr.Typeflag, rel)
+			return fmt.Errorf("unsupported archive entry type %d at %q", hdr.Typeflag, rel)
 		}
+		return nil
 	}
-	return entries, matched, nil
-}
-
-// seedEntryRel resolves the relative path for a seed entry at the subtree
-// root. For directories, the root itself is skipped (matching
-// collectArchiveEntries). For a single-file match (inImagePath names a
-// file exactly), rel is "" so path.Join(destPrefix, "") == destPrefix --
-// the caller passes the full destination path. When destPrefix is also
-// empty, collectSeedEntries falls back to the file's basename.
-func seedEntryRel(rel, _ string, typeflag byte) (string, bool) {
-	if rel != "" && rel != "." {
-		return rel, false
+	kind, err := walkProducerLayer(r, inImagePath, emit)
+	if err != nil {
+		return nil, false, err
 	}
-	if typeflag == tar.TypeDir {
-		return "", true // skip directory root
-	}
-	return "", false
+	return entries, kind != MountKindMissing, nil
 }
