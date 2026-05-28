@@ -244,7 +244,7 @@ func cmdRun(ctx context.Context, path string, engine container.Engine) {
 	ca, caCleanup := initLaneCA(p)
 	defer caCleanup()
 
-	frontCleanup := initFront(ctx)
+	ft, frontCleanup := initFront(ctx)
 	defer frontCleanup()
 
 	stepPorts := allocateMediatedPorts(p)
@@ -278,6 +278,13 @@ func cmdRun(ctx context.Context, path string, engine container.Engine) {
 	}
 	defer rc.removeTrustVolumes(context.Background(), trust)
 	rc.trust = trust
+
+	// Setup is complete: start serving the front. Until now it is bound (its
+	// address was available to setup) but not accepting; the accept loop
+	// begins only after all setup state is frozen (ADR-038 D2, bind-then-
+	// serve).
+	ft.Start()
+
 	for _, stepName := range dag.Order {
 		if stepErr := rc.runStep(stepName); stepErr != nil {
 			log.Fatalf("error: %v", stepErr)
@@ -306,13 +313,13 @@ func initLaneCA(p *lane.Lane) (*transport.EphemeralCA, func()) {
 // loopback listener. In this skeleton the front owns only its listener and
 // lifecycle; it does not yet terminate SSH or route by token (ADR-038 roadmap
 // items 3 and 5). The returned cleanup closes it.
-func initFront(ctx context.Context) func() {
+func initFront(ctx context.Context) (*front.Front, func()) {
 	ft, ftErr := front.New(ctx)
 	if ftErr != nil {
 		log.Fatalf("error: front: %v", ftErr)
 	}
-	log.Printf("FRONT  listening @ %s", ft.Addr())
-	return func() { closer.Warn(ft, "front") }
+	log.Printf("FRONT  bound @ %s", ft.Addr())
+	return ft, func() { closer.Warn(ft, "front") }
 }
 
 // allocateMediatedPorts pre-allocates a host-port block for every

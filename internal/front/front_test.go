@@ -30,7 +30,7 @@ func TestNew_AddrLoopback(t *testing.T) {
 	}
 }
 
-func TestNew_FailsClosed(t *testing.T) {
+func TestStart_FailsClosed(t *testing.T) {
 	f, err := front.New(context.Background())
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -40,6 +40,7 @@ func TestNew_FailsClosed(t *testing.T) {
 			t.Errorf("Close: %v", cErr)
 		}
 	})
+	f.Start()
 
 	var d net.Dialer
 	conn, dialErr := d.DialContext(context.Background(), "tcp", f.Addr().String())

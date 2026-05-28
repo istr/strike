@@ -1,11 +1,13 @@
 // Package front is strike's lane-run control-plane front (ADR-038 D2): a
 // single run-level component that will terminate container-facing SSH
 // sessions, read the in-band capability token, and dispatch to per-step
-// capsule contexts. This file is the skeleton. It owns one host-loopback
-// listener and its lifecycle, exposes the listen address, and refuses every
-// connection (fail-closed) until the terminating SSH server lands (ADR-038
-// roadmap item 5). The capability token and the per-run dispatch table are
-// ADR-038 roadmap item 2; both arrive with their first callers, not here.
+// capsule contexts. It follows the bind-then-serve pattern: New binds the
+// host-loopback listener and exposes the address (so lane setup can build
+// state that depends on it), and Start launches the accept loop as the last
+// setup step. Until the terminating SSH server lands (ADR-038 roadmap item
+// 5) every accepted connection is refused (fail-closed). The capability token
+// and the per-run dispatch table are later roadmap items and arrive with
+// their first callers, not here.
 package front
 
 import (
@@ -24,11 +26,12 @@ type Front struct {
 	addr     netip.AddrPort
 }
 
-// New binds the front to a kernel-assigned host-loopback port and starts its
-// accept loop. The address is fixed for the lane run and read back via Addr;
-// a configurable bind address is a later staging step (ADR-038 A1). The port
-// is kernel-assigned rather than a fixed constant so concurrent lane runs on
-// one host do not collide.
+// New binds the front to a kernel-assigned host-loopback port and returns it
+// ready for setup to query Addr; it does not accept connections until Start.
+// The address is fixed for the lane run and read back via Addr; a
+// configurable bind address is a later staging step (ADR-038 A1). The port is
+// kernel-assigned rather than a fixed constant so concurrent lane runs on one
+// host do not collide.
 func New(ctx context.Context) (*Front, error) {
 	var lc net.ListenConfig
 	l, err := lc.Listen(ctx, "tcp", "127.0.0.1:0")
@@ -44,7 +47,6 @@ func New(ctx context.Context) (*Front, error) {
 		addr:     tcpAddr.AddrPort(),
 		listener: l,
 	}
-	go f.serve()
 	return f, nil
 }
 
@@ -53,6 +55,16 @@ func New(ctx context.Context) (*Front, error) {
 // items 3 and 4).
 func (f *Front) Addr() netip.AddrPort {
 	return f.addr
+}
+
+// Start launches the accept loop. Call it once, as the last setup step, after
+// all lane setup that depends on the front's address (and any future dispatch
+// state) is complete: New binds and exposes Addr for setup, Start begins
+// accepting. Starting only after setup means the accept goroutine sees fully
+// built, frozen setup state without locking. Not safe to call concurrently
+// with Close.
+func (f *Front) Start() {
+	go f.serve()
 }
 
 // Close stops the front by closing the listener, which unblocks the accept
