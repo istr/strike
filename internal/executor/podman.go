@@ -32,6 +32,10 @@ type Run struct {
 	// (ADR-036 inside-workdir delivery). Built by the caller; the executor
 	// passes them through to ContainerRunHeld unchanged.
 	Seeds []container.Seed
+	// ImageVolumes carry inputs mounted outside the workdir as read-only
+	// engine-native image mounts (ADR-036 outside-workdir delivery). Built by
+	// the caller; the executor copies them into RunOpts unchanged.
+	ImageVolumes []container.ImageVolume
 }
 
 // Execute runs the step container held (not auto-removed) and returns the
@@ -99,6 +103,7 @@ func (r Run) Execute(ctx context.Context) (string, error) {
 	opts.DNSServers = []string{r.Capsule.ResolverAddr().Addr().String()}
 
 	opts.Mounts = mounts
+	opts.ImageVolumes = r.ImageVolumes
 	if r.Step.Workdir != nil {
 		opts.Workdir = r.Step.Workdir.String()
 		if r.VolumeName != "" {

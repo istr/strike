@@ -442,7 +442,7 @@ func (rc *runContext) executeContainerStep(ctx context.Context, step *lane.Step,
 		return fmt.Errorf("%s: secrets: %w", safeName, err)
 	}
 
-	inputSeeds, err := rc.buildInputSeeds(ctx, step)
+	inputSeeds, inputMounts, err := rc.buildInputDelivery(ctx, step)
 	if err != nil {
 		return fmt.Errorf("%s: inputs: %w", safeName, err)
 	}
@@ -474,6 +474,7 @@ func (rc *runContext) executeContainerStep(ctx context.Context, step *lane.Step,
 		Engine:       rc.engine,
 		Step:         step,
 		Seeds:        inputSeeds,
+		ImageVolumes: inputMounts,
 		VolumeName:   volName,
 		Secrets:      secrets,
 		ImageRef:     rc.state.imageFromTags[stepName],
@@ -540,7 +541,7 @@ func (rc *runContext) wrapArchivedOutput(ctx context.Context, step *lane.Step, s
 		err    error
 	)
 	switch out.Type {
-	case "file", "directory":
+	case artifactTypeFile, "directory":
 		digest, size, err = rc.regClient.WrapArchiveAsImage(ctx, stream, stripPrefix, destPrefix, tag)
 	case artifactTypeImage:
 		digest, size, err = rc.regClient.WrapImageArchiveAsImage(ctx, stream, tag)
@@ -590,65 +591,119 @@ func (rc *runContext) captureProvenance(ctx context.Context, step *lane.Step, sa
 	return rc.laneState.RecordProvenance(string(step.Name), rec)
 }
 
-// buildInputSeeds resolves each input edge to a seed: the producer content,
-// selected by subpath and re-rooted under the workdir, packed as a tar to be
-// written into the workdir volume before the container starts (ADR-036
-// inside-workdir delivery). It does not touch the host filesystem.
+// buildInputDelivery resolves each input edge to its delivery: inside the
+// workdir, a seed written into the workdir volume before start; outside
+// the workdir (including every input on a step with no workdir), a
+// read-only image-volume mount referencing the producer image tag. It
+// does not touch the host filesystem (ADR-036).
 //
-// Only inputs inside the step's workdir are delivered here. An input mounted
-// outside the workdir, or any input on a step without a workdir, is rejected
-// fail-closed: delivering inputs outside the workdir is a committed follow-up
-// and not yet implemented. The error speaks of the workdir, never of the
-// delivery mechanism.
-func (rc *runContext) buildInputSeeds(ctx context.Context, step *lane.Step) ([]container.Seed, error) {
+// Errors speak in lane terms ("input at <mount>"), never of the seed/mount
+// mechanism. A single regular file cannot be mounted outside the workdir
+// (the overlay is directory-granular); strike rejects it here, statically
+// when the producing output is type file and at the validation walk when a
+// subpath resolves to a regular file, rather than surfacing the engine's
+// opaque runtime error.
+func (rc *runContext) buildInputDelivery(ctx context.Context, step *lane.Step) ([]container.Seed, []container.ImageVolume, error) {
 	edges := rc.dag.InputEdges[string(step.Name)]
 	if len(edges) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
-	if step.Workdir == nil {
-		return nil, fmt.Errorf("step %q declares inputs but no workdir; "+
-			"inputs outside a workdir are not yet supported", step.Name)
-	}
-	workdir := step.Workdir.String()
 
-	seeds := make([]container.Seed, 0, len(edges))
-	imageCache := make(map[string][]byte) // producer tag -> image tar, exported once
+	var (
+		seeds      []container.Seed
+		mounts     []container.ImageVolume
+		imageCache = make(map[string][]byte) // producer tag -> image tar, exported once
+	)
 	for _, e := range edges {
-		rel, inside := relWithinWorkdir(workdir, e.Mount.String())
-		if !inside {
-			return nil, fmt.Errorf("input at %q lies outside the workdir %q; "+
-				"inputs outside the workdir are not yet supported", e.Mount, workdir)
-		}
-
 		ref := string(e.FromStep.Name) + "." + e.FromOutput.Name
-		_, artErr := rc.laneState.Resolve(ref)
-		if artErr != nil {
-			return nil, fmt.Errorf("input at %q: source artifact %s not found: %w",
+		if _, artErr := rc.laneState.Resolve(ref); artErr != nil {
+			return nil, nil, fmt.Errorf("input at %q: source artifact %s not found: %w",
 				e.Mount, ref, artErr)
 		}
 		tag := registry.WrapTag(rc.lane.LaneID, string(e.FromStep.Name),
 			rc.state.specHashes[string(e.FromStep.Name)])
-		tarBytes, ok := imageCache[tag]
-		if !ok {
-			var saveErr error
-			tarBytes, saveErr = registry.SaveImage(ctx, rc.engine, tag)
-			if saveErr != nil {
-				return nil, fmt.Errorf("input at %q: save %s: %w", e.Mount, ref, saveErr)
-			}
-			imageCache[tag] = tarBytes
+
+		inside := false
+		var rel string
+		if step.Workdir != nil {
+			rel, inside = relWithinWorkdir(step.Workdir.String(), e.Mount.String())
 		}
 
-		inImagePath := inputContentPath(e)
-		seedTar, buildErr := registry.SeedTarFromImage(tarBytes, inImagePath, rel)
-		if buildErr != nil {
-			return nil, fmt.Errorf("input at %q: %w", e.Mount, buildErr)
+		if inside {
+			tarBytes, cacheErr := producerTar(ctx, rc.engine, imageCache, tag, e)
+			if cacheErr != nil {
+				return nil, nil, cacheErr
+			}
+			seedTar, buildErr := registry.SeedTarFromImage(tarBytes, inputContentPath(e), rel)
+			if buildErr != nil {
+				return nil, nil, fmt.Errorf("input at %q: %w", e.Mount, buildErr)
+			}
+			seeds = append(seeds, container.Seed{
+				Tar:  bytes.NewReader(seedTar),
+				Path: step.Workdir.String(),
+			})
+			continue
 		}
-		seeds = append(seeds, container.Seed{
-			Tar:  bytes.NewReader(seedTar),
-			Path: workdir,
-		})
+
+		// Outside the workdir (or no workdir): read-only image-volume mount.
+		mount, mountErr := buildImageMount(ctx, rc.engine, imageCache, tag, e)
+		if mountErr != nil {
+			return nil, nil, mountErr
+		}
+		mounts = append(mounts, mount)
 	}
-	return seeds, nil
+	return seeds, mounts, nil
+}
+
+// buildImageMount validates and constructs a read-only image-volume mount for
+// an input delivered outside the workdir. A single-file selection is rejected
+// in lane terms, statically for a type:file output, by walk otherwise.
+func buildImageMount(ctx context.Context, engine container.Engine, cache map[string][]byte, tag string, e lane.InputEdge) (container.ImageVolume, error) {
+	if e.FromOutput.Type == artifactTypeFile && e.Subpath == nil {
+		return container.ImageVolume{}, singleFileOutsideErr(e)
+	}
+	tarBytes, cacheErr := producerTar(ctx, engine, cache, tag, e)
+	if cacheErr != nil {
+		return container.ImageVolume{}, cacheErr
+	}
+	subPath := inputContentPath(e)
+	kind, valErr := registry.ValidateImageMount(tarBytes, subPath)
+	if valErr != nil {
+		return container.ImageVolume{}, fmt.Errorf("input at %q: %w", e.Mount, valErr)
+	}
+	if kind == registry.MountKindFile {
+		return container.ImageVolume{}, singleFileOutsideErr(e)
+	}
+	return container.ImageVolume{
+		Source:      tag,
+		Destination: e.Mount.String(),
+		SubPath:     subPath,
+		ReadWrite:   false,
+	}, nil
+}
+
+// producerTar returns the producer image's OCI-layout tar, exporting it
+// from the engine at most once per tag across all input edges of a step.
+func producerTar(ctx context.Context, engine container.Engine, cache map[string][]byte, tag string, e lane.InputEdge) ([]byte, error) {
+	if tarBytes, ok := cache[tag]; ok {
+		return tarBytes, nil
+	}
+	tarBytes, saveErr := registry.SaveImage(ctx, engine, tag)
+	if saveErr != nil {
+		return nil, fmt.Errorf("input at %q: save %s.%s: %w",
+			e.Mount, e.FromStep.Name, e.FromOutput.Name, saveErr)
+	}
+	cache[tag] = tarBytes
+	return tarBytes, nil
+}
+
+// singleFileOutsideErr is the lane-surface diagnostic for a single regular
+// file selected as an input mounted outside the workdir. It names neither
+// mount nor overlay; it tells the author what to change.
+func singleFileOutsideErr(e lane.InputEdge) error {
+	return fmt.Errorf("input at %q resolves to a single file, which can only "+
+		"be delivered inside the step workdir; mount its parent directory, "+
+		"use a directory output, or place it inside the workdir", e.Mount)
 }
 
 // archiveReroot returns the path to archive from the container and the
@@ -659,7 +714,7 @@ func (rc *runContext) buildInputSeeds(ctx context.Context, step *lane.Step) ([]c
 // archived path (probe-confirmed, podman 5.4.2): /out -> "out/...",
 // /out/tree -> "tree/...", and a single file /out/f -> the bare entry "f".
 // The layer must end rooted at OutputLayerName so the consumer
-// (buildInputSeeds) and pack (resolvePackInputPaths) find content at
+// (buildInputDelivery) and pack (resolvePackInputPaths) find content at
 // <OutputLayerName>/... .
 //
 //   - directory: strip the basename podman prepended, then re-root under
@@ -677,7 +732,7 @@ func archiveReroot(workdir string, out lane.OutputSpec) (archivePath, stripPrefi
 	if out.Path != nil {
 		archivePath = path.Join(workdir, out.Path.String())
 	}
-	if out.Type == "file" {
+	if out.Type == artifactTypeFile {
 		return archivePath, "", ""
 	}
 	return archivePath, path.Base(archivePath), lane.OutputLayerName(out)

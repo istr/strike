@@ -53,10 +53,10 @@ func newTestRC(t *testing.T, engine *mockEngine) *runContext {
 }
 
 // --------------------------------------------------------------------------.
-// buildInputSeeds
+// buildInputDelivery
 // --------------------------------------------------------------------------.
 
-func TestBuildInputSeeds_Single(t *testing.T) {
+func TestBuildInputDelivery_Single(t *testing.T) {
 	eng := &mockEngine{}
 	rc := newTestRC(t, eng)
 
@@ -91,9 +91,9 @@ func TestBuildInputSeeds_Single(t *testing.T) {
 	tag := registry.WrapTag(rc.lane.LaneID, "compile", rc.state.specHashes["compile"])
 	eng.saveTars = map[string][]byte{tag: tarBytes}
 
-	seeds, seedErr := rc.buildInputSeeds(context.Background(), rc.dag.Steps["test"])
+	seeds, _, seedErr := rc.buildInputDelivery(context.Background(), rc.dag.Steps["test"])
 	if seedErr != nil {
-		t.Fatalf("buildInputSeeds: %v", seedErr)
+		t.Fatalf("buildInputDelivery: %v", seedErr)
 	}
 	if len(seeds) != 1 {
 		t.Fatalf("expected 1 seed, got %d", len(seeds))
@@ -103,7 +103,7 @@ func TestBuildInputSeeds_Single(t *testing.T) {
 	}
 }
 
-func TestBuildInputSeeds_Multiple(t *testing.T) {
+func TestBuildInputDelivery_Multiple(t *testing.T) {
 	eng := &mockEngine{}
 	rc := newTestRC(t, eng)
 
@@ -153,16 +153,16 @@ func TestBuildInputSeeds_Multiple(t *testing.T) {
 	tag2 := registry.WrapTag(rc.lane.LaneID, "s2", rc.state.specHashes["s2"])
 	eng.saveTars = map[string][]byte{tag1: tar1, tag2: tar2}
 
-	seeds, seedErr := rc.buildInputSeeds(context.Background(), rc.dag.Steps["consumer"])
+	seeds, _, seedErr := rc.buildInputDelivery(context.Background(), rc.dag.Steps["consumer"])
 	if seedErr != nil {
-		t.Fatalf("buildInputSeeds: %v", seedErr)
+		t.Fatalf("buildInputDelivery: %v", seedErr)
 	}
 	if len(seeds) != 2 {
 		t.Fatalf("expected 2 seeds, got %d", len(seeds))
 	}
 }
 
-func TestBuildInputSeeds_MissingSubpath(t *testing.T) {
+func TestBuildInputDelivery_MissingSubpath(t *testing.T) {
 	eng := &mockEngine{}
 	rc := newTestRC(t, eng)
 
@@ -199,7 +199,7 @@ func TestBuildInputSeeds_MissingSubpath(t *testing.T) {
 	tag := registry.WrapTag(rc.lane.LaneID, "src", rc.state.specHashes["src"])
 	eng.saveTars = map[string][]byte{tag: tarBytes}
 
-	_, seedErr := rc.buildInputSeeds(context.Background(), rc.dag.Steps["consumer"])
+	_, _, seedErr := rc.buildInputDelivery(context.Background(), rc.dag.Steps["consumer"])
 	if seedErr == nil {
 		t.Fatal("expected error for missing subpath")
 	}
@@ -208,7 +208,114 @@ func TestBuildInputSeeds_MissingSubpath(t *testing.T) {
 	}
 }
 
-func TestBuildInputSeeds_OutsideWorkdir(t *testing.T) {
+func TestBuildInputDelivery_OutsideWorkdir_DirectoryMount(t *testing.T) {
+	eng := &mockEngine{}
+	rc := newTestRC(t, eng)
+
+	p := &lane.Lane{
+		Registry: "localhost:5555/test",
+		Steps: []lane.Step{
+			{
+				Name: "src", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
+				Outputs: []lane.OutputSpec{{Name: "tree", Type: "directory", Path: lane.Ptr(lane.RelPath("tree"))}},
+			},
+			{
+				Name: "consumer", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
+				Workdir: lane.Ptr(lane.AbsPath("/work")),
+				Inputs:  []lane.InputRef{{From: "src.tree", Mount: "/outside/tree"}},
+			},
+		},
+	}
+	rc.dag = buildTestDAG(t, p)
+
+	if err := rc.laneState.Register("src", "tree", lane.Artifact{
+		Type: "directory", Digest: lane.MustParseDigest("sha256:aabbccdd11223344000000000000000000000000000000000000000000000000"),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	rc.state.specHashes["src"] = lane.MustParseDigest("sha256:1111111111111111000000000000000000000000000000000000000000000000")
+
+	tarBytes, err := regtest.BuildMultiFileImageTar(map[string][]byte{
+		"tree/a.txt": []byte("a"),
+	})
+	if err != nil {
+		t.Fatalf("BuildMultiFileImageTar: %v", err)
+	}
+	tag := registry.WrapTag(rc.lane.LaneID, "src", rc.state.specHashes["src"])
+	eng.saveTars = map[string][]byte{tag: tarBytes}
+
+	seeds, mounts, dErr := rc.buildInputDelivery(context.Background(), rc.dag.Steps["consumer"])
+	if dErr != nil {
+		t.Fatalf("buildInputDelivery: %v", dErr)
+	}
+	if len(seeds) != 0 {
+		t.Errorf("expected 0 seeds, got %d", len(seeds))
+	}
+	if len(mounts) != 1 {
+		t.Fatalf("expected 1 mount, got %d", len(mounts))
+	}
+	if mounts[0].Source != tag {
+		t.Errorf("mount Source = %q, want %q", mounts[0].Source, tag)
+	}
+	if mounts[0].Destination != "/outside/tree" {
+		t.Errorf("mount Destination = %q, want /outside/tree", mounts[0].Destination)
+	}
+	if mounts[0].SubPath != "tree" {
+		t.Errorf("mount SubPath = %q, want tree", mounts[0].SubPath)
+	}
+	if mounts[0].ReadWrite {
+		t.Error("mount ReadWrite = true, want false")
+	}
+}
+
+func TestBuildInputDelivery_NoWorkdir_Mounts(t *testing.T) {
+	eng := &mockEngine{}
+	rc := newTestRC(t, eng)
+
+	p := &lane.Lane{
+		Registry: "localhost:5555/test",
+		Steps: []lane.Step{
+			{
+				Name: "src", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
+				Outputs: []lane.OutputSpec{{Name: "tree", Type: "directory", Path: lane.Ptr(lane.RelPath("tree"))}},
+			},
+			{
+				Name: "consumer", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
+				Inputs: []lane.InputRef{{From: "src.tree", Mount: "/in/tree"}},
+			},
+		},
+	}
+	rc.dag = buildTestDAG(t, p)
+
+	if err := rc.laneState.Register("src", "tree", lane.Artifact{
+		Type: "directory", Digest: lane.MustParseDigest("sha256:aabbccdd11223344000000000000000000000000000000000000000000000000"),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	rc.state.specHashes["src"] = lane.MustParseDigest("sha256:1111111111111111000000000000000000000000000000000000000000000000")
+
+	tarBytes, err := regtest.BuildMultiFileImageTar(map[string][]byte{
+		"tree/a.txt": []byte("a"),
+	})
+	if err != nil {
+		t.Fatalf("BuildMultiFileImageTar: %v", err)
+	}
+	tag := registry.WrapTag(rc.lane.LaneID, "src", rc.state.specHashes["src"])
+	eng.saveTars = map[string][]byte{tag: tarBytes}
+
+	seeds, mounts, dErr := rc.buildInputDelivery(context.Background(), rc.dag.Steps["consumer"])
+	if dErr != nil {
+		t.Fatalf("buildInputDelivery: %v", dErr)
+	}
+	if len(seeds) != 0 {
+		t.Errorf("expected 0 seeds, got %d", len(seeds))
+	}
+	if len(mounts) != 1 || mounts[0].Destination != "/in/tree" {
+		t.Fatalf("expected 1 mount at /in/tree, got %+v", mounts)
+	}
+}
+
+func TestBuildInputDelivery_SingleFileOutside_Rejected(t *testing.T) {
 	rc := newTestRC(t, &mockEngine{})
 
 	p := &lane.Lane{
@@ -234,43 +341,16 @@ func TestBuildInputSeeds_OutsideWorkdir(t *testing.T) {
 	}
 	rc.state.specHashes["src"] = lane.MustParseDigest("sha256:1111111111111111000000000000000000000000000000000000000000000000")
 
-	_, err := rc.buildInputSeeds(context.Background(), rc.dag.Steps["consumer"])
+	_, _, err := rc.buildInputDelivery(context.Background(), rc.dag.Steps["consumer"])
 	if err == nil {
-		t.Fatal("expected error for input outside workdir")
+		t.Fatal("expected single-file-outside rejection")
 	}
-	if !strings.Contains(err.Error(), "outside the workdir") {
-		t.Errorf("error should mention 'outside the workdir': %v", err)
+	if !strings.Contains(err.Error(), "single file") {
+		t.Errorf("error should explain the single-file constraint in lane terms: %v", err)
 	}
 }
 
-func TestBuildInputSeeds_NoWorkdir(t *testing.T) {
-	rc := newTestRC(t, &mockEngine{})
-
-	p := &lane.Lane{
-		Registry: "localhost:5555/test",
-		Steps: []lane.Step{
-			{
-				Name: "src", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{Name: "bin", Type: "file", Path: lane.Ptr(lane.RelPath("binary"))}},
-			},
-			{
-				Name: "consumer", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Inputs: []lane.InputRef{{From: "src.bin", Mount: "/in/binary"}},
-			},
-		},
-	}
-	rc.dag = buildTestDAG(t, p)
-
-	_, err := rc.buildInputSeeds(context.Background(), rc.dag.Steps["consumer"])
-	if err == nil {
-		t.Fatal("expected error for input on step without workdir")
-	}
-	if !strings.Contains(err.Error(), "no workdir") {
-		t.Errorf("error should mention 'no workdir': %v", err)
-	}
-}
-
-func TestBuildInputSeeds_ExportsProducerOnce(t *testing.T) {
+func TestBuildInputDelivery_ExportsProducerOnce(t *testing.T) {
 	eng := &mockEngine{}
 	rc := newTestRC(t, eng)
 
@@ -311,9 +391,9 @@ func TestBuildInputSeeds_ExportsProducerOnce(t *testing.T) {
 	tag := registry.WrapTag(rc.lane.LaneID, "src", rc.state.specHashes["src"])
 	eng.saveTars = map[string][]byte{tag: tarBytes}
 
-	seeds, seedErr := rc.buildInputSeeds(context.Background(), rc.dag.Steps["consumer"])
+	seeds, _, seedErr := rc.buildInputDelivery(context.Background(), rc.dag.Steps["consumer"])
 	if seedErr != nil {
-		t.Fatalf("buildInputSeeds: %v", seedErr)
+		t.Fatalf("buildInputDelivery: %v", seedErr)
 	}
 	if len(seeds) != 2 {
 		t.Fatalf("expected 2 seeds, got %d", len(seeds))
