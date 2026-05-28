@@ -15,6 +15,7 @@ import (
 	"github.com/istr/strike/internal/closer"
 	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/executor"
+	"github.com/istr/strike/internal/front"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/registry"
 	"github.com/istr/strike/internal/transport"
@@ -243,6 +244,9 @@ func cmdRun(ctx context.Context, path string, engine container.Engine) {
 	ca, caCleanup := initLaneCA(p)
 	defer caCleanup()
 
+	frontCleanup := initFront(ctx)
+	defer frontCleanup()
+
 	stepPorts := allocateMediatedPorts(p)
 
 	upstreamLook := capsule.UpstreamLookupFunc(func(ctx context.Context, name string) ([]netip.Addr, error) {
@@ -296,6 +300,19 @@ func initLaneCA(p *lane.Lane) (*transport.EphemeralCA, func()) {
 		log.Fatalf("error: ephemeral CA: %v", caErr)
 	}
 	return ca, func() { closer.Warn(ca, "ephemeral CA") }
+}
+
+// initFront starts the lane-run control-plane front (ADR-038 D2) on a host-
+// loopback listener. In this skeleton the front owns only its listener and
+// lifecycle; it does not yet terminate SSH or route by token (ADR-038 roadmap
+// items 3 and 5). The returned cleanup closes it.
+func initFront(ctx context.Context) func() {
+	ft, ftErr := front.New(ctx)
+	if ftErr != nil {
+		log.Fatalf("error: front: %v", ftErr)
+	}
+	log.Printf("FRONT  listening @ %s", ft.Addr())
+	return func() { closer.Warn(ft, "front") }
 }
 
 // allocateMediatedPorts pre-allocates a host-port block for every
