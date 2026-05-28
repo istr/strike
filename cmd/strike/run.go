@@ -56,8 +56,9 @@ type runContext struct {
 	upstreamLook   capsule.UpstreamLookupFunc
 	lane           *lane.Lane
 	dag            *lane.DAG
-	stepPorts      map[string]capsule.HostPorts // mediated step name -> host ports
-	networkRecords map[string]capsule.Records   // step name -> records
+	stepPorts      map[string]capsule.HostPorts       // mediated step name -> host ports
+	networkRecords map[string]capsule.Records         // step name -> records
+	capsules       map[string]*capsule.NetworkCapsule // run-step name -> pre-built capsule
 	laneRoot       *os.Root
 	rekor          *executor.RekorClient // optional Rekor transparency log client
 	trust          trustVolumes
@@ -460,15 +461,12 @@ func (rc *runContext) executeContainerStep(ctx context.Context, step *lane.Step,
 		}()
 	}
 
-	caps, capsErr := rc.startCapsule(ctx, stepName, safeName, step.Peers)
-	if capsErr != nil {
-		return capsErr
+	caps, ok := rc.capsules[stepName]
+	if !ok {
+		return fmt.Errorf("%s: no pre-built capsule", safeName)
 	}
 	defer func() {
 		rc.networkRecords[stepName] = caps.Records()
-		if stopErr := caps.Stop(); stopErr != nil {
-			log.Printf("WARN   %s: capsule stop: %v", safeName, stopErr)
-		}
 	}()
 
 	run := executor.Run{
@@ -905,6 +903,39 @@ func singleFileTar(name string, data []byte, mode int64) ([]byte, error) {
 		return nil, err
 	}
 	return buf.Bytes(), nil
+}
+
+// buildCapsules constructs and starts a capsule for every run step (every
+// step that is neither a deploy nor a pack step -- exactly the steps
+// executeContainerStep runs), keyed by step name. Built during setup so the
+// capsules exist before the front starts and before the dispatch map is built
+// (ADR-038 roadmap). Deploy and state-capture capsules are not built here;
+// the deploy path owns them.
+func (rc *runContext) buildCapsules(ctx context.Context) error {
+	for i := range rc.lane.Steps {
+		step := &rc.lane.Steps[i]
+		if step.Deploy != nil || step.Pack != nil {
+			continue
+		}
+		name := string(step.Name)
+		caps, err := rc.startCapsule(ctx, name, sanitizeForLog(name), step.Peers)
+		if err != nil {
+			return err
+		}
+		rc.capsules[name] = caps
+	}
+	return nil
+}
+
+// stopCapsules stops every pre-built capsule at lane end. Per-step network
+// records are snapshotted as each step finishes (executeContainerStep), so
+// this only closes listeners; record collection is not repeated here.
+func (rc *runContext) stopCapsules() {
+	for name, caps := range rc.capsules {
+		if stopErr := caps.Stop(); stopErr != nil {
+			log.Printf("WARN   %s: capsule stop: %v", sanitizeForLog(name), stopErr)
+		}
+	}
 }
 
 // startCapsule constructs and starts a NetworkCapsule for one container

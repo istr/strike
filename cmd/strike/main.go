@@ -215,19 +215,7 @@ func cmdRun(ctx context.Context, path string, engine container.Engine) {
 		log.Fatalf("error: %v", err)
 	}
 
-	// Pre-flight resolver probe. lane.Parse is a pure offline
-	// check; resolver reachability is an environmental property
-	// and therefore lives here, at run start, not in Parse. See
-	// docs/ROADMAP-ADR-028.md D16 for the rationale. The probe also
-	// captures the resolver's observed TLS identity, recorded in the
-	// deploy attestation per ADR-030.
-	probeCtx, probeCancel := context.WithTimeout(ctx, 5*clock.Second)
-	resolverID, probeErr := transport.ProbeResolver(probeCtx, p.Resolver)
-	probeCancel()
-	if probeErr != nil {
-		log.Fatalf("error: %v", probeErr)
-	}
-
+	resolverID := probeResolver(ctx, p)
 	laneDir := filepath.Dir(fp.String())
 
 	laneRoot, err := os.OpenRoot(laneDir)
@@ -266,11 +254,17 @@ func cmdRun(ctx context.Context, path string, engine container.Engine) {
 		laneState:      lane.NewState(),
 		stepPorts:      stepPorts,
 		networkRecords: map[string]capsule.Records{},
+		capsules:       map[string]*capsule.NetworkCapsule{},
 		laneRoot:       laneRoot,
 		rekor:          initRekor(),
 		resolverID:     resolverID,
 		laneDir:        laneDir,
 	}
+
+	if capsErr := rc.buildCapsules(ctx); capsErr != nil {
+		log.Fatalf("error: %v", capsErr)
+	}
+	defer rc.stopCapsules()
 
 	trust, trustErr := rc.planTrustVolumes(ctx, ca.PublicCertPEM())
 	if trustErr != nil {
@@ -297,6 +291,22 @@ func cmdRun(ctx context.Context, path string, engine container.Engine) {
 		log.Fatalf("error: marshal lane state: %v", err)
 	}
 	log.Printf("STATE  %s", stateJSON)
+}
+
+// probeResolver runs the pre-flight resolver probe. lane.Parse is a pure
+// offline check; resolver reachability is an environmental property and
+// therefore lives here, at run start, not in Parse. See
+// docs/ROADMAP-ADR-028.md D16 for the rationale. The probe also captures
+// the resolver's observed TLS identity, recorded in the deploy attestation
+// per ADR-030.
+func probeResolver(ctx context.Context, p *lane.Lane) transport.ConnectionIdentity {
+	probeCtx, probeCancel := context.WithTimeout(ctx, 5*clock.Second)
+	resolverID, probeErr := transport.ProbeResolver(probeCtx, p.Resolver)
+	probeCancel()
+	if probeErr != nil {
+		log.Fatalf("error: %v", probeErr)
+	}
+	return resolverID
 }
 
 // initLaneCA creates the lane-wide ephemeral CA. The returned cleanup
