@@ -26,8 +26,9 @@ type Run struct {
 	// caller for image_from steps so that Step.Image remains the
 	// parsed YAML value and the executor sees the producer's
 	// local WrapTag. When empty, Step.Image is used unchanged.
-	ImageRef string
-	CAVolume string // lane-wide CA volume name; mounted r/o at /etc/ssl/certs; required when Capsule != nil
+	ImageRef  string
+	CAVolume  string // lane-wide CA volume name; mounted r/o at /etc/ssl/certs; required when Capsule != nil
+	SSHVolume string // per-step SSH trust volume name; mounted r/o at /etc/ssh; empty when step has no SSH peers
 	// Seeds carry input content into the workdir volume before start
 	// (ADR-036 inside-workdir delivery). Built by the caller; the executor
 	// passes them through to ContainerRunHeld unchanged.
@@ -64,10 +65,9 @@ func (r Run) Execute(ctx context.Context) (string, error) {
 	env["XDG_DATA_HOME"] = "/tmp/data"
 
 	// Inputs are delivered by seeding the workdir volume before start
-	// (r.Seeds), not by bind mounts. Only CA and SSH mounts remain.
+	// (r.Seeds), not by bind mounts. Only agent socket mounts remain.
 	var mounts []container.Mount
-	sshContainerPorts := SSHContainerPorts(r.Step.Peers)
-	mounts, err = appendSSHMounts(ctx, r.Step.Peers, scratchDir, sshContainerPorts, mounts, env)
+	mounts, err = appendSSHMounts(ctx, r.Step.Peers, scratchDir, mounts, env)
 	if err != nil {
 		return "", err
 	}
@@ -97,6 +97,12 @@ func (r Run) Execute(ctx context.Context) (string, error) {
 		Name: r.CAVolume,
 		Dest: "/etc/ssl/certs",
 	})
+	if r.SSHVolume != "" {
+		opts.TrustVolumes = append(opts.TrustVolumes, container.VolumeMount{
+			Name: r.SSHVolume,
+			Dest: "/etc/ssh",
+		})
+	}
 	opts.Network = "pasta"
 	opts.PastaArgs = r.Capsule.PastaArgs()
 	opts.DNSServers = []string{r.Capsule.ResolverAddr().Addr().String()}
@@ -125,20 +131,13 @@ func (r Run) Execute(ctx context.Context) (string, error) {
 	return id, nil
 }
 
-// appendSSHMounts configures SSH peer known_hosts, the strike ssh_config
-// (per-peer Port directives), and the agent proxy, appending any
-// resulting mounts and injecting env vars. containerPorts maps each SSH
-// peer host (no port) to its container-side port.
-func appendSSHMounts(ctx context.Context, peers []lane.Peer, scratchDir string, containerPorts map[string]uint16, mounts []container.Mount, env map[string]string) ([]container.Mount, error) {
-	sshMounts, sshEnv, err := ConfigureSSHPeers(peers, scratchDir, containerPorts)
-	if err != nil {
-		return nil, fmt.Errorf("ssh peer setup: %w", err)
-	}
-	mounts = append(mounts, sshMounts...)
-	for k, v := range sshEnv {
-		env[k] = v
-	}
-
+// appendSSHMounts handles the SSH agent socket bind-mount and its env
+// var. The SSH trust material (known_hosts, ssh_config) now rides a
+// per-step trust volume mounted at /etc/ssh by the orchestrator (see
+// cmd/strike/run.go planTrustVolumes); the agent socket is a live Unix
+// socket and cannot ride a volume, so it stays a bind-mount until the
+// ADR-038 front removes it entirely (roadmap item 6).
+func appendSSHMounts(ctx context.Context, peers []lane.Peer, scratchDir string, mounts []container.Mount, env map[string]string) ([]container.Mount, error) {
 	agentMount, agentEnv, err := StartAgentProxy(ctx, peers, scratchDir)
 	if err != nil {
 		return nil, fmt.Errorf("ssh agent proxy setup: %w", err)

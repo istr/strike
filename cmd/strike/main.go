@@ -268,16 +268,12 @@ func cmdRun(ctx context.Context, path string, engine container.Engine) {
 		laneDir:        laneDir,
 	}
 
-	caVolume, caVolErr := rc.populateCAVolume(ctx, ca.PublicCertPEM())
-	if caVolErr != nil {
-		log.Fatalf("error: %v", caVolErr)
+	trust, trustErr := rc.planTrustVolumes(ctx, ca.PublicCertPEM())
+	if trustErr != nil {
+		log.Fatalf("error: %v", trustErr)
 	}
-	defer func() {
-		if rmErr := rc.engine.VolumeRemove(ctx, caVolume); rmErr != nil {
-			log.Printf("WARN   remove ca volume: %v", rmErr)
-		}
-	}()
-	rc.caVolume = caVolume
+	defer rc.removeTrustVolumes(context.Background(), trust)
+	rc.trust = trust
 	for _, stepName := range dag.Order {
 		if stepErr := rc.runStep(stepName); stepErr != nil {
 			log.Fatalf("error: %v", stepErr)

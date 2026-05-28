@@ -1,10 +1,13 @@
 package executor_test
 
 import (
+	"archive/tar"
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
+	"io"
 	"io/fs"
-	"os"
 	"path/filepath"
 	"testing"
 
@@ -151,31 +154,19 @@ func TestRenderKnownHosts_order_independence(t *testing.T) {
 	}
 }
 
-func TestConfigureSSHPeers_no_ssh_peers(t *testing.T) {
-	dir := t.TempDir()
-	mounts, env, err := executor.ConfigureSSHPeers([]lane.Peer{
+func TestSSHTrustContent_no_ssh_peers(t *testing.T) {
+	kh, cfg := executor.SSHTrustContent([]lane.Peer{
 		lane.HTTPSPeer{Type: "https", Host: transport.Host("example.com"), Trust: transport.FingerprintTrust{Mode: "cert_fingerprint", Fingerprint: "sha256:abc"}},
-	}, dir, nil)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	}, nil)
+	if kh != nil {
+		t.Errorf("knownHosts = %q, want nil", kh)
 	}
-	if mounts != nil {
-		t.Errorf("mounts = %v, want nil", mounts)
-	}
-	if env != nil {
-		t.Errorf("env = %v, want nil", env)
-	}
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		t.Fatalf("ReadDir: %v", err)
-	}
-	if len(entries) != 0 {
-		t.Errorf("scratch dir not empty: %v", entries)
+	if cfg != nil {
+		t.Errorf("sshConfig = %q, want nil", cfg)
 	}
 }
 
-func TestConfigureSSHPeers_with_ssh_peers(t *testing.T) {
-	dir := t.TempDir()
+func TestSSHTrustContent_with_ssh_peers(t *testing.T) {
 	peers := []lane.Peer{
 		lane.SSHPeer{
 			Type: "ssh", Host: transport.Host("git.example.com"),
@@ -185,44 +176,81 @@ func TestConfigureSSHPeers_with_ssh_peers(t *testing.T) {
 		},
 	}
 	containerPorts := map[string]uint16{"git.example.com": 2200}
-	mounts, env, err := executor.ConfigureSSHPeers(peers, dir, containerPorts)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(mounts) != 2 {
-		t.Fatalf("got %d mounts, want 2", len(mounts))
-	}
-	if mounts[0].Target != "/etc/ssh/ssh_known_hosts" {
-		t.Errorf("mounts[0].Target = %q, want /etc/ssh/ssh_known_hosts", mounts[0].Target)
-	}
-	if !mounts[0].ReadOnly {
-		t.Error("mounts[0].ReadOnly = false, want true")
-	}
-	if mounts[1].Target != "/etc/ssh/strike_config" {
-		t.Errorf("mounts[1].Target = %q, want /etc/ssh/strike_config", mounts[1].Target)
-	}
-	if !mounts[1].ReadOnly {
-		t.Error("mounts[1].ReadOnly = false, want true")
+	kh, cfg := executor.SSHTrustContent(peers, containerPorts)
+
+	wantKH := executor.RenderKnownHosts(peers)
+	if string(kh) != string(wantKH) {
+		t.Errorf("knownHosts mismatch:\n  got:  %q\n  want: %q", kh, wantKH)
 	}
 
-	fileBytes, err := os.ReadFile(mounts[0].Source)
-	if err != nil {
-		t.Fatalf("read file: %v", err)
+	wantCfg := "Host git.example.com\n    Port 2200\n"
+	if string(cfg) != wantCfg {
+		t.Errorf("sshConfig mismatch:\n  got:  %q\n  want: %q", cfg, wantCfg)
 	}
-	wantBytes := executor.RenderKnownHosts(peers)
-	if string(fileBytes) != string(wantBytes) {
-		t.Errorf("file content mismatch:\n  got:  %q\n  want: %q", fileBytes, wantBytes)
+}
+
+func TestSSHTrustEnv_empty(t *testing.T) {
+	env := executor.SSHTrustEnv()
+	if len(env) != 0 {
+		t.Errorf("SSHTrustEnv() = %v, want empty map", env)
+	}
+}
+
+func TestSSHTrustTar_structure(t *testing.T) {
+	kh := []byte("git.example.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestKey\n")
+	cfg := []byte("Host git.example.com\n    Port 2200\n")
+
+	tarBytes, err := executor.SSHTrustTar(kh, cfg)
+	if err != nil {
+		t.Fatalf("SSHTrustTar: %v", err)
 	}
 
-	if env == nil {
-		t.Fatal("env is nil")
+	tr := tar.NewReader(bytes.NewReader(tarBytes))
+
+	// First entry: ssh_known_hosts.
+	hdr, err := tr.Next()
+	if err != nil {
+		t.Fatalf("tar entry 0: %v", err)
 	}
-	const wantCmd = "ssh -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/etc/ssh/ssh_known_hosts -o GlobalKnownHostsFile=/etc/ssh/ssh_known_hosts -o PasswordAuthentication=no -o BatchMode=yes -F /etc/ssh/strike_config"
-	if env["GIT_SSH_COMMAND"] != wantCmd {
-		t.Errorf("GIT_SSH_COMMAND =\n  %q\nwant:\n  %q", env["GIT_SSH_COMMAND"], wantCmd)
+	if hdr.Name != "ssh_known_hosts" {
+		t.Errorf("entry 0 name = %q, want ssh_known_hosts", hdr.Name)
 	}
-	if len(env) != 1 {
-		t.Errorf("env has %d entries, want 1", len(env))
+	if hdr.Mode != 0o644 {
+		t.Errorf("entry 0 mode = %o, want 644", hdr.Mode)
+	}
+	got := make([]byte, hdr.Size)
+	_, err = io.ReadFull(tr, got)
+	if err != nil {
+		t.Fatalf("read entry 0: %v", err)
+	}
+	if string(got) != string(kh) {
+		t.Errorf("entry 0 content = %q, want %q", got, kh)
+	}
+
+	// Second entry: ssh_config.
+	hdr, err = tr.Next()
+	if err != nil {
+		t.Fatalf("tar entry 1: %v", err)
+	}
+	if hdr.Name != "ssh_config" {
+		t.Errorf("entry 1 name = %q, want ssh_config", hdr.Name)
+	}
+	if hdr.Mode != 0o644 {
+		t.Errorf("entry 1 mode = %o, want 644", hdr.Mode)
+	}
+	got = make([]byte, hdr.Size)
+	_, err = io.ReadFull(tr, got)
+	if err != nil {
+		t.Fatalf("read entry 1: %v", err)
+	}
+	if string(got) != string(cfg) {
+		t.Errorf("entry 1 content = %q, want %q", got, cfg)
+	}
+
+	// No more entries.
+	_, err = tr.Next()
+	if !errors.Is(err, io.EOF) {
+		t.Errorf("expected EOF after 2 entries, got %v", err)
 	}
 }
 

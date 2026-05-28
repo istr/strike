@@ -1,15 +1,12 @@
 package executor
 
 import (
+	"archive/tar"
 	"bytes"
-	"fmt"
-	"os"
-	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
 
-	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/lane"
 )
 
@@ -77,51 +74,60 @@ func formatHost(host string) string {
 	return "[" + h + "]:" + p
 }
 
-// strikeSSHConfigPath is the in-container path of the strike-generated
-// ssh_config carrying per-peer Port directives. It is referenced via
-// -F so the SSH client connects to each peer's strike-assigned
-// loopback port. strike injects this transport-config the same way it
-// injects the ephemeral CA for TLS; a tool that ignores it reaches no
-// forward and fails closed.
-const strikeSSHConfigPath = "/etc/ssh/strike_config"
-
-// gitSSHBase is the GIT_SSH_COMMAND prefix (ADR-024, ADR-025) shared by
-// every SSH-enabled step. ConfigureSSHPeers appends "-F <config>".
-const gitSSHBase = "ssh -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/etc/ssh/ssh_known_hosts -o GlobalKnownHostsFile=/etc/ssh/ssh_known_hosts -o PasswordAuthentication=no -o BatchMode=yes"
-
-// ConfigureSSHPeers renders the SSH known_hosts file plus the strike
-// ssh_config and returns the two mounts and the env map for injecting
-// them into a container. containerPorts maps each SSH peer host (no
-// port) to the container-side port the SSH client must use, allocated
-// by the caller from the capsule's SSH forwards. If no SSH peers are
-// present, all return values are nil.
-func ConfigureSSHPeers(peers []lane.Peer, scratchDir string, containerPorts map[string]uint16) ([]container.Mount, map[string]string, error) {
-	rendered := RenderKnownHosts(peers)
-	if len(rendered) == 0 {
-		return nil, nil, nil
+// SSHTrustContent returns the byte content of the per-step SSH trust
+// volume: known_hosts (one line per declared SSH peer) and ssh_config
+// (per-peer Port directives pointing at strike-assigned loopback ports).
+// Both files are produced deterministically and are the byte-identical
+// payload the prior bind-mount mechanic wrote to disk. Returns nil when
+// no SSH peers are present, signalling the step needs no SSH volume.
+func SSHTrustContent(peers []lane.Peer, containerPorts map[string]uint16) (knownHosts, sshConfig []byte) {
+	kh := RenderKnownHosts(peers)
+	if len(kh) == 0 {
+		return nil, nil
 	}
+	return kh, renderSSHConfig(containerPorts)
+}
 
-	khPath := filepath.Join(scratchDir, "known_hosts")
-	if err := os.WriteFile(khPath, rendered, 0o600); err != nil {
-		return nil, nil, fmt.Errorf("ssh known_hosts: %w", err)
+// SSHTrustEnv returns the env vars an SSH-enabled step needs. With the
+// ssh_config and known_hosts delivered at the system-wide paths via the
+// /etc/ssh trust volume, the client reads them without -F; the env set
+// is therefore empty in the volume-delivery world.
+func SSHTrustEnv() map[string]string {
+	return map[string]string{}
+}
+
+// SSHTrustTar builds the tar payload SeedVolumes extracts into the SSH
+// trust volume. The two files land at the volume root and the volume is
+// mounted at /etc/ssh, so the in-container paths are
+// /etc/ssh/ssh_known_hosts and /etc/ssh/ssh_config -- system-wide
+// defaults read without an -F override.
+func SSHTrustTar(knownHosts, sshConfig []byte) ([]byte, error) {
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+	for _, e := range []struct {
+		name string
+		data []byte
+		mode int64
+	}{
+		{"ssh_known_hosts", knownHosts, 0o644},
+		{"ssh_config", sshConfig, 0o644},
+	} {
+		if err := tw.WriteHeader(&tar.Header{
+			Name:     e.name,
+			Mode:     e.mode,
+			Size:     int64(len(e.data)),
+			Typeflag: tar.TypeReg,
+		}); err != nil {
+			return nil, err
+		}
+		if _, err := tw.Write(e.data); err != nil {
+			return nil, err
+		}
 	}
-
-	cfg := renderSSHConfig(containerPorts)
-	cfgPath := filepath.Join(scratchDir, "strike_ssh_config")
-	if err := os.WriteFile(cfgPath, cfg, 0o600); err != nil {
-		return nil, nil, fmt.Errorf("ssh config: %w", err)
+	if err := tw.Close(); err != nil {
+		return nil, err
 	}
-
-	mounts := []container.Mount{
-		{Source: khPath, Target: "/etc/ssh/ssh_known_hosts", ReadOnly: true},
-		{Source: cfgPath, Target: strikeSSHConfigPath, ReadOnly: true},
-	}
-
-	env := map[string]string{
-		"GIT_SSH_COMMAND": gitSSHBase + " -F " + strikeSSHConfigPath,
-	}
-
-	return mounts, env, nil
+	return buf.Bytes(), nil
 }
 
 // renderSSHConfig produces a byte-deterministic ssh_config with one

@@ -58,10 +58,8 @@ func (e *captureEngine) SeedVolumes(_ context.Context, _ []container.VolumeSeed)
 func (e *captureEngine) VolumeRemove(_ context.Context, _ string) error                { return nil }
 
 const (
-	sshKnownHostsTarget  = "/etc/ssh/ssh_known_hosts"
-	sshConfigTarget      = "/etc/ssh/strike_config"
+	sshTrustVolumeDest   = "/etc/ssh"
 	containerAgentTarget = "/run/strike/ssh-agent.sock"
-	wantGitSSHCommand    = "ssh -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/etc/ssh/ssh_known_hosts -o GlobalKnownHostsFile=/etc/ssh/ssh_known_hosts -o PasswordAuthentication=no -o BatchMode=yes -F /etc/ssh/strike_config"
 )
 
 // specgenTestCapsule creates a minimal capsule for specgen tests.
@@ -102,10 +100,11 @@ func TestExecute_WithSSHPeer(t *testing.T) {
 	caps, caPath := specgenTestCapsule(t)
 
 	r := executor.Run{
-		Engine:   eng,
-		Capsule:  caps,
-		CAVolume: caPath,
-		Secrets:  nil,
+		Engine:    eng,
+		Capsule:   caps,
+		CAVolume:  caPath,
+		SSHVolume: "strike-ssh-test-step-12345",
+		Secrets:   nil,
 		Step: &lane.Step{
 			Name:  "test-step",
 			Image: lane.Ptr(lane.ImageRef("alpine:latest")),
@@ -127,36 +126,35 @@ func TestExecute_WithSSHPeer(t *testing.T) {
 		t.Fatalf("Execute: %v", err)
 	}
 
-	// Verify known_hosts mount
-	var foundKnownHosts, foundSSHConfig bool
-	for _, m := range eng.captured.Mounts {
-		if m.Target == sshKnownHostsTarget {
-			foundKnownHosts = true
-			if !m.ReadOnly {
-				t.Error("ssh_known_hosts mount should be ReadOnly")
-			}
-		}
-		if m.Target == sshConfigTarget {
-			foundSSHConfig = true
-			if !m.ReadOnly {
-				t.Error("strike_config mount should be ReadOnly")
+	// Verify SSH trust volume in TrustVolumes (not bind mounts).
+	var foundSSHVolume bool
+	for _, v := range eng.captured.TrustVolumes {
+		if v.Dest == sshTrustVolumeDest {
+			foundSSHVolume = true
+			if v.Name != "strike-ssh-test-step-12345" {
+				t.Errorf("SSH trust volume name = %q, want strike-ssh-test-step-12345", v.Name)
 			}
 		}
 	}
-	if !foundKnownHosts {
-		t.Error("expected mount with Target=/etc/ssh/ssh_known_hosts")
-	}
-	if !foundSSHConfig {
-		t.Error("expected mount with Target=/etc/ssh/strike_config")
+	if !foundSSHVolume {
+		t.Error("expected TrustVolume with Dest=/etc/ssh")
 	}
 
-	// Verify GIT_SSH_COMMAND
-	got, ok := eng.captured.Env["GIT_SSH_COMMAND"]
-	if !ok {
-		t.Fatal("expected GIT_SSH_COMMAND in env")
+	// No bind mounts for known_hosts or ssh_config.
+	for _, m := range eng.captured.Mounts {
+		if m.Target == "/etc/ssh/ssh_known_hosts" {
+			t.Error("unexpected known_hosts bind mount; should be delivered via trust volume")
+		}
+		if m.Target == "/etc/ssh/ssh_config" || m.Target == "/etc/ssh/strike_config" {
+			t.Error("unexpected ssh_config bind mount; should be delivered via trust volume")
+		}
 	}
-	if got != wantGitSSHCommand {
-		t.Errorf("GIT_SSH_COMMAND =\n  %q\nwant:\n  %q", got, wantGitSSHCommand)
+
+	// GIT_SSH_COMMAND should not contain -F (system-wide config via volume).
+	if cmd, ok := eng.captured.Env["GIT_SSH_COMMAND"]; ok {
+		if strings.Contains(cmd, "-F") {
+			t.Errorf("GIT_SSH_COMMAND should not contain -F: %q", cmd)
+		}
 	}
 }
 
@@ -192,11 +190,13 @@ func TestExecute_WithoutSSHPeer(t *testing.T) {
 	}
 
 	for _, m := range eng.captured.Mounts {
-		if m.Target == sshKnownHostsTarget {
-			t.Error("unexpected ssh_known_hosts mount when no SSH peer")
-		}
 		if m.Target == containerAgentTarget {
 			t.Error("unexpected agent mount when no SSH peer")
+		}
+	}
+	for _, v := range eng.captured.TrustVolumes {
+		if v.Dest == sshTrustVolumeDest {
+			t.Error("unexpected SSH trust volume when no SSH peer")
 		}
 	}
 
@@ -216,10 +216,11 @@ func TestRunExecute_SSHAgentProxy_SpecGenerator(t *testing.T) {
 	caps, caPath := specgenTestCapsule(t)
 
 	r := executor.Run{
-		Engine:   eng,
-		Capsule:  caps,
-		CAVolume: caPath,
-		Secrets:  nil,
+		Engine:    eng,
+		Capsule:   caps,
+		CAVolume:  caPath,
+		SSHVolume: "strike-ssh-test-step-99999",
+		Secrets:   nil,
 		Step: &lane.Step{
 			Name:  "test-step",
 			Image: lane.Ptr(lane.ImageRef("alpine:latest")),
@@ -241,36 +242,29 @@ func TestRunExecute_SSHAgentProxy_SpecGenerator(t *testing.T) {
 		t.Fatalf("Execute: %v", err)
 	}
 
-	// Verify both mounts present.
-	var foundKnownHosts, foundAgent bool
+	// Verify agent socket bind-mount is present.
+	var foundAgent bool
 	for _, m := range eng.captured.Mounts {
-		switch m.Target {
-		case sshKnownHostsTarget:
-			foundKnownHosts = true
-			if !m.ReadOnly {
-				t.Error("known_hosts mount should be ReadOnly")
-			}
-		case containerAgentTarget:
+		if m.Target == containerAgentTarget {
 			foundAgent = true
 			if m.ReadOnly {
 				t.Error("agent mount should be read-write")
 			}
 		}
 	}
-	if !foundKnownHosts {
-		t.Error("missing known_hosts mount")
-	}
 	if !foundAgent {
 		t.Error("missing agent socket mount")
 	}
 
-	// Verify GIT_SSH_COMMAND includes BatchMode=yes.
-	gitCmd, ok := eng.captured.Env["GIT_SSH_COMMAND"]
-	if !ok {
-		t.Fatal("expected GIT_SSH_COMMAND in env")
+	// Verify SSH trust volume (not bind mount).
+	var foundSSHVolume bool
+	for _, v := range eng.captured.TrustVolumes {
+		if v.Dest == sshTrustVolumeDest {
+			foundSSHVolume = true
+		}
 	}
-	if !strings.Contains(gitCmd, "-o BatchMode=yes") {
-		t.Errorf("GIT_SSH_COMMAND missing BatchMode=yes: %q", gitCmd)
+	if !foundSSHVolume {
+		t.Error("missing SSH trust volume at /etc/ssh")
 	}
 
 	// Verify SSH_AUTH_SOCK.

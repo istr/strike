@@ -632,13 +632,17 @@ func (d *Deployer) executeCustomDeploy(ctx context.Context, m lane.DeployCustom,
 	return nil
 }
 
-// setupSSHEnv configures SSH peer forwarding and agent proxy for a
-// container unit, returning the mounts and merged environment.
+// setupSSHEnv configures SSH agent proxy for a deploy container unit,
+// returning the mounts and merged environment. SSH trust material
+// (known_hosts, ssh_config) delivery via volumes is not yet implemented
+// for the deploy path; deploy units with SSH peers are rejected until
+// the ADR-038 front lands the additional protocols (scp, sftp, rsync
+// over SSH) the deploy path requires.
 func setupSSHEnv(ctx context.Context, peers []lane.Peer, scratchDir string) ([]container.Mount, map[string]string, error) {
-	sshContainerPorts := executor.SSHContainerPorts(peers)
-	sshMounts, sshEnv, err := executor.ConfigureSSHPeers(peers, scratchDir, sshContainerPorts)
-	if err != nil {
-		return nil, nil, fmt.Errorf("ssh peer setup: %w", err)
+	for _, p := range peers {
+		if _, ok := p.(lane.SSHPeer); ok {
+			return nil, nil, fmt.Errorf("deploy SSH peers not yet implemented (ADR-038 roadmap)")
+		}
 	}
 
 	agentMount, agentEnv, err := executor.StartAgentProxy(ctx, peers, scratchDir)
@@ -647,15 +651,11 @@ func setupSSHEnv(ctx context.Context, peers []lane.Peer, scratchDir string) ([]c
 	}
 
 	var mounts []container.Mount
-	mounts = append(mounts, sshMounts...)
 	if agentMount != nil {
 		mounts = append(mounts, *agentMount)
 	}
 
-	env := make(map[string]string, len(sshEnv)+len(agentEnv))
-	for k, v := range sshEnv {
-		env[k] = v
-	}
+	env := make(map[string]string, len(agentEnv))
 	for k, v := range agentEnv {
 		env[k] = v
 	}

@@ -60,7 +60,7 @@ type runContext struct {
 	networkRecords map[string]capsule.Records   // step name -> records
 	laneRoot       *os.Root
 	rekor          *executor.RekorClient // optional Rekor transparency log client
-	caVolume       string                // lane-wide CA volume name
+	trust          trustVolumes
 	laneDir        string
 	resolverID     transport.ConnectionIdentity
 }
@@ -144,7 +144,7 @@ func (rc *runContext) executeDeploy(ctx context.Context, step *lane.Step, stepNa
 		LaneID:       rc.lane.LaneID,
 		CA:           rc.ca,
 		UpstreamLook: rc.upstreamLook,
-		CAVolume:     rc.caVolume,
+		CAVolume:     rc.trust.ca,
 		StepName:     stepName,
 		StepPorts:    rc.stepPorts,
 	}
@@ -480,7 +480,8 @@ func (rc *runContext) executeContainerStep(ctx context.Context, step *lane.Step,
 		Secrets:      secrets,
 		ImageRef:     rc.state.imageFromTags[stepName],
 		Capsule:      caps,
-		CAVolume:     rc.caVolume,
+		CAVolume:     rc.trust.ca,
+		SSHVolume:    rc.trust.ssh[stepName],
 	}
 	containerID, execErr := run.Execute(ctx)
 	if containerID != "" {
@@ -802,32 +803,87 @@ func (rc *runContext) createWorkdirVolume(ctx context.Context, step *lane.Step, 
 	return volName, nil
 }
 
-// populateCAVolume creates a lane-wide named volume and seeds the
-// ephemeral CA PEM into it as ca-certificates.crt, so it can be mounted
-// read-only at /etc/ssl/certs on every mediated container (masking the
-// base image's system CA bundle; ADR-028 D18). The volume is populated
-// via SeedVolumes (a throwaway helper container, never started).
-func (rc *runContext) populateCAVolume(ctx context.Context, caPEM []byte) (string, error) {
-	name := fmt.Sprintf("strike-ca-%s-%d", rc.lane.LaneID, clock.Wall().UnixNano())
-	if err := rc.engine.VolumeCreate(ctx, name); err != nil {
-		return "", fmt.Errorf("ca volume create: %w", err)
-	}
-	tarBuf, err := singleFileTar("ca-certificates.crt", caPEM, 0o644)
+// trustVolumes is the planned set of trust volumes for the lane: one CA
+// volume (lane-wide) and one SSH volume per step with SSH peers (keyed
+// by step name). All are created and seeded in one SeedVolumes batch
+// before the step loop runs.
+type trustVolumes struct {
+	ssh map[string]string // step name -> ssh trust volume name; nil when no step needs SSH
+	ca  string
+}
+
+// planTrustVolumes creates and populates the lane-wide CA trust volume
+// plus one per-step SSH trust volume for every step with SSH peers. All
+// volumes are filled in a single SeedVolumes batch (one throwaway helper
+// container, N archive-PUTs) before the step loop runs. Returns the set
+// of named volumes the orchestrator owns; the caller removes them at
+// lane end.
+func (rc *runContext) planTrustVolumes(ctx context.Context, caPEM []byte) (trustVolumes, error) {
+	tv := trustVolumes{ssh: map[string]string{}}
+
+	// CA (lane-wide).
+	tv.ca = fmt.Sprintf("strike-ca-%s-%d", rc.lane.LaneID, clock.Wall().UnixNano())
+	caTar, err := singleFileTar("ca-certificates.crt", caPEM, 0o644)
 	if err != nil {
-		if rmErr := rc.engine.VolumeRemove(ctx, name); rmErr != nil {
-			log.Printf("WARN   ca volume cleanup: %v", rmErr)
-		}
-		return "", fmt.Errorf("ca volume tar: %w", err)
+		return trustVolumes{}, fmt.Errorf("ca volume tar: %w", err)
 	}
-	if seedErr := rc.engine.SeedVolumes(ctx, []container.VolumeSeed{
-		{Volume: name, Tar: bytes.NewReader(tarBuf)},
-	}); seedErr != nil {
-		if rmErr := rc.engine.VolumeRemove(ctx, name); rmErr != nil {
-			log.Printf("WARN   ca volume cleanup: %v", rmErr)
-		}
-		return "", fmt.Errorf("ca volume seed: %w", seedErr)
+	seeds := []container.VolumeSeed{
+		{Volume: tv.ca, Tar: bytes.NewReader(caTar)},
 	}
-	return name, nil
+	volumeNames := []string{tv.ca}
+
+	// SSH (one per step with SSH peers). The per-peer container-port
+	// mapping is computed the same way the run path used to compute it
+	// (executor.SSHContainerPorts), so the ssh_config bytes are
+	// identical to the pre-volume world.
+	for i := range rc.lane.Steps {
+		step := &rc.lane.Steps[i]
+		ports := executor.SSHContainerPorts(step.Peers)
+		kh, cfg := executor.SSHTrustContent(step.Peers, ports)
+		if kh == nil {
+			continue
+		}
+		name := fmt.Sprintf("strike-ssh-%s-%d", sanitizeForLog(string(step.Name)), clock.Wall().UnixNano())
+		sshTar, tarErr := executor.SSHTrustTar(kh, cfg)
+		if tarErr != nil {
+			return trustVolumes{}, fmt.Errorf("ssh volume tar for %s: %w", step.Name, tarErr)
+		}
+		tv.ssh[string(step.Name)] = name
+		seeds = append(seeds, container.VolumeSeed{
+			Volume: name, Tar: bytes.NewReader(sshTar),
+		})
+		volumeNames = append(volumeNames, name)
+	}
+
+	// Create all volumes before seeding (SeedVolumes assumes they exist).
+	for _, n := range volumeNames {
+		if err := rc.engine.VolumeCreate(ctx, n); err != nil {
+			rc.removeTrustVolumes(ctx, tv)
+			return trustVolumes{}, fmt.Errorf("trust volume create %s: %w", n, err)
+		}
+	}
+
+	// Seed them all in one batch.
+	if err := rc.engine.SeedVolumes(ctx, seeds); err != nil {
+		rc.removeTrustVolumes(ctx, tv)
+		return trustVolumes{}, fmt.Errorf("trust volume seed: %w", err)
+	}
+	return tv, nil
+}
+
+// removeTrustVolumes best-effort removes every volume in tv. Errors are
+// logged but not returned; cleanup is advisory.
+func (rc *runContext) removeTrustVolumes(ctx context.Context, tv trustVolumes) {
+	if tv.ca != "" {
+		if err := rc.engine.VolumeRemove(ctx, tv.ca); err != nil {
+			log.Printf("WARN   remove ca volume: %v", err)
+		}
+	}
+	for stepName, n := range tv.ssh {
+		if err := rc.engine.VolumeRemove(ctx, n); err != nil {
+			log.Printf("WARN   remove ssh volume for %s: %v", stepName, err)
+		}
+	}
 }
 
 // singleFileTar builds a minimal tar archive containing one regular file.

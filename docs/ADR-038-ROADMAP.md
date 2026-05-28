@@ -1,14 +1,21 @@
 # ADR-038 Implementation Roadmap
 
-## Status: NOT IMPLEMENTED
+## Status: PARTIAL
 
-ADR-038 is accepted but no implementation work has started. The current
-codebase still runs the ADR-024/025/033 mechanisms that ADR-038 supersedes:
+ADR-038 is accepted. Pre-front trust-material delivery is in progress;
+the front itself is not yet implemented. The current codebase runs a mix
+of superseded and partially migrated mechanisms:
 
-- `internal/executor/sshagent.go` -- ADR-025 agent socket forwarding (active)
+- `internal/executor/sshagent.go` -- ADR-025 agent socket forwarding (active;
+  removal is roadmap item 6)
 - `internal/capsule/sshforward.go` -- ADR-033 raw TCP splice forwarding (active)
-- `internal/executor/sshknownhosts.go` -- ADR-024 container-mounted known_hosts
-  and per-peer Port-directive ssh_config (active)
+- `internal/executor/sshknownhosts.go` -- per-step SSH trust content production
+  (`SSHTrustContent`, `SSHTrustTar`); bind-mount delivery removed for the run
+  path, replaced by read-only named volumes masking `/etc/ssh`
+- `cmd/strike/run.go` -- `planTrustVolumes` creates and seeds the lane-wide CA
+  volume and per-step SSH volumes in one `SeedVolumes` batch after `lane.Build`
+- Deploy path: SSH peers rejected with a not-implemented error until the
+  ADR-038 front lands the additional protocols the deploy path requires
 
 ## What needs to be implemented
 
@@ -58,6 +65,14 @@ host key). The real peer's known_hosts is validated by the front upstream,
 not mounted into the container. `GIT_SSH_COMMAND` replaced by system-wide
 ssh_config injection.
 
+**Partial (run path):** Per-step SSH trust volumes deliver `ssh_known_hosts`
+and `ssh_config` at `/etc/ssh` via read-only named volumes. The `-F`
+override in `GIT_SSH_COMMAND` is removed; the SSH client reads
+system-wide config. `ConfigureSSHPeers` bind-mount path is deleted for
+the run path; replaced by `SSHTrustContent` + `SSHTrustTar` (content
+only, no disk I/O). `planTrustVolumes` batches CA + SSH volumes in a
+single `SeedVolumes` call. Deploy path deferred (SSH peers rejected).
+
 ### 8. DoT resolver and TLS mediator rehosting onto the front
 
 The resolver and TLS mediator lift from per-step capsule listeners to the
@@ -78,6 +93,8 @@ Populates `engine_dependent` in the attestation predicate.
 Per `HANDOVER-ssh-egress-redesign.md`:
 
 1. Predicate hardening (ADR-037) -- **DONE** (Instruction 44)
+1b. Per-step SSH trust volumes; batch with CA before step loop --
+    **DONE** (Instruction 60, run path only; deploy path deferred)
 2. `STRIKE_PEER` token + front dispatch table; drop per-peer SSH port
    allocation
 3. Front termination (run-level host key/CA) + capsule context refactor
