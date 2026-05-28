@@ -1,6 +1,8 @@
 package container
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -69,5 +71,65 @@ func TestBuildSpecGenerator_NamedVolume(t *testing.T) {
 	}
 	if v.Dest != "/out/build" {
 		t.Errorf("volume Dest = %q, want /out/build", v.Dest)
+	}
+}
+
+func TestBuildSpecGenerator_ImageVolumes(t *testing.T) {
+	opts := DefaultSecureOpts()
+	opts.Image = "img"
+	opts.ImageVolumes = []ImageVolume{
+		{
+			Source:      "localhost/strike/lane/src:abc123",
+			Destination: "/out/packages",
+			SubPath:     "packages",
+			ReadWrite:   false,
+		},
+	}
+
+	spec := buildSpecGenerator(opts)
+	if len(spec.ImageVolumes) != 1 {
+		t.Fatalf("ImageVolumes len = %d, want 1", len(spec.ImageVolumes))
+	}
+	iv := spec.ImageVolumes[0]
+	if iv.Source != "localhost/strike/lane/src:abc123" {
+		t.Errorf("Source = %q", iv.Source)
+	}
+	if iv.Destination != "/out/packages" {
+		t.Errorf("Destination = %q", iv.Destination)
+	}
+	if iv.SubPath != "packages" {
+		t.Errorf("SubPath = %q", iv.SubPath)
+	}
+	if iv.ReadWrite {
+		t.Error("ReadWrite = true, want false")
+	}
+
+	b, err := json.Marshal(spec)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	wire := string(b)
+	for _, want := range []string{
+		`"image_volumes"`,
+		`"Source":"localhost/strike/lane/src:abc123"`,
+		`"Destination":"/out/packages"`,
+		`"SubPath":"packages"`,
+		`"ReadWrite":false`,
+	} {
+		if !strings.Contains(wire, want) {
+			t.Errorf("wire missing %s\ngot: %s", want, wire)
+		}
+	}
+}
+
+func TestBuildSpecGenerator_NoImageVolumes(t *testing.T) {
+	opts := DefaultSecureOpts()
+	opts.Image = "img"
+	b, err := json.Marshal(buildSpecGenerator(opts))
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if strings.Contains(string(b), "image_volumes") {
+		t.Error("image_volumes present when none set (omitempty broken)")
 	}
 }

@@ -708,6 +708,7 @@ type specGen struct {
 	Entrypoint         []string            `json:"entrypoint,omitempty"`
 	Mounts             []specMount         `json:"mounts,omitempty"`
 	Volumes            []specNamedVolume   `json:"volumes,omitempty"`
+	ImageVolumes       []specImageVolume   `json:"image_volumes,omitempty"`
 	DNSServer          []string            `json:"dns_server,omitempty"`
 	CapDrop            []string            `json:"cap_drop,omitempty"`
 	SecurityOpt        []string            `json:"security_opt,omitempty"`
@@ -744,6 +745,20 @@ type specNamedVolume struct {
 	Options []string `json:"Options,omitempty"`
 }
 
+// specImageVolume is one entry of the SpecGenerator "image_volumes" array,
+// the podman ImageVolume struct (PascalCase keys). ReadWrite is emitted
+// without omitempty so a read-only input cannot be silently promoted to
+// writable by a dropped false; SubPath is optional (empty selects the
+// image content root).
+// VERIFY AGAINST LIVE ENGINE -- confirmed podman 5.4.2: a read-only entry
+// is {Source, Destination, ReadWrite, SubPath}; SubPath is directory-only.
+type specImageVolume struct {
+	Source      string `json:"Source"`
+	Destination string `json:"Destination"`
+	SubPath     string `json:"SubPath,omitempty"`
+	ReadWrite   bool   `json:"ReadWrite"`
+}
+
 // buildSpecGenerator constructs the libpod SpecGenerator wire payload from
 // RunOpts. Empty/zero fields are dropped by the omitempty tags on specGen;
 // the only branches that remain are the ones that must avoid a nil
@@ -767,6 +782,12 @@ func buildSpecGenerator(opts RunOpts) specGen {
 	// Named volume (the engine-managed writable workdir surface).
 	if opts.Volume != nil {
 		spec.Volumes = buildVolumes(opts)
+	}
+
+	// Read-only image volumes (engine-native inputs mounted outside the
+	// workdir, ADR-036). Each references a producer image tag as Source.
+	if len(opts.ImageVolumes) > 0 {
+		spec.ImageVolumes = buildImageVolumes(opts)
 	}
 
 	// Network
@@ -824,6 +845,18 @@ func buildVolumes(opts RunOpts) []specNamedVolume {
 		entry.Options = v.Options
 	}
 	return []specNamedVolume{entry}
+}
+
+// buildImageVolumes maps the read-only image-volume inputs into the libpod
+// SpecGenerator "image_volumes" array. ReadWrite is copied through (always
+// false for input delivery) and emitted explicitly, so an input can never
+// be silently writable.
+func buildImageVolumes(opts RunOpts) []specImageVolume {
+	out := make([]specImageVolume, len(opts.ImageVolumes))
+	for i, iv := range opts.ImageVolumes {
+		out[i] = specImageVolume(iv)
+	}
+	return out
 }
 
 // demuxLogStream reads the Docker/libpod multiplexed log stream.

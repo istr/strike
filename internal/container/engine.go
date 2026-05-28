@@ -96,25 +96,26 @@ type ImageInfo struct {
 
 // RunOpts configures a container execution.
 type RunOpts struct {
-	Stdin       io.Reader
-	Stderr      io.Writer
-	Stdout      io.Writer
-	Env         map[string]string
-	Tmpfs       map[string]string
-	Image       string
-	Network     string
-	UsernsMode  string
-	Workdir     string
-	Mounts      []Mount
-	Volume      *VolumeMount
-	SecurityOpt []string
-	CapDrop     []string
-	Cmd         []string
-	Entrypoint  []string
-	PastaArgs   []string // pasta options when Network == "pasta"
-	DNSServers  []string // resolv.conf nameservers in the container
-	ReadOnly    bool
-	Remove      bool
+	Stdin        io.Reader
+	Stderr       io.Writer
+	Stdout       io.Writer
+	Env          map[string]string
+	Tmpfs        map[string]string
+	Image        string
+	Network      string
+	UsernsMode   string
+	Workdir      string
+	Mounts       []Mount
+	ImageVolumes []ImageVolume
+	Volume       *VolumeMount
+	SecurityOpt  []string
+	CapDrop      []string
+	Cmd          []string
+	Entrypoint   []string
+	PastaArgs    []string // pasta options when Network == "pasta"
+	DNSServers   []string // resolv.conf nameservers in the container
+	ReadOnly     bool
+	Remove       bool
 }
 
 // Mount describes a bind mount.
@@ -144,6 +145,22 @@ type VolumeMount struct {
 	Name    string
 	Dest    string
 	Options []string
+}
+
+// ImageVolume describes a read-only mount whose source is an existing
+// engine image rather than a host path or a named volume. Source is the
+// producer image tag (a local WrapTag); Destination is the mount path in
+// the container; SubPath selects a directory within the image content
+// (directory-granular -- a SubPath resolving to a regular file is rejected
+// by the OCI runtime at start, so callers reject single-file selections
+// before constructing one). ReadWrite is carried explicitly and stays
+// false for input delivery: an input must never be silently writable
+// (ADR-036 outside-workdir delivery).
+type ImageVolume struct {
+	Source      string
+	Destination string
+	SubPath     string
+	ReadWrite   bool
 }
 
 // DefaultSecureOpts returns a RunOpts with the standard hardened security
