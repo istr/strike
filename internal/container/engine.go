@@ -65,6 +65,13 @@ type Engine interface {
 	// VolumeCreate creates a named engine-managed volume.
 	VolumeCreate(ctx context.Context, name string) error
 
+	// SeedVolumes populates one or more named volumes in a single batch.
+	// Internally creates a throwaway helper container (never started) with
+	// all volumes mounted, PUTs each tar via the container archive endpoint,
+	// then removes the helper. The volumes must already exist. A minimal
+	// scratch image is imported on first call and reused thereafter.
+	SeedVolumes(ctx context.Context, seeds []VolumeSeed) error
+
 	// VolumeRemove removes a named engine-managed volume.
 	VolumeRemove(ctx context.Context, name string) error
 
@@ -107,6 +114,7 @@ type RunOpts struct {
 	Workdir      string
 	Mounts       []Mount
 	ImageVolumes []ImageVolume
+	TrustVolumes []VolumeMount
 	Volume       *VolumeMount
 	SecurityOpt  []string
 	CapDrop      []string
@@ -135,6 +143,13 @@ type Mount struct {
 type Seed struct {
 	Tar  io.Reader
 	Path string
+}
+
+// VolumeSeed pairs a named volume with a tar stream to extract into it.
+// Used by SeedVolumes to batch-populate volumes before any step runs.
+type VolumeSeed struct {
+	Tar    io.Reader
+	Volume string
 }
 
 // VolumeMount describes the named engine-managed volume mounted into the

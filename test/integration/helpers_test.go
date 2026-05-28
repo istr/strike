@@ -32,7 +32,7 @@ import (
 // integrationCapsuleFields returns capsule-related Deployer fields for
 // integration tests. portKeys lists every StepPorts key the test's step
 // will look up.
-func integrationCapsuleFields(t *testing.T, portKeys ...string) (ca *transport.EphemeralCA, look capsule.UpstreamLookupFunc, caPath string, ports map[string]capsule.HostPorts) {
+func integrationCapsuleFields(t *testing.T, portKeys ...string) (ca *transport.EphemeralCA, look capsule.UpstreamLookupFunc, caVolume string, ports map[string]capsule.HostPorts) {
 	t.Helper()
 	var err error
 	ca, err = transport.New("integration-test")
@@ -41,11 +41,7 @@ func integrationCapsuleFields(t *testing.T, portKeys ...string) (ca *transport.E
 	}
 	t.Cleanup(func() { testutil.CloseLog(t, ca, "integration CA") })
 
-	dir := t.TempDir()
-	caPath = filepath.Join(dir, "ca.pem")
-	if wErr := os.WriteFile(caPath, ca.PublicCertPEM(), 0o600); wErr != nil {
-		t.Fatalf("write CA: %v", wErr)
-	}
+	caVolume = "strike-ca-integration-test"
 
 	look = func(_ context.Context, _ string) ([]netip.Addr, error) {
 		return []netip.Addr{netip.MustParseAddr("127.0.0.1")}, nil
@@ -59,7 +55,7 @@ func integrationCapsuleFields(t *testing.T, portKeys ...string) (ca *transport.E
 			Mediator: base + uint16(i)*2 + 1,
 		}
 	}
-	return ca, look, caPath, ports
+	return ca, look, caVolume, ports
 }
 
 // Digest-pinned image references matching lane.yaml.

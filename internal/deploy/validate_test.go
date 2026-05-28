@@ -17,8 +17,8 @@ import (
 func TestValidateAttestation_Valid(t *testing.T) {
 	att := &deploy.Attestation{
 		Sealed: deploy.Sealed{
-			LaneID:    "test-lane",
-			Target:    lane.DeployTarget{ID: "prod-1", Type: "registry", Description: "production"},
+			LaneID: "test-lane",
+			Target: lane.DeployTarget{ID: "prod-1", Type: "registry", Description: "production"},
 			Artifacts: map[string]deploy.SignedArtifact{
 				"image": {Digest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
 			},

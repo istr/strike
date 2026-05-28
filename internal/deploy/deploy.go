@@ -45,14 +45,14 @@ type Attestation struct {
 
 // Sealed -- CP-bound claims, sound to any verifier without engine trust.
 type Sealed struct {
-	LaneID    string                    `json:"lane_id"`
-	Target    lane.DeployTarget         `json:"target"`
-	LaneRef   string                    `json:"lane_ref"`
 	Artifacts map[string]SignedArtifact `json:"artifacts"`
-	Resolver  *ResolverRecord           `json:"resolver,omitempty"`
 	Peers     map[string][]lane.Peer    `json:"peers"`
+	Resolver  *ResolverRecord           `json:"resolver,omitempty"`
 	Rekor     *lane.RekorEntry          `json:"rekor,omitempty"`
 	Engine    *EngineConnection         `json:"engine,omitempty"`
+	Target    lane.DeployTarget         `json:"target"`
+	LaneID    string                    `json:"lane_id"`
+	LaneRef   string                    `json:"lane_ref"`
 }
 
 // EngineDependent -- claims sound only under trust(E).
@@ -191,18 +191,15 @@ func (d *Deployer) startUnitCapsule(ctx context.Context, name string, peers []la
 }
 
 // applyCapsule sets the pasta network options and appends the CA
-// bind-mounts onto opts for a capsule-mediated deploy container.
+// trust volume onto opts for a capsule-mediated deploy container.
 func (d *Deployer) applyCapsule(opts *container.RunOpts, caps *capsule.NetworkCapsule) {
 	opts.Network = "pasta"
 	opts.PastaArgs = caps.PastaArgs()
 	opts.DNSServers = []string{caps.ResolverAddr().Addr().String()}
-	for _, target := range executor.CABundleTargets() {
-		opts.Mounts = append(opts.Mounts, container.Mount{
-			Source:   d.CABundlePath,
-			Target:   target,
-			ReadOnly: true,
-		})
-	}
+	opts.TrustVolumes = append(opts.TrustVolumes, container.VolumeMount{
+		Name: d.CAVolume,
+		Dest: "/etc/ssl/certs",
+	})
 }
 
 // captureKey is the stepPorts key for a state-capture container; it
@@ -224,7 +221,7 @@ type Deployer struct {
 	StepPorts    map[string]capsule.HostPorts // unit name -> host ports
 	LaneID       string
 	StepName     string // deploy step name; method-container port key and capture-key prefix
-	CABundlePath string // lane-wide CA PEM path on host
+	CAVolume     string // lane-wide CA volume name; mounted r/o at /etc/ssl/certs
 	SigningKey   []byte
 	KeyPassword  []byte
 }

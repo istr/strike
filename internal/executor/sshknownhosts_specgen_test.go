@@ -5,7 +5,6 @@ import (
 	"context"
 	"io"
 	"net/netip"
-	"os"
 	"strings"
 	"testing"
 
@@ -53,9 +52,10 @@ func (e *captureEngine) ContainerRunHeld(_ context.Context, opts container.RunOp
 func (e *captureEngine) ContainerArchive(_ context.Context, _, _ string) (io.ReadCloser, error) {
 	return io.NopCloser(bytes.NewReader(nil)), nil
 }
-func (e *captureEngine) ContainerRemove(_ context.Context, _ string) error { return nil }
-func (e *captureEngine) VolumeCreate(_ context.Context, _ string) error    { return nil }
-func (e *captureEngine) VolumeRemove(_ context.Context, _ string) error    { return nil }
+func (e *captureEngine) ContainerRemove(_ context.Context, _ string) error             { return nil }
+func (e *captureEngine) VolumeCreate(_ context.Context, _ string) error                { return nil }
+func (e *captureEngine) SeedVolumes(_ context.Context, _ []container.VolumeSeed) error { return nil }
+func (e *captureEngine) VolumeRemove(_ context.Context, _ string) error                { return nil }
 
 const (
 	sshKnownHostsTarget  = "/etc/ssh/ssh_known_hosts"
@@ -66,7 +66,9 @@ const (
 
 // specgenTestCapsule creates a minimal capsule for specgen tests.
 // The capsule is not Start()ed; Execute only calls PastaArgs() and
-// ResolverAddr(), which work without binding listeners.
+// ResolverAddr(), which work without binding listeners. Returns the
+// capsule and a synthetic CA volume name (the mock engine does not
+// perform real volume operations).
 func specgenTestCapsule(t *testing.T) (*capsule.NetworkCapsule, string) {
 	t.Helper()
 	ca, err := transport.New("specgen-test")
@@ -74,12 +76,6 @@ func specgenTestCapsule(t *testing.T) (*capsule.NetworkCapsule, string) {
 		t.Fatalf("transport.New: %v", err)
 	}
 	t.Cleanup(func() { testutil.CloseLog(t, ca, "specgen CA") })
-
-	dir := t.TempDir()
-	caPath := dir + "/ca.pem"
-	if wErr := os.WriteFile(caPath, ca.PublicCertPEM(), 0o600); wErr != nil {
-		t.Fatalf("write CA bundle: %v", wErr)
-	}
 
 	c, err := capsule.New("specgen", capsule.HostPorts{Resolver: 15353, Mediator: 15354},
 		nil, nil, ca,
@@ -89,7 +85,7 @@ func specgenTestCapsule(t *testing.T) (*capsule.NetworkCapsule, string) {
 	if err != nil {
 		t.Fatalf("capsule.New: %v", err)
 	}
-	return c, caPath
+	return c, "strike-ca-specgen-test"
 }
 
 // specgenFakeAgent creates a minimal echo socket for tests that need SSH_AUTH_SOCK.
@@ -106,10 +102,10 @@ func TestExecute_WithSSHPeer(t *testing.T) {
 	caps, caPath := specgenTestCapsule(t)
 
 	r := executor.Run{
-		Engine:       eng,
-		Capsule:      caps,
-		CABundlePath: caPath,
-		Secrets:      nil,
+		Engine:   eng,
+		Capsule:  caps,
+		CAVolume: caPath,
+		Secrets:  nil,
 		Step: &lane.Step{
 			Name:  "test-step",
 			Image: lane.Ptr(lane.ImageRef("alpine:latest")),
@@ -169,10 +165,10 @@ func TestExecute_WithoutSSHPeer(t *testing.T) {
 	caps, caPath := specgenTestCapsule(t)
 
 	r := executor.Run{
-		Engine:       eng,
-		Capsule:      caps,
-		CABundlePath: caPath,
-		Secrets:      nil,
+		Engine:   eng,
+		Capsule:  caps,
+		CAVolume: caPath,
+		Secrets:  nil,
 		Step: &lane.Step{
 			Name:  "test-step",
 			Image: lane.Ptr(lane.ImageRef("alpine:latest")),
@@ -220,10 +216,10 @@ func TestRunExecute_SSHAgentProxy_SpecGenerator(t *testing.T) {
 	caps, caPath := specgenTestCapsule(t)
 
 	r := executor.Run{
-		Engine:       eng,
-		Capsule:      caps,
-		CABundlePath: caPath,
-		Secrets:      nil,
+		Engine:   eng,
+		Capsule:  caps,
+		CAVolume: caPath,
+		Secrets:  nil,
 		Step: &lane.Step{
 			Name:  "test-step",
 			Image: lane.Ptr(lane.ImageRef("alpine:latest")),
@@ -327,10 +323,10 @@ func TestRunExecute_Seeds_PassedThrough(t *testing.T) {
 
 	seedTar := bytes.NewReader([]byte("seed-content"))
 	r := executor.Run{
-		Engine:       eng,
-		Capsule:      caps,
-		CABundlePath: caPath,
-		Secrets:      nil,
+		Engine:   eng,
+		Capsule:  caps,
+		CAVolume: caPath,
+		Secrets:  nil,
 		Step: &lane.Step{
 			Name:    "consumer",
 			Image:   lane.Ptr(lane.ImageRef("alpine:latest")),

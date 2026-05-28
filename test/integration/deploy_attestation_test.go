@@ -96,7 +96,7 @@ func executeDeploy(t *testing.T, engine container.Engine, keyPEM []byte, state *
 		LaneID:       "integration-test",
 		CA:           ca,
 		UpstreamLook: look,
-		CABundlePath: caPath,
+		CAVolume:     caPath,
 		StepName:     "deploy-test",
 		StepPorts:    ports,
 	}

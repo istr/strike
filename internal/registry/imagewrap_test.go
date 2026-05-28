@@ -115,9 +115,10 @@ func (e *wrapEngine) ContainerRunHeld(_ context.Context, _ container.RunOpts, _ 
 func (e *wrapEngine) ContainerArchive(_ context.Context, _, _ string) (io.ReadCloser, error) {
 	return io.NopCloser(bytes.NewReader(nil)), nil
 }
-func (e *wrapEngine) ContainerRemove(_ context.Context, _ string) error { return nil }
-func (e *wrapEngine) VolumeCreate(_ context.Context, _ string) error    { return nil }
-func (e *wrapEngine) VolumeRemove(_ context.Context, _ string) error    { return nil }
+func (e *wrapEngine) ContainerRemove(_ context.Context, _ string) error             { return nil }
+func (e *wrapEngine) VolumeCreate(_ context.Context, _ string) error                { return nil }
+func (e *wrapEngine) SeedVolumes(_ context.Context, _ []container.VolumeSeed) error { return nil }
+func (e *wrapEngine) VolumeRemove(_ context.Context, _ string) error                { return nil }
 
 func TestWrapImageOutputAsImage_LoadsExistingTar(t *testing.T) {
 	// Build a minimal valid OCI image tar via regtest, then use it as input

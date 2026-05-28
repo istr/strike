@@ -1,6 +1,7 @@
 package main
 
 import (
+	"archive/tar"
 	"bytes"
 	"context"
 	"errors"
@@ -59,7 +60,7 @@ type runContext struct {
 	networkRecords map[string]capsule.Records   // step name -> records
 	laneRoot       *os.Root
 	rekor          *executor.RekorClient // optional Rekor transparency log client
-	caBundlePath   string                // lane-wide CA PEM path on host
+	caVolume       string                // lane-wide CA volume name
 	laneDir        string
 	resolverID     transport.ConnectionIdentity
 }
@@ -143,7 +144,7 @@ func (rc *runContext) executeDeploy(ctx context.Context, step *lane.Step, stepNa
 		LaneID:       rc.lane.LaneID,
 		CA:           rc.ca,
 		UpstreamLook: rc.upstreamLook,
-		CABundlePath: rc.caBundlePath,
+		CAVolume:     rc.caVolume,
 		StepName:     stepName,
 		StepPorts:    rc.stepPorts,
 	}
@@ -479,7 +480,7 @@ func (rc *runContext) executeContainerStep(ctx context.Context, step *lane.Step,
 		Secrets:      secrets,
 		ImageRef:     rc.state.imageFromTags[stepName],
 		Capsule:      caps,
-		CABundlePath: rc.caBundlePath,
+		CAVolume:     rc.caVolume,
 	}
 	containerID, execErr := run.Execute(ctx)
 	if containerID != "" {
@@ -799,6 +800,55 @@ func (rc *runContext) createWorkdirVolume(ctx context.Context, step *lane.Step, 
 		return "", fmt.Errorf("%s: create workdir volume: %w", safeName, err)
 	}
 	return volName, nil
+}
+
+// populateCAVolume creates a lane-wide named volume and seeds the
+// ephemeral CA PEM into it as ca-certificates.crt, so it can be mounted
+// read-only at /etc/ssl/certs on every mediated container (masking the
+// base image's system CA bundle; ADR-028 D18). The volume is populated
+// via SeedVolumes (a throwaway helper container, never started).
+func (rc *runContext) populateCAVolume(ctx context.Context, caPEM []byte) (string, error) {
+	name := fmt.Sprintf("strike-ca-%s-%d", rc.lane.LaneID, clock.Wall().UnixNano())
+	if err := rc.engine.VolumeCreate(ctx, name); err != nil {
+		return "", fmt.Errorf("ca volume create: %w", err)
+	}
+	tarBuf, err := singleFileTar("ca-certificates.crt", caPEM, 0o644)
+	if err != nil {
+		if rmErr := rc.engine.VolumeRemove(ctx, name); rmErr != nil {
+			log.Printf("WARN   ca volume cleanup: %v", rmErr)
+		}
+		return "", fmt.Errorf("ca volume tar: %w", err)
+	}
+	if seedErr := rc.engine.SeedVolumes(ctx, []container.VolumeSeed{
+		{Volume: name, Tar: bytes.NewReader(tarBuf)},
+	}); seedErr != nil {
+		if rmErr := rc.engine.VolumeRemove(ctx, name); rmErr != nil {
+			log.Printf("WARN   ca volume cleanup: %v", rmErr)
+		}
+		return "", fmt.Errorf("ca volume seed: %w", seedErr)
+	}
+	return name, nil
+}
+
+// singleFileTar builds a minimal tar archive containing one regular file.
+func singleFileTar(name string, data []byte, mode int64) ([]byte, error) {
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+	if err := tw.WriteHeader(&tar.Header{
+		Name:     name,
+		Mode:     mode,
+		Size:     int64(len(data)),
+		Typeflag: tar.TypeReg,
+	}); err != nil {
+		return nil, err
+	}
+	if _, err := tw.Write(data); err != nil {
+		return nil, err
+	}
+	if err := tw.Close(); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
 // startCapsule constructs and starts a NetworkCapsule for one container

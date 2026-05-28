@@ -36,7 +36,7 @@ const connTypeTLS = "tls"
 // by tests that exercise captureOne or method execution. portKeys lists
 // every StepPorts key the test's step will look up (capture keys and/or
 // the step name itself).
-func deployCapsuleFields(t *testing.T, portKeys ...string) (ca *transport.EphemeralCA, look capsule.UpstreamLookupFunc, caPath string, ports map[string]capsule.HostPorts) {
+func deployCapsuleFields(t *testing.T, portKeys ...string) (ca *transport.EphemeralCA, look capsule.UpstreamLookupFunc, caVolume string, ports map[string]capsule.HostPorts) {
 	t.Helper()
 	var err error
 	ca, err = transport.New("deploy-test")
@@ -45,11 +45,7 @@ func deployCapsuleFields(t *testing.T, portKeys ...string) (ca *transport.Epheme
 	}
 	t.Cleanup(func() { testutil.CloseLog(t, ca, "deploy test CA") })
 
-	dir := t.TempDir()
-	caPath = filepath.Join(dir, "ca.pem")
-	if wErr := os.WriteFile(caPath, ca.PublicCertPEM(), 0o600); wErr != nil {
-		t.Fatalf("write CA: %v", wErr)
-	}
+	caVolume = "strike-ca-test"
 
 	look = func(_ context.Context, _ string) ([]netip.Addr, error) {
 		return []netip.Addr{netip.MustParseAddr("127.0.0.1")}, nil
@@ -63,7 +59,7 @@ func deployCapsuleFields(t *testing.T, portKeys ...string) (ca *transport.Epheme
 			Mediator: base + uint16(i)*2 + 1,
 		}
 	}
-	return ca, look, caPath, ports
+	return ca, look, caVolume, ports
 }
 
 func newTLSTestEngine(t *testing.T, handler http.Handler) container.Engine {
@@ -345,7 +341,7 @@ func TestDeployerExecute(t *testing.T) {
 		LaneID:       "test-lane",
 		CA:           ca,
 		UpstreamLook: look,
-		CABundlePath: caPath,
+		CAVolume:     caPath,
 		StepName:     "deploy-prod",
 		StepPorts:    ports,
 	}
@@ -494,7 +490,7 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 		LaneID:       "test-lane",
 		CA:           ca,
 		UpstreamLook: look,
-		CABundlePath: caPath,
+		CAVolume:     caPath,
 		StepName:     "deploy-prod",
 		StepPorts:    ports,
 	}
@@ -573,7 +569,7 @@ func TestEngineRecord_NilEngineID(t *testing.T) {
 		LaneID:       "test-lane",
 		CA:           ca,
 		UpstreamLook: look,
-		CABundlePath: caPath,
+		CAVolume:     caPath,
 		StepName:     "deploy-nil-engine",
 		StepPorts:    ports,
 	}
@@ -632,7 +628,7 @@ func TestEngineRecord_WithRuntime(t *testing.T) {
 		LaneID:       "test-lane",
 		CA:           ca,
 		UpstreamLook: look,
-		CABundlePath: caPath,
+		CAVolume:     caPath,
 		StepName:     "deploy-runtime",
 		StepPorts:    ports,
 	}
@@ -702,7 +698,7 @@ func TestEngineRecord_WithoutRuntime(t *testing.T) {
 		LaneID:       "test-lane",
 		CA:           ca,
 		UpstreamLook: look,
-		CABundlePath: caPath,
+		CAVolume:     caPath,
 		StepName:     "deploy-no-runtime",
 		StepPorts:    ports,
 	}
@@ -763,7 +759,7 @@ func TestResolverRecord_NilResolverID(t *testing.T) {
 		LaneID:       "test-lane",
 		CA:           ca,
 		UpstreamLook: look,
-		CABundlePath: caPath,
+		CAVolume:     caPath,
 		StepName:     "deploy-nil-resolver",
 		StepPorts:    ports,
 	}
@@ -817,7 +813,7 @@ func TestResolverRecord_Populated(t *testing.T) {
 		LaneID:       "test-lane",
 		CA:           ca,
 		UpstreamLook: look,
-		CABundlePath: caPath,
+		CAVolume:     caPath,
 		StepName:     "deploy-resolver",
 		StepPorts:    ports,
 	}
@@ -911,7 +907,7 @@ func TestDeployerExecute_RequiredPreStateFails(t *testing.T) {
 		LaneID:       "test-lane",
 		CA:           ca,
 		UpstreamLook: look,
-		CABundlePath: caPath,
+		CAVolume:     caPath,
 		StepName:     "deploy-fail-pre",
 		StepPorts:    ports,
 	}
@@ -958,7 +954,7 @@ func TestDeployerExecute_WithRekor(t *testing.T) {
 		LaneID:       "test-lane",
 		CA:           ca,
 		UpstreamLook: look,
-		CABundlePath: caPath,
+		CAVolume:     caPath,
 		StepName:     "deploy-prod",
 		StepPorts:    ports,
 	}
@@ -1003,7 +999,7 @@ func TestDeployerExecute_NoRekor(t *testing.T) {
 		LaneID:       "test-lane",
 		CA:           ca,
 		UpstreamLook: look,
-		CABundlePath: caPath,
+		CAVolume:     caPath,
 		StepName:     "deploy-prod",
 		StepPorts:    ports,
 	}
@@ -1053,7 +1049,7 @@ func TestDeployerExecute_RekorTransient(t *testing.T) {
 		LaneID:       "test-lane",
 		CA:           ca,
 		UpstreamLook: look,
-		CABundlePath: caPath,
+		CAVolume:     caPath,
 		StepName:     "deploy-prod",
 		StepPorts:    ports,
 	}
@@ -1101,7 +1097,7 @@ func TestDeployerExecute_RekorSignedContentNoRekorField(t *testing.T) {
 		LaneID:       "test-lane",
 		CA:           ca,
 		UpstreamLook: look,
-		CABundlePath: caPath,
+		CAVolume:     caPath,
 		StepName:     "deploy-prod",
 		StepPorts:    ports,
 	}

@@ -35,9 +35,10 @@ func (s *stubEngine) ContainerRunHeld(_ context.Context, _ container.RunOpts, _ 
 func (s *stubEngine) ContainerArchive(_ context.Context, _, _ string) (io.ReadCloser, error) {
 	return io.NopCloser(bytes.NewReader(nil)), nil
 }
-func (s *stubEngine) ContainerRemove(_ context.Context, _ string) error { return nil }
-func (s *stubEngine) VolumeCreate(_ context.Context, _ string) error    { return nil }
-func (s *stubEngine) VolumeRemove(_ context.Context, _ string) error    { return nil }
+func (s *stubEngine) ContainerRemove(_ context.Context, _ string) error             { return nil }
+func (s *stubEngine) VolumeCreate(_ context.Context, _ string) error                { return nil }
+func (s *stubEngine) SeedVolumes(_ context.Context, _ []container.VolumeSeed) error { return nil }
+func (s *stubEngine) VolumeRemove(_ context.Context, _ string) error                { return nil }
 
 func TestRequireVersion_NilIdentity(t *testing.T) {
 	e := &stubEngine{identity: nil}

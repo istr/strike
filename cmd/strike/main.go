@@ -240,7 +240,7 @@ func cmdRun(ctx context.Context, path string, engine container.Engine) {
 		log.Fatalf("error: %v", err)
 	}
 
-	ca, caBundlePath, caCleanup := initLaneCA(p)
+	ca, caCleanup := initLaneCA(p)
 	defer caCleanup()
 
 	stepPorts := allocateMediatedPorts(p)
@@ -266,8 +266,18 @@ func cmdRun(ctx context.Context, path string, engine container.Engine) {
 		rekor:          initRekor(),
 		resolverID:     resolverID,
 		laneDir:        laneDir,
-		caBundlePath:   caBundlePath,
 	}
+
+	caVolume, caVolErr := rc.populateCAVolume(ctx, ca.PublicCertPEM())
+	if caVolErr != nil {
+		log.Fatalf("error: %v", caVolErr)
+	}
+	defer func() {
+		if rmErr := rc.engine.VolumeRemove(ctx, caVolume); rmErr != nil {
+			log.Printf("WARN   remove ca volume: %v", rmErr)
+		}
+	}()
+	rc.caVolume = caVolume
 	for _, stepName := range dag.Order {
 		if stepErr := rc.runStep(stepName); stepErr != nil {
 			log.Fatalf("error: %v", stepErr)
@@ -282,31 +292,14 @@ func cmdRun(ctx context.Context, path string, engine container.Engine) {
 	log.Printf("STATE  %s", stateJSON)
 }
 
-// initLaneCA creates the lane-wide ephemeral CA and writes its
-// public PEM to a temp directory. The returned cleanup function
-// closes the CA and removes the temp directory.
-func initLaneCA(p *lane.Lane) (*transport.EphemeralCA, string, func()) {
+// initLaneCA creates the lane-wide ephemeral CA. The returned cleanup
+// function closes the CA.
+func initLaneCA(p *lane.Lane) (*transport.EphemeralCA, func()) {
 	ca, caErr := transport.New(string(p.LaneID))
 	if caErr != nil {
 		log.Fatalf("error: ephemeral CA: %v", caErr)
 	}
-
-	caBundleDir, mkErr := os.MkdirTemp("", "strike-lane-"+string(p.LaneID)+"-")
-	if mkErr != nil {
-		log.Fatalf("error: ca temp dir: %v", mkErr)
-	}
-
-	cleanDir := filepath.Clean(caBundleDir)
-	caBundlePath := filepath.Join(cleanDir, "ca.pem")
-	if writeErr := os.WriteFile(caBundlePath, ca.PublicCertPEM(), 0o600); writeErr != nil { // #nosec G703 -- caBundleDir from os.MkdirTemp, no user input
-		log.Fatalf("error: write ca pem: %v", writeErr)
-	}
-
-	cleanup := func() {
-		closer.Warn(ca, "ephemeral CA")
-		closer.Remove(cleanDir, "ca temp dir")
-	}
-	return ca, caBundlePath, cleanup
+	return ca, func() { closer.Warn(ca, "ephemeral CA") }
 }
 
 // allocateMediatedPorts pre-allocates a host-port block for every

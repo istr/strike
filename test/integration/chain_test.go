@@ -133,7 +133,7 @@ func chainDeploy(
 		LaneID:       "e2e-chain",
 		CA:           ca,
 		UpstreamLook: look,
-		CABundlePath: caPath,
+		CAVolume:     caPath,
 		StepName:     "deploy-e2e",
 		StepPorts:    ports,
 	}

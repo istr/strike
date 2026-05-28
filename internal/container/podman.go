@@ -1,6 +1,7 @@
 package container
 
 import (
+	"archive/tar"
 	"bytes"
 	"context"
 	"crypto/tls"
@@ -661,6 +662,145 @@ func (e *podmanEngine) VolumeCreate(ctx context.Context, name string) error {
 	return nil
 }
 
+// seedScratchRef is the local tag for the minimal scratch image used by
+// SeedVolumes as the helper container's base. Imported once (empty tar)
+// and reused for all subsequent seed operations.
+const seedScratchRef = "localhost/strike-seed-scratch:latest"
+
+// ensureSeedImage imports a minimal scratch image if it does not already
+// exist. The image is an empty tar (1024 null bytes); the container
+// created from it is never started — it only serves as a mount carrier
+// for the archive PUT that populates volumes.
+func (e *podmanEngine) ensureSeedImage(ctx context.Context) error {
+	ok, err := e.ImageExists(ctx, seedScratchRef)
+	if err != nil {
+		return fmt.Errorf("seed image check: %w", err)
+	}
+	if ok {
+		return nil
+	}
+	t, tErr := emptyTar()
+	if tErr != nil {
+		return fmt.Errorf("seed scratch tar: %w", tErr)
+	}
+	return e.imageImport(ctx, t, seedScratchRef)
+}
+
+// emptyTar returns a valid empty tar archive (two 512-byte zero blocks).
+func emptyTar() (io.Reader, error) {
+	var buf bytes.Buffer
+	if err := tar.NewWriter(&buf).Close(); err != nil {
+		return nil, err
+	}
+	return &buf, nil
+}
+
+// imageImport imports a tar stream as an image with the given reference.
+func (e *podmanEngine) imageImport(ctx context.Context, tarStream io.Reader, ref string) error {
+	u := e.base + "/images/import?reference=" + url.QueryEscape(ref)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, tarStream)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/x-tar")
+	resp, err := e.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("image import %s: %w", ref, err)
+	}
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			log.Printf("WARN close response body: %v", closeErr)
+		}
+	}()
+	if resp.StatusCode != http.StatusOK {
+		b, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			return fmt.Errorf("image import %s: status %d: (body read failed)", ref, resp.StatusCode)
+		}
+		return fmt.Errorf("image import %s: status %d: %s", ref, resp.StatusCode, b)
+	}
+	return nil
+}
+
+// SeedVolumes populates one or more named volumes in a single batch.
+// A throwaway helper container mounts all volumes at /seed/0../seed/N;
+// each tar is extracted via archive PUT. The helper is never started and
+// removed after all PUTs complete. Volumes must already exist.
+func (e *podmanEngine) SeedVolumes(ctx context.Context, seeds []VolumeSeed) error {
+	if len(seeds) == 0 {
+		return nil
+	}
+	if err := e.ensureSeedImage(ctx); err != nil {
+		return err
+	}
+
+	vols := make([]specNamedVolume, len(seeds))
+	dests := make([]string, len(seeds))
+	for i, sd := range seeds {
+		dests[i] = fmt.Sprintf("/seed/%d", i)
+		vols[i] = specNamedVolume{Name: sd.Volume, Dest: dests[i]}
+	}
+
+	id, createErr := e.seedContainerCreate(ctx, vols)
+	if createErr != nil {
+		return fmt.Errorf("seed helper create: %w", createErr)
+	}
+	defer func() {
+		if rmErr := e.containerRemove(ctx, id); rmErr != nil {
+			log.Printf("WARN seed helper remove: %v", rmErr)
+		}
+	}()
+
+	for i, sd := range seeds {
+		if err := e.containerArchivePut(ctx, id, dests[i], sd.Tar); err != nil {
+			return fmt.Errorf("seed volume %s: %w", sd.Volume, err)
+		}
+	}
+	return nil
+}
+
+// seedContainerCreate creates a never-started helper container from the
+// scratch image with the given named volume mounts.
+func (e *podmanEngine) seedContainerCreate(ctx context.Context, vols []specNamedVolume) (string, error) {
+	spec := map[string]any{
+		"image":   seedScratchRef,
+		"volumes": vols,
+	}
+	body, err := json.Marshal(spec)
+	if err != nil {
+		return "", err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		e.base+"/containers/create", bytes.NewReader(body))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := e.client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			log.Printf("WARN close response body: %v", closeErr)
+		}
+	}()
+	if resp.StatusCode != http.StatusCreated {
+		b, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			return "", fmt.Errorf("status %d: (body read failed)", resp.StatusCode)
+		}
+		return "", fmt.Errorf("status %d: %s", resp.StatusCode, b)
+	}
+	var result struct {
+		ID string `json:"Id"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", err
+	}
+	return result.ID, nil
+}
+
 // VolumeRemove removes a named engine-managed volume.
 func (e *podmanEngine) VolumeRemove(ctx context.Context, name string) error {
 	// VERIFY AGAINST LIVE ENGINE -- confirmed podman 5.4.2: libpod DELETE
@@ -779,8 +919,10 @@ func buildSpecGenerator(opts RunOpts) specGen {
 		Remove:             opts.Remove,
 	}
 
-	// Named volume (the engine-managed writable workdir surface).
-	if opts.Volume != nil {
+	// Named volumes: the writable workdir surface (opts.Volume) plus any
+	// read-only trust-material volumes (opts.TrustVolumes, e.g. the
+	// lane-wide CA volume masking /etc/ssl/certs).
+	if opts.Volume != nil || len(opts.TrustVolumes) > 0 {
 		spec.Volumes = buildVolumes(opts)
 	}
 
@@ -833,18 +975,27 @@ func buildMounts(opts RunOpts) []specMount {
 	return mounts
 }
 
-// buildVolumes wraps the single named volume into the array shape the
-// libpod SpecGenerator expects under the "volumes" key.
+// buildVolumes maps the writable workdir volume and any read-only trust
+// volumes into the libpod SpecGenerator "volumes" array.
 func buildVolumes(opts RunOpts) []specNamedVolume {
 	// VERIFY AGAINST LIVE ENGINE -- confirmed podman 5.4.2: the libpod
 	// SpecGenerator names this key "volumes", with entries
 	// {"Name","Dest","Options"}.
-	v := opts.Volume
-	entry := specNamedVolume{Name: v.Name, Dest: v.Dest}
-	if len(v.Options) > 0 {
-		entry.Options = v.Options
+	var out []specNamedVolume
+	if opts.Volume != nil {
+		v := opts.Volume
+		entry := specNamedVolume{Name: v.Name, Dest: v.Dest}
+		if len(v.Options) > 0 {
+			entry.Options = v.Options
+		}
+		out = append(out, entry)
 	}
-	return []specNamedVolume{entry}
+	for _, tv := range opts.TrustVolumes {
+		entry := specNamedVolume{Name: tv.Name, Dest: tv.Dest}
+		entry.Options = append(append([]string{}, tv.Options...), "ro")
+		out = append(out, entry)
+	}
+	return out
 }
 
 // buildImageVolumes maps the read-only image-volume inputs into the libpod

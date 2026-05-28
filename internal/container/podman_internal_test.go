@@ -74,6 +74,58 @@ func TestBuildSpecGenerator_NamedVolume(t *testing.T) {
 	}
 }
 
+func TestBuildSpecGenerator_TrustVolume(t *testing.T) {
+	opts := RunOpts{
+		Image:  "img",
+		Volume: &VolumeMount{Name: "wd", Dest: "/work"},
+		TrustVolumes: []VolumeMount{
+			{Name: "strike-ca-test", Dest: "/etc/ssl/certs"},
+		},
+	}
+	spec := buildSpecGenerator(opts)
+
+	if len(spec.Volumes) != 2 {
+		t.Fatalf("volumes len = %d, want 2", len(spec.Volumes))
+	}
+	wd := spec.Volumes[0]
+	if wd.Name != "wd" || wd.Dest != "/work" {
+		t.Errorf("workdir volume = %+v", wd)
+	}
+	ca := spec.Volumes[1]
+	if ca.Name != "strike-ca-test" {
+		t.Errorf("trust volume Name = %q", ca.Name)
+	}
+	if ca.Dest != "/etc/ssl/certs" {
+		t.Errorf("trust volume Dest = %q", ca.Dest)
+	}
+	hasRO := false
+	for _, o := range ca.Options {
+		if o == "ro" {
+			hasRO = true
+		}
+	}
+	if !hasRO {
+		t.Errorf("trust volume Options = %v, want ro", ca.Options)
+	}
+}
+
+func TestBuildSpecGenerator_TrustVolumeOnly(t *testing.T) {
+	opts := RunOpts{
+		Image: "img",
+		TrustVolumes: []VolumeMount{
+			{Name: "strike-ca-test", Dest: "/etc/ssl/certs"},
+		},
+	}
+	spec := buildSpecGenerator(opts)
+
+	if len(spec.Volumes) != 1 {
+		t.Fatalf("volumes len = %d, want 1", len(spec.Volumes))
+	}
+	if spec.Volumes[0].Name != "strike-ca-test" {
+		t.Errorf("Name = %q", spec.Volumes[0].Name)
+	}
+}
+
 func TestBuildSpecGenerator_ImageVolumes(t *testing.T) {
 	opts := DefaultSecureOpts()
 	opts.Image = "img"
