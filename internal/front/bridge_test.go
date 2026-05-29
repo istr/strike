@@ -322,7 +322,7 @@ func TestBridge_EndToEnd(t *testing.T) {
 	})
 
 	ca := bridgeTestCA(t)
-	hp := capsule.HostPorts{Resolver: 15400, Mediator: 15401, SSH: []uint16{15402}}
+	hp := capsule.HostPorts{Resolver: 15400, Mediator: 15401}
 	targets := []capsule.SSHTarget{{
 		Host:     upstream.addr(),
 		HostKeys: []string{upstream.hostKeyLine()},
@@ -384,7 +384,7 @@ func TestBridge_WrongToken_Refused(t *testing.T) {
 	})
 
 	ca := bridgeTestCA(t)
-	hp := capsule.HostPorts{Resolver: 15410, Mediator: 15411, SSH: []uint16{15412}}
+	hp := capsule.HostPorts{Resolver: 15410, Mediator: 15411}
 	targets := []capsule.SSHTarget{{
 		Host:     upstream.addr(),
 		HostKeys: []string{upstream.hostKeyLine()},
@@ -461,7 +461,7 @@ func TestBridge_InboundCloseUnblocksHandler(t *testing.T) {
 	})
 
 	ca := bridgeTestCA(t)
-	hp := capsule.HostPorts{Resolver: 15430, Mediator: 15431, SSH: []uint16{15432}}
+	hp := capsule.HostPorts{Resolver: 15430, Mediator: 15431}
 	targets := []capsule.SSHTarget{{
 		Host:     upstream.addr(),
 		HostKeys: []string{upstream.hostKeyLine()},
@@ -554,7 +554,7 @@ func TestBridge_DisallowedCommand_Refused(t *testing.T) {
 	})
 
 	ca := bridgeTestCA(t)
-	hp := capsule.HostPorts{Resolver: 15420, Mediator: 15421, SSH: []uint16{15422}}
+	hp := capsule.HostPorts{Resolver: 15420, Mediator: 15421}
 	targets := []capsule.SSHTarget{{
 		Host:     upstream.addr(),
 		HostKeys: []string{upstream.hostKeyLine()},

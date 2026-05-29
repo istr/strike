@@ -346,15 +346,15 @@ func allocateMediatedPorts(p *lane.Lane) map[string]capsule.HostPorts {
 		case s.Pack != nil:
 			continue
 		case s.Deploy != nil:
-			reqs = append(reqs, capsule.StepPortReq{Name: string(s.Name), SSHCount: sshCount(s.Peers)})
+			reqs = append(reqs, capsule.StepPortReq{Name: string(s.Name)})
 			for _, sc := range s.Deploy.Attestation.PreState.Capture {
-				reqs = append(reqs, capsule.StepPortReq{Name: captureKey(string(s.Name), sc.Name), SSHCount: sshCount(sc.Peers)})
+				reqs = append(reqs, capsule.StepPortReq{Name: captureKey(string(s.Name), sc.Name)})
 			}
 			for _, sc := range s.Deploy.Attestation.PostState.Capture {
-				reqs = append(reqs, capsule.StepPortReq{Name: captureKey(string(s.Name), sc.Name), SSHCount: sshCount(sc.Peers)})
+				reqs = append(reqs, capsule.StepPortReq{Name: captureKey(string(s.Name), sc.Name)})
 			}
 		default:
-			reqs = append(reqs, capsule.StepPortReq{Name: string(s.Name), SSHCount: sshCount(s.Peers)})
+			reqs = append(reqs, capsule.StepPortReq{Name: string(s.Name)})
 		}
 	}
 	ports, err := capsule.AllocatePorts(reqs)

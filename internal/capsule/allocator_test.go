@@ -48,22 +48,3 @@ func TestAllocatePorts_Deterministic(t *testing.T) {
 		t.Errorf("non-deterministic: %#v vs %#v", a, b)
 	}
 }
-
-func TestAllocatePorts_SSHBlocks(t *testing.T) {
-	ports, err := capsule.AllocatePorts([]capsule.StepPortReq{
-		{Name: "a", SSHCount: 0},
-		{Name: "b", SSHCount: 2},
-		{Name: "c", SSHCount: 1},
-	})
-	if err != nil {
-		t.Fatalf("AllocatePorts: %v", err)
-	}
-	want := map[string]capsule.HostPorts{
-		"a": {Resolver: 5353, Mediator: 5354},
-		"b": {Resolver: 5355, Mediator: 5356, SSH: []uint16{5357, 5358}},
-		"c": {Resolver: 5359, Mediator: 5360, SSH: []uint16{5361}},
-	}
-	if !reflect.DeepEqual(ports, want) {
-		t.Errorf("AllocatePorts = %#v, want %#v", ports, want)
-	}
-}

@@ -819,8 +819,7 @@ func TestCapsule_AAAA_AllowedName_Empty(t *testing.T) {
 
 func TestCapsule_SSHForward_PastaArgs(t *testing.T) {
 	ca := testCA(t)
-	sshHostPort := uint16(15375)
-	hp := capsule.HostPorts{Resolver: 15373, Mediator: 15374, SSH: []uint16{sshHostPort}}
+	hp := capsule.HostPorts{Resolver: 15373, Mediator: 15374}
 	targets := []capsule.SSHTarget{{Host: "git.example.com", HostKeys: []string{testHostKeyLine(t)}}}
 
 	c, err := capsule.New("ssh-step", hp, nil, targets, 40000, ca, testUpstream())
@@ -828,35 +827,29 @@ func TestCapsule_SSHForward_PastaArgs(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 	args := c.PastaArgs()
-	// The SSH forward should appear as -T <containerPort>:<hostPort>.
-	found := false
-	want := fmt.Sprintf("%d:%d", capsule.SSHContainerPortBase, sshHostPort)
-	for i, a := range args {
-		if a == "-T" && i+1 < len(args) && args[i+1] == want {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Errorf("PastaArgs %v does not contain -T %s", args, want)
-	}
-	// The front forward must appear as -T 22:<frontHostPort>.
+	// The front forward must appear as -T 22:<frontHostPort>; SSH egress
+	// reaches the peer through the front, not a per-peer forward.
 	frontFound := false
-	wantFront := "22:40000"
 	for i, a := range args {
-		if a == "-T" && i+1 < len(args) && args[i+1] == wantFront {
+		if a == "-T" && i+1 < len(args) && args[i+1] == "22:40000" {
 			frontFound = true
 			break
 		}
 	}
 	if !frontFound {
-		t.Errorf("PastaArgs %v does not contain -T %s", args, wantFront)
+		t.Errorf("PastaArgs %v does not contain -T 22:40000", args)
+	}
+	// No per-peer SSH forward (former container-port base 2200) must remain.
+	for i, a := range args {
+		if a == "-T" && i+1 < len(args) && strings.HasPrefix(args[i+1], "2200:") {
+			t.Errorf("PastaArgs %v still contains a per-peer SSH forward", args)
+		}
 	}
 }
 
 func TestCapsule_New_SSHTargets_RequireFrontPort(t *testing.T) {
 	ca := testCA(t)
-	hp := capsule.HostPorts{Resolver: 15385, Mediator: 15386, SSH: []uint16{15387}}
+	hp := capsule.HostPorts{Resolver: 15385, Mediator: 15386}
 	targets := []capsule.SSHTarget{{Host: "git.example.com", HostKeys: []string{testHostKeyLine(t)}}}
 
 	_, err := capsule.New("bad-step", hp, nil, targets, 0, ca, testUpstream())
@@ -906,7 +899,7 @@ func TestSSHConfig_NoSSHTargets_Nil(t *testing.T) {
 
 func TestTokens_OneSSHTarget(t *testing.T) {
 	ca := testCA(t)
-	hp := capsule.HostPorts{Resolver: 15376, Mediator: 15377, SSH: []uint16{15378}}
+	hp := capsule.HostPorts{Resolver: 15376, Mediator: 15377}
 	targets := []capsule.SSHTarget{{Host: "git.example.com", HostKeys: []string{testHostKeyLine(t)}}}
 
 	c, err := capsule.New("tok-step", hp, nil, targets, 40000, ca, testUpstream())
@@ -928,7 +921,7 @@ func TestTokens_OneSSHTarget(t *testing.T) {
 
 func TestSSHConfig_OneSSHTarget_Structure(t *testing.T) {
 	ca := testCA(t)
-	hp := capsule.HostPorts{Resolver: 15379, Mediator: 15380, SSH: []uint16{15381}}
+	hp := capsule.HostPorts{Resolver: 15379, Mediator: 15380}
 	targets := []capsule.SSHTarget{{Host: "git.example.com", HostKeys: []string{testHostKeyLine(t)}}}
 
 	c, err := capsule.New("cfg-step", hp, nil, targets, 40000, ca, testUpstream())
@@ -1029,7 +1022,7 @@ func TestCloseOutbound_ForceClosesTrackedClient(t *testing.T) {
 	// Build a capsule with one SSH target, track the client, then CloseOutbound.
 	ca := testCA(t)
 	hostKeyLine := strings.TrimSpace(string(ssh.MarshalAuthorizedKey(hostSigner.PublicKey())))
-	hp := capsule.HostPorts{Resolver: 15500, Mediator: 15501, SSH: []uint16{15502}}
+	hp := capsule.HostPorts{Resolver: 15500, Mediator: 15501}
 	targets := []capsule.SSHTarget{{Host: srvLn.Addr().String(), HostKeys: []string{hostKeyLine}}}
 	caps, capsErr := capsule.New("close-step", hp, nil, targets, 40000, ca, testUpstream())
 	if capsErr != nil {
@@ -1069,7 +1062,7 @@ func TestCloseOutbound_NoSSH_Noop(t *testing.T) {
 
 func TestTokens_IsSnapshot(t *testing.T) {
 	ca := testCA(t)
-	hp := capsule.HostPorts{Resolver: 15382, Mediator: 15383, SSH: []uint16{15384}}
+	hp := capsule.HostPorts{Resolver: 15382, Mediator: 15383}
 	targets := []capsule.SSHTarget{{Host: "git.example.com", HostKeys: []string{testHostKeyLine(t)}}}
 
 	c, err := capsule.New("snap-step", hp, nil, targets, 40000, ca, testUpstream())

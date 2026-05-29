@@ -1,11 +1,8 @@
 package capsule
 
 import (
-	"context"
 	"errors"
 	"fmt"
-	"net"
-	"net/netip"
 	"strconv"
 	"strings"
 	"sync"
@@ -14,32 +11,12 @@ import (
 
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/closer"
-	"github.com/istr/strike/internal/copier"
 	"github.com/istr/strike/internal/mediator"
-	"github.com/istr/strike/internal/transport"
 )
 
-// SSHContainerPortBase is the first container-side port assigned to a
-// unit's SSH peers. The k-th SSH peer (in peer-list order) is reached
-// by the step's SSH client at 127.0.0.1:(SSHContainerPortBase+k). Port
-// 22 is deliberately left unforwarded, so a connection that ignores the
-// injected ssh_config fails closed instead of being misrouted.
-const SSHContainerPortBase uint16 = 2200
-
-// defaultSSHPort is the upstream port the forwarder dials when an SSH
+// defaultSSHPort is the upstream port the capsule dials when an SSH
 // target host carries no explicit port.
 const defaultSSHPort uint16 = 22
-
-// pollInterval bounds Accept/Read blocking so serve loops notice ctx
-// cancellation promptly without a separate wakeup channel.
-const pollInterval = 200 * clock.Millisecond
-
-// isTimeoutErr reports whether err is a deadline timeout (expected on
-// each poll tick), as opposed to a real failure.
-func isTimeoutErr(err error) bool {
-	var ne net.Error
-	return errors.As(err, &ne) && ne.Timeout()
-}
 
 // SSHTarget is one SSH peer the capsule connects to: the declared upstream
 // host (added to the resolver allowlist and resolved via the DoT resolver,
@@ -82,8 +59,12 @@ func SplitSSHHostPort(h string) (string, uint16) {
 	return host, uint16(p)
 }
 
-// sshForwarder is a per-SSH-peer raw TCP relay bound to one host
-// loopback port.
+// sshForwarder holds the per-SSH-peer state the capsule needs to dial that
+// peer on behalf of the front (ADR-038 D5): the resolved upstream host and
+// port, the lane DoT lookup, the live outbound clients, and the connection
+// records. It no longer relays raw TCP -- the front terminates SSH and the
+// capsule re-originates via BridgePeer. (Name retained pending the naming
+// consistency pass.)
 type sshForwarder struct {
 	upstreamLook UpstreamLookupFunc
 	stepName     string
@@ -109,79 +90,6 @@ func newSSHForwarder(stepName string, t SSHTarget, upstreamLook UpstreamLookupFu
 		port:         port,
 		upstreamLook: upstreamLook,
 	}, nil
-}
-
-// serve accepts connections on l until ctx is done. Caller owns l;
-// serve does not close it. Returns nil on clean ctx-cancellation.
-func (f *sshForwarder) serve(ctx context.Context, l net.Listener) error {
-	type deadliner interface {
-		SetDeadline(t clock.Time) error
-	}
-	for ctx.Err() == nil {
-		if d, ok := l.(deadliner); ok {
-			if err := d.SetDeadline(clock.Wall().Add(pollInterval)); err != nil {
-				return fmt.Errorf("capsule: sshforward set deadline: %w", err)
-			}
-		}
-		conn, acceptErr := l.Accept()
-		switch {
-		case isTimeoutErr(acceptErr):
-			continue
-		case acceptErr != nil && ctx.Err() != nil:
-			return nil
-		case acceptErr != nil:
-			return fmt.Errorf("capsule: sshforward accept: %w", acceptErr)
-		}
-		go f.handle(ctx, conn)
-	}
-	return nil
-}
-
-func (f *sshForwarder) handle(ctx context.Context, client net.Conn) {
-	defer closer.Warn(client, "sshforward client conn")
-
-	rec := SSHConnectionRecord{
-		Time: clock.Wall(),
-		Host: f.host,
-		Port: f.port,
-	}
-
-	addrs, err := f.upstreamLook(ctx, f.host)
-	if err != nil || len(addrs) == 0 {
-		rec.Decision = mediator.DecisionError
-		if err != nil {
-			rec.Err = err.Error()
-		} else {
-			rec.Err = "no addresses resolved"
-		}
-		f.record(rec)
-		return
-	}
-	dst := netip.AddrPortFrom(addrs[0], f.port)
-	rec.DestIP = addrs[0].String()
-
-	upstream, err := transport.DialTCP(ctx, dst.String())
-	if err != nil {
-		rec.Decision = mediator.DecisionError
-		rec.Err = err.Error()
-		f.record(rec)
-		return
-	}
-	defer closer.Warn(upstream, "sshforward upstream conn")
-
-	rec.Decision = mediator.DecisionAllowed
-	f.record(rec)
-
-	splice(client, upstream)
-}
-
-// splice copies bytes in both directions until either side closes.
-func splice(a, b net.Conn) {
-	var wg sync.WaitGroup
-	wg.Add(2)
-	go func() { defer wg.Done(); copier.Forward(a, b, "sshforward a<-b") }()
-	go func() { defer wg.Done(); copier.Forward(b, a, "sshforward b<-a") }()
-	wg.Wait()
 }
 
 func (f *sshForwarder) record(rec SSHConnectionRecord) {

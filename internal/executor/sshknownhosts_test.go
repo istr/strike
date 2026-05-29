@@ -219,7 +219,7 @@ func TestSSHTrustContent_with_ssh_peers(t *testing.T) {
 	lookup := func(_ context.Context, _ string) ([]netip.Addr, error) {
 		return []netip.Addr{netip.MustParseAddr("93.184.216.34")}, nil
 	}
-	hp := capsule.HostPorts{Resolver: 5353, Mediator: 5354, SSH: []uint16{5355}}
+	hp := capsule.HostPorts{Resolver: 5353, Mediator: 5354}
 	targets := []capsule.SSHTarget{{Host: "git.example.com", HostKeys: []string{authLine}}}
 	caps, capsErr := capsule.New("trust-step", hp, nil, targets, 40000, ca, lookup)
 	if capsErr != nil {

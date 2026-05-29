@@ -1000,14 +1000,3 @@ func sshTargetsOf(peers []lane.Peer) []capsule.SSHTarget {
 	}
 	return out
 }
-
-// sshCount returns the number of SSH peers in a peer list.
-func sshCount(peers []lane.Peer) int {
-	n := 0
-	for _, p := range peers {
-		if _, ok := p.(lane.SSHPeer); ok {
-			n++
-		}
-	}
-	return n
-}
