@@ -1,77 +1,86 @@
 # ADR-038 Implementation Roadmap
 
-## Status: PARTIAL
+## Status: PARTIAL (items 1--4 done, items 5--6 remain)
 
-ADR-038 is accepted. Pre-front trust-material delivery is in progress;
-the front itself is not yet implemented. The current codebase runs a mix
-of superseded and partially migrated mechanisms:
+ADR-038 is accepted. The control-plane front, STRIKE_PEER token dispatch,
+SSH termination with command allowlist, and capsule bridge are implemented.
+Connection lifecycle follows the "each side closes what it initiated"
+principle: the front waits for the client/pasta close (no teardown timer);
+the capsule force-closes its outbound SSH clients when the executor reaps
+the container (`CloseOutbound`). The current codebase:
 
+- `internal/front/front.go` -- run-level SSH front: terminates container-
+  facing SSH, reads STRIKE_PEER token, dispatches to per-step capsule via
+  `BridgePeer`. After a session, `sshConn.Wait()` lets the client or pasta
+  drive the close (no timer).
+- `internal/capsule/capsule.go` -- `BridgePeer` dials the real peer,
+  tracks the `*ssh.Client` in the forwarder, and splices the channel.
+  `CloseOutbound` force-closes tracked outbound clients on container reap.
+- `internal/capsule/sshforward.go` -- per-peer raw TCP relay (ADR-033,
+  retained for the legacy path) plus `trackClient`/`untrackClient`/
+  `closeClients` for the SSH bridge path.
 - `internal/executor/sshagent.go` -- ADR-025 agent socket forwarding (active;
   removal is roadmap item 6)
-- `internal/capsule/sshforward.go` -- ADR-033 raw TCP splice forwarding (active)
 - `internal/executor/sshknownhosts.go` -- per-step SSH trust content production
-  (`SSHTrustContent`, `SSHTrustTar`); bind-mount delivery removed for the run
-  path, replaced by read-only named volumes masking `/etc/ssh`
+  (`SSHTrustContent`, `SSHTrustTar`); delivered via read-only named volumes
+  masking `/etc/ssh`
 - `cmd/strike/run.go` -- `planTrustVolumes` creates and seeds the lane-wide CA
-  volume and per-step SSH volumes in one `SeedVolumes` batch after `lane.Build`
+  volume and per-step SSH volumes in one `SeedVolumes` batch after `lane.Build`;
+  `executeContainerStep` calls `caps.CloseOutbound()` after container reap
 - Deploy path: SSH peers rejected with a not-implemented error until the
   ADR-038 front lands the additional protocols the deploy path requires
 
 ## What needs to be implemented
 
-### 1. Control-plane front (D2)
+### 1. Control-plane front (D2) -- DONE
 
-A single, run-level component that terminates container-facing sessions
-(SSH, TLS, DoT), reads the in-band capability token, and dispatches to
-per-step capsule contexts. Holds run-level ephemeral crypto (one SSH host
-key, one TLS CA per lane run).
+Single run-level component (`internal/front/front.go`) terminating
+container-facing SSH, reading the in-band capability token, and
+dispatching to per-step capsule contexts. Holds one ephemeral ed25519
+SSH host key per lane run.
 
-### 2. STRIKE_PEER capability token + dispatch table (D5)
+### 2. STRIKE_PEER capability token + dispatch table (D5) -- DONE
 
-High-entropy random token encoding (step, peer), issued per step per peer,
-injected via `SetEnv STRIKE_PEER=<token>` in system-wide ssh_config `Host`
-blocks. Fail-closed on unknown/absent token. Replaces the per-peer host-port
-mux entirely.
+256-bit hex tokens issued per step per peer (`capsule.mintToken`),
+injected via `SetEnv STRIKE_PEER=<token>` in system-wide ssh_config
+Host blocks (`capsule.SSHConfig`). Front's `Register`/`Lookup`
+dispatches to capsule; fail-closed on unknown/absent token.
 
-### 3. SSH server and client (`golang.org/x/crypto/ssh`)
+### 3. SSH server and client (`golang.org/x/crypto/ssh`) -- DONE
 
-The front terminates SSH framing (transport, userauth, channel requests) so
-the exec/subsystem request is visible for allowlist checking. Upstream client
-authenticates from the host ssh-agent reached by the front directly (never
-forwarded into the container).
+Front terminates SSH framing (transport, `NoClientAuth`, channel
+requests) so exec/subsystem is visible for allowlist checking. Upstream
+client (`capsule.BridgePeer`) authenticates from the host ssh-agent
+reached by the front's process directly (never forwarded into the
+container). Connection lifecycle: front waits (`sshConn.Wait`) for
+client/pasta close after the session; capsule force-closes its outbound
+clients on container reap (`CloseOutbound`). No teardown timer.
 
-### 4. Command allowlist (D1)
+### 4. Command allowlist (D1) -- DONE
 
-Initial allowlist: `git-upload-pack`, `git-receive-pack`. Anything not on
-the list (shell, arbitrary command, port forwarding, agent forwarding) is
-refused. Later additions: `sftp`, `rsync --server`, `scp -t`/`scp -f`.
+`allowedSSHCommand`: `git-upload-pack`, `git-receive-pack`. Anything
+else refused. Later additions: `sftp`, `rsync --server`, `scp -t`/
+`scp -f`.
 
-### 5. Per-step capsule context refactor (D2)
+### 5. Per-step capsule context refactor (D2) -- DONE
 
-Capsule retains per-step policy (declared peer set, trust anchors, upstream
-dial logic, allowlist) but loses its container-facing listener and crypto
-endpoint (both lift to the front). The allocator loses per-step SSH port
-blocks and the `containerPorts` parameter.
+Capsule retains per-step policy (declared peer set, trust anchors,
+upstream dial, host-key pinning). The front owns the container-facing
+listener and SSH endpoint; the capsule's `BridgePeer` dials the real
+peer. Per-peer raw TCP forwarder (`sshforward.go` `serve`/`handle`/
+`splice`) is retained but retired.
 
 ### 6. In-container agent socket removal
 
 Remove the ADR-025 `SSH_AUTH_SOCK` injection and agent proxy. Container
 presents `none` to the front. Eliminates the in-container signing oracle.
 
-### 7. Synthetic container ssh_config + known_hosts
+### 7. Synthetic container ssh_config + known_hosts -- DONE (run path)
 
-All declared peer hostnames map to the single front identity (ephemeral
-host key). The real peer's known_hosts is validated by the front upstream,
-not mounted into the container. `GIT_SSH_COMMAND` replaced by system-wide
-ssh_config injection.
-
-**Partial (run path):** Per-step SSH trust volumes deliver `ssh_known_hosts`
-and `ssh_config` at `/etc/ssh` via read-only named volumes. The `-F`
-override in `GIT_SSH_COMMAND` is removed; the SSH client reads
-system-wide config. `ConfigureSSHPeers` bind-mount path is deleted for
-the run path; replaced by `SSHTrustContent` + `SSHTrustTar` (content
-only, no disk I/O). `planTrustVolumes` batches CA + SSH volumes in a
-single `SeedVolumes` call. Deploy path deferred (SSH peers rejected).
+Per-step SSH trust volumes deliver `ssh_known_hosts` and `ssh_config` at
+`/etc/ssh` via read-only named volumes. `planTrustVolumes` batches CA +
+SSH volumes in a single `SeedVolumes` call. Deploy path deferred (SSH
+peers rejected).
 
 ### 8. DoT resolver and TLS mediator rehosting onto the front
 
@@ -95,11 +104,12 @@ Per `HANDOVER-ssh-egress-redesign.md`:
 1. Predicate hardening (ADR-037) -- **DONE** (Instruction 44)
 1b. Per-step SSH trust volumes; batch with CA before step loop --
     **DONE** (Instruction 60, run path only; deploy path deferred)
-2. `STRIKE_PEER` token + front dispatch table; drop per-peer SSH port
-   allocation
-3. Front termination (run-level host key/CA) + capsule context refactor
+2. `STRIKE_PEER` token + front dispatch table -- **DONE**
+3. Front termination (run-level host key) + capsule context refactor --
+   **DONE**; connection lifecycle: each side closes what it initiated,
+   no teardown timer
 4. SSH server/client with D1 command allowlist; agent in the front;
-   synthetic container known_hosts
+   synthetic container known_hosts -- **DONE**
 5. DoT resolver and TLS mediator rehosting onto the front
 6. Phase-2 per-peer connection records with D7 observed/engine-asserted
    split

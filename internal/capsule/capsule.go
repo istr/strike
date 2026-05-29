@@ -22,7 +22,6 @@ import (
 	"net/netip"
 	"os"
 	"sort"
-	"strconv"
 	"sync"
 	"syscall"
 
@@ -131,21 +130,12 @@ func New(
 	hostPorts HostPorts,
 	peers []mediator.PeerTrust,
 	sshTargets []SSHTarget,
+	frontHostPort uint16,
 	ca *transport.EphemeralCA,
 	upstreamLook UpstreamLookupFunc,
 ) (*NetworkCapsule, error) {
-	if stepName == "" {
-		return nil, errors.New("capsule: stepName must not be empty")
-	}
-	if ca == nil {
-		return nil, errors.New("capsule: ca must not be nil")
-	}
-	if upstreamLook == nil {
-		return nil, errors.New("capsule: upstreamLook must not be nil")
-	}
-	if len(sshTargets) != len(hostPorts.SSH) {
-		return nil, fmt.Errorf("capsule: %d ssh targets but %d ssh host ports",
-			len(sshTargets), len(hostPorts.SSH))
+	if err := validateNewArgs(stepName, hostPorts, sshTargets, frontHostPort, ca, upstreamLook); err != nil {
+		return nil, err
 	}
 
 	allowlist := make([]transport.Host, 0, len(peers)+len(sshTargets))
@@ -203,9 +193,38 @@ func New(
 		sshPins:     sshPins,
 		sshTokens:   sshTokens,
 		ca:          ca,
-		pastaArgs:   egress.BuildPastaArgs(resolverPort, hostPorts.Resolver, mediatorPort, hostPorts.Mediator, sshFwds),
+		pastaArgs:   egress.BuildPastaArgs(resolverPort, hostPorts.Resolver, mediatorPort, hostPorts.Mediator, frontForwardPort(sshTargets, frontHostPort), sshFwds),
 		state:       stateNew,
 	}, nil
+}
+
+func validateNewArgs(stepName string, hostPorts HostPorts, sshTargets []SSHTarget, frontHostPort uint16, ca *transport.EphemeralCA, upstreamLook UpstreamLookupFunc) error {
+	if stepName == "" {
+		return errors.New("capsule: stepName must not be empty")
+	}
+	if ca == nil {
+		return errors.New("capsule: ca must not be nil")
+	}
+	if upstreamLook == nil {
+		return errors.New("capsule: upstreamLook must not be nil")
+	}
+	if len(sshTargets) > 0 && frontHostPort == 0 {
+		return errors.New("capsule: ssh targets require a front host port")
+	}
+	if len(sshTargets) != len(hostPorts.SSH) {
+		return fmt.Errorf("capsule: %d ssh targets but %d ssh host ports",
+			len(sshTargets), len(hostPorts.SSH))
+	}
+	return nil
+}
+
+// frontForwardPort returns the front host port to forward into the container,
+// or 0 when the capsule has no SSH peers (no SSH path to the front needed).
+func frontForwardPort(sshTargets []SSHTarget, frontHostPort uint16) uint16 {
+	if len(sshTargets) == 0 {
+		return 0
+	}
+	return frontHostPort
 }
 
 // mintToken returns a 256-bit capability token, hex-encoded (64 lowercase
@@ -219,12 +238,11 @@ func mintToken() (string, error) {
 }
 
 // SSHConfig renders the byte-deterministic ssh_config for this capsule's SSH
-// peers: one Host block per peer, sorted by host, each setting Port (the
-// peer's container-side loopback port) and SetEnv STRIKE_PEER=<token> (the
-// ADR-038 D5 routing capability by which the front recovers this capsule and
-// peer). Returns nil when the capsule has no SSH peers. The Port directive is
-// transitional -- it points at the per-peer forwarder today and is removed
-// when the front becomes the live endpoint (close of the D5 token strand).
+// peers: one Host block per peer, sorted by host, each setting SetEnv
+// STRIKE_PEER=<token> (the ADR-038 D5 routing capability by which the front
+// recovers this capsule and peer). No Port directive is emitted: the
+// container's SSH client uses the default port 22, which pasta forwards to
+// the front. Returns nil when the capsule has no SSH peers.
 func (c *NetworkCapsule) SSHConfig() []byte {
 	if len(c.sshForwards) == 0 {
 		return nil
@@ -232,14 +250,12 @@ func (c *NetworkCapsule) SSHConfig() []byte {
 	type block struct {
 		host  string
 		token string
-		port  uint16
 	}
 	blocks := make([]block, len(c.sshForwards))
 	for k := range c.sshForwards {
 		blocks[k] = block{
 			host:  c.sshForwards[k].host,
 			token: c.sshTokens[k],
-			port:  SSHContainerPortBase + uint16(k),
 		}
 	}
 	sort.Slice(blocks, func(i, j int) bool { return blocks[i].host < blocks[j].host })
@@ -248,9 +264,6 @@ func (c *NetworkCapsule) SSHConfig() []byte {
 	for _, b := range blocks {
 		buf.WriteString("Host ")
 		buf.WriteString(b.host)
-		buf.WriteByte('\n')
-		buf.WriteString("    Port ")
-		buf.WriteString(strconv.FormatUint(uint64(b.port), 10))
 		buf.WriteByte('\n')
 		buf.WriteString("    SetEnv STRIKE_PEER=")
 		buf.WriteString(b.token)
@@ -414,6 +427,21 @@ func (c *NetworkCapsule) Stop() error {
 	return firstErr
 }
 
+// CloseOutbound force-closes every outbound SSH connection this capsule's
+// forwarders still hold to their peers. The executor calls it once the step's
+// container is fully reaped: by then any in-flight bridge is either done (its
+// upstream already closed and untracked) or aborted (the container died
+// mid-clone), and an aborted bridge blocked on the upstream session.Wait is
+// unblocked here. The capsule closes only the connections it initiated (the
+// peer outbounds); the front's inbound is the engine's, torn down by pasta.
+// No lifecycle lock: sshForwards is fixed after New, and each forwarder guards
+// its own clients. Idempotent.
+func (c *NetworkCapsule) CloseOutbound() {
+	for _, f := range c.sshForwards {
+		f.closeClients()
+	}
+}
+
 // Records returns a snapshot of DNS query records and connection
 // records collected during serve. Callable before Start (empty),
 // during, or after Stop (final).
@@ -533,6 +561,8 @@ func (c *NetworkCapsule) BridgePeer(ctx context.Context, channel ssh.Channel, to
 		return 255, fmt.Errorf("capsule: upstream dial: %w", dErr)
 	}
 	defer closer.Warn(upstream, "capsule upstream conn")
+	fwd.trackClient(upstream)
+	defer fwd.untrackClient(upstream)
 
 	rec.Decision = mediator.DecisionAllowed
 	fwd.record(rec)
@@ -573,27 +603,26 @@ func spliceSSH(channel ssh.Channel, upstream *ssh.Client, cmd string) (uint32, e
 	go func() {
 		defer wg.Done()
 		copier.Forward(stdin, channel, "capsule stdin")
-		closer.Warn(stdin, "capsule stdin pipe")
 	}()
 	// stdout and stderr both write to the container channel, so we must
 	// NOT call channel.CloseWrite until both finish. Use io.Copy (not
 	// copier.Forward, which auto-half-closes) and CloseWrite after join.
 	go func() {
 		defer wg.Done()
-		if _, cpErr := io.Copy(channel, stdout); cpErr != nil && !copier.IsExpectedClose(cpErr) {
+		if _, cpErr := io.Copy(channel, stdout); cpErr != nil && !closer.IsExpectedClose(cpErr) {
 			log.Printf("WARN   capsule stdout: copy: %v", cpErr)
 		}
 	}()
 	go func() {
 		defer wg.Done()
-		if _, cpErr := io.Copy(channel.Stderr(), stderr); cpErr != nil && !copier.IsExpectedClose(cpErr) {
+		if _, cpErr := io.Copy(channel.Stderr(), stderr); cpErr != nil && !closer.IsExpectedClose(cpErr) {
 			log.Printf("WARN   capsule stderr: copy: %v", cpErr)
 		}
 	}()
 
 	status := sshExitStatus(session.Wait())
 	wg.Wait()
-	if cwErr := channel.CloseWrite(); cwErr != nil && !copier.IsExpectedClose(cwErr) {
+	if cwErr := channel.CloseWrite(); cwErr != nil && !closer.IsExpectedClose(cwErr) {
 		log.Printf("WARN   capsule channel: half-close: %v", cwErr)
 	}
 	return status, nil

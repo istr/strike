@@ -184,7 +184,7 @@ func (d *Deployer) startUnitCapsule(ctx context.Context, name string, peers []la
 			targets = append(targets, capsule.SSHTarget{Host: string(sp.Host), HostKeys: keys})
 		}
 	}
-	caps, err := capsule.New(name, ports, trusts, targets, d.CA, d.UpstreamLook)
+	caps, err := capsule.New(name, ports, trusts, targets, 0, d.CA, d.UpstreamLook)
 	if err != nil {
 		return nil, fmt.Errorf("deploy %q: construct capsule: %w", name, err)
 	}

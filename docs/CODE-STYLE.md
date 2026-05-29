@@ -146,6 +146,9 @@ environmental signal (filesystem out of space, container engine
 disappeared, fd table corrupted) and should appear in audit logs.
 `closer.Warn` consumes the error after logging, which is `errcheck`-clean.
 `//nolint:errcheck` discards both the error *and* the audit signal.
+Close errors that are expected socket/stream shutdowns
+(`closer.IsExpectedClose`: EOF, closed conn/file, broken pipe, peer reset)
+are silent; real failures warn.
 
 **The helper.**
 
@@ -154,7 +157,7 @@ disappeared, fd table corrupted) and should appear in audit logs.
 package closer
 
 func Warn(c io.Closer, context string) {
-    if err := c.Close(); err != nil {
+    if err := c.Close(); err != nil && !IsExpectedClose(err) {
         log.Printf("WARN   %s: close: %v", context, err)
     }
 }
@@ -607,11 +610,11 @@ package copier
 
 func Forward(dst io.Writer, src io.Reader, context string) {
     _, err := io.Copy(dst, src)
-    if err != nil && !isExpectedClose(err) {
+    if err != nil && !closer.IsExpectedClose(err) {
         log.Printf("WARN   %s: copy: %v", context, err)
     }
     if uc, ok := dst.(interface{ CloseWrite() error }); ok {
-        if cwErr := uc.CloseWrite(); cwErr != nil && !isExpectedClose(cwErr) {
+        if cwErr := uc.CloseWrite(); cwErr != nil && !closer.IsExpectedClose(cwErr) {
             log.Printf("WARN   %s: half-close: %v", context, cwErr)
         }
     }
@@ -620,8 +623,9 @@ func Forward(dst io.Writer, src io.Reader, context string) {
 
 **Rationale.** The previous shape had four suppressions per direction
 (two for `io.Copy`, two for `CloseWrite`) and was duplicated forward and
-reverse. The helper turns eight annotations into zero and centralizes
-the "what counts as an expected close" question.
+reverse. The helper turns eight annotations into zero. The expected-close
+classifier lives in `closer` (the close-error domain owner) and `copier`
+consumes it.
 
 ---
 

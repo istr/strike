@@ -6,59 +6,37 @@ import (
 	"sort"
 	"strings"
 
+	"golang.org/x/crypto/ssh"
+
 	"github.com/istr/strike/internal/capsule"
 	"github.com/istr/strike/internal/lane"
 )
 
-// RenderKnownHosts renders the SSH peer entries from the given peer list
-// into an OpenSSH-format known_hosts document. The output is
-// byte-deterministic: lines are sorted lexicographically by
-// (formattedHost, keyType, key). Returns nil if no SSH peers with
-// known_hosts entries are present.
-func RenderKnownHosts(peers []lane.Peer) []byte {
-	type record struct {
-		formattedHost string
-		keyType       string
-		key           string
-	}
-
-	var records []record
+// RenderKnownHosts renders the container's ssh_known_hosts: one line per
+// declared SSH peer host, all carrying the front's lane-wide synthetic host
+// key (ADR-038 D5). The container connects to the peer hostname, which DNS
+// points at the front; it validates the front's key here. The real peer's
+// host key is not in the container -- the capsule validates it when it dials
+// the peer. Output is byte-deterministic (hosts sorted). Returns nil when no
+// SSH peers are present. frontKey is the front's public host key.
+func RenderKnownHosts(peers []lane.Peer, frontKey ssh.PublicKey) []byte {
+	var hosts []string
 	for _, p := range peers {
-		sp, ok := p.(lane.SSHPeer)
-		if !ok {
-			continue
-		}
-		host := formatHost(string(sp.Host))
-		for _, entry := range sp.KnownHosts {
-			records = append(records, record{
-				formattedHost: host,
-				keyType:       entry.KeyType,
-				key:           entry.Key,
-			})
+		if sp, ok := p.(lane.SSHPeer); ok {
+			hosts = append(hosts, formatHost(string(sp.Host)))
 		}
 	}
-
-	sort.Slice(records, func(i, j int) bool {
-		if records[i].formattedHost != records[j].formattedHost {
-			return records[i].formattedHost < records[j].formattedHost
-		}
-		if records[i].keyType != records[j].keyType {
-			return records[i].keyType < records[j].keyType
-		}
-		return records[i].key < records[j].key
-	})
-
-	if len(records) == 0 {
+	if len(hosts) == 0 {
 		return nil
 	}
+	sort.Strings(hosts)
+	keyLine := strings.TrimSpace(string(ssh.MarshalAuthorizedKey(frontKey)))
 
 	var buf bytes.Buffer
-	for _, r := range records {
-		buf.WriteString(r.formattedHost)
+	for _, h := range hosts {
+		buf.WriteString(h)
 		buf.WriteByte(' ')
-		buf.WriteString(r.keyType)
-		buf.WriteByte(' ')
-		buf.WriteString(r.key)
+		buf.WriteString(keyLine)
 		buf.WriteByte('\n')
 	}
 	return buf.Bytes()
@@ -75,11 +53,12 @@ func formatHost(host string) string {
 }
 
 // SSHTrustContent returns the per-step SSH trust volume content: known_hosts
-// (rendered from the declared peers) and ssh_config (rendered by the step's
-// capsule, which owns the per-peer container ports and capability tokens).
-// Returns nil when the step has no SSH peers; caps may be nil in that case.
-func SSHTrustContent(peers []lane.Peer, caps *capsule.NetworkCapsule) (knownHosts, sshConfig []byte) {
-	kh := RenderKnownHosts(peers)
+// (carrying the front's synthetic host key for every SSH peer) and ssh_config
+// (rendered by the step's capsule, which owns the per-peer capability
+// tokens). Returns nil when the step has no SSH peers; caps and frontKey may
+// be nil/zero in that case.
+func SSHTrustContent(peers []lane.Peer, caps *capsule.NetworkCapsule, frontKey ssh.PublicKey) (knownHosts, sshConfig []byte) {
+	kh := RenderKnownHosts(peers, frontKey)
 	if len(kh) == 0 {
 		return nil, nil
 	}

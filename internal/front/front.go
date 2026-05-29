@@ -146,11 +146,15 @@ func (f *Front) serve() {
 }
 
 func (f *Front) handleConn(conn net.Conn, cfg *ssh.ServerConfig) {
-	defer closer.Warn(conn, "front conn")
 	sshConn, chans, reqs, hErr := ssh.NewServerConn(conn, cfg)
 	if hErr != nil {
+		// Handshake failed: sshConn does not own conn, so close it here.
+		// Stray probes/keyscans land here and fail closed quietly.
+		closer.Warn(conn, "front conn")
 		return
 	}
+	// sshConn owns the underlying conn; closing it closes conn. Do not also
+	// close conn, or the second close logs "use of closed network connection".
 	defer closer.Warn(sshConn, "front ssh conn")
 	go ssh.DiscardRequests(reqs)
 
@@ -167,7 +171,16 @@ func (f *Front) handleConn(conn net.Conn, cfg *ssh.ServerConfig) {
 			return
 		}
 		f.handleSession(channel, requests)
-		return
+		break
+	}
+	// The front did not initiate this connection (the engine did, via pasta),
+	// so it does not tear it down. After the session, wait for the client to
+	// disconnect -- it does once it has the exit-status -- or for pasta to
+	// close the inbound when the container is reaped. Either ends the Wait;
+	// the deferred sshConn close is then a backstop on an already-closed conn.
+	// No timer: the container lifecycle bounds the wait.
+	if wErr := sshConn.Wait(); wErr != nil && !closer.IsExpectedClose(wErr) {
+		log.Printf("WARN   front: conn wait: %v", wErr)
 	}
 }
 

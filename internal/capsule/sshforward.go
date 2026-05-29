@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 
+	"golang.org/x/crypto/ssh"
+
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/closer"
 	"github.com/istr/strike/internal/copier"
@@ -86,6 +88,7 @@ type sshForwarder struct {
 	upstreamLook UpstreamLookupFunc
 	stepName     string
 	host         string
+	clients      map[*ssh.Client]struct{}
 	records      []SSHConnectionRecord
 	mu           sync.Mutex
 	port         uint16
@@ -194,4 +197,42 @@ func (f *sshForwarder) Records() []SSHConnectionRecord {
 	out := make([]SSHConnectionRecord, len(f.records))
 	copy(out, f.records)
 	return out
+}
+
+// trackClient registers a live outbound SSH client this forwarder opened to
+// its peer, so closeClients can force it shut when the step's container is
+// reaped (ADR-038 D5: the capsule closes the connections it initiated).
+func (f *sshForwarder) trackClient(c *ssh.Client) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.clients == nil {
+		f.clients = make(map[*ssh.Client]struct{})
+	}
+	f.clients[c] = struct{}{}
+}
+
+// untrackClient removes a client that closed on its own (normal bridge
+// completion). Safe after closeClients cleared the set (delete on a nil map is
+// a no-op).
+func (f *sshForwarder) untrackClient(c *ssh.Client) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	delete(f.clients, c)
+}
+
+// closeClients force-closes every still-open outbound client. Snapshots under
+// the lock, then closes outside it (Close may block; do not hold mu across
+// it). Closing a client unblocks any spliceSSH stuck on the upstream
+// session.Wait. Idempotent.
+func (f *sshForwarder) closeClients() {
+	f.mu.Lock()
+	clients := make([]*ssh.Client, 0, len(f.clients))
+	for c := range f.clients {
+		clients = append(clients, c)
+	}
+	f.clients = nil
+	f.mu.Unlock()
+	for _, c := range clients {
+		closer.Warn(c, "capsule upstream conn (forced on reap)")
+	}
 }

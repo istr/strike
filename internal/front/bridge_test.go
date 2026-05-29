@@ -328,7 +328,7 @@ func TestBridge_EndToEnd(t *testing.T) {
 		HostKeys: []string{upstream.hostKeyLine()},
 	}}
 
-	caps, capsErr := capsule.New("bridge-step", hp, nil, targets, ca, loopbackLookup)
+	caps, capsErr := capsule.New("bridge-step", hp, nil, targets, 40000, ca, loopbackLookup)
 	if capsErr != nil {
 		t.Fatalf("capsule.New: %v", capsErr)
 	}
@@ -389,7 +389,7 @@ func TestBridge_WrongToken_Refused(t *testing.T) {
 		Host:     upstream.addr(),
 		HostKeys: []string{upstream.hostKeyLine()},
 	}}
-	caps, capsErr := capsule.New("wrong-tok", hp, nil, targets, ca, loopbackLookup)
+	caps, capsErr := capsule.New("wrong-tok", hp, nil, targets, 40000, ca, loopbackLookup)
 	if capsErr != nil {
 		t.Fatal(capsErr)
 	}
@@ -429,6 +429,102 @@ func TestBridge_WrongToken_Refused(t *testing.T) {
 	}
 }
 
+func TestBridge_InboundCloseUnblocksHandler(t *testing.T) {
+	// Simulate pasta closing the inbound when the container is reaped:
+	// the front's sshConn.Wait() must return (no hang).
+	clientPub, clientPriv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sshClientPub, pubErr := ssh.NewPublicKey(clientPub)
+	if pubErr != nil {
+		t.Fatal(pubErr)
+	}
+
+	wantPayload := "inbound-close-test\n"
+	upstream := newTestUpstreamSSH(t, sshClientPub, wantPayload, "", 0)
+	t.Cleanup(func() {
+		if cErr := upstream.listener.Close(); cErr != nil {
+			t.Logf("upstream close: %v", cErr)
+		}
+	})
+	startTestAgent(t, clientPriv)
+
+	f, fErr := front.New(context.Background())
+	if fErr != nil {
+		t.Fatal(fErr)
+	}
+	t.Cleanup(func() {
+		if cErr := f.Close(); cErr != nil {
+			t.Logf("front close: %v", cErr)
+		}
+	})
+
+	ca := bridgeTestCA(t)
+	hp := capsule.HostPorts{Resolver: 15430, Mediator: 15431, SSH: []uint16{15432}}
+	targets := []capsule.SSHTarget{{
+		Host:     upstream.addr(),
+		HostKeys: []string{upstream.hostKeyLine()},
+	}}
+	caps, capsErr := capsule.New("inbound-close", hp, nil, targets, 40000, ca, loopbackLookup)
+	if capsErr != nil {
+		t.Fatal(capsErr)
+	}
+	tokens := caps.Tokens()
+	if regErr := f.Register(tokens[0], caps); regErr != nil {
+		t.Fatal(regErr)
+	}
+	f.Start()
+
+	// Dial the front and run a bridge.
+	cfg := &ssh.ClientConfig{
+		User:            "test",
+		HostKeyCallback: ssh.FixedHostKey(f.HostKeyPublic()),
+	}
+	conn, dialErr := ssh.Dial("tcp", f.Addr().String(), cfg)
+	if dialErr != nil {
+		t.Fatal(dialErr)
+	}
+
+	session, sessErr := conn.NewSession()
+	if sessErr != nil {
+		t.Fatal(sessErr)
+	}
+
+	if envErr := session.Setenv("STRIKE_PEER", tokens[0]); envErr != nil {
+		t.Fatalf("setenv: %v", envErr)
+	}
+	stdout, pipeErr := session.StdoutPipe()
+	if pipeErr != nil {
+		t.Fatal(pipeErr)
+	}
+	if startErr := session.Start("git-upload-pack 'repo'"); startErr != nil {
+		t.Fatal(startErr)
+	}
+	// Read all output first to let the bridge complete.
+	outBytes, readErr := io.ReadAll(stdout)
+	if readErr != nil {
+		t.Fatalf("read stdout: %v", readErr)
+	}
+	if string(outBytes) != wantPayload {
+		t.Errorf("stdout = %q, want %q", outBytes, wantPayload)
+	}
+	// Wait for session to get exit-status.
+	if wErr := session.Wait(); wErr != nil {
+		var exitErr *ssh.ExitError
+		if !errors.As(wErr, &exitErr) {
+			t.Fatalf("session wait: %v", wErr)
+		}
+	}
+
+	// Now close the client connection (simulating what pasta does on reap).
+	// The front's sshConn.Wait() must return and handleConn must exit.
+	// If it hangs, the test times out.
+	if cErr := conn.Close(); cErr != nil {
+		t.Logf("conn close: %v", cErr)
+	}
+}
+
 func TestBridge_DisallowedCommand_Refused(t *testing.T) {
 	clientPub, clientPriv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
@@ -463,7 +559,7 @@ func TestBridge_DisallowedCommand_Refused(t *testing.T) {
 		Host:     upstream.addr(),
 		HostKeys: []string{upstream.hostKeyLine()},
 	}}
-	caps, capsErr := capsule.New("bad-cmd", hp, nil, targets, ca, loopbackLookup)
+	caps, capsErr := capsule.New("bad-cmd", hp, nil, targets, 40000, ca, loopbackLookup)
 	if capsErr != nil {
 		t.Fatal(capsErr)
 	}

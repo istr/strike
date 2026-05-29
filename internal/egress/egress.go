@@ -25,6 +25,14 @@ type SSHForward struct {
 	HostPort      uint16
 }
 
+// FrontContainerPort is the container-side port a step's SSH client connects
+// to reach the lane-run front (ADR-038 D5). It is the SSH default (22): the
+// injected ssh_config sets no Port, so git uses 22, and pasta forwards 22 to
+// the front's host listener -- the same connect-and-intercept mechanism as the
+// resolver (53) and mediator (443); no privileged bind happens in the
+// container.
+const FrontContainerPort uint16 = 22
+
 // BuildPastaArgs returns the pasta options for a step container.
 // The container sees the resolver on resolverPort (53), the mediator
 // on mediatorPort (443), and each SSH peer on its container port;
@@ -33,7 +41,13 @@ type SSHForward struct {
 // forward spec remaps the container port to the host port with the
 // "container:host" syntax and accepts no listening address (only
 // -t/-u do), which is why per-step distinctness lives in the host
-// port rather than a per-step address.
+// port rather than a per-step address. When frontHostPort is non-zero,
+// a forward from the container's port 22 to the front's host listener
+// is appended, so the step's SSH client reaches the front (ADR-038
+// D5). The per-SSH-peer forwards remain until the per-peer forwarder
+// is retired (a follow-up); a step with SSH peers carries both, but
+// only the front forward is reached (ssh_config sets no Port -> port
+// 22 -> front).
 //
 // Output order:
 //
@@ -41,6 +55,7 @@ type SSHForward struct {
 //	-T <resolverPort>:<resolverHostPort>
 //	-T <mediatorPort>:<mediatorHostPort>
 //	-U <resolverPort>:<resolverHostPort>
+//	-T 22:<frontHostPort>                 (when frontHostPort != 0)
 //	-T <sshContainerPort>:<sshHostPort>   (one per SSH peer, in order)
 //
 // The -U forward for the resolver port is essential: DNS clients try
@@ -48,12 +63,15 @@ type SSHForward struct {
 // container DNS queries time out on UDP. SSH forwards are TCP-only.
 //
 // Byte-identical for byte-identical inputs.
-func BuildPastaArgs(resolverPort, resolverHostPort, mediatorPort, mediatorHostPort uint16, ssh []SSHForward) []string {
+func BuildPastaArgs(resolverPort, resolverHostPort, mediatorPort, mediatorHostPort, frontHostPort uint16, ssh []SSHForward) []string {
 	args := []string{
 		"--splice-only",
 		"-T", fmt.Sprintf("%d:%d", resolverPort, resolverHostPort),
 		"-T", fmt.Sprintf("%d:%d", mediatorPort, mediatorHostPort),
 		"-U", fmt.Sprintf("%d:%d", resolverPort, resolverHostPort),
+	}
+	if frontHostPort != 0 {
+		args = append(args, "-T", fmt.Sprintf("%d:%d", FrontContainerPort, frontHostPort))
 	}
 	for _, f := range ssh {
 		args = append(args, "-T", fmt.Sprintf("%d:%d", f.ContainerPort, f.HostPort))

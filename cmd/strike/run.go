@@ -468,6 +468,7 @@ func (rc *runContext) executeContainerStep(ctx context.Context, step *lane.Step,
 		return fmt.Errorf("%s: no pre-built capsule", safeName)
 	}
 	defer func() {
+		caps.CloseOutbound()
 		rc.networkRecords[stepName] = caps.Records()
 	}()
 
@@ -838,7 +839,7 @@ func (rc *runContext) planTrustVolumes(ctx context.Context, caPEM []byte) (trust
 	for i := range rc.lane.Steps {
 		step := &rc.lane.Steps[i]
 		caps := rc.capsules[string(step.Name)]
-		kh, cfg := executor.SSHTrustContent(step.Peers, caps)
+		kh, cfg := executor.SSHTrustContent(step.Peers, caps, rc.front.HostKeyPublic())
 		if kh == nil {
 			continue
 		}
@@ -962,7 +963,7 @@ func (rc *runContext) startCapsule(ctx context.Context, name, safeName string, p
 	}
 	sshTargets := sshTargetsOf(peers)
 
-	caps, capsErr := capsule.New(name, ports, peerTrusts, sshTargets, rc.ca, rc.upstreamLook)
+	caps, capsErr := capsule.New(name, ports, peerTrusts, sshTargets, rc.front.Addr().Port(), rc.ca, rc.upstreamLook)
 	if capsErr != nil {
 		return nil, fmt.Errorf("%s: construct capsule: %w", safeName, capsErr)
 	}

@@ -76,7 +76,7 @@ func specgenTestCapsule(t *testing.T) (*capsule.NetworkCapsule, string) {
 	t.Cleanup(func() { testutil.CloseLog(t, ca, "specgen CA") })
 
 	c, err := capsule.New("specgen", capsule.HostPorts{Resolver: 15353, Mediator: 15354},
-		nil, nil, ca,
+		nil, nil, 0, ca,
 		func(_ context.Context, _ string) ([]netip.Addr, error) {
 			return []netip.Addr{netip.MustParseAddr("127.0.0.1")}, nil
 		})
