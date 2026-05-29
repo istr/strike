@@ -277,7 +277,7 @@ func cmdRun(ctx context.Context, path string, engine container.Engine) {
 	// address was available to setup) but not accepting; the accept loop
 	// begins only after all setup state is frozen (ADR-038 D2, bind-then-
 	// serve).
-	ft.Start()
+	ft.Start(ctx)
 
 	for _, stepName := range dag.Order {
 		if stepErr := rc.runStep(stepName); stepErr != nil {

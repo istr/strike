@@ -48,7 +48,7 @@ func TestStart_FailsClosed(t *testing.T) {
 			t.Errorf("Close: %v", cErr)
 		}
 	})
-	f.Start()
+	f.Start(context.Background())
 
 	var d net.Dialer
 	conn, dialErr := d.DialContext(context.Background(), "tcp", f.Addr().String())

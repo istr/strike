@@ -86,9 +86,11 @@ func (f *Front) Addr() netip.AddrPort {
 // state) is complete: New binds and exposes Addr for setup, Start begins
 // accepting. Starting only after setup means the accept goroutine sees fully
 // built, frozen setup state without locking. Not safe to call concurrently
-// with Close.
-func (f *Front) Start() {
-	go f.serve()
+// with Close. ctx is the lane-run context, threaded to each session's
+// BridgePeer so an upstream resolve or agent dial cancels when the run ends;
+// the accept loop itself is bounded by Close, not ctx.
+func (f *Front) Start(ctx context.Context) {
+	go f.serve(ctx)
 }
 
 // Close stops the front by closing the listener, which unblocks the accept
@@ -133,7 +135,7 @@ func (f *Front) HostKeyPublic() ssh.PublicKey {
 // command, allowlists the command, looks up the capsule, and hands the
 // channel to capsule.BridgePeer (ADR-038 D5). The front never dials the peer;
 // the capsule does. The loop ends when Close closes the listener.
-func (f *Front) serve() {
+func (f *Front) serve(ctx context.Context) {
 	cfg := &ssh.ServerConfig{NoClientAuth: true}
 	cfg.AddHostKey(f.hostKey)
 	for {
@@ -141,11 +143,11 @@ func (f *Front) serve() {
 		if err != nil {
 			return
 		}
-		go f.handleConn(conn, cfg)
+		go f.handleConn(ctx, conn, cfg)
 	}
 }
 
-func (f *Front) handleConn(conn net.Conn, cfg *ssh.ServerConfig) {
+func (f *Front) handleConn(ctx context.Context, conn net.Conn, cfg *ssh.ServerConfig) {
 	sshConn, chans, reqs, hErr := ssh.NewServerConn(conn, cfg)
 	if hErr != nil {
 		// Handshake failed: sshConn does not own conn, so close it here.
@@ -170,7 +172,7 @@ func (f *Front) handleConn(conn net.Conn, cfg *ssh.ServerConfig) {
 		if aErr != nil {
 			return
 		}
-		f.handleSession(channel, requests)
+		f.handleSession(ctx, channel, requests)
 		break
 	}
 	// The front did not initiate this connection (the engine did, via pasta),
@@ -179,12 +181,17 @@ func (f *Front) handleConn(conn net.Conn, cfg *ssh.ServerConfig) {
 	// close the inbound when the container is reaped. Either ends the Wait;
 	// the deferred sshConn close is then a backstop on an already-closed conn.
 	// No timer: the container lifecycle bounds the wait.
-	if wErr := sshConn.Wait(); wErr != nil && !closer.IsExpectedClose(wErr) {
+	// A client disconnect here (e.g. git's reason-11 "disconnected by user" at
+	// clone end) is normal teardown, not a failure; x/crypto/ssh has no
+	// exported disconnect type, so match the rendered error.
+	if wErr := sshConn.Wait(); wErr != nil &&
+		!closer.IsExpectedClose(wErr) &&
+		!strings.Contains(wErr.Error(), "ssh: disconnect") {
 		log.Printf("WARN   front: conn wait: %v", wErr)
 	}
 }
 
-func (f *Front) handleSession(channel ssh.Channel, requests <-chan *ssh.Request) {
+func (f *Front) handleSession(ctx context.Context, channel ssh.Channel, requests <-chan *ssh.Request) {
 	defer closer.Warn(channel, "front session channel")
 	var token string
 	for req := range requests {
@@ -192,7 +199,7 @@ func (f *Front) handleSession(channel ssh.Channel, requests <-chan *ssh.Request)
 		case "env":
 			token = f.handleEnv(req, token)
 		case "exec":
-			f.handleExec(req, channel, token)
+			f.handleExec(ctx, req, channel, token)
 			return
 		default:
 			replyReq(req, false)
@@ -209,7 +216,7 @@ func (f *Front) handleEnv(req *ssh.Request, token string) string {
 	return token
 }
 
-func (f *Front) handleExec(req *ssh.Request, channel ssh.Channel, token string) {
+func (f *Front) handleExec(ctx context.Context, req *ssh.Request, channel ssh.Channel, token string) {
 	var ex struct{ Command string }
 	if ssh.Unmarshal(req.Payload, &ex) != nil || !allowedSSHCommand(ex.Command) {
 		replyReq(req, false)
@@ -221,7 +228,7 @@ func (f *Front) handleExec(req *ssh.Request, channel ssh.Channel, token string) 
 		return
 	}
 	replyReq(req, true)
-	status, bErr := caps.BridgePeer(context.Background(), channel, token, ex.Command)
+	status, bErr := caps.BridgePeer(ctx, channel, token, ex.Command)
 	if bErr != nil {
 		log.Printf("WARN   front: bridge peer: %v", bErr)
 	}

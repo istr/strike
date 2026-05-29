@@ -340,7 +340,7 @@ func TestBridge_EndToEnd(t *testing.T) {
 	if regErr := f.Register(tokens[0], caps); regErr != nil {
 		t.Fatal(regErr)
 	}
-	f.Start()
+	f.Start(context.Background())
 
 	gotOut, gotErr, gotExit := dialFrontSSH(t, f, tokens[0], "git-upload-pack 'repo'")
 
@@ -397,7 +397,7 @@ func TestBridge_WrongToken_Refused(t *testing.T) {
 	if regErr := f.Register(tokens[0], caps); regErr != nil {
 		t.Fatal(regErr)
 	}
-	f.Start()
+	f.Start(context.Background())
 
 	cfg := &ssh.ClientConfig{
 		User:            "test",
@@ -474,7 +474,7 @@ func TestBridge_InboundCloseUnblocksHandler(t *testing.T) {
 	if regErr := f.Register(tokens[0], caps); regErr != nil {
 		t.Fatal(regErr)
 	}
-	f.Start()
+	f.Start(context.Background())
 
 	// Dial the front and run a bridge.
 	cfg := &ssh.ClientConfig{
@@ -567,7 +567,7 @@ func TestBridge_DisallowedCommand_Refused(t *testing.T) {
 	if regErr := f.Register(tokens[0], caps); regErr != nil {
 		t.Fatal(regErr)
 	}
-	f.Start()
+	f.Start(context.Background())
 
 	cfg := &ssh.ClientConfig{
 		User:            "test",
