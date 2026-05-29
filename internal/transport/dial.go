@@ -12,6 +12,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"syscall"
 
 	"github.com/istr/strike/internal/closer"
 )
@@ -240,6 +241,67 @@ func CaptureIdentity(state tls.ConnectionState, addr string) ConnectionIdentity 
 		id.LeafFingerprint = "sha256:" + hex.EncodeToString(sum[:])
 	}
 	return id
+}
+
+// DialUnixSocket opens a validated connection to a Unix-domain
+// socket. The path is resolved via EvalSymlinks, checked to be
+// a socket (ModeSocket), and verified to be owned by the
+// current user (uid match). Returns a *net.UnixConn connected
+// to the resolved path.
+//
+// Error strings intentionally omit the path to avoid leaking
+// host filesystem layout in logs or error chains.
+func DialUnixSocket(ctx context.Context, path string) (*net.UnixConn, error) {
+	resolved, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return nil, fmt.Errorf("transport: resolve unix socket: %w", err)
+	}
+	info, err := os.Lstat(resolved)
+	if err != nil {
+		return nil, fmt.Errorf("transport: stat unix socket: %w", err)
+	}
+	if info.Mode()&os.ModeSocket == 0 {
+		return nil, errors.New("transport: path is not a unix socket")
+	}
+	st, ok := info.Sys().(*syscall.Stat_t)
+	if !ok {
+		return nil, errors.New("transport: cannot determine socket owner")
+	}
+	if int64(st.Uid) != int64(os.Getuid()) {
+		return nil, errors.New("transport: unix socket owner does not match current user")
+	}
+	var d net.Dialer
+	conn, err := d.DialContext(ctx, "unix", resolved)
+	if err != nil {
+		return nil, fmt.Errorf("transport: dial unix socket: %w", err)
+	}
+	uc, ok := conn.(*net.UnixConn)
+	if !ok {
+		closer.Warn(conn, "transport: non-unix conn cleanup")
+		return nil, errors.New("transport: dialer returned non-unix connection")
+	}
+	return uc, nil
+}
+
+// DialTCP opens a TCP connection to addr (host:port). The host
+// part must be an IP literal (IPv4 or IPv6); hostnames are
+// rejected because callers are expected to have resolved them
+// already via the capsule's DoT resolver. This prevents
+// accidental DNS-based routing outside the resolver allowlist.
+func DialTCP(ctx context.Context, addr string) (net.Conn, error) {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return nil, fmt.Errorf("transport: invalid tcp address: %w", err)
+	}
+	if !isIPLiteral(host) {
+		return nil, errors.New("transport: tcp dial requires an IP literal, not a hostname")
+	}
+	var d net.Dialer
+	conn, err := d.DialContext(ctx, "tcp", addr)
+	if err != nil {
+		return nil, fmt.Errorf("transport: dial tcp: %w", err)
+	}
+	return conn, nil
 }
 
 // isIPLiteral reports whether host parses as an IP address

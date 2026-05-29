@@ -510,7 +510,7 @@ func (c *NetworkCapsule) BridgePeer(ctx context.Context, channel ssh.Channel, to
 		fwd.record(rec)
 		return 255, fmt.Errorf("capsule: SSH_AUTH_SOCK not set")
 	}
-	agentConn, aErr := net.DialUnix("unix", nil, &net.UnixAddr{Name: agentSock, Net: "unix"})
+	agentConn, aErr := transport.DialUnixSocket(ctx, agentSock)
 	if aErr != nil {
 		rec.Decision = mediator.DecisionError
 		rec.Err = aErr.Error()

@@ -89,6 +89,11 @@ linters:
         # Zero subprocess execution. Belt-and-suspenders with depguard.
         - pattern: 'exec\.(Command|LookPath)'
           msg: "use container.Engine API -- no subprocess execution (AGENTS.md invariant 1)"
+        # Egress dials go through transport.DialVerified or transport.DialUnixSocket.
+        - pattern: 'net\.Dial(Unix|TCP|IP|Timeout)?$'
+          msg: "use transport.DialVerified or transport.DialUnixSocket (CODE-STYLE.md#controlplane-egress-dials)"
+        - pattern: 'net\.Dialer'
+          msg: "use transport.DialVerified or transport.DialUnixSocket (CODE-STYLE.md#controlplane-egress-dials)"
     depguard:
       rules:
         all:
@@ -134,6 +139,16 @@ linters:
           - godot
           - revive
           - govet
+      # transport package: validated egress dial chokepoint
+      - path: internal/transport/dial\.go
+        linters:
+          - forbidigo
+        text: "net\\.Dial|net\\.Dialer"
+      # Test files: legitimate test-side dials
+      - path: _test\.go
+        linters:
+          - forbidigo
+        text: "net\\.Dial|net\\.Dialer"
 
 issues:
   max-issues-per-linter: 0

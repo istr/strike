@@ -11,6 +11,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/hex"
 	"encoding/pem"
+	"io"
 	"math/big"
 	"net"
 	"os"
@@ -21,6 +22,7 @@ import (
 
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/closer"
+	"github.com/istr/strike/internal/testutil"
 	"github.com/istr/strike/internal/transport"
 )
 
@@ -428,5 +430,166 @@ func TestDialVerified_NoSNIForIPLiteral(t *testing.T) {
 	defer closer.Warn(conn, "test verified conn")
 	if conn.Identity().ServerName != "" {
 		t.Errorf("ServerName = %q, want empty (IP literal addr)", conn.Identity().ServerName)
+	}
+}
+
+func TestDialUnixSocket(t *testing.T) {
+	tests := []struct {
+		name    string
+		setup   func(t *testing.T) string
+		wantErr string
+	}{
+		{
+			name: "valid socket",
+			setup: func(t *testing.T) string {
+				t.Helper()
+				return testutil.StartEchoSocket(t)
+			},
+		},
+		{
+			name: "regular file",
+			setup: func(t *testing.T) string {
+				t.Helper()
+				p := filepath.Join(t.TempDir(), "not-a-socket")
+				if err := os.WriteFile(p, []byte("x"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+				return p
+			},
+			wantErr: "not a unix socket",
+		},
+		{
+			name: "nonexistent path",
+			setup: func(t *testing.T) string {
+				t.Helper()
+				return filepath.Join(t.TempDir(), "no-such-file")
+			},
+			wantErr: "resolve unix socket",
+		},
+		{
+			name: "symlink to valid socket",
+			setup: func(t *testing.T) string {
+				t.Helper()
+				target := testutil.StartEchoSocket(t)
+				link := filepath.Join(t.TempDir(), "link.sock")
+				if err := os.Symlink(target, link); err != nil {
+					t.Fatal(err)
+				}
+				return link
+			},
+		},
+		{
+			name: "broken symlink",
+			setup: func(t *testing.T) string {
+				t.Helper()
+				link := filepath.Join(t.TempDir(), "broken.sock")
+				if err := os.Symlink("/nonexistent/target", link); err != nil {
+					t.Fatal(err)
+				}
+				return link
+			},
+			wantErr: "resolve unix socket",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := tt.setup(t)
+			ctx := context.Background()
+			conn, err := transport.DialUnixSocket(ctx, path)
+			if tt.wantErr != "" {
+				if err == nil {
+					t.Fatalf("expected error containing %q, got nil", tt.wantErr)
+				}
+				if !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("error %q does not contain %q", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("DialUnixSocket: %v", err)
+			}
+			defer testutil.CloseLog(t, conn, "test unix conn")
+
+			want := []byte("dial unix socket test")
+			if _, wErr := conn.Write(want); wErr != nil {
+				t.Fatalf("write: %v", wErr)
+			}
+			if cwErr := conn.CloseWrite(); cwErr != nil {
+				t.Fatalf("close write: %v", cwErr)
+			}
+			got, rErr := io.ReadAll(conn)
+			if rErr != nil {
+				t.Fatalf("read: %v", rErr)
+			}
+			if string(got) != string(want) {
+				t.Errorf("got %q, want %q", got, want)
+			}
+		})
+	}
+}
+
+func TestDialTCP(t *testing.T) {
+	// Start a TCP listener for the success case.
+	var lc net.ListenConfig
+	ln, err := lc.Listen(context.Background(), "tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	t.Cleanup(func() { closer.Warn(ln, "test tcp listener") })
+	go func() {
+		for {
+			c, acceptErr := ln.Accept()
+			if acceptErr != nil {
+				return
+			}
+			closer.Warn(c, "test tcp accepted")
+		}
+	}()
+
+	tests := []struct {
+		name    string
+		addr    string
+		wantErr string
+	}{
+		{
+			name: "valid IP literal",
+			addr: ln.Addr().String(),
+		},
+		{
+			name:    "hostname rejected",
+			addr:    "example.com:443",
+			wantErr: "requires an IP literal",
+		},
+		{
+			name:    "missing port",
+			addr:    "127.0.0.1",
+			wantErr: "invalid tcp address",
+		},
+		{
+			name:    "connection refused",
+			addr:    "127.0.0.1:1",
+			wantErr: "dial tcp",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			conn, dialErr := transport.DialTCP(ctx, tt.addr)
+			if tt.wantErr != "" {
+				if dialErr == nil {
+					t.Fatalf("expected error containing %q, got nil", tt.wantErr)
+				}
+				if !strings.Contains(dialErr.Error(), tt.wantErr) {
+					t.Fatalf("error %q does not contain %q", dialErr, tt.wantErr)
+				}
+				return
+			}
+			if dialErr != nil {
+				t.Fatalf("DialTCP: %v", dialErr)
+			}
+			closer.Warn(conn, "test tcp conn")
+		})
 	}
 }

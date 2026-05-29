@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/istr/strike/internal/clock"
+	nettransport "github.com/istr/strike/internal/transport"
 )
 
 // newHTTPClient creates an HTTP client for the given address.
@@ -29,8 +30,7 @@ func newHTTPClient(addr string, tlsCfg TLSConfig) (*http.Client, error) {
 	case strings.HasPrefix(addr, "unix://"):
 		sockPath := strings.TrimPrefix(addr, "unix://")
 		transport.DialContext = func(ctx context.Context, _, _ string) (net.Conn, error) {
-			var d net.Dialer
-			return d.DialContext(ctx, "unix", sockPath)
+			return nettransport.DialUnixSocket(ctx, sockPath)
 		}
 
 	case strings.HasPrefix(addr, "tcp://"):

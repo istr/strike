@@ -217,11 +217,22 @@ schema disagree, the CUE schema wins and the Go code must be fixed.
 ```
 cmd/strike/main.go   CLI entry, dependency wiring, lane execution orchestration
 internal/
+  capsule/           Per-step network capsule (resolver, mediator, SSH forwards, pasta)
+  clock/             Reproducible time (Wall, Reproducible); wraps stdlib time
+  closer/            Deferred close/remove helpers (Warn, Remove)
   container/         Container engine REST API client (Engine interface, podman impl)
-  lane/              Pipeline definitions, CUE schema, DAG, state, digests
-  executor/          Container execution, OCI pack, signing, SBOM
-  registry/          OCI registry operations, caching, spec hashing
+  copier/            Half-duplex io.Copy with half-close (Forward)
   deploy/            Deployment with mandatory state attestation
+  egress/            Pasta argument builder for per-step container networking
+  executor/          Container execution, OCI pack, signing, SBOM
+  front/             Control-plane SSH front (per-capsule token routing)
+  lane/              Pipeline definitions, CUE schema, DAG, state, digests
+  mediator/          TLS-terminating egress mediator (SNI policy, audit)
+  probe/             Filesystem and network probes (Stat, socket checks)
+  registry/          OCI registry operations, caching, spec hashing
+  resolver/          Allowlist DNS resolver (DoT upstream, per-step scope)
+  testutil/          Test helpers (echo socket, close, HTTP, fixtures)
+  transport/         Validated egress dialing (DialVerified, DialUnixSocket), TLS trust types
 ```
 
 Do not create new packages under internal/ without discussion. Do not create

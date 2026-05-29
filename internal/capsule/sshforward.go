@@ -14,6 +14,7 @@ import (
 	"github.com/istr/strike/internal/closer"
 	"github.com/istr/strike/internal/copier"
 	"github.com/istr/strike/internal/mediator"
+	"github.com/istr/strike/internal/transport"
 )
 
 // SSHContainerPortBase is the first container-side port assigned to a
@@ -156,8 +157,7 @@ func (f *sshForwarder) handle(ctx context.Context, client net.Conn) {
 	dst := netip.AddrPortFrom(addrs[0], f.port)
 	rec.DestIP = addrs[0].String()
 
-	var d net.Dialer
-	upstream, err := d.DialContext(ctx, "tcp", dst.String())
+	upstream, err := transport.DialTCP(ctx, dst.String())
 	if err != nil {
 		rec.Decision = mediator.DecisionError
 		rec.Err = err.Error()

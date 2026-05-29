@@ -797,6 +797,60 @@ fixture remains inline.
 
 ---
 
+## Control-plane egress dials go through `internal/transport` `controlplane-egress-dials`
+
+**Rule.** Every outbound `net.Dial*` or `net.Dialer` call in non-test code
+goes through a validated helper in `internal/transport`: `DialVerified` for
+TLS-over-TCP, `DialTCP` for raw TCP to a resolved IP, `DialUnixSocket` for
+Unix-domain sockets. Raw `net.Dial`,
+`net.DialUnix`, `net.DialTCP`, `net.DialTimeout`, and `net.Dialer`
+construction are forbidden by `forbidigo` outside the chokepoint.
+
+**Bad.**
+
+```go
+agentConn, err := net.DialUnix("unix", nil, &net.UnixAddr{Name: sock, Net: "unix"})
+```
+
+**Good.**
+
+```go
+agentConn, err := transport.DialUnixSocket(ctx, sock)
+```
+
+**Rationale.** gosec models `net.Dial` as an SSRF sink but not
+`net.DialUnix`. A security finding can be silenced by switching to a
+semantically equivalent function the detector does not model -- without
+validating the input and without the suppression review AGENTS.md
+mandates. Anchoring enforcement to a project-owned chokepoint, enforced
+by location via `forbidigo`, makes the invariant immune to which dial
+function is used and which functions the detector happens to model.
+
+`DialUnixSocket` validates the path before dialing: `EvalSymlinks`,
+`ModeSocket` check, and owner-uid match. `DialTCP` requires the host
+part to be an IP literal (callers must resolve via the capsule's DoT
+resolver first; hostnames are rejected to prevent DNS-based SSRF).
+Error strings omit filesystem paths (AGENTS.md error-message rules).
+
+**Enforced by.** `forbidigo` rules in `.golangci.yml`; the chokepoint
+file (`internal/transport/dial.go`) is exempted via `exclusions.rules`.
+
+**Discovery.**
+
+```
+grep -rn -E 'net\.(Dial|DialUnix|DialTCP|DialIP|DialTimeout)\(' \
+  --include='*.go' | grep -v _test.go
+grep -rn 'net\.Dialer' --include='*.go' | grep -v _test.go
+```
+
+Any match outside `internal/transport/dial.go` and the files listed in
+`.golangci.yml` exclusions is a violation.
+
+**Exception.** Test files (`_test.go`) are excluded from the forbidigo
+rule to allow test-side dials. No production-code exceptions remain.
+
+---
+
 ## See also
 
 - `DESIGN-PRINCIPLES.md` -- the principles these patterns operationalize.

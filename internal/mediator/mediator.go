@@ -283,8 +283,7 @@ func (m *Mediator) dialUpstream(ctx context.Context, sni string, trust transport
 	}
 
 	target := net.JoinHostPort(addrs[0].String(), upstreamPort)
-	dialer := &net.Dialer{}
-	raw, err := dialer.DialContext(ctx, "tcp", target)
+	raw, err := transport.DialTCP(ctx, target)
 	if err != nil {
 		return nil, nil, fmt.Errorf("upstream dial %s: %w", target, err)
 	}

@@ -13,6 +13,7 @@ import (
 	"github.com/istr/strike/internal/copier"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/probe"
+	"github.com/istr/strike/internal/transport"
 )
 
 const containerAgentSocketPath = "/run/strike/ssh-agent.sock"
@@ -89,8 +90,7 @@ func StartAgentProxy(ctx context.Context, peers []lane.Peer, scratchDir string) 
 func forwardAgent(client net.Conn, hostSock string) {
 	defer closer.Warn(client, "ssh agent client")
 
-	var d net.Dialer
-	upstream, err := d.Dial("unix", hostSock)
+	upstream, err := transport.DialUnixSocket(context.Background(), hostSock)
 	if err != nil {
 		return
 	}
