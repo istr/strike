@@ -17,17 +17,19 @@ import (
 // CloseWrite. Both io.Copy and CloseWrite errors are logged at WARN
 // unless they are expected-close conditions.
 func Forward(dst io.Writer, src io.Reader, context string) {
-	if _, err := io.Copy(dst, src); err != nil && !isExpectedClose(err) {
+	if _, err := io.Copy(dst, src); err != nil && !IsExpectedClose(err) {
 		log.Printf("WARN   %s: copy: %v", context, err)
 	}
 	if cw, ok := dst.(interface{ CloseWrite() error }); ok {
-		if err := cw.CloseWrite(); err != nil && !isExpectedClose(err) {
+		if err := cw.CloseWrite(); err != nil && !IsExpectedClose(err) {
 			log.Printf("WARN   %s: half-close: %v", context, err)
 		}
 	}
 }
 
-func isExpectedClose(err error) bool {
+// IsExpectedClose reports whether err is an expected socket-shutdown
+// condition (EOF, closed connection, broken pipe, reset).
+func IsExpectedClose(err error) bool {
 	if errors.Is(err, io.EOF) || errors.Is(err, net.ErrClosed) || errors.Is(err, os.ErrClosed) {
 		return true
 	}

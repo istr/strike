@@ -3,6 +3,7 @@ package capsule_test
 import (
 	"context"
 	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/sha256"
@@ -19,6 +20,7 @@ import (
 	"sync"
 	"testing"
 
+	"golang.org/x/crypto/ssh"
 	"golang.org/x/net/dns/dnsmessage"
 
 	"github.com/istr/strike/internal/capsule"
@@ -50,6 +52,21 @@ func testCA(t *testing.T) *transport.EphemeralCA {
 // testPorts returns a HostPorts suitable for tests that do not call Start.
 func testPorts() capsule.HostPorts {
 	return capsule.HostPorts{Resolver: 5353, Mediator: 5354}
+}
+
+// testHostKeyLine generates an ephemeral ed25519 key and returns its
+// authorized_keys line, suitable for SSHTarget.HostKeys.
+func testHostKeyLine(t *testing.T) string {
+	t.Helper()
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pub, err := ssh.NewPublicKey(priv.Public())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return strings.TrimSpace(string(ssh.MarshalAuthorizedKey(pub)))
 }
 
 func TestNew_RejectsEmptyStepName(t *testing.T) {
@@ -804,7 +821,7 @@ func TestCapsule_SSHForward_PastaArgs(t *testing.T) {
 	ca := testCA(t)
 	sshHostPort := uint16(15375)
 	hp := capsule.HostPorts{Resolver: 15373, Mediator: 15374, SSH: []uint16{sshHostPort}}
-	targets := []capsule.SSHTarget{{Host: "git.example.com"}}
+	targets := []capsule.SSHTarget{{Host: "git.example.com", HostKeys: []string{testHostKeyLine(t)}}}
 
 	c, err := capsule.New("ssh-step", hp, nil, targets, ca, testUpstream())
 	if err != nil {
@@ -850,7 +867,7 @@ func TestSSHConfig_NoSSHTargets_Nil(t *testing.T) {
 func TestTokens_OneSSHTarget(t *testing.T) {
 	ca := testCA(t)
 	hp := capsule.HostPorts{Resolver: 15376, Mediator: 15377, SSH: []uint16{15378}}
-	targets := []capsule.SSHTarget{{Host: "git.example.com"}}
+	targets := []capsule.SSHTarget{{Host: "git.example.com", HostKeys: []string{testHostKeyLine(t)}}}
 
 	c, err := capsule.New("tok-step", hp, nil, targets, ca, testUpstream())
 	if err != nil {
@@ -872,7 +889,7 @@ func TestTokens_OneSSHTarget(t *testing.T) {
 func TestSSHConfig_OneSSHTarget_Structure(t *testing.T) {
 	ca := testCA(t)
 	hp := capsule.HostPorts{Resolver: 15379, Mediator: 15380, SSH: []uint16{15381}}
-	targets := []capsule.SSHTarget{{Host: "git.example.com"}}
+	targets := []capsule.SSHTarget{{Host: "git.example.com", HostKeys: []string{testHostKeyLine(t)}}}
 
 	c, err := capsule.New("cfg-step", hp, nil, targets, ca, testUpstream())
 	if err != nil {
@@ -899,7 +916,7 @@ func TestSSHConfig_OneSSHTarget_Structure(t *testing.T) {
 func TestTokens_IsSnapshot(t *testing.T) {
 	ca := testCA(t)
 	hp := capsule.HostPorts{Resolver: 15382, Mediator: 15383, SSH: []uint16{15384}}
-	targets := []capsule.SSHTarget{{Host: "git.example.com"}}
+	targets := []capsule.SSHTarget{{Host: "git.example.com", HostKeys: []string{testHostKeyLine(t)}}}
 
 	c, err := capsule.New("snap-step", hp, nil, targets, ca, testUpstream())
 	if err != nil {

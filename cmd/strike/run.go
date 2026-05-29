@@ -990,7 +990,11 @@ func sshTargetsOf(peers []lane.Peer) []capsule.SSHTarget {
 	var out []capsule.SSHTarget
 	for _, p := range peers {
 		if sp, ok := p.(lane.SSHPeer); ok {
-			out = append(out, capsule.SSHTarget{Host: string(sp.Host)})
+			keys := make([]string, len(sp.KnownHosts))
+			for j, e := range sp.KnownHosts {
+				keys[j] = e.KeyType + " " + e.Key
+			}
+			out = append(out, capsule.SSHTarget{Host: string(sp.Host), HostKeys: keys})
 		}
 	}
 	return out

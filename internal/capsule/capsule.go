@@ -15,17 +15,24 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
+	"log"
 	"math"
 	"net"
 	"net/netip"
+	"os"
 	"sort"
 	"strconv"
 	"sync"
 	"syscall"
 
+	"golang.org/x/crypto/ssh"
+	"golang.org/x/crypto/ssh/agent"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/closer"
+	"github.com/istr/strike/internal/copier"
 	"github.com/istr/strike/internal/egress"
 	"github.com/istr/strike/internal/mediator"
 	"github.com/istr/strike/internal/resolver"
@@ -88,6 +95,7 @@ type NetworkCapsule struct {
 	stepName    string
 	pastaArgs   []string
 	sshForwards []*sshForwarder
+	sshPins     [][]ssh.PublicKey
 	sshTokens   []string
 	sshTCP      []net.Listener
 	hostPorts   HostPorts
@@ -160,6 +168,7 @@ func New(
 	forwarders := make([]*sshForwarder, len(sshTargets))
 	sshFwds := make([]egress.SSHForward, len(sshTargets))
 	sshTokens := make([]string, len(sshTargets))
+	sshPins := make([][]ssh.PublicKey, len(sshTargets))
 	for k, t := range sshTargets {
 		fwd, fErr := newSSHForwarder(stepName, t, upstreamLook)
 		if fErr != nil {
@@ -175,6 +184,14 @@ func New(
 			return nil, fmt.Errorf("capsule: ssh token: %w", tErr)
 		}
 		sshTokens[k] = tok
+		pins, pErr := parseHostKeys(t.HostKeys)
+		if pErr != nil {
+			return nil, fmt.Errorf("capsule: ssh host keys for %q: %w", t.Host, pErr)
+		}
+		if len(pins) == 0 {
+			return nil, fmt.Errorf("capsule: ssh peer %q has no host keys", t.Host)
+		}
+		sshPins[k] = pins
 	}
 
 	return &NetworkCapsule{
@@ -183,6 +200,7 @@ func New(
 		resolver:    res,
 		mediator:    med,
 		sshForwards: forwarders,
+		sshPins:     sshPins,
 		sshTokens:   sshTokens,
 		ca:          ca,
 		pastaArgs:   egress.BuildPastaArgs(resolverPort, hostPorts.Resolver, mediatorPort, hostPorts.Mediator, sshFwds),
@@ -409,4 +427,191 @@ func (c *NetworkCapsule) Records() Records {
 		Connections: c.mediator.Records(),
 		SSH:         ssh,
 	}
+}
+
+// parseHostKeys parses known_hosts-style "<keyType> <base64>" lines into
+// public keys for host-key pinning.
+func parseHostKeys(lines []string) ([]ssh.PublicKey, error) {
+	out := make([]ssh.PublicKey, 0, len(lines))
+	for _, ln := range lines {
+		pub, _, _, _, err := ssh.ParseAuthorizedKey([]byte(ln))
+		if err != nil {
+			return nil, fmt.Errorf("parse host key %q: %w", ln, err)
+		}
+		out = append(out, pub)
+	}
+	return out, nil
+}
+
+// pinnedHostKey returns a HostKeyCallback that accepts the connection only if
+// the presented host key matches one of pins (by marshaled wire bytes). A
+// peer may declare several keys (multiple known_hosts entries); any one
+// matches. Mismatch is fail-closed.
+func pinnedHostKey(pins []ssh.PublicKey) ssh.HostKeyCallback {
+	want := make(map[string]struct{}, len(pins))
+	for _, p := range pins {
+		want[string(p.Marshal())] = struct{}{}
+	}
+	return func(_ string, _ net.Addr, key ssh.PublicKey) error {
+		if _, ok := want[string(key.Marshal())]; ok {
+			return nil
+		}
+		return fmt.Errorf("capsule: ssh host key mismatch")
+	}
+}
+
+// peerIndexForToken returns the SSH peer index a capability token was issued
+// for, or false if the token is not this capsule's. O(n) over a handful of
+// peers.
+func (c *NetworkCapsule) peerIndexForToken(token string) (int, bool) {
+	for k, t := range c.sshTokens {
+		if t == token {
+			return k, true
+		}
+	}
+	return -1, false
+}
+
+// BridgePeer dials the real SSH peer this token was issued for and splices the
+// container-facing channel to it, running the command cmd (already
+// allowlisted by the front) on the upstream. The capsule holds the peer host-
+// key pins and drives the host ssh-agent for client auth; the front never
+// reaches the peer (ADR-038 D5, left-to-right dialing). Returns the upstream
+// exit status; the caller relays it on the channel. The splice shape and
+// close/exit ordering are the verified bridge (ADR-038 spike): three io.Copy
+// goroutines (stdin, stdout+CloseWrite, stderr), wait for the upstream, then
+// the caller sends exit-status before closing the channel.
+func (c *NetworkCapsule) BridgePeer(ctx context.Context, channel ssh.Channel, token, cmd string) (uint32, error) {
+	k, ok := c.peerIndexForToken(token)
+	if !ok {
+		return 255, fmt.Errorf("capsule: unknown token")
+	}
+	fwd := c.sshForwards[k]
+
+	rec := SSHConnectionRecord{Time: clock.Wall(), Host: fwd.host, Port: fwd.port}
+	addrs, lErr := fwd.upstreamLook(ctx, fwd.host)
+	if lErr != nil || len(addrs) == 0 {
+		rec.Decision = mediator.DecisionError
+		if lErr != nil {
+			rec.Err = lErr.Error()
+		} else {
+			rec.Err = "no addresses resolved"
+		}
+		fwd.record(rec)
+		return 255, fmt.Errorf("capsule: resolve %q: %w", fwd.host, lErr)
+	}
+	rec.DestIP = addrs[0].String()
+	dst := netip.AddrPortFrom(addrs[0], fwd.port)
+
+	agentSock := os.Getenv("SSH_AUTH_SOCK")
+	if agentSock == "" {
+		rec.Decision = mediator.DecisionError
+		rec.Err = "SSH_AUTH_SOCK not set"
+		fwd.record(rec)
+		return 255, fmt.Errorf("capsule: SSH_AUTH_SOCK not set")
+	}
+	agentConn, aErr := net.DialUnix("unix", nil, &net.UnixAddr{Name: agentSock, Net: "unix"})
+	if aErr != nil {
+		rec.Decision = mediator.DecisionError
+		rec.Err = aErr.Error()
+		fwd.record(rec)
+		return 255, fmt.Errorf("capsule: agent dial: %w", aErr)
+	}
+	defer closer.Warn(agentConn, "capsule agent conn")
+	agentClient := agent.NewClient(agentConn)
+
+	clientCfg := &ssh.ClientConfig{
+		User:            "git",
+		Auth:            []ssh.AuthMethod{ssh.PublicKeysCallback(agentClient.Signers)},
+		HostKeyCallback: pinnedHostKey(c.sshPins[k]),
+	}
+	upstream, dErr := ssh.Dial("tcp", dst.String(), clientCfg)
+	if dErr != nil {
+		rec.Decision = mediator.DecisionError
+		rec.Err = dErr.Error()
+		fwd.record(rec)
+		return 255, fmt.Errorf("capsule: upstream dial: %w", dErr)
+	}
+	defer closer.Warn(upstream, "capsule upstream conn")
+
+	rec.Decision = mediator.DecisionAllowed
+	fwd.record(rec)
+
+	return spliceSSH(channel, upstream, cmd)
+}
+
+// spliceSSH runs cmd on the upstream connection and splices the channel to it.
+// Verified close/exit ordering (ADR-038 spike): three goroutines (stdin,
+// stdout, stderr); channel.CloseWrite after both stdout and stderr drain (they
+// share the channel, so half-close waits for both); upstream exit status
+// returned after all pumps finish.
+func spliceSSH(channel ssh.Channel, upstream *ssh.Client, cmd string) (uint32, error) {
+	session, sErr := upstream.NewSession()
+	if sErr != nil {
+		return 255, fmt.Errorf("capsule: upstream session: %w", sErr)
+	}
+	defer closer.Warn(session, "capsule upstream session")
+
+	stdin, inErr := session.StdinPipe()
+	if inErr != nil {
+		return 255, fmt.Errorf("capsule: stdin pipe: %w", inErr)
+	}
+	stdout, outErr := session.StdoutPipe()
+	if outErr != nil {
+		return 255, fmt.Errorf("capsule: stdout pipe: %w", outErr)
+	}
+	stderr, errErr := session.StderrPipe()
+	if errErr != nil {
+		return 255, fmt.Errorf("capsule: stderr pipe: %w", errErr)
+	}
+	if startErr := session.Start(cmd); startErr != nil {
+		return 255, fmt.Errorf("capsule: upstream exec: %w", startErr)
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(3)
+	go func() {
+		defer wg.Done()
+		copier.Forward(stdin, channel, "capsule stdin")
+		closer.Warn(stdin, "capsule stdin pipe")
+	}()
+	// stdout and stderr both write to the container channel, so we must
+	// NOT call channel.CloseWrite until both finish. Use io.Copy (not
+	// copier.Forward, which auto-half-closes) and CloseWrite after join.
+	go func() {
+		defer wg.Done()
+		if _, cpErr := io.Copy(channel, stdout); cpErr != nil && !copier.IsExpectedClose(cpErr) {
+			log.Printf("WARN   capsule stdout: copy: %v", cpErr)
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		if _, cpErr := io.Copy(channel.Stderr(), stderr); cpErr != nil && !copier.IsExpectedClose(cpErr) {
+			log.Printf("WARN   capsule stderr: copy: %v", cpErr)
+		}
+	}()
+
+	status := sshExitStatus(session.Wait())
+	wg.Wait()
+	if cwErr := channel.CloseWrite(); cwErr != nil && !copier.IsExpectedClose(cwErr) {
+		log.Printf("WARN   capsule channel: half-close: %v", cwErr)
+	}
+	return status, nil
+}
+
+// sshExitStatus extracts the exit status from an ssh.Session.Wait error. A nil
+// error is exit 0; an ExitError yields its status clamped to [0,255]; anything
+// else is 255.
+func sshExitStatus(err error) uint32 {
+	if err == nil {
+		return 0
+	}
+	var exitErr *ssh.ExitError
+	if errors.As(err, &exitErr) {
+		code := exitErr.ExitStatus()
+		if code >= 0 && code <= 255 {
+			return uint32(code)
+		}
+	}
+	return 255
 }

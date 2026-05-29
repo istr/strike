@@ -38,12 +38,16 @@ func isTimeoutErr(err error) bool {
 	return errors.As(err, &ne) && ne.Timeout()
 }
 
-// SSHTarget is one SSH peer the capsule forwards to: the declared
-// upstream host (added to the resolver allowlist and resolved via the
-// DoT resolver) and, implicitly, the upstream port the raw-TCP
-// forwarder dials (the port suffix of Host, default 22).
+// SSHTarget is one SSH peer the capsule connects to: the declared upstream
+// host (added to the resolver allowlist and resolved via the DoT resolver,
+// the port suffix being the upstream port, default 22) and the peer's
+// declared host keys. HostKeys are the lane's known_hosts entries for this
+// peer ("<keyType> <base64>" lines, no host prefix); the capsule pins them
+// when it dials the peer (the front, not the container, now validates the
+// peer -- ADR-038 D5, left-to-right dialing).
 type SSHTarget struct {
-	Host string
+	Host     string
+	HostKeys []string
 }
 
 // SSHConnectionRecord captures one SSH forward attempt for attestation.

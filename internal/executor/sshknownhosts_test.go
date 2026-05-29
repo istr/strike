@@ -4,6 +4,8 @@ import (
 	"archive/tar"
 	"bytes"
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -13,6 +15,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	gossh "golang.org/x/crypto/ssh"
 
 	"github.com/istr/strike/internal/capsule"
 	"github.com/istr/strike/internal/executor"
@@ -170,12 +174,28 @@ func TestSSHTrustContent_no_ssh_peers(t *testing.T) {
 	}
 }
 
+func testSSHHostKey(t *testing.T) (keyType, keyB64, authLine string) {
+	t.Helper()
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pub, err := gossh.NewPublicKey(priv.Public())
+	if err != nil {
+		t.Fatal(err)
+	}
+	line := strings.TrimSpace(string(gossh.MarshalAuthorizedKey(pub)))
+	parts := strings.SplitN(line, " ", 2)
+	return parts[0], parts[1], line
+}
+
 func TestSSHTrustContent_with_ssh_peers(t *testing.T) {
+	kt, kb, authLine := testSSHHostKey(t)
 	peers := []lane.Peer{
 		lane.SSHPeer{
 			Type: "ssh", Host: transport.Host("git.example.com"),
 			KnownHosts: []lane.KnownHostEntry{
-				{KeyType: "ssh-ed25519", Key: "AAAAC3NzaC1lZDI1NTE5AAAAITestKey"},
+				{KeyType: kt, Key: kb},
 			},
 		},
 	}
@@ -193,7 +213,7 @@ func TestSSHTrustContent_with_ssh_peers(t *testing.T) {
 		return []netip.Addr{netip.MustParseAddr("93.184.216.34")}, nil
 	}
 	hp := capsule.HostPorts{Resolver: 5353, Mediator: 5354, SSH: []uint16{5355}}
-	targets := []capsule.SSHTarget{{Host: "git.example.com"}}
+	targets := []capsule.SSHTarget{{Host: "git.example.com", HostKeys: []string{authLine}}}
 	caps, capsErr := capsule.New("trust-step", hp, nil, targets, ca, lookup)
 	if capsErr != nil {
 		t.Fatalf("capsule.New: %v", capsErr)

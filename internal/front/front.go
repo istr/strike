@@ -14,9 +14,16 @@ package front
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"encoding/binary"
 	"fmt"
+	"log"
 	"net"
 	"net/netip"
+	"strings"
+
+	"golang.org/x/crypto/ssh"
 
 	"github.com/istr/strike/internal/capsule"
 	"github.com/istr/strike/internal/closer"
@@ -25,6 +32,7 @@ import (
 // Front is strike's lane-run control-plane front. It is constructed once per
 // cmdRun, alongside the ephemeral CA, and closed at lane end.
 type Front struct {
+	hostKey  ssh.Signer
 	listener net.Listener
 	dispatch map[string]*capsule.NetworkCapsule
 	addr     netip.AddrPort
@@ -47,10 +55,21 @@ func New(ctx context.Context) (*Front, error) {
 		closer.Warn(l, "front listener")
 		return nil, fmt.Errorf("front: listener address is %T, want *net.TCPAddr", l.Addr())
 	}
+	_, priv, keyErr := ed25519.GenerateKey(rand.Reader)
+	if keyErr != nil {
+		closer.Warn(l, "front listener")
+		return nil, fmt.Errorf("front: host key: %w", keyErr)
+	}
+	signer, sErr := ssh.NewSignerFromKey(priv)
+	if sErr != nil {
+		closer.Warn(l, "front listener")
+		return nil, fmt.Errorf("front: host signer: %w", sErr)
+	}
 	f := &Front{
 		addr:     tcpAddr.AddrPort(),
 		listener: l,
 		dispatch: map[string]*capsule.NetworkCapsule{},
+		hostKey:  signer,
 	}
 	return f, nil
 }
@@ -103,16 +122,122 @@ func (f *Front) Lookup(token string) (*capsule.NetworkCapsule, bool) {
 	return c, ok
 }
 
-// serve accepts and immediately refuses every connection. The front has no
-// routing table and no upstream dial path until the terminating SSH server
-// lands (ADR-038 roadmap item 5), so a connection that reaches it must fail
-// closed, never be relayed. The loop ends when Close closes the listener.
+// HostKeyPublic returns the front's synthetic SSH host key's public half.
+// Used by the bridge test and by instruction 66 for the container known_hosts.
+func (f *Front) HostKeyPublic() ssh.PublicKey {
+	return f.hostKey.PublicKey()
+}
+
+// serve accepts container-facing SSH connections, terminates each with the
+// synthetic host key and none auth, reads the STRIKE_PEER token and the
+// command, allowlists the command, looks up the capsule, and hands the
+// channel to capsule.BridgePeer (ADR-038 D5). The front never dials the peer;
+// the capsule does. The loop ends when Close closes the listener.
 func (f *Front) serve() {
+	cfg := &ssh.ServerConfig{NoClientAuth: true}
+	cfg.AddHostKey(f.hostKey)
 	for {
 		conn, err := f.listener.Accept()
 		if err != nil {
 			return
 		}
-		closer.Warn(conn, "front: refused pre-server connection")
+		go f.handleConn(conn, cfg)
+	}
+}
+
+func (f *Front) handleConn(conn net.Conn, cfg *ssh.ServerConfig) {
+	defer closer.Warn(conn, "front conn")
+	sshConn, chans, reqs, hErr := ssh.NewServerConn(conn, cfg)
+	if hErr != nil {
+		return
+	}
+	defer closer.Warn(sshConn, "front ssh conn")
+	go ssh.DiscardRequests(reqs)
+
+	for newChan := range chans {
+		if newChan.ChannelType() != "session" {
+			rejectErr := newChan.Reject(ssh.UnknownChannelType, "only session channels")
+			if rejectErr != nil {
+				log.Printf("WARN   front: reject non-session channel: %v", rejectErr)
+			}
+			continue
+		}
+		channel, requests, aErr := newChan.Accept()
+		if aErr != nil {
+			return
+		}
+		f.handleSession(channel, requests)
+		return
+	}
+}
+
+func (f *Front) handleSession(channel ssh.Channel, requests <-chan *ssh.Request) {
+	defer closer.Warn(channel, "front session channel")
+	var token string
+	for req := range requests {
+		switch req.Type {
+		case "env":
+			token = f.handleEnv(req, token)
+		case "exec":
+			f.handleExec(req, channel, token)
+			return
+		default:
+			replyReq(req, false)
+		}
+	}
+}
+
+func (f *Front) handleEnv(req *ssh.Request, token string) string {
+	var env struct{ Name, Value string }
+	if ssh.Unmarshal(req.Payload, &env) == nil && env.Name == "STRIKE_PEER" {
+		token = env.Value
+	}
+	replyReq(req, true)
+	return token
+}
+
+func (f *Front) handleExec(req *ssh.Request, channel ssh.Channel, token string) {
+	var ex struct{ Command string }
+	if ssh.Unmarshal(req.Payload, &ex) != nil || !allowedSSHCommand(ex.Command) {
+		replyReq(req, false)
+		return
+	}
+	caps, ok := f.Lookup(token)
+	if !ok {
+		replyReq(req, false)
+		return
+	}
+	replyReq(req, true)
+	status, bErr := caps.BridgePeer(context.Background(), channel, token, ex.Command)
+	if bErr != nil {
+		log.Printf("WARN   front: bridge peer: %v", bErr)
+	}
+	sendExitStatus(channel, status)
+}
+
+// replyReq sends a reply if the request wants one. Errors are logged.
+func replyReq(req *ssh.Request, ok bool) {
+	if req.WantReply {
+		if err := req.Reply(ok, nil); err != nil {
+			log.Printf("WARN   front: reply: %v", err)
+		}
+	}
+}
+
+// allowedSSHCommand permits only the two git transport commands (ADR-038 D1).
+// The command arrives as "git-upload-pack 'path'" or "git-receive-pack 'path'".
+func allowedSSHCommand(cmd string) bool {
+	return strings.HasPrefix(cmd, "git-upload-pack ") ||
+		strings.HasPrefix(cmd, "git-receive-pack ")
+}
+
+// sendExitStatus relays the upstream exit status on the container-facing
+// channel (verified ADR-038 spike: uint32 big-endian, WantReply false, sent
+// after data is flushed and CloseWrite'd, before the deferred Close).
+func sendExitStatus(channel ssh.Channel, status uint32) {
+	payload := make([]byte, 4)
+	binary.BigEndian.PutUint32(payload, status)
+	if _, err := channel.SendRequest("exit-status", false, payload); err != nil {
+		log.Printf("WARN   front: send exit-status: %v", err)
 	}
 }

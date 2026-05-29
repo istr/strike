@@ -177,7 +177,11 @@ func (d *Deployer) startUnitCapsule(ctx context.Context, name string, peers []la
 	var targets []capsule.SSHTarget
 	for _, p := range peers {
 		if sp, ok := p.(lane.SSHPeer); ok {
-			targets = append(targets, capsule.SSHTarget{Host: string(sp.Host)})
+			keys := make([]string, len(sp.KnownHosts))
+			for j, e := range sp.KnownHosts {
+				keys[j] = e.KeyType + " " + e.Key
+			}
+			targets = append(targets, capsule.SSHTarget{Host: string(sp.Host), HostKeys: keys})
 		}
 	}
 	caps, err := capsule.New(name, ports, trusts, targets, d.CA, d.UpstreamLook)

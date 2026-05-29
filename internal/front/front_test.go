@@ -5,11 +5,18 @@ import (
 	"errors"
 	"io"
 	"net"
+	"strings"
 	"testing"
 
 	"github.com/istr/strike/internal/capsule"
+	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/front"
 )
+
+func isTimeout(err error) bool {
+	var ne net.Error
+	return errors.As(err, &ne) && ne.Timeout()
+}
 
 func TestNew_AddrLoopback(t *testing.T) {
 	f, err := front.New(context.Background())
@@ -54,17 +61,21 @@ func TestStart_FailsClosed(t *testing.T) {
 		}
 	}()
 
-	// The front accepts then immediately closes: the client sees EOF and no
-	// relayed bytes. A correct skeleton closes promptly, so no read deadline
-	// is needed; a broken serve loop that never closes is caught by the
-	// package test timeout.
-	buf := make([]byte, 1)
-	n, rErr := conn.Read(buf)
-	if n != 0 {
-		t.Errorf("read %d bytes, want 0 (front must not relay)", n)
+	// The front now terminates SSH. A raw TCP client that does not complete
+	// the SSH handshake receives the server's version banner. The server
+	// then blocks waiting for the client's version; set a short deadline so
+	// the test does not hang. After the deadline the connection is closed;
+	// verify we got the SSH banner and nothing else.
+	if deadlineErr := conn.SetReadDeadline(clock.Wall().Add(clock.Second)); deadlineErr != nil {
+		t.Fatal(deadlineErr)
 	}
-	if !errors.Is(rErr, io.EOF) {
-		t.Errorf("read err = %v, want io.EOF", rErr)
+	all, rErr := io.ReadAll(conn)
+	// Expect a timeout (server waiting for client version), EOF, or nil.
+	if rErr != nil && !errors.Is(rErr, io.EOF) && !isTimeout(rErr) {
+		t.Fatalf("read err = %v, want EOF, timeout, or nil", rErr)
+	}
+	if len(all) > 0 && !strings.HasPrefix(string(all), "SSH-2.0-") {
+		t.Errorf("unexpected data from front: %q", all)
 	}
 }
 
