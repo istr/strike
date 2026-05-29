@@ -20,7 +20,6 @@ import (
 
 	"github.com/istr/strike/internal/capsule"
 	"github.com/istr/strike/internal/clock"
-	"github.com/istr/strike/internal/closer"
 	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/executor"
 	"github.com/istr/strike/internal/lane"
@@ -431,12 +430,6 @@ func (d *Deployer) captureState(ctx context.Context, spec lane.StateCaptureSpec)
 
 // captureOne runs a state capture command inside a container.
 func (d *Deployer) captureOne(ctx context.Context, sc lane.StateCapture) (captureSnap, error) {
-	scratchDir, err := os.MkdirTemp("", "strike-ssh-capture-")
-	if err != nil {
-		return captureSnap{}, fmt.Errorf("ssh scratch: %w", err)
-	}
-	defer closer.Remove(scratchDir, "deploy scratch")
-
 	if sc.Image == "" {
 		return captureSnap{}, fmt.Errorf("capture %q: image is required", sc.Name)
 	}
@@ -465,17 +458,14 @@ func (d *Deployer) captureOne(ctx context.Context, sc lane.StateCapture) (captur
 		}
 	}()
 
-	sshMounts, env, err := setupSSHEnv(ctx, sc.Peers, scratchDir)
-	if err != nil {
+	if err = setupSSHEnv(sc.Peers); err != nil {
 		return captureSnap{}, err
 	}
-	mounts = append(mounts, sshMounts...)
 
 	opts := HardenedRunOpts()
 	opts.Image = string(sc.Image)
 	opts.Cmd = sc.Command
 	opts.Mounts = mounts
-	opts.Env = env
 	opts.Stdout = &stdout
 	opts.Stderr = &stderr
 	d.applyCapsule(&opts, caps)
@@ -518,12 +508,6 @@ func executeRegistryDeploy(m lane.DeployRegistry) error {
 }
 
 func (d *Deployer) executeKubernetesDeploy(ctx context.Context, m lane.DeployKubernetes, peers []lane.Peer) error {
-	scratchDir, err := os.MkdirTemp("", "strike-ssh-k8s-")
-	if err != nil {
-		return fmt.Errorf("ssh scratch: %w", err)
-	}
-	defer closer.Remove(scratchDir, "deploy scratch")
-
 	if m.Image == "" {
 		return fmt.Errorf("kubernetes deploy: image required (digest-pinned kubectl image)")
 	}
@@ -561,17 +545,14 @@ func (d *Deployer) executeKubernetesDeploy(ctx context.Context, m lane.DeployKub
 		}
 	}()
 
-	sshMounts, env, err := setupSSHEnv(ctx, peers, scratchDir)
-	if err != nil {
+	if err = setupSSHEnv(peers); err != nil {
 		return err
 	}
-	mounts = append(mounts, sshMounts...)
 
 	opts := HardenedRunOpts()
 	opts.Image = string(m.Image)
 	opts.Cmd = kubectlArgs
 	opts.Mounts = mounts
-	opts.Env = env
 	opts.Stdin = os.Stdin
 	opts.Stdout = os.Stdout
 	opts.Stderr = os.Stderr
@@ -588,12 +569,6 @@ func (d *Deployer) executeKubernetesDeploy(ctx context.Context, m lane.DeployKub
 }
 
 func (d *Deployer) executeCustomDeploy(ctx context.Context, m lane.DeployCustom, peers []lane.Peer) error {
-	scratchDir, err := os.MkdirTemp("", "strike-ssh-custom-")
-	if err != nil {
-		return fmt.Errorf("ssh scratch: %w", err)
-	}
-	defer closer.Remove(scratchDir, "deploy scratch")
-
 	if m.Image == "" {
 		return fmt.Errorf("custom deploy: image required")
 	}
@@ -608,10 +583,10 @@ func (d *Deployer) executeCustomDeploy(ctx context.Context, m lane.DeployCustom,
 		}
 	}()
 
-	sshMounts, env, err := setupSSHEnv(ctx, peers, scratchDir)
-	if err != nil {
+	if err = setupSSHEnv(peers); err != nil {
 		return err
 	}
+	env := make(map[string]string, len(m.Env))
 	for k, v := range m.Env {
 		env[k] = v
 	}
@@ -621,7 +596,6 @@ func (d *Deployer) executeCustomDeploy(ctx context.Context, m lane.DeployCustom,
 	opts.Entrypoint = m.Entrypoint
 	opts.Cmd = m.Args
 	opts.Env = env
-	opts.Mounts = sshMounts
 	opts.Stdout = os.Stdout
 	opts.Stderr = os.Stderr
 	d.applyCapsule(&opts, caps)
@@ -636,34 +610,20 @@ func (d *Deployer) executeCustomDeploy(ctx context.Context, m lane.DeployCustom,
 	return nil
 }
 
-// setupSSHEnv configures SSH agent proxy for a deploy container unit,
-// returning the mounts and merged environment. SSH trust material
-// (known_hosts, ssh_config) delivery via volumes is not yet implemented
-// for the deploy path; deploy units with SSH peers are rejected until
-// the ADR-038 front lands the additional protocols (scp, sftp, rsync
-// over SSH) the deploy path requires.
-func setupSSHEnv(ctx context.Context, peers []lane.Peer, scratchDir string) ([]container.Mount, map[string]string, error) {
+// setupSSHEnv rejects deploy units that declare SSH peers. Deploy-path SSH
+// (scp/sftp/rsync over SSH) is not yet implemented and waits on the ADR-038
+// front landing those protocols. It no longer sets anything up: the container
+// ssh-agent socket it used to mount is gone (ADR-038 D6 -- the front
+// terminates SSH and the capsule drives the host agent, so no container needs
+// an agent socket). The name is now a misnomer; renaming is left to the
+// naming-consistency pass.
+func setupSSHEnv(peers []lane.Peer) error {
 	for _, p := range peers {
 		if _, ok := p.(lane.SSHPeer); ok {
-			return nil, nil, fmt.Errorf("deploy SSH peers not yet implemented (ADR-038 roadmap)")
+			return fmt.Errorf("deploy SSH peers not yet implemented (ADR-038 roadmap)")
 		}
 	}
-
-	agentMount, agentEnv, err := executor.StartAgentProxy(ctx, peers, scratchDir)
-	if err != nil {
-		return nil, nil, fmt.Errorf("ssh agent proxy setup: %w", err)
-	}
-
-	var mounts []container.Mount
-	if agentMount != nil {
-		mounts = append(mounts, *agentMount)
-	}
-
-	env := make(map[string]string, len(agentEnv))
-	for k, v := range agentEnv {
-		env[k] = v
-	}
-	return mounts, env, nil
+	return nil
 }
 
 func sha256Sum(data []byte) []byte {

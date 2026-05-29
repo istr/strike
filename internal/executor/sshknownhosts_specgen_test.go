@@ -57,10 +57,7 @@ func (e *captureEngine) VolumeCreate(_ context.Context, _ string) error         
 func (e *captureEngine) SeedVolumes(_ context.Context, _ []container.VolumeSeed) error { return nil }
 func (e *captureEngine) VolumeRemove(_ context.Context, _ string) error                { return nil }
 
-const (
-	sshTrustVolumeDest   = "/etc/ssh"
-	containerAgentTarget = "/run/strike/ssh-agent.sock"
-)
+const sshTrustVolumeDest = "/etc/ssh"
 
 // specgenTestCapsule creates a minimal capsule for specgen tests.
 // The capsule is not Start()ed; Execute only calls PastaArgs() and
@@ -86,16 +83,7 @@ func specgenTestCapsule(t *testing.T) (*capsule.NetworkCapsule, string) {
 	return c, "strike-ca-specgen-test"
 }
 
-// specgenFakeAgent creates a minimal echo socket for tests that need SSH_AUTH_SOCK.
-func specgenFakeAgent(t *testing.T) string {
-	t.Helper()
-	return testutil.StartEchoSocket(t)
-}
-
 func TestExecute_WithSSHPeer(t *testing.T) {
-	fakeSock := specgenFakeAgent(t)
-	t.Setenv("SSH_AUTH_SOCK", fakeSock)
-
 	eng := &captureEngine{}
 	caps, caPath := specgenTestCapsule(t)
 
@@ -189,11 +177,6 @@ func TestExecute_WithoutSSHPeer(t *testing.T) {
 		t.Fatalf("Execute: %v", err)
 	}
 
-	for _, m := range eng.captured.Mounts {
-		if m.Target == containerAgentTarget {
-			t.Error("unexpected agent mount when no SSH peer")
-		}
-	}
 	for _, v := range eng.captured.TrustVolumes {
 		if v.Dest == sshTrustVolumeDest {
 			t.Error("unexpected SSH trust volume when no SSH peer")
@@ -205,109 +188,6 @@ func TestExecute_WithoutSSHPeer(t *testing.T) {
 	}
 	if _, ok := eng.captured.Env["SSH_AUTH_SOCK"]; ok {
 		t.Error("unexpected SSH_AUTH_SOCK in env when no SSH peer")
-	}
-}
-
-func TestRunExecute_SSHAgentProxy_SpecGenerator(t *testing.T) {
-	fakeSock := specgenFakeAgent(t)
-	t.Setenv("SSH_AUTH_SOCK", fakeSock)
-
-	eng := &captureEngine{}
-	caps, caPath := specgenTestCapsule(t)
-
-	r := executor.Run{
-		Engine:    eng,
-		Capsule:   caps,
-		CAVolume:  caPath,
-		SSHVolume: "strike-ssh-test-step-99999",
-		Secrets:   nil,
-		Step: &lane.Step{
-			Name:  "test-step",
-			Image: lane.Ptr(lane.ImageRef("alpine:latest")),
-			Args:  []string{"true"},
-			Peers: []lane.Peer{
-				lane.SSHPeer{
-					Type: "ssh",
-					Host: transport.Host("git.example.com"),
-					KnownHosts: []lane.KnownHostEntry{
-						{KeyType: "ssh-ed25519", Key: "AAAAC3NzaC1lZDI1NTE5AAAAITestKey"},
-					},
-				},
-			},
-		},
-		VolumeName: "",
-	}
-
-	if _, err := r.Execute(context.Background()); err != nil {
-		t.Fatalf("Execute: %v", err)
-	}
-
-	// Verify agent socket bind-mount is present.
-	var foundAgent bool
-	for _, m := range eng.captured.Mounts {
-		if m.Target == containerAgentTarget {
-			foundAgent = true
-			if m.ReadOnly {
-				t.Error("agent mount should be read-write")
-			}
-		}
-	}
-	if !foundAgent {
-		t.Error("missing agent socket mount")
-	}
-
-	// Verify SSH trust volume (not bind mount).
-	var foundSSHVolume bool
-	for _, v := range eng.captured.TrustVolumes {
-		if v.Dest == sshTrustVolumeDest {
-			foundSSHVolume = true
-		}
-	}
-	if !foundSSHVolume {
-		t.Error("missing SSH trust volume at /etc/ssh")
-	}
-
-	// Verify SSH_AUTH_SOCK.
-	authSock, ok := eng.captured.Env["SSH_AUTH_SOCK"]
-	if !ok {
-		t.Fatal("expected SSH_AUTH_SOCK in env")
-	}
-	if authSock != containerAgentTarget {
-		t.Errorf("SSH_AUTH_SOCK = %q, want %q", authSock, containerAgentTarget)
-	}
-}
-
-func TestRunExecute_SSHPeer_NoAuthSock(t *testing.T) {
-	t.Setenv("SSH_AUTH_SOCK", "")
-
-	eng := &captureEngine{}
-
-	r := executor.Run{
-		Engine:  eng,
-		Secrets: nil,
-		Step: &lane.Step{
-			Name:  "test-step",
-			Image: lane.Ptr(lane.ImageRef("alpine:latest")),
-			Args:  []string{"true"},
-			Peers: []lane.Peer{
-				lane.SSHPeer{
-					Type: "ssh",
-					Host: transport.Host("git.example.com"),
-					KnownHosts: []lane.KnownHostEntry{
-						{KeyType: "ssh-ed25519", Key: "AAAAC3NzaC1lZDI1NTE5AAAAITestKey"},
-					},
-				},
-			},
-		},
-		VolumeName: "",
-	}
-
-	_, err := r.Execute(context.Background())
-	if err == nil {
-		t.Fatal("expected error when SSH_AUTH_SOCK not set")
-	}
-	if !strings.Contains(err.Error(), "SSH_AUTH_SOCK not set") {
-		t.Errorf("error = %q, want substring about SSH_AUTH_SOCK", err.Error())
 	}
 }
 

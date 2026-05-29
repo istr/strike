@@ -7,7 +7,6 @@ import (
 	"os"
 
 	"github.com/istr/strike/internal/capsule"
-	"github.com/istr/strike/internal/closer"
 	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/lane"
 )
@@ -44,12 +43,6 @@ type Run struct {
 // and then purge it. The id is returned even on error when the container was
 // created, so the caller can always clean up.
 func (r Run) Execute(ctx context.Context) (string, error) {
-	scratchDir, err := os.MkdirTemp("", "strike-ssh-")
-	if err != nil {
-		return "", fmt.Errorf("ssh scratch: %w", err)
-	}
-	defer closer.Remove(scratchDir, "executor scratch")
-
 	// Build environment (non-sensitive + secrets)
 	env := make(map[string]string, len(r.Step.Env)+len(r.Secrets)+2)
 	for k, v := range r.Step.Env {
@@ -64,14 +57,9 @@ func (r Run) Execute(ctx context.Context) (string, error) {
 	env["XDG_RUNTIME_DIR"] = "/tmp/run"
 	env["XDG_DATA_HOME"] = "/tmp/data"
 
-	// Inputs are delivered by seeding the workdir volume before start
-	// (r.Seeds), not by bind mounts. Only agent socket mounts remain.
-	var mounts []container.Mount
-	mounts, err = appendSSHMounts(ctx, r.Step.Peers, scratchDir, mounts, env)
-	if err != nil {
-		return "", err
-	}
-
+	// The container has no bind mounts: inputs are seeded into the workdir
+	// volume before start (r.Seeds), trust material rides named volumes, and
+	// SSH egress reaches the front on port 22 -- no agent socket (ADR-038 D6).
 	opts := container.DefaultSecureOpts()
 	if r.Step.Image != nil {
 		opts.Image = string(*r.Step.Image)
@@ -107,7 +95,6 @@ func (r Run) Execute(ctx context.Context) (string, error) {
 	opts.PastaArgs = r.Capsule.PastaArgs()
 	opts.DNSServers = []string{r.Capsule.ResolverAddr().Addr().String()}
 
-	opts.Mounts = mounts
 	opts.ImageVolumes = r.ImageVolumes
 	if r.Step.Workdir != nil {
 		opts.Workdir = r.Step.Workdir.String()
@@ -129,24 +116,4 @@ func (r Run) Execute(ctx context.Context) (string, error) {
 		return id, fmt.Errorf("container exited with code %d", exitCode)
 	}
 	return id, nil
-}
-
-// appendSSHMounts handles the SSH agent socket bind-mount and its env
-// var. The SSH trust material (known_hosts, ssh_config) now rides a
-// per-step trust volume mounted at /etc/ssh by the orchestrator (see
-// cmd/strike/run.go planTrustVolumes); the agent socket is a live Unix
-// socket and cannot ride a volume, so it stays a bind-mount until the
-// ADR-038 front removes it entirely (roadmap item 6).
-func appendSSHMounts(ctx context.Context, peers []lane.Peer, scratchDir string, mounts []container.Mount, env map[string]string) ([]container.Mount, error) {
-	agentMount, agentEnv, err := StartAgentProxy(ctx, peers, scratchDir)
-	if err != nil {
-		return nil, fmt.Errorf("ssh agent proxy setup: %w", err)
-	}
-	if agentMount != nil {
-		mounts = append(mounts, *agentMount)
-	}
-	for k, v := range agentEnv {
-		env[k] = v
-	}
-	return mounts, nil
 }

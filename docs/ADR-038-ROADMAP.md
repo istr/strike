@@ -1,6 +1,6 @@
 # ADR-038 Implementation Roadmap
 
-## Status: PARTIAL (items 1--4 done, items 5--6 remain)
+## Status: PARTIAL (items 1--7 done; items 8--9 remain)
 
 ADR-038 is accepted. The control-plane front, STRIKE_PEER token dispatch,
 SSH termination with command allowlist, and capsule bridge are implemented.
@@ -19,8 +19,8 @@ the container (`CloseOutbound`). The current codebase:
 - `internal/capsule/sshforward.go` -- per-peer raw TCP relay (ADR-033,
   retained for the legacy path) plus `trackClient`/`untrackClient`/
   `closeClients` for the SSH bridge path.
-- `internal/executor/sshagent.go` -- ADR-025 agent socket forwarding (active;
-  removal is roadmap item 6)
+- `internal/executor/sshagent.go` -- ADR-025 agent socket forwarding (removed;
+  roadmap item 6, D6)
 - `internal/executor/sshknownhosts.go` -- per-step SSH trust content production
   (`SSHTrustContent`, `SSHTrustTar`); delivered via read-only named volumes
   masking `/etc/ssh`
@@ -70,10 +70,14 @@ listener and SSH endpoint; the capsule's `BridgePeer` dials the real
 peer. Per-peer raw TCP forwarder (`sshforward.go` `serve`/`handle`/
 `splice`) is retained but retired.
 
-### 6. In-container agent socket removal
+### 6. In-container agent socket removal -- DONE
 
-Remove the ADR-025 `SSH_AUTH_SOCK` injection and agent proxy. Container
-presents `none` to the front. Eliminates the in-container signing oracle.
+Removed the ADR-025 `SSH_AUTH_SOCK` injection and agent proxy
+(`sshagent.go`, `sshagent_socket.go`, `appendSSHMounts`, deploy-path
+scratch dirs). Container presents `none` to the front; the capsule's
+`BridgePeer` drives the host ssh-agent directly. `setupSSHEnv` collapsed
+to a deploy-SSH reject guard (name is a misnomer, left for the
+naming-consistency pass).
 
 ### 7. Synthetic container ssh_config + known_hosts -- DONE (run path)
 
@@ -110,6 +114,7 @@ Per `HANDOVER-ssh-egress-redesign.md`:
    no teardown timer
 4. SSH server/client with D1 command allowlist; agent in the front;
    synthetic container known_hosts -- **DONE**
+4b. Remove in-container agent socket (D6) -- **DONE** (Instruction 68)
 5. DoT resolver and TLS mediator rehosting onto the front
 6. Phase-2 per-peer connection records with D7 observed/engine-asserted
    split

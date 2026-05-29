@@ -54,7 +54,6 @@ sanctions only the following long-lived annotation sites:
 
 | Helper                                            | Linter / code                | Reason                                      |
 |---------------------------------------------------|------------------------------|---------------------------------------------|
-| `internal/executor.chmodAgentSocket`              | `gosec` G302                 | ADR-025 SSH-agent socket                    |
 | `internal/executor.SETPayload` declaration        | `govet` fieldalignment       | Field order is part of the signed payload   |
 | `internal/lane.FilePath.Read`                     | `gosec` G304 (optional)      | Validated CLI path chokepoint               |
 | `internal/testutil.ReadTemp`                      | `gosec` G304 (optional)      | `t.TempDir()` root contract                 |
