@@ -15,6 +15,7 @@ import (
 	"math/big"
 	"net"
 	"net/netip"
+	"strings"
 	"sync"
 	"testing"
 
@@ -120,9 +121,9 @@ func TestPastaArgs_IsSnapshot(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 	a := c.PastaArgs()
-	a[0] = "mutated"
+	a[0] = testMutatedSentinel
 	b := c.PastaArgs()
-	if b[0] == "mutated" {
+	if b[0] == testMutatedSentinel {
 		t.Error("PastaArgs returned the same underlying slice, not a copy")
 	}
 }
@@ -357,6 +358,8 @@ func TestTwoCapsules_DistinctPorts(t *testing.T) {
 		}
 	}()
 }
+
+const testMutatedSentinel = "mutated"
 
 const testPeerSNI = "test-peer.example"
 
@@ -819,5 +822,93 @@ func TestCapsule_SSHForward_PastaArgs(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("PastaArgs %v does not contain -T %s", args, want)
+	}
+}
+
+func TestTokens_NoSSHTargets_Empty(t *testing.T) {
+	ca := testCA(t)
+	c, err := capsule.New("step", testPorts(), nil, nil, ca, testUpstream())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if got := c.Tokens(); len(got) != 0 {
+		t.Errorf("Tokens() = %v, want empty", got)
+	}
+}
+
+func TestSSHConfig_NoSSHTargets_Nil(t *testing.T) {
+	ca := testCA(t)
+	c, err := capsule.New("step", testPorts(), nil, nil, ca, testUpstream())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if got := c.SSHConfig(); got != nil {
+		t.Errorf("SSHConfig() = %q, want nil", got)
+	}
+}
+
+func TestTokens_OneSSHTarget(t *testing.T) {
+	ca := testCA(t)
+	hp := capsule.HostPorts{Resolver: 15376, Mediator: 15377, SSH: []uint16{15378}}
+	targets := []capsule.SSHTarget{{Host: "git.example.com"}}
+
+	c, err := capsule.New("tok-step", hp, nil, targets, ca, testUpstream())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	tokens := c.Tokens()
+	if len(tokens) != 1 {
+		t.Fatalf("Tokens() len = %d, want 1", len(tokens))
+	}
+	if len(tokens[0]) != 64 {
+		t.Errorf("token len = %d, want 64 hex chars", len(tokens[0]))
+	}
+	// Validate hex by decoding.
+	if _, decErr := hex.DecodeString(tokens[0]); decErr != nil {
+		t.Fatalf("token is not valid hex: %v", decErr)
+	}
+}
+
+func TestSSHConfig_OneSSHTarget_Structure(t *testing.T) {
+	ca := testCA(t)
+	hp := capsule.HostPorts{Resolver: 15379, Mediator: 15380, SSH: []uint16{15381}}
+	targets := []capsule.SSHTarget{{Host: "git.example.com"}}
+
+	c, err := capsule.New("cfg-step", hp, nil, targets, ca, testUpstream())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	cfg := string(c.SSHConfig())
+	tokens := c.Tokens()
+
+	// Must contain Host, Port, and SetEnv lines.
+	if !strings.Contains(cfg, "Host git.example.com\n") {
+		t.Errorf("SSHConfig missing Host line:\n%s", cfg)
+	}
+	wantPort := fmt.Sprintf("    Port %d\n", capsule.SSHContainerPortBase)
+	if !strings.Contains(cfg, wantPort) {
+		t.Errorf("SSHConfig missing Port line %q:\n%s", wantPort, cfg)
+	}
+	wantEnv := "    SetEnv STRIKE_PEER=" + tokens[0] + "\n"
+	if !strings.Contains(cfg, wantEnv) {
+		t.Errorf("SSHConfig missing SetEnv line:\n%s", cfg)
+	}
+}
+
+func TestTokens_IsSnapshot(t *testing.T) {
+	ca := testCA(t)
+	hp := capsule.HostPorts{Resolver: 15382, Mediator: 15383, SSH: []uint16{15384}}
+	targets := []capsule.SSHTarget{{Host: "git.example.com"}}
+
+	c, err := capsule.New("snap-step", hp, nil, targets, ca, testUpstream())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	a := c.Tokens()
+	a[0] = testMutatedSentinel
+	b := c.Tokens()
+	if b[0] == testMutatedSentinel {
+		t.Error("Tokens returned the same underlying slice, not a copy")
 	}
 }

@@ -5,9 +5,11 @@
 // host-loopback listener and exposes the address (so lane setup can build
 // state that depends on it), and Start launches the accept loop as the last
 // setup step. Until the terminating SSH server lands (ADR-038 roadmap item
-// 5) every accepted connection is refused (fail-closed). The capability token
-// and the per-run dispatch table are later roadmap items and arrive with
-// their first callers, not here.
+// 5) every accepted connection is refused (fail-closed). The front holds a
+// flat token -> capsule dispatch map (ADR-038 D5): Register records a
+// capsule's token, Lookup recovers the capsule. The map is built during the
+// single-threaded setup phase and frozen before Start launches the accept
+// loop, so it needs no lock.
 package front
 
 import (
@@ -16,6 +18,7 @@ import (
 	"net"
 	"net/netip"
 
+	"github.com/istr/strike/internal/capsule"
 	"github.com/istr/strike/internal/closer"
 )
 
@@ -23,6 +26,7 @@ import (
 // cmdRun, alongside the ephemeral CA, and closed at lane end.
 type Front struct {
 	listener net.Listener
+	dispatch map[string]*capsule.NetworkCapsule
 	addr     netip.AddrPort
 }
 
@@ -46,6 +50,7 @@ func New(ctx context.Context) (*Front, error) {
 	f := &Front{
 		addr:     tcpAddr.AddrPort(),
 		listener: l,
+		dispatch: map[string]*capsule.NetworkCapsule{},
 	}
 	return f, nil
 }
@@ -71,6 +76,31 @@ func (f *Front) Start() {
 // loop and ends it. cmdRun closes exactly once; idempotency is not required.
 func (f *Front) Close() error {
 	return f.listener.Close()
+}
+
+// Register records token -> c in the dispatch map. Call only during the
+// single-threaded setup phase, before Start; the map is frozen by the time
+// the accept loop runs, so no lock is taken here or in Lookup -- correctness
+// rests on the bind-then-serve ordering (the go in Start happens-after every
+// Register). A duplicate token (astronomically unlikely across 256-bit
+// values) is an error, not a silent overwrite.
+func (f *Front) Register(token string, c *capsule.NetworkCapsule) error {
+	if token == "" || c == nil {
+		return fmt.Errorf("front: register: empty token or nil capsule")
+	}
+	if _, dup := f.dispatch[token]; dup {
+		return fmt.Errorf("front: register: token collision")
+	}
+	f.dispatch[token] = c
+	return nil
+}
+
+// Lookup recovers the capsule a token was issued by. ok is false for an
+// unknown or absent token; the terminating server treats that as fail-closed
+// (ADR-038 D5). Read only after Start, when the map is frozen; no lock.
+func (f *Front) Lookup(token string) (*capsule.NetworkCapsule, bool) {
+	c, ok := f.dispatch[token]
+	return c, ok
 }
 
 // serve accepts and immediately refuses every connection. The front has no

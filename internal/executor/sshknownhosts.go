@@ -4,9 +4,9 @@ import (
 	"archive/tar"
 	"bytes"
 	"sort"
-	"strconv"
 	"strings"
 
+	"github.com/istr/strike/internal/capsule"
 	"github.com/istr/strike/internal/lane"
 )
 
@@ -74,18 +74,16 @@ func formatHost(host string) string {
 	return "[" + h + "]:" + p
 }
 
-// SSHTrustContent returns the byte content of the per-step SSH trust
-// volume: known_hosts (one line per declared SSH peer) and ssh_config
-// (per-peer Port directives pointing at strike-assigned loopback ports).
-// Both files are produced deterministically and are the byte-identical
-// payload the prior bind-mount mechanic wrote to disk. Returns nil when
-// no SSH peers are present, signalling the step needs no SSH volume.
-func SSHTrustContent(peers []lane.Peer, containerPorts map[string]uint16) (knownHosts, sshConfig []byte) {
+// SSHTrustContent returns the per-step SSH trust volume content: known_hosts
+// (rendered from the declared peers) and ssh_config (rendered by the step's
+// capsule, which owns the per-peer container ports and capability tokens).
+// Returns nil when the step has no SSH peers; caps may be nil in that case.
+func SSHTrustContent(peers []lane.Peer, caps *capsule.NetworkCapsule) (knownHosts, sshConfig []byte) {
 	kh := RenderKnownHosts(peers)
 	if len(kh) == 0 {
 		return nil, nil
 	}
-	return kh, renderSSHConfig(containerPorts)
+	return kh, caps.SSHConfig()
 }
 
 // SSHTrustEnv returns the env vars an SSH-enabled step needs. With the
@@ -128,28 +126,4 @@ func SSHTrustTar(knownHosts, sshConfig []byte) ([]byte, error) {
 		return nil, err
 	}
 	return buf.Bytes(), nil
-}
-
-// renderSSHConfig produces a byte-deterministic ssh_config with one
-// Host block per entry, sorted by host. HostName is not overridden, so
-// DNS resolution flows through the capsule resolver (and is attested);
-// only Port is set, pointing the client at the peer's strike-assigned
-// container-side loopback port.
-func renderSSHConfig(containerPorts map[string]uint16) []byte {
-	hosts := make([]string, 0, len(containerPorts))
-	for h := range containerPorts {
-		hosts = append(hosts, h)
-	}
-	sort.Strings(hosts)
-
-	var buf bytes.Buffer
-	for _, h := range hosts {
-		buf.WriteString("Host ")
-		buf.WriteString(h)
-		buf.WriteByte('\n')
-		buf.WriteString("    Port ")
-		buf.WriteString(strconv.FormatUint(uint64(containerPorts[h]), 10))
-		buf.WriteByte('\n')
-	}
-	return buf.Bytes()
 }

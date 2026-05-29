@@ -3,14 +3,18 @@ package executor_test
 import (
 	"archive/tar"
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
 	"io/fs"
+	"net/netip"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/istr/strike/internal/capsule"
 	"github.com/istr/strike/internal/executor"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/transport"
@@ -175,17 +179,39 @@ func TestSSHTrustContent_with_ssh_peers(t *testing.T) {
 			},
 		},
 	}
-	containerPorts := map[string]uint16{"git.example.com": 2200}
-	kh, cfg := executor.SSHTrustContent(peers, containerPorts)
+
+	ca, caErr := transport.New("test-lane")
+	if caErr != nil {
+		t.Fatalf("transport.New: %v", caErr)
+	}
+	t.Cleanup(func() {
+		if err := ca.Close(); err != nil {
+			t.Logf("ca close: %v", err)
+		}
+	})
+	lookup := func(_ context.Context, _ string) ([]netip.Addr, error) {
+		return []netip.Addr{netip.MustParseAddr("93.184.216.34")}, nil
+	}
+	hp := capsule.HostPorts{Resolver: 5353, Mediator: 5354, SSH: []uint16{5355}}
+	targets := []capsule.SSHTarget{{Host: "git.example.com"}}
+	caps, capsErr := capsule.New("trust-step", hp, nil, targets, ca, lookup)
+	if capsErr != nil {
+		t.Fatalf("capsule.New: %v", capsErr)
+	}
+
+	kh, cfg := executor.SSHTrustContent(peers, caps)
 
 	wantKH := executor.RenderKnownHosts(peers)
 	if string(kh) != string(wantKH) {
 		t.Errorf("knownHosts mismatch:\n  got:  %q\n  want: %q", kh, wantKH)
 	}
 
-	wantCfg := "Host git.example.com\n    Port 2200\n"
-	if string(cfg) != wantCfg {
-		t.Errorf("sshConfig mismatch:\n  got:  %q\n  want: %q", cfg, wantCfg)
+	// The config must contain Host/Port/SetEnv lines from the capsule.
+	if !strings.Contains(string(cfg), "Host git.example.com\n") {
+		t.Errorf("sshConfig missing Host line:\n%s", cfg)
+	}
+	if !strings.Contains(string(cfg), "SetEnv STRIKE_PEER=") {
+		t.Errorf("sshConfig missing SetEnv line:\n%s", cfg)
 	}
 }
 

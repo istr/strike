@@ -9,12 +9,17 @@
 package capsule
 
 import (
+	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"math"
 	"net"
 	"net/netip"
+	"sort"
+	"strconv"
 	"sync"
 	"syscall"
 
@@ -83,6 +88,7 @@ type NetworkCapsule struct {
 	stepName    string
 	pastaArgs   []string
 	sshForwards []*sshForwarder
+	sshTokens   []string
 	sshTCP      []net.Listener
 	hostPorts   HostPorts
 	state       capsuleState
@@ -153,6 +159,7 @@ func New(
 
 	forwarders := make([]*sshForwarder, len(sshTargets))
 	sshFwds := make([]egress.SSHForward, len(sshTargets))
+	sshTokens := make([]string, len(sshTargets))
 	for k, t := range sshTargets {
 		fwd, fErr := newSSHForwarder(stepName, t, upstreamLook)
 		if fErr != nil {
@@ -163,6 +170,11 @@ func New(
 			ContainerPort: SSHContainerPortBase + uint16(k),
 			HostPort:      hostPorts.SSH[k],
 		}
+		tok, tErr := mintToken()
+		if tErr != nil {
+			return nil, fmt.Errorf("capsule: ssh token: %w", tErr)
+		}
+		sshTokens[k] = tok
 	}
 
 	return &NetworkCapsule{
@@ -171,10 +183,70 @@ func New(
 		resolver:    res,
 		mediator:    med,
 		sshForwards: forwarders,
+		sshTokens:   sshTokens,
 		ca:          ca,
 		pastaArgs:   egress.BuildPastaArgs(resolverPort, hostPorts.Resolver, mediatorPort, hostPorts.Mediator, sshFwds),
 		state:       stateNew,
 	}, nil
+}
+
+// mintToken returns a 256-bit capability token, hex-encoded (64 lowercase
+// hex chars: a safe ssh_config SetEnv value, no quoting).
+func mintToken() (string, error) {
+	var raw [32]byte
+	if _, err := rand.Read(raw[:]); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(raw[:]), nil
+}
+
+// SSHConfig renders the byte-deterministic ssh_config for this capsule's SSH
+// peers: one Host block per peer, sorted by host, each setting Port (the
+// peer's container-side loopback port) and SetEnv STRIKE_PEER=<token> (the
+// ADR-038 D5 routing capability by which the front recovers this capsule and
+// peer). Returns nil when the capsule has no SSH peers. The Port directive is
+// transitional -- it points at the per-peer forwarder today and is removed
+// when the front becomes the live endpoint (close of the D5 token strand).
+func (c *NetworkCapsule) SSHConfig() []byte {
+	if len(c.sshForwards) == 0 {
+		return nil
+	}
+	type block struct {
+		host  string
+		token string
+		port  uint16
+	}
+	blocks := make([]block, len(c.sshForwards))
+	for k := range c.sshForwards {
+		blocks[k] = block{
+			host:  c.sshForwards[k].host,
+			token: c.sshTokens[k],
+			port:  SSHContainerPortBase + uint16(k),
+		}
+	}
+	sort.Slice(blocks, func(i, j int) bool { return blocks[i].host < blocks[j].host })
+
+	var buf bytes.Buffer
+	for _, b := range blocks {
+		buf.WriteString("Host ")
+		buf.WriteString(b.host)
+		buf.WriteByte('\n')
+		buf.WriteString("    Port ")
+		buf.WriteString(strconv.FormatUint(uint64(b.port), 10))
+		buf.WriteByte('\n')
+		buf.WriteString("    SetEnv STRIKE_PEER=")
+		buf.WriteString(b.token)
+		buf.WriteByte('\n')
+	}
+	return buf.Bytes()
+}
+
+// Tokens returns a copy of this capsule's per-peer capability tokens, for the
+// caller to register token -> capsule in the front's dispatch map.
+func (c *NetworkCapsule) Tokens() []string {
+	out := make([]string, len(c.sshTokens))
+	copy(out, c.sshTokens)
+	return out
 }
 
 // PastaArgs returns a copy of the pasta options for this step.

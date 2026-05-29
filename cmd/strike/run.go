@@ -20,6 +20,7 @@ import (
 	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/deploy"
 	"github.com/istr/strike/internal/executor"
+	"github.com/istr/strike/internal/front"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/mediator"
 	"github.com/istr/strike/internal/registry"
@@ -53,6 +54,7 @@ type runContext struct {
 	regClient      *registry.Client
 	engineID       *container.EngineIdentity
 	ca             *transport.EphemeralCA
+	front          *front.Front
 	upstreamLook   capsule.UpstreamLookupFunc
 	lane           *lane.Lane
 	dag            *lane.DAG
@@ -830,14 +832,13 @@ func (rc *runContext) planTrustVolumes(ctx context.Context, caPEM []byte) (trust
 	}
 	volumeNames := []string{tv.ca}
 
-	// SSH (one per step with SSH peers). The per-peer container-port
-	// mapping is computed the same way the run path used to compute it
-	// (executor.SSHContainerPorts), so the ssh_config bytes are
-	// identical to the pre-volume world.
+	// SSH (one per step with SSH peers). The capsule owns the per-peer
+	// container ports and capability tokens; ssh_config is rendered by
+	// capsule.SSHConfig().
 	for i := range rc.lane.Steps {
 		step := &rc.lane.Steps[i]
-		ports := executor.SSHContainerPorts(step.Peers)
-		kh, cfg := executor.SSHTrustContent(step.Peers, ports)
+		caps := rc.capsules[string(step.Name)]
+		kh, cfg := executor.SSHTrustContent(step.Peers, caps)
 		if kh == nil {
 			continue
 		}
@@ -923,6 +924,11 @@ func (rc *runContext) buildCapsules(ctx context.Context) error {
 			return err
 		}
 		rc.capsules[name] = caps
+		for _, tok := range caps.Tokens() {
+			if regErr := rc.front.Register(tok, caps); regErr != nil {
+				return regErr
+			}
+		}
 	}
 	return nil
 }

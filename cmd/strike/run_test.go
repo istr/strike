@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/istr/strike/internal/container"
+	"github.com/istr/strike/internal/front"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/registry"
 	"github.com/istr/strike/internal/registry/regtest"
@@ -39,12 +40,22 @@ func newTestRC(t *testing.T, engine *mockEngine) *runContext {
 			t.Logf("close root: %v", err)
 		}
 	})
+	ft, ftErr := front.New(context.Background())
+	if ftErr != nil {
+		t.Fatalf("front.New: %v", ftErr)
+	}
+	t.Cleanup(func() {
+		if cErr := ft.Close(); cErr != nil {
+			t.Logf("close front: %v", cErr)
+		}
+	})
 	return &runContext{
 		ctx:       context.Background(),
 		lane:      &lane.Lane{Registry: "localhost:5555/test"},
 		dag:       &lane.DAG{Steps: map[string]*lane.Step{}},
 		regClient: &registry.Client{Engine: engine},
 		engine:    engine,
+		front:     ft,
 		state:     newRunState(),
 		laneState: lane.NewState(),
 		laneRoot:  root,

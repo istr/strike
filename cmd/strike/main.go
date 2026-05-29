@@ -217,7 +217,6 @@ func cmdRun(ctx context.Context, path string, engine container.Engine) {
 
 	resolverID := probeResolver(ctx, p)
 	laneDir := filepath.Dir(fp.String())
-
 	laneRoot, err := os.OpenRoot(laneDir)
 	if err != nil {
 		log.Fatalf("error: open lane root: %v", err)
@@ -249,6 +248,7 @@ func cmdRun(ctx context.Context, path string, engine container.Engine) {
 		regClient:      &registry.Client{Engine: engine},
 		engineID:       engine.Identity(),
 		ca:             ca,
+		front:          ft,
 		upstreamLook:   upstreamLook,
 		state:          newRunState(),
 		laneState:      lane.NewState(),

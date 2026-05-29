@@ -150,28 +150,3 @@ func appendSSHMounts(ctx context.Context, peers []lane.Peer, scratchDir string, 
 	}
 	return mounts, nil
 }
-
-// SSHContainerPorts maps each SSH peer host (no port) to the
-// container-side loopback port the step's SSH client must use,
-// assigned capsule.SSHContainerPortBase + k in peer-list order. The
-// mapping is consumed by ConfigureSSHPeers (ssh_config Port directives)
-// and is consistent by construction with the capsule's SSH forwards,
-// which use the same base and order. Returns nil when no SSH peers are
-// present.
-func SSHContainerPorts(peers []lane.Peer) map[string]uint16 {
-	var out map[string]uint16
-	k := 0
-	for _, p := range peers {
-		sp, ok := p.(lane.SSHPeer)
-		if !ok {
-			continue
-		}
-		if out == nil {
-			out = map[string]uint16{}
-		}
-		host, _ := capsule.SplitSSHHostPort(string(sp.Host))
-		out[host] = capsule.SSHContainerPortBase + uint16(k)
-		k++
-	}
-	return out
-}
