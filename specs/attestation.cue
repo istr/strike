@@ -96,20 +96,72 @@ package deploy
 	// The engine's self-reports (version, rootless) live in
 	// informational.engine_metadata.
 	engine?: #EngineConnection
+
+	// observed_peers records, per peer endpoint ("host:port"), the connection
+	// identity the control plane observed and validated against the declared
+	// anchor, deduplicated across steps. A key/cert mismatch aborts the run
+	// before any entry is written, so every entry here is a validated identity
+	// (Layer V). No step attribution: which step reached a peer is an
+	// engine-asserted fact and lives in engine_dependent.peer_attribution.
+	observed_peers?: [Endpoint=string]: #ObservedPeer
 }
 
-// EngineDependent -- claims sound only under trust(E).
+// ---------------------------------------------------------------------------
+// Observed peer identity (sealed.observed_peers)
+// ---------------------------------------------------------------------------
+
+// ObservedPeer is one peer endpoint the control plane connected to and
+// validated against the declared anchor. Layer V: the control plane dials per
+// the lane spec and verifies the presented identity itself; the engine is not
+// in this path.
+#ObservedPeer: {
+	// resolved lists the upstream IPs the lane's DoT resolver returned for this
+	// peer's host, unioned across connections (resolution can vary by
+	// TTL/round-robin; the validated identity below is stable). The resolver's
+	// own identity is anchored in sealed.resolver.
+	resolved: [...string]
+
+	// identity is the validated channel identity, discriminated by type.
+	identity: #ObservedSSH | #ObservedTLS
+}
+
+// ObservedSSH is a validated SSH host identity. host_key_fingerprint is the
+// SHA-256 of the key the server presented that matched the declared known_hosts
+// anchor; host_key_algo is that key's algorithm.
+#ObservedSSH: {
+	type:                 "ssh"
+	host_key_fingerprint: string
+	host_key_algo:        string
+}
+
+// ObservedTLS is a validated HTTPS server identity. server_cert_fingerprint is
+// the SHA-256 of the leaf certificate that matched the declared anchor.
+#ObservedTLS: {
+	type:                    "https"
+	server_cert_fingerprint: string
+}
+
+// EngineDependent -- claims sound only under trust(E). Engine-asserted: the
+// binding of a network action to a step rests on the engine routing the right
+// container's traffic; there is no control-plane-independent basis for it
+// (ADR-037 D2, front-step-demux spike).
 //
-// Empty by structural design in Phase 1. The empty section is the
-// structural form of "best effort": strike currently notarizes no
-// engine-action claims, so a verifier reads accurately that this
-// attestation does not assert anything about engine behavior beyond
-// what is sealed in #Sealed.
+// These records are the *mediated* set: connections strike observed because
+// they traversed its mediation. The set is never exhaustive, and exhaustiveness
+// is not a claim a mediator can make -- a mediator certifies what passed through
+// it, never that nothing else did; the complement is, by construction,
+// unobservable. Engine trust does not lift this: "the container had no other
+// egress path" is a separate engine proposition (confinement), not a scope of
+// these records -- folding it in would be a category error. Hence there is, and
+// can be, no completeness flag.
 //
-// Phase-2 populates this section with capsule-observed engine-action
-// attribution (per-peer connection routing, step run, egress confinement
-// per ADR-038). That work is tracked separately; do not pre-populate.
+// Phase 1 leaves peer_attribution empty; Phase-2 wiring (a separate
+// instruction) populates it from capsule-observed routing. Do not pre-populate.
 #EngineDependent: {
+	// peer_attribution maps each step to the peer endpoints its mediated
+	// connections reached ("host:port" keys into sealed.observed_peers).
+	// Engine-asserted (Layer E).
+	peer_attribution?: [Step=string]: [...string]
 }
 
 // Informational -- recorded for audit and IoC purposes; no trust claim.
