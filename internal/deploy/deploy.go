@@ -15,8 +15,11 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
+	"net/netip"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"github.com/istr/strike/internal/capsule"
 	"github.com/istr/strike/internal/clock"
@@ -320,20 +323,211 @@ func captureKey(stepName, captureName string) string {
 
 // Deployer executes deploy steps and produces attestations.
 type Deployer struct {
-	Engine       container.Engine
-	ArtifactRefs map[string]string // pre-resolved: artifact name -> "step.output" state ref
-	EngineID     *container.EngineIdentity
-	ResolverID   *transport.ConnectionIdentity // DoT resolver identity from the pre-flight probe; nil if unavailable
-	Rekor        *executor.RekorClient
-	DAG          *lane.DAG
-	CA           *transport.EphemeralCA
-	UpstreamLook capsule.UpstreamLookupFunc
-	StepPorts    map[string]capsule.HostPorts // unit name -> host ports
-	LaneID       string
-	StepName     string // deploy step name; method-container port key and capture-key prefix
-	CAVolume     string // lane-wide CA volume name; mounted r/o at /etc/ssl/certs
-	SigningKey   []byte
-	KeyPassword  []byte
+	Engine         container.Engine
+	ArtifactRefs   map[string]string // pre-resolved: artifact name -> "step.output" state ref
+	EngineID       *container.EngineIdentity
+	ResolverID     *transport.ConnectionIdentity // DoT resolver identity from the pre-flight probe; nil if unavailable
+	Rekor          *executor.RekorClient
+	DAG            *lane.DAG
+	CA             *transport.EphemeralCA
+	UpstreamLook   capsule.UpstreamLookupFunc
+	StepPorts      map[string]capsule.HostPorts // unit name -> host ports
+	NetworkRecords map[string]capsule.Records   // run/build step records, keyed by step name (injected by cmd/strike)
+	ownRecords     []capsule.Records            // method + capture container records, accumulated during Execute
+	LaneID         string
+	StepName       string // deploy step name; method-container port key and capture-key prefix
+	CAVolume       string // lane-wide CA volume name; mounted r/o at /etc/ssl/certs
+	SigningKey     []byte
+	KeyPassword    []byte
+}
+
+// collectObservedPeers builds the Layer-V observed_peers map and the Layer-E
+// peer_attribution map for one deploy step's sub-tree, and folds the deploy
+// step's state-capture declared peers into declaredPeers under the deploy step
+// name (ADR-039 D4). declaredPeers is the CollectPeers result for this deploy
+// step (it already contains the deploy method's own peers under step.Name).
+//
+// observed_peers is deduplicated per "host:port" with no step attribution
+// (Layer V); a second observation of the same endpoint with a different
+// validated identity is a conflict and returns an error -- the deploy is not
+// attested. peer_attribution records, per step, the endpoints that step's
+// mediated connections reached (Layer E). Only DecisionAllowed records are
+// ingested; deploy units are HTTPS-only, so their own records yield ObservedTLS.
+func (d *Deployer) collectObservedPeers(
+	step *lane.Step,
+	declaredPeers map[string][]lane.Peer,
+) (map[string]ObservedPeer, map[string][]string, error) {
+	observed := map[string]ObservedPeer{}
+	attribution := map[string][]string{}
+
+	// Predecessors and the deploy step's method container: declared-peer steps
+	// of the sub-tree. Only steps with declared peers can have connections; the
+	// deploy step's own method records live in ownRecords (folded below), so the
+	// step.Name lookup here only matches run/build predecessors.
+	for stepName := range declaredPeers {
+		if recs, ok := d.NetworkRecords[stepName]; ok {
+			if err := ingestRecords(stepName, recs, observed, attribution); err != nil {
+				return nil, nil, err
+			}
+		}
+	}
+
+	// Deploy step's own units (method + captures): fold under the deploy step
+	// name (a1). Also fold the capture declared peers into declaredPeers.
+	for _, recs := range d.ownRecords {
+		if err := ingestRecords(string(step.Name), recs, observed, attribution); err != nil {
+			return nil, nil, err
+		}
+	}
+	for _, sc := range step.Deploy.Attestation.PreState.Capture {
+		declaredPeers[string(step.Name)] = append(declaredPeers[string(step.Name)], sc.Peers...)
+	}
+	for _, sc := range step.Deploy.Attestation.PostState.Capture {
+		declaredPeers[string(step.Name)] = append(declaredPeers[string(step.Name)], sc.Peers...)
+	}
+
+	return observed, attribution, nil
+}
+
+// ingestRecords adds the allowed TLS and SSH connections from recs into
+// observed and attribution under stepKey. Returns an error on identity
+// conflict.
+func ingestRecords(stepKey string, recs capsule.Records, observed map[string]ObservedPeer, attribution map[string][]string) error {
+	for _, c := range recs.Connections {
+		if c.Decision != mediator.DecisionAllowed || c.Upstream == nil {
+			continue
+		}
+		host := c.SNI
+		port, perr := portOfAddress(c.Upstream.PeerAddress)
+		if perr != nil {
+			return fmt.Errorf("step %q: tls peer address %q: %w", stepKey, c.Upstream.PeerAddress, perr)
+		}
+		if host == "" {
+			if h, _, herr := net.SplitHostPort(c.Upstream.PeerAddress); herr == nil {
+				host = h
+			}
+		}
+		key := net.JoinHostPort(host, port)
+		id := ObservedTLS{Type: "https", ServerCertFingerprint: c.Upstream.LeafFingerprint}
+		if err := addObservedPeer(key, c.Resolved, id, observed); err != nil {
+			return err
+		}
+		attribution[stepKey] = appendUniqueString(attribution[stepKey], key)
+	}
+	for _, s := range recs.SSH {
+		if s.Decision != mediator.DecisionAllowed {
+			continue
+		}
+		key := net.JoinHostPort(s.Host, strconv.Itoa(int(s.Port)))
+		id := ObservedSSH{Type: "ssh", HostKeyFingerprint: s.HostKeyFingerprint, HostKeyAlgo: s.HostKeyAlgo}
+		if err := addObservedPeer(key, s.Resolved, id, observed); err != nil {
+			return err
+		}
+		attribution[stepKey] = appendUniqueString(attribution[stepKey], key)
+	}
+	return nil
+}
+
+// addObservedPeer inserts or merges a peer observation into observed.
+// Returns an error if the same key was already observed with a different
+// validated identity.
+func addObservedPeer(key string, resolved []netip.Addr, id ObservedIdentity, observed map[string]ObservedPeer) error {
+	ips := make([]string, len(resolved))
+	for i, a := range resolved {
+		ips[i] = a.String()
+	}
+	existing, ok := observed[key]
+	if !ok {
+		observed[key] = ObservedPeer{Resolved: ips, Identity: id}
+		return nil
+	}
+	if !sameObservedIdentity(existing.Identity, id) {
+		return fmt.Errorf("observed peer %q has conflicting validated identities across steps", key)
+	}
+	existing.Resolved = unionStrings(existing.Resolved, ips)
+	observed[key] = existing
+	return nil
+}
+
+// sameObservedIdentity reports whether two observed identities are the same
+// validated peer identity (same discriminator and fingerprint material).
+func sameObservedIdentity(a, b ObservedIdentity) bool {
+	switch x := a.(type) {
+	case ObservedTLS:
+		y, ok := b.(ObservedTLS)
+		return ok && x.ServerCertFingerprint == y.ServerCertFingerprint
+	case ObservedSSH:
+		y, ok := b.(ObservedSSH)
+		return ok && x.HostKeyFingerprint == y.HostKeyFingerprint && x.HostKeyAlgo == y.HostKeyAlgo
+	default:
+		return false
+	}
+}
+
+// portOfAddress returns the port substring of a "host:port" address.
+func portOfAddress(addr string) (string, error) {
+	_, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return "", err
+	}
+	return port, nil
+}
+
+// unionStrings returns the union of two string slices, order-stable on a then
+// the new entries of b.
+func unionStrings(a, b []string) []string {
+	out := a
+	for _, v := range b {
+		out = appendUniqueString(out, v)
+	}
+	return out
+}
+
+// appendUniqueString appends v to s unless already present.
+func appendUniqueString(s []string, v string) []string {
+	for _, e := range s {
+		if e == v {
+			return s
+		}
+	}
+	return append(s, v)
+}
+
+// buildAttestation constructs the attestation struct for step 6 of Execute,
+// including observed-peer collection and peer-attribution wiring.
+func (d *Deployer) buildAttestation(
+	step *lane.Step, spec lane.DeploySpec,
+	artifactDigests map[string]SignedArtifact,
+	provenance []lane.ProvenanceRecord,
+	started clock.Time, preDigest, postDigest lane.Digest,
+) (*Attestation, error) {
+	engineConn, engineMeta := d.engineRecords()
+	declaredPeers := d.DAG.CollectPeers(string(step.Name))
+	observedPeers, peerAttribution, err := d.collectObservedPeers(step, declaredPeers)
+	if err != nil {
+		return nil, err
+	}
+	return &Attestation{
+		Sealed: Sealed{
+			LaneID:        d.LaneID,
+			Target:        spec.Target,
+			Artifacts:     artifactDigests,
+			Resolver:      d.resolverRecord(),
+			Peers:         declaredPeers,
+			Engine:        engineConn,
+			ObservedPeers: observedPeers,
+		},
+		EngineDependent: EngineDependent{
+			PeerAttribution: peerAttribution,
+		},
+		Informational: &Informational{
+			Timestamp:       started,
+			EngineMetadata:  engineMeta,
+			PreStateDigest:  preDigest,
+			PostStateDigest: postDigest,
+			Provenance:      provenance,
+		},
+	}, nil
 }
 
 // Execute runs a deploy step: capture pre-state, execute the deploy
@@ -380,24 +574,9 @@ func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.Sta
 	postDigest := StateDigest(postCaptures)
 
 	// 6. Build attestation.
-	engineConn, engineMeta := d.engineRecords()
-	att := &Attestation{
-		Sealed: Sealed{
-			LaneID:    d.LaneID,
-			Target:    spec.Target,
-			Artifacts: artifactDigests,
-			Resolver:  d.resolverRecord(),
-			Peers:     d.DAG.CollectPeers(string(step.Name)),
-			Engine:    engineConn,
-		},
-		EngineDependent: EngineDependent{},
-		Informational: &Informational{
-			Timestamp:       started,
-			EngineMetadata:  engineMeta,
-			PreStateDigest:  preDigest,
-			PostStateDigest: postDigest,
-			Provenance:      provenance,
-		},
+	att, obsErr := d.buildAttestation(step, spec, artifactDigests, provenance, started, preDigest, postDigest)
+	if obsErr != nil {
+		return nil, fmt.Errorf("step %q: %w", step.Name, obsErr)
 	}
 
 	// 7. Validate attestation against CUE schema.
@@ -560,6 +739,7 @@ func (d *Deployer) captureOne(ctx context.Context, sc lane.StateCapture) (captur
 		return captureSnap{}, err
 	}
 	defer func() {
+		d.ownRecords = append(d.ownRecords, caps.Records())
 		if stopErr := caps.Stop(); stopErr != nil {
 			log.Printf("WARN   capture %s: capsule stop: %v", sc.Name, stopErr)
 		}
@@ -647,6 +827,7 @@ func (d *Deployer) executeKubernetesDeploy(ctx context.Context, m lane.DeployKub
 		return err
 	}
 	defer func() {
+		d.ownRecords = append(d.ownRecords, caps.Records())
 		if stopErr := caps.Stop(); stopErr != nil {
 			log.Printf("WARN   deploy %s: capsule stop: %v", d.StepName, stopErr)
 		}
@@ -685,6 +866,7 @@ func (d *Deployer) executeCustomDeploy(ctx context.Context, m lane.DeployCustom,
 		return err
 	}
 	defer func() {
+		d.ownRecords = append(d.ownRecords, caps.Records())
 		if stopErr := caps.Stop(); stopErr != nil {
 			log.Printf("WARN   deploy %s: capsule stop: %v", d.StepName, stopErr)
 		}

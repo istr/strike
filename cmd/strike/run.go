@@ -136,20 +136,21 @@ func (rc *runContext) executeDeploy(ctx context.Context, step *lane.Step, stepNa
 	}
 
 	d := &deploy.Deployer{
-		Engine:       rc.engine,
-		EngineID:     rc.engineID,
-		ResolverID:   &rc.resolverID,
-		Rekor:        rc.rekor,
-		DAG:          rc.dag,
-		ArtifactRefs: artifactRefs,
-		SigningKey:   signingKey,
-		KeyPassword:  keyPassword,
-		LaneID:       rc.lane.LaneID,
-		CA:           rc.ca,
-		UpstreamLook: rc.upstreamLook,
-		CAVolume:     rc.trust.ca,
-		StepName:     stepName,
-		StepPorts:    rc.stepPorts,
+		Engine:         rc.engine,
+		EngineID:       rc.engineID,
+		ResolverID:     &rc.resolverID,
+		Rekor:          rc.rekor,
+		DAG:            rc.dag,
+		ArtifactRefs:   artifactRefs,
+		SigningKey:     signingKey,
+		KeyPassword:    keyPassword,
+		LaneID:         rc.lane.LaneID,
+		CA:             rc.ca,
+		UpstreamLook:   rc.upstreamLook,
+		CAVolume:       rc.trust.ca,
+		StepName:       stepName,
+		StepPorts:      rc.stepPorts,
+		NetworkRecords: rc.networkRecords,
 	}
 
 	att, err := d.Execute(ctx, step, rc.laneState)

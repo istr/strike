@@ -26,6 +26,7 @@ import (
 	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/deploy"
 	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/mediator"
 	"github.com/istr/strike/internal/testutil"
 	"github.com/istr/strike/internal/transport"
 )
@@ -1198,5 +1199,295 @@ func TestUnmarshalDeploySpec_UnknownType(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "unknown deploy method") {
 		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+// --------------------------------------------------------------------------.
+// Observed peer wiring tests.
+// --------------------------------------------------------------------------.
+
+func TestDeployerExecute_ObservedPeersPopulated(t *testing.T) {
+	eng := newTLSTestEngine(t, containerMock(t, "v1.0"))
+
+	// Build a lane with a "build" predecessor that has peers, and a deploy step.
+	buildPeer := lane.HTTPSPeer{
+		Type: "https",
+		Host: "api.example.com:443",
+		Trust: transport.FingerprintTrust{
+			Mode:        "cert_fingerprint",
+			Fingerprint: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		},
+	}
+	buildSSHPeer := lane.SSHPeer{
+		Type: "ssh",
+		Host: "git.example.com",
+		KnownHosts: []lane.KnownHostEntry{{
+			KeyType: "ssh-ed25519",
+			Key:     "AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl",
+		}},
+	}
+
+	p := &lane.Lane{
+		Name:     "test-observed",
+		Registry: "localhost:5555/test",
+		Steps: []lane.Step{
+			{
+				Name:    "build",
+				Image:   lane.Ptr(lane.ImageRef("alpine:3.20")),
+				Args:    []string{"echo", "ok"},
+				Env:     map[string]string{},
+				Inputs:  []lane.InputRef{},
+				Secrets: []lane.SecretRef{},
+				Outputs: []lane.OutputSpec{
+					{Name: "image", Type: "image", Path: lane.Ptr(lane.RelPath("o"))},
+				},
+				Peers: []lane.Peer{buildPeer, buildSSHPeer},
+			},
+			{
+				Name: "deploy-prod",
+				Deploy: &lane.DeploySpec{
+					Method: lane.DeployCustom{
+						Type:  "custom",
+						Image: "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+					},
+					Artifacts: map[string]lane.ArtifactRef{
+						"image": {From: "build.image"},
+					},
+					Target:      lane.DeployTarget{ID: "prod-1", Type: "registry", Description: "production"},
+					Attestation: lane.AttestationSpec{},
+				},
+			},
+		},
+	}
+	dag, buildErr := lane.Build(p)
+	if buildErr != nil {
+		t.Fatalf("Build: %v", buildErr)
+	}
+
+	state := lane.NewState()
+	if regErr := state.Register("build", "image", lane.Artifact{
+		Type:   "image",
+		Digest: lane.MustParseDigest("sha256:abc1230000000000000000000000000000000000000000000000000000000000"),
+	}); regErr != nil {
+		t.Fatal(regErr)
+	}
+
+	ca, look, caPath, ports := deployCapsuleFields(t, "deploy-prod")
+
+	// Inject synthetic network records for the "build" step.
+	tlsFP := "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	sshFP := "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+	networkRecords := map[string]capsule.Records{
+		"build": {
+			Connections: []mediator.ConnectionRecord{{
+				Decision: mediator.DecisionAllowed,
+				SNI:      "api.example.com",
+				Upstream: &transport.ConnectionIdentity{
+					LeafFingerprint: tlsFP,
+					PeerAddress:     "api.example.com:443",
+				},
+				Resolved: []netip.Addr{netip.MustParseAddr("93.184.216.34")},
+			}},
+			SSH: []capsule.SSHConnectionRecord{{
+				Decision:           mediator.DecisionAllowed,
+				Host:               "git.example.com",
+				Port:               22,
+				HostKeyFingerprint: sshFP,
+				HostKeyAlgo:        "ssh-ed25519",
+				Resolved:           []netip.Addr{netip.MustParseAddr("192.0.2.1")},
+			}},
+		},
+	}
+
+	step := dag.Steps["deploy-prod"]
+	d := &deploy.Deployer{
+		Engine:         eng,
+		ArtifactRefs:   map[string]string{"image": "build.image"},
+		LaneID:         "test-lane",
+		DAG:            dag,
+		CA:             ca,
+		UpstreamLook:   look,
+		CAVolume:       caPath,
+		StepName:       "deploy-prod",
+		StepPorts:      ports,
+		NetworkRecords: networkRecords,
+	}
+	att, err := d.Execute(context.Background(), step, state)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	// Assert observed_peers has two entries.
+	if len(att.Sealed.ObservedPeers) != 2 {
+		t.Fatalf("ObservedPeers count = %d, want 2", len(att.Sealed.ObservedPeers))
+	}
+
+	tlsObs, ok := att.Sealed.ObservedPeers["api.example.com:443"]
+	if !ok {
+		t.Fatal("missing observed peer api.example.com:443")
+	}
+	tlsID, ok := tlsObs.Identity.(deploy.ObservedTLS)
+	if !ok {
+		t.Fatalf("identity type = %T, want ObservedTLS", tlsObs.Identity)
+	}
+	if tlsID.ServerCertFingerprint != tlsFP {
+		t.Errorf("TLS fingerprint = %q, want %q", tlsID.ServerCertFingerprint, tlsFP)
+	}
+	if len(tlsObs.Resolved) == 0 {
+		t.Error("expected non-empty Resolved for TLS peer")
+	}
+
+	sshObs, ok := att.Sealed.ObservedPeers["git.example.com:22"]
+	if !ok {
+		t.Fatal("missing observed peer git.example.com:22")
+	}
+	sshID, ok := sshObs.Identity.(deploy.ObservedSSH)
+	if !ok {
+		t.Fatalf("identity type = %T, want ObservedSSH", sshObs.Identity)
+	}
+	if sshID.HostKeyFingerprint != sshFP {
+		t.Errorf("SSH fingerprint = %q, want %q", sshID.HostKeyFingerprint, sshFP)
+	}
+	if sshID.HostKeyAlgo != "ssh-ed25519" {
+		t.Errorf("SSH algo = %q, want ssh-ed25519", sshID.HostKeyAlgo)
+	}
+
+	// Assert peer_attribution.
+	buildAttr, ok := att.EngineDependent.PeerAttribution["build"]
+	if !ok {
+		t.Fatal("missing peer_attribution for build")
+	}
+	if len(buildAttr) != 2 {
+		t.Fatalf("build attribution count = %d, want 2", len(buildAttr))
+	}
+}
+
+func TestDeployerExecute_ObservedPeersConflictAborts(t *testing.T) {
+	eng := newTLSTestEngine(t, containerMock(t, "v1.0"))
+
+	// Two predecessor steps whose records report the same host:port with
+	// different TLS fingerprints.
+	peerA := lane.HTTPSPeer{
+		Type: "https",
+		Host: "api.example.com:443",
+		Trust: transport.FingerprintTrust{
+			Mode:        "cert_fingerprint",
+			Fingerprint: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		},
+	}
+	peerB := lane.HTTPSPeer{
+		Type: "https",
+		Host: "api.example.com:443",
+		Trust: transport.FingerprintTrust{
+			Mode:        "cert_fingerprint",
+			Fingerprint: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		},
+	}
+
+	p := &lane.Lane{
+		Name:     "test-conflict",
+		Registry: "localhost:5555/test",
+		Steps: []lane.Step{
+			{
+				Name:    "step-a",
+				Image:   lane.Ptr(lane.ImageRef("alpine:3.20")),
+				Args:    []string{"echo", "ok"},
+				Env:     map[string]string{},
+				Inputs:  []lane.InputRef{},
+				Secrets: []lane.SecretRef{},
+				Outputs: []lane.OutputSpec{
+					{Name: "out", Type: "file", Path: lane.Ptr(lane.RelPath("a"))},
+				},
+				Peers: []lane.Peer{peerA},
+			},
+			{
+				Name:    "step-b",
+				Image:   lane.Ptr(lane.ImageRef("alpine:3.20")),
+				Args:    []string{"echo", "ok"},
+				Env:     map[string]string{},
+				Inputs:  []lane.InputRef{},
+				Secrets: []lane.SecretRef{},
+				Outputs: []lane.OutputSpec{
+					{Name: "out", Type: "image", Path: lane.Ptr(lane.RelPath("b"))},
+				},
+				Peers: []lane.Peer{peerB},
+			},
+			{
+				Name: "deploy-conflict",
+				Deploy: &lane.DeploySpec{
+					Method: lane.DeployCustom{
+						Type:  "custom",
+						Image: "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+					},
+					Artifacts: map[string]lane.ArtifactRef{
+						"image": {From: "step-b.out"},
+					},
+					Target:      lane.DeployTarget{ID: "prod-1", Type: "registry", Description: "production"},
+					Attestation: lane.AttestationSpec{},
+				},
+				Inputs: []lane.InputRef{{From: "step-a.out", Mount: "/in/a"}},
+			},
+		},
+	}
+	dag, buildErr := lane.Build(p)
+	if buildErr != nil {
+		t.Fatalf("Build: %v", buildErr)
+	}
+
+	state := lane.NewState()
+	if regErr := state.Register("step-b", "out", lane.Artifact{
+		Type:   "image",
+		Digest: lane.MustParseDigest("sha256:abc1230000000000000000000000000000000000000000000000000000000000"),
+	}); regErr != nil {
+		t.Fatal(regErr)
+	}
+
+	ca, look, caPath, ports := deployCapsuleFields(t, "deploy-conflict")
+
+	// Same host:port, different fingerprints -> conflict.
+	networkRecords := map[string]capsule.Records{
+		"step-a": {
+			Connections: []mediator.ConnectionRecord{{
+				Decision: mediator.DecisionAllowed,
+				SNI:      "api.example.com",
+				Upstream: &transport.ConnectionIdentity{
+					LeafFingerprint: "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+					PeerAddress:     "api.example.com:443",
+				},
+				Resolved: []netip.Addr{netip.MustParseAddr("93.184.216.34")},
+			}},
+		},
+		"step-b": {
+			Connections: []mediator.ConnectionRecord{{
+				Decision: mediator.DecisionAllowed,
+				SNI:      "api.example.com",
+				Upstream: &transport.ConnectionIdentity{
+					LeafFingerprint: "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+					PeerAddress:     "api.example.com:443",
+				},
+				Resolved: []netip.Addr{netip.MustParseAddr("93.184.216.34")},
+			}},
+		},
+	}
+
+	step := dag.Steps["deploy-conflict"]
+	d := &deploy.Deployer{
+		Engine:         eng,
+		ArtifactRefs:   map[string]string{"image": "step-b.out"},
+		LaneID:         "test-lane",
+		DAG:            dag,
+		CA:             ca,
+		UpstreamLook:   look,
+		CAVolume:       caPath,
+		StepName:       "deploy-conflict",
+		StepPorts:      ports,
+		NetworkRecords: networkRecords,
+	}
+	_, execErr := d.Execute(context.Background(), step, state)
+	if execErr == nil {
+		t.Fatal("expected error for conflicting observed peer identities")
+	}
+	if !strings.Contains(execErr.Error(), "conflicting validated identities") {
+		t.Errorf("error = %q, want 'conflicting validated identities'", execErr.Error())
 	}
 }
