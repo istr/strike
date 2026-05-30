@@ -46,10 +46,14 @@ lint-adr-index:
 			|| { echo "ADR on disk but missing from ADR-INDEX.md: $$b"; exit 1; }; \
 	done; echo "adr-index: ok"
 
+.PHONY: lint-arch
+lint-arch:
+	go run github.com/fe3dback/go-arch-lint@v1.14.0 check --project-path .
+
 lint-ci:
 	golangci-lint run ./...
 
-lint: lint-ci lint-from lint-ascii lint-adr-index
+lint: lint-ci lint-from lint-arch lint-ascii lint-adr-index
 
 test:
 	go test -race -coverprofile=coverage.out -covermode=atomic ./...

@@ -1,0 +1,75 @@
+# .go-arch-lint.yml
+# Enforces the internal package layering of github.com/istr/strike.
+# Invariant: dependencies may not point upward across tiers. Intra-tier and
+# downward edges are allowed (cycles are already prevented by the compiler).
+# Test files and non-product code (tools, fixtures) are out of scope.
+#
+#   entry          I=1.00      cmd/strike
+#   orchestration  I~0.71-0.91 executor, deploy
+#   services       I~0.43-0.67 container, lane, copier, mediator, registry,
+#                              capsule, front, resolver
+#   transport      I=0.22      transport                 (base infrastructure)
+#   foundation     I=0.00      clock, closer, egress, probe, specs  (sinks; common)
+
+version: 3
+
+allow:
+  depOnAnyVendor: true        # only internal layering is enforced here
+  deepScan: false             # govern static imports, not DI/call-graph flows
+
+# Test code is not part of the shipped architecture and legitimately crosses
+# layers; exclude it. Non-product directories are excluded as well.
+excludeFiles:
+  - "_test\\.go$"
+exclude:
+  - tools                     # custom tooling (lintfrom), not the product
+  - test                      # integration/crossval packages + testdata fixtures
+  - internal/testutil         # test scaffolding
+  - internal/registry/regtest # test double
+
+components:
+  foundation:
+    in:
+      - internal/clock
+      - internal/closer
+      - internal/egress
+      - internal/probe
+      - specs
+  transport:
+    in: internal/transport
+  services:
+    in:
+      - internal/container
+      - internal/lane
+      - internal/copier
+      - internal/mediator
+      - internal/registry
+      - internal/capsule
+      - internal/front
+      - internal/resolver
+  orchestration:
+    in:
+      - internal/executor
+      - internal/deploy
+  entry:
+    in: cmd/strike
+
+commonComponents:
+  - foundation                # any tier may depend on the stable sinks
+
+deps:
+  # transport has no entry: it uses only foundation (common).
+  services:
+    mayDependOn:
+      - services              # allow intra-tier edges (capsule->mediator, etc.)
+      - transport
+  orchestration:
+    mayDependOn:
+      - orchestration         # allow deploy->executor
+      - services
+      - transport
+  entry:
+    mayDependOn:
+      - orchestration
+      - services
+      - transport
