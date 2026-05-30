@@ -353,6 +353,20 @@ func TestBridge_EndToEnd(t *testing.T) {
 	if gotExit != int(wantExit) {
 		t.Errorf("exit = %d, want %d", gotExit, wantExit)
 	}
+
+	sshRecs := caps.Records().SSH
+	if len(sshRecs) != 1 {
+		t.Fatalf("expected 1 SSH record, got %d", len(sshRecs))
+	}
+	if got := sshRecs[0].HostKeyFingerprint; !strings.HasPrefix(got, "sha256:") {
+		t.Errorf("HostKeyFingerprint = %q, want sha256: prefix", got)
+	}
+	if sshRecs[0].HostKeyAlgo == "" {
+		t.Error("HostKeyAlgo is empty")
+	}
+	if len(sshRecs[0].Resolved) == 0 {
+		t.Error("Resolved is empty")
+	}
 }
 
 func TestBridge_WrongToken_Refused(t *testing.T) {

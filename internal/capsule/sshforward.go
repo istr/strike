@@ -3,6 +3,7 @@ package capsule
 import (
 	"errors"
 	"fmt"
+	"net/netip"
 	"strconv"
 	"strings"
 	"sync"
@@ -31,16 +32,20 @@ type SSHTarget struct {
 }
 
 // SSHConnectionRecord captures one SSH forward attempt for attestation.
-// strike does not terminate or inspect SSH; the record confirms the
-// connection to the declared peer succeeded (or why it failed). The
-// validated host key lives in the lane's known_hosts entry (ADR-024).
+// strike does not terminate or inspect SSH; on the allowed path the record
+// carries the validated upstream host-key identity (the key the server
+// presented that matched the declared known_hosts anchor, ADR-024) and the
+// upstream IPs resolved for the peer. Identity fields are set only on
+// DecisionAllowed; a failed interaction aborts the run before notarization.
 type SSHConnectionRecord struct {
-	Time     clock.Time
-	Host     string // declared upstream host (no port)
-	DestIP   string // resolved upstream IP actually dialed; empty on resolve error
-	Err      string
-	Decision mediator.Decision
-	Port     uint16
+	Time               clock.Time
+	Host               string // declared upstream host (no port)
+	HostKeyFingerprint string // "sha256:<hex>" of the validated host key; set on DecisionAllowed
+	HostKeyAlgo        string // host-key algorithm, e.g. "ssh-ed25519"; set on DecisionAllowed
+	Err                string
+	Decision           mediator.Decision
+	Resolved           []netip.Addr // upstream IPs from the DoT lookup; dialed addr is Resolved[0]
+	Port               uint16
 }
 
 // SplitSSHHostPort splits an SSH peer host into its host part and the

@@ -373,6 +373,9 @@ func TestServe_AllowedSNI_EndToEnd(t *testing.T) {
 	if recs[0].Upstream != nil && recs[0].Upstream.LeafFingerprint != fp {
 		t.Errorf("fingerprint = %q, want %q", recs[0].Upstream.LeafFingerprint, fp)
 	}
+	if len(recs[0].Resolved) != 1 || recs[0].Resolved[0].String() != "127.0.0.2" {
+		t.Errorf("Resolved = %v, want [127.0.0.2]", recs[0].Resolved)
+	}
 }
 
 func TestServe_DeniedSNI_HandshakeFails(t *testing.T) {

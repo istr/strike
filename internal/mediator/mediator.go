@@ -57,11 +57,12 @@ const (
 // ConnectionRecord captures one mediated connection attempt for
 // attestation.
 type ConnectionRecord struct {
-	Upstream *transport.ConnectionIdentity // nil unless DecisionAllowed
 	Time     clock.Time
-	SNI      string // canonicalized
-	Err      string // populated when DecisionError
+	Upstream *transport.ConnectionIdentity // nil unless DecisionAllowed
+	SNI      string                        // canonicalized
+	Err      string                        // populated when DecisionError
 	Decision Decision
+	Resolved []netip.Addr // upstream IPs from the DoT lookup; set on DecisionAllowed
 }
 
 // ErrMediatorClosed is returned by Serve after Close.
@@ -233,7 +234,7 @@ func (m *Mediator) handleConn(ctx context.Context, raw net.Conn) {
 		return
 	}
 
-	upstreamConn, identity, err := m.dialUpstream(handshakeCtx, sni, trust)
+	upstreamConn, identity, resolved, err := m.dialUpstream(handshakeCtx, sni, trust)
 	if err != nil {
 		log.Printf("WARN   mediator[%s]: upstream %s failed: %v", m.stepName, sni, err)
 		m.appendRecord(ConnectionRecord{
@@ -248,6 +249,7 @@ func (m *Mediator) handleConn(ctx context.Context, raw net.Conn) {
 		SNI:      sni,
 		Decision: DecisionAllowed,
 		Upstream: identity,
+		Resolved: resolved,
 	})
 
 	if err := proxyBidirectional(ctx, clientSide, upstreamConn); err != nil {
@@ -273,36 +275,36 @@ func (m *Mediator) getCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate,
 	return m.ca.GetCertificate(hello)
 }
 
-func (m *Mediator) dialUpstream(ctx context.Context, sni string, trust transport.TLSTrust) (*tls.Conn, *transport.ConnectionIdentity, error) {
+func (m *Mediator) dialUpstream(ctx context.Context, sni string, trust transport.TLSTrust) (*tls.Conn, *transport.ConnectionIdentity, []netip.Addr, error) {
 	addrs, err := m.upstreamLook(ctx, sni)
 	if err != nil {
-		return nil, nil, fmt.Errorf("upstream lookup %q: %w", sni, err)
+		return nil, nil, nil, fmt.Errorf("upstream lookup %q: %w", sni, err)
 	}
 	if len(addrs) == 0 {
-		return nil, nil, fmt.Errorf("upstream lookup %q: no addresses", sni)
+		return nil, nil, nil, fmt.Errorf("upstream lookup %q: no addresses", sni)
 	}
 
 	target := net.JoinHostPort(addrs[0].String(), upstreamPort)
 	raw, err := transport.DialTCP(ctx, target)
 	if err != nil {
-		return nil, nil, fmt.Errorf("upstream dial %s: %w", target, err)
+		return nil, nil, nil, fmt.Errorf("upstream dial %s: %w", target, err)
 	}
 
 	tlsConfig, configErr := transport.BuildTLSConfig(trust)
 	if configErr != nil {
 		closer.Warn(raw, "mediator: upstream raw (config error)")
-		return nil, nil, fmt.Errorf("upstream tls config for %s: %w", sni, configErr)
+		return nil, nil, nil, fmt.Errorf("upstream tls config for %s: %w", sni, configErr)
 	}
 	tlsConfig.ServerName = sni
 
 	upstream := tls.Client(raw, tlsConfig)
 	if hsErr := upstream.HandshakeContext(ctx); hsErr != nil {
 		closer.Warn(raw, "mediator: upstream raw (handshake error)")
-		return nil, nil, fmt.Errorf("upstream handshake %s: %w", sni, hsErr)
+		return nil, nil, nil, fmt.Errorf("upstream handshake %s: %w", sni, hsErr)
 	}
 
 	identity := transport.CaptureIdentity(upstream.ConnectionState(), sni)
-	return upstream, &identity, nil
+	return upstream, &identity, addrs, nil
 }
 
 func (m *Mediator) appendRecord(rec ConnectionRecord) {

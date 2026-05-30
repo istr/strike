@@ -13,6 +13,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -441,13 +442,14 @@ func parseHostKeys(lines []string) ([]ssh.PublicKey, error) {
 // the presented host key matches one of pins (by marshaled wire bytes). A
 // peer may declare several keys (multiple known_hosts entries); any one
 // matches. Mismatch is fail-closed.
-func pinnedHostKey(pins []ssh.PublicKey) ssh.HostKeyCallback {
+func pinnedHostKey(pins []ssh.PublicKey, matched *ssh.PublicKey) ssh.HostKeyCallback {
 	want := make(map[string]struct{}, len(pins))
 	for _, p := range pins {
 		want[string(p.Marshal())] = struct{}{}
 	}
 	return func(_ string, _ net.Addr, key ssh.PublicKey) error {
 		if _, ok := want[string(key.Marshal())]; ok {
+			*matched = key
 			return nil
 		}
 		return fmt.Errorf("capsule: ssh host key mismatch")
@@ -494,7 +496,7 @@ func (c *NetworkCapsule) BridgePeer(ctx context.Context, channel ssh.Channel, to
 		fwd.record(rec)
 		return 255, fmt.Errorf("capsule: resolve %q: %w", fwd.host, lErr)
 	}
-	rec.DestIP = addrs[0].String()
+	rec.Resolved = addrs
 	dst := netip.AddrPortFrom(addrs[0], fwd.port)
 
 	agentSock := os.Getenv("SSH_AUTH_SOCK")
@@ -514,10 +516,11 @@ func (c *NetworkCapsule) BridgePeer(ctx context.Context, channel ssh.Channel, to
 	defer closer.Warn(agentConn, "capsule agent conn")
 	agentClient := agent.NewClient(agentConn)
 
+	var hostKey ssh.PublicKey
 	clientCfg := &ssh.ClientConfig{
 		User:            "git",
 		Auth:            []ssh.AuthMethod{ssh.PublicKeysCallback(agentClient.Signers)},
-		HostKeyCallback: pinnedHostKey(c.sshPins[k]),
+		HostKeyCallback: pinnedHostKey(c.sshPins[k], &hostKey),
 	}
 	upstream, dErr := ssh.Dial("tcp", dst.String(), clientCfg)
 	if dErr != nil {
@@ -530,6 +533,9 @@ func (c *NetworkCapsule) BridgePeer(ctx context.Context, channel ssh.Channel, to
 	fwd.trackClient(upstream)
 	defer fwd.untrackClient(upstream)
 
+	sum := sha256.Sum256(hostKey.Marshal())
+	rec.HostKeyFingerprint = "sha256:" + hex.EncodeToString(sum[:])
+	rec.HostKeyAlgo = hostKey.Type()
 	rec.Decision = mediator.DecisionAllowed
 	fwd.record(rec)
 
