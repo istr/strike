@@ -1,8 +1,5 @@
 package deploy
 
-// PAEEncode exposes paeEncode for the external test package.
-var PAEEncode = paeEncode
-
 // CaptureSnap exposes captureSnap for the external test package.
 type CaptureSnap = captureSnap
 

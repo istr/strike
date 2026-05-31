@@ -51,6 +51,7 @@ components:
     in:
       - internal/executor
       - internal/deploy
+      - internal/verify
   entry:
     in: cmd/strike
 

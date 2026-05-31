@@ -37,7 +37,7 @@ func SignAttestation(attestationJSON, keyPEM, password []byte) ([]byte, error) {
 	b64Payload := base64.RawURLEncoding.EncodeToString(attestationJSON)
 
 	// Construct PAE (Pre-Authentication Encoding) over the raw payload.
-	paeBytes := paeEncode(AttestationPayloadType, attestationJSON)
+	paeBytes := PAEEncode(AttestationPayloadType, attestationJSON)
 
 	b64sig, keyID, err := executor.SignPayload(paeBytes, keyPEM, password)
 	if err != nil {
@@ -52,10 +52,10 @@ func SignAttestation(attestationJSON, keyPEM, password []byte) ([]byte, error) {
 	return json.Marshal(envelope)
 }
 
-// paeEncode constructs a DSSE Pre-Authentication Encoding.
+// PAEEncode constructs a DSSE Pre-Authentication Encoding.
 //
 //	"DSSEv1" SP len(type) SP type SP len(payload) SP payload
-func paeEncode(payloadType string, payload []byte) []byte {
+func PAEEncode(payloadType string, payload []byte) []byte {
 	var buf bytes.Buffer
 	buf.WriteString("DSSEv1 ")
 	buf.WriteString(strconv.Itoa(len(payloadType)))
