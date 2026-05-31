@@ -320,6 +320,38 @@ func (d *DAG) validateDeployLeaves(p *Lane) error {
 	return nil
 }
 
+// ValidateLeavesAreDeploys enforces that every DAG leaf is a deploy
+// step (ADR-039 D5). A non-deploy step whose output no other step
+// consumes is a dangling terminal build: it contributes to no
+// attestation, and -- because a leaf has no successor whose execution
+// its failure could prevent -- it cannot gate the deploy it might be
+// meant to guard. A check or QA step is therefore expressed as a
+// predecessor in the artifact's data path (it consumes the artifact
+// and produces an output the deploy consumes), so its failure stops
+// the deploy. Together with validateDeployLeaves (a deploy step is a
+// leaf, ADR-039 D2) this makes "leaf" and "deploy step" coextensive:
+// a lane's leaves are exactly its deploy targets.
+//
+// This is a lane-validity policy that needs the resolved graph, so it
+// is deliberately NOT called from Build (which stays usable for graph-
+// mechanism tests that build partial graphs). The CLI calls it as part
+// of the single validation gate every subcommand passes through. Steps
+// are iterated in lane order so the first error is deterministic.
+func (d *DAG) ValidateLeavesAreDeploys(p *Lane) error {
+	for _, s := range p.Steps {
+		if s.Deploy != nil {
+			continue
+		}
+		if len(d.reverse[string(s.Name)]) == 0 {
+			return fmt.Errorf("step %q is a non-deploy DAG leaf: nothing consumes "+
+				"its output and it is not a deploy step; a gate must produce an "+
+				"output the deploy consumes so it sits in the chain (ADR-039 D5)",
+				s.Name)
+		}
+	}
+	return nil
+}
+
 // validatePeerAnchors enforces that no two steps declare the same network
 // endpoint (host:port) with different trust anchors. Declaring one endpoint
 // with the same anchor from several steps is allowed; declaring it with

@@ -158,31 +158,39 @@ func initRekor() *executor.RekorClient {
 	}
 }
 
-func cmdValidate(path string) {
-	fp, fpErr := lane.NewFilePath(path)
-	if fpErr != nil {
-		log.Fatalf("error: %v", fpErr)
+// validateLane is the single validation gate. Every subcommand passes a
+// lane through it before doing anything else, so a lane that does not
+// validate yields exactly one error in any subcommand -- never a partial
+// DAG dump or a half-started run. The checks are fully offline: file
+// resolution, parse, DAG construction, and the leaf-is-deploy policy
+// (ADR-039 D5). It returns the resolved file path, parsed lane, and DAG.
+func validateLane(path string) (fp lane.FilePath, p *lane.Lane, dag *lane.DAG, err error) {
+	fp, err = lane.NewFilePath(path)
+	if err != nil {
+		return fp, p, dag, err
 	}
-	p, err := lane.Parse(fp)
+	p, err = lane.Parse(fp)
+	if err != nil {
+		return fp, p, dag, err
+	}
+	dag, err = lane.Build(p)
+	if err != nil {
+		return fp, p, dag, err
+	}
+	err = dag.ValidateLeavesAreDeploys(p)
+	return fp, p, dag, err
+}
+
+func cmdValidate(path string) {
+	_, p, _, err := validateLane(path)
 	if err != nil {
 		log.Fatalf("error: %v", err)
-	}
-	if _, err := lane.Build(p); err != nil {
-		log.Fatalf("error: DAG: %v", err)
 	}
 	log.Printf("ok: %s is valid (%d steps)", path, len(p.Steps)) // #nosec G706 -- path is a local file path from CLI args
 }
 
 func cmdDAG(path string) {
-	fp, fpErr := lane.NewFilePath(path)
-	if fpErr != nil {
-		log.Fatalf("error: %v", fpErr)
-	}
-	p, err := lane.Parse(fp)
-	if err != nil {
-		log.Fatalf("error: %v", err)
-	}
-	dag, err := lane.Build(p)
+	_, _, dag, err := validateLane(path)
 	if err != nil {
 		log.Fatalf("error: %v", err)
 	}
@@ -206,11 +214,7 @@ func cmdDAG(path string) {
 }
 
 func cmdRun(ctx context.Context, path string, engine container.Engine) {
-	fp, fpErr := lane.NewFilePath(path)
-	if fpErr != nil {
-		log.Fatalf("error: %v", fpErr)
-	}
-	p, err := lane.Parse(fp)
+	fp, p, dag, err := validateLane(path)
 	if err != nil {
 		log.Fatalf("error: %v", err)
 	}
@@ -222,11 +226,6 @@ func cmdRun(ctx context.Context, path string, engine container.Engine) {
 		log.Fatalf("error: open lane root: %v", err)
 	}
 	defer closer.Warn(laneRoot, "lane root")
-
-	dag, err := lane.Build(p)
-	if err != nil {
-		log.Fatalf("error: %v", err)
-	}
 
 	ca, caCleanup := initLaneCA(p)
 	defer caCleanup()

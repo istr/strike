@@ -801,3 +801,83 @@ func assertErrContains(t *testing.T, err error, substr string) {
 		t.Errorf("error %q should contain %q", err.Error(), substr)
 	}
 }
+
+// --------------------------------------------------------------------------.
+// ValidateLeavesAreDeploys (ADR-039 D5).
+// --------------------------------------------------------------------------.
+
+// TestValidateLeavesAreDeploys_Valid: pack is consumed by deploy, so the
+// only leaf is the deploy step -- the policy passes.
+func TestValidateLeavesAreDeploys_Valid(t *testing.T) {
+	p := &lane.Lane{
+		Steps: []lane.Step{
+			{
+				Name: "pack", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
+				Outputs: []lane.OutputSpec{{Name: "img", Type: "image", Path: lane.Ptr(lane.RelPath("img.tar"))}},
+			},
+			{
+				Name: "deploy", Env: map[string]string{}, Args: []string{},
+				Deploy: &lane.DeploySpec{
+					Artifacts: map[string]lane.ArtifactRef{"image": {From: "pack.img"}},
+				},
+			},
+		},
+	}
+	dag, err := lane.Build(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := dag.ValidateLeavesAreDeploys(p); err != nil {
+		t.Errorf("expected valid lane to pass, got: %v", err)
+	}
+}
+
+// TestValidateLeavesAreDeploys_DeployOnly: a single deploy step is itself
+// the only leaf and is a deploy -- the policy passes.
+func TestValidateLeavesAreDeploys_DeployOnly(t *testing.T) {
+	p := &lane.Lane{
+		Steps: []lane.Step{
+			{
+				Name: "deploy", Env: map[string]string{}, Args: []string{},
+				Deploy: &lane.DeploySpec{Artifacts: map[string]lane.ArtifactRef{}},
+			},
+		},
+	}
+	dag, err := lane.Build(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := dag.ValidateLeavesAreDeploys(p); err != nil {
+		t.Errorf("expected deploy-only lane to pass, got: %v", err)
+	}
+}
+
+// TestValidateLeavesAreDeploys_DanglingLeafRejected: "orphan" produces an
+// output nothing consumes and is not a deploy, so it is a non-deploy leaf.
+// Build accepts the lane (the policy is the separate gate); the policy
+// rejects it, naming the offending step.
+func TestValidateLeavesAreDeploys_DanglingLeafRejected(t *testing.T) {
+	p := &lane.Lane{
+		Steps: []lane.Step{
+			{
+				Name: "pack", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
+				Outputs: []lane.OutputSpec{{Name: "img", Type: "image", Path: lane.Ptr(lane.RelPath("img.tar"))}},
+			},
+			{
+				Name: "deploy", Env: map[string]string{}, Args: []string{},
+				Deploy: &lane.DeploySpec{
+					Artifacts: map[string]lane.ArtifactRef{"image": {From: "pack.img"}},
+				},
+			},
+			{
+				Name: "orphan", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
+				Outputs: []lane.OutputSpec{{Name: "out", Type: "file", Path: lane.Ptr(lane.RelPath("out"))}},
+			},
+		},
+	}
+	dag, err := lane.Build(p)
+	if err != nil {
+		t.Fatalf("Build should accept the lane (policy is separate): %v", err)
+	}
+	assertErrContains(t, dag.ValidateLeavesAreDeploys(p), "orphan")
+}
