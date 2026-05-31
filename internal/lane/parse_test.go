@@ -59,8 +59,8 @@ func TestParse_ValidMinimal(t *testing.T) {
 	if p.Name != "test-lane" {
 		t.Errorf("name = %q, want test-lane", p.Name)
 	}
-	if len(p.Steps) != 1 {
-		t.Fatalf("step count = %d, want 1", len(p.Steps))
+	if len(p.Steps) != 2 {
+		t.Fatalf("step count = %d, want 2", len(p.Steps))
 	}
 	if p.Steps[0].Name != "build" {
 		t.Errorf("step name = %q, want build", p.Steps[0].Name)
@@ -71,6 +71,65 @@ func TestParse_ValidMinimal(t *testing.T) {
 	}
 	if len(p.Steps[0].Outputs) != 1 {
 		t.Errorf("output count = %d, want 1", len(p.Steps[0].Outputs))
+	}
+	if p.Steps[1].Name != "deploy" {
+		t.Errorf("step[1] name = %q, want deploy", p.Steps[1].Name)
+	}
+	if p.Steps[1].Deploy == nil {
+		t.Error("step[1].Deploy is nil, want non-nil")
+	}
+}
+
+func TestParse_ValidDeployOnly(t *testing.T) {
+	yaml := []byte(`
+name: deploy-only
+lane_id: deploy-only
+registry: localhost:5555/test
+secrets: {}
+resolver:
+  host: "1.1.1.1:853"
+  trust:
+    mode: cert_fingerprint
+    fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+steps:
+  - name: deploy
+    deploy:
+      method:
+        type: registry
+        source: localhost:5555/test/image:latest
+        target: registry.example.com/app:latest
+      artifacts: {}
+      target:
+        id: deploy-only-target
+        type: registry
+        description: deploy-only lane
+      attestation:
+        pre_state:
+          required: false
+          capture: []
+        post_state:
+          required: false
+          capture: []
+    args: []
+    env: {}
+    inputs: []
+    secrets: []
+    outputs: []
+`)
+	dir := t.TempDir()
+	path := filepath.Join(dir, "lane.yaml")
+	if err := os.WriteFile(path, yaml, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	p, err := lane.Parse(mustFilePath(t, path))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if len(p.Steps) != 1 {
+		t.Fatalf("step count = %d, want 1", len(p.Steps))
+	}
+	if p.Steps[0].Deploy == nil {
+		t.Error("step[0].Deploy is nil, want non-nil")
 	}
 }
 
@@ -342,6 +401,29 @@ steps:
       - from: src.tree
         subpath: %s
         mount: /in/x
+    secrets: []
+    outputs: []
+  - name: deploy
+    deploy:
+      method:
+        type: registry
+        source: localhost:5555/test/image:latest
+        target: registry.example.com/app:latest
+      artifacts: {}
+      target:
+        id: d1-minimal-target
+        type: registry
+        description: minimal deploy step for D1
+      attestation:
+        pre_state:
+          required: false
+          capture: []
+        post_state:
+          required: false
+          capture: []
+    args: []
+    env: {}
+    inputs: []
     secrets: []
     outputs: []
 `

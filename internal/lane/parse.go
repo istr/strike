@@ -92,6 +92,10 @@ func Parse(fp FilePath) (*Lane, error) {
 		}
 	}
 
+	if err := validateDeployPresence(&p); err != nil {
+		return nil, err
+	}
+
 	if err := validateResolver(&p); err != nil {
 		return nil, err
 	}
@@ -144,6 +148,19 @@ func validateStepPaths(s Step) error {
 		}
 	}
 	return nil
+}
+
+// validateDeployPresence enforces ADR-039 D1: a lane must contain at
+// least one deploy step. A lane that produces artifacts but deploys
+// nowhere has no attestation to produce; publishing those artifacts
+// (a registry push) is itself a deploy step.
+func validateDeployPresence(p *Lane) error {
+	for _, s := range p.Steps {
+		if s.Deploy != nil {
+			return nil
+		}
+	}
+	return fmt.Errorf("lane %q: no deploy step; a lane must declare at least one deploy step", p.Name)
 }
 
 // validateResolver enforces the IP-literal constraint on the

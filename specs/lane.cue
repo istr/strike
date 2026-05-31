@@ -81,6 +81,17 @@ package lane
 	deploy?:     #DeploySpec @go(Deploy,optional=nillable)
 	provenance?: #ProvenanceSpec @go(Provenance,optional=nillable)
 	// constraint: exactly one of image, image_from, pack, or deploy -- validated in Go
+
+	// D2 (ADR-039): a deploy step is a DAG leaf and declares no output.
+	// Tying deploy presence to an empty outputs list keeps the constraint in
+	// the schema (CUE first). It validates as an "incompatible list lengths"
+	// error and is transparent to `cue exp gengotypes` (the generated Outputs
+	// field is unchanged; verified by spike under cue v0.16.1). The
+	// complementary leaf-edge rejection lives in lane.Build
+	// (validateDeployLeaves).
+	if deploy != _|_ {
+		outputs: []
+	}
 }
 
 // ---------------------------------------------------------------------------

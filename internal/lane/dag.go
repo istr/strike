@@ -106,6 +106,9 @@ func Build(p *Lane) (*DAG, error) {
 	if err := d.validateMountDisjointness(p); err != nil {
 		return nil, err
 	}
+	if err := d.validateDeployLeaves(p); err != nil {
+		return nil, err
+	}
 
 	order, err := kahnSort(d)
 	if err != nil {
@@ -284,6 +287,29 @@ func (d *DAG) validateProvenancePaths(p *Lane) error {
 			return fmt.Errorf("step %q: provenance.path %q is not within any declared output",
 				s.Name, provPath)
 		}
+	}
+	return nil
+}
+
+// validateDeployLeaves enforces ADR-039 D2: a deploy step is a DAG leaf.
+// No step may depend on a deploy step. The schema already forbids outputs
+// on a deploy step (so any reference to one also fails output resolution),
+// but this check yields a precise error and holds even for a DAG built
+// without going through Parse. Steps are iterated in lane order and the
+// dependent list is sorted, so the error message is deterministic.
+func (d *DAG) validateDeployLeaves(p *Lane) error {
+	for _, s := range p.Steps {
+		if s.Deploy == nil {
+			continue
+		}
+		dependents := d.reverse[string(s.Name)]
+		if len(dependents) == 0 {
+			continue
+		}
+		sorted := append([]string(nil), dependents...)
+		sort.Strings(sorted)
+		return fmt.Errorf("deploy step %q must be a DAG leaf but is depended on by %v",
+			s.Name, sorted)
 	}
 	return nil
 }

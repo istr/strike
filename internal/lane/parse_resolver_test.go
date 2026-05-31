@@ -73,6 +73,29 @@ steps:
     secrets: []
     outputs:
       - { name: out, type: file, path: x }
+  - name: deploy
+    deploy:
+      method:
+        type: registry
+        source: localhost:5555/test/image:latest
+        target: registry.example.com/app:latest
+      artifacts: {}
+      target:
+        id: d1-minimal-target
+        type: registry
+        description: minimal deploy step for D1
+      attestation:
+        pre_state:
+          required: false
+          capture: []
+        post_state:
+          required: false
+          capture: []
+    args: []
+    env: {}
+    inputs: []
+    secrets: []
+    outputs: []
 `)
 	dir := t.TempDir()
 	path := filepath.Join(dir, "lane.yaml")
@@ -111,6 +134,29 @@ steps:
     secrets: []
     outputs:
       - { name: out, type: file, path: x }
+  - name: deploy
+    deploy:
+      method:
+        type: registry
+        source: localhost:5555/test/image:latest
+        target: registry.example.com/app:latest
+      artifacts: {}
+      target:
+        id: d1-minimal-target
+        type: registry
+        description: minimal deploy step for D1
+      attestation:
+        pre_state:
+          required: false
+          capture: []
+        post_state:
+          required: false
+          capture: []
+    args: []
+    env: {}
+    inputs: []
+    secrets: []
+    outputs: []
 `)
 	dir := t.TempDir()
 	path := filepath.Join(dir, "lane.yaml")
