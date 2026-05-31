@@ -669,7 +669,7 @@ const seedScratchRef = "localhost/strike-seed-scratch:latest"
 
 // ensureSeedImage imports a minimal scratch image if it does not already
 // exist. The image is an empty tar (1024 null bytes); the container
-// created from it is never started — it only serves as a mount carrier
+// created from it is never started -- it only serves as a mount carrier
 // for the archive PUT that populates volumes.
 func (e *podmanEngine) ensureSeedImage(ctx context.Context) error {
 	ok, err := e.ImageExists(ctx, seedScratchRef)
