@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/transport"
 )
 
 // --------------------------------------------------------------------------.
@@ -617,6 +618,99 @@ func TestBuild_DeterministicOrder_LexSmallestNotFIFO(t *testing.T) {
 				"see test doc comment for the algorithmic contract)",
 				i, dag.Order, want)
 		}
+	}
+}
+
+// --------------------------------------------------------------------------.
+// Peer anchor conflict (instruction 74).
+// --------------------------------------------------------------------------.
+
+// TestBuild_PeerAnchorConflict covers the build-time duplicate-anchor rule
+// (instruction 74): same host:port with differing trust anchors is rejected;
+// same anchor (including SSH known_hosts in a different order) is accepted.
+func TestBuild_PeerAnchorConflict(t *testing.T) {
+	// A producer step whose output the deploy step can reference,
+	// so that Build succeeds past edge resolution.
+	producerStep := lane.Step{
+		Name: "pack", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{"x"}, Env: map[string]string{},
+		Outputs: []lane.OutputSpec{{Name: "img", Type: "image", Path: lane.Ptr(lane.RelPath("img.tar"))}},
+	}
+	deployStep := lane.Step{
+		Name: "deploy", Env: map[string]string{}, Args: []string{},
+		Deploy: &lane.DeploySpec{
+			Artifacts: map[string]lane.ArtifactRef{"image": {From: "pack.img"}},
+		},
+	}
+
+	fpA := transport.FingerprintTrust{Mode: "cert_fingerprint", Fingerprint: "sha256:" + strings.Repeat("a", 64)}
+	fpB := transport.FingerprintTrust{Mode: "cert_fingerprint", Fingerprint: "sha256:" + strings.Repeat("b", 64)}
+
+	httpsStep := func(name, host string, tr transport.TLSTrust) lane.Step {
+		return lane.Step{
+			Name: name, Image: lane.Ptr(lane.ImageRef("img@sha256:" + strings.Repeat("a", 64))),
+			Args: []string{"x"}, Env: map[string]string{},
+			Peers: []lane.Peer{lane.HTTPSPeer{Type: "https", Host: transport.Host(host), Trust: tr}},
+		}
+	}
+	sshStep := func(name, host string, kh []lane.KnownHostEntry) lane.Step {
+		return lane.Step{
+			Name: name, Image: lane.Ptr(lane.ImageRef("img@sha256:" + strings.Repeat("a", 64))),
+			Args: []string{"x"}, Env: map[string]string{},
+			Peers: []lane.Peer{lane.SSHPeer{Type: "ssh", Host: transport.Host(host), KnownHosts: kh}},
+		}
+	}
+
+	khAB := []lane.KnownHostEntry{
+		{KeyType: "ssh-ed25519", Key: "AAAA"},
+		{KeyType: "rsa-sha2-256", Key: "BBBB"},
+	}
+	khBA := []lane.KnownHostEntry{
+		{KeyType: "rsa-sha2-256", Key: "BBBB"},
+		{KeyType: "ssh-ed25519", Key: "AAAA"},
+	}
+
+	tests := []struct {
+		name    string
+		steps   []lane.Step
+		wantErr bool
+	}{
+		{
+			name:    "same endpoint same fingerprint -- ok",
+			steps:   []lane.Step{httpsStep("a", "h.example:443", fpA), httpsStep("b", "h.example:443", fpA), producerStep, deployStep},
+			wantErr: false,
+		},
+		{
+			name:    "same endpoint different fingerprint -- conflict",
+			steps:   []lane.Step{httpsStep("a", "h.example:443", fpA), httpsStep("b", "h.example:443", fpB), producerStep, deployStep},
+			wantErr: true,
+		},
+		{
+			name:    "different endpoints -- ok",
+			steps:   []lane.Step{httpsStep("a", "h.example:443", fpA), httpsStep("b", "other.example:443", fpB), producerStep, deployStep},
+			wantErr: false,
+		},
+		{
+			name:    "same endpoint https vs ssh -- conflict (C-1)",
+			steps:   []lane.Step{httpsStep("a", "h.example:443", fpA), sshStep("b", "h.example:443", khAB), producerStep, deployStep},
+			wantErr: true,
+		},
+		{
+			name:    "ssh known_hosts reordered -- ok (C-2)",
+			steps:   []lane.Step{sshStep("a", "h.example:22", khAB), sshStep("b", "h.example:22", khBA), producerStep, deployStep},
+			wantErr: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := lane.Build(&lane.Lane{Steps: tc.steps})
+			if tc.wantErr && err == nil {
+				t.Fatal("expected a peer-anchor conflict error, got nil")
+			}
+			if !tc.wantErr && err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
 	}
 }
 

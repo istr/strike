@@ -7,6 +7,8 @@ import (
 	"path"
 	"sort"
 	"strings"
+
+	"github.com/istr/strike/internal/transport"
 )
 
 // parseRef splits a "step_name.output_name" reference into its parts.
@@ -107,6 +109,9 @@ func Build(p *Lane) (*DAG, error) {
 		return nil, err
 	}
 	if err := d.validateDeployLeaves(p); err != nil {
+		return nil, err
+	}
+	if err := d.validatePeerAnchors(p); err != nil {
 		return nil, err
 	}
 
@@ -312,6 +317,79 @@ func (d *DAG) validateDeployLeaves(p *Lane) error {
 			s.Name, sorted)
 	}
 	return nil
+}
+
+// validatePeerAnchors enforces that no two steps declare the same network
+// endpoint (host:port) with different trust anchors. Declaring one endpoint
+// with the same anchor from several steps is allowed; declaring it with
+// differing anchors is a contradiction the lane cannot satisfy and that the
+// runtime identity-conflict abort would only catch after containers run. The
+// endpoint key is host:port alone (peer.Host already carries the optional
+// port), so two peers of different protocols on the same host:port are treated
+// as a conflict -- the strictest rule, matching the runtime dedup posture.
+//
+// The anchor is reduced to a canonical string. For TLS trust the discriminator
+// plus its anchor material (fingerprint or CA-bundle path); for SSH the sorted
+// set of "keytype key" entries, so known_hosts order is irrelevant. Steps and
+// peers are iterated in declaration order; the first conflicting endpoint
+// yields a deterministic error.
+func (d *DAG) validatePeerAnchors(p *Lane) error {
+	seen := map[string]string{} // host:port -> canonical anchor
+	for _, s := range p.Steps {
+		for _, peer := range s.Peers {
+			endpoint := peerEndpoint(peer)
+			anchor := peerAnchor(peer)
+			if prev, ok := seen[endpoint]; ok {
+				if prev != anchor {
+					return fmt.Errorf(
+						"peer endpoint %q declared with conflicting trust anchors", endpoint)
+				}
+				continue
+			}
+			seen[endpoint] = anchor
+		}
+	}
+	return nil
+}
+
+// peerEndpoint returns the host:port key a peer is keyed on. peer.Host already
+// includes the optional :port from the schema, so it is the key as-is.
+func peerEndpoint(peer Peer) string {
+	switch x := peer.(type) {
+	case HTTPSPeer:
+		return string(x.Host)
+	case SSHPeer:
+		return string(x.Host)
+	default:
+		return ""
+	}
+}
+
+// peerAnchor returns a canonical string for a peer's trust anchor. Two peers on
+// the same endpoint are compatible iff their peerAnchor strings are equal. The
+// protocol discriminator is part of the string, so an HTTPS and an SSH anchor
+// on one endpoint never compare equal (C-1).
+func peerAnchor(peer Peer) string {
+	switch x := peer.(type) {
+	case HTTPSPeer:
+		switch t := x.Trust.(type) {
+		case transport.FingerprintTrust:
+			return "https/cert_fingerprint/" + t.Fingerprint
+		case transport.CABundleTrust:
+			return "https/ca_bundle/" + t.Path
+		default:
+			return "https/unknown"
+		}
+	case SSHPeer:
+		entries := make([]string, len(x.KnownHosts))
+		for i, kh := range x.KnownHosts {
+			entries[i] = kh.KeyType + " " + kh.Key
+		}
+		sort.Strings(entries)
+		return "ssh/" + strings.Join(entries, "\n")
+	default:
+		return "unknown"
+	}
 }
 
 // validateMountDisjointness checks that input mounts within the same step
