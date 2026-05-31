@@ -1,6 +1,6 @@
 # ADR-037 Implementation Roadmap
 
-## Status: SUBSTANTIALLY IMPLEMENTED
+## Status: IMPLEMENTED
 
 ## What has landed
 
@@ -13,50 +13,44 @@
   `SignatureInfo`, `IsSigned()` removed.
 - **Provenance placed under informational.** All four provenance variants
   under `informational.provenance[]`.
-- **engine_dependent empty by structural design.** Phase-1 honest posture;
-  struct-literal `{}`.
-- **Theoretical foundation.** `docs/foundation/ATTESTATION-SOUNDNESS-AND-
+- **Theoretical foundation.** `docs/ATTESTATION-SOUNDNESS-AND-
   THE-TRUST-BOUNDARY.md` landed (Instruction 43). SECURITY.md subsection
   added. Commit `2c1bb93`.
+- **Envelope signature verification core.** `internal/verify` package
+  (commit `eddb14e`): DSSE envelope parsing, payload-type guard, ECDSA P-256
+  signature verification over PAE. Returns decoded attestation JSON for
+  caller-side trust-layer semantics. Rekor and anchor cross-checks are
+  separate concerns for later instructions.
+- **README aim-sentence conditionalization.** Qualified with engine-trust
+  condition: end-to-end when the engine shares the controller's trust domain,
+  best-effort when it does not, linking SECURITY.md.
+- **`engine_dependent.peer_attribution` populated.** Phase-2 wiring landed:
+  `collectObservedPeers()` / `ingestRecords()` in `internal/deploy/deploy.go`
+  populate `sealed.observed_peers` (Layer V) and
+  `engine_dependent.peer_attribution` (Layer E) from capsule-observed
+  connection records.
 
 ## What is NOT yet implemented
 
-### 1. `strike verify` subcommand (Instruction 45)
+### 1. `strike verify` CLI subcommand
 
-Does not yet exist. The verifier reads the restructured predicate and
-surfaces the section-level trust posture:
+The internal verification library exists (`internal/verify`), but
+`cmd/strike/main.go` does not yet expose a `verify` subcommand. The CLI
+entry point reads the restructured predicate and surfaces the
+section-level trust posture:
 
 - `sealed` claims: verified cryptographically (signature, Rekor SET,
   declared-anchor matches, lane-hash binding, digest dereference).
-- `engine_dependent` claims: reported as "empty in Phase 1" (honest
-  best-effort) or verified under explicit operator-supplied `trust(E)` flag.
+- `engine_dependent` claims: reported with trust caveat, or verified under
+  explicit operator-supplied `trust(E)` flag.
 - `informational` claims: recorded for operator consumption with explicit
   "no trust claim" statement.
 
 This is the offline-verifiability promise the project has carried since
-the beginning. Green-field implementation against the restructured predicate.
-
-### 2. README aim-sentence conditionalization (Instruction 46)
-
-The README currently says "end-to-end software attestation and provenance
-tracing" without the conditional. The foundation note requires qualifying
-that under remote/untrusted engines, strike is best-effort. Small docs-only
-change.
-
-### 3. Phase-2 capsule-observed engine-action attribution
-
-Populates `engine_dependent` with per-peer connection routing records per
-ADR-038 Phase 2. Schema-additive on the new shape. Depends on ADR-038's
-capsule restructure landing first.
-
-## Sequencing
-
-1. `strike verify` (Instruction 45) -- immediate next item
-2. README conditionalization (Instruction 46 or fold into 45)
-3. Phase-2 capsule attribution -- downstream of ADR-038 implementation
+the beginning.
 
 ## References
 
 - `HANDOVER-trust-layer-predicate-restructure.md` -- frozen design handover
 - `docs/ADR-037-two-engine-trust-layers.md` -- governing ADR
-- `docs/foundation/ATTESTATION-SOUNDNESS-AND-THE-TRUST-BOUNDARY.md` -- theory
+- `docs/ATTESTATION-SOUNDNESS-AND-THE-TRUST-BOUNDARY.md` -- theory

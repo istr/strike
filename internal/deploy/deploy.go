@@ -162,8 +162,9 @@ func (p *ObservedPeer) UnmarshalJSON(data []byte) error {
 // these records -- folding it in would be a category error. Hence there is, and
 // can be, no completeness flag.
 //
-// Phase 1 leaves PeerAttribution empty; Phase-2 wiring (a separate instruction)
-// populates it from capsule-observed routing. Do not pre-populate.
+// PeerAttribution is populated from capsule-observed routing by
+// collectObservedPeers / ingestRecords. Registry deploys (no capsule)
+// contribute no attribution.
 type EngineDependent struct {
 	// PeerAttribution maps each step to the peer endpoints its mediated
 	// connections reached ("host:port" keys into Sealed.ObservedPeers).

@@ -7,7 +7,10 @@ Breaking changes are acceptable and do not need to be mentioned.
 
 We are developing our tool architecture based on real-world use cases with
 the aim of creating a tool that operates according to a few principles
-to support end-to-end software attestation and provenance tracing.
+to support software attestation and provenance tracing -- end-to-end when
+the container engine shares the controller's trust domain (local rootless,
+or remote with an attested TCB), best-effort when it does not (see
+[SECURITY.md](SECURITY.md#attestation-soundness-best-effort-vs-end-to-end)).
 
 This will also systematically reduce the attack surface for modern software
 supply-chain attacks.
