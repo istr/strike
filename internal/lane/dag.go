@@ -5,6 +5,7 @@ package lane
 import (
 	"fmt"
 	"path"
+	"slices"
 	"sort"
 	"strings"
 
@@ -455,7 +456,22 @@ func isPathPrefix(prefix, full string) bool {
 	return full[len(prefix)] == '/'
 }
 
+// addEdge records that step "from" depends on step "to". The
+// dependency relation modelled by edges/reverse is a set, not a
+// multiset: a step that references the same producer through several
+// inputs, pack files, or deploy artifacts depends on it exactly once.
+// The typed edge maps (InputEdges, PackFileEdges, DeployEdges,
+// ImageFromEdges) carry the full per-reference detail; edges/reverse
+// carry only the collapsed relation that kahnSort, Tree, and the
+// attestation predecessor chain consume. Idempotent: a repeated
+// (from, to) pair is a no-op. Because both slices are only ever
+// appended together through this function, the presence of "to" in
+// edges[from] implies the presence of "from" in reverse[to], so one
+// membership check guards both.
 func (d *DAG) addEdge(from, to string) {
+	if slices.Contains(d.edges[from], to) {
+		return
+	}
 	d.edges[from] = append(d.edges[from], to)
 	d.reverse[to] = append(d.reverse[to], from)
 }
@@ -569,34 +585,52 @@ func (d *DAG) CollectPeers(fromStep string) map[string][]Peer {
 	return peers
 }
 
-// Tree renders the DAG as a tree structure.
+// Tree renders the DAG as an ASCII tree rooted at the dependency-free
+// steps. The graph is a DAG, not a tree: a step reachable through more
+// than one path (a multi-dependency "diamond" join) is printed in full
+// at its first occurrence and as a back-reference "name (*)" -- without
+// its subtree -- at every later occurrence, so no subtree is
+// duplicated.
+//
+// Roots are sorted, and treeNode sorts each node's dependents and
+// annotation set, so the output is deterministic for a given graph
+// regardless of map-iteration order in the resolvers (resolveDeployEdges
+// iterates a map). See docs/DESIGN-PRINCIPLES.md "Reproducibility is
+// enforced, not hoped for".
 func (d *DAG) Tree() string {
 	var sb strings.Builder
 
-	// Roots: steps without dependencies
+	// Roots: steps without dependencies, sorted for deterministic output.
 	roots := []string{}
 	for name := range d.Steps {
 		if len(d.edges[name]) == 0 {
 			roots = append(roots, name)
 		}
 	}
+	sort.Strings(roots)
 
+	visited := make(map[string]bool, len(d.Steps))
 	for i, root := range roots {
 		last := i == len(roots)-1
-		prefix := ""
 		connector := "+-- "
 		if last {
 			connector = "`-- "
 		}
 		sb.WriteString(connector + root + "\n")
-		d.treeNode(&sb, root, prefix, last)
+		visited[root] = true
+		d.treeNode(&sb, root, "", last, visited)
 	}
 
 	return sb.String()
 }
 
-func (d *DAG) treeNode(sb *strings.Builder, node, prefix string, lastParent bool) {
-	dependents := d.reverse[node]
+func (d *DAG) treeNode(sb *strings.Builder, node, prefix string, lastParent bool, visited map[string]bool) {
+	// Copy and sort the dependents so the traversal order -- and thus
+	// which occurrence of a shared node is the full one -- is
+	// deterministic. Do not sort d.reverse[node] in place; it is shared.
+	dependents := append([]string(nil), d.reverse[node]...)
+	sort.Strings(dependents)
+
 	childPrefix := prefix
 	if lastParent {
 		childPrefix += "    "
@@ -610,13 +644,22 @@ func (d *DAG) treeNode(sb *strings.Builder, node, prefix string, lastParent bool
 		if last {
 			connector = "`-- "
 		}
-		// Show dependencies when more than one
-		deps := d.edges[dep]
+		if visited[dep] {
+			// Already printed in full elsewhere. Emit a back-reference
+			// and do not recurse, so the shared subtree is not repeated.
+			sb.WriteString(childPrefix + connector + dep + " (*)\n")
+			continue
+		}
+		visited[dep] = true
+		// Annotate a step that has more than one dependency with its
+		// full (sorted) dependency set, so diamond joins are visible.
+		deps := append([]string(nil), d.edges[dep]...)
+		sort.Strings(deps)
 		annotation := ""
 		if len(deps) > 1 {
 			annotation = " (" + strings.Join(deps, ", ") + ")"
 		}
 		sb.WriteString(childPrefix + connector + dep + annotation + "\n")
-		d.treeNode(sb, dep, childPrefix, last)
+		d.treeNode(sb, dep, childPrefix, last, visited)
 	}
 }

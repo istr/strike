@@ -714,6 +714,74 @@ func TestBuild_PeerAnchorConflict(t *testing.T) {
 	}
 }
 
+// TestTree_DeduplicatesRepeatedDependency asserts that a step which
+// references one producer through several inputs depends on it once:
+// the dependency-graph annotation must not list the producer twice.
+func TestTree_DeduplicatesRepeatedDependency(t *testing.T) {
+	p := &lane.Lane{
+		Steps: []lane.Step{
+			{
+				Name: "producer", Image: lane.Ptr(lane.ImageRef("img")),
+				Args: []string{}, Env: map[string]string{},
+				Outputs: []lane.OutputSpec{{Name: "out", Type: "directory", Path: lane.Ptr(lane.RelPath("o"))}},
+			},
+			{
+				Name: "consumer", Image: lane.Ptr(lane.ImageRef("img")),
+				Args: []string{}, Env: map[string]string{},
+				Inputs: []lane.InputRef{
+					{From: "producer.out", Subpath: lane.Ptr(lane.RelPath("a")), Mount: "/a"},
+					{From: "producer.out", Subpath: lane.Ptr(lane.RelPath("b")), Mount: "/b"},
+				},
+			},
+		},
+	}
+	dag, err := lane.Build(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tree := dag.Tree()
+	if strings.Contains(tree, "producer, producer") {
+		t.Errorf("dependency edge not deduplicated; got:\n%s", tree)
+	}
+	if got := strings.Count(tree, "consumer"); got != 1 {
+		t.Errorf("consumer printed %d times, want 1; got:\n%s", got, tree)
+	}
+}
+
+// TestTree_DiamondRendersSharedNodeOnce asserts that a node reachable
+// through two paths is printed in full once and as a back-reference
+// "(*)" once, never as two full subtrees.
+func TestTree_DiamondRendersSharedNodeOnce(t *testing.T) {
+	dir := func(name string, inputs ...lane.InputRef) lane.Step {
+		return lane.Step{
+			Name: name, Image: lane.Ptr(lane.ImageRef("img")),
+			Args: []string{}, Env: map[string]string{}, Inputs: inputs,
+			Outputs: []lane.OutputSpec{{Name: "out", Type: "directory", Path: lane.Ptr(lane.RelPath("o"))}},
+		}
+	}
+	p := &lane.Lane{
+		Steps: []lane.Step{
+			dir("root"),
+			dir("left", lane.InputRef{From: "root.out", Mount: "/r"}),
+			dir("right", lane.InputRef{From: "root.out", Mount: "/r"}),
+			dir("bottom",
+				lane.InputRef{From: "left.out", Mount: "/l"},
+				lane.InputRef{From: "right.out", Mount: "/ri"}),
+		},
+	}
+	dag, err := lane.Build(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tree := dag.Tree()
+	if got := strings.Count(tree, "bottom"); got != 2 {
+		t.Errorf("bottom appears %d times, want 2 (one full, one back-ref); got:\n%s", got, tree)
+	}
+	if got := strings.Count(tree, "(*)"); got != 1 {
+		t.Errorf("expected exactly one back-reference marker, got %d; tree:\n%s", got, tree)
+	}
+}
+
 // assertErrContains checks that err is non-nil and contains substr.
 func assertErrContains(t *testing.T, err error, substr string) {
 	t.Helper()
