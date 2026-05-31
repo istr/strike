@@ -740,8 +740,11 @@ func TestTree_DeduplicatesRepeatedDependency(t *testing.T) {
 		t.Fatal(err)
 	}
 	tree := dag.Tree()
-	if strings.Contains(tree, "producer, producer") {
-		t.Errorf("dependency edge not deduplicated; got:\n%s", tree)
+	// consumer depends on producer exactly once, so producer appears as a
+	// single child with no back-reference. A non-deduplicated edge would
+	// print producer twice (one full occurrence, one "(*)").
+	if got := strings.Count(tree, "producer"); got != 1 {
+		t.Errorf("producer printed %d times, want 1 (edge not deduplicated?); got:\n%s", got, tree)
 	}
 	if got := strings.Count(tree, "consumer"); got != 1 {
 		t.Errorf("consumer printed %d times, want 1; got:\n%s", got, tree)
@@ -774,8 +777,14 @@ func TestTree_DiamondRendersSharedNodeOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 	tree := dag.Tree()
-	if got := strings.Count(tree, "bottom"); got != 2 {
-		t.Errorf("bottom appears %d times, want 2 (one full, one back-ref); got:\n%s", got, tree)
+	// Rooted at the sink (bottom). root is depended on by both left and
+	// right, so it is printed in full once and as a back-reference once;
+	// bottom is the sole root and appears exactly once.
+	if got := strings.Count(tree, "bottom"); got != 1 {
+		t.Errorf("bottom (the sink/root) appears %d times, want 1; got:\n%s", got, tree)
+	}
+	if got := strings.Count(tree, "root"); got != 2 {
+		t.Errorf("root appears %d times, want 2 (one full, one back-ref); got:\n%s", got, tree)
 	}
 	if got := strings.Count(tree, "(*)"); got != 1 {
 		t.Errorf("expected exactly one back-reference marker, got %d; tree:\n%s", got, tree)

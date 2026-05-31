@@ -585,25 +585,30 @@ func (d *DAG) CollectPeers(fromStep string) map[string][]Peer {
 	return peers
 }
 
-// Tree renders the DAG as an ASCII tree rooted at the dependency-free
-// steps. The graph is a DAG, not a tree: a step reachable through more
-// than one path (a multi-dependency "diamond" join) is printed in full
-// at its first occurrence and as a back-reference "name (*)" -- without
-// its subtree -- at every later occurrence, so no subtree is
-// duplicated.
+// Tree renders the DAG as an ASCII tree rooted at the lane's sinks --
+// the steps that no other step depends on. A deploy step is always a
+// sink (ADR-039 D2), so every deploy target is a root; its subtree is
+// that target's transitive dependency chain, i.e. exactly the
+// predecessor set its attestation records, in the same edge direction
+// CollectPeers walks. A non-deploy terminal artifact is also a sink and
+// is shown as its own root, so nothing in the graph is hidden.
 //
-// Roots are sorted, and treeNode sorts each node's dependents and
-// annotation set, so the output is deterministic for a given graph
-// regardless of map-iteration order in the resolvers (resolveDeployEdges
-// iterates a map). See docs/DESIGN-PRINCIPLES.md "Reproducibility is
-// enforced, not hoped for".
+// The graph is a DAG, not a tree: a dependency reachable through more
+// than one path is printed in full at its first occurrence and as a
+// back-reference "name (*)" -- without its subtree -- thereafter, so no
+// subtree is duplicated. Sinks and each node's dependencies are sorted,
+// so the output is deterministic for a given graph regardless of
+// map-iteration order in the resolvers (resolveDeployEdges iterates a
+// map). See docs/DESIGN-PRINCIPLES.md "Reproducibility is enforced, not
+// hoped for".
 func (d *DAG) Tree() string {
 	var sb strings.Builder
 
-	// Roots: steps without dependencies, sorted for deterministic output.
+	// Roots: sinks (steps no other step depends on), sorted for
+	// deterministic output.
 	roots := []string{}
 	for name := range d.Steps {
-		if len(d.edges[name]) == 0 {
+		if len(d.reverse[name]) == 0 {
 			roots = append(roots, name)
 		}
 	}
@@ -625,11 +630,11 @@ func (d *DAG) Tree() string {
 }
 
 func (d *DAG) treeNode(sb *strings.Builder, node, prefix string, lastParent bool, visited map[string]bool) {
-	// Copy and sort the dependents so the traversal order -- and thus
-	// which occurrence of a shared node is the full one -- is
-	// deterministic. Do not sort d.reverse[node] in place; it is shared.
-	dependents := append([]string(nil), d.reverse[node]...)
-	sort.Strings(dependents)
+	// Copy and sort the node's dependencies so the traversal order -- and
+	// thus which occurrence of a shared dependency is the full one -- is
+	// deterministic. Do not sort d.edges[node] in place; it is shared.
+	deps := append([]string(nil), d.edges[node]...)
+	sort.Strings(deps)
 
 	childPrefix := prefix
 	if lastParent {
@@ -638,8 +643,8 @@ func (d *DAG) treeNode(sb *strings.Builder, node, prefix string, lastParent bool
 		childPrefix += "|   "
 	}
 
-	for i, dep := range dependents {
-		last := i == len(dependents)-1
+	for i, dep := range deps {
+		last := i == len(deps)-1
 		connector := "+-- "
 		if last {
 			connector = "`-- "
@@ -651,15 +656,7 @@ func (d *DAG) treeNode(sb *strings.Builder, node, prefix string, lastParent bool
 			continue
 		}
 		visited[dep] = true
-		// Annotate a step that has more than one dependency with its
-		// full (sorted) dependency set, so diamond joins are visible.
-		deps := append([]string(nil), d.edges[dep]...)
-		sort.Strings(deps)
-		annotation := ""
-		if len(deps) > 1 {
-			annotation = " (" + strings.Join(deps, ", ") + ")"
-		}
-		sb.WriteString(childPrefix + connector + dep + annotation + "\n")
+		sb.WriteString(childPrefix + connector + dep + "\n")
 		d.treeNode(sb, dep, childPrefix, last, visited)
 	}
 }
