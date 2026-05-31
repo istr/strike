@@ -119,16 +119,15 @@ func AssembleImage(base v1.Image, spec *lane.PackSpec, inputPaths map[string]str
 }
 
 // Pack assembles an OCI image from the given options, generates an SBOM,
-// signs the manifest, and writes the result as an OCI layout tar.
+// optionally signs the manifest, and writes the result as an OCI layout
+// tar. Signing is gated on opts.SigningKey: when nil, the image is left
+// unsigned and no signature manifest is written. The key is supplied iff
+// the step references a cosign_key secret (see executePack).
 //
 // Pack is the orchestrator: it handles I/O (pull, write) and delegates
 // to pure functions (AssembleImage, SignManifest, GenerateSBOM) for the
 // security-critical computations.
 func Pack(ctx context.Context, opts PackOpts) (*PackResult, error) {
-	if opts.SigningKey == nil {
-		return nil, fmt.Errorf("pack: signing key is required; keyless signing is not yet implemented")
-	}
-
 	// 1. Pull and verify the base image (network I/O)
 	base, err := pullVerified(string(opts.Spec.Base))
 	if err != nil {
@@ -152,18 +151,29 @@ func Pack(ctx context.Context, opts PackOpts) (*PackResult, error) {
 		return nil, fmt.Errorf("pack: SBOM artifact: %w", err)
 	}
 
-	// 4. Sign the image manifest digest -- pure crypto, optional Rekor submission
-	signRes, err := SignManifest(ctx, assembled.Digest.String(), opts.SigningKey, opts.KeyPassword, opts.Rekor)
-	if err != nil {
-		return nil, fmt.Errorf("pack: sign: %w", err)
+	// 4. Sign the image manifest digest -- optional, gated on a cosign_key
+	// secret. An unsigned pack still produces a verifiable artifact: its
+	// integrity in the chain comes from the recorded manifest digest,
+	// pinned by consuming steps. The cosign manifest signature is an
+	// out-of-band guarantee for pushed images, not the provenance backbone.
+	var sigImage v1.Image
+	var rekorEntry *lane.RekorEntry
+	if opts.SigningKey != nil {
+		signRes, signErr := SignManifest(ctx, assembled.Digest.String(), opts.SigningKey, opts.KeyPassword, opts.Rekor)
+		if signErr != nil {
+			return nil, fmt.Errorf("pack: sign: %w", signErr)
+		}
+		sigImage = signRes.Image
+		rekorEntry = signRes.Rekor
 	}
 
-	// 5. Write OCI layout with all three manifests (filesystem I/O)
-	if err := writeOCILayout(assembled.Image, sbomImage, signRes.Image, opts.OutputRoot, opts.OutputName, assembled.Digest.String()); err != nil {
+	// 5. Write OCI layout (filesystem I/O). The signature manifest is
+	// appended only when the image was signed.
+	if err := writeOCILayout(assembled.Image, sbomImage, sigImage, opts.OutputRoot, opts.OutputName, assembled.Digest.String()); err != nil {
 		return nil, err
 	}
 
-	return &PackResult{Digest: lane.MustParseDigest(assembled.Digest.String()), Rekor: signRes.Rekor}, nil
+	return &PackResult{Digest: lane.MustParseDigest(assembled.Digest.String()), Rekor: rekorEntry}, nil
 }
 
 // addFileLayers appends a layer for each file entry, returning the updated
@@ -332,8 +342,10 @@ func writeOCILayout(img, sbomImage, sigImage v1.Image, outputRoot *os.Root, outp
 	if err := lp.AppendImage(sbomImage); err != nil {
 		return fmt.Errorf("pack: append SBOM: %w", err)
 	}
-	if err := lp.AppendImage(sigImage); err != nil {
-		return fmt.Errorf("pack: append signature: %w", err)
+	if sigImage != nil {
+		if err := lp.AppendImage(sigImage); err != nil {
+			return fmt.Errorf("pack: append signature: %w", err)
+		}
 	}
 
 	if err := tarDirectoryToRoot(layoutDir, outputRoot, outputName); err != nil {

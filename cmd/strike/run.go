@@ -339,6 +339,9 @@ func (rc *runContext) executePack(ctx context.Context, step *lane.Step, stepName
 	}
 
 	signed := signingKey != nil
+	if !signed {
+		log.Printf("WARN   %s: image unsigned (no cosign_key secret)", safeName)
+	}
 	if regErr := rc.laneState.Register(stepName, step.Outputs[0].Name, lane.Artifact{
 		Type:   artifactTypeImage,
 		Digest: result.Digest,
