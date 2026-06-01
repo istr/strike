@@ -528,12 +528,9 @@ func (rc *runContext) wrapArchivedOutput(ctx context.Context, step *lane.Step, s
 	workdir := step.Workdir.String()
 	tag := registry.WrapTag(rc.lane.LaneID, stepName, specHash)
 
-	// Podman's ContainerArchive prefixes entries with the archived path's
-	// basename (probe-confirmed, podman 5.4.2): /out -> "out/...", /out/tree
-	// -> "tree/...", a single file -> the bare basename. archiveReroot strips
-	// that prefix and re-roots under OutputLayerName (directory), or keeps the
-	// single file entry as-is (file), so the layer is rooted at
-	// <OutputLayerName> for both consumer and pack.
+	// archiveReroot computes the archive path and the strip/dest prefixes for
+	// re-rooting the archive stream into the output's OCI layer. See its doc
+	// comment for the podman entry-rooting rules.
 	archivePath, stripPrefix, destPrefix := archiveReroot(workdir, out)
 
 	stream, archErr := rc.engine.ContainerArchive(ctx, containerID, archivePath)
@@ -557,6 +554,14 @@ func (rc *runContext) wrapArchivedOutput(ctx context.Context, step *lane.Step, s
 	}
 	if err != nil {
 		return fmt.Errorf("%s: wrap output %q: %w", safeName, out.Name, err)
+	}
+
+	// A directory output with no file content is legitimate (an intentionally
+	// empty tree) but is also the symptom of a misdeclared workdir or output
+	// path. Surface it as INFO so an unintended empty output points the
+	// operator at the right step, while an intended one can be ignored.
+	if out.Type == "directory" && size == 0 {
+		log.Printf("INFO   %s: output %q has no file content; if unintended, check the step workdir and output path", safeName, out.Name)
 	}
 
 	if regErr := rc.laneState.Register(stepName, out.Name, lane.Artifact{
@@ -717,17 +722,29 @@ func singleFileOutsideErr(e lane.InputEdge) error {
 // (stripPrefix, destPrefix) for re-rooting that archive stream into the
 // output's OCI layer.
 //
-// Podman's ContainerArchive prefixes every entry with the basename of the
-// archived path (probe-confirmed, podman 5.4.2): /out -> "out/...",
-// /out/tree -> "tree/...", and a single file /out/f -> the bare entry "f".
+// Podman's ContainerArchive roots its entries differently for a subdirectory
+// than for a volume mountpoint (probe-confirmed, podman 5.4.2, stopped
+// container with content written into the volume):
+//
+//   - a SUBDIRECTORY /out/tree -> entries prefixed with the subdir basename,
+//     no leading slash: "tree/...". A single file /out/f -> the bare entry
+//     "f".
+//   - the WORKDIR MOUNTPOINT /out -> entries rooted at the volume root WITH a
+//     leading slash: "/", "/node_modules", "/package.json". NOT prefixed with
+//     the mountpoint basename.
+//
 // The layer must end rooted at OutputLayerName so the consumer
 // (buildInputDelivery) and pack (resolvePackInputPaths) find content at
 // <OutputLayerName>/... .
 //
-//   - directory: strip the basename podman prepended, then re-root under
-//     OutputLayerName. For a path-bearing output basename == OutputLayerName
-//     (a no-op net of strip+add); for a whole-workdir output they differ --
-//     strip the workdir basename, add the output name.
+//   - path-bearing directory: strip the subdir basename podman prepended, then
+//     re-root under OutputLayerName (basename == OutputLayerName, a no-op net
+//     of strip+add).
+//   - whole-workdir directory (no path): strip NOTHING. The mountpoint archive
+//     already roots at the volume root; relUnderPrefix("") keeps each cleaned
+//     name and path.Join(OutputLayerName, name) absorbs the leading slash, so
+//     the whole workdir lands under the output name. Stripping the mountpoint
+//     basename would match no entry (none carries it) and drop the layer.
 //   - file: the archive is a single bare entry already named
 //     basename(out.Path) == OutputLayerName; keep it (stripPrefix="",
 //     destPrefix=""). Stripping its own name would drop the only entry.
@@ -741,6 +758,9 @@ func archiveReroot(workdir string, out lane.OutputSpec) (archivePath, stripPrefi
 	}
 	if out.Type == artifactTypeFile {
 		return archivePath, "", ""
+	}
+	if out.Path == nil {
+		return archivePath, "", lane.OutputLayerName(out)
 	}
 	return archivePath, path.Base(archivePath), lane.OutputLayerName(out)
 }

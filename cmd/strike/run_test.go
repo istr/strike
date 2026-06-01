@@ -1116,7 +1116,7 @@ func TestArchiveReroot(t *testing.T) {
 			name:        "directory whole workdir (no path)",
 			workdir:     "/out",
 			out:         lane.OutputSpec{Name: "site", Type: "directory"},
-			wantArchive: "/out", wantStrip: "out", wantDest: "site",
+			wantArchive: "/out", wantStrip: "", wantDest: "site",
 		},
 		{
 			name:        "file with path",
