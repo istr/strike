@@ -13,7 +13,9 @@ Reframes the trust statements in
 [ADR-012](ADR-012-engine-identity-capture.md),
 [ADR-028](ADR-028-step-container-egress-mediation.md), and
 [ADR-033](ADR-033-ssh-peer-egress-and-unified-mediation.md). Its scope statement
-(D4) is the revisable crux.
+(D4) is the revisable crux. Extended by ADR-040 (control-plane SBOM generation and keyless attestation),
+which realizes the V and E layers as a standard SLSA provenance predicate and a
+co-attached engine-context predicate.
 
 ## Context
 

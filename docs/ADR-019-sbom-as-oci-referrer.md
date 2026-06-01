@@ -2,7 +2,12 @@
 
 ## Status
 
-Accepted.
+Accepted. Superseded in part by ADR-040 (control-plane SBOM generation and
+keyless attestation): the Go-buildinfo SBOM generation (decision step 1) is
+replaced by control-plane cataloging of the sealed image; the operator-held-key
+signing (decision step 3) is replaced by keyless signing; and the
+CycloneDX-only generation stance is replaced by CycloneDX plus SPDX. The OCI 1.1
+referrer attachment and the base-image SBOM resolution order are retained.
 
 ## Context
 
