@@ -56,27 +56,17 @@ func TestParse_ValidMinimal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
-	if p.Name != "test-lane" {
-		t.Errorf("name = %q, want test-lane", p.Name)
+	if p.Name != "minimal-lane" {
+		t.Errorf("name = %q, want minimal-lane", p.Name)
 	}
-	if len(p.Steps) != 2 {
-		t.Fatalf("step count = %d, want 2", len(p.Steps))
+	if len(p.Steps) != 1 {
+		t.Fatalf("step count = %d, want 1", len(p.Steps))
 	}
-	if p.Steps[0].Name != "build" {
-		t.Errorf("step name = %q, want build", p.Steps[0].Name)
+	if p.Steps[0].Name != "deploy" {
+		t.Errorf("step name = %q, want deploy", p.Steps[0].Name)
 	}
-	wantImage := lane.ImageRef("docker.io/library/golang@sha256:abababababababababababababababababababababababababababababababab")
-	if p.Steps[0].Image == nil || *p.Steps[0].Image != wantImage {
-		t.Errorf("image = %v, want %s", p.Steps[0].Image, wantImage)
-	}
-	if len(p.Steps[0].Outputs) != 1 {
-		t.Errorf("output count = %d, want 1", len(p.Steps[0].Outputs))
-	}
-	if p.Steps[1].Name != "deploy" {
-		t.Errorf("step[1] name = %q, want deploy", p.Steps[1].Name)
-	}
-	if p.Steps[1].Deploy == nil {
-		t.Error("step[1].Deploy is nil, want non-nil")
+	if p.Steps[0].Deploy == nil {
+		t.Error("step[0].Deploy is nil, want non-nil")
 	}
 }
 

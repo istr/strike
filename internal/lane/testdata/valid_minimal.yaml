@@ -1,5 +1,5 @@
-name: test-lane
-lane_id: test-lane
+name: minimal-lane
+lane_id: minimal-lane
 registry: localhost:5555/test
 secrets: {}
 resolver:
@@ -8,23 +8,11 @@ resolver:
     mode: cert_fingerprint
     fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 steps:
-  - name: build
-    image: docker.io/library/golang@sha256:abababababababababababababababababababababababababababababababab
-    args: ["go", "build", "-o", "/out/binary"]
-    workdir: /out
-    env:
-      CGO_ENABLED: "0"
-    inputs: []
-    secrets: []
-    outputs:
-      - name: binary
-        type: file
-        path: binary
   - name: deploy
     deploy:
       method:
         type: registry
-        source: localhost:5555/test/image:latest
+        source: docker.io/library/golang@sha256:abababababababababababababababababababababababababababababababab
         target: registry.example.com/app:latest
       artifacts: {}
       target:

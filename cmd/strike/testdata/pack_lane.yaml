@@ -45,7 +45,9 @@ steps:
         type: registry
         source: localhost:5555/test/image:latest
         target: registry.example.com/app:latest
-      artifacts: {}
+      artifacts:
+        image:
+          from: pack.image
       target:
         id: d1-minimal-target
         type: registry

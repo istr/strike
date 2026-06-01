@@ -39,7 +39,9 @@ steps:
         type: registry
         source: localhost:5555/test/image:latest
         target: registry.example.com/app:latest
-      artifacts: {}
+      artifacts:
+        site:
+          from: build.site
       target:
         id: d1-minimal-target
         type: registry

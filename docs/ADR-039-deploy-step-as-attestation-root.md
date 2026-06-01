@@ -85,10 +85,42 @@ and validated against those anchors are recorded in `sealed.observed_peers`. No
 declared peer that strike acted on is omitted from the attestation, and the
 observed set is always a subset of the declared set.
 
+**D5. Every DAG leaf is a deploy step.** A leaf -- a step no other step
+depends on -- must be a deploy step. `dag.ValidateLeavesAreDeploys` rejects any
+non-deploy leaf. A non-deploy step whose output nothing consumes is a dangling
+terminal build: it produces an artifact that is neither used nor deployed, so
+it contributes to no attestation. The rule also has an execution-semantics
+basis: a step's failure can only stop its successors, so a leaf can stop
+nothing. A check or QA step meant to prevent a deploy must therefore be a
+*predecessor* of that deploy, not a leaf -- it consumes the artifact and
+produces an output the deploy consumes (the validated artifact, or a report the
+deploy takes as an input), so its failure stops the deploy and the attestation
+records that what was deployed is what passed the gate. Together with D2 (a
+deploy step is a leaf), D5 makes "leaf" and "deploy step" coextensive: a lane's
+leaves are exactly its deploy targets. D5 also subsumes D1 for any non-empty
+acyclic lane (every finite DAG has a leaf, and that leaf must be a deploy), but
+D1 is retained for its clearer early diagnostic.
+
+Unlike D1 and D2, D5 is enforced only in Go, not in the schema. The invariant
+is a property of the resolved edge relation between steps; expressing it in CUE
+would re-derive that relation from the `from` references by hand -- duplicating
+the Go edge resolvers and producing worse diagnostics -- so the Go check is the
+binding contract and the schema records only the intent. This is the same
+"semantically schema, technically Go" split used for the IP-literal resolver
+check (ADR-024). Because the check needs the built graph, it runs after
+`lane.Build` rather than inside it: `Build` stays usable for graph-mechanism
+unit tests on partial graphs, while the CLI runs D5 as part of a single
+validation gate -- `strike validate`, `strike dag`, and `strike run` all reject
+a non-conforming lane identically, with one error and no other output.
+
 ## Consequences
 
 - Every lane terminates in at least one signed attestation. The no-deploy
   degenerate case is gone.
+- A lane's leaves are exactly its deploy targets (D2 + D5). A dangling non-
+  deploy build, or a check step that produces nothing and so cannot gate a
+  deploy, is rejected at validation rather than silently performing work that
+  is never attested.
 - A deploy step's sub-tree is provably complete and final when the deploy step
   runs: topological order guarantees every predecessor has terminated, and the
   leaf invariant (D2) guarantees nothing downstream can alter what was deployed.
@@ -155,7 +187,10 @@ those of its predecessors.
   assembly and the existing sub-tree walkers; it adds enforcement of two
   invariants, not a new lane-wide assembler.
 - **CUE first.** D1 and D2 are enforced in the schema (and in `Build`), not by
-  runtime convention.
+  runtime convention. D5 is the deliberate exception: it is a graph-edge
+  invariant enforced only in Go, after `Build`, because re-deriving the edge
+  relation in CUE would merely duplicate the Go resolvers (the same
+  "semantically schema, technically Go" split as ADR-024).
 - **Reproducibility is enforced.** A branch-scoped attestation is a
   deterministic function of its sub-tree, independent of unrelated branches and
   of execution interleaving.

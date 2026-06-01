@@ -27,31 +27,43 @@ steps:
         path: manifest.txt
   - name: consumer_a
     image: docker.io/library/alpine@sha256:cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd
-    args: [cat, /input/data.json]
+    args: [sh, -c, "cat /input/data.json > /out/a.txt"]
+    workdir: /out
     env: {}
     inputs:
       - from: generate.data
         mount: /input/data.json
     secrets: []
-    outputs: []
+    outputs:
+      - name: out
+        type: file
+        path: a.txt
   - name: consumer_b
     image: docker.io/library/alpine@sha256:cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd
-    args: [cat, /input/config.yaml]
+    args: [sh, -c, "cat /input/config.yaml > /out/b.txt"]
+    workdir: /out
     env: {}
     inputs:
       - from: generate.config
         mount: /input/config.yaml
     secrets: []
-    outputs: []
+    outputs:
+      - name: out
+        type: file
+        path: b.txt
   - name: consumer_c
     image: docker.io/library/alpine@sha256:cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd
-    args: [cat, /input/manifest.txt]
+    args: [sh, -c, "cat /input/manifest.txt > /out/c.txt"]
+    workdir: /out
     env: {}
     inputs:
       - from: generate.manifest
         mount: /input/manifest.txt
     secrets: []
-    outputs: []
+    outputs:
+      - name: out
+        type: file
+        path: c.txt
 
   - name: deploy
     deploy:
@@ -59,7 +71,13 @@ steps:
         type: registry
         source: localhost:5555/test/image:latest
         target: registry.example.com/app:latest
-      artifacts: {}
+      artifacts:
+        a:
+          from: consumer_a.out
+        b:
+          from: consumer_b.out
+        c:
+          from: consumer_c.out
       target:
         id: d1-minimal-target
         type: registry

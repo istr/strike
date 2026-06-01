@@ -32,7 +32,7 @@ func TestAllFixturesBuild(t *testing.T) {
 				}
 				t.Fatalf("parse: %v", err)
 			}
-			_, err = lane.Build(p)
+			dag, err := lane.Build(p)
 			if strings.HasPrefix(filepath.Base(path), "invalid_") {
 				if err == nil {
 					t.Fatal("expected build error for invalid fixture")
@@ -41,6 +41,9 @@ func TestAllFixturesBuild(t *testing.T) {
 			}
 			if err != nil {
 				t.Fatalf("build: %v", err)
+			}
+			if depErr := dag.ValidateLeavesAreDeploys(p); depErr != nil {
+				t.Fatalf("leaf-is-deploy policy (ADR-039 D5): %v", depErr)
 			}
 		})
 	}
