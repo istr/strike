@@ -72,6 +72,7 @@ referenced here at all.
 | 036 | [Engine-native step input delivery](ADR-036-engine-native-input-delivery.md) | Accepted | Containers are the only storage; Digest-pinned references; Reproducibility; Code is liability; Enforcement is structural |
 | 037 | [Two trust layers toward the engine](ADR-037-two-engine-trust-layers.md) | Accepted | Runtime is attested; Identity is asymmetric; Code is liability; Reproducibility; Enforcement is structural |
 | 038 | [Protocol-mediated SSH via a control-plane front](ADR-038-protocol-mediated-ssh.md) | Proposed | No shell; Peers are declared; Identity is asymmetric; Runtime is attested; Digest-pinned references; Code is liability; Enforcement is structural |
+| 039 | [The deploy step as attestation root](ADR-039-deploy-step-as-attestation-root.md) | Accepted | Code is liability; CUE first; Reproducibility |
 
 ## By principle
 
@@ -85,7 +86,7 @@ ADR-001, ADR-002, ADR-004, ADR-005, ADR-006, ADR-008, ADR-010,
 ADR-011, ADR-013, ADR-014, ADR-015, ADR-016, ADR-017, ADR-018,
 ADR-019, ADR-020, ADR-021, ADR-023, ADR-024, ADR-025, ADR-026, ADR-027,
 ADR-028, ADR-029, ADR-030, ADR-031, ADR-032, ADR-033, ADR-034, ADR-035,
-ADR-036, ADR-037, ADR-038.
+ADR-036, ADR-037, ADR-038, ADR-039.
 
 ### No shell
 
@@ -102,7 +103,7 @@ ADR-031, ADR-033.
 
 ### CUE first
 
-ADR-004, ADR-010, ADR-015, ADR-017, ADR-022, ADR-027, ADR-035.
+ADR-004, ADR-010, ADR-015, ADR-017, ADR-022, ADR-027, ADR-035, ADR-039.
 
 ### Secrets are typed
 
@@ -132,7 +133,7 @@ ADR-030, ADR-031, ADR-034, ADR-035, ADR-036, ADR-038.
 ### Reproducibility is enforced, not hoped for
 
 ADR-009, ADR-010, ADR-011, ADR-015, ADR-016, ADR-017, ADR-026, ADR-027,
-ADR-031, ADR-034, ADR-035, ADR-036, ADR-037.
+ADR-031, ADR-034, ADR-035, ADR-036, ADR-037, ADR-039.
 
 ### Containers are the only storage
 
