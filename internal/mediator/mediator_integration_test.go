@@ -1,5 +1,3 @@
-//go:build integration
-
 package mediator_test
 
 import (
@@ -89,14 +87,14 @@ func TestMediator_CloudflareHTTPS_INTEGRATION(t *testing.T) {
 		t.Fatalf("dial: %v", err)
 	}
 	clientConn := tls.Client(raw, clientConfig)
-	if err := clientConn.HandshakeContext(ctx); err != nil {
+	if hsErr := clientConn.HandshakeContext(ctx); hsErr != nil {
 		closer.Warn(raw, "integration client raw")
-		t.Fatalf("client handshake: %v", err)
+		t.Fatalf("client handshake: %v", hsErr)
 	}
 	defer closer.Warn(clientConn, "integration client conn")
 
-	if _, err := clientConn.Write([]byte("HEAD / HTTP/1.1\r\nHost: one.one.one.one\r\nConnection: close\r\n\r\n")); err != nil {
-		t.Fatalf("write: %v", err)
+	if _, wErr := clientConn.Write([]byte("HEAD / HTTP/1.1\r\nHost: one.one.one.one\r\nConnection: close\r\n\r\n")); wErr != nil {
+		t.Fatalf("write: %v", wErr)
 	}
 	resp, err := io.ReadAll(clientConn)
 	if err != nil {

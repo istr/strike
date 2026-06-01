@@ -1,5 +1,3 @@
-//go:build integration
-
 package registry_test
 
 import (
@@ -28,8 +26,8 @@ func TestExtractSingleLayer_Integration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ImageLoad: %v", err)
 	}
-	if err := engine.ImageTag(ctx, id, tag); err != nil {
-		t.Fatalf("ImageTag: %v", err)
+	if tagErr := engine.ImageTag(ctx, id, tag); tagErr != nil {
+		t.Fatalf("ImageTag: %v", tagErr)
 	}
 
 	saved, err := registry.SaveImage(ctx, engine, tag)
@@ -41,8 +39,8 @@ func TestExtractSingleLayer_Integration(t *testing.T) {
 	}
 
 	destDir := t.TempDir()
-	if err := registry.ExtractSingleLayer(saved, destDir); err != nil {
-		t.Fatalf("ExtractSingleLayer: %v", err)
+	if exErr := registry.ExtractSingleLayer(saved, destDir); exErr != nil {
+		t.Fatalf("ExtractSingleLayer: %v", exErr)
 	}
 
 	root, err := os.OpenRoot(destDir)
