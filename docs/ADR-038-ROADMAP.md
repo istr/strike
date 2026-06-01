@@ -99,7 +99,14 @@ Per mediated SSH connection, split into:
   allowlisted command.
 - Engine-asserted (Layer E): attribution of connection to specific step.
 
-Populates `engine_dependent` in the attestation predicate.
+The collection side has landed with the ADR-037 Phase-2 wiring:
+`collectObservedPeers()` / `ingestRecords()` in `internal/deploy/deploy.go`
+already fold capsule-observed records into `sealed.observed_peers` (Layer V)
+and `engine_dependent.peer_attribution` (Layer E). What remains for this item
+is the SSH-mediated path emitting those per-connection observed records
+(host-key fingerprint, negotiated algorithms, allowlisted command) into the
+capsule records that `ingestRecords` consumes; the TLS mediator and the DoT
+resolver already emit their connection / query records.
 
 ## Sequencing
 
@@ -120,7 +127,9 @@ Per `HANDOVER-ssh-egress-redesign.md`:
    split
 
 Dependency: externalize signing key (KMS/keyless) before the front's inbound
-listener is exposed in a remote deployment (ADR-037 D5.1 ordering).
+listener is exposed in a remote deployment (ADR-037 D5.1 ordering). That
+externalization is ADR-040 D2 (keyless), landed by `docs/ADR-040-ROADMAP.md`
+instruction 3; sequence that instruction ahead of any remote-front exposure.
 
 ## References
 

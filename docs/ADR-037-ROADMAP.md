@@ -49,6 +49,17 @@ section-level trust posture:
 This is the offline-verifiability promise the project has carried since
 the beginning.
 
+**Scope now governed by ADR-040 D3.** ADR-040 redefines the `verify`
+subcommand: cosign-compatible OCI referrers plus Rekor v2 inclusion plus
+SLSA and SBOM predicate validation plus the issuer/identity cross-check,
+with per-layer exit driven by trust mode (engine-trust requires V and E;
+no-engine-trust requires only V; informational never gates). It also moves
+the signature model this item must verify from the operator-held-key DSSE
+path to the keyless Fulcio chain. `internal/verify` stays the foundation:
+its DSSE / PAE / ECDSA P-256 core is retained and extended, not replaced.
+The verify work is tracked in `docs/ADR-040-ROADMAP.md` instruction 5; this
+item is retired in favor of it.
+
 ## References
 
 - `HANDOVER-trust-layer-predicate-restructure.md` -- frozen design handover

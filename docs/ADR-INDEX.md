@@ -71,7 +71,7 @@ referenced here at all.
 | 035 | [Build payload stays in the engine; outputs are workdir-volume projections](ADR-035-build-payload-in-engine.md) | Accepted | Containers are the only storage; Enforcement is structural; Reproducibility; Digest-pinned references; CUE first; Code is liability |
 | 036 | [Engine-native step input delivery](ADR-036-engine-native-input-delivery.md) | Accepted | Containers are the only storage; Digest-pinned references; Reproducibility; Code is liability; Enforcement is structural |
 | 037 | [Two trust layers toward the engine](ADR-037-two-engine-trust-layers.md) | Accepted | Runtime is attested; Identity is asymmetric; Code is liability; Reproducibility; Enforcement is structural |
-| 038 | [Protocol-mediated SSH via a control-plane front](ADR-038-protocol-mediated-ssh.md) | Proposed | No shell; Peers are declared; Identity is asymmetric; Runtime is attested; Digest-pinned references; Code is liability; Enforcement is structural |
+| 038 | [Protocol-mediated SSH via a control-plane front](ADR-038-protocol-mediated-ssh.md) | Accepted | No shell; Peers are declared; Identity is asymmetric; Runtime is attested; Digest-pinned references; Code is liability; Enforcement is structural |
 | 039 | [The deploy step as attestation root](ADR-039-deploy-step-as-attestation-root.md) | Accepted | Code is liability; CUE first; Reproducibility |
 | 040 | [Control-plane SBOM generation and keyless attestation](ADR-040-control-plane-sbom-and-keyless-attestation.md) | Accepted | Runtime is attested; Identity is asymmetric; Peers are declared; Digest-pinned references; Reproducibility; Code is liability; No exec |
 
