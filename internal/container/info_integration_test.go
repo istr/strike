@@ -3,29 +3,18 @@ package container_test
 import (
 	"context"
 	"encoding/json"
-	"os"
 	"testing"
 
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/container"
+	"github.com/istr/strike/internal/testutil"
 )
 
 func TestIntegrationInfoSchema(t *testing.T) {
-	if os.Getenv("STRIKE_INTEGRATION") == "0" {
-		t.Skip("integration tests disabled (STRIKE_INTEGRATION=0)")
-	}
-
-	eng, err := container.New()
-	if err != nil {
-		t.Skipf("no container engine: %v", err)
-	}
+	eng := testutil.RequireEngine(t)
 
 	ctx, cancel := context.WithTimeout(t.Context(), 30*clock.Second)
 	defer cancel()
-
-	if pingErr := eng.Ping(ctx); pingErr != nil {
-		t.Fatalf("Ping: %v", pingErr)
-	}
 	if infoErr := eng.Info(ctx); infoErr != nil {
 		t.Fatalf("Info: %v", infoErr)
 	}

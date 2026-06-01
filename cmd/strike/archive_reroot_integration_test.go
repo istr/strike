@@ -13,39 +13,8 @@ import (
 	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/registry"
+	"github.com/istr/strike/internal/testutil"
 )
-
-// wholeWorkdirNeedsEngine returns a live engine or skips when no engine is
-// present or STRIKE_INTEGRATION=0.
-func wholeWorkdirNeedsEngine(ctx context.Context, t *testing.T) container.Engine {
-	t.Helper()
-	if os.Getenv("STRIKE_INTEGRATION") == "0" {
-		t.Skip("STRIKE_INTEGRATION=0: integration test skipped")
-	}
-	eng, err := container.New()
-	if err != nil {
-		t.Skipf("no container engine: %v", err)
-	}
-	if pingErr := eng.Ping(ctx); pingErr != nil {
-		t.Fatalf("engine ping: %v", pingErr)
-	}
-	return eng
-}
-
-// wholeWorkdirEnsureImage pulls an image if not already local.
-func wholeWorkdirEnsureImage(ctx context.Context, t *testing.T, eng container.Engine, ref string) {
-	t.Helper()
-	exists, err := eng.ImageExists(ctx, ref)
-	if err != nil {
-		t.Fatalf("image exists: %v", err)
-	}
-	if !exists {
-		t.Logf("pulling %s ...", ref)
-		if pullErr := eng.ImagePull(ctx, ref); pullErr != nil {
-			t.Fatalf("pull %s: %v", ref, pullErr)
-		}
-	}
-}
 
 // TestWholeWorkdirOutput_Integration exercises the path-less directory output
 // end to end against a real engine. A path-less output is the "whole workdir
@@ -58,11 +27,11 @@ func wholeWorkdirEnsureImage(ctx context.Context, t *testing.T, eng container.En
 // strip/dest, saves the resulting image, extracts the single layer, and
 // asserts the whole workdir is present under the output name.
 func TestWholeWorkdirOutput_Integration(t *testing.T) {
+	eng := testutil.RequireEngine(t)
 	ctx := context.Background()
-	eng := wholeWorkdirNeedsEngine(ctx, t)
 
 	const img = "cgr.dev/chainguard/go@sha256:4ec098b553c8d74d9f01925578660b2bfcdee4ef45e5ab082250cf9675a0e28b"
-	wholeWorkdirEnsureImage(ctx, t, eng, img)
+	mountEnsureImage(t, eng, img)
 
 	vol := fmt.Sprintf("strike-workdir-itest-%d", clock.Wall().UnixNano())
 	if err := eng.VolumeCreate(ctx, vol); err != nil {

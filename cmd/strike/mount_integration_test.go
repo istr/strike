@@ -4,14 +4,13 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"testing"
 
 	"github.com/istr/strike/internal/clock"
-
 	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/registry/regtest"
+	"github.com/istr/strike/internal/testutil"
 )
 
 // Digest-pinned images matching test/integration/helpers_test.go.
@@ -20,22 +19,6 @@ import (
 const (
 	mountGoImage = "cgr.dev/chainguard/go@sha256:4ec098b553c8d74d9f01925578660b2bfcdee4ef45e5ab082250cf9675a0e28b"
 )
-
-// mountNeedsEngine returns a live engine or skips/fails the test.
-func mountNeedsEngine(t *testing.T) container.Engine {
-	t.Helper()
-	if os.Getenv("STRIKE_INTEGRATION") == "0" {
-		t.Skip("integration tests disabled (STRIKE_INTEGRATION=0)")
-	}
-	eng, err := container.New()
-	if err != nil {
-		t.Fatalf("no container engine (is the podman socket running?): %v", err)
-	}
-	if pingErr := eng.Ping(context.Background()); pingErr != nil {
-		t.Fatalf("engine ping: %v", pingErr)
-	}
-	return eng
-}
 
 // mountEnsureImage pulls an image if not already local.
 func mountEnsureImage(t *testing.T, engine container.Engine, ref string) {
@@ -58,7 +41,7 @@ func mountEnsureImage(t *testing.T, engine container.Engine, ref string) {
 // live rootless podman, confirming that a local producer tag resolves as
 // an image_volumes Source in the actual mount-construction path.
 func TestOutsideWorkdirMount_INTEGRATION(t *testing.T) {
-	engine := mountNeedsEngine(t)
+	engine := testutil.RequireEngine(t)
 	ctx := context.Background()
 	mountEnsureImage(t, engine, mountGoImage)
 

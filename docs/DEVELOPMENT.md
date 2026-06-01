@@ -262,27 +262,31 @@ Focus coverage investment on:
 ### 2.5 Integration tests
 
 Integration tests that require external dependencies (podman, a registry)
-auto-detect the podman socket at runtime. If no engine is available, the tests
-skip automatically via `t.Skip`. Set `STRIKE_INTEGRATION=0` to force-skip them:
+run by default and acquire the engine through `testutil.RequireEngine(t)`.
+The engine is a prerequisite: if it is unreachable, the test fails fast with a
+hint to the opt-out rather than skipping silently. Set `STRIKE_INTEGRATION=0`
+to opt out. Do not write per-package engine helpers; call `RequireEngine`:
 
 ```go
-func needsEngine(t *testing.T) container.Engine {
+func RequireEngine(t *testing.T) container.Engine {
     t.Helper()
     if os.Getenv("STRIKE_INTEGRATION") == "0" {
         t.Skip("integration tests disabled (STRIKE_INTEGRATION=0)")
     }
-    engine, err := container.New()
+    eng, err := container.New()
     if err != nil {
-        t.Skipf("no container engine: %v", err)
+        t.Fatalf("container engine unreachable (%v); set STRIKE_INTEGRATION=0 to skip integration tests", err)
     }
-    if err := engine.Ping(context.Background()); err != nil {
-        t.Skipf("container engine not responding: %v", err)
+    if pingErr := eng.Ping(t.Context()); pingErr != nil {
+        t.Fatalf("container engine not responding (%v); set STRIKE_INTEGRATION=0 to skip integration tests", pingErr)
     }
-    return engine
+    return eng
 }
 ```
 
-This ensures `go test ./...` always succeeds without external dependencies.
+A plain `go test ./...` runs the integration tests; without an engine they
+fail fast with the opt-out hint, and `STRIKE_INTEGRATION=0 go test ./...`
+skips them.
 
 ### 2.6 Fuzz testing
 

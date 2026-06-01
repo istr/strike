@@ -20,7 +20,7 @@ import (
 )
 
 func TestDeployAttestation(t *testing.T) {
-	engine := needsEngine(t)
+	engine := testutil.RequireEngine(t)
 	ctx := context.Background()
 	keyPEM := generateTestKey(t)
 

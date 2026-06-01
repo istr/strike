@@ -3,26 +3,17 @@ package registry_test
 import (
 	"context"
 	"fmt"
-	"os"
 	"testing"
 
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/registry"
+	"github.com/istr/strike/internal/testutil"
 )
 
 func TestWrapArchiveAsImage_RealSymlink(t *testing.T) {
-	if os.Getenv("STRIKE_INTEGRATION") == "0" {
-		t.Skip("STRIKE_INTEGRATION=0: engine integration test skipped")
-	}
+	eng := testutil.RequireEngine(t)
 	ctx := context.Background()
-	eng, err := container.New()
-	if err != nil {
-		t.Fatalf("connect engine: %v", err)
-	}
-	if pingErr := eng.Ping(ctx); pingErr != nil {
-		t.Fatalf("engine ping: %v", pingErr)
-	}
 
 	// A minimal image with ln, pinned by digest (same as paper-1 integration test).
 	const img = "cgr.dev/chainguard/go@sha256:4ec098b553c8d74d9f01925578660b2bfcdee4ef45e5ab082250cf9675a0e28b"

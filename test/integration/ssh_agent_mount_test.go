@@ -15,7 +15,7 @@ import (
 // This confirms the OCI runtime creates the /run/strike/ parent
 // directory before the read-only rootfs switch takes effect.
 func TestSSHAgentSocketBindMount(t *testing.T) {
-	engine := needsEngine(t)
+	engine := testutil.RequireEngine(t)
 	ensureImage(t, engine, goImage)
 
 	// Create a fake agent socket on the host.

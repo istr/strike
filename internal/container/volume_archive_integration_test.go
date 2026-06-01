@@ -6,30 +6,12 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 	"testing"
 
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/container"
+	"github.com/istr/strike/internal/testutil"
 )
-
-// requireEngine returns a live engine, or skips when STRIKE_INTEGRATION=0.
-// Engine integration tests run by default; set STRIKE_INTEGRATION=0 to opt
-// out in an environment without a running rootless Podman.
-func requireEngine(t *testing.T) container.Engine {
-	t.Helper()
-	if os.Getenv("STRIKE_INTEGRATION") == "0" {
-		t.Skip("STRIKE_INTEGRATION=0: engine integration test skipped")
-	}
-	eng, err := container.New()
-	if err != nil {
-		t.Fatalf("connect engine: %v", err)
-	}
-	if pingErr := eng.Ping(context.Background()); pingErr != nil {
-		t.Fatalf("engine ping: %v", pingErr)
-	}
-	return eng
-}
 
 // TestEngineVolumeArchiveRoundTrip exercises the ADR-035 primitives end to
 // end: create a workdir volume, run a held container that writes into it
@@ -41,7 +23,7 @@ func requireEngine(t *testing.T) container.Engine {
 // named volume at the workdir writable by the keep-id user?), not a defect
 // in the primitives -- report it as input for the Phase 1 flow paper.
 func TestEngineVolumeArchiveRoundTrip(t *testing.T) {
-	eng := requireEngine(t)
+	eng := testutil.RequireEngine(t)
 	ctx := context.Background()
 
 	const img = "cgr.dev/chainguard/go@sha256:4ec098b553c8d74d9f01925578660b2bfcdee4ef45e5ab082250cf9675a0e28b"
@@ -131,7 +113,7 @@ func findTarEntry(t *testing.T, r io.Reader, suffix string) bool {
 // then read the workdir back and confirm the seeded file landed before start.
 // Mirrors probe 43 (Probe 1).
 func TestEngineSeedThenRun(t *testing.T) {
-	eng := requireEngine(t)
+	eng := testutil.RequireEngine(t)
 	ctx := context.Background()
 
 	const img = "cgr.dev/chainguard/go@sha256:4ec098b553c8d74d9f01925578660b2bfcdee4ef45e5ab082250cf9675a0e28b"

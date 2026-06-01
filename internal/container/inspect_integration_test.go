@@ -3,30 +3,14 @@ package container_test
 import (
 	"context"
 	"encoding/json"
-	"os"
 	"testing"
 
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/container"
+	"github.com/istr/strike/internal/testutil"
 )
 
 const inspectTestImage = "cgr.dev/chainguard/static@sha256:2fdfacc8d61164aa9e20909dceec7cc28b9feb66580e8e1a65b9f2443c53b61b"
-
-// needsIntegrationEngine returns a ready engine or skips the test.
-func needsIntegrationEngine(ctx context.Context, t *testing.T) container.Engine {
-	t.Helper()
-	if os.Getenv("STRIKE_INTEGRATION") == "0" {
-		t.Skip("integration tests disabled (STRIKE_INTEGRATION=0)")
-	}
-	eng, err := container.New()
-	if err != nil {
-		t.Skipf("no container engine: %v", err)
-	}
-	if pingErr := eng.Ping(ctx); pingErr != nil {
-		t.Fatalf("Ping: %v", pingErr)
-	}
-	return eng
-}
 
 // ensureImageLocal pulls an image if it is not in the local store.
 func ensureImageLocal(ctx context.Context, t *testing.T, eng container.Engine, ref string) {
@@ -60,7 +44,7 @@ func TestIntegrationContainerInspectSchema(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 60*clock.Second)
 	defer cancel()
 
-	eng := needsIntegrationEngine(ctx, t)
+	eng := testutil.RequireEngine(t)
 	ensureImageLocal(ctx, t, eng, inspectTestImage)
 
 	// Create a container but do not start it. "created" state is

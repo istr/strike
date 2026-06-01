@@ -9,10 +9,11 @@ import (
 
 	"github.com/istr/strike/internal/registry"
 	"github.com/istr/strike/internal/registry/regtest"
+	"github.com/istr/strike/internal/testutil"
 )
 
 func TestExtractSingleLayer_Integration(t *testing.T) {
-	engine := needsEngine(t)
+	engine := testutil.RequireEngine(t)
 	ctx := context.Background()
 
 	content := []byte("extract integration test")

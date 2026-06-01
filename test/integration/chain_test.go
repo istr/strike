@@ -24,7 +24,7 @@ import (
 // TestEndToEndChain validates the complete attestation chain:
 // build -> pack -> sign -> deploy -> signed attestation.
 func TestEndToEndChain(t *testing.T) {
-	engine := needsEngine(t)
+	engine := testutil.RequireEngine(t)
 	ctx := context.Background()
 	keyPEM := generateTestKey(t)
 
