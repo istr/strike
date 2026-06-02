@@ -151,15 +151,15 @@ keyless successor to the SignConfig that was removed earlier:
 	issuer:    string @go(Issuer)     // iss / issuer-url; local IdP for testing, real IdP later, config only
 	client_id: string @go(ClientID)   // aud
 	identity:  string @go(Identity)   // expected SAN subject Fulcio writes into the cert
-	trust:     #PeerTrust @go(Trust)  // pin the IdP endpoints (cert fingerprint / CA bundle), like resolver.trust
+	trust:     #TLSTrust @go(Trust)  // pin the IdP endpoints (cert fingerprint / CA bundle), like resolver.trust
 }
 ```
 
-attached to the lane as `oidc?: #OIDCConfig @go(OIDC,optional=nillable)`. It is
+attached to the lane as a required field, `oidc: #OIDCConfig @go(OIDC)`. It is
 defined in CUE first; the Go type is generated.
 
 The IdP is a declared peer: `trust` pins its endpoints with the existing
-`#PeerTrust` trust-anchor type, so a man-in-the-middle IdP cannot mint tokens
+`#TLSTrust` trust-anchor type, so a man-in-the-middle IdP cannot mint tokens
 strike will trust. The declared issuer and identity become a sealed claim in the
 provenance, and `strike verify` cross-checks the Fulcio certificate against them:
 cert issuer equals declared issuer, and cert SAN equals declared identity. The

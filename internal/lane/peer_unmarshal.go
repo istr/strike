@@ -165,15 +165,45 @@ func (sc *StateCapture) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// unmarshalOIDCConfig decodes an OIDC config JSON object into
+// OIDCConfig. The Trust field is an interface (TLSTrust) and
+// requires discriminator dispatch via unmarshalTLSTrust.
+func unmarshalOIDCConfig(data []byte) (OIDCConfig, error) {
+	type alias struct {
+		Issuer   string          `json:"issuer"`
+		ClientID string          `json:"client_id"`
+		Identity string          `json:"identity"`
+		Trust    json.RawMessage `json:"trust"`
+	}
+	var aux alias
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return OIDCConfig{}, fmt.Errorf("decode oidc: %w", err)
+	}
+	if len(aux.Trust) == 0 {
+		return OIDCConfig{}, fmt.Errorf("oidc: trust required")
+	}
+	t, err := unmarshalTLSTrust(aux.Trust)
+	if err != nil {
+		return OIDCConfig{}, fmt.Errorf("oidc: %w", err)
+	}
+	return OIDCConfig{
+		Issuer:   aux.Issuer,
+		ClientID: aux.ClientID,
+		Identity: aux.Identity,
+		Trust:    t,
+	}, nil
+}
+
 // UnmarshalJSON implements json.Unmarshaler for Lane. It
-// decodes the resolver field through unmarshalDNSResolver,
-// which dispatches the TLSTrust discriminator. All other
+// decodes the resolver and oidc fields through their respective
+// helpers, which dispatch the TLSTrust discriminator. All other
 // fields fall through to the default decoder via the alias trick.
 func (p *Lane) UnmarshalJSON(data []byte) error {
 	type alias Lane
 	aux := struct {
 		*alias
 		Resolver json.RawMessage `json:"resolver"`
+		OIDC     json.RawMessage `json:"oidc"`
 	}{
 		alias: (*alias)(p),
 	}
@@ -188,6 +218,14 @@ func (p *Lane) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("lane: %w", err)
 	}
 	p.Resolver = r
+	if len(aux.OIDC) == 0 || string(aux.OIDC) == jsonNull {
+		return nil
+	}
+	oidc, err := unmarshalOIDCConfig(aux.OIDC)
+	if err != nil {
+		return fmt.Errorf("lane: %w", err)
+	}
+	p.OIDC = oidc
 	return nil
 }
 

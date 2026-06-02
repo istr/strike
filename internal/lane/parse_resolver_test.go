@@ -63,6 +63,13 @@ resolver:
   trust:
     mode: cert_fingerprint
     fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+oidc:
+  issuer: "https://idp.example.com"
+  client_id: "strike"
+  identity: "strike@example.com"
+  trust:
+    mode: cert_fingerprint
+    fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 steps:
   - name: build
     image: docker.io/library/alpine@sha256:abababababababababababababababababababababababababababababababab
@@ -121,6 +128,13 @@ registry: localhost:5555/test
 secrets: {}
 resolver:
   host: "9.9.9.9:853"
+  trust:
+    mode: cert_fingerprint
+    fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+oidc:
+  issuer: "https://idp.example.com"
+  client_id: "strike"
+  identity: "strike@example.com"
   trust:
     mode: cert_fingerprint
     fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000

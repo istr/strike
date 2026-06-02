@@ -7,6 +7,13 @@ resolver:
   trust:
     mode: cert_fingerprint
     fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+oidc:
+  issuer: "https://idp.example.com"
+  client_id: "strike"
+  identity: "strike@example.com"
+  trust:
+    mode: cert_fingerprint
+    fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 steps:
   - name: build
     image: golang:1.22

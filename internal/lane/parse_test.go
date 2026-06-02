@@ -81,6 +81,13 @@ resolver:
   trust:
     mode: cert_fingerprint
     fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+oidc:
+  issuer: "https://idp.example.com"
+  client_id: "strike"
+  identity: "strike@example.com"
+  trust:
+    mode: cert_fingerprint
+    fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 steps:
   - name: deploy
     deploy:
@@ -326,6 +333,13 @@ resolver:
   trust:
     mode: cert_fingerprint
     fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+oidc:
+  issuer: "https://idp.example.com"
+  client_id: "strike"
+  identity: "strike@example.com"
+  trust:
+    mode: cert_fingerprint
+    fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 steps:
   - name: bad-deploy
     deploy:
@@ -370,6 +384,13 @@ registry: localhost:5555/test
 secrets: {}
 resolver:
   host: "1.1.1.1:853"
+  trust:
+    mode: cert_fingerprint
+    fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+oidc:
+  issuer: "https://idp.example.com"
+  client_id: "strike"
+  identity: "strike@example.com"
   trust:
     mode: cert_fingerprint
     fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000

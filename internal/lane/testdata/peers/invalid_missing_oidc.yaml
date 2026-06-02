@@ -1,5 +1,5 @@
-name: peers-multi
-lane_id: peers-multi
+name: peers-absent
+lane_id: peers-absent
 registry: localhost:5555/test
 secrets: {}
 resolver:
@@ -7,17 +7,10 @@ resolver:
   trust:
     mode: cert_fingerprint
     fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
-oidc:
-  issuer: "https://idp.example.com"
-  client_id: "strike"
-  identity: "strike@example.com"
-  trust:
-    mode: cert_fingerprint
-    fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 steps:
-  - name: fetch
+  - name: peerless
     image: docker.io/library/alpine@sha256:abababababababababababababababababababababababababababababababab
-    args: [sh, "-c", "true"]
+    args: [echo, "ok"]
     workdir: /out
     env: {}
     inputs: []
@@ -26,17 +19,6 @@ steps:
       - name: ok
         type: file
         path: ok
-    peers:
-      - type: https
-        host: example.com
-        trust:
-          mode: cert_fingerprint
-          fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
-      - type: ssh
-        host: git.example.com
-        known_hosts:
-          - key_type: ssh-ed25519
-            key: AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl
 
   - name: deploy
     deploy:

@@ -24,12 +24,28 @@ package lane
 	secrets: [Name=string]: #SecretSource @go(Secrets)
 	steps: [#Step, ...#Step] @go(Steps)
 	resolver: #DNSResolver @go(Resolver,type="github.com/istr/strike/internal/transport".DNSResolver)
+	oidc:     #OIDCConfig @go(OIDC)
 	defaults?: #LaneDefaults @go(Defaults,optional=nillable)
 }
 
 #LaneDefaults: {
 	@go(LaneDefaults)
 	timeout: *"10m" | #Duration @go(Timeout)
+}
+
+// OIDCConfig declares the lane-wide keyless signing identity (ADR-040 D5).
+// Required: a lane that cannot be attested with a verifiable signature is
+// not a valid strike lane (mirrors ADR-039 D1 for the signing layer). The
+// IdP is a declared peer; trust pins its endpoints with the same #TLSTrust
+// anchor resolver.trust and #HTTPSPeer.trust use. validate/dag check
+// declaration only and never contact the IdP; the live keyless flow runs at
+// the sign step of run.
+#OIDCConfig: {
+	@go(OIDCConfig)
+	issuer:    string @go(Issuer)     // iss / issuer-url; config only, no IdP contact at validate/dag
+	client_id: string @go(ClientID)   // aud
+	identity:  string @go(Identity)   // expected SAN subject Fulcio writes into the cert
+	trust:     #TLSTrust @go(Trust,type="github.com/istr/strike/internal/transport".TLSTrust)
 }
 
 // ---------------------------------------------------------------------------
