@@ -1,0 +1,9 @@
+{
+	# Internal CA only; no ACME, no port-80 redirect server.
+	auto_https disable_redirects
+}
+
+keycloak.127.0.0.1.sslip.io:8443 {
+	tls internal
+	reverse_proxy keycloak:8080
+}

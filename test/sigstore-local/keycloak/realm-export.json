@@ -1,0 +1,41 @@
+{
+  "realm": "sigstore",
+  "enabled": true,
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "clients": [
+    {
+      "clientId": "sigstore",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "fullScopeAllowed": true,
+      "redirectUris": [
+        "http://localhost/*",
+        "http://127.0.0.1/*"
+      ],
+      "defaultClientScopes": [
+        "email",
+        "profile"
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "tester",
+      "enabled": true,
+      "email": "tester@strike.localhost",
+      "emailVerified": true,
+      "firstName": "Strike",
+      "lastName": "Tester",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "tester",
+          "temporary": false
+        }
+      ]
+    }
+  ]
+}

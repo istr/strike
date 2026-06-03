@@ -1,0 +1,8 @@
+# Fulcio OIDC issuer config. The issuer URL must be byte-identical to the token
+# iss claim and to the client's --oidc-issuer. type email extracts the verified
+# email into the certificate SAN -- the identity ADR-040 D5 cross-checks.
+oidc-issuers:
+  https://keycloak.127.0.0.1.sslip.io:8443/realms/sigstore:
+    issuer-url: https://keycloak.127.0.0.1.sslip.io:8443/realms/sigstore
+    client-id: sigstore
+    type: email

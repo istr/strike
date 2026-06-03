@@ -1,0 +1,133 @@
+# Local sigstore stack for the strike keyless harness (H1).
+# Rootless-Podman-compatible; also runs under docker compose.
+# TLS terminated by Caddy (internal CA); hostname resolved via sslip.io.
+# Not part of the strike trusted binary.
+name: strike-sigstore-local
+
+networks:
+  sigstore:
+    driver: bridge
+
+volumes:
+  posix_storage: {}
+  caddy_data: {}
+
+services:
+  caddy:
+    # TLS terminator + reverse proxy for Keycloak.
+    image: caddy:2.8@sha256:b95ed06fbc6d74d24a40902090c8cc6086ce7d08ba60a3a7e8e62bf164a9d7bb
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    networks:
+      sigstore:
+        aliases:
+          # In-network resolution of the canonical issuer host overrides
+          # sslip.io; must equal the issuer hostname character for character.
+          - keycloak.127.0.0.1.sslip.io
+    ports:
+      - "8443:8443"
+    depends_on:
+      keycloak:
+        condition: service_started
+
+  keycloak:
+    # HTTP-only behind Caddy.
+    image: quay.io/keycloak/keycloak:26.1@sha256:dc23dd938a5dc5dfaabc71e44d014928284fafff9122e0395659f1cdcf534da8
+    command:
+      - start-dev
+      - --import-realm
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_HTTP_ENABLED: "true"
+      KC_HOSTNAME_STRICT: "false"
+      # Full external URL so iss and discovery match the canonical issuer.
+      KC_HOSTNAME: https://keycloak.127.0.0.1.sslip.io:8443
+      # Trust the proxy's forwarded scheme/host (Caddy sets X-Forwarded-*).
+      KC_PROXY_HEADERS: xforwarded
+    volumes:
+      - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
+    networks:
+      - sigstore
+    # No host port: only Caddy reaches Keycloak, in-network at keycloak:8080.
+
+  fulcio:
+    image: gcr.io/projectsigstore/fulcio:v1.6.6@sha256:b0ae905e37ad34657c4aed425da649d73353859f1f302b318b6963d65c0e8a23
+    command:
+      - serve
+      - --port=5555
+      - --ca=ephemeralca
+      - --ct-log-url=
+      - --config-path=/etc/fulcio/config.yaml
+    volumes:
+      - ./fulcio/config.yaml:/etc/fulcio/config.yaml:ro
+    networks:
+      - sigstore
+    ports:
+      - "5555:5555"
+    depends_on:
+      keycloak:
+        condition: service_started
+    # No container healthcheck: the image lacks a shell for a TCP probe.
+    # Functional readiness is the issuer poll in `make up` and the next
+    # instruction's sign test.
+
+  rekor:
+    # Rekor v2 POSIX (tile/Tessera), no Trillian/DB.
+    image: ghcr.io/sigstore/rekor-tiles/posix:v2.2.1@sha256:df1795ee39802422c10d0f6b4803332ae4cfcc07a99556b8f1f59a2aa1aafb57
+    command:
+      - rekor-server
+      - serve
+      - --http-address=0.0.0.0
+      - --grpc-address=0.0.0.0
+      - --hostname=rekor.localhost
+      - --storage-dir=/data/log
+      - --signer-filepath=/pki/rekor-ed25519.pem
+      - --checkpoint-interval=2s
+      - --log-level=debug
+    volumes:
+      - ./pki:/pki:ro
+      - posix_storage:/data/log:U
+    networks:
+      - sigstore
+    ports:
+      - "3003:3000"
+      - "3001:3001"
+      - "2114:2112"
+    # No container healthcheck and no depends_on: readiness is polled
+    # functionally from the Makefile against the published port. rekor writes
+    # its tiles to the storage dir directly; no HTTP tile server is needed for
+    # the sign/verify round trip (the inclusion proof is returned at upload and
+    # persisted in the bundle; the tile read API is for log monitors only).
+
+  # In-network probe (same DNS vantage as Fulcio). Not started by `up`.
+  # podman compose run --rm probe -sk <url>
+  probe:
+    profiles: ["tools"]
+    # Entrypoint is curl; args follow `run probe`.
+    image: curlimages/curl:8.11.1@sha256:ce8e655b562cf387752de7d2076ec3f81a4383c908f386b6724ec3571ce08b4a
+    networks:
+      - sigstore
+
+  # Off by default. Enable only if rekor refuses to serve without a witness
+  # (first-run risk R-2): podman compose --profile witness up
+  witness:
+    profiles: ["witness"]
+    build:
+      context: https://github.com/transparency-dev/witness.git#main
+      dockerfile: cmd/omniwitness/Dockerfile
+    networks:
+      - sigstore
+
+  # Off by default. Enabled only if keyless verify in the pinned client
+  # versions needs a separate signed timestamp under Rekor v2 (decided at the
+  # smoke test): podman compose --profile tsa up
+  tsa:
+    profiles: ["tsa"]
+    # PIN image and command at first run.
+    image: ghcr.io/sigstore/timestamp-server:latest
+    networks:
+      - sigstore
+    ports:
+      - "3004:3000"

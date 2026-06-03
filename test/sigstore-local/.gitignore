@@ -1,0 +1,4 @@
+# Ephemeral signing material and exported trust anchors -- never committed.
+pki/*.pem
+pki/*.crt
+pki/*.key
