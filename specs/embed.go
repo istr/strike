@@ -21,6 +21,12 @@ var AttestationSchema string
 //go:embed artifact.cue
 var ArtifactSchema string
 
+// PredicateSchema is the embedded CUE schema for the output attestation
+// predicates (ADR-040 D3). Same package deploy -- must be compiled together.
+//
+//go:embed predicate.cue
+var PredicateSchema string
+
 // ProvenanceSchema is the embedded CUE schema for source provenance records.
 // Same package lane as LaneSchema.
 //

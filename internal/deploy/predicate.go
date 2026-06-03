@@ -1,0 +1,107 @@
+package deploy
+
+import "github.com/istr/strike/internal/lane"
+
+// Output attestation predicate types (ADR-040 D3). These are the standard-
+// ecosystem shapes strike signs and publishes. The projection from the
+// internal Attestation collect-model into these shapes is a later instruction;
+// this file is the type definitions only. Mirrors specs/predicate.cue and is
+// validated against it (predicate_test.go).
+
+// DigestSet is an in-toto DigestSet, typed to the algorithms strike emits.
+type DigestSet struct {
+	SHA256    string `json:"sha256,omitempty"`
+	SHA512    string `json:"sha512,omitempty"`
+	GitCommit string `json:"gitCommit,omitempty"`
+}
+
+// ResourceDescriptor is the in-toto ResourceDescriptor (fields strike emits).
+type ResourceDescriptor struct {
+	Digest           *DigestSet `json:"digest,omitempty"`
+	Name             string     `json:"name,omitempty"`
+	URI              string     `json:"uri,omitempty"`
+	MediaType        string     `json:"mediaType,omitempty"`
+	DownloadLocation string     `json:"downloadLocation,omitempty"`
+}
+
+// Subject is one in-toto statement subject: a deployed artifact.
+type Subject struct {
+	Digest DigestSet `json:"digest"`
+	Name   string    `json:"name"`
+}
+
+// SLSAProvenanceStatement is the sealed (Layer V) output: an in-toto Statement
+// v1 wrapping a SLSA Provenance v1 predicate.
+type SLSAProvenanceStatement struct {
+	Predicate     SLSAProvenancePredicate `json:"predicate"`
+	Type          string                  `json:"_type"`
+	PredicateType string                  `json:"predicateType"`
+	Subject       []Subject               `json:"subject"`
+}
+
+// SLSAProvenancePredicate is the SLSA Provenance v1 predicate.
+type SLSAProvenancePredicate struct {
+	RunDetails      SLSARunDetails      `json:"runDetails"`
+	BuildDefinition SLSABuildDefinition `json:"buildDefinition"`
+}
+
+// SLSABuildDefinition is the SLSA BuildDefinition.
+type SLSABuildDefinition struct {
+	ExternalParameters   StrikeExternalParameters `json:"externalParameters"`
+	BuildType            string                   `json:"buildType"`
+	ResolvedDependencies []ResourceDescriptor     `json:"resolvedDependencies,omitempty"`
+}
+
+// StrikeExternalParameters occupies SLSA's open externalParameters slot with
+// strike's typed Layer-V facts (Fork C, Fork D). EngineConnection is Layer V
+// and lives here, not in the engine-context predicate.
+type StrikeExternalParameters struct {
+	Target        lane.DeployTarget       `json:"target"`
+	Peers         map[string][]lane.Peer  `json:"peers"`
+	ObservedPeers map[string]ObservedPeer `json:"observed_peers,omitempty"`
+	Resolver      *ResolverRecord         `json:"resolver,omitempty"`
+	Engine        *EngineConnection       `json:"engine,omitempty"`
+	OIDC          ProvenanceOIDC          `json:"oidc"`
+	LaneID        string                  `json:"lane_id"`
+	LaneRef       string                  `json:"lane_ref"`
+}
+
+// ProvenanceOIDC is the declared signing identity carried into the sealed
+// provenance (ADR-040 D5); the strike verify cross-check targets.
+type ProvenanceOIDC struct {
+	Issuer   string `json:"issuer"`
+	Identity string `json:"identity"`
+}
+
+// SLSARunDetails is the SLSA RunDetails.
+type SLSARunDetails struct {
+	Metadata   *SLSABuildMetadata   `json:"metadata,omitempty"`
+	Builder    SLSABuilder          `json:"builder"`
+	Byproducts []ResourceDescriptor `json:"byproducts,omitempty"`
+}
+
+// SLSABuilder is the SLSA Builder identity.
+type SLSABuilder struct {
+	ID string `json:"id"`
+}
+
+// SLSABuildMetadata carries only reproducible fields (no wall-clock).
+type SLSABuildMetadata struct {
+	InvocationID string `json:"invocationId,omitempty"`
+}
+
+// EngineContextStatement is the engine_dependent (Layer E) output: an in-toto
+// Statement v1 wrapping a strike-defined engine-context predicate.
+type EngineContextStatement struct {
+	Predicate     EngineContextPredicate `json:"predicate"`
+	Type          string                 `json:"_type"`
+	PredicateType string                 `json:"predicateType"`
+	Subject       []Subject              `json:"subject"`
+}
+
+// EngineContextPredicate carries Layer-E claims only: engine self-reports and
+// engine-asserted step attribution. EngineConnection (Layer V) is not here.
+type EngineContextPredicate struct {
+	PeerAttribution map[string][]string `json:"peer_attribution,omitempty"`
+	EngineMetadata  *EngineMetadata     `json:"engine_metadata,omitempty"`
+}

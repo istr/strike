@@ -7,3 +7,6 @@ type CaptureSnap = captureSnap
 func NewCaptureSnap(name, image string, output []byte) CaptureSnap {
 	return captureSnap{name: name, image: image, output: output}
 }
+
+// DeploySchema exposes deploySchema for the external test package.
+var DeploySchema = deploySchema

@@ -1,20 +1,34 @@
 # ADR-040 Implementation Roadmap
 
-## Status: PLANNED (plumbing landed; no decision implemented)
+## Status: IN PROGRESS (instruction 1 done; instructions 2--5 remain)
 
 ADR-040 is Accepted and plumbed: the decision record is at
 `docs/ADR-040-control-plane-sbom-and-keyless-attestation.md`, registered in
 `docs/ADR-INDEX.md` by number and by principle, with the partial-supersession
 back-reference to ADR-019 and the extension note to ADR-037 in place.
 
-None of the five decisions is implemented in code. This roadmap decomposes
-that work into the established numbered instruction-file sequence. It does not
-contain instruction files; it is the plan they will follow.
+D5 is done (instruction 1a) and the D3 output predicate types are defined
+(instruction 1b). The remaining decisions (D1, D2, D3 packaging, D4) are
+not yet implemented in code. This roadmap decomposes that work into the
+established numbered instruction-file sequence.
 
 ## What has landed
 
 - **ADR-040 plumbing.** Decision record placed, indexed, cross-referenced.
   Status flipped to Accepted.
+- **Instruction 1a -- lane-wide OIDC identity (D5).** `#OIDCConfig` added to
+  `specs/lane.cue` with generated Go type. The lane carries the declared
+  signing identity (issuer + identity) that ADR-040 D5 cross-checks against
+  the Fulcio certificate.
+- **Instruction 1b -- output predicate types (D3).** `specs/predicate.cue`
+  defines the two standard-ecosystem attestation shapes: a sealed (Layer V)
+  in-toto Statement v1 wrapping SLSA Provenance v1
+  (`#SLSAProvenanceStatement`), and an engine_dependent (Layer E) statement
+  wrapping a strike-defined engine-context predicate
+  (`#EngineContextStatement`). Hand-written Go types in
+  `internal/deploy/predicate.go`, validated against the embedded CUE schema.
+  The internal `#Attestation` collect-model is unchanged; projection into
+  these output shapes is instruction 3.
 - **Decision basis: two spikes (both complete).**
   - scalibr import-surface spike (PARTIAL result): the heavy clusters
     (container-runtime, grpc, sqlite, vuln, TUI, cloud crypto, resolution)
@@ -60,10 +74,13 @@ The three layers (sealed V / engine_dependent E / informational) exist as
 predicate sections inside one attestation (ADR-037). ADR-040 D3 makes the
 V / E boundary physical: each layer becomes a separate, co-attached referrer
 (sealed = standard SLSA Provenance v1; engine_dependent = a strike-defined
-predicate type, for example `strike.dev/predicates/engine-context/v1`;
-informational = signed byproducts that never gate). This packaging does not
-exist yet; it is built across instructions 1 (predicate types), 3 (signing
-each as its own attestation), and 5 (per-layer verification exit).
+predicate type `https://istr.dev/strike/predicates/engine-context/v1`;
+informational = signed byproducts that never gate). The output predicate
+types are defined (instruction 1b: `specs/predicate.cue`,
+`internal/deploy/predicate.go`). What remains: the projection from the
+internal `#Attestation` into these shapes, signing each as its own
+attestation (instruction 3), and per-layer verification exit
+(instruction 5).
 
 ### D4 -- the control plane owns the registry push
 
@@ -71,11 +88,13 @@ No `remote.Write` push path exists in production code. The control plane
 does not yet push; signing-and-attach therefore cannot yet run on the
 registry digest. Landed in instruction 4.
 
-### D5 -- lane-wide OIDC identity, pinned
+### D5 -- lane-wide OIDC identity, pinned -- DONE (instruction 1a)
 
-There is no `#OIDCConfig` in the CUE schema and no generated Go type. The
-lane carries no signing-identity declaration (the keyless successor to the
-removed SignConfig). Added, CUE-first, in instruction 1.
+`#OIDCConfig` added to `specs/lane.cue` with generated Go type (instruction
+1a). The declared identity (issuer + identity) is carried into the sealed
+provenance's `externalParameters.oidc` (instruction 1b). The Fulcio
+certificate cross-check (cert issuer == declared issuer, cert SAN ==
+declared identity) is instruction 5.
 
 ## Instruction-file sequence
 
@@ -87,19 +106,18 @@ that `docs/ADR-INDEX.md` reflects ADR-040. None of these files is written
 until its design fork is ratified; instruction 1 (schema) is written and
 landed before any implementation instruction.
 
-### 1. CUE schema (D5 + the D3 predicate shapes)
+### 1. CUE schema (D5 + the D3 predicate shapes) -- DONE
 
-Add `#OIDCConfig` and attach it to the lane as
-`oidc?: #OIDCConfig @go(OIDC,optional=nillable)`. Define the predicate /
-provenance types the V / E split needs: the sealed SLSA Provenance v1 shape
-(externalParameters including the declared OIDC identity, resolvedDependencies
-= control-plane-computed input digests, runDetails.builder = control-plane
-identity) and the engine-context predicate type. CUE first; Go types
-generated. Acceptance verifies the `cue exp gengotypes` round-trip under
-cue v0.16.1 is byte-identical.
+**1a (D5).** Added `#OIDCConfig` to `specs/lane.cue` with generated Go type.
 
-Gate: CUE schema change -- requires explicit operator ratification before
-the instruction file is written.
+**1b (D3).** Defined the two output predicate types in `specs/predicate.cue`
+with hand-written Go types in `internal/deploy/predicate.go`: sealed SLSA
+Provenance v1 statement (`#SLSAProvenanceStatement`) with strike's typed
+`externalParameters` (including the declared OIDC identity, peers, observed
+peers, resolver, engine connection), and the engine-context statement
+(`#EngineContextStatement`) carrying only Layer-E claims (peer attribution,
+engine metadata). Validated against the embedded CUE schema in
+`predicate_test.go`. The internal `#Attestation` collect-model is unchanged.
 
 ### 2. SBOM core (D1)
 
