@@ -6,6 +6,8 @@ require (
 	cuelang.org/go v0.16.1
 	github.com/CycloneDX/cyclonedx-go v0.11.0
 	github.com/google/go-containerregistry v0.21.6
+	github.com/package-url/packageurl-go v0.1.6
+	github.com/spdx/tools-golang v0.5.7
 	golang.org/x/crypto v0.52.0
 	golang.org/x/net v0.55.0
 	golang.org/x/sync v0.20.0
@@ -13,6 +15,7 @@ require (
 )
 
 require (
+	github.com/anchore/go-struct-converter v0.1.0 // indirect
 	github.com/cockroachdb/apd/v3 v3.2.3 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/docker/cli v29.5.2+incompatible // indirect

@@ -82,6 +82,36 @@ deletion, not a fix. A directory output that wraps with no file content is
 surfaced at the producing step as an INFO line (the class of the original
 crash), without affecting any verification.
 
+**D1 amendment (measured; supersedes the mechanism above, not the decision).**
+The decision stands: the control plane catalogs the sealed artifact in-process
+over an `fs.FS`, emitting canonical CycloneDX and first-class SPDX 2.3 as
+layer-V claims; the buildinfo path is removed; an empty directory output is an
+INFO line. Two import-surface measurements revised the mechanism. First,
+osv-scalibr's extractors cannot be imported without the disk-image cluster:
+every filesystem extractor imports `extractor/filesystem -> embeddedfs/common
+-> go-diskfs/go-ext4/go-ntfs` at import time, so the thin walker -- which
+replaces only the walk -- cannot shed it, correcting the spike's conclusion.
+Second, scalibr's converter-only path, while free of the disk-image cluster,
+was measured to add ~12 modules / ~3--5 MiB, including a full go-git
+implementation pulled for gitignore support strike never uses, plus go-funk,
+osv-schema, and stringset, purely to call two converter functions. osv-scalibr
+is therefore not used. Instead, strike parses `package-lock.json` and dpkg
+`status` in strike-owned native parsers (lockfiles and the dpkg status database
+are simple, documented formats; "a little copying is better than a little
+dependency", with the option to lift an audited parser file under its
+Apache-2.0 license with attribution rather than import a module), and renders
+CycloneDX via `cyclonedx-go` and SPDX 2.3 via `spdx/tools-golang` (its model and
+JSON sub-packages only, avoiding the RDF and YAML dependencies). The conformant
+serialization stays in those libraries; strike owns only the field mapping.
+`cyclonedx-go` therefore remains a direct dependency, revising the original note
+above that it would become transitive; `spdx/tools-golang` and
+`package-url/packageurl-go` are added as focused direct dependencies. The
+modular repo-manifest collector `git-pkgs/manifests` was evaluated and deferred:
+it targets declared repo manifests and lockfiles rather than an image's
+installed-package state, does not cover the dpkg installed-package database, and
+is pre-1.0 single-maintainer -- revisit only if strike moves toward broad
+repo-source multi-ecosystem cataloging.
+
 ### D2 -- Signing is keyless, driven in-process
 
 Identity is gated by hardware at the IdP, not by holding a key. A FIDO2 token

@@ -130,6 +130,73 @@ steps:
 	}
 }
 
+func TestParse_BaseSBOMSigners(t *testing.T) {
+	yaml := []byte(`
+name: sbom-signer-lane
+lane_id: sbom-signer-lane
+registry: localhost:5555/test
+secrets: {}
+resolver:
+  host: "1.1.1.1:853"
+  trust:
+    mode: cert_fingerprint
+    fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+oidc:
+  issuer: "https://idp.example.com"
+  client_id: "strike"
+  identity: "strike@example.com"
+  trust:
+    mode: cert_fingerprint
+    fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+base_sbom_signers:
+  - issuer: "https://accounts.google.com"
+    identity: "sbom-builder@example.iam.gserviceaccount.com"
+steps:
+  - name: deploy
+    deploy:
+      method:
+        type: registry
+        source: localhost:5555/test/image:latest
+        target: registry.example.com/app:latest
+      artifacts: {}
+      target:
+        id: sbom-signer-target
+        type: registry
+        description: sbom signer test
+      attestation:
+        pre_state:
+          required: false
+          capture: []
+        post_state:
+          required: false
+          capture: []
+    args: []
+    env: {}
+    inputs: []
+    secrets: []
+    outputs: []
+`)
+	dir := t.TempDir()
+	path := filepath.Join(dir, "lane.yaml")
+	if err := os.WriteFile(path, yaml, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	p, err := lane.Parse(mustFilePath(t, path))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	want := []lane.SBOMSigner{{
+		Issuer:   "https://accounts.google.com",
+		Identity: "sbom-builder@example.iam.gserviceaccount.com",
+	}}
+	if len(p.BaseSBOMSigners) != len(want) {
+		t.Fatalf("BaseSBOMSigners length = %d, want %d", len(p.BaseSBOMSigners), len(want))
+	}
+	if p.BaseSBOMSigners[0] != want[0] {
+		t.Errorf("BaseSBOMSigners[0] = %+v, want %+v", p.BaseSBOMSigners[0], want[0])
+	}
+}
+
 func TestParse_NonPinnedImageRejected(t *testing.T) {
 	_, err := lane.Parse(mustFilePath(t, "testdata/invalid_image_not_pinned.yaml"))
 	if err == nil {

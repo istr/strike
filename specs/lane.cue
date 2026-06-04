@@ -15,16 +15,19 @@ package lane
 
 #Lane: {
 	@go(Lane)
-	name:     string @go(Name)
+	name: string @go(Name)
 	// Stable identifier assigned at authoring time. Used by external
 	// verifiers to pair attestations against the same lane across runs.
 	// Distinct from `name`, which is human-display.
 	lane_id:  =~"^[a-z0-9][a-z0-9-]{0,62}$" @go(LaneID)
-	registry: string & =~"^[a-z0-9./-]+" @go(Registry)
-	secrets: [Name=string]: #SecretSource @go(Secrets)
+	registry: string & =~"^[a-z0-9./-]+"    @go(Registry)
+	secrets: {
+		[Name=string]: #SecretSource @go(Secrets)
+	}
 	steps: [#Step, ...#Step] @go(Steps)
 	resolver: #DNSResolver @go(Resolver,type="github.com/istr/strike/internal/transport".DNSResolver)
-	oidc:     #OIDCConfig @go(OIDC)
+	oidc:     #OIDCConfig  @go(OIDC)
+	base_sbom_signers?: [...#SBOMSigner] @go(BaseSBOMSigners,optional=nillable)
 	defaults?: #LaneDefaults @go(Defaults,optional=nillable)
 }
 
@@ -42,10 +45,28 @@ package lane
 // the sign step of run.
 #OIDCConfig: {
 	@go(OIDCConfig)
-	issuer:    string @go(Issuer)     // iss / issuer-url; config only, no IdP contact at validate/dag
-	client_id: string @go(ClientID)   // aud
-	identity:  string @go(Identity)   // expected SAN subject Fulcio writes into the cert
+
+	issuer:    string    @go(Issuer)   // iss / issuer-url; config only, no IdP contact at validate/dag
+	client_id: string    @go(ClientID) // aud
+	identity:  string    @go(Identity) // expected SAN subject Fulcio writes into the cert
 	trust:     #TLSTrust @go(Trust,type="github.com/istr/strike/internal/transport".TLSTrust)
+}
+
+// SBOMSigner is a trusted signer of a base-image SBOM (ADR-040 D1, option ii).
+// A base SBOM referrer is lifted to layer V only if its sigstore signature
+// verifies against one of the lane's declared signers: the Fulcio
+// certificate's OIDC issuer equals issuer and its SAN equals identity.
+// Declaring a provider once covers every base SBOM that provider signs -- no
+// per-SBOM digest pinning. The list is optional: a lane whose bases are fully
+// catalogable in-process needs none. Fail-closed (enforced at pack time, a
+// later instruction): a base SBOM matching no declared signer is rejected,
+// never silently included. The sigstore trust root (Fulcio / Rekor / CT) is a
+// verification-time parameter, not declared here.
+#SBOMSigner: {
+	@go(SBOMSigner)
+
+	issuer:   string @go(Issuer)   // expected Fulcio cert OIDC issuer
+	identity: string @go(Identity) // expected cert SAN (exact match)
 }
 
 // ---------------------------------------------------------------------------
@@ -75,26 +96,28 @@ package lane
 
 #Step: {
 	@go(Step)
-	name:        string @go(Name)
-	image?:      #ImageRef @go(Image,optional=nillable)
+	name:        string     @go(Name)
+	image?:      #ImageRef  @go(Image,optional=nillable)
 	image_from?: #ImageFrom @go(ImageFrom,optional=nillable)
-	args:        [...string] @go(Args)
-	env:         [string]: string @go(Env)
-	inputs:      [...#InputRef] @go(Inputs)
-	outputs:     [...#OutputSpec] @go(Outputs)
-	secrets:     [...#SecretRef] @go(Secrets)
-	workdir?:    #AbsPath @go(Workdir,optional=nillable)
-	peers?:      [...#Peer] @go(Peers)
+	args: [...string] @go(Args)
+	env: {
+		[string]: string @go(Env)
+	}
+	inputs: [...#InputRef] @go(Inputs)
+	outputs: [...#OutputSpec] @go(Outputs)
+	secrets: [...#SecretRef] @go(Secrets)
+	workdir?: #AbsPath @go(Workdir,optional=nillable)
+	peers?: [...#Peer] @go(Peers)
 	// force_run: when true, strike bypasses the cache check
 	// and runs the step unconditionally. The explicit escape
 	// hatch for intentionally non-deterministic steps such as
 	// `git clone` from a moving branch or `npm install` of a
 	// `latest` tag. Strike does not auto-detect
 	// non-determinism; lane authors declare it.
-	force_run?:  bool | *false @go(ForceRun)
-	timeout?:    #Duration @go(Timeout,optional=nillable)
-	pack?:       #PackSpec @go(Pack,optional=nillable)
-	deploy?:     #DeploySpec @go(Deploy,optional=nillable)
+	force_run?:  bool | *false   @go(ForceRun)
+	timeout?:    #Duration       @go(Timeout,optional=nillable)
+	pack?:       #PackSpec       @go(Pack,optional=nillable)
+	deploy?:     #DeploySpec     @go(Deploy,optional=nillable)
 	provenance?: #ProvenanceSpec @go(Provenance,optional=nillable)
 	// constraint: exactly one of image, image_from, pack, or deploy -- validated in Go
 
@@ -128,10 +151,11 @@ package lane
 
 #InputRef: {
 	@go(InputRef)
-	from:     string @go(From)            // "step_name.output_name"
-	subpath?: #RelPath @go(Subpath,optional=nillable)   // path within producer output; nil mounts whole output
+
+	from:     string   @go(From)                      // "step_name.output_name"
+	subpath?: #RelPath @go(Subpath,optional=nillable) // path within producer output; nil mounts whole output
 	mount:    #AbsPath @go(Mount)
-	digest?:  #Digest @go(Digest,type=*Digest)
+	digest?:  #Digest  @go(Digest,type=*Digest)
 }
 
 // ---------------------------------------------------------------------------
@@ -142,13 +166,13 @@ package lane
 
 #OutputSpec: {
 	@go(OutputSpec)
-	name: string @go(Name)
+	name: string        @go(Name)
 	type: #ArtifactType @go(Type)
 	// path is relative to the step workdir (the single writable volume).
 	// Absent means the whole workdir is the artifact; a value selects a
 	// subpath within it. An absolute path is a type error: outputs are
 	// projections of the workdir, never of the read-only base image.
-	path?:     #RelPath @go(Path,optional=nillable)
+	path?:     #RelPath          @go(Path,optional=nillable)
 	expected?: #OutputValidation @go(Expected,optional=nillable)
 }
 
@@ -191,8 +215,8 @@ package lane
 // HTTPSPeer declares an HTTPS endpoint together with its server-trust anchor.
 #HTTPSPeer: {
 	@go(HTTPSPeer)
-	type:  "https" @go(Type)
-	host:  #Host @go(Host,type="github.com/istr/strike/internal/transport".Host)
+	type:  "https"   @go(Type)
+	host:  #Host     @go(Host,type="github.com/istr/strike/internal/transport".Host)
 	trust: #TLSTrust @go(Trust,type="github.com/istr/strike/internal/transport".TLSTrust)
 }
 
@@ -203,8 +227,8 @@ package lane
 // if available.
 #SSHPeer: {
 	@go(SSHPeer)
-	type:        "ssh" @go(Type)
-	host:        #Host @go(Host,type="github.com/istr/strike/internal/transport".Host)
+	type: "ssh" @go(Type)
+	host: #Host @go(Host,type="github.com/istr/strike/internal/transport".Host)
 	known_hosts: [...#KnownHostEntry] @go(KnownHosts)
 }
 
@@ -236,23 +260,27 @@ package lane
 
 #PackSpec: {
 	@go(PackSpec)
-	base:          #ImageRef @go(Base)
-	files:         [...#PackFile] @go(Files)
-	packages?:     [...#Package] @go(Packages)
-	config_files?: [Path=string]: #FileEntry @go(ConfigFiles)
-	config?:       #ImageConfig @go(Config,optional=nillable)
-	annotations?:  [string]: string @go(Annotations)
-	sbom?:         #SBOMConfig @go(SBOM,optional=nillable)
-	push?:         [...string] @go(Push)
+	base: #ImageRef @go(Base)
+	files: [...#PackFile] @go(Files)
+	packages?: [...#Package] @go(Packages)
+	config_files?: {
+		[Path=string]: #FileEntry @go(ConfigFiles)
+	}
+	config?: #ImageConfig @go(Config,optional=nillable)
+	annotations?: {
+		[string]: string @go(Annotations)
+	}
+	sbom?: #SBOMConfig @go(SBOM,optional=nillable)
+	push?: [...string] @go(Push)
 }
 
 #PackFile: {
 	@go(PackFile)
-	from: string @go(From)
-	dest: #AbsPath @go(Dest)
+	from: string       @go(From)
+	dest: #AbsPath     @go(Dest)
 	mode: *0o755 | int @go(Mode)
-	uid?: int @go(UID,optional=nillable)
-	gid?: int @go(GID,optional=nillable)
+	uid?: int          @go(UID,optional=nillable)
+	gid?: int          @go(GID,optional=nillable)
 }
 
 #Package: {
@@ -263,20 +291,24 @@ package lane
 
 #FileEntry: {
 	@go(FileEntry)
-	content: string @go(Content)
+	content: string       @go(Content)
 	mode:    *0o644 | int @go(Mode)
-	uid:     *0 | int @go(UID)
-	gid:     *0 | int @go(GID)
+	uid:     *0 | int     @go(UID)
+	gid:     *0 | int     @go(GID)
 }
 
 #ImageConfig: {
 	@go(ImageConfig)
-	env?:        [string]: string @go(Env)
+	env?: {
+		[string]: string @go(Env)
+	}
 	entrypoint?: [...string] @go(Entrypoint)
-	cmd?:        [...string] @go(Cmd)
-	workdir?:    string @go(Workdir,optional=nillable)
-	user?:       string @go(User,optional=nillable)
-	labels?:     [string]: string @go(Labels)
+	cmd?: [...string] @go(Cmd)
+	workdir?: string @go(Workdir,optional=nillable)
+	user?:    string @go(User,optional=nillable)
+	labels?: {
+		[string]: string @go(Labels)
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -285,9 +317,11 @@ package lane
 
 #DeploySpec: {
 	@go(DeploySpec)
-	method:      #DeployMethod @go(Method)
-	artifacts:   [Name=string]: #ArtifactRef @go(Artifacts)
-	target:      #DeployTarget @go(Target)
+	method: #DeployMethod @go(Method)
+	artifacts: {
+		[Name=string]: #ArtifactRef @go(Artifacts)
+	}
+	target:      #DeployTarget    @go(Target)
 	attestation: #AttestationSpec @go(Attestation)
 	source?: {
 		git_image: #ImageRef
@@ -298,26 +332,28 @@ package lane
 
 #DeployKubernetes: {
 	@go(DeployKubernetes)
-	type:        "kubernetes" @go(Type)
-	image:       #ImageRef @go(Image)
-	namespace:   string @go(Namespace)
+	type:        "kubernetes"                     @go(Type)
+	image:       #ImageRef                        @go(Image)
+	namespace:   string                           @go(Namespace)
 	strategy:    *"apply" | "replace" | "rollout" @go(Strategy)
-	kubeconfig?: string @go(Kubeconfig,optional=nillable)
+	kubeconfig?: string                           @go(Kubeconfig,optional=nillable)
 }
 
 #DeployRegistry: {
 	@go(DeployRegistry)
 	type:   "registry" @go(Type)
-	source: string @go(Source)
-	target: string @go(Target)
+	source: string     @go(Source)
+	target: string     @go(Target)
 }
 
 #DeployCustom: {
 	@go(DeployCustom)
-	type:        "custom" @go(Type)
-	image:       #ImageRef @go(Image)
-	args:        [...string] @go(Args)
-	env:         [string]: string @go(Env)
+	type:  "custom"  @go(Type)
+	image: #ImageRef @go(Image)
+	args: [...string] @go(Args)
+	env: {
+		[string]: string @go(Env)
+	}
 	entrypoint?: [...string] @go(Entrypoint)
 }
 
@@ -328,14 +364,15 @@ package lane
 
 #DeployTarget: {
 	@go(DeployTarget)
+
 	// Stable identifier assigned at authoring time. External verifiers use
 	// this to pair pre/post-state digests across consecutive deploys
 	// to the same target.
 	id:          =~"^[a-z0-9][a-z0-9-]{0,62}$" @go(ID)
-	type:        string @go(Type)
-	description: string @go(Description)
-	url?:        string @go(URL,optional=nillable)
-	namespace?:  string @go(Namespace,optional=nillable)
+	type:        string                        @go(Type)
+	description: string                        @go(Description)
+	url?:        string                        @go(URL,optional=nillable)
+	namespace?:  string                        @go(Namespace,optional=nillable)
 }
 
 // ---------------------------------------------------------------------------
@@ -351,21 +388,21 @@ package lane
 #StateCaptureSpec: {
 	@go(StateCaptureSpec)
 	required: *true | bool @go(Required)
-	capture:  [...#StateCapture] @go(Capture)
+	capture: [...#StateCapture] @go(Capture)
 }
 
 #StateCapture: {
 	@go(StateCapture)
-	name:     string @go(Name)
-	image:    #ImageRef @go(Image)
-	command:  [...string] @go(Command)
-	peers?:   [...#Peer] @go(Peers)
-	mounts?:  [...#CaptureMount] @go(Mounts)
+	name:  string    @go(Name)
+	image: #ImageRef @go(Image)
+	command: [...string] @go(Command)
+	peers?: [...#Peer] @go(Peers)
+	mounts?: [...#CaptureMount] @go(Mounts)
 }
 
 #CaptureMount: {
 	@go(CaptureMount)
-	source: string @go(Source)
+	source: string   @go(Source)
 	target: #AbsPath @go(Target)
 }
 
@@ -392,11 +429,12 @@ package lane
 
 #SBOMConfig: {
 	@go(SBOMConfig)
-	generate: *true | bool @go(Generate)
+	generate: *true | bool                    @go(Generate)
 	format:   *"spdx-json" | "cyclonedx-json" @go(Format)
 }
 
 #Digest: =~"^sha256:[a-f0-9]{64}$" @go(-)
+
 #Duration: =~"^[0-9]+(s|m|h)$"
 
 // ---------------------------------------------------------------------------
@@ -409,18 +447,20 @@ package lane
 #Artifact: {
 	@go(Artifact)
 	type:          #ArtifactType @go(Type)
-	digest:        #Digest @go(Digest,type=Digest)
-	local_path?:   string @go(LocalPath,optional=nillable)
-	size:          int & >=0 @go(Size)
-	content_type?: string @go(ContentType,optional=nillable)
-	metadata?:     [string]: string @go(Metadata)
-	rekor?:        #RekorEntry @go(Rekor,optional=nillable)
+	digest:        #Digest       @go(Digest,type=Digest)
+	local_path?:   string        @go(LocalPath,optional=nillable)
+	size:          int & >=0     @go(Size)
+	content_type?: string        @go(ContentType,optional=nillable)
+	metadata?: {
+		[string]: string @go(Metadata)
+	}
+	rekor?: #RekorEntry @go(Rekor,optional=nillable)
 	// signed: true if this artifact was cryptographically
 	// signed during its production. Currently set by pack
 	// steps when a signing key is configured. Read by
 	// guardUnsignedImages to reject unsigned OCI image
 	// inputs into steps that declare network peers.
-	signed?:       bool | *false @go(Signed)
+	signed?: bool | *false @go(Signed)
 }
 
 // ---------------------------------------------------------------------------

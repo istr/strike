@@ -1,6 +1,6 @@
 # ADR-040 Implementation Roadmap
 
-## Status: IN PROGRESS (instruction 1 done; instructions 2--5 remain)
+## Status: IN PROGRESS (instruction 1 done, instruction 2a done; instructions 2b--5 remain)
 
 ADR-040 is Accepted and plumbed: the decision record is at
 `docs/ADR-040-control-plane-sbom-and-keyless-attestation.md`, registered in
@@ -29,6 +29,14 @@ established numbered instruction-file sequence.
   `internal/deploy/predicate.go`, validated against the embedded CUE schema.
   The internal `#Attestation` collect-model is unchanged; projection into
   these output shapes is instruction 3.
+- **Instruction 2a -- base-SBOM signer schema + native SBOM cataloger (D1).**
+  `#SBOMSigner` added to `specs/lane.cue` (optional lane-wide
+  `base_sbom_signers` list). Native SBOM cataloger in
+  `internal/executor/catalog.go`: strike-owned npm lockfile and dpkg status
+  parsers, CycloneDX via `cyclonedx-go`, SPDX 2.3 via `spdx/tools-golang`
+  (model + JSON only). osv-scalibr ruled out by two import-surface
+  measurements (D1 mechanism amendment appended to ADR-040). Cataloger tested
+  in isolation; not yet wired into `Pack` (2b).
 - **Decision basis: two spikes (both complete).**
   - scalibr import-surface spike (PARTIAL result): the heavy clusters
     (container-runtime, grpc, sqlite, vuln, TUI, cloud crypto, resolution)
@@ -51,14 +59,22 @@ established numbered instruction-file sequence.
 
 Grounded against the current snapshot.
 
-### D1 -- control-plane SBOM over the sealed artifact
+### D1 -- control-plane SBOM over the sealed artifact -- PARTIALLY DONE (2a)
 
-The buildinfo path is intact. `GenerateSBOM` and the `debug/buildinfo`
-import live in `internal/executor/sbom.go`; there is no osv-scalibr import,
-no `fs.FS` walker, and no SPDX output anywhere in the tree. The SBOM today
-describes the packed Go binary, not the artifact -- the class of the
-`read build info from "": no such file` crash. Removed and replaced in
-instruction 2.
+**Done (instruction 2a).** The `#SBOMSigner` schema (trusted base-SBOM
+signer identity) is in `specs/lane.cue` with generated Go type. The native
+SBOM cataloger (`internal/executor/catalog.go`) catalogs an extracted root
+filesystem (`fs.FS`) into canonical CycloneDX and first-class SPDX 2.3,
+using strike-owned npm lockfile and dpkg status parsers rendered through
+`cyclonedx-go` and `spdx/tools-golang` (model + JSON sub-packages only).
+osv-scalibr is not used (D1 mechanism amendment). Output is canonicalized
+(deterministic serial/namespace, SOURCE_DATE_EPOCH timestamp, stable
+ordering). The cataloger is tested in isolation with a fixture rootfs.
+
+**Remaining (instruction 2b).** Wire `GenerateImageSBOM` into `Pack` over
+the flattened image's `fs.FS`. Remove the buildinfo `GenerateSBOM` path in
+`internal/executor/sbom.go`. Base-SBOM ingestion and signature verification
+against the declared `base_sbom_signers`. Engine-backed e2e test.
 
 ### D2 -- keyless signing, in-process
 
@@ -119,25 +135,32 @@ peers, resolver, engine connection), and the engine-context statement
 engine metadata). Validated against the embedded CUE schema in
 `predicate_test.go`. The internal `#Attestation` collect-model is unchanged.
 
-### 2. SBOM core (D1)
+### 2. SBOM core (D1) -- PARTIALLY DONE (2a done; 2b remains)
 
-Couple osv-scalibr as a modular library: import only the npm
-`packagelockjson` extractor and the Debian `dpkg` extractor, never the
-`extractor/filesystem/list` aggregator and never the image / disk scanner.
-Drive the extractors through the thin in-process `fs.FS` walker (~100 lines)
-over an already-extracted rootfs, to avoid the `extractor/filesystem ->
-embeddedfs/common` disk-image cluster. Emit both formats via scalibr's
-converters: CycloneDX canonical (`application/vnd.cyclonedx+json`) plus SPDX
-2.3 first-class. Canonicalize the document (deterministic serial number and
-namespace, SOURCE_DATE_EPOCH, stable component ordering). Remove the
-`GenerateSBOM` buildinfo path in `internal/executor/sbom.go` in its entirety
-(deletion, not a fix); surface an empty directory output at the producing
-step as an INFO line. `cyclonedx-go` drops as a direct dependency (stays
-transitive via scalibr at the identical v0.11.0). Includes an engine-backed
-end-to-end test.
+**2a (done).** Added the `#SBOMSigner` schema and optional lane-wide
+`base_sbom_signers` field. Built a native SBOM cataloger
+(`internal/executor/catalog.go`) that catalogs an extracted root filesystem
+(`fs.FS`) into canonical CycloneDX and first-class SPDX 2.3. Two
+import-surface measurements ruled out osv-scalibr (D1 mechanism amendment
+appended to ADR-040): its extractors pull the go-diskfs/ext4/ntfs disk-image
+cluster at import time, and its converter-only path drags go-git plus
+go-funk/osv-schema/stringset. Instead, strike parses `package-lock.json` and
+dpkg `status` with native parsers and renders through `cyclonedx-go` (v0.11.0,
+stays direct) and `spdx/tools-golang` (v0.5.7, model + JSON only).
+`package-url/packageurl-go` (v0.1.6) added for PURL construction. Output is
+canonicalized (deterministic serial/namespace from subject digest,
+SOURCE_DATE_EPOCH timestamp, stable component ordering). Tested in isolation
+with `fstest.MapFS` fixture.
+
+**2b (remaining).** Wire `GenerateImageSBOM` into `Pack` over the flattened
+image's `fs.FS`. Remove the `GenerateSBOM` buildinfo path in
+`internal/executor/sbom.go` in its entirety (deletion, not a fix); surface an
+empty directory output at the producing step as an INFO line. Base-SBOM
+ingestion and signature verification against the declared
+`base_sbom_signers`. Engine-backed end-to-end test.
 
 Depends on: instruction 1 (predicate types consume the SBOM as a subject).
-Deletion gate: grep-verified reachability gate (report-only) on
+Deletion gate (2b): grep-verified reachability gate (report-only) on
 `GenerateSBOM` and the buildinfo import before any edit.
 
 ### 3. Keyless signing (D2 + the D3 multi-attestation packaging)
@@ -183,11 +206,10 @@ verify item the ADR-037 roadmap carried (see "Cross-roadmap dependencies").
 
 ## Parallel tracks (outside the strike code sequence)
 
-- **osv-scalibr decoupling PR (upstream).** Decouples
-  `embeddedfs/common` from the `extractor/filesystem` walker so the
-  disk-image cluster no longer imports unconditionally. Once merged, the D1
-  thin walker is dropped and strike returns to the upstream entry point.
-  Independent of the instruction sequence; organic ecosystem visibility.
+- **osv-scalibr decoupling PR (upstream).** No longer needed for strike:
+  the D1 mechanism amendment (instruction 2a) ruled out osv-scalibr entirely
+  in favor of native parsers. The upstream decoupling is organic ecosystem
+  work only.
 - **Local sigstore test harness.** docker-compose Fulcio + Rekor v2 +
   Keycloak (WebAuthn-passwordless, user verification required; Fulcio
   OIDCIssuers pointed at the Keycloak realm, type email; cosign >= v3.0.1 or
@@ -235,9 +257,9 @@ verify item the ADR-037 roadmap carried (see "Cross-roadmap dependencies").
   (canonicalized SBOM, SOURCE_DATE_EPOCH, stable ordering); the signature
   covers the registry digest the control plane pushed.
 - Code is liability: the cataloger and the signing stack are the leanest
-  audited libraries that cover the task (measured by the two spikes); the
-  thin walker is chosen over a heavy dependency. No exec: the keyless flow
-  runs in-process as libraries, never by spawning a CLI.
+  audited libraries that cover the task (measured by the two spikes); native
+  parsers plus format libraries are chosen over a heavy dependency. No exec:
+  the keyless flow runs in-process as libraries, never by spawning a CLI.
 
 ## Open items
 
