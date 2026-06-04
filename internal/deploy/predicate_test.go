@@ -8,6 +8,7 @@ import (
 	"cuelang.org/go/cue/cuecontext"
 	cuejson "cuelang.org/go/encoding/json"
 
+	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/deploy"
 	"github.com/istr/strike/internal/lane"
 )
@@ -50,6 +51,25 @@ func TestSLSAProvenanceStatement_Valid(t *testing.T) {
 		t.Fatalf("marshal: %v", err)
 	}
 	validateAgainstDef(t, data, "#SLSAProvenanceStatement")
+}
+
+func TestInformationalStatement_Valid(t *testing.T) {
+	stmt := deploy.InformationalStatement{
+		Type:          "https://in-toto.io/Statement/v1",
+		Subject:       []deploy.Subject{{Name: "image", Digest: deploy.DigestSet{SHA256: "0000000000000000000000000000000000000000000000000000000000000000"}}},
+		PredicateType: "https://istr.dev/strike/predicates/informational/v1",
+		Predicate: deploy.InformationalPredicate{
+			Timestamp:       clock.Reproducible(),
+			PreStateDigest:  lane.MustParseDigest("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
+			PostStateDigest: lane.MustParseDigest("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
+			Provenance:      []lane.ProvenanceRecord{},
+		},
+	}
+	data, err := json.Marshal(stmt)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	validateAgainstDef(t, data, "#InformationalStatement")
 }
 
 func TestEngineContextStatement_Valid(t *testing.T) {

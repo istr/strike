@@ -1,6 +1,9 @@
 package deploy
 
-import "github.com/istr/strike/internal/lane"
+import (
+	"github.com/istr/strike/internal/clock"
+	"github.com/istr/strike/internal/lane"
+)
 
 // Output attestation predicate types (ADR-040 D3). These are the standard-
 // ecosystem shapes strike signs and publishes. The projection from the
@@ -104,4 +107,30 @@ type EngineContextStatement struct {
 type EngineContextPredicate struct {
 	PeerAttribution map[string][]string `json:"peer_attribution,omitempty"`
 	EngineMetadata  *EngineMetadata     `json:"engine_metadata,omitempty"`
+}
+
+// InformationalStatement is the informational output: an in-toto Statement v1
+// wrapping a strike-defined informational predicate. Signed but never gating a
+// verification exit (ADR-040 D3); a verifier discriminates it by predicateType
+// and never lets its contents affect the exit (ADR-037).
+type InformationalStatement struct {
+	Predicate     InformationalPredicate `json:"predicate"`
+	Type          string                 `json:"_type"`
+	PredicateType string                 `json:"predicateType"`
+	Subject       []Subject              `json:"subject"`
+}
+
+// InformationalPredicate carries the informational-layer fields (ADR-037): the
+// deploy wall-clock (informational, not canonical -- Rekor integratedTime is
+// canonical), the CP-canonical pre/post-state digests (container-produced
+// bytes, CP-hashed; the hash transports them, it does not lift them out of the
+// container-asserted class), and the container-asserted, engine-relayed
+// provenance records. None of these gate. This is the one output statement
+// that carries a wall-clock; the sealed provenance is reproducible and omits
+// it.
+type InformationalPredicate struct {
+	Timestamp       clock.Time              `json:"timestamp,omitempty"`
+	PreStateDigest  lane.Digest             `json:"pre_state_digest"`
+	PostStateDigest lane.Digest             `json:"post_state_digest"`
+	Provenance      []lane.ProvenanceRecord `json:"provenance"`
 }

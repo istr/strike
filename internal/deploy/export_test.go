@@ -10,3 +10,6 @@ func NewCaptureSnap(name, image string, output []byte) CaptureSnap {
 
 // DeploySchema exposes deploySchema for the external test package.
 var DeploySchema = deploySchema
+
+// ProjectStatements exposes projectStatements for the external test package.
+var ProjectStatements = projectStatements

@@ -39,10 +39,10 @@ import (
 // docs/ATTESTATION-SOUNDNESS-AND-THE-TRUST-BOUNDARY.md and
 // ADR-037 for the trust-layer theory.
 type Attestation struct {
-	Sealed          Sealed          `json:"sealed"`
-	EngineDependent EngineDependent `json:"engine_dependent"`
-	Informational   *Informational  `json:"informational,omitempty"`
-	SignedEnvelope  []byte          `json:"-"` // DSSE envelope, not part of attestation JSON
+	Informational   *Informational    `json:"informational,omitempty"`
+	Signed          *SignedStatements `json:"-"`
+	EngineDependent EngineDependent   `json:"engine_dependent"`
+	Sealed          Sealed            `json:"sealed"`
 }
 
 // Sealed -- CP-bound claims, sound to any verifier without engine trust.
@@ -330,6 +330,7 @@ type Deployer struct {
 	ResolverID     *transport.ConnectionIdentity // DoT resolver identity from the pre-flight probe; nil if unavailable
 	Rekor          *executor.RekorClient
 	DAG            *lane.DAG
+	OIDC           lane.OIDCConfig // lane-declared signing identity (ADR-040 D5); carried into the sealed provenance externalParameters
 	CA             *transport.EphemeralCA
 	UpstreamLook   capsule.UpstreamLookupFunc
 	StepPorts      map[string]capsule.HostPorts // unit name -> host ports
@@ -585,18 +586,14 @@ func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.Sta
 		return nil, fmt.Errorf("step %q: attestation invalid: %w", step.Name, err)
 	}
 
-	// 8. Sign attestation (optional, key-dependent).
-	if err := d.signAttestation(att, step.Name); err != nil {
+	// 8. Project into the three output statements and sign each (ADR-040 D3).
+	if err := d.signStatements(att, step.Name); err != nil {
 		return nil, err
 	}
 
-	// 9. Submit signed attestation to Rekor transparency log (optional).
-	if d.Rekor != nil && att.SignedEnvelope != nil {
-		rekorEntry, rekorErr := submitAttestationToRekor(ctx, d, att)
-		if rekorErr != nil {
-			return nil, rekorErr
-		}
-		att.Sealed.Rekor = rekorEntry
+	// 9. Submit each signed statement to Rekor (optional).
+	if err := d.submitStatementsToRekor(ctx, att); err != nil {
+		return nil, err
 	}
 
 	// 10. Record in lane state.
@@ -607,32 +604,77 @@ func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.Sta
 	return att, nil
 }
 
-// signAttestation wraps the attestation in a signed DSSE envelope if a key is configured.
-func (d *Deployer) signAttestation(att *Attestation, stepName string) error {
+// signStatements projects the attestation into the three output in-toto
+// statements (ADR-040 D3) and signs each as its own DSSE envelope with the
+// operator key, storing them on att.Signed. No-op with a WARN when no signing
+// key is configured (an unsigned deploy still produces a verifiable chain via
+// the recorded digests). The OCI-referrer attach of these statements runs on
+// the pushed digest (instruction 4).
+func (d *Deployer) signStatements(att *Attestation, stepName string) error {
 	if d.SigningKey == nil {
 		log.Printf("WARN   deploy %s: attestation unsigned (no signing key configured)", stepName)
 		return nil
 	}
-	attJSON, err := json.Marshal(att)
+	slsa, engineCtx, info, err := projectStatements(att, d.OIDC)
 	if err != nil {
-		return fmt.Errorf("step %q: marshal attestation for signing: %w", stepName, err)
+		return fmt.Errorf("step %q: project statements: %w", stepName, err)
 	}
-	envelope, err := SignAttestation(attJSON, d.SigningKey, d.KeyPassword)
+	signed := &SignedStatements{}
+	if signed.Sealed.Envelope, err = d.signOne(slsa); err != nil {
+		return fmt.Errorf("step %q: sign sealed statement: %w", stepName, err)
+	}
+	if signed.EngineContext.Envelope, err = d.signOne(engineCtx); err != nil {
+		return fmt.Errorf("step %q: sign engine-context statement: %w", stepName, err)
+	}
+	if signed.Informational.Envelope, err = d.signOne(info); err != nil {
+		return fmt.Errorf("step %q: sign informational statement: %w", stepName, err)
+	}
+	att.Signed = signed
+	return nil
+}
+
+// signOne marshals one projected statement and signs it as an in-toto DSSE
+// envelope with the operator key.
+func (d *Deployer) signOne(stmt any) ([]byte, error) {
+	stmtJSON, err := json.Marshal(stmt)
 	if err != nil {
-		return fmt.Errorf("step %q: sign attestation: %w", stepName, err)
+		return nil, fmt.Errorf("marshal statement: %w", err)
 	}
-	att.SignedEnvelope = envelope
+	return SignStatement(stmtJSON, d.SigningKey, d.KeyPassword)
+}
+
+// submitStatementsToRekor submits each signed statement to Rekor and mirrors
+// the sealed entry into the collect-model (ADR-013). No-op when Rekor is nil
+// or the attestation is unsigned.
+func (d *Deployer) submitStatementsToRekor(ctx context.Context, att *Attestation) error {
+	if d.Rekor == nil || att.Signed == nil {
+		return nil
+	}
+	laneID, targetID := att.Sealed.LaneID, att.Sealed.Target.ID
+	for _, s := range []*SignedStatement{
+		&att.Signed.Sealed, &att.Signed.EngineContext, &att.Signed.Informational,
+	} {
+		entry, rekorErr := submitEnvelopeToRekor(ctx, d, laneID, targetID, s.Envelope)
+		if rekorErr != nil {
+			return rekorErr
+		}
+		s.Rekor = entry
+	}
+	// Mirror the sealed statement's Rekor entry into the collect-model for
+	// continuity of Sealed.Rekor (ADR-013 strips it before verifying the
+	// sealed statement's signature).
+	att.Sealed.Rekor = att.Signed.Sealed.Rekor
 	return nil
 }
 
 const rekorMaxEnvelopeSize = 100 * 1024 // 100KB Rekor upload limit
 
-// submitAttestationToRekor submits the signed DSSE envelope to Rekor.
-// Returns nil entry on transient failure (fail open) or oversized envelope.
-func submitAttestationToRekor(ctx context.Context, d *Deployer, att *Attestation) (*lane.RekorEntry, error) {
-	if len(att.SignedEnvelope) > rekorMaxEnvelopeSize {
+// submitEnvelopeToRekor submits one signed DSSE envelope to Rekor. Returns a
+// nil entry on transient failure (fail open) or an oversized envelope.
+func submitEnvelopeToRekor(ctx context.Context, d *Deployer, laneID, targetID string, envelope []byte) (*lane.RekorEntry, error) {
+	if len(envelope) > rekorMaxEnvelopeSize {
 		log.Printf("WARN   deploy %s/%s: DSSE envelope %d bytes exceeds Rekor %d byte limit, skipping",
-			att.Sealed.LaneID, att.Sealed.Target.ID, len(att.SignedEnvelope), rekorMaxEnvelopeSize)
+			laneID, targetID, len(envelope), rekorMaxEnvelopeSize)
 		return nil, nil
 	}
 
@@ -640,11 +682,11 @@ func submitAttestationToRekor(ctx context.Context, d *Deployer, att *Attestation
 	if err != nil {
 		return nil, fmt.Errorf("rekor: derive public key: %w", err)
 	}
-	entry, err := d.Rekor.SubmitDSSE(ctx, att.SignedEnvelope, pubPEM)
+	entry, err := d.Rekor.SubmitDSSE(ctx, envelope, pubPEM)
 	if err != nil {
 		var w *executor.RekorTransientError
 		if errors.As(err, &w) {
-			log.Printf("WARN   deploy %s/%s: rekor dsse: %v", att.Sealed.LaneID, att.Sealed.Target.ID, err)
+			log.Printf("WARN   deploy %s/%s: rekor dsse: %v", laneID, targetID, err)
 			return nil, nil
 		}
 		return nil, err

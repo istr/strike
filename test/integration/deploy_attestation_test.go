@@ -122,68 +122,65 @@ func executeDeploy(t *testing.T, engine container.Engine, keyPEM []byte, state *
 	return att
 }
 
-// verifyDSSE checks the DSSE signed envelope on an attestation.
-// Verification is inlined here because the production verify function
-// lives in a _test.go file (test-only code) and cannot be imported
-// cross-package.
+// verifyDSSE checks the three signed in-toto statement envelopes on an
+// attestation (ADR-040 D3). Verification is inlined here because the
+// production verify function lives in a _test.go file (test-only code)
+// and cannot be imported cross-package.
 func verifyDSSE(t *testing.T, att *deploy.Attestation, keyPEM []byte) {
 	t.Helper()
 
-	if att.SignedEnvelope == nil {
-		t.Fatal("expected signed envelope, got nil")
+	if att.Signed == nil {
+		t.Fatal("expected signed statements, got nil")
 	}
-
-	// Decode the DSSE envelope.
-	var envelope struct {
-		PayloadType string `json:"payloadType"`
-		Payload     string `json:"payload"`
-		Signatures  []struct {
-			KeyID string `json:"keyid"`
-			Sig   string `json:"sig"`
-		} `json:"signatures"`
-	}
-	if err := json.Unmarshal(att.SignedEnvelope, &envelope); err != nil {
-		t.Fatalf("unmarshal DSSE envelope: %v", err)
-	}
-
-	// Decode the base64url payload.
-	recovered, err := base64.RawURLEncoding.DecodeString(envelope.Payload)
-	if err != nil {
-		t.Fatalf("decode DSSE payload: %v", err)
-	}
-
-	// Verify at least one signature against the test public key.
-	pubKey := testPublicKeyFrom(t, keyPEM)
-	pae := dssePayloadPAE(envelope.PayloadType, recovered)
-	digest := sha256.Sum256(pae)
-
-	verified := false
-	for _, sig := range envelope.Signatures {
-		sigBytes, decErr := base64.StdEncoding.DecodeString(sig.Sig)
-		if decErr != nil || len(sigBytes) != 64 {
-			continue
+	for _, env := range [][]byte{
+		att.Signed.Sealed.Envelope,
+		att.Signed.EngineContext.Envelope,
+		att.Signed.Informational.Envelope,
+	} {
+		// Decode the DSSE envelope.
+		var envelope struct {
+			PayloadType string `json:"payloadType"`
+			Payload     string `json:"payload"`
+			Signatures  []struct {
+				KeyID string `json:"keyid"`
+				Sig   string `json:"sig"`
+			} `json:"signatures"`
 		}
-		r := new(big.Int).SetBytes(sigBytes[:32])
-		s := new(big.Int).SetBytes(sigBytes[32:])
-		if ecdsa.Verify(pubKey, digest[:], r, s) {
-			verified = true
-			break
+		if err := json.Unmarshal(env, &envelope); err != nil {
+			t.Fatalf("unmarshal DSSE envelope: %v", err)
 		}
-	}
-	if !verified {
-		t.Fatal("no valid DSSE signature found")
-	}
 
-	// Compare recovered payload with the attestation JSON.
-	attJSON, marshalErr := json.Marshal(att)
-	if marshalErr != nil {
-		t.Fatalf("marshal attestation: %v", marshalErr)
-	}
-	if string(recovered) != string(attJSON) {
-		t.Error("recovered DSSE payload does not match attestation JSON")
-	}
-	if !strings.Contains(string(recovered), att.Sealed.LaneID) {
-		t.Error("lane ID not found in attestation payload")
+		if envelope.PayloadType != deploy.InTotoPayloadType {
+			t.Errorf("payloadType = %q, want %q", envelope.PayloadType, deploy.InTotoPayloadType)
+		}
+
+		// Decode the base64url payload.
+		recovered, err := base64.RawURLEncoding.DecodeString(envelope.Payload)
+		if err != nil {
+			t.Fatalf("decode DSSE payload: %v", err)
+		}
+
+		// Verify at least one signature against the test public key.
+		pubKey := testPublicKeyFrom(t, keyPEM)
+		pae := dssePayloadPAE(envelope.PayloadType, recovered)
+		digest := sha256.Sum256(pae)
+
+		verified := false
+		for _, sig := range envelope.Signatures {
+			sigBytes, decErr := base64.StdEncoding.DecodeString(sig.Sig)
+			if decErr != nil || len(sigBytes) != 64 {
+				continue
+			}
+			r := new(big.Int).SetBytes(sigBytes[:32])
+			s := new(big.Int).SetBytes(sigBytes[32:])
+			if ecdsa.Verify(pubKey, digest[:], r, s) {
+				verified = true
+				break
+			}
+		}
+		if !verified {
+			t.Fatal("no valid DSSE signature found")
+		}
 	}
 }
 

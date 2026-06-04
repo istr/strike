@@ -189,16 +189,25 @@ after instruction 5 (needs Fulcio/Rekor verification machinery). Base OS
 packages are still captured for catalogable bases because flattening includes
 the base layers and the cataloger reads their dpkg database directly.
 
-### 3. Keyless signing (D2 + the D3 multi-attestation packaging)
+### 3. Statement projection and keyless signing (D2 + D3)
 
-Replace the operator-key DSSE path with the composed in-process chain:
-ephemeral keypair, Fulcio short-lived certificate, DSSE, Rekor v2 upload and
-bundle (sigstore-go/pkg/sign), interactive OIDC (sigstore/pkg/oauthflow),
-referrer attach (go-containerregistry, already a dependency). No cosign CLI;
-no exec. Sign the three layers as separate attestations so the V / E
-boundary is physical: the sealed SLSA provenance, the engine-context
-predicate, and the informational byproducts each become their own referrer.
-ADR-013 retained: `sealed.rekor` is stripped before signature verification.
+**3a (done).** Project the internal `#Attestation` into the three output
+in-toto statements and sign each as its own operator-key DSSE: sealed SLSA
+Provenance v1 (Layer V), engine-context (Layer E, with `EngineMetadata`
+reclassified per Fork C and the engine-asserted peer attribution), and a new
+informational statement (`specs/predicate.cue`,
+`internal/deploy/predicate.go`). `Attestation.SignedEnvelope` becomes
+`Attestation.Signed` (three envelopes plus per-statement Rekor entries); each
+is submitted to Rekor and written as its own DSSE file. The projected
+statements carry `application/vnd.in-toto+json` (ADR-040 D3 supersedes
+ADR-013's payload type for the output). The OCI-referrer attach is deferred
+to instruction 4: the deploy attestation is recorded in lane state plus Rekor
+plus the output dir today, and the three referrers materialize on the pushed
+digest.
+
+**3b (next).** Replace the operator-key DSSE with the composed keyless chain
+(ephemeral key -> Fulcio -> DSSE -> Rekor v2 -> bundle, sigstore-go) over the
+same three statements; reorient `internal/verify`.
 
 Depends on: instructions 1 and 2 (both done: predicates and the SBOM).
 This is also the cross-roadmap unblock: see "Cross-roadmap dependencies".

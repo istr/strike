@@ -141,6 +141,7 @@ func (rc *runContext) executeDeploy(ctx context.Context, step *lane.Step, stepNa
 		ResolverID:     &rc.resolverID,
 		Rekor:          rc.rekor,
 		DAG:            rc.dag,
+		OIDC:           rc.lane.OIDC,
 		ArtifactRefs:   artifactRefs,
 		SigningKey:     signingKey,
 		KeyPassword:    keyPassword,
@@ -172,9 +173,18 @@ func (rc *runContext) executeDeploy(ctx context.Context, step *lane.Step, stepNa
 	if writeErr := writeToOutputDir(outDir, "attestation.json", attJSON); writeErr != nil {
 		return fmt.Errorf("%s: write attestation: %w", safeName, writeErr)
 	}
-	if att.SignedEnvelope != nil {
-		if writeErr := writeToOutputDir(outDir, "attestation.dsse.json", att.SignedEnvelope); writeErr != nil {
-			return fmt.Errorf("%s: write signed attestation: %w", safeName, writeErr)
+	if att.Signed != nil {
+		for _, w := range []struct {
+			name string
+			env  []byte
+		}{
+			{"slsa-provenance.dsse.json", att.Signed.Sealed.Envelope},
+			{"engine-context.dsse.json", att.Signed.EngineContext.Envelope},
+			{"informational.dsse.json", att.Signed.Informational.Envelope},
+		} {
+			if writeErr := writeToOutputDir(outDir, w.name, w.env); writeErr != nil {
+				return fmt.Errorf("%s: write %s: %w", safeName, w.name, writeErr)
+			}
 		}
 	}
 	return nil

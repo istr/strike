@@ -971,8 +971,8 @@ func TestDeployerExecute_WithRekor(t *testing.T) {
 	if att.Sealed.Rekor.LogIndex != 42 {
 		t.Errorf("att.Sealed.Rekor.LogIndex = %d, want 42", att.Sealed.Rekor.LogIndex)
 	}
-	if att.SignedEnvelope == nil {
-		t.Error("expected non-nil SignedEnvelope")
+	if att.Signed == nil {
+		t.Error("expected non-nil Signed")
 	}
 }
 
@@ -1013,8 +1013,8 @@ func TestDeployerExecute_NoRekor(t *testing.T) {
 	if att.Sealed.Rekor != nil {
 		t.Errorf("expected nil att.Sealed.Rekor when no RekorClient, got %+v", att.Sealed.Rekor)
 	}
-	if att.SignedEnvelope == nil {
-		t.Error("expected non-nil SignedEnvelope (signing should still work)")
+	if att.Signed == nil {
+		t.Error("expected non-nil Signed (signing should still work)")
 	}
 }
 
@@ -1063,8 +1063,8 @@ func TestDeployerExecute_RekorTransient(t *testing.T) {
 	if att.Sealed.Rekor != nil {
 		t.Errorf("expected nil att.Sealed.Rekor on transient failure, got %+v", att.Sealed.Rekor)
 	}
-	if att.SignedEnvelope == nil {
-		t.Error("expected non-nil SignedEnvelope (signing should still work)")
+	if att.Signed == nil {
+		t.Error("expected non-nil Signed (signing should still work)")
 	}
 }
 
@@ -1108,11 +1108,14 @@ func TestDeployerExecute_RekorSignedContentNoRekorField(t *testing.T) {
 		t.Fatalf("Execute: %v", err)
 	}
 
-	// The DSSE envelope must have been signed BEFORE the rekor field was set.
-	// Verify by decoding the envelope and checking the payload has no "rekor" key.
+	// The sealed statement envelope must not contain a "rekor" key in its payload:
+	// the Rekor entry is external metadata, set after signing (ADR-013).
+	if att.Signed == nil {
+		t.Fatal("expected non-nil Signed")
+	}
 	var env deploy.DSSEEnvelope
-	if unmarshalErr := json.Unmarshal(att.SignedEnvelope, &env); unmarshalErr != nil {
-		t.Fatalf("unmarshal DSSE envelope: %v", unmarshalErr)
+	if unmarshalErr := json.Unmarshal(att.Signed.Sealed.Envelope, &env); unmarshalErr != nil {
+		t.Fatalf("unmarshal sealed DSSE envelope: %v", unmarshalErr)
 	}
 
 	payloadJSON, decErr := base64.RawURLEncoding.DecodeString(env.Payload)
@@ -1120,17 +1123,27 @@ func TestDeployerExecute_RekorSignedContentNoRekorField(t *testing.T) {
 		t.Fatalf("decode payload: %v", decErr)
 	}
 
-	var attMap map[string]any
-	if unmarshalErr := json.Unmarshal(payloadJSON, &attMap); unmarshalErr != nil {
+	var stmtMap map[string]any
+	if unmarshalErr := json.Unmarshal(payloadJSON, &stmtMap); unmarshalErr != nil {
 		t.Fatalf("unmarshal payload: %v", unmarshalErr)
 	}
 
-	sealedMap, ok := attMap["sealed"].(map[string]any)
+	// The sealed statement is an in-toto Statement v1; its predicate's
+	// externalParameters must not carry a rekor field.
+	predMap, ok := stmtMap["predicate"].(map[string]any)
 	if !ok {
-		t.Fatal("expected sealed object in DSSE payload")
+		t.Fatal("expected predicate object in sealed DSSE payload")
 	}
-	if _, hasRekor := sealedMap["rekor"]; hasRekor {
-		t.Error("DSSE-signed payload must NOT contain 'sealed.rekor' field")
+	bdMap, ok := predMap["buildDefinition"].(map[string]any)
+	if !ok {
+		t.Fatal("expected buildDefinition in predicate")
+	}
+	epMap, ok := bdMap["externalParameters"].(map[string]any)
+	if !ok {
+		t.Fatal("expected externalParameters in buildDefinition")
+	}
+	if _, hasRekor := epMap["rekor"]; hasRekor {
+		t.Error("sealed statement externalParameters must NOT contain 'rekor' field")
 	}
 }
 

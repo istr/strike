@@ -96,6 +96,18 @@ warning, not silently truncated.
   forged response (SET verification failure) is fail-closed with
   an error. Treating them the same would mask attacks.
 
+## Superseded in part
+
+ADR-040 D3 supersedes the `payloadType` choice for strike's projected output
+statements. The sealed SLSA provenance, the engine-context statement, and the
+informational statement are standard in-toto Statement v1 documents and carry
+`application/vnd.in-toto+json`. The strike-specific
+`application/vnd.strike.attestation+json` remains only on the internal
+collect-model envelope (`SignAttestation`), whose disposition is ADR-040
+instruction 3b. The rest of ADR-013 (DSSE shape, PAE, Rekor, and stripping
+the rekor field before signature verification) is retained and now applies
+per output statement.
+
 ## Principles
 
 - Runtime is attested

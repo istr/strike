@@ -7,15 +7,16 @@
 //
 // The layer boundary is physical (ADR-037, ADR-040 D3): the sealed (V) layer
 // is a standard SLSA Provenance v1 statement; the engine_dependent (E) layer
-// is a strike-defined engine-context statement; each is signed as its own
-// referrer. The informational layer's output packaging is deferred.
+// is a strike-defined engine-context statement; the informational layer is a
+// strike-defined informational statement. Each is signed as its own referrer.
 //
 // Rekor inclusion lives in the sigstore bundle, never in a predicate payload
 // (ADR-013 satisfied structurally): no predicate here carries a rekor field.
 //
-// #Digest, #DeployTarget, #Peer, #ObservedPeer, #ResolverRecord,
-// #EngineConnection, and #EngineMetadata are defined in the same package deploy
-// (attestation.cue / artifact.cue) and are available here without import.
+// #Digest, #Timestamp, #DeployTarget, #Peer, #ObservedPeer, #ResolverRecord,
+// #EngineConnection, #EngineMetadata, and #ProvenanceRecord are defined in the
+// same package deploy (attestation.cue / artifact.cue) and are available here
+// without import.
 
 package deploy
 
@@ -143,4 +144,40 @@ package deploy
 #EngineContextPredicate: {
 	engine_metadata?: #EngineMetadata
 	peer_attribution?: [Step=string]: [...string]
+}
+
+// ---------------------------------------------------------------------------
+// Informational: strike-defined informational statement.
+// predicateType https://istr.dev/strike/predicates/informational/v1
+// Signed byproducts that never gate a verification exit (ADR-040 D3): the
+// deploy wall-clock, the pre/post-state digests, and the container-asserted
+// provenance. Carries no trust claim; a verifier discriminates it by
+// predicateType and never lets its contents affect the exit (ADR-037).
+// ---------------------------------------------------------------------------
+
+#InformationalStatement: {
+	"_type": "https://in-toto.io/Statement/v1"
+	subject: [...#Subject]
+	predicateType: "https://istr.dev/strike/predicates/informational/v1"
+	predicate:     #InformationalPredicate
+}
+
+#InformationalPredicate: {
+	// timestamp is CP's wall-clock at deploy start. Informational, not the
+	// canonical time: Rekor integratedTime is canonical (ADR-037). This is the
+	// one output statement that carries a wall-clock; the sealed provenance is
+	// reproducible and omits it.
+	timestamp?: #Timestamp
+
+	// pre_state_digest / post_state_digest are CP's canonical SHA-256 digests of
+	// the pre/post-deploy state captures. The bytes were produced by the
+	// (untrusted) capture container and engine-relayed; CP's hash transports
+	// them, it does not lift them out of the container-asserted class.
+	pre_state_digest:  #Digest
+	post_state_digest: #Digest
+
+	// provenance collects validated provenance records from transitive
+	// predecessor steps; each is container-written at step exit and
+	// engine-relayed. Recorded for audit and IoC, never gating.
+	provenance: [...#ProvenanceRecord]
 }

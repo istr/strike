@@ -1,0 +1,76 @@
+package deploy_test
+
+import (
+	"strings"
+	"testing"
+
+	"github.com/istr/strike/internal/clock"
+	"github.com/istr/strike/internal/deploy"
+	"github.com/istr/strike/internal/lane"
+)
+
+func TestProjectStatements(t *testing.T) {
+	rootless := true
+	att := &deploy.Attestation{
+		Sealed: deploy.Sealed{
+			LaneID:  "demo",
+			LaneRef: "",
+			Target:  lane.DeployTarget{ID: "prod-1", Type: "registry", Description: "production"},
+			Artifacts: map[string]deploy.SignedArtifact{
+				"b-image": {Digest: "sha256:" + strings.Repeat("b", 64)},
+				"a-image": {Digest: "sha256:" + strings.Repeat("a", 64)},
+			},
+			Peers:  map[string][]lane.Peer{},
+			Engine: &deploy.EngineConnection{ConnectionType: "tls", CATrustMode: "pinned", ServerCertFingerprint: "sha256:cc"},
+		},
+		EngineDependent: deploy.EngineDependent{
+			PeerAttribution: map[string][]string{"build": {"git.example.com:22"}},
+		},
+		Informational: &deploy.Informational{
+			Timestamp:       clock.Reproducible(),
+			EngineMetadata:  &deploy.EngineMetadata{Rootless: &rootless, Version: "5.3.1"},
+			PreStateDigest:  lane.MustParseDigest("sha256:" + strings.Repeat("e", 64)),
+			PostStateDigest: lane.MustParseDigest("sha256:" + strings.Repeat("f", 64)),
+			Provenance:      []lane.ProvenanceRecord{},
+		},
+	}
+	oidc := lane.OIDCConfig{Issuer: "https://idp.example.com", Identity: "deployer@example.com"}
+
+	slsa, engineCtx, info, err := deploy.ProjectStatements(att, oidc)
+	if err != nil {
+		t.Fatalf("projectStatements: %v", err)
+	}
+
+	// Subject is shared and sorted by name across all three statements.
+	if len(slsa.Subject) != 2 || slsa.Subject[0].Name != "a-image" || slsa.Subject[1].Name != "b-image" {
+		t.Fatalf("subject not sorted: %+v", slsa.Subject)
+	}
+	if slsa.Subject[0].Digest.SHA256 != strings.Repeat("a", 64) {
+		t.Errorf("subject digest = %q", slsa.Subject[0].Digest.SHA256)
+	}
+
+	// Sealed (V): declared OIDC identity carried; engine connection present.
+	ep := slsa.Predicate.BuildDefinition.ExternalParameters
+	if ep.OIDC.Issuer != "https://idp.example.com" || ep.OIDC.Identity != "deployer@example.com" {
+		t.Error("OIDC identity not carried into sealed externalParameters")
+	}
+	if ep.Engine == nil {
+		t.Error("engine connection (Layer V) missing from sealed externalParameters")
+	}
+
+	// Engine-context (E): engine metadata (Fork C) and peer attribution here.
+	if engineCtx.Predicate.EngineMetadata == nil || engineCtx.Predicate.EngineMetadata.Version != "5.3.1" {
+		t.Error("engine metadata not reclassified into engine-context (Layer E)")
+	}
+	if len(engineCtx.Predicate.PeerAttribution) != 1 {
+		t.Error("peer attribution missing from engine-context")
+	}
+
+	// Informational: state digests and provenance here.
+	if info.Predicate.PreStateDigest.Hex != strings.Repeat("e", 64) {
+		t.Errorf("pre-state digest = %q", info.Predicate.PreStateDigest.Hex)
+	}
+	if info.PredicateType != "https://istr.dev/strike/predicates/informational/v1" {
+		t.Errorf("informational predicateType = %q", info.PredicateType)
+	}
+}

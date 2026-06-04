@@ -186,24 +186,47 @@ func verifyChain(t *testing.T, att *deploy.Attestation, imageDigest string, keyP
 	t.Logf("  signed:      yes (DSSE verified)")
 }
 
-func chainVerifySignature(t *testing.T, att *deploy.Attestation, imageDigest string, keyPEM []byte) {
+func chainVerifySignature(t *testing.T, att *deploy.Attestation, _ string, keyPEM []byte) {
 	t.Helper()
-	if att.SignedEnvelope == nil {
-		t.Fatal("expected signed envelope")
+	if att.Signed == nil {
+		t.Fatal("expected signed statements")
 	}
 
 	pubPEM := chainExtractPubKey(t, keyPEM)
-	payload := chainVerifyDSSE(t, att.SignedEnvelope, pubPEM)
 
-	var roundTripped deploy.Attestation
-	if err := json.Unmarshal(payload, &roundTripped); err != nil {
-		t.Fatalf("unmarshal round-tripped attestation: %v", err)
+	// Verify each of the three statement envelopes.
+	for _, env := range [][]byte{
+		att.Signed.Sealed.Envelope,
+		att.Signed.EngineContext.Envelope,
+		att.Signed.Informational.Envelope,
+	} {
+		chainVerifyDSSE(t, env, pubPEM)
 	}
-	if roundTripped.Sealed.LaneID != att.Sealed.LaneID {
-		t.Errorf("round-trip lane ID mismatch: %s vs %s", roundTripped.Sealed.LaneID, att.Sealed.LaneID)
+
+	// Round-trip the sealed statement payload to verify lane ID.
+	payload := chainVerifyDSSE(t, att.Signed.Sealed.Envelope, pubPEM)
+	var stmtMap map[string]any
+	if err := json.Unmarshal(payload, &stmtMap); err != nil {
+		t.Fatalf("unmarshal round-tripped sealed statement: %v", err)
 	}
-	if roundTripped.Sealed.Artifacts["app"].Digest != imageDigest {
-		t.Error("round-trip artifact digest mismatch")
+	pred, ok := stmtMap["predicate"].(map[string]any)
+	if !ok {
+		t.Fatal("expected predicate in sealed statement")
+	}
+	bd, ok := pred["buildDefinition"].(map[string]any)
+	if !ok {
+		t.Fatal("expected buildDefinition in predicate")
+	}
+	ep, ok := bd["externalParameters"].(map[string]any)
+	if !ok {
+		t.Fatal("expected externalParameters in buildDefinition")
+	}
+	laneID, ok := ep["lane_id"].(string)
+	if !ok {
+		t.Fatal("expected lane_id in externalParameters")
+	}
+	if laneID != att.Sealed.LaneID {
+		t.Errorf("round-trip lane ID mismatch: %s vs %s", laneID, att.Sealed.LaneID)
 	}
 }
 
