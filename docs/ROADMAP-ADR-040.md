@@ -1,6 +1,6 @@
 # ADR-040 Implementation Roadmap
 
-## Status: IN PROGRESS (instruction 1 done, instruction 2a done; instructions 2b--5 remain)
+## Status: IN PROGRESS (instructions 1, 2 done; instructions 3--5 remain)
 
 ADR-040 is Accepted and plumbed: the decision record is at
 `docs/ADR-040-control-plane-sbom-and-keyless-attestation.md`, registered in
@@ -32,11 +32,21 @@ established numbered instruction-file sequence.
 - **Instruction 2a -- base-SBOM signer schema + native SBOM cataloger (D1).**
   `#SBOMSigner` added to `specs/lane.cue` (optional lane-wide
   `base_sbom_signers` list). Native SBOM cataloger in
-  `internal/executor/catalog.go`: strike-owned npm lockfile and dpkg status
-  parsers, CycloneDX via `cyclonedx-go`, SPDX 2.3 via `spdx/tools-golang`
-  (model + JSON only). osv-scalibr ruled out by two import-surface
-  measurements (D1 mechanism amendment appended to ADR-040). Cataloger tested
-  in isolation; not yet wired into `Pack` (2b).
+  `internal/executor/catalog.go`: strike-owned npm lockfile, dpkg status,
+  and go-buildinfo parsers, CycloneDX via `cyclonedx-go`, SPDX 2.3 via
+  `spdx/tools-golang` (model + JSON only). osv-scalibr ruled out by two
+  import-surface measurements (D1 mechanism amendment appended to ADR-040).
+- **Instruction 2b -- wire cataloger into Pack, remove buildinfo path (D1).**
+  `Pack` now flattens the assembled image into an in-memory `fs.FS`
+  (`internal/executor/flatten.go`) and catalogs it in-process via
+  `GenerateImageSBOM`, emitting both CycloneDX and SPDX 2.3 bound to the
+  artifact's digest as separate OCI referrers. The buildinfo `GenerateSBOM`
+  path (`internal/executor/sbom.go`) is removed in its entirety, together
+  with the unverified ADR-019 base-SBOM referrer fetch and the
+  `AssembleResult.BinaryPath` plumbing. An empty catalog is surfaced as
+  INFO. Engine-backed e2e test verifies the full pipeline. Verified
+  base-SBOM ingestion against `base_sbom_signers` is deferred to after
+  instruction 5 (needs the Fulcio/Rekor verification machinery).
 - **Decision basis: two spikes (both complete).**
   - scalibr import-surface spike (PARTIAL result): the heavy clusters
     (container-runtime, grpc, sqlite, vuln, TUI, cloud crypto, resolution)
@@ -59,22 +69,31 @@ established numbered instruction-file sequence.
 
 Grounded against the current snapshot.
 
-### D1 -- control-plane SBOM over the sealed artifact -- PARTIALLY DONE (2a)
+### D1 -- control-plane SBOM over the sealed artifact -- DONE (2a + 2b)
 
 **Done (instruction 2a).** The `#SBOMSigner` schema (trusted base-SBOM
 signer identity) is in `specs/lane.cue` with generated Go type. The native
 SBOM cataloger (`internal/executor/catalog.go`) catalogs an extracted root
 filesystem (`fs.FS`) into canonical CycloneDX and first-class SPDX 2.3,
-using strike-owned npm lockfile and dpkg status parsers rendered through
-`cyclonedx-go` and `spdx/tools-golang` (model + JSON sub-packages only).
-osv-scalibr is not used (D1 mechanism amendment). Output is canonicalized
-(deterministic serial/namespace, SOURCE_DATE_EPOCH timestamp, stable
-ordering). The cataloger is tested in isolation with a fixture rootfs.
+using strike-owned npm lockfile, dpkg status, and go-buildinfo parsers
+rendered through `cyclonedx-go` and `spdx/tools-golang` (model + JSON
+sub-packages only). osv-scalibr is not used (D1 mechanism amendment).
+Output is canonicalized (deterministic serial/namespace, SOURCE_DATE_EPOCH
+timestamp, stable ordering).
 
-**Remaining (instruction 2b).** Wire `GenerateImageSBOM` into `Pack` over
-the flattened image's `fs.FS`. Remove the buildinfo `GenerateSBOM` path in
-`internal/executor/sbom.go`. Base-SBOM ingestion and signature verification
-against the declared `base_sbom_signers`. Engine-backed e2e test.
+**Done (instruction 2b).** `Pack` flattens the assembled image into an
+in-memory `fs.FS` (`internal/executor/flatten.go`) and catalogs it via
+`GenerateImageSBOM`, emitting both CycloneDX and SPDX 2.3 as separate OCI
+referrers bound to the artifact's digest. The buildinfo `GenerateSBOM`
+path and the unverified ADR-019 base-SBOM referrer fetch are removed in
+their entirety. An empty catalog is surfaced as INFO. Engine-backed e2e
+test verifies the full pipeline including determinism.
+
+**Deferred.** Verified base-SBOM ingestion against the declared
+`base_sbom_signers` is deferred to after instruction 5 (needs the
+Fulcio/Rekor verification machinery). Base OS packages are still captured
+for catalogable bases because flattening includes the base layers and the
+cataloger reads their dpkg database directly.
 
 ### D2 -- keyless signing, in-process
 
@@ -135,7 +154,7 @@ peers, resolver, engine connection), and the engine-context statement
 engine metadata). Validated against the embedded CUE schema in
 `predicate_test.go`. The internal `#Attestation` collect-model is unchanged.
 
-### 2. SBOM core (D1) -- PARTIALLY DONE (2a done; 2b remains)
+### 2. SBOM core (D1) -- DONE (2a + 2b)
 
 **2a (done).** Added the `#SBOMSigner` schema and optional lane-wide
 `base_sbom_signers` field. Built a native SBOM cataloger
@@ -144,24 +163,31 @@ engine metadata). Validated against the embedded CUE schema in
 import-surface measurements ruled out osv-scalibr (D1 mechanism amendment
 appended to ADR-040): its extractors pull the go-diskfs/ext4/ntfs disk-image
 cluster at import time, and its converter-only path drags go-git plus
-go-funk/osv-schema/stringset. Instead, strike parses `package-lock.json` and
-dpkg `status` with native parsers and renders through `cyclonedx-go` (v0.11.0,
-stays direct) and `spdx/tools-golang` (v0.5.7, model + JSON only).
+go-funk/osv-schema/stringset. Instead, strike parses `package-lock.json`,
+dpkg `status`, and Go binaries (`debug/buildinfo`) with native parsers and
+renders through `cyclonedx-go` (v0.11.0, stays direct) and
+`spdx/tools-golang` (v0.5.7, model + JSON only).
 `package-url/packageurl-go` (v0.1.6) added for PURL construction. Output is
 canonicalized (deterministic serial/namespace from subject digest,
-SOURCE_DATE_EPOCH timestamp, stable component ordering). Tested in isolation
-with `fstest.MapFS` fixture.
+SOURCE_DATE_EPOCH timestamp, stable component ordering).
 
-**2b (remaining).** Wire `GenerateImageSBOM` into `Pack` over the flattened
-image's `fs.FS`. Remove the `GenerateSBOM` buildinfo path in
-`internal/executor/sbom.go` in its entirety (deletion, not a fix); surface an
-empty directory output at the producing step as an INFO line. Base-SBOM
-ingestion and signature verification against the declared
-`base_sbom_signers`. Engine-backed end-to-end test.
+**2b (done).** `Pack` flattens the assembled image into an in-memory `fs.FS`
+(`internal/executor/flatten.go` -- single backing `[]byte`, no disk I/O, no
+unpack/read race) and catalogs it in-process via `GenerateImageSBOM`,
+emitting both CycloneDX and SPDX 2.3 as separate OCI referrers bound to the
+artifact's digest. The buildinfo `GenerateSBOM` path
+(`internal/executor/sbom.go`) is removed in its entirety (deletion, not a
+fix), together with the unverified ADR-019 base-SBOM referrer fetch
+(`ProbeBaseImageSBOM` and helpers, the `SBOMSource` type,
+`sbomArtifactTypes`) and the dead `AssembleResult.BinaryPath` plumbing. An
+empty catalog is surfaced as INFO. Engine-backed e2e test
+(`test/integration/sbom_test.go`) verifies two SBOM referrers, correct
+subject, npm/dpkg/golang components, and deterministic output.
 
-Depends on: instruction 1 (predicate types consume the SBOM as a subject).
-Deletion gate (2b): grep-verified reachability gate (report-only) on
-`GenerateSBOM` and the buildinfo import before any edit.
+Verified base-SBOM ingestion against `base_sbom_signers` is deferred to
+after instruction 5 (needs Fulcio/Rekor verification machinery). Base OS
+packages are still captured for catalogable bases because flattening includes
+the base layers and the cataloger reads their dpkg database directly.
 
 ### 3. Keyless signing (D2 + the D3 multi-attestation packaging)
 
@@ -174,7 +200,7 @@ boundary is physical: the sealed SLSA provenance, the engine-context
 predicate, and the informational byproducts each become their own referrer.
 ADR-013 retained: `sealed.rekor` is stripped before signature verification.
 
-Depends on: instructions 1 and 2 (the predicates and the SBOM to be signed).
+Depends on: instructions 1 and 2 (both done: predicates and the SBOM).
 This is also the cross-roadmap unblock: see "Cross-roadmap dependencies".
 
 ### 4. Control-plane push (D4)

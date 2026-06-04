@@ -52,10 +52,9 @@ type PackResult struct {
 // and input files, any implementation (Go, Rust, ...) must produce an
 // AssembleResult with identical Digest.
 type AssembleResult struct {
-	Image      v1.Image      // assembled OCI image
-	Digest     v1.Hash       // manifest digest
-	Subject    v1.Descriptor // descriptor for referrer relationships
-	BinaryPath string        // host path of first binary (for SBOM)
+	Image   v1.Image      // assembled OCI image
+	Digest  v1.Hash       // manifest digest
+	Subject v1.Descriptor // descriptor for referrer relationships
 }
 
 // AssembleImage is the pure computational core of OCI image construction.
@@ -66,7 +65,7 @@ type AssembleResult struct {
 // given identical (base, spec, inputPaths), the output Digest must match.
 func AssembleImage(base v1.Image, spec *lane.PackSpec, inputPaths map[string]string) (*AssembleResult, error) {
 	// 1. Add file layers
-	img, binaryPath, err := addFileLayers(base, spec.Files, inputPaths)
+	img, err := addFileLayers(base, spec.Files, inputPaths)
 	if err != nil {
 		return nil, err
 	}
@@ -107,9 +106,8 @@ func AssembleImage(base v1.Image, spec *lane.PackSpec, inputPaths map[string]str
 	}
 
 	return &AssembleResult{
-		Image:      img,
-		Digest:     imgDigest,
-		BinaryPath: binaryPath,
+		Image:  img,
+		Digest: imgDigest,
 		Subject: v1.Descriptor{
 			MediaType: imgMediaType,
 			Digest:    imgDigest,
@@ -125,7 +123,7 @@ func AssembleImage(base v1.Image, spec *lane.PackSpec, inputPaths map[string]str
 // the step references a cosign_key secret (see executePack).
 //
 // Pack is the orchestrator: it handles I/O (pull, write) and delegates
-// to pure functions (AssembleImage, SignManifest, GenerateSBOM) for the
+// to pure functions (AssembleImage, SignManifest, GenerateImageSBOM) for the
 // security-critical computations.
 func Pack(ctx context.Context, opts PackOpts) (*PackResult, error) {
 	// 1. Pull and verify the base image (network I/O)
@@ -140,15 +138,27 @@ func Pack(ctx context.Context, opts PackOpts) (*PackResult, error) {
 		return nil, fmt.Errorf("pack: %w", err)
 	}
 
-	// 3. Generate SBOM (reads binary buildinfo + probes remote registry)
+	// 3. Catalog the assembled image filesystem in-process (sealed, layer V):
+	// flatten the image to an fs.FS and emit both CycloneDX and SPDX 2.3 bound
+	// to the artifact's digest. No registry probe and no base-SBOM fetch --
+	// verified base-SBOM ingestion against base_sbom_signers is a later
+	// instruction. An empty catalog is surfaced as INFO inside the cataloger.
 	buildTime := clock.Reproducible()
-	sbomBytes, err := GenerateSBOM(assembled.BinaryPath, assembled.Digest.String(), string(opts.Spec.Base), buildTime)
+	imageFS, err := flattenImageToFS(assembled.Image)
+	if err != nil {
+		return nil, fmt.Errorf("pack: flatten image: %w", err)
+	}
+	cdxBytes, spdxBytes, err := GenerateImageSBOM(imageFS, assembled.Digest.String(), buildTime)
 	if err != nil {
 		return nil, fmt.Errorf("pack: sbom: %w", err)
 	}
-	sbomImage, err := artifactImage(sbomBytes, "application/vnd.cyclonedx+json", assembled.Subject)
+	cdxImage, err := artifactImage(cdxBytes, "application/vnd.cyclonedx+json", assembled.Subject)
 	if err != nil {
-		return nil, fmt.Errorf("pack: SBOM artifact: %w", err)
+		return nil, fmt.Errorf("pack: cyclonedx artifact: %w", err)
+	}
+	spdxImage, err := artifactImage(spdxBytes, "application/spdx+json", assembled.Subject)
+	if err != nil {
+		return nil, fmt.Errorf("pack: spdx artifact: %w", err)
 	}
 
 	// 4. Sign the image manifest digest -- optional, gated on a cosign_key
@@ -169,7 +179,7 @@ func Pack(ctx context.Context, opts PackOpts) (*PackResult, error) {
 
 	// 5. Write OCI layout (filesystem I/O). The signature manifest is
 	// appended only when the image was signed.
-	if err := writeOCILayout(assembled.Image, sbomImage, sigImage, opts.OutputRoot, opts.OutputName, assembled.Digest.String()); err != nil {
+	if err := writeOCILayout(assembled.Image, []v1.Image{cdxImage, spdxImage}, sigImage, opts.OutputRoot, opts.OutputName, assembled.Digest.String()); err != nil {
 		return nil, err
 	}
 
@@ -177,37 +187,32 @@ func Pack(ctx context.Context, opts PackOpts) (*PackResult, error) {
 }
 
 // addFileLayers appends a layer for each file entry, returning the updated
-// image and the host path of the first binary (used for SBOM generation).
-// When the host path is a directory, a dirLayer is created instead of a
-// fileLayer; the directory tree is mirrored at dest in the container image.
-func addFileLayers(img v1.Image, files []lane.PackFile, inputPaths map[string]string) (v1.Image, string, error) {
-	var binaryPath string
+// image. When the host path is a directory, a dirLayer is created instead of
+// a fileLayer; the directory tree is mirrored at dest in the container image.
+func addFileLayers(img v1.Image, files []lane.PackFile, inputPaths map[string]string) (v1.Image, error) {
 	for _, f := range files {
 		dest := f.Dest.String()
 		hostPath, ok := inputPaths[dest]
 		if !ok {
-			return nil, "", fmt.Errorf("pack: file dest %q: host path not resolved", dest)
+			return nil, fmt.Errorf("pack: file dest %q: host path not resolved", dest)
 		}
 		info, err := os.Lstat(hostPath)
 		if err != nil {
-			return nil, "", fmt.Errorf("pack: stat %q: %w", dest, err)
+			return nil, fmt.Errorf("pack: stat %q: %w", dest, err)
 		}
 		switch {
 		case info.IsDir():
 			img, err = appendDirLayer(img, hostPath, dest)
 		case info.Mode().IsRegular():
-			if binaryPath == "" {
-				binaryPath = hostPath
-			}
 			img, err = appendRegularFileLayer(img, hostPath, dest, f.Mode)
 		default:
-			return nil, "", fmt.Errorf("pack: %q: unsupported file type %v", dest, info.Mode().Type())
+			return nil, fmt.Errorf("pack: %q: unsupported file type %v", dest, info.Mode().Type())
 		}
 		if err != nil {
-			return nil, "", fmt.Errorf("pack: %w", err)
+			return nil, fmt.Errorf("pack: %w", err)
 		}
 	}
-	return img, binaryPath, nil
+	return img, nil
 }
 
 // appendDirLayer creates a directory layer from hostPath and appends it to img.
@@ -323,7 +328,7 @@ func applyConfig(img v1.Image, spec *lane.PackSpec) (v1.Image, error) {
 
 // writeOCILayout writes the main image, SBOM, and signature to an OCI layout
 // tar in the given output root.
-func writeOCILayout(img, sbomImage, sigImage v1.Image, outputRoot *os.Root, outputName, imgDigest string) error {
+func writeOCILayout(img v1.Image, sbomImages []v1.Image, sigImage v1.Image, outputRoot *os.Root, outputName, imgDigest string) error {
 	layoutDir, err := os.MkdirTemp("", "strike-pack-layout-")
 	if err != nil {
 		return fmt.Errorf("pack: temp dir: %w", err)
@@ -339,8 +344,10 @@ func writeOCILayout(img, sbomImage, sigImage v1.Image, outputRoot *os.Root, outp
 	})); err != nil {
 		return fmt.Errorf("pack: append main image: %w", err)
 	}
-	if err := lp.AppendImage(sbomImage); err != nil {
-		return fmt.Errorf("pack: append SBOM: %w", err)
+	for _, si := range sbomImages {
+		if err := lp.AppendImage(si); err != nil {
+			return fmt.Errorf("pack: append SBOM: %w", err)
+		}
 	}
 	if sigImage != nil {
 		if err := lp.AppendImage(sigImage); err != nil {

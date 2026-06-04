@@ -19,15 +19,28 @@ See also: [DESIGN-PRINCIPLES.md](DESIGN-PRINCIPLES.md)
 
 ## What is strike?
 
-strike is a cloud-native lane executor that treats containers as the only
-unit of computation. Every step runs in a pinned, digest-verified OCI image
-with network disabled by default. There is no shell interpreter, no script
-block evaluation, no implicit host dependency beyond a working rootless
-container runtime.
+strike produces verifiable supply-chain provenance for the artifacts it
+builds. Each lane run yields a signed, transparency-logged attestation that
+records what was built, from which digest-pinned inputs, in what runtime, and
+under which declared identity -- a record a consumer can check offline,
+without trusting strike or the engine that ran the work. In an increasingly
+containerized world the artifact's own contents are the input that matters,
+so strike catalogs the image it assembled in-process and emits it as a
+first-class CycloneDX and SPDX 2.3 SBOM bound to the artifact's digest.
 
-Lanes are declared in YAML, validated against a CUE schema, and executed as
-a content-addressable DAG. Outputs are cached as OCI artifacts in any standard
-registry.
+The execution model exists to keep that attestation sound. Every step runs in
+a pinned, digest-verified OCI image with no shell, no privilege escalation,
+and no network unless its peers are declared; the controller spawns no
+subprocesses and holds no long-lived keys. Mutable references are rejected
+before the DAG is built, and byte-identical inputs must produce byte-identical
+outputs, so an independent implementation can re-derive the result and check
+it. Claims the controller can vouch for itself are kept separate from claims
+only the engine can make, so a verifier always knows which survive without
+trusting the engine.
+
+Lanes are declared in YAML, validated against a CUE schema, and executed as a
+content-addressable DAG. Outputs and their attestations are stored as OCI
+artifacts in any standard registry.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the security architecture, SLSA 3
 compliance analysis, and trust boundary model.
@@ -191,7 +204,8 @@ internal/
     validate.go                   Output validation (magic bytes, size bounds)
     pack.go                       OCI image assembly (native Go, no container)
     sign.go                       ECDSA P-256 cosign-compatible signing
-    sbom.go                       CycloneDX 1.6 SBOM generation
+    catalog.go                    Native SBOM cataloger (CycloneDX + SPDX 2.3)
+    flatten.go                    In-memory image flattening (image -> fs.FS)
   registry/
     cache.go                      Spec hashing and cache tagging
     client.go                     Registry operations (Engine API, go-containerregistry)

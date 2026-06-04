@@ -4,9 +4,12 @@ import (
 	"bufio"
 	"bytes"
 	"crypto/sha256"
+	"debug/buildinfo"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/fs"
+	"log"
 	"sort"
 	"strings"
 
@@ -26,7 +29,7 @@ type component struct {
 	Name      string
 	Version   string
 	PURL      string
-	Ecosystem string // "npm" or "deb"
+	Ecosystem string // "npm", "deb", or "golang"
 }
 
 // GenerateImageSBOM catalogs an extracted root filesystem and produces
@@ -37,6 +40,10 @@ func GenerateImageSBOM(fsys fs.FS, subjectDigest string, buildTime clock.Time) (
 	components, err := walkAndCatalog(fsys)
 	if err != nil {
 		return nil, nil, fmt.Errorf("catalog filesystem: %w", err)
+	}
+
+	if len(components) == 0 {
+		log.Printf("INFO   sbom: no components cataloged for %s", subjectDigest)
 	}
 
 	sortComponents(components)
@@ -79,6 +86,9 @@ func walkAndCatalog(fsys fs.FS) ([]component, error) {
 				return fmt.Errorf("parse %s: %w", path, parseErr)
 			}
 			components = append(components, parsed...)
+		default:
+			parsed := catalogGoBinary(fsys, path, d)
+			components = append(components, parsed...)
 		}
 		return nil
 	})
@@ -86,6 +96,26 @@ func walkAndCatalog(fsys fs.FS) ([]component, error) {
 		return nil, err
 	}
 	return components, nil
+}
+
+// catalogGoBinary attempts to read Go build info from an executable file.
+// Returns nil if the file is not a regular executable or not a Go binary.
+func catalogGoBinary(fsys fs.FS, path string, d fs.DirEntry) []component {
+	if !d.Type().IsRegular() {
+		return nil
+	}
+	info, err := d.Info()
+	if err != nil {
+		return nil
+	}
+	if info.Mode()&0o111 == 0 {
+		return nil
+	}
+	parsed, err := parseGoBuildinfo(fsys, path)
+	if err != nil {
+		return nil // not a Go binary -- skip silently
+	}
+	return parsed
 }
 
 // npmLockfile is the minimal structure of a package-lock.json.
@@ -231,6 +261,62 @@ func parseDpkgStatus(fsys fs.FS, path string) ([]component, error) {
 		return nil, err
 	}
 	return components, nil
+}
+
+// parseGoBuildinfo attempts to read Go build info from an executable file
+// and returns its module dependencies as components. Returns an error if
+// the file is not a Go binary (callers skip silently).
+func parseGoBuildinfo(fsys fs.FS, path string) ([]component, error) {
+	f, err := fsys.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer closer.Warn(f, "go-buildinfo")
+
+	var info *buildinfo.BuildInfo
+	if ra, ok := f.(io.ReaderAt); ok {
+		info, err = buildinfo.Read(ra)
+	} else {
+		var data []byte
+		data, err = io.ReadAll(f)
+		if err != nil {
+			return nil, err
+		}
+		info, err = buildinfo.Read(bytes.NewReader(data))
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	var components []component
+	if info.Main.Path != "" && info.Main.Version != "" {
+		purl := golangPURL(info.Main.Path, info.Main.Version)
+		components = append(components, component{
+			Name:      info.Main.Path,
+			Version:   info.Main.Version,
+			PURL:      purl,
+			Ecosystem: "golang",
+		})
+	}
+	for _, dep := range info.Deps {
+		if dep.Path == "" || dep.Version == "" {
+			continue
+		}
+		purl := golangPURL(dep.Path, dep.Version)
+		components = append(components, component{
+			Name:      dep.Path,
+			Version:   dep.Version,
+			PURL:      purl,
+			Ecosystem: "golang",
+		})
+	}
+	return components, nil
+}
+
+// golangPURL builds a package URL for a Go module.
+func golangPURL(path, version string) string {
+	p := packageurl.NewPackageURL("golang", "", path, version, nil, "")
+	return p.ToString()
 }
 
 // dpkgPURL builds a package URL for a Debian package.

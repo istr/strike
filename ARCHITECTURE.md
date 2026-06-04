@@ -50,8 +50,9 @@ Notes:
 
 Security-critical operations use **native Go libraries** within the controller
 process: `go-containerregistry` for OCI image assembly, `sigstore-go` (planned)
-for signing and verification, `cyclonedx-go` for SBOM generation, and
-`in-toto/attestation` (planned) for provenance construction.
+for signing and verification, `cyclonedx-go` and `spdx/tools-golang` for SBOM
+generation (CycloneDX and SPDX 2.3), and `in-toto/attestation` (planned) for
+provenance construction.
 
 Build workload execution uses the **container engine API** over Unix socket or
 TLS-secured TCP, treating the engine as an untrusted worker. The controller
@@ -69,9 +70,9 @@ external operations run inside containers via the Engine API.
 | TRUSTED: strike controller process                  |
 |                                                     |
 |  +-----------+ +----------+ +-------------------+   |
-|  | go-       | | ECDSA    | | CycloneDX SBOM    |   |
-|  | container | | signing  | | generation        |   |
-|  | registry  | | (P-256)  | |                   |   |
+|  | go-       | | ECDSA    | | CycloneDX + SPDX  |   |
+|  | container | | signing  | | SBOM generation   |   |
+|  | registry  | | (P-256)  | | (in-process)      |   |
 |  +-----------+ +----------+ +-------------------+   |
 |                                                     |
 |  +----------------------------------------------+   |
@@ -194,8 +195,11 @@ The full non-repudiation chain for a strike-produced artifact:
    full `#SignedArtifact` record: content-addressed digest (computed by the
    controller via `go-containerregistry`), signature metadata, SBOM digest,
    and Rekor transparency log entry. Schema: `specs/artifact.cue`.
-5. **SBOM** -- generated in-process from Go build info and base image referrers.
-   The SBOM digest is recorded in the artifact's `#SBOMRecord`.
+5. **SBOM** -- generated in-process by cataloging the assembled image's
+   flattened filesystem (npm lockfiles, dpkg status, Go buildinfo). Both
+   CycloneDX and SPDX 2.3 are emitted as OCI referrers bound to the
+   artifact's digest. The SBOM is a sealed (layer V) claim: produced from
+   bytes the control plane holds, not from engine-relayed content.
 6. **Signature** -- ECDSA P-256 over manifest digest, recorded in Rekor
    transparency log. Signing metadata is captured in `#SignatureRecord`.
 7. **Attestation** -- SLSA Provenance predicate with all inputs, parameters,
