@@ -1,6 +1,6 @@
 # ADR-040 Implementation Roadmap
 
-## Status: IN PROGRESS (instructions 1, 2 done; instructions 3--5 remain)
+## Status: IN PROGRESS (instructions 1, 2, 3a done; 3b in progress; instructions 4--5 remain)
 
 ADR-040 is Accepted and plumbed: the decision record is at
 `docs/ADR-040-control-plane-sbom-and-keyless-attestation.md`, registered in
@@ -58,7 +58,27 @@ established numbered instruction-file sequence.
     (sigstore-go/pkg/sign + sigstore/pkg/oauthflow + go-containerregistry)
     compiles the full chain (OIDC -> Fulcio -> DSSE -> Rekor v2 -> referrer
     attach) at roughly one third the binary size of cosign-as-a-library and
-    without the cloud-KMS provider clusters. Decision: compose.
+    without the cloud-KMS provider clusters. Decision: compose. Subsequent
+    D-3b-1 decision: demote sigstore-go to test-only crossval oracle; produce
+    bundles hand-rolled via protobuf-specs (smaller dependency surface).
+- **Instruction 3b-i -- hand-rolled keyless bundle core (D2).**
+  `internal/deploy/keyless.go`: `signStatementKeyless` signs a projected
+  in-toto statement with an ephemeral key in ASN.1 DER ECDSA (sigstore
+  verifiers reject strike's internal raw r||s format);
+  `assembleKeylessBundle` builds a sigstore v0.3 bundle (single leaf cert,
+  Rekor v2 tlog entry, RFC3161 timestamp -- no SET, trusted time from the
+  timestamp) and marshals it via protojson. `protobuf-specs` is the only
+  new production dependency. `internal/deploy/keyless_test.go`: a hermetic
+  crossval test signs a fixture with strike's DER signing and verifies the
+  assembled bundle against sigstore-go's `pkg/verify` (`VirtualSigstore`
+  trust root, `WithTransparencyLog` + `WithSignedTimestamps`). sigstore-go
+  is a test-only oracle and stays out of the binary's import graph. This
+  closes the D-3b-1 open question: a DSSE signature strike produces verifies
+  under the canonical sigstore verifier.
+- **Decision basis: D-3b-1 (ratified).** The hand-rolled producer
+  (sigstore-go demoted to test-only crossval oracle) is ratified. strike
+  signs in ASN.1 DER and assembles the bundle itself using protobuf-specs;
+  sigstore-go is the verification oracle, never a production dependency.
 - **Verify foundation (from ADR-037).** The `internal/verify` package
   (DSSE envelope parsing, payload-type guard, ECDSA P-256 signature
   verification over PAE) exists and is the base instruction 5 builds on. It
@@ -95,13 +115,14 @@ Fulcio/Rekor verification machinery). Base OS packages are still captured
 for catalogable bases because flattening includes the base layers and the
 cataloger reads their dpkg database directly.
 
-### D2 -- keyless signing, in-process
+### D2 -- keyless signing, in-process -- PARTIAL (3b-i done; 3b-ii remains)
 
-No sigstore / Fulcio / oauthflow / rekor-tiles import exists; the only
-`dev.sigstore.cosign/*` references are the existing cosign-tag referrer
-annotations on the registry side, not a signing path. Signing remains
-operator-key / ECDSA P-256 DSSE. Replaced by the composed keyless chain in
-instruction 3.
+The hand-rolled keyless core exists (`internal/deploy/keyless.go`):
+ASN.1 DER signing and sigstore v0.3 bundle assembly via protobuf-specs,
+proven by a hermetic crossval test against sigstore-go's verifier. The
+core is additive and unreferenced by production code; wiring into the
+deploy path (Fulcio/Rekor/TSA network clients, OIDC token acquisition,
+output-file changes) is instruction 3b-ii.
 
 ### D3 -- cosign-compatible OCI referrers, layered by trust
 
@@ -205,9 +226,18 @@ to instruction 4: the deploy attestation is recorded in lane state plus Rekor
 plus the output dir today, and the three referrers materialize on the pushed
 digest.
 
-**3b (next).** Replace the operator-key DSSE with the composed keyless chain
-(ephemeral key -> Fulcio -> DSSE -> Rekor v2 -> bundle, sigstore-go) over the
-same three statements; reorient `internal/verify`.
+**3b-i (done).** Hand-rolled keyless bundle core: `signStatementKeyless`
+(ASN.1 DER ECDSA signing) and `assembleKeylessBundle` (sigstore v0.3 bundle
+assembly via protobuf-specs). Hermetic crossval test signs a fixture with
+strike's DER signing and verifies the assembled bundle against sigstore-go's
+`pkg/verify`. sigstore-go is a test-only oracle (not in the binary's import
+graph). `protobuf-specs` is the only new production dependency. D-3b-1
+ratified the hand-rolled producer.
+
+**3b-ii (next).** Wire the keyless core into the deploy path: Fulcio/Rekor/TSA
+network clients, OIDC token acquisition, output-file changes (three
+`*.sigstore.json` bundles replace the three `*.dsse.json` envelopes), schema
+(`#KeylessEndpoints`), and reorientation of `internal/verify`.
 
 Depends on: instructions 1 and 2 (both done: predicates and the SBOM).
 This is also the cross-roadmap unblock: see "Cross-roadmap dependencies".

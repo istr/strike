@@ -13,3 +13,9 @@ var DeploySchema = deploySchema
 
 // ProjectStatements exposes projectStatements for the external test package.
 var ProjectStatements = projectStatements
+
+// SignStatementKeyless exposes signStatementKeyless for the external test package.
+var SignStatementKeyless = signStatementKeyless
+
+// AssembleKeylessBundle exposes assembleKeylessBundle for the external test package.
+var AssembleKeylessBundle = assembleKeylessBundle

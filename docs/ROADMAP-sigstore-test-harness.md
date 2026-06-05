@@ -16,9 +16,11 @@ that ADR-040 D5 and instruction 5 verify against.
 
 ADR-040 resolves the client question that the earlier framing left open:
 
-- strike is the producer. It drives the keyless chain in-process
-  (sigstore-go/pkg/sign + sigstore/pkg/oauthflow + go-containerregistry),
-  never by spawning cosign (D2; no exec).
+- strike is the producer. It drives the keyless chain in-process with a
+  hand-rolled bundle producer (protobuf-specs for the wire format,
+  ASN.1 DER ECDSA signing, direct Fulcio/Rekor/TSA HTTP clients), never
+  by spawning cosign (D2; no exec). sigstore-go is a test-only crossval
+  oracle (D-3b-1 ratified).
 - cosign is the independent verifier. ADR-040 requires that strike's
   outputs verify offline under cosign and SLSA tooling, without contacting
   strike or the original engine. cosign verify-attestation against this
