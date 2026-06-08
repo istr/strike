@@ -244,3 +244,6 @@ record stays informational.
 - **Code is liability.** The resolver record reuses the engine-record
   shape (`resolverRecord()` parallel to `engineRecord()`); no second
   handshake and no per-record TLS code.
+- **Observation over declaration.** The recorded resolver identity is the
+  one observed at the handshake; a declared `resolver.trust` anchor is the
+  thing checked against that observation, not a substitute for it.

@@ -61,18 +61,18 @@ referenced here at all.
 | 025 | [SSH peer client-identity enforcement](ADR-025-ssh-peer-client-identity-enforcement.md)        | Accepted | Identity is asymmetric; No root; Code is liability; Peers are declared; Enforcement is structural |
 | 026 | [Containers as sole inter-step storage object](ADR-026-containers-as-sole-inter-step-storage.md) | Accepted | Containers are the only storage; Code is liability; Digest-pinned references; Reproducibility |
 | 027 | [Subpath selection on inputs](ADR-027-input-subpath-selection.md) | Accepted | Code is liability; CUE first; Digest-pinned references; Reproducibility |
-| 028 | [Step-Container Egress Mediation](ADR-028-step-container-egress-mediation.md) | Accepted | No root; Peers are declared; Identity is asymmetric; Enforcement is structural; Runtime is attested; Code is liability |
+| 028 | [Step-Container Egress Mediation](ADR-028-step-container-egress-mediation.md) | Accepted | No root; Peers are declared; Identity is asymmetric; Enforcement is structural; Runtime is attested; Code is liability; Observation over declaration |
 | 029 | [Peers are container-egress contracts; the OCI peer type is removed](ADR-029-peers-are-container-egress.md) | Accepted | Peers are declared; Identity is asymmetric; Digest-pinned references; Enforcement is structural; Code is liability |
-| 030 | [Controller-side connection recording follows the trust chain, not the connection count](ADR-030-controller-side-connection-recording.md) | Accepted | Runtime is attested; Identity is asymmetric; Digest-pinned references; Code is liability |
+| 030 | [Controller-side connection recording follows the trust chain, not the connection count](ADR-030-controller-side-connection-recording.md) | Accepted | Runtime is attested; Identity is asymmetric; Digest-pinned references; Code is liability; Observation over declaration |
 | 031 | [pasta --splice-only Toolchain Dependency and Platform Support](ADR-031-pasta-splice-only-dependency.md) | Accepted | No root; Peers are declared; Digest-pinned references; Reproducibility; Code is liability; Enforcement is structural |
 | 032 | [Peer TLS version floor](ADR-032-peer-tls-version-floor.md) | Accepted | Restricted by default; Peers are declared; Code is liability |
 | 033 | [SSH Peer Egress and Unified Capsule Mediation](ADR-033-ssh-peer-egress-and-unified-mediation.md) | Accepted | Peers are declared; Identity is asymmetric; No root; Runtime is attested; Code is liability; Enforcement is structural |
 | 034 | [Symlink Containment at Wrap and Mount](ADR-034-symlink-containment.md) | Accepted | Restricted by default; Reproducibility; Digest-pinned references; Code is liability; Enforcement is structural |
 | 035 | [Build payload stays in the engine; outputs are workdir-volume projections](ADR-035-build-payload-in-engine.md) | Accepted | Containers are the only storage; Enforcement is structural; Reproducibility; Digest-pinned references; CUE first; Code is liability |
 | 036 | [Engine-native step input delivery](ADR-036-engine-native-input-delivery.md) | Accepted | Containers are the only storage; Digest-pinned references; Reproducibility; Code is liability; Enforcement is structural |
-| 037 | [Two trust layers toward the engine](ADR-037-two-engine-trust-layers.md) | Accepted | Runtime is attested; Identity is asymmetric; Code is liability; Reproducibility; Enforcement is structural |
+| 037 | [Two trust layers toward the engine](ADR-037-two-engine-trust-layers.md) | Accepted | Runtime is attested; Identity is asymmetric; Code is liability; Reproducibility; Enforcement is structural; Observation over declaration |
 | 038 | [Protocol-mediated SSH via a control-plane front](ADR-038-protocol-mediated-ssh.md) | Accepted | No shell; Peers are declared; Identity is asymmetric; Runtime is attested; Digest-pinned references; Code is liability; Enforcement is structural |
-| 039 | [The deploy step as attestation root](ADR-039-deploy-step-as-attestation-root.md) | Accepted | Code is liability; CUE first; Reproducibility |
+| 039 | [The deploy step as attestation root](ADR-039-deploy-step-as-attestation-root.md) | Accepted | Code is liability; CUE first; Reproducibility; Observation over declaration |
 | 040 | [Control-plane SBOM generation and keyless attestation](ADR-040-control-plane-sbom-and-keyless-attestation.md) | Accepted | Runtime is attested; Identity is asymmetric; Peers are declared; Digest-pinned references; Reproducibility; Code is liability; No exec |
 
 ## By principle
@@ -148,6 +148,10 @@ ADR-032, ADR-034.
 
 ADR-005, ADR-006, ADR-022, ADR-024, ADR-025, ADR-028, ADR-029,
 ADR-031, ADR-033, ADR-034, ADR-035, ADR-036, ADR-037, ADR-038.
+
+### Observation over declaration
+
+ADR-028, ADR-030, ADR-037, ADR-039.
 
 ## Format
 

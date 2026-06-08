@@ -269,6 +269,42 @@ what lets an attestation record what the runtime actually imposed rather
 than what a configuration hoped it would.
 
 
+## Observation over declaration
+
+A declaration is a claim about what should be true; an observation is a
+record of what strike actually saw. Where the two diverge, the
+observation governs. strike attests and acts on what it observed, never
+on what was declared in its place, and a declaration the runtime does not
+bear out is rejected rather than trusted. The signed record is therefore a
+statement of fact, not of intent -- the only thing a downstream verifier
+can check.
+
+The pattern recurs throughout the architecture:
+
+- The attestation records what happened, not what was intended: the engine
+  identity and transport fingerprint as captured at the handshake, the
+  resolved digests of the inputs actually pulled, the pre- and post-action
+  state of a deploy as snapshotted -- not the lane's stated goal for any of
+  them.
+- The SBOM cataloger reads the compiled set from the binary's build info
+  (`debug/buildinfo`, what `go version -m` reports), not the declared module
+  graph (`go.mod`/`go.sum`). A module that is required but contributes no
+  compiled code is not part of the artifact and is not cataloged; the
+  reachable surface is the real one, and the module graph overstates it.
+- A mediator certifies only what passed through it. Exhaustiveness of
+  mediation is a declaration no record can support, so the attestation
+  states observed passage, never a claim of completeness.
+- Engine-verified facts (Layer V) outrank engine-asserted ones (Layer E):
+  whether a fact was independently observed or merely declared by the
+  engine is exactly what sets the trust layer it occupies.
+
+This is the epistemic floor under "runtime is attested": that principle
+says the runtime context is recorded; this one says the record is of the
+observed context, and that an observation always defeats a conflicting
+declaration. An attestation built on declarations would certify hopes;
+built on observations, it certifies facts.
+
+
 ## How the principles interact
 
 The principles reinforce each other in ways worth naming explicitly:

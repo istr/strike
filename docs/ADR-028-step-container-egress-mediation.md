@@ -659,3 +659,6 @@ implementation reaches it:
 - **Code is liability.** One TLS verification implementation
   (`internal/transport`); multiple consumers (resolver, mediator,
   audit, verify). No per-consumer ad-hoc TLS code.
+- **Observation over declaration.** The mediator records the connection
+  identities and metadata it observed passing through it; it certifies the
+  observed traffic, never a declared claim of mediation completeness.

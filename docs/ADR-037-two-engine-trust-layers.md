@@ -307,3 +307,7 @@ expose the plane.
   integrity, D3).
 - **Enforcement is structural, not discretionary** (the layer a guarantee sits
   in is a property of its mechanism, not a per-lane choice).
+- **Observation over declaration.** Whether strike independently observed a
+  fact (Layer V) or the engine merely asserted it (Layer E) is what sets the
+  layer it occupies; an unobserved engine assertion never rises to a verified
+  fact.

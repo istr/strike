@@ -194,3 +194,6 @@ those of its predecessors.
 - **Reproducibility is enforced.** A branch-scoped attestation is a
   deterministic function of its sub-tree, independent of unrelated branches and
   of execution interleaving.
+- **Observation over declaration.** A deploy attestation records the observed
+  pre- and post-action state, not the lane's intended outcome; what is signed
+  is what the runtime did.
