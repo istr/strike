@@ -18,10 +18,13 @@ infrastructure -- not part of the strike binary.
 
     make up
     make check-issuer   # both lines must print the same issuer string
+    make token          # print an OIDC id_token for tester@strike.localhost
+    make tsa-certchain  # fetch the TSA certificate chain to pki/tsa-certchain.pem
 
 ## Layout
 
-- `compose.yaml` -- the stack. witness, tsa, probe are non-default profiles.
+- `compose.yaml` -- the stack. witness and probe are non-default profiles; TSA
+  runs by default (Rekor v2 Path 1 requires RFC3161 timestamps).
 - `caddy/Caddyfile` -- TLS terminator (internal CA) + reverse proxy to Keycloak.
 - `fulcio/config.yaml` -- OIDC issuer (canonical issuer, type email).
 - `keycloak/realm-export.json` -- realm `sigstore`, public client `sigstore`,
@@ -130,9 +133,9 @@ separate nginx for it.
 - R-5 -- `compose cp`. If your compose provider does not support
   `compose cp SERVICE:PATH`, export the Caddy root with `podman cp <container>
   /data/caddy/pki/authorities/local/root.crt pki/caddy-root.crt` instead.
-- R-6 -- Fulcio CA trust (NOT wired here). At the first sign (instruction 3),
-  Fulcio must trust the Caddy CA to validate Keycloak discovery: mount
-  `pki/caddy-root.crt` into Fulcio and point `SSL_CERT_FILE` at it.
+- R-6 -- Fulcio CA trust (WIRED). `pki/caddy-root.crt` is mounted into Fulcio
+  and `SSL_CERT_FILE` points at it, so Fulcio validates Keycloak discovery TLS.
+  `make up` brings Caddy up first, extracts the root, then starts the rest.
 - caddy_data must be writable by the container user; with a named volume under
   rootless Podman this is automatic.
 

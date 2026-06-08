@@ -5,7 +5,7 @@ ISSUER    := https://keycloak.127.0.0.1.sslip.io:8443/realms/sigstore
 DISCOVERY := $(ISSUER)/.well-known/openid-configuration
 CADDY_ROOT := pki/caddy-root.crt
 
-.PHONY: keys up down clean caddy-root check-issuer preflight
+.PHONY: keys up down clean caddy-root check-issuer preflight token tsa-certchain
 
 keys: pki/rekor-ed25519.pem ## generate the rekor log signer key (ed25519)
 
@@ -14,8 +14,9 @@ pki/rekor-ed25519.pem:
 	chmod 644 $@
 
 up: keys ## bring the stack up, export the caddy root, wait for readiness
-	$(COMPOSE) up -d
+	$(COMPOSE) up -d caddy
 	@$(MAKE) caddy-root
+	$(COMPOSE) up -d
 	@echo "waiting for issuer discovery (TLS validated against caddy root)..."
 	@for i in $$(seq 1 60); do \
 	  curl --cacert $(CADDY_ROOT) -sf $(DISCOVERY) >/dev/null 2>&1 && { echo "issuer ready"; exit 0; }; \
@@ -62,3 +63,20 @@ check-issuer: ## verify the issuer resolves identically from host and in-network
 	curl --cacert $(CADDY_ROOT) -sf $(DISCOVERY) | grep -o '"issuer":"[^"]*"'
 	@echo "== in-network (same vantage as Fulcio) =="
 	$(COMPOSE) --profile tools run --rm probe -sk $(DISCOVERY) | grep -o '"issuer":"[^"]*"'
+
+token: $(CADDY_ROOT) ## print an OIDC id_token for tester@strike.localhost (aud sigstore)
+	@curl --cacert $(CADDY_ROOT) -sf \
+	  -d grant_type=password -d client_id=sigstore \
+	  -d username=tester -d password=tester -d scope=openid \
+	  $(ISSUER)/protocol/openid-connect/token \
+	  | grep -o '"id_token":"[^"]*"' | sed 's/.*:"//;s/"$$//'
+
+tsa-certchain: pki/tsa-certchain.pem ## fetch the TSA certificate chain (PEM)
+
+pki/tsa-certchain.pem:
+	@echo "waiting for TSA certchain..."
+	@for i in $$(seq 1 30); do \
+	  curl -sf http://localhost:3004/api/v1/timestamp/certchain -o $@ \
+	    && { echo "exported $@"; exit 0; }; \
+	  sleep 2; \
+	done; echo "TSA certchain not available" >&2; exit 1
