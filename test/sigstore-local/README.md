@@ -21,17 +21,32 @@ infrastructure -- not part of the strike binary.
     make token          # print an OIDC id_token for tester@strike.localhost
     make tsa-certchain  # fetch the TSA certificate chain to pki/tsa-certchain.pem
 
+## Endpoints
+
+Every service is TLS-terminated by Caddy under one internal root
+(`pki/caddy-root.crt`) and reached over HTTPS via sslip.io. There is no
+plaintext endpoint -- a strike keyless producer pins this root as its
+`#TLSTrust` `ca_bundle` for every endpoint:
+
+- Fulcio: `https://fulcio.127.0.0.1.sslip.io:5555`
+- Rekor v2: `https://rekor.127.0.0.1.sslip.io:3003`
+- TSA: `https://tsa.127.0.0.1.sslip.io:3004`
+- Issuer (Keycloak): `https://keycloak.127.0.0.1.sslip.io:8443/realms/sigstore`
+
 ## Layout
 
 - `compose.yaml` -- the stack. witness and probe are non-default profiles; TSA
   runs by default (Rekor v2 Path 1 requires RFC3161 timestamps).
-- `caddy/Caddyfile` -- TLS terminator (internal CA) + reverse proxy to Keycloak.
+- `caddy/Caddyfile` -- TLS terminator (internal CA) + reverse proxy to
+  Keycloak, Fulcio, Rekor, and TSA. Every service strike dials is reached over
+  HTTPS under the Caddy internal root; there is no plaintext endpoint.
 - `fulcio/config.yaml` -- OIDC issuer (canonical issuer, type email).
 - `keycloak/realm-export.json` -- realm `sigstore`, public client `sigstore`,
   direct access grant on, verified test user `tester` / `tester`,
   email `tester@strike.localhost`.
-- `pki/` -- generated ed25519 rekor signer key and the exported Caddy root
-  (`caddy-root.crt`). Never committed.
+- `pki/` -- generated ed25519 rekor signer key, its exported public key
+  (`rekor-ed25519-pub.pem`, for trust-root assembly), and the exported Caddy
+  root (`caddy-root.crt`). Never committed.
 
 ## Canonical issuer and trust anchor
 

@@ -27,6 +27,9 @@ services:
           - keycloak.127.0.0.1.sslip.io
     ports:
       - "8443:8443"
+      - "5555:5555"
+      - "3003:3003"
+      - "3004:3004"
     depends_on:
       keycloak:
         condition: service_started
@@ -67,8 +70,6 @@ services:
       - SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
     networks:
       - sigstore
-    ports:
-      - "5555:5555"
     depends_on:
       keycloak:
         condition: service_started
@@ -94,10 +95,6 @@ services:
       - posix_storage:/data/log:U
     networks:
       - sigstore
-    ports:
-      - "3003:3000"
-      - "3001:3001"
-      - "2114:2112"
     # No container healthcheck and no depends_on: readiness is polled
     # functionally from the Makefile against the published port. rekor writes
     # its tiles to the storage dir directly; no HTTP tile server is needed for
@@ -136,5 +133,3 @@ services:
       - --timestamp-signer-hash=sha256
     networks:
       - sigstore
-    ports:
-      - "3004:3000"

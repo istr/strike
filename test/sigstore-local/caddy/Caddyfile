@@ -7,3 +7,18 @@ keycloak.127.0.0.1.sslip.io:8443 {
 	tls internal
 	reverse_proxy keycloak:8080
 }
+
+fulcio.127.0.0.1.sslip.io:5555 {
+	tls internal
+	reverse_proxy fulcio:5555
+}
+
+rekor.127.0.0.1.sslip.io:3003 {
+	tls internal
+	reverse_proxy rekor:3000
+}
+
+tsa.127.0.0.1.sslip.io:3004 {
+	tls internal
+	reverse_proxy tsa:3000
+}

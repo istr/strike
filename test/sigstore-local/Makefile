@@ -5,13 +5,16 @@ ISSUER    := https://keycloak.127.0.0.1.sslip.io:8443/realms/sigstore
 DISCOVERY := $(ISSUER)/.well-known/openid-configuration
 CADDY_ROOT := pki/caddy-root.crt
 
-.PHONY: keys up down clean caddy-root check-issuer preflight token tsa-certchain
+.PHONY: keys up down clean caddy-root check-issuer preflight token tsa-certchain rekor-pubkey
 
-keys: pki/rekor-ed25519.pem ## generate the rekor log signer key (ed25519)
+keys: pki/rekor-ed25519.pem pki/rekor-ed25519-pub.pem ## generate the rekor log signer key (ed25519) and its public key
 
 pki/rekor-ed25519.pem:
 	openssl genpkey -algorithm ed25519 -out $@
 	chmod 644 $@
+
+pki/rekor-ed25519-pub.pem: pki/rekor-ed25519.pem
+	openssl pkey -in $< -pubout -out $@
 
 up: keys ## bring the stack up, export the caddy root, wait for readiness
 	$(COMPOSE) up -d caddy
@@ -22,9 +25,9 @@ up: keys ## bring the stack up, export the caddy root, wait for readiness
 	  curl --cacert $(CADDY_ROOT) -sf $(DISCOVERY) >/dev/null 2>&1 && { echo "issuer ready"; exit 0; }; \
 	  sleep 2; \
 	done; echo "issuer not ready in time" >&2; exit 1
-	@echo "waiting for rekor /healthz..."
+	@echo "waiting for rekor /healthz (TLS validated against caddy root)..."
 	@for i in $$(seq 1 30); do \
-	  curl -sf http://localhost:3003/healthz 2>/dev/null | grep -q SERVING && { echo "rekor ready"; exit 0; }; \
+	  curl --cacert $(CADDY_ROOT) -sf https://rekor.127.0.0.1.sslip.io:3003/healthz 2>/dev/null | grep -q SERVING && { echo "rekor ready"; exit 0; }; \
 	  sleep 2; \
 	done; echo "rekor not ready in time" >&2; exit 1
 	@echo "stack ready"
@@ -73,10 +76,12 @@ token: $(CADDY_ROOT) ## print an OIDC id_token for tester@strike.localhost (aud 
 
 tsa-certchain: pki/tsa-certchain.pem ## fetch the TSA certificate chain (PEM)
 
-pki/tsa-certchain.pem:
-	@echo "waiting for TSA certchain..."
+pki/tsa-certchain.pem: $(CADDY_ROOT)
+	@echo "waiting for TSA certchain (TLS validated against caddy root)..."
 	@for i in $$(seq 1 30); do \
-	  curl -sf http://localhost:3004/api/v1/timestamp/certchain -o $@ \
+	  curl --cacert $(CADDY_ROOT) -sf https://tsa.127.0.0.1.sslip.io:3004/api/v1/timestamp/certchain -o $@ \
 	    && { echo "exported $@"; exit 0; }; \
 	  sleep 2; \
 	done; echo "TSA certchain not available" >&2; exit 1
+
+rekor-pubkey: pki/rekor-ed25519-pub.pem ## export the rekor log public key (for trust-root assembly)
