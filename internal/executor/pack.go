@@ -19,7 +19,6 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/layout"
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
-	"github.com/google/go-containerregistry/pkg/v1/static"
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
 	"github.com/google/go-containerregistry/pkg/v1/types"
 
@@ -27,6 +26,7 @@ import (
 
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/registry"
 )
 
 // PackOpts is everything pack needs; callers in main.go assemble this.
@@ -152,11 +152,11 @@ func Pack(ctx context.Context, opts PackOpts) (*PackResult, error) {
 	if err != nil {
 		return nil, fmt.Errorf("pack: sbom: %w", err)
 	}
-	cdxImage, err := artifactImage(cdxBytes, "application/vnd.cyclonedx+json", assembled.Subject)
+	cdxImage, err := registry.ArtifactImage(cdxBytes, "application/vnd.cyclonedx+json", assembled.Subject)
 	if err != nil {
 		return nil, fmt.Errorf("pack: cyclonedx artifact: %w", err)
 	}
-	spdxImage, err := artifactImage(spdxBytes, "application/spdx+json", assembled.Subject)
+	spdxImage, err := registry.ArtifactImage(spdxBytes, "application/spdx+json", assembled.Subject)
 	if err != nil {
 		return nil, fmt.Errorf("pack: spdx artifact: %w", err)
 	}
@@ -564,34 +564,6 @@ func appendEnv(env []string, key, value string) []string {
 		}
 	}
 	return append(env, entry)
-}
-
-// artifactImage creates a single-layer OCI artifact image with subject
-// descriptor for OCI 1.1 referrer relationship.
-func artifactImage(content []byte, artifactType string, subject v1.Descriptor) (v1.Image, error) {
-	layer := static.NewLayer(content, types.MediaType(artifactType))
-
-	img := mutate.MediaType(empty.Image, types.OCIManifestSchema1)
-	annotated, ok := mutate.Annotations(img, map[string]string{
-		"org.opencontainers.image.created": "1970-01-01T00:00:00Z",
-	}).(v1.Image)
-	if !ok {
-		return nil, fmt.Errorf("unexpected type from mutate.Annotations")
-	}
-	img = annotated
-
-	var err error
-	img, err = mutate.AppendLayers(img, layer)
-	if err != nil {
-		return nil, err
-	}
-
-	withSubject, ok := mutate.Subject(img, subject).(v1.Image)
-	if !ok {
-		return nil, fmt.Errorf("unexpected type from mutate.Subject")
-	}
-	img = withSubject
-	return img, nil
 }
 
 // tarDirectoryToRoot tars a directory and writes the output through outputRoot.

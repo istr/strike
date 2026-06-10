@@ -18,10 +18,19 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/google/go-containerregistry/pkg/name"
+	ggcrregistry "github.com/google/go-containerregistry/pkg/registry"
+	"github.com/google/go-containerregistry/pkg/v1/empty"
+	"github.com/google/go-containerregistry/pkg/v1/mutate"
+	"github.com/google/go-containerregistry/pkg/v1/remote"
+	"github.com/google/go-containerregistry/pkg/v1/static"
+	"github.com/google/go-containerregistry/pkg/v1/types"
 
 	"github.com/istr/strike/internal/capsule"
 	"github.com/istr/strike/internal/clock"
@@ -367,6 +376,123 @@ func TestDeployerExecute(t *testing.T) {
 	}
 	if att.Informational.PostStateDigest.IsZero() {
 		t.Error("expected non-zero post-state digest")
+	}
+}
+
+func TestDeployerExecuteRegistryAttachesReferrers(t *testing.T) {
+	eng := newTLSTestEngine(t, containerMock(t, "v1.2.3"))
+
+	srv := httptest.NewServer(ggcrregistry.New(ggcrregistry.WithReferrersSupport(true)))
+	t.Cleanup(srv.Close)
+	u, err := url.Parse(srv.URL)
+	if err != nil {
+		t.Fatalf("parse server url: %v", err)
+	}
+	host := "localhost:" + u.Port() // ggcr dials 127.0.0.1 via HTTPS; localhost via HTTP
+
+	src := host + "/src:v1"
+	img := mutate.MediaType(empty.Image, types.OCIManifestSchema1)
+	img, err = mutate.AppendLayers(img, static.NewLayer([]byte("artifact"), types.OCILayer))
+	if err != nil {
+		t.Fatalf("append layer: %v", err)
+	}
+	srcRef, err := name.ParseReference(src)
+	if err != nil {
+		t.Fatalf("parse src: %v", err)
+	}
+	if writeErr := remote.Write(srcRef, img); writeErr != nil {
+		t.Fatalf("seed source image: %v", writeErr)
+	}
+	imgDigest, err := img.Digest()
+	if err != nil {
+		t.Fatalf("digest: %v", err)
+	}
+
+	state := lane.NewState()
+	if regErr := state.Register("build", "image", lane.Artifact{
+		Type:   "image",
+		Digest: lane.MustParseDigest("sha256:abc1230000000000000000000000000000000000000000000000000000000000"),
+	}); regErr != nil {
+		t.Fatal(regErr)
+	}
+
+	step := &lane.Step{
+		Name: "deploy-prod",
+		Deploy: &lane.DeploySpec{
+			Method: lane.DeployRegistry{
+				Type:   "registry",
+				Source: src,
+				Target: host + "/app:v1",
+			},
+			Artifacts: map[string]lane.ArtifactRef{
+				"image": {From: "build.image"},
+			},
+			Target: lane.DeployTarget{ID: "prod-1", Type: "registry", Description: "production"},
+			Attestation: lane.AttestationSpec{
+				PreState:  lane.StateCaptureSpec{Capture: []lane.StateCapture{}},
+				PostState: lane.StateCaptureSpec{Capture: []lane.StateCapture{}},
+			},
+		},
+	}
+
+	ca, look, caPath, ports := deployCapsuleFields(t,
+		"capture:deploy-prod:version", "deploy-prod")
+
+	d := &deploy.Deployer{
+		Engine:       eng,
+		ArtifactRefs: map[string]string{"image": "build.image"},
+		LaneID:       "test-lane",
+		CA:           ca,
+		UpstreamLook: look,
+		CAVolume:     caPath,
+		StepName:     "deploy-prod",
+		StepPorts:    ports,
+	}
+	deploy.SetProduceBundles(d, stubProduceBundles())
+	if _, execErr := d.Execute(context.Background(), step, state); execErr != nil {
+		t.Fatalf("Execute: %v", execErr)
+	}
+
+	subjectRef, err := name.NewDigest(host + "/app@" + imgDigest.String())
+	if err != nil {
+		t.Fatalf("subject digest ref: %v", err)
+	}
+	index, err := remote.Referrers(subjectRef)
+	if err != nil {
+		t.Fatalf("Referrers: %v", err)
+	}
+	manifest, err := index.IndexManifest()
+	if err != nil {
+		t.Fatalf("IndexManifest: %v", err)
+	}
+	if len(manifest.Manifests) != 3 {
+		t.Fatalf("referrers = %d, want 3", len(manifest.Manifests))
+	}
+	want := map[string]bool{"sealed": false, "engine-context": false, "informational": false}
+	for _, desc := range manifest.Manifests {
+		dref, err := name.NewDigest(host + "/app@" + desc.Digest.String())
+		if err != nil {
+			t.Fatalf("referrer digest ref: %v", err)
+		}
+		rimg, err := remote.Image(dref)
+		if err != nil {
+			t.Fatalf("fetch referrer %s: %v", desc.Digest, err)
+		}
+		rimgMfst, err := rimg.Manifest()
+		if err != nil {
+			t.Fatalf("referrer manifest %s: %v", desc.Digest, err)
+		}
+		stmt := rimgMfst.Annotations["dev.strike.statement"]
+		if _, ok := want[stmt]; !ok {
+			t.Errorf("unexpected statement annotation %q", stmt)
+			continue
+		}
+		want[stmt] = true
+	}
+	for stmt, ok := range want {
+		if !ok {
+			t.Errorf("missing referrer for statement %q", stmt)
+		}
 	}
 }
 

@@ -20,6 +20,8 @@ import (
 	"path/filepath"
 	"strconv"
 
+	v1 "github.com/google/go-containerregistry/pkg/v1"
+
 	"github.com/istr/strike/internal/capsule"
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/container"
@@ -556,8 +558,10 @@ func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.Sta
 	// 3. Collect provenance records from transitive predecessors.
 	provenance := state.CollectProvenance(d.DAG, string(step.Name))
 
-	// 4. Execute deploy action.
-	if execErr := d.executeMethod(ctx, spec, step.Peers); execErr != nil {
+	// 4. Execute deploy action. For registry deploys the returned attach
+	// target carries the pushed manifest descriptor; nil otherwise.
+	attach, execErr := d.executeMethod(ctx, spec, step.Peers)
+	if execErr != nil {
 		return nil, fmt.Errorf("step %q: deploy action failed: %w", step.Name, execErr)
 	}
 
@@ -588,6 +592,20 @@ func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.Sta
 		return nil, err
 	}
 
+	// 8b. Attach the three statement bundles as OCI 1.1 referrers of the
+	// pushed manifest digest (ADR-040 D3), registry deploys only.
+	// Fail-closed: a deploy whose transparency artifacts cannot be bound
+	// to the artifact fails before the lane state records it.
+	if attach != nil {
+		if err := registry.AttachStatementBundles(ctx, attach.ref, attach.subject, []registry.StatementBundle{
+			{Statement: "sealed", Bundle: att.Signed.Sealed.Bundle},
+			{Statement: "engine-context", Bundle: att.Signed.EngineContext.Bundle},
+			{Statement: "informational", Bundle: att.Signed.Informational.Bundle},
+		}); err != nil {
+			return nil, fmt.Errorf("step %q: attach statement bundles: %w", step.Name, err)
+		}
+	}
+
 	// 9. Record in lane state.
 	if err := d.recordAttestation(att, step, state, started); err != nil {
 		return nil, fmt.Errorf("step %q: %w", step.Name, err)
@@ -604,8 +622,8 @@ func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.Sta
 // deploy that cannot obtain a certificate, a timestamp, or an inclusion
 // proof fails; there is no unsigned fallback. The bundle carries the
 // transparency proof, so no Rekor entry is mirrored into the collect-model.
-// The OCI-referrer attach of these bundles runs on the pushed digest
-// (instruction 4).
+// For registry deploys, the bundles are then attached as OCI referrers of
+// the pushed manifest digest (Execute step 8b).
 func (d *Deployer) signStatements(ctx context.Context, att *Attestation, stepName string) error {
 	slsa, engineCtx, info, err := projectStatements(att, d.OIDC)
 	if err != nil {
@@ -766,25 +784,35 @@ func (d *Deployer) captureOne(ctx context.Context, sc lane.StateCapture) (captur
 	}, nil
 }
 
-// executeMethod dispatches to the appropriate deploy method.
-func (d *Deployer) executeMethod(ctx context.Context, spec lane.DeploySpec, peers []lane.Peer) error {
+// attachTarget identifies where the signed statement bundles are attached
+// after signing: the pushed manifest descriptor within the deploy target
+// repository (ADR-040 D3). Nil for deploy methods without a registry push.
+type attachTarget struct {
+	ref     string        // deploy target reference (repository selector)
+	subject v1.Descriptor // pushed manifest descriptor (the referrer subject)
+}
+
+// executeMethod dispatches to the appropriate deploy method. It returns a
+// non-nil attach target only for registry deploys.
+func (d *Deployer) executeMethod(ctx context.Context, spec lane.DeploySpec, peers []lane.Peer) (*attachTarget, error) {
 	switch m := spec.Method.(type) {
 	case lane.DeployRegistry:
 		return executeRegistryDeploy(m)
 	case lane.DeployKubernetes:
-		return d.executeKubernetesDeploy(ctx, m, peers)
+		return nil, d.executeKubernetesDeploy(ctx, m, peers)
 	case lane.DeployCustom:
-		return d.executeCustomDeploy(ctx, m, peers)
+		return nil, d.executeCustomDeploy(ctx, m, peers)
 	default:
-		return fmt.Errorf("unknown deploy method type %q", spec.Method.MethodType())
+		return nil, fmt.Errorf("unknown deploy method type %q", spec.Method.MethodType())
 	}
 }
 
-func executeRegistryDeploy(m lane.DeployRegistry) error {
-	if err := registry.CopyImage(m.Source, m.Target); err != nil {
-		return fmt.Errorf("registry deploy: %w", err)
+func executeRegistryDeploy(m lane.DeployRegistry) (*attachTarget, error) {
+	desc, err := registry.CopyImage(m.Source, m.Target)
+	if err != nil {
+		return nil, fmt.Errorf("registry deploy: %w", err)
 	}
-	return nil
+	return &attachTarget{ref: m.Target, subject: desc}, nil
 }
 
 func (d *Deployer) executeKubernetesDeploy(ctx context.Context, m lane.DeployKubernetes, peers []lane.Peer) error {
