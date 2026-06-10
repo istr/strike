@@ -73,6 +73,27 @@ Module path: `github.com/istr/strike`
 Go version: 1.26+
 Build: `CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o strike ./cmd/strike`
 
+## Execution profile
+
+Instruction files carry an "Execution profile" section: a recommended
+model class and reasoning depth for the session executing them. Rules:
+
+- The profile addresses the operator's launch choice. You do not select,
+  change, or re-grade it. If you are running, the operator has chosen;
+  execute the instruction as written.
+- The profile never modifies the contract. Gates, byte-exact
+  before-snippets, out-of-scope lists, and stop-and-report apply
+  identically under every model and every reasoning setting. A "deep"
+  profile is not a license for initiative, and a "none" profile is not an
+  excuse for a failed gate.
+- Escalate instead of grinding. If execution under the running profile
+  repeatedly trips quality gates, or requires live debugging or diagnosis
+  beyond applying the written edits, STOP and report that the task
+  appears to exceed the profile -- recommend re-running under a stronger
+  one. A stop-and-escalate is a correct outcome; a forced pass is not.
+- If an instruction carries no profile, ask the operator before starting
+  rather than assuming one.
+
 ## Hard invariants -- never violate these
 
 1. **No subprocess execution.** Never use `exec.Command`, `exec.CommandContext`,

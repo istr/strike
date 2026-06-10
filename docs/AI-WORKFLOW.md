@@ -54,6 +54,8 @@ conversational request. Each file follows the same shape:
 - **Quality gates** -- the `grep` and build/lint/test commands that must
   pass, written so the result is checkable rather than asserted.
 - **Acceptance criteria** and a **commit message**.
+- **Execution profile** -- the recommended model class and reasoning
+  depth for executing this instruction, with a one-line rationale.
 
 The exactness is the point. A before-snippet that does not match the tree
 triggers a stop-and-report instead of an improvised edit, which converts
@@ -68,6 +70,32 @@ it lands; their numbering carries no meaning and need not be contiguous or
 even consistent. This is the opposite of an ADR, which is permanent,
 strictly monotonic, and never renumbered. Nothing downstream may depend on
 an instruction file's name or number.
+
+## The execution profile is part of the contract
+
+Choosing which model executes an instruction, and with how much reasoning
+budget, used to be implicit operator judgment at launch time. The profile
+section makes it explicit: the analysis model, which knows the
+instruction's risk class better than anyone at the moment of writing,
+records a recommendation in the file itself -- model class, reasoning
+depth (none / brief / deep), and one line of why.
+
+The mapping follows risk, not size. Mechanical work -- byte-exact snippet
+application, documentation, fixture churn behind count gates -- needs the
+smallest capable model and no deep reasoning; the gates carry the safety,
+and a stronger model adds cost and initiative surface, not quality. Code
+changes verified by hermetic gates sit in the middle. The strongest model
+with deep reasoning is reserved for instructions whose acceptance includes
+live verification, debugging against a running system, schema-and-codegen
+chains, or cross-cutting removals -- the classes where execution has
+historically required diagnosis, not just application.
+
+The profile is advisory to the operator and is not a control. Gates,
+before-snippets, and stop-and-report apply identically under every
+profile; a stronger model is never a license to loosen them, and a weaker
+model is never an excuse for a gate to fail. The profile's value is the
+inverse: when an under-profiled session starts grinding against its gates,
+the mismatch is visible and named instead of diagnosed after the fact.
 
 ## Decisions are ratified before instructions exist
 
