@@ -75,3 +75,17 @@ package lane
 	host:  #Host
 	trust: #TLSTrust
 }
+
+// ----------------------------------------------------------------
+// HTTPS endpoint: a TLS-only base URL with a mandatory declared
+// trust anchor. Used by service clients that dial fixed well-known
+// API paths under the base (ADR-040 keyless endpoints). The
+// https:// regex makes a plaintext URL a parse error, not a
+// runtime rejection ("Enforcement is structural, not
+// discretionary").
+// ----------------------------------------------------------------
+#HTTPSEndpoint: {
+	@go(-)
+	url:   string & =~"^https://"
+	trust: #TLSTrust
+}

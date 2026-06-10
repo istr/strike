@@ -194,8 +194,61 @@ func unmarshalOIDCConfig(data []byte) (OIDCConfig, error) {
 	}, nil
 }
 
+// unmarshalKeylessEndpoints decodes the keyless endpoint set. Each
+// endpoint's Trust field is an interface (TLSTrust) and requires
+// discriminator dispatch via unmarshalTLSTrust.
+func unmarshalKeylessEndpoints(data []byte) (KeylessEndpoints, error) {
+	type alias struct {
+		Fulcio json.RawMessage `json:"fulcio"`
+		Rekor  json.RawMessage `json:"rekor"`
+		TSA    json.RawMessage `json:"tsa"`
+	}
+	var aux alias
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return KeylessEndpoints{}, fmt.Errorf("decode keyless: %w", err)
+	}
+	fulcio, err := unmarshalKeylessEndpoint("fulcio", aux.Fulcio)
+	if err != nil {
+		return KeylessEndpoints{}, err
+	}
+	rekor, err := unmarshalKeylessEndpoint("rekor", aux.Rekor)
+	if err != nil {
+		return KeylessEndpoints{}, err
+	}
+	tsa, err := unmarshalKeylessEndpoint("tsa", aux.TSA)
+	if err != nil {
+		return KeylessEndpoints{}, err
+	}
+	return KeylessEndpoints{Fulcio: fulcio, Rekor: rekor, TSA: tsa}, nil
+}
+
+// unmarshalKeylessEndpoint decodes one keyless endpoint, dispatching the
+// TLSTrust discriminator. All three endpoints are mandatory inside a
+// declared keyless block, and trust is mandatory per endpoint.
+func unmarshalKeylessEndpoint(name string, data []byte) (transport.HTTPSEndpoint, error) {
+	if len(data) == 0 || string(data) == jsonNull {
+		return transport.HTTPSEndpoint{}, fmt.Errorf("keyless: %s required", name)
+	}
+	type alias struct {
+		URL   string          `json:"url"`
+		Trust json.RawMessage `json:"trust"`
+	}
+	var aux alias
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return transport.HTTPSEndpoint{}, fmt.Errorf("decode keyless %s: %w", name, err)
+	}
+	if len(aux.Trust) == 0 {
+		return transport.HTTPSEndpoint{}, fmt.Errorf("keyless %s: trust required", name)
+	}
+	t, err := unmarshalTLSTrust(aux.Trust)
+	if err != nil {
+		return transport.HTTPSEndpoint{}, fmt.Errorf("keyless %s: %w", name, err)
+	}
+	return transport.HTTPSEndpoint{URL: aux.URL, Trust: t}, nil
+}
+
 // UnmarshalJSON implements json.Unmarshaler for Lane. It
-// decodes the resolver and oidc fields through their respective
+// decodes the resolver, oidc, and keyless fields through their respective
 // helpers, which dispatch the TLSTrust discriminator. All other
 // fields fall through to the default decoder via the alias trick.
 func (p *Lane) UnmarshalJSON(data []byte) error {
@@ -204,6 +257,7 @@ func (p *Lane) UnmarshalJSON(data []byte) error {
 		*alias
 		Resolver json.RawMessage `json:"resolver"`
 		OIDC     json.RawMessage `json:"oidc"`
+		Keyless  json.RawMessage `json:"keyless"`
 	}{
 		alias: (*alias)(p),
 	}
@@ -218,6 +272,13 @@ func (p *Lane) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("lane: %w", err)
 	}
 	p.Resolver = r
+	if len(aux.Keyless) != 0 && string(aux.Keyless) != jsonNull {
+		k, kerr := unmarshalKeylessEndpoints(aux.Keyless)
+		if kerr != nil {
+			return fmt.Errorf("lane: %w", kerr)
+		}
+		p.Keyless = &k
+	}
 	if len(aux.OIDC) == 0 || string(aux.OIDC) == jsonNull {
 		return nil
 	}

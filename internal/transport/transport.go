@@ -51,3 +51,13 @@ type DNSResolver struct {
 	Trust TLSTrust `json:"trust"`
 	Host  Host     `json:"host"`
 }
+
+// HTTPSEndpoint is a TLS-only service base URL with a mandatory
+// declared trust anchor. The CUE schema (#HTTPSEndpoint) admits
+// only https:// URLs, so a plaintext endpoint is a parse error,
+// not a runtime rejection. Clients append fixed well-known API
+// paths to the base URL.
+type HTTPSEndpoint struct {
+	Trust TLSTrust `json:"trust"`
+	URL   string   `json:"url"`
+}

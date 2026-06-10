@@ -27,6 +27,10 @@ package lane
 	steps: [#Step, ...#Step] @go(Steps)
 	resolver: #DNSResolver @go(Resolver,type="github.com/istr/strike/internal/transport".DNSResolver)
 	oidc:     #OIDCConfig  @go(OIDC)
+	// Keyless signing endpoints (ADR-040 3b). Optional until the keyless
+	// cutover consumes it; it becomes required when signStatements dials
+	// these endpoints (requiredness follows consumption).
+	keyless?: #KeylessEndpoints @go(Keyless,optional=nillable)
 	base_sbom_signers?: [...#SBOMSigner] @go(BaseSBOMSigners,optional=nillable)
 	defaults?: #LaneDefaults @go(Defaults,optional=nillable)
 }
@@ -50,6 +54,20 @@ package lane
 	client_id: string    @go(ClientID) // aud
 	identity:  string    @go(Identity) // expected SAN subject Fulcio writes into the cert
 	trust:     #TLSTrust @go(Trust,type="github.com/istr/strike/internal/transport".TLSTrust)
+}
+
+// KeylessEndpoints declares the sigstore services the keyless chain dials
+// (ADR-040 D2/3b): Fulcio (CA), Rekor v2 (transparency log), and an RFC3161
+// TSA (Rekor v2 has no integrated timestamp; trusted time is the RFC3161
+// token). Every endpoint is HTTPS-only with a mandatory declared trust
+// anchor (#HTTPSEndpoint). URLs are bases; the clients append the fixed
+// well-known API paths.
+#KeylessEndpoints: {
+	@go(KeylessEndpoints)
+
+	fulcio: #HTTPSEndpoint @go(Fulcio,type="github.com/istr/strike/internal/transport".HTTPSEndpoint)
+	rekor:  #HTTPSEndpoint @go(Rekor,type="github.com/istr/strike/internal/transport".HTTPSEndpoint)
+	tsa:    #HTTPSEndpoint @go(TSA,type="github.com/istr/strike/internal/transport".HTTPSEndpoint)
 }
 
 // SBOMSigner is a trusted signer of a base-image SBOM (ADR-040 D1, option ii).
