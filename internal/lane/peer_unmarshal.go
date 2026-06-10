@@ -272,13 +272,14 @@ func (p *Lane) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("lane: %w", err)
 	}
 	p.Resolver = r
-	if len(aux.Keyless) != 0 && string(aux.Keyless) != jsonNull {
-		k, kerr := unmarshalKeylessEndpoints(aux.Keyless)
-		if kerr != nil {
-			return fmt.Errorf("lane: %w", kerr)
-		}
-		p.Keyless = &k
+	if len(aux.Keyless) == 0 || string(aux.Keyless) == jsonNull {
+		return fmt.Errorf("lane: keyless required")
 	}
+	k, kerr := unmarshalKeylessEndpoints(aux.Keyless)
+	if kerr != nil {
+		return fmt.Errorf("lane: %w", kerr)
+	}
+	p.Keyless = k
 	if len(aux.OIDC) == 0 || string(aux.OIDC) == jsonNull {
 		return nil
 	}

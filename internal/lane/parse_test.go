@@ -88,6 +88,22 @@ oidc:
   trust:
     mode: cert_fingerprint
     fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+keyless:
+  fulcio:
+    url: "https://fulcio.example:5555"
+    trust:
+      mode: cert_fingerprint
+      fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+  rekor:
+    url: "https://rekor.example:3003"
+    trust:
+      mode: cert_fingerprint
+      fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+  tsa:
+    url: "https://tsa.example:3004"
+    trust:
+      mode: cert_fingerprint
+      fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 steps:
   - name: deploy
     deploy:
@@ -148,6 +164,22 @@ oidc:
   trust:
     mode: cert_fingerprint
     fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+keyless:
+  fulcio:
+    url: "https://fulcio.example:5555"
+    trust:
+      mode: cert_fingerprint
+      fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+  rekor:
+    url: "https://rekor.example:3003"
+    trust:
+      mode: cert_fingerprint
+      fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+  tsa:
+    url: "https://tsa.example:3004"
+    trust:
+      mode: cert_fingerprint
+      fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 base_sbom_signers:
   - issuer: "https://accounts.google.com"
     identity: "sbom-builder@example.iam.gserviceaccount.com"
@@ -407,6 +439,22 @@ oidc:
   trust:
     mode: cert_fingerprint
     fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+keyless:
+  fulcio:
+    url: "https://fulcio.example:5555"
+    trust:
+      mode: cert_fingerprint
+      fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+  rekor:
+    url: "https://rekor.example:3003"
+    trust:
+      mode: cert_fingerprint
+      fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+  tsa:
+    url: "https://tsa.example:3004"
+    trust:
+      mode: cert_fingerprint
+      fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 steps:
   - name: bad-deploy
     deploy:
@@ -461,6 +509,22 @@ oidc:
   trust:
     mode: cert_fingerprint
     fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+keyless:
+  fulcio:
+    url: "https://fulcio.example:5555"
+    trust:
+      mode: cert_fingerprint
+      fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+  rekor:
+    url: "https://rekor.example:3003"
+    trust:
+      mode: cert_fingerprint
+      fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+  tsa:
+    url: "https://tsa.example:3004"
+    trust:
+      mode: cert_fingerprint
+      fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 steps:
   - name: src
     image: img@sha256:abababababababababababababababababababababababababababababababab

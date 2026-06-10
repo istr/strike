@@ -10,7 +10,6 @@ import (
 	"encoding/pem"
 	"fmt"
 	"io"
-	"net/netip"
 	"os"
 	"path/filepath"
 	"testing"
@@ -18,45 +17,13 @@ import (
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/layout"
 
-	"github.com/istr/strike/internal/capsule"
 	"github.com/istr/strike/internal/closer"
 	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/executor"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/registry"
 	"github.com/istr/strike/internal/registry/regtest"
-	"github.com/istr/strike/internal/testutil"
-	"github.com/istr/strike/internal/transport"
 )
-
-// integrationCapsuleFields returns capsule-related Deployer fields for
-// integration tests. portKeys lists every StepPorts key the test's step
-// will look up.
-func integrationCapsuleFields(t *testing.T, portKeys ...string) (ca *transport.EphemeralCA, look capsule.UpstreamLookupFunc, caVolume string, ports map[string]capsule.HostPorts) {
-	t.Helper()
-	var err error
-	ca, err = transport.New("integration-test")
-	if err != nil {
-		t.Fatalf("transport.New: %v", err)
-	}
-	t.Cleanup(func() { testutil.CloseLog(t, ca, "integration CA") })
-
-	caVolume = "strike-ca-integration-test"
-
-	look = func(_ context.Context, _ string) ([]netip.Addr, error) {
-		return []netip.Addr{netip.MustParseAddr("127.0.0.1")}, nil
-	}
-
-	ports = make(map[string]capsule.HostPorts, len(portKeys))
-	base := uint16(17000)
-	for i, k := range portKeys {
-		ports[k] = capsule.HostPorts{
-			Resolver: base + uint16(i)*2,
-			Mediator: base + uint16(i)*2 + 1,
-		}
-	}
-	return ca, look, caVolume, ports
-}
 
 // Digest-pinned image references matching lane.yaml.
 const (
@@ -176,21 +143,6 @@ func packTestImage(t *testing.T, binPath string, keyPEM []byte) (*executor.PackR
 		t.Fatalf("pack: %v", packErr)
 	}
 	return result, outRoot, outDir
-}
-
-// testPublicKeyFrom derives the ECDSA public key from a private key PEM.
-func testPublicKeyFrom(t *testing.T, privPEM []byte) *ecdsa.PublicKey {
-	t.Helper()
-	block, _ := pem.Decode(privPEM)
-	key, err := x509.ParsePKCS8PrivateKey(block.Bytes)
-	if err != nil {
-		t.Fatalf("parse test key: %v", err)
-	}
-	ecKey, ok := key.(*ecdsa.PrivateKey)
-	if !ok {
-		t.Fatal("test key is not ECDSA")
-	}
-	return &ecKey.PublicKey
 }
 
 // loadOCITar loads the main image from an OCI tar archive into the local

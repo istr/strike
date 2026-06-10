@@ -12,7 +12,6 @@ import (
 	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -24,7 +23,6 @@ import (
 	"github.com/istr/strike/internal/capsule"
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/container"
-	"github.com/istr/strike/internal/executor"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/mediator"
 	"github.com/istr/strike/internal/probe"
@@ -50,7 +48,6 @@ type Sealed struct {
 	Artifacts     map[string]SignedArtifact `json:"artifacts"`
 	Peers         map[string][]lane.Peer    `json:"peers"`
 	Resolver      *ResolverRecord           `json:"resolver,omitempty"`
-	Rekor         *lane.RekorEntry          `json:"rekor,omitempty"`
 	Engine        *EngineConnection         `json:"engine,omitempty"`
 	ObservedPeers map[string]ObservedPeer   `json:"observed_peers,omitempty"`
 	Target        lane.DeployTarget         `json:"target"`
@@ -328,19 +325,18 @@ type Deployer struct {
 	ArtifactRefs   map[string]string // pre-resolved: artifact name -> "step.output" state ref
 	EngineID       *container.EngineIdentity
 	ResolverID     *transport.ConnectionIdentity // DoT resolver identity from the pre-flight probe; nil if unavailable
-	Rekor          *executor.RekorClient
 	DAG            *lane.DAG
 	OIDC           lane.OIDCConfig // lane-declared signing identity (ADR-040 D5); carried into the sealed provenance externalParameters
 	CA             *transport.EphemeralCA
 	UpstreamLook   capsule.UpstreamLookupFunc
 	StepPorts      map[string]capsule.HostPorts // unit name -> host ports
 	NetworkRecords map[string]capsule.Records   // run/build step records, keyed by step name (injected by cmd/strike)
-	ownRecords     []capsule.Records            // method + capture container records, accumulated during Execute
 	LaneID         string
-	StepName       string // deploy step name; method-container port key and capture-key prefix
-	CAVolume       string // lane-wide CA volume name; mounted r/o at /etc/ssl/certs
-	SigningKey     []byte
-	KeyPassword    []byte
+	StepName       string                                                                                      // deploy step name; method-container port key and capture-key prefix
+	CAVolume       string                                                                                      // lane-wide CA volume name; mounted r/o at /etc/ssl/certs
+	Keyless        lane.KeylessEndpoints                                                                       // lane-declared keyless endpoints (ADR-040 D2); every deploy dials Fulcio, Rekor v2, and the TSA
+	produceBundles func(ctx context.Context, eps lane.KeylessEndpoints, statements [][]byte) ([][]byte, error) // test seam; nil selects the real keyless chain
+	ownRecords     []capsule.Records                                                                           // method + capture container records, accumulated during Execute
 }
 
 // collectObservedPeers builds the Layer-V observed_peers map and the Layer-E
@@ -586,17 +582,13 @@ func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.Sta
 		return nil, fmt.Errorf("step %q: attestation invalid: %w", step.Name, err)
 	}
 
-	// 8. Project into the three output statements and sign each (ADR-040 D3).
-	if err := d.signStatements(att, step.Name); err != nil {
+	// 8. Project into the three output statements and produce one keyless
+	// sigstore bundle per statement (ADR-040 D2/D3), fail-closed.
+	if err := d.signStatements(ctx, att, step.Name); err != nil {
 		return nil, err
 	}
 
-	// 9. Submit each signed statement to Rekor (optional).
-	if err := d.submitStatementsToRekor(ctx, att); err != nil {
-		return nil, err
-	}
-
-	// 10. Record in lane state.
+	// 9. Record in lane state.
 	if err := d.recordAttestation(att, step, state, started); err != nil {
 		return nil, fmt.Errorf("step %q: %w", step.Name, err)
 	}
@@ -605,93 +597,51 @@ func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.Sta
 }
 
 // signStatements projects the attestation into the three output in-toto
-// statements (ADR-040 D3) and signs each as its own DSSE envelope with the
-// operator key, storing them on att.Signed. No-op with a WARN when no signing
-// key is configured (an unsigned deploy still produces a verifiable chain via
-// the recorded digests). The OCI-referrer attach of these statements runs on
-// the pushed digest (instruction 4).
-func (d *Deployer) signStatements(att *Attestation, stepName string) error {
-	if d.SigningKey == nil {
-		log.Printf("WARN   deploy %s: attestation unsigned (no signing key configured)", stepName)
-		return nil
-	}
+// statements (ADR-040 D3) and produces one keyless sigstore bundle per
+// statement (ADR-040 D2): one ephemeral key and one Fulcio certificate per
+// deploy, then per statement DSSE -> RFC3161 timestamp -> Rekor v2
+// inclusion -> v0.3 bundle, stored on att.Signed. Fail-closed (D-3b-2): a
+// deploy that cannot obtain a certificate, a timestamp, or an inclusion
+// proof fails; there is no unsigned fallback. The bundle carries the
+// transparency proof, so no Rekor entry is mirrored into the collect-model.
+// The OCI-referrer attach of these bundles runs on the pushed digest
+// (instruction 4).
+func (d *Deployer) signStatements(ctx context.Context, att *Attestation, stepName string) error {
 	slsa, engineCtx, info, err := projectStatements(att, d.OIDC)
 	if err != nil {
 		return fmt.Errorf("step %q: project statements: %w", stepName, err)
 	}
-	signed := &SignedStatements{}
-	if signed.Sealed.Envelope, err = d.signOne(slsa); err != nil {
-		return fmt.Errorf("step %q: sign sealed statement: %w", stepName, err)
-	}
-	if signed.EngineContext.Envelope, err = d.signOne(engineCtx); err != nil {
-		return fmt.Errorf("step %q: sign engine-context statement: %w", stepName, err)
-	}
-	if signed.Informational.Envelope, err = d.signOne(info); err != nil {
-		return fmt.Errorf("step %q: sign informational statement: %w", stepName, err)
-	}
-	att.Signed = signed
-	return nil
-}
-
-// signOne marshals one projected statement and signs it as an in-toto DSSE
-// envelope with the operator key.
-func (d *Deployer) signOne(stmt any) ([]byte, error) {
-	stmtJSON, err := json.Marshal(stmt)
-	if err != nil {
-		return nil, fmt.Errorf("marshal statement: %w", err)
-	}
-	return SignStatement(stmtJSON, d.SigningKey, d.KeyPassword)
-}
-
-// submitStatementsToRekor submits each signed statement to Rekor and mirrors
-// the sealed entry into the collect-model (ADR-013). No-op when Rekor is nil
-// or the attestation is unsigned.
-func (d *Deployer) submitStatementsToRekor(ctx context.Context, att *Attestation) error {
-	if d.Rekor == nil || att.Signed == nil {
-		return nil
-	}
-	laneID, targetID := att.Sealed.LaneID, att.Sealed.Target.ID
-	for _, s := range []*SignedStatement{
-		&att.Signed.Sealed, &att.Signed.EngineContext, &att.Signed.Informational,
-	} {
-		entry, rekorErr := submitEnvelopeToRekor(ctx, d, laneID, targetID, s.Envelope)
-		if rekorErr != nil {
-			return rekorErr
+	statements := make([][]byte, 0, 3)
+	for _, stmt := range []any{slsa, engineCtx, info} {
+		stmtJSON, mErr := json.Marshal(stmt)
+		if mErr != nil {
+			return fmt.Errorf("step %q: marshal statement: %w", stepName, mErr)
 		}
-		s.Rekor = entry
+		statements = append(statements, stmtJSON)
 	}
-	// Mirror the sealed statement's Rekor entry into the collect-model for
-	// continuity of Sealed.Rekor (ADR-013 strips it before verifying the
-	// sealed statement's signature).
-	att.Sealed.Rekor = att.Signed.Sealed.Rekor
-	return nil
-}
-
-const rekorMaxEnvelopeSize = 100 * 1024 // 100KB Rekor upload limit
-
-// submitEnvelopeToRekor submits one signed DSSE envelope to Rekor. Returns a
-// nil entry on transient failure (fail open) or an oversized envelope.
-func submitEnvelopeToRekor(ctx context.Context, d *Deployer, laneID, targetID string, envelope []byte) (*lane.RekorEntry, error) {
-	if len(envelope) > rekorMaxEnvelopeSize {
-		log.Printf("WARN   deploy %s/%s: DSSE envelope %d bytes exceeds Rekor %d byte limit, skipping",
-			laneID, targetID, len(envelope), rekorMaxEnvelopeSize)
-		return nil, nil
-	}
-
-	pubPEM, err := executor.DerivePublicKeyPEM(d.SigningKey, d.KeyPassword)
-	if err != nil {
-		return nil, fmt.Errorf("rekor: derive public key: %w", err)
-	}
-	entry, err := d.Rekor.SubmitDSSE(ctx, envelope, pubPEM)
-	if err != nil {
-		var w *executor.RekorTransientError
-		if errors.As(err, &w) {
-			log.Printf("WARN   deploy %s/%s: rekor dsse: %v", laneID, targetID, err)
-			return nil, nil
+	produce := d.produceBundles
+	if produce == nil {
+		token, tErr := ambientIDToken()
+		if tErr != nil {
+			return fmt.Errorf("step %q: %w", stepName, tErr)
 		}
-		return nil, err
+		produce = func(ctx context.Context, eps lane.KeylessEndpoints, stmts [][]byte) ([][]byte, error) {
+			return produceKeylessBundles(ctx, eps, token, stmts)
+		}
 	}
-	return entry, nil
+	bundles, err := produce(ctx, d.Keyless, statements)
+	if err != nil {
+		return fmt.Errorf("step %q: %w", stepName, err)
+	}
+	if len(bundles) != len(statements) {
+		return fmt.Errorf("step %q: keyless: got %d bundles, want %d", stepName, len(bundles), len(statements))
+	}
+	att.Signed = &SignedStatements{
+		Sealed:        SignedStatement{Bundle: bundles[0]},
+		EngineContext: SignedStatement{Bundle: bundles[1]},
+		Informational: SignedStatement{Bundle: bundles[2]},
+	}
+	return nil
 }
 
 // resolveArtifactDigests resolves all artifact references to their signed provenance records.

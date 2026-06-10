@@ -27,10 +27,11 @@ package lane
 	steps: [#Step, ...#Step] @go(Steps)
 	resolver: #DNSResolver @go(Resolver,type="github.com/istr/strike/internal/transport".DNSResolver)
 	oidc:     #OIDCConfig  @go(OIDC)
-	// Keyless signing endpoints (ADR-040 3b). Optional until the keyless
-	// cutover consumes it; it becomes required when signStatements dials
-	// these endpoints (requiredness follows consumption).
-	keyless?: #KeylessEndpoints @go(Keyless,optional=nillable)
+	// Keyless signing endpoints (ADR-040 3b). Required: every deploy
+	// attestation is produced through these endpoints (Fulcio, Rekor v2,
+	// TSA), fail-closed; a lane that cannot reach them cannot produce a
+	// verifiable bundle (mirrors the oidc rationale).
+	keyless:  #KeylessEndpoints @go(Keyless)
 	base_sbom_signers?: [...#SBOMSigner] @go(BaseSBOMSigners,optional=nillable)
 	defaults?: #LaneDefaults @go(Defaults,optional=nillable)
 }

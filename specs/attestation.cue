@@ -88,9 +88,6 @@ package deploy
 	// that step. Declared, lane-anchored.
 	peers: [Step=string]: [...#Peer]
 
-	// rekor is the transparency log entry from a Rekor hashedrekord or
-	// dsse submission, SET-verified before acceptance.
-	rekor?: #RekorEntry
 
 	// engine carries the CP-observed connection facts about the engine.
 	// The engine's self-reports (version, rootless) live in

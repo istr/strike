@@ -131,6 +131,19 @@ covers the same flow at roughly one third the binary size and without the cloud
 KMS provider clusters (AWS, Azure, GCP) that cosign-as-a-library drags in
 through its CLI option and timestamp paths.
 
+> **Amendment (3b, as built).** The import-surface measurements of the 3b
+> spikes revised the composed-library conclusion above. The producer is
+> hand-rolled: protobuf-specs (bundle and DSSE protos), rekor-tiles'
+> generated proto types only (a plain HTTP POST replaces `pkg/client`,
+> whose transport drags Docker-credential and OTLP modules into the
+> graph), and `digitorus/timestamp` for RFC3161 -- both promotions of
+> already-indirect modules, so no new module entered go.mod. sigstore-go
+> is confined to test-only use as the crossval oracle and appears nowhere
+> in the production compile graph. `sigstore/pkg/oauthflow` is not
+> imported at all: the token is ambient (`SIGSTORE_ID_TOKEN`, D-3b-4),
+> never interactive. Rekor v2 supplies no integrated timestamp; trusted
+> time is the TSA's RFC3161 token carried in the bundle.
+
 ### D3 -- Attestations are cosign-compatible OCI referrers, layered by trust
 
 ADR-037 establishes two trust layers toward the engine -- V (verify or observe;

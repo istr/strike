@@ -1,16 +1,19 @@
 # ADR-040 Implementation Roadmap
 
-## Status: IN PROGRESS (instructions 1, 2, 3a done; 3b in progress; instructions 4--5 remain)
+## Status: IN PROGRESS (instructions 1, 2, 3 done; instructions 4--5 remain)
 
 ADR-040 is Accepted and plumbed: the decision record is at
 `docs/ADR-040-control-plane-sbom-and-keyless-attestation.md`, registered in
 `docs/ADR-INDEX.md` by number and by principle, with the partial-supersession
 back-reference to ADR-019 and the extension note to ADR-037 in place.
 
-D5 is done (instruction 1a) and the D3 output predicate types are defined
-(instruction 1b). The remaining decisions (D1, D2, D3 packaging, D4) are
-not yet implemented in code. This roadmap decomposes that work into the
-established numbered instruction-file sequence.
+D5 is done (instruction 1a), the D3 output predicate types are defined
+(instruction 1b), D1 is done (instruction 2), and D2 is done (instruction
+3: statement projection, keyless chain, cutover -- every deploy now signs
+its three statements keylessly, fail-closed). What remains: D3 packaging
+as co-attached OCI referrers plus the control-plane push (instruction 4),
+and the verification exit (instruction 5). This roadmap decomposes that
+work into the established numbered instruction-file sequence.
 
 ## What has landed
 
@@ -79,6 +82,40 @@ established numbered instruction-file sequence.
   (sigstore-go demoted to test-only crossval oracle) is ratified. strike
   signs in ASN.1 DER and assembles the bundle itself using protobuf-specs;
   sigstore-go is the verification oracle, never a production dependency.
+- **Instruction 3b-ii-a -- TLS-only keyless harness (parallel track).**
+  `test/sigstore-local/`: Keycloak + Fulcio + Rekor v2 (POSIX) + TSA
+  behind a Caddy TLS terminator under one internal root; sslip.io
+  canonical hostnames; token, rekor-pubkey, and tsa-certchain Makefile
+  targets. See `docs/ROADMAP-sigstore-test-harness.md` for the as-built
+  record.
+- **Instruction 3b-ii-b -- keyless endpoints schema, clients, producer
+  (D2).** `#KeylessEndpoints` in `specs/lane.cue` (Fulcio, Rekor v2, TSA,
+  each with a pinned `#TLSTrust`); direct HTTP clients
+  (`internal/deploy/keyless_clients.go`: Fulcio cert issuance, plain
+  Rekor v2 POST -- rekor-tiles generated proto types only, no
+  `pkg/client` -- RFC3161 TSA via `digitorus/timestamp`); the per-deploy
+  producer (`keyless_producer.go`: one ephemeral key, one certificate,
+  per statement DSSE -> timestamp -> inclusion -> v0.3 bundle). Env-gated
+  live test (`TestKeylessLive`) runs the real chain against the harness.
+  The ambient token is `SIGSTORE_ID_TOKEN` (D-3b-4); no oauthflow import.
+- **Instruction 3b-ii-c -- keyless cutover (D2).** `signStatements`
+  produces three sigstore v0.3 bundles via `produceKeylessBundles`,
+  fail-closed (D-3b-2): no unsigned fallback, no fail-open Rekor path.
+  `keyless:` is a required lane field (requiredness follows consumption,
+  F1=2); all lane fixtures carry a canonical placeholder block. The
+  Deployer lost `SigningKey`/`KeyPassword`/`Rekor` (F3: keyless means no
+  key); `SignedStatement` carries a bundle, and `SignedStatement.Rekor`
+  plus the `Sealed.Rekor` mirror (and its schema field) fell -- the
+  bundle subsumes the transparency proof (D-3b-6). `cmd/strike` writes
+  `*.sigstore.json` instead of `*.dsse.json`. ADR-040 D2 carries a
+  blockquote amendment recording the as-built import surface. The
+  operator-key statement path (`SignStatement`, `signOne`,
+  `submitStatementsToRekor`) is removed; a nil-defaulted unexported
+  producer seam keeps the Execute unit tests hermetic (F2). Artifacts
+  stay on the v1 operator-key path until instruction 5 (D-3b-5), so
+  `SignAttestation`, `signDSSE`, and `internal/verify` are untouched
+  (D-3b-3). End-to-end deploy integration coverage is deliberately
+  deferred to the strike-verify arc (instruction 5).
 - **Verify foundation (from ADR-037).** The `internal/verify` package
   (DSSE envelope parsing, payload-type guard, ECDSA P-256 signature
   verification over PAE) exists and is the base instruction 5 builds on. It
@@ -115,16 +152,18 @@ Fulcio/Rekor verification machinery). Base OS packages are still captured
 for catalogable bases because flattening includes the base layers and the
 cataloger reads their dpkg database directly.
 
-### D2 -- keyless signing, in-process -- PARTIAL (3b-i done; 3b-ii remains)
+### D2 -- keyless signing, in-process -- DONE (3b-i + 3b-ii)
 
-The hand-rolled keyless core exists (`internal/deploy/keyless.go`):
-ASN.1 DER signing and sigstore v0.3 bundle assembly via protobuf-specs,
-proven by a hermetic crossval test against sigstore-go's verifier. The
-core is additive and unreferenced by production code; wiring into the
-deploy path (Fulcio/Rekor/TSA network clients, OIDC token acquisition,
-output-file changes) is instruction 3b-ii.
+The full chain is live in the deploy path: one ephemeral key and one
+Fulcio certificate per deploy, then per statement DSSE -> RFC3161
+timestamp -> Rekor v2 inclusion -> sigstore v0.3 bundle, fail-closed
+(D-3b-2). `keyless:` is a required lane field; the Deployer carries no
+key material and no Rekor client. The only durable secret in the
+statement path is the OIDC identity (ambient `SIGSTORE_ID_TOKEN`,
+D-3b-4). Remaining D2 surface: the v1 operator-key artifact path
+(`executor.Pack`) cuts over in instruction 5 (D-3b-5).
 
-### D3 -- cosign-compatible OCI referrers, layered by trust
+### D3 -- cosign-compatible OCI referrers, layered by trust -- PARTIAL (shapes + signing done; packaging remains)
 
 The three layers (sealed V / engine_dependent E / informational) exist as
 predicate sections inside one attestation (ADR-037). ADR-040 D3 makes the
@@ -132,17 +171,18 @@ V / E boundary physical: each layer becomes a separate, co-attached referrer
 (sealed = standard SLSA Provenance v1; engine_dependent = a strike-defined
 predicate type `https://istr.dev/strike/predicates/engine-context/v1`;
 informational = signed byproducts that never gate). The output predicate
-types are defined (instruction 1b: `specs/predicate.cue`,
-`internal/deploy/predicate.go`). What remains: the projection from the
-internal `#Attestation` into these shapes, signing each as its own
-attestation (instruction 3), and per-layer verification exit
-(instruction 5).
+types are defined (instruction 1b), the projection from the internal
+`#Attestation` into the three statements is live (instruction 3a), and
+each statement is signed keylessly as its own sigstore bundle
+(instruction 3b). What remains: attaching the three bundles as
+co-attached OCI referrers on the pushed digest (instruction 4) and the
+per-layer verification exit (instruction 5).
 
 ### D4 -- the control plane owns the registry push
 
 No `remote.Write` push path exists in production code. The control plane
 does not yet push; signing-and-attach therefore cannot yet run on the
-registry digest. Landed in instruction 4.
+registry digest. Lands in instruction 4.
 
 ### D5 -- lane-wide OIDC identity, pinned -- DONE (instruction 1a)
 
@@ -234,13 +274,25 @@ strike's DER signing and verifies the assembled bundle against sigstore-go's
 graph). `protobuf-specs` is the only new production dependency. D-3b-1
 ratified the hand-rolled producer.
 
-**3b-ii (next).** Wire the keyless core into the deploy path: Fulcio/Rekor/TSA
-network clients, OIDC token acquisition, output-file changes (three
-`*.sigstore.json` bundles replace the three `*.dsse.json` envelopes), schema
-(`#KeylessEndpoints`), and reorientation of `internal/verify`.
+**3b-ii (done, in three steps).** The keyless core is wired into the
+deploy path:
 
-Depends on: instructions 1 and 2 (both done: predicates and the SBOM).
-This is also the cross-roadmap unblock: see "Cross-roadmap dependencies".
+- **3b-ii-a** -- the TLS-only local harness (parallel track; see
+  `docs/ROADMAP-sigstore-test-harness.md`).
+- **3b-ii-b** -- `#KeylessEndpoints` schema, Fulcio/Rekor v2/TSA HTTP
+  clients, the per-deploy bundle producer, and the env-gated live test
+  against the harness. Token acquisition is ambient (`SIGSTORE_ID_TOKEN`,
+  D-3b-4) -- no oauthflow, never interactive.
+- **3b-ii-c** -- the cutover: `signStatements` goes keyless fail-closed,
+  `keyless:` becomes required, the operator-key statement path and the
+  Deployer's key/Rekor fields are removed, three `*.sigstore.json`
+  bundles replace the three `*.dsse.json` envelopes, and
+  `SignedStatement.Rekor`/`Sealed.Rekor` fall (D-3b-6).
+
+The reorientation of `internal/verify`, originally listed under 3b-ii,
+was ratified out of the cutover (D-3b-3) and is instruction 5 work, where
+the verification model changes anyway. This completed the cross-roadmap
+unblock: see "Cross-roadmap dependencies".
 
 ### 4. Control-plane push (D4)
 
@@ -265,6 +317,16 @@ informational never gates. The L3-versus-L2+ distinction is exactly this
 switch -- whether E is trusted -- gating the two L3-only properties (build
 isolation, complete externalParameters).
 
+Instruction 5 also absorbs the work items the 3b arc deliberately
+deferred to it: the v1 operator-key artifact path cuts over to keyless
+(D-3b-5; `executor.Pack`'s `SigningKey`/`Rekor` options, `signDSSE`,
+`SignAttestation`, and `#RekorEntry` retire with it), `internal/verify`
+is reoriented from operator-key DSSE to bundle verification (D-3b-3),
+verified base-SBOM ingestion against `base_sbom_signers` becomes possible
+(instruction 2 deferral), and end-to-end deploy integration coverage --
+deliberately deferred at the 3b-ii-c cutover -- returns as verify-driven
+integration tests over real bundles.
+
 Depends on: instructions 1, 3, 4 (predicate shapes, keyless signatures, the
 pushed registry digest the referrers hang off). Subsumes and redefines the
 verify item the ADR-037 roadmap carried (see "Cross-roadmap dependencies").
@@ -275,23 +337,26 @@ verify item the ADR-037 roadmap carried (see "Cross-roadmap dependencies").
   the D1 mechanism amendment (instruction 2a) ruled out osv-scalibr entirely
   in favor of native parsers. The upstream decoupling is organic ecosystem
   work only.
-- **Local sigstore test harness.** docker-compose Fulcio + Rekor v2 +
-  Keycloak (WebAuthn-passwordless, user verification required; Fulcio
-  OIDCIssuers pointed at the Keycloak realm, type email; cosign >= v3.0.1 or
-  >= v2.6.0 for Rekor v2). Exercises the live chain. This is a test
-  environment, distinct from strike's in-process integration; it supports
-  instructions 3 and 5 but is not part of the trusted binary.
+- **Local sigstore test harness -- LANDED (H1).** `test/sigstore-local/`:
+  Keycloak + Fulcio + Rekor v2 (POSIX) + TSA behind a Caddy TLS
+  terminator, all endpoints HTTPS under one exported internal root,
+  sslip.io canonical hostnames, digest-pinned images. It exercises the
+  live chain (`TestKeylessLive`) and supports instruction 5; it is not
+  part of the trusted binary. WebAuthn/FIDO2 hardening (H2) remains. See
+  `docs/ROADMAP-sigstore-test-harness.md`.
 
 ## Cross-roadmap dependencies and ordering
 
 - **ADR-040 instruction 3 (keyless) satisfies the ADR-038 D5.1 ordering
-  dependency.** ADR-038's roadmap records that the signing key must be
-  externalized (KMS / keyless) before the front's inbound listener is
-  exposed in a remote deployment. Keyless is that externalization; the only
-  durable secret becomes the OIDC identity. Instruction 3 is therefore a
-  prerequisite for the remote-deployment exposure of the ADR-038 front, and
-  the two roadmaps should be sequenced with instruction 3 ahead of any
-  remote-front exposure.
+  dependency for the statement path.** ADR-038's roadmap records that the
+  signing key must be externalized (KMS / keyless) before the front's
+  inbound listener is exposed in a remote deployment. Instruction 3 is
+  done: deploy statements sign keylessly and the Deployer holds no key
+  material; their only durable secret is the OIDC identity. The
+  externalization is complete once the v1 operator-key artifact path also
+  cuts over (instruction 5, D-3b-5) -- until then `executor.Pack` still
+  loads the operator key, so remote-front exposure waits for
+  instruction 5.
 - **ADR-040 instruction 5 (strike verify) subsumes the ADR-037 roadmap's
   pending verify item.** The ADR-037 roadmap lists a single open item: the
   `strike verify` CLI subcommand over the restructured predicate. ADR-040 D3

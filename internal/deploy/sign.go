@@ -8,7 +8,6 @@ import (
 	"strconv"
 
 	"github.com/istr/strike/internal/executor"
-	"github.com/istr/strike/internal/lane"
 )
 
 // AttestationPayloadType is the DSSE payload type for the internal
@@ -22,19 +21,20 @@ const AttestationPayloadType = "application/vnd.strike.attestation+json"
 // documents; ADR-040 D3 supersedes ADR-013's strike-specific type for them.
 const InTotoPayloadType = "application/vnd.in-toto+json"
 
-// SignedStatement is one projected, signed in-toto statement and its Rekor
-// transparency-log entry. The Rekor entry is external metadata, never part of
-// the signed payload (ADR-013).
+// SignedStatement is one projected in-toto statement, signed keylessly and
+// carried as a sigstore v0.3 bundle (ADR-040 D2). The bundle subsumes the
+// transparency proof (inclusion proof, checkpoint, RFC3161 timestamp), so
+// no separate Rekor entry is recorded.
 type SignedStatement struct {
-	Rekor    *lane.RekorEntry `json:"rekor,omitempty"`
-	Envelope []byte           `json:"-"`
+	Bundle []byte `json:"-"`
 }
 
-// SignedStatements carries the three projected, signed in-toto statements
-// (ADR-040 D3): the sealed SLSA provenance (Layer V), the engine-context
-// statement (Layer E), and the informational statement (never gates). Each is
-// its own DSSE envelope; each becomes its own OCI referrer when the artifact is
-// pushed (instruction 4). Replaces the single SignedEnvelope.
+// SignedStatements carries the three projected, keylessly signed in-toto
+// statements (ADR-040 D3): the sealed SLSA provenance (Layer V), the
+// engine-context statement (Layer E), and the informational statement (never
+// gates). Each is its own sigstore bundle; each becomes its own OCI referrer
+// when the artifact is pushed (instruction 4). Replaces the single
+// SignedEnvelope.
 type SignedStatements struct {
 	Sealed        SignedStatement
 	EngineContext SignedStatement
@@ -80,12 +80,6 @@ func signDSSE(payload []byte, payloadType string, keyPEM, password []byte) ([]by
 // boundary; its production disposition is ADR-040 instruction 3b.
 func SignAttestation(attestationJSON, keyPEM, password []byte) ([]byte, error) {
 	return signDSSE(attestationJSON, AttestationPayloadType, keyPEM, password)
-}
-
-// SignStatement wraps a projected in-toto statement in a signed DSSE envelope
-// (ADR-040 D3, in-toto payload type, operator key for now).
-func SignStatement(statementJSON, keyPEM, password []byte) ([]byte, error) {
-	return signDSSE(statementJSON, InTotoPayloadType, keyPEM, password)
 }
 
 // PAEEncode constructs a DSSE Pre-Authentication Encoding.

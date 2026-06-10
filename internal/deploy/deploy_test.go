@@ -1,6 +1,7 @@
 package deploy_test
 
 import (
+	"bytes"
 	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -8,9 +9,10 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
+	"fmt"
 	"math/big"
 	"net"
 	"net/http"
@@ -346,6 +348,7 @@ func TestDeployerExecute(t *testing.T) {
 		StepName:     "deploy-prod",
 		StepPorts:    ports,
 	}
+	deploy.SetProduceBundles(d, stubProduceBundles())
 	att, err := d.Execute(context.Background(), step, state)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -387,6 +390,7 @@ func TestDeployerExecute_MissingArtifact(t *testing.T) {
 		ArtifactRefs: map[string]string{"image": "build.image"},
 		LaneID:       "test-lane",
 	}
+	deploy.SetProduceBundles(d, stubProduceBundles())
 	_, err := d.Execute(context.Background(), step, state)
 	if err == nil {
 		t.Fatal("expected error for missing artifact")
@@ -495,6 +499,7 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 		StepName:     "deploy-prod",
 		StepPorts:    ports,
 	}
+	deploy.SetProduceBundles(d, stubProduceBundles())
 	att, err := d.Execute(context.Background(), step, state)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -574,6 +579,7 @@ func TestEngineRecord_NilEngineID(t *testing.T) {
 		StepName:     "deploy-nil-engine",
 		StepPorts:    ports,
 	}
+	deploy.SetProduceBundles(d, stubProduceBundles())
 	att, err := d.Execute(context.Background(), step, state)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -633,6 +639,7 @@ func TestEngineRecord_WithRuntime(t *testing.T) {
 		StepName:     "deploy-runtime",
 		StepPorts:    ports,
 	}
+	deploy.SetProduceBundles(d, stubProduceBundles())
 	att, err := d.Execute(context.Background(), step, state)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -703,6 +710,7 @@ func TestEngineRecord_WithoutRuntime(t *testing.T) {
 		StepName:     "deploy-no-runtime",
 		StepPorts:    ports,
 	}
+	deploy.SetProduceBundles(d, stubProduceBundles())
 	att, err := d.Execute(context.Background(), step, state)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -764,6 +772,7 @@ func TestResolverRecord_NilResolverID(t *testing.T) {
 		StepName:     "deploy-nil-resolver",
 		StepPorts:    ports,
 	}
+	deploy.SetProduceBundles(d, stubProduceBundles())
 	att, err := d.Execute(context.Background(), step, state)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -818,6 +827,7 @@ func TestResolverRecord_Populated(t *testing.T) {
 		StepName:     "deploy-resolver",
 		StepPorts:    ports,
 	}
+	deploy.SetProduceBundles(d, stubProduceBundles())
 	att, err := d.Execute(context.Background(), step, state)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -848,6 +858,7 @@ func TestDeployerExecute_NotDeployStep(t *testing.T) {
 	state := lane.NewState()
 	step := &lane.Step{Name: "build", Deploy: nil}
 	d := &deploy.Deployer{Engine: eng, LaneID: "test-lane"}
+	deploy.SetProduceBundles(d, stubProduceBundles())
 	_, err := d.Execute(context.Background(), step, state)
 	if err == nil {
 		t.Fatal("expected error for non-deploy step")
@@ -912,6 +923,7 @@ func TestDeployerExecute_RequiredPreStateFails(t *testing.T) {
 		StepName:     "deploy-fail-pre",
 		StepPorts:    ports,
 	}
+	deploy.SetProduceBundles(d, stubProduceBundles())
 	_, err := d.Execute(context.Background(), step, state)
 	if err == nil {
 		t.Fatal("expected error for required pre-state failure")
@@ -922,16 +934,24 @@ func TestDeployerExecute_RequiredPreStateFails(t *testing.T) {
 }
 
 // --------------------------------------------------------------------------.
-// Rekor DSSE attestation tests.
+// Keyless bundle tests.
 // --------------------------------------------------------------------------.
 
-func TestDeployerExecute_WithRekor(t *testing.T) {
-	rekorKey, rekorPubPEM := generateRekorKey(t)
-	srv := httptest.NewServer(fakeDSSERekorHandler(t, rekorKey))
-	defer srv.Close()
+// stubProduceBundles returns a bundle producer that yields one fake bundle
+// per statement, replacing the real keyless chain (covered by the live
+// test).
+func stubProduceBundles() func(context.Context, lane.KeylessEndpoints, [][]byte) ([][]byte, error) {
+	return func(_ context.Context, _ lane.KeylessEndpoints, statements [][]byte) ([][]byte, error) {
+		bundles := make([][]byte, len(statements))
+		for i := range statements {
+			bundles[i] = []byte(fmt.Sprintf(`{"stub":"bundle-%d"}`, i))
+		}
+		return bundles, nil
+	}
+}
 
+func TestDeployerExecute_KeylessBundles(t *testing.T) {
 	eng := newTLSTestEngine(t, containerMock(t, "v1.2.3"))
-	keyPEM, _ := generateTestKeyPEM(t)
 
 	state := lane.NewState()
 	if err := state.Register("build", "image", lane.Artifact{
@@ -948,10 +968,7 @@ func TestDeployerExecute_WithRekor(t *testing.T) {
 	d := &deploy.Deployer{
 		Engine:       eng,
 		EngineID:     eng.Identity(),
-		Rekor:        newRekorClient(t, rekorPubPEM, srv.Client(), srv.URL),
 		ArtifactRefs: map[string]string{"image": "build.image"},
-		SigningKey:   keyPEM,
-		KeyPassword:  nil,
 		LaneID:       "test-lane",
 		CA:           ca,
 		UpstreamLook: look,
@@ -959,191 +976,69 @@ func TestDeployerExecute_WithRekor(t *testing.T) {
 		StepName:     "deploy-prod",
 		StepPorts:    ports,
 	}
+	deploy.SetProduceBundles(d, stubProduceBundles())
 
 	att, err := d.Execute(context.Background(), step, state)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
 
-	if att.Sealed.Rekor == nil {
-		t.Fatal("expected non-nil att.Sealed.Rekor when RekorClient is configured")
-	}
-	if att.Sealed.Rekor.LogIndex != 42 {
-		t.Errorf("att.Sealed.Rekor.LogIndex = %d, want 42", att.Sealed.Rekor.LogIndex)
-	}
-	if att.Signed == nil {
-		t.Error("expected non-nil Signed")
-	}
-}
-
-func TestDeployerExecute_NoRekor(t *testing.T) {
-	eng := newTLSTestEngine(t, containerMock(t, "v1.2.3"))
-	keyPEM, _ := generateTestKeyPEM(t)
-
-	state := lane.NewState()
-	if err := state.Register("build", "image", lane.Artifact{
-		Type:   "image",
-		Digest: lane.MustParseDigest("sha256:abc1230000000000000000000000000000000000000000000000000000000000"),
-	}); err != nil {
-		t.Fatal(err)
-	}
-
-	ca, look, caPath, ports := deployCapsuleFields(t,
-		"capture:deploy-prod:version", "deploy-prod")
-
-	step := deployStep()
-	d := &deploy.Deployer{
-		Engine:       eng,
-		ArtifactRefs: map[string]string{"image": "build.image"},
-		SigningKey:   keyPEM,
-		KeyPassword:  nil,
-		LaneID:       "test-lane",
-		CA:           ca,
-		UpstreamLook: look,
-		CAVolume:     caPath,
-		StepName:     "deploy-prod",
-		StepPorts:    ports,
-	}
-
-	att, err := d.Execute(context.Background(), step, state)
-	if err != nil {
-		t.Fatalf("Execute: %v", err)
-	}
-
-	if att.Sealed.Rekor != nil {
-		t.Errorf("expected nil att.Sealed.Rekor when no RekorClient, got %+v", att.Sealed.Rekor)
-	}
-	if att.Signed == nil {
-		t.Error("expected non-nil Signed (signing should still work)")
-	}
-}
-
-func TestDeployerExecute_RekorTransient(t *testing.T) {
-	_, rekorPubPEM := generateRekorKey(t)
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-		testutil.WriteBody(t, w, []byte("temporary failure"))
-	}))
-	defer srv.Close()
-
-	eng := newTLSTestEngine(t, containerMock(t, "v1.2.3"))
-	keyPEM, _ := generateTestKeyPEM(t)
-
-	state := lane.NewState()
-	if err := state.Register("build", "image", lane.Artifact{
-		Type:   "image",
-		Digest: lane.MustParseDigest("sha256:abc1230000000000000000000000000000000000000000000000000000000000"),
-	}); err != nil {
-		t.Fatal(err)
-	}
-
-	ca, look, caPath, ports := deployCapsuleFields(t,
-		"capture:deploy-prod:version", "deploy-prod")
-
-	step := deployStep()
-	d := &deploy.Deployer{
-		Engine:       eng,
-		Rekor:        newRekorClient(t, rekorPubPEM, srv.Client(), srv.URL),
-		ArtifactRefs: map[string]string{"image": "build.image"},
-		SigningKey:   keyPEM,
-		KeyPassword:  nil,
-		LaneID:       "test-lane",
-		CA:           ca,
-		UpstreamLook: look,
-		CAVolume:     caPath,
-		StepName:     "deploy-prod",
-		StepPorts:    ports,
-	}
-
-	att, err := d.Execute(context.Background(), step, state)
-	if err != nil {
-		t.Fatalf("Execute: %v (expected fail-open on transient Rekor error)", err)
-	}
-
-	if att.Sealed.Rekor != nil {
-		t.Errorf("expected nil att.Sealed.Rekor on transient failure, got %+v", att.Sealed.Rekor)
-	}
-	if att.Signed == nil {
-		t.Error("expected non-nil Signed (signing should still work)")
-	}
-}
-
-func TestDeployerExecute_RekorSignedContentNoRekorField(t *testing.T) {
-	rekorKey, rekorPubPEM := generateRekorKey(t)
-	srv := httptest.NewServer(fakeDSSERekorHandler(t, rekorKey))
-	defer srv.Close()
-
-	eng := newTLSTestEngine(t, containerMock(t, "v1.2.3"))
-	keyPEM, _ := generateTestKeyPEM(t)
-
-	state := lane.NewState()
-	if err := state.Register("build", "image", lane.Artifact{
-		Type:   "image",
-		Digest: lane.MustParseDigest("sha256:abc1230000000000000000000000000000000000000000000000000000000000"),
-	}); err != nil {
-		t.Fatal(err)
-	}
-
-	ca, look, caPath, ports := deployCapsuleFields(t,
-		"capture:deploy-prod:version", "deploy-prod")
-
-	step := deployStep()
-	d := &deploy.Deployer{
-		Engine:       eng,
-		EngineID:     eng.Identity(),
-		Rekor:        newRekorClient(t, rekorPubPEM, srv.Client(), srv.URL),
-		ArtifactRefs: map[string]string{"image": "build.image"},
-		SigningKey:   keyPEM,
-		KeyPassword:  nil,
-		LaneID:       "test-lane",
-		CA:           ca,
-		UpstreamLook: look,
-		CAVolume:     caPath,
-		StepName:     "deploy-prod",
-		StepPorts:    ports,
-	}
-
-	att, err := d.Execute(context.Background(), step, state)
-	if err != nil {
-		t.Fatalf("Execute: %v", err)
-	}
-
-	// The sealed statement envelope must not contain a "rekor" key in its payload:
-	// the Rekor entry is external metadata, set after signing (ADR-013).
 	if att.Signed == nil {
 		t.Fatal("expected non-nil Signed")
 	}
-	var env deploy.DSSEEnvelope
-	if unmarshalErr := json.Unmarshal(att.Signed.Sealed.Envelope, &env); unmarshalErr != nil {
-		t.Fatalf("unmarshal sealed DSSE envelope: %v", unmarshalErr)
+	got := map[string][]byte{
+		"sealed":         att.Signed.Sealed.Bundle,
+		"engine-context": att.Signed.EngineContext.Bundle,
+		"informational":  att.Signed.Informational.Bundle,
+	}
+	want := map[string][]byte{
+		"sealed":         []byte(`{"stub":"bundle-0"}`),
+		"engine-context": []byte(`{"stub":"bundle-1"}`),
+		"informational":  []byte(`{"stub":"bundle-2"}`),
+	}
+	for name, wantBundle := range want {
+		if !bytes.Equal(got[name], wantBundle) {
+			t.Errorf("%s bundle = %s, want %s", name, got[name], wantBundle)
+		}
+	}
+}
+
+func TestDeployerExecute_KeylessFailureIsFatal(t *testing.T) {
+	eng := newTLSTestEngine(t, containerMock(t, "v1.2.3"))
+
+	state := lane.NewState()
+	if err := state.Register("build", "image", lane.Artifact{
+		Type:   "image",
+		Digest: lane.MustParseDigest("sha256:abc1230000000000000000000000000000000000000000000000000000000000"),
+	}); err != nil {
+		t.Fatal(err)
 	}
 
-	payloadJSON, decErr := base64.RawURLEncoding.DecodeString(env.Payload)
-	if decErr != nil {
-		t.Fatalf("decode payload: %v", decErr)
-	}
+	ca, look, caPath, ports := deployCapsuleFields(t,
+		"capture:deploy-prod:version", "deploy-prod")
 
-	var stmtMap map[string]any
-	if unmarshalErr := json.Unmarshal(payloadJSON, &stmtMap); unmarshalErr != nil {
-		t.Fatalf("unmarshal payload: %v", unmarshalErr)
+	step := deployStep()
+	d := &deploy.Deployer{
+		Engine:       eng,
+		ArtifactRefs: map[string]string{"image": "build.image"},
+		LaneID:       "test-lane",
+		CA:           ca,
+		UpstreamLook: look,
+		CAVolume:     caPath,
+		StepName:     "deploy-prod",
+		StepPorts:    ports,
 	}
+	wantErr := errors.New("keyless: fulcio unreachable")
+	deploy.SetProduceBundles(d, func(_ context.Context, _ lane.KeylessEndpoints, _ [][]byte) ([][]byte, error) {
+		return nil, wantErr
+	})
 
-	// The sealed statement is an in-toto Statement v1; its predicate's
-	// externalParameters must not carry a rekor field.
-	predMap, ok := stmtMap["predicate"].(map[string]any)
-	if !ok {
-		t.Fatal("expected predicate object in sealed DSSE payload")
+	_, err := d.Execute(context.Background(), step, state)
+	if err == nil {
+		t.Fatal("expected Execute to fail when bundle production fails (fail-closed)")
 	}
-	bdMap, ok := predMap["buildDefinition"].(map[string]any)
-	if !ok {
-		t.Fatal("expected buildDefinition in predicate")
-	}
-	epMap, ok := bdMap["externalParameters"].(map[string]any)
-	if !ok {
-		t.Fatal("expected externalParameters in buildDefinition")
-	}
-	if _, hasRekor := epMap["rekor"]; hasRekor {
-		t.Error("sealed statement externalParameters must NOT contain 'rekor' field")
+	if !errors.Is(err, wantErr) {
+		t.Errorf("error = %v, want wrapped %v", err, wantErr)
 	}
 }
 
@@ -1325,6 +1220,7 @@ func TestDeployerExecute_ObservedPeersPopulated(t *testing.T) {
 		StepPorts:      ports,
 		NetworkRecords: networkRecords,
 	}
+	deploy.SetProduceBundles(d, stubProduceBundles())
 	att, err := d.Execute(context.Background(), step, state)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -1496,6 +1392,7 @@ func TestDeployerExecute_ObservedPeersConflictAborts(t *testing.T) {
 		StepPorts:      ports,
 		NetworkRecords: networkRecords,
 	}
+	deploy.SetProduceBundles(d, stubProduceBundles())
 	_, execErr := d.Execute(context.Background(), step, state)
 	if execErr == nil {
 		t.Fatal("expected error for conflicting observed peer identities")

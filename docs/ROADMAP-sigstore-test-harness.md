@@ -2,13 +2,43 @@
 
 ## Status
 
-PLANNED. No files created. This roadmap fixes scope and decisions for the
-supporting infrastructure ADR-040 calls for. The instruction files that
-build it are authored one at a time after this plan, per AI-WORKFLOW.md.
+H1 DONE (stack-up + trust anchors + live smoke); H2 (WebAuthn/FIDO2)
+remains. The harness lives at `test/sigstore-local/` and the keyless
+chain runs against it end to end: ADR-040 instruction 3b-ii-b's env-gated
+live test (`TestKeylessLive`) drives strike's own producer through
+Fulcio, the TSA, and Rekor v2, and the 3b-ii-c cutover made that chain
+the production signing path for deploy statements.
+
+As built, three things diverged from the plan below (the plan text is
+kept as the decision record):
+
+- **TLS everywhere via Caddy.** Every service sits behind a Caddy TLS
+  terminator under one exported internal root (`pki/caddy-root.crt`);
+  there is no plaintext endpoint. strike pins this root as the
+  `#TLSTrust` `ca_bundle` for every keyless endpoint. This came from the
+  3b-ii-a hardening pass ("TLS-only harness").
+- **sslip.io canonical hostnames, not keycloak.local.** The issuer
+  `https://keycloak.127.0.0.1.sslip.io:8443/realms/sigstore` resolves
+  byte-identically from the host (sslip.io -> 127.0.0.1) and in-network
+  (Caddy network alias) without `/etc/hosts` edits or root.
+- **TSA on by default, and piecemeal trust anchors instead of a single
+  TrustedRoot bundle.** Rekor v2 supplies no integrated timestamp (Path 1
+  requires RFC3161), so the TSA toggle resolved to on. The exported
+  anchors are the Caddy root, the Rekor log public key
+  (`make rekor-pubkey`), and the TSA certificate chain
+  (`make tsa-certchain`); the consumer to date is strike's live test, so
+  no assembled trusted-root.json was needed yet. The cosign
+  verify-attestation independence check remains open (it belongs to the
+  instruction-5 arc) and may motivate assembling one then.
+
+The smoke milestone was reached with strike's own chain rather than
+cosign: by the time the stack was up, 3b-i/3b-ii-b had already produced
+the hand-rolled producer and the sigstore-go crossval oracle, so cosign
+as an early bring-up producer was unnecessary.
 
 ## Purpose and relationship to ADR-040
 
-ADR-040-ROADMAP.md lists this harness as a parallel track outside the
+ROADMAP-ADR-040.md lists this harness as a parallel track outside the
 strike code sequence (instructions 1-5). It exists to exercise the live
 keyless chain -- OIDC -> Fulcio short-lived certificate -> DSSE -> Rekor v2
 -- that ADR-040 D2 drives in-process, and to provide the local trust root
@@ -112,7 +142,7 @@ harness is greenfield, most steps create files rather than edit them, so the
 before/after-snippet discipline applies only to the one edit that touches
 existing config; the rest is checked by build / run gates instead.
 
-### stack-up (H1 core)
+### stack-up (H1 core) -- DONE
 
 Goal: the three services come up under rootless Podman, healthy, with a
 single canonical issuer hostname that resolves identically from the host
@@ -137,7 +167,7 @@ Acceptance: all three services report healthy; the issuer discovery document
 is reachable from inside the Fulcio container at the same URL the host uses;
 `iss` matches Fulcio's issuer-url character for character.
 
-### trusted-root-and-smoke (H1 completion)
+### trusted-root-and-smoke (H1 completion) -- DONE (as built: strike live test, piecemeal anchors)
 
 Goal: a non-interactive keyless round-trip is green and offline-verifiable,
 proving the stack before strike's own chain plugs in.
@@ -161,7 +191,7 @@ requirement.
 
 Depends on: stack-up.
 
-### webauthn-fido2 (H2)
+### webauthn-fido2 (H2) -- OPEN
 
 Goal: identity is hardware-gated at the IdP; the backplane is unchanged.
 
@@ -207,22 +237,30 @@ first one):
 - Documents and config are US English, ASCII only, consistent with the rest
   of the tree.
 
-## Open items (decided at run time, not now)
+## Open items
 
-- TSA on or off. Driven by whether keyless verify in the pinned versions
-  needs a separate signed timestamp under Rekor v2. Decided at the
-  trusted-root-and-smoke smoke test. Compose carries it off by default.
-- Exact image digests and cosign version. Pinned and verified at first run on
-  the operator's machine; the planning environment cannot pull from container
-  registries (egress is restricted to source-package mirrors), so none of the
-  config has been executed.
+Resolved at run time:
+
+- TSA on or off -- RESOLVED: on by default. Rekor v2 supplies no
+  integrated timestamp (Path 1 requires RFC3161 tokens); the TSA is a
+  mandatory link in the chain and its certificate chain is exported via
+  `make tsa-certchain`.
+- Exact image digests -- RESOLVED: pinned in `compose.yaml` (Caddy,
+  Keycloak, Fulcio, rekor-tiles POSIX, timestamp-server, curl).
+
+Still open:
+
+- cosign independent-verify path. The original cosign smoke was overtaken
+  by strike's own live test; the cosign verify-attestation independence
+  check (and a possibly needed assembled trusted-root.json) belongs to
+  the ADR-040 instruction-5 arc.
 - Whether direct access grant stays enabled after H2 for CI convenience, or
   is removed so the only path is WebAuthn. Operator choice.
 
 ## References
 
 - ADR-040-control-plane-sbom-and-keyless-attestation.md -- the governing ADR
-- ADR-040-ROADMAP.md -- the strike code sequence; this harness is its parallel
+- ROADMAP-ADR-040.md -- the strike code sequence; this harness is its parallel
   "Local sigstore test harness" track, supporting instructions 3 and 5
 - sigstore-keyless-fido2-report.md -- keyless / FIDO2 evaluation, Variant A,
   the four failure points

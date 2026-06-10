@@ -125,11 +125,6 @@ func (rc *runContext) runStep(stepName string) error {
 func (rc *runContext) executeDeploy(ctx context.Context, step *lane.Step, stepName, safeName string) error {
 	log.Printf("DEPLOY %s", safeName)
 
-	signingKey, keyPassword, err := rc.resolveDeploySecrets(step, safeName)
-	if err != nil {
-		return err
-	}
-
 	artifactRefs := make(map[string]string)
 	for _, e := range rc.dag.DeployEdges[stepName] {
 		artifactRefs[e.ArtifactName] = string(e.FromStep.Name) + "." + e.FromOutput.Name
@@ -139,12 +134,10 @@ func (rc *runContext) executeDeploy(ctx context.Context, step *lane.Step, stepNa
 		Engine:         rc.engine,
 		EngineID:       rc.engineID,
 		ResolverID:     &rc.resolverID,
-		Rekor:          rc.rekor,
 		DAG:            rc.dag,
 		OIDC:           rc.lane.OIDC,
+		Keyless:        rc.lane.Keyless,
 		ArtifactRefs:   artifactRefs,
-		SigningKey:     signingKey,
-		KeyPassword:    keyPassword,
 		LaneID:         rc.lane.LaneID,
 		CA:             rc.ca,
 		UpstreamLook:   rc.upstreamLook,
@@ -178,9 +171,9 @@ func (rc *runContext) executeDeploy(ctx context.Context, step *lane.Step, stepNa
 			name string
 			env  []byte
 		}{
-			{"slsa-provenance.dsse.json", att.Signed.Sealed.Envelope},
-			{"engine-context.dsse.json", att.Signed.EngineContext.Envelope},
-			{"informational.dsse.json", att.Signed.Informational.Envelope},
+			{"slsa-provenance.sigstore.json", att.Signed.Sealed.Bundle},
+			{"engine-context.sigstore.json", att.Signed.EngineContext.Bundle},
+			{"informational.sigstore.json", att.Signed.Informational.Bundle},
 		} {
 			if writeErr := writeToOutputDir(outDir, w.name, w.env); writeErr != nil {
 				return fmt.Errorf("%s: write %s: %w", safeName, w.name, writeErr)
@@ -420,10 +413,6 @@ func (rc *runContext) resolvePackInputPaths(ctx context.Context, step *lane.Step
 		inputPaths[e.Dest.String()] = filepath.Join(inputDir, lane.OutputLayerName(*e.FromOutput))
 	}
 	return inputPaths, nil
-}
-
-func (rc *runContext) resolveDeploySecrets(step *lane.Step, safeName string) ([]byte, []byte, error) {
-	return rc.resolveSigningSecrets(step, safeName)
 }
 
 func (rc *runContext) resolvePackSecrets(step *lane.Step, safeName string) ([]byte, []byte, error) {

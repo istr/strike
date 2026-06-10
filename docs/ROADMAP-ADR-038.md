@@ -128,8 +128,12 @@ Per `HANDOVER-ssh-egress-redesign.md`:
 
 Dependency: externalize signing key (KMS/keyless) before the front's inbound
 listener is exposed in a remote deployment (ADR-037 D5.1 ordering). That
-externalization is ADR-040 D2 (keyless), landed by `docs/ADR-040-ROADMAP.md`
-instruction 3; sequence that instruction ahead of any remote-front exposure.
+externalization is ADR-040 D2 (keyless). Status: ADR-040 instruction 3 is
+done -- deploy statements sign keylessly and the Deployer holds no key
+material -- but the v1 operator-key artifact path (`executor.Pack`)
+remains until ADR-040 instruction 5 (D-3b-5). Remote-front exposure
+therefore still waits for that instruction; see
+`docs/ROADMAP-ADR-040.md`, "Cross-roadmap dependencies".
 
 ## References
 

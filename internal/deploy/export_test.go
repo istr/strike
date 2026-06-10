@@ -1,5 +1,11 @@
 package deploy
 
+import (
+	"context"
+
+	"github.com/istr/strike/internal/lane"
+)
+
 // CaptureSnap exposes captureSnap for the external test package.
 type CaptureSnap = captureSnap
 
@@ -19,3 +25,9 @@ var SignStatementKeyless = signStatementKeyless
 
 // AssembleKeylessBundle exposes assembleKeylessBundle for the external test package.
 var AssembleKeylessBundle = assembleKeylessBundle
+
+// SetProduceBundles injects a bundle producer, replacing the real keyless
+// chain in tests (the live test covers the real chain).
+func SetProduceBundles(d *Deployer, f func(ctx context.Context, eps lane.KeylessEndpoints, statements [][]byte) ([][]byte, error)) {
+	d.produceBundles = f
+}
