@@ -74,8 +74,8 @@ func TestKeylessVerifySpike(t *testing.T) {
 	}
 
 	var pb protobundle.Bundle
-	if err := protojson.Unmarshal(bundles[0], &pb); err != nil {
-		t.Fatalf("protojson unmarshal bundle: %v", err)
+	if uerr := protojson.Unmarshal(bundles[0], &pb); uerr != nil {
+		t.Fatalf("protojson unmarshal bundle: %v", uerr)
 	}
 	vm := pb.GetVerificationMaterial()
 	if vm == nil || len(vm.GetTlogEntries()) != 1 {
@@ -212,10 +212,10 @@ func rfc6962RootFromProof(leaf []byte, index, size int64, path [][]byte) ([]byte
 	return hash, nil
 }
 
-type spikeErr string
+type spikeError string
 
-func (e spikeErr) Error() string { return string(e) }
-func errSpike(s string) error    { return spikeErr("R3: " + s) }
+func (e spikeError) Error() string { return string(e) }
+func errSpike(s string) error      { return spikeError("R3: " + s) }
 
 // parseEd25519PKIX extracts an Ed25519 public key from PKIX/SPKI DER.
 func parseEd25519PKIX(der []byte) (ed25519.PublicKey, error) {
@@ -242,6 +242,9 @@ func verifyCheckpointNote(envelope, origin string, pub ed25519.PublicKey) error 
 		return errSpike("note has no body/signature separator")
 	}
 	body := envelope[:idx+1] // body includes its trailing newline, not the blank line
+	if !strings.HasPrefix(body, origin+"\n") {
+		return errSpike("checkpoint origin does not match the expected log origin")
+	}
 	sigBlock := envelope[idx+len(sep):]
 	for _, line := range strings.Split(strings.TrimRight(sigBlock, "\n"), "\n") {
 		fields := strings.Fields(line)
