@@ -192,7 +192,7 @@ func (p *testPKI) material(t *testing.T) *verify.TrustedMaterial {
 		t.Fatal(err)
 	}
 	logID := sha256.Sum256(rekorDER) // arbitrary stable ID for the test map
-	return verify.NewTestTrustedMaterial(p.fulcioRoot, p.tsaRoot, string(logID[:]), p.rekorPub)
+	return verify.NewTestTrustedMaterial(p.fulcioRoot, p.tsaRoot, p.tsaLeaf, string(logID[:]), p.rekorPub)
 }
 
 // trustedRootJSON round-trips the test material through the production
@@ -372,10 +372,11 @@ func TestTrustedTime(t *testing.T) {
 	sig := []byte("dsse-signature-bytes")
 	h := sha256.Sum256(sig)
 	tsReq := &timestamp.Timestamp{
-		HashAlgorithm:     crypto.SHA256,
-		HashedMessage:     h[:],
-		Time:              p.now,
-		AddTSACertificate: true, // embed the signing cert; verifier fail-closes without it
+		HashAlgorithm: crypto.SHA256,
+		HashedMessage: h[:],
+		Time:          p.now,
+		// Certless token: the producer requests no certificate, and TrustedTime
+		// injects the trusted-root TSA leaf to verify the CMS signature.
 		// CreateResponse marshals the policy OID unconditionally; a nil
 		// policy is an invalid OID. The value itself is not verified.
 		Policy: asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 57264, 2},

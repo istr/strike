@@ -40,6 +40,9 @@ type TrustedMaterial struct {
 	fulcioIntermediates *x509.CertPool
 	tsaRoots            *x509.CertPool
 	tsaIntermediates    *x509.CertPool
+	// tsaLeaf is the TSA signing certificate, injected into a certless RFC3161
+	// token so its CMS signature can be verified against the trusted root.
+	tsaLeaf *x509.Certificate
 	// rekorKeys maps the hex-encoded non-truncated C2SP signed-note key ID to
 	// the log's Ed25519 public key. Consumed by the inclusion layer (5a-ii).
 	rekorKeys map[string]ed25519.PublicKey

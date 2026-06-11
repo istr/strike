@@ -32,6 +32,20 @@ func ParseTrustedRoot(jsonBytes []byte) (*TrustedMaterial, error) {
 	if err := loadCAs(tr.GetTimestampAuthorities(), tm.tsaRoots, tm.tsaIntermediates); err != nil {
 		return nil, fmt.Errorf("%w: tsa: %w", ErrTrustedRoot, err)
 	}
+	// Capture the TSA signing leaf (first cert of the first authority's chain,
+	// leaf-first per the X509CertificateChain convention) for injection into
+	// certless RFC3161 tokens. It is also present in the intermediate pool,
+	// which is harmless for chain building.
+	if tsas := tr.GetTimestampAuthorities(); len(tsas) > 0 {
+		chain := tsas[0].GetCertChain().GetCertificates()
+		if len(chain) > 0 {
+			leaf, err := x509.ParseCertificate(chain[0].GetRawBytes())
+			if err != nil {
+				return nil, fmt.Errorf("%w: tsa leaf: %w", ErrTrustedRoot, err)
+			}
+			tm.tsaLeaf = leaf
+		}
+	}
 	for _, tl := range tr.GetTlogs() {
 		pub, err := x509.ParsePKIXPublicKey(tl.GetPublicKey().GetRawBytes())
 		if err != nil {

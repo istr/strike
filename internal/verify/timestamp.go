@@ -5,31 +5,38 @@ import (
 	"crypto/x509"
 	"fmt"
 
+	"github.com/digitorus/pkcs7"
 	"github.com/digitorus/timestamp"
 
 	"github.com/istr/strike/internal/clock"
 )
 
-// TrustedTime parses the RFC3161 timestamp, verifies its signing chain
-// to the TSA roots in tm, confirms it was taken over the DSSE signature
-// bytes, and returns its time. This is the authoritative trusted time: it,
-// not the wall clock, is the certificate-validity reference, so an at-the-time
-// valid but long-expired leaf verifies and a never-valid one does not.
+// TrustedTime parses the RFC3161 timestamp, verifies its CMS signature against
+// the TSA certificate from the trusted root, confirms it was taken over the
+// DSSE signature bytes, and returns its time. This is the authoritative
+// trusted time: it, not the wall clock, is the certificate-validity reference,
+// so an at-the-time valid but long-expired leaf verifies and a never-valid one
+// does not.
+//
+// strike's producer requests certless tokens (no CertReq), and digitorus does
+// not verify a token that embeds no certificate. The TSA leaf from the trusted
+// root is injected so the signer can be found and the signature verified, the
+// same way sigstore's timestamp verification does it.
 func TrustedTime(pb *ParsedBundle, tm *TrustedMaterial) (clock.Time, error) {
 	ts, err := timestamp.ParseResponse(pb.RFC3161)
 	if err != nil {
 		return clock.Time{}, fmt.Errorf("%w: parse: %w", ErrTrustedTime, err)
 	}
-	if len(ts.Certificates) == 0 {
-		return clock.Time{}, fmt.Errorf("%w: no TSA certificate in token", ErrTrustedTime)
+	p7, err := pkcs7.Parse(ts.RawToken)
+	if err != nil {
+		return clock.Time{}, fmt.Errorf("%w: token: %w", ErrTrustedTime, err)
 	}
-	intermediates := tm.tsaIntermediates.Clone()
-	for _, c := range ts.Certificates[1:] {
-		intermediates.AddCert(c)
+	if p7.Certificates == nil && tm.tsaLeaf != nil {
+		p7.Certificates = []*x509.Certificate{tm.tsaLeaf}
 	}
-	if _, err := ts.Certificates[0].Verify(x509.VerifyOptions{
+	if err := p7.VerifyWithOpts(x509.VerifyOptions{
 		Roots:         tm.tsaRoots,
-		Intermediates: intermediates,
+		Intermediates: tm.tsaIntermediates,
 		CurrentTime:   ts.Time,
 		KeyUsages:     []x509.ExtKeyUsage{x509.ExtKeyUsageTimeStamping},
 	}); err != nil {
@@ -39,7 +46,7 @@ func TrustedTime(pb *ParsedBundle, tm *TrustedMaterial) (clock.Time, error) {
 	h := ts.HashAlgorithm.New()
 	h.Write(sig)
 	if !bytes.Equal(ts.HashedMessage, h.Sum(nil)) {
-		return clock.Time{}, fmt.Errorf("%w: timestamp imprint does not cover the signature", ErrTrustedTime)
+		return clock.Time{}, fmt.Errorf("%w: imprint does not cover the signature", ErrTrustedTime)
 	}
 	return ts.Time, nil
 }

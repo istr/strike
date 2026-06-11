@@ -157,6 +157,13 @@ func goldenTrustedRoot(ctx context.Context, t *testing.T, fulcioEp transport.HTT
 			PublicKey: &protocommon.PublicKey{
 				RawBytes:   block.Bytes,
 				KeyDetails: protocommon.PublicKeyDetails_PKIX_ED25519,
+				// sigstore-go's trusted-root loader requires a validity start
+				// for the log key. The Ed25519 log key has no certificate
+				// validity of its own; the Fulcio root NotBefore is a safe
+				// lower bound (it precedes any entry signed in this harness).
+				ValidFor: &protocommon.TimeRange{
+					Start: timestamppb.New(fulcioRoot.NotBefore),
+				},
 			},
 			LogId: &protocommon.LogId{KeyId: logID},
 		}},
