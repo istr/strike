@@ -50,7 +50,7 @@ $(CADDY_ROOT):
 	@for i in $$(seq 1 30); do \
 	  ( $(COMPOSE) cp caddy:/data/caddy/pki/authorities/local/root.crt $@ 2>/dev/null \
 	    || podman cp strike-sigstore-local_caddy_1:/data/caddy/pki/authorities/local/root.crt $@ 2>/dev/null ) \
-	    && { echo "exported $@"; exit 0; }; \
+	    && { chmod 644 $@; echo "exported $@"; exit 0; }; \
 	  sleep 2; \
 	done; echo "caddy root not available (see first-run risk R-5)" >&2; exit 1
 
@@ -74,13 +74,11 @@ token: $(CADDY_ROOT) ## print an OIDC id_token for tester@strike.localhost (aud 
 	  $(ISSUER)/protocol/openid-connect/token \
 	  | grep -o '"id_token":"[^"]*"' | sed 's/.*:"//;s/"$$//'
 
-tsa-certchain: pki/tsa-certchain.pem ## fetch the TSA certificate chain (PEM)
-
-pki/tsa-certchain.pem: $(CADDY_ROOT)
+tsa-certchain: $(CADDY_ROOT) ## fetch the TSA certificate chain (PEM); always re-fetched -- the TSA mints a fresh signing cert per startup
 	@echo "waiting for TSA certchain (TLS validated against caddy root)..."
 	@for i in $$(seq 1 30); do \
-	  curl --cacert $(CADDY_ROOT) -sf https://tsa.127.0.0.1.sslip.io:3004/api/v1/timestamp/certchain -o $@ \
-	    && { echo "exported $@"; exit 0; }; \
+	  curl --cacert $(CADDY_ROOT) -sf https://tsa.127.0.0.1.sslip.io:3004/api/v1/timestamp/certchain -o pki/tsa-certchain.pem \
+	    && { echo "exported pki/tsa-certchain.pem"; exit 0; }; \
 	  sleep 2; \
 	done; echo "TSA certchain not available" >&2; exit 1
 
