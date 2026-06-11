@@ -141,7 +141,9 @@ func TestKeylessLive(t *testing.T) {
 // the exported Rekor log public key, and the fetched TSA certificate chain.
 // R1 spike caveats applied: the trust root BaseURL hostname must equal the
 // checkpoint origin; Ed25519 SignatureHashFunc is crypto.Hash(0) (pure, no
-// prehash); the log ID is the SHA-256 of the DER-encoded public key.
+// prehash); the log ID is the non-truncated C2SP signed-note key ID,
+// sha256(origin + "\n" + 0x01 + raw ed25519 pubkey) -- NOT the sha256 of the
+// PKIX DER (confirmed by the R3 spike, prefix 1e050d3e).
 func liveTrustRoot(ctx context.Context, t *testing.T, fulcioEp transport.HTTPSEndpoint, rekorPubPath, tsaChainPath string) *root.TrustedRoot {
 	t.Helper()
 

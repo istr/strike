@@ -30,6 +30,7 @@ var (
 	ErrLeafChain   = errors.New("verify: leaf certificate chain")
 	ErrIdentity    = errors.New("verify: certificate identity")
 	ErrTrustedTime = errors.New("verify: trusted timestamp")
+	ErrInclusion   = errors.New("verify: transparency-log inclusion")
 )
 
 // TrustedMaterial is the parsed, ready-to-use form of a sigstore TrustedRoot:
@@ -56,4 +57,48 @@ type ParsedBundle struct {
 	LeafDER  []byte
 	TLE      *protorekor.TransparencyLogEntry
 	RFC3161  []byte
+}
+
+// Verifier checks keyless attestation bundles against a fixed trusted root and
+// an expected signer identity. Construct once with New, then Verify many
+// bundles. It holds no network client and contacts nothing.
+type Verifier struct {
+	tm       *TrustedMaterial
+	identity string
+	issuer   string
+}
+
+// New returns a Verifier bound to the parsed trusted material and the signer
+// identity (SAN) and OIDC issuer every accepted bundle must carry.
+func New(tm *TrustedMaterial, identity, issuer string) *Verifier {
+	return &Verifier{tm: tm, identity: identity, issuer: issuer}
+}
+
+// Verify checks a sigstore v0.3 bundle end to end and returns the verified
+// in-toto statement payload. The order is fail-closed and total: strict
+// bundle shape, RFC3161 trusted time, Fulcio leaf chain and bound identity at
+// that time, DSSE signature, and Rekor v2 transparency-log inclusion. A
+// returned payload has passed every layer; any failure returns a layer
+// sentinel and no payload.
+func (v *Verifier) Verify(bundleJSON []byte) ([]byte, error) {
+	pb, err := ParseBundle(bundleJSON)
+	if err != nil {
+		return nil, err
+	}
+	trustedTime, err := TrustedTime(pb, v.tm)
+	if err != nil {
+		return nil, err
+	}
+	leaf, err := Leaf(pb.LeafDER, v.tm, trustedTime, v.identity, v.issuer)
+	if err != nil {
+		return nil, err
+	}
+	payload, err := DSSE(pb, leaf)
+	if err != nil {
+		return nil, err
+	}
+	if err := Inclusion(pb, v.tm, leaf); err != nil {
+		return nil, err
+	}
+	return payload, nil
 }
