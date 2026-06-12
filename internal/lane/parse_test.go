@@ -468,7 +468,6 @@ steps:
       attestation:
         pre_state: {required: false, capture: []}
         post_state: {required: false, capture: []}
-        drift: {detect: false, on_drift: warn}
 `)
 
 	dir := t.TempDir()

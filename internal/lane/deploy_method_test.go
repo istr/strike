@@ -33,7 +33,6 @@ func TestDeploySpec_UnmarshalJSON_Discriminator(t *testing.T) {
 				"attestation": {
 					"pre_state": {"required": false, "capture": []},
 					"post_state": {"required": false, "capture": []},
-					"drift": {"detect": false, "on_drift": "warn"}
 				}
 			}`,
 			check: func(t *testing.T, m lane.DeployMethod) {
@@ -62,7 +61,6 @@ func TestDeploySpec_UnmarshalJSON_Discriminator(t *testing.T) {
 				"attestation": {
 					"pre_state": {"required": false, "capture": []},
 					"post_state": {"required": false, "capture": []},
-					"drift": {"detect": false, "on_drift": "warn"}
 				}
 			}`,
 			check: func(t *testing.T, m lane.DeployMethod) {
@@ -90,7 +88,6 @@ func TestDeploySpec_UnmarshalJSON_Discriminator(t *testing.T) {
 				"attestation": {
 					"pre_state": {"required": false, "capture": []},
 					"post_state": {"required": false, "capture": []},
-					"drift": {"detect": false, "on_drift": "warn"}
 				}
 			}`,
 			check: func(t *testing.T, m lane.DeployMethod) {
@@ -158,7 +155,6 @@ func TestDeploySpec_RoundTrip(t *testing.T) {
 		"attestation": {
 			"pre_state": {"required": false, "capture": []},
 			"post_state": {"required": false, "capture": []},
-			"drift": {"detect": false, "on_drift": "warn"}
 		}
 	}`
 
