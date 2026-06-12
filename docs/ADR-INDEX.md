@@ -75,6 +75,7 @@ referenced here at all.
 | 039 | [The deploy step as attestation root](ADR-039-deploy-step-as-attestation-root.md) | Accepted | Code is liability; CUE first; Reproducibility; Observation over declaration |
 | 040 | [Control-plane SBOM generation and keyless attestation](ADR-040-control-plane-sbom-and-keyless-attestation.md) | Accepted | Runtime is attested; Identity is asymmetric; Peers are declared; Digest-pinned references; Reproducibility; Code is liability; No exec |
 | 041 | [The lane as verification policy](ADR-041-lane-as-verification-policy.md) | Accepted | Runtime is attested; Identity is asymmetric; Digest-pinned references; CUE first; Observation over declaration; Enforcement is structural; Code is liability |
+| 042 | [Field naming: camelCase, matching the attestation ecosystem](ADR-042-field-naming-camelcase.md) | Accepted | Runtime is attested; CUE first; Code is liability |
 
 ## By principle
 
@@ -88,7 +89,7 @@ ADR-001, ADR-002, ADR-004, ADR-005, ADR-006, ADR-008, ADR-010,
 ADR-011, ADR-013, ADR-014, ADR-015, ADR-016, ADR-017, ADR-018,
 ADR-019, ADR-020, ADR-021, ADR-023, ADR-024, ADR-025, ADR-026, ADR-027,
 ADR-028, ADR-029, ADR-030, ADR-031, ADR-032, ADR-033, ADR-034, ADR-035,
-ADR-036, ADR-037, ADR-038, ADR-039, ADR-040, ADR-041.
+ADR-036, ADR-037, ADR-038, ADR-039, ADR-040, ADR-041, ADR-042.
 
 ### No shell
 
@@ -106,7 +107,7 @@ ADR-031, ADR-033.
 ### CUE first
 
 ADR-004, ADR-010, ADR-015, ADR-017, ADR-022, ADR-027, ADR-035, ADR-039,
-ADR-041.
+ADR-041, ADR-042.
 
 ### Secrets are typed
 
@@ -115,7 +116,7 @@ ADR-006, ADR-014, ADR-016, ADR-018.
 ### Runtime is attested
 
 ADR-012, ADR-013, ADR-014, ADR-016, ADR-019, ADR-028, ADR-030,
-ADR-033, ADR-037, ADR-038, ADR-040, ADR-041.
+ADR-033, ADR-037, ADR-038, ADR-040, ADR-041, ADR-042.
 
 ### Peers are declared
 
