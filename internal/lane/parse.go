@@ -1,6 +1,8 @@
 package lane
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/netip"
@@ -40,35 +42,44 @@ func buildSchema() string {
 }
 
 // Parse reads a lane YAML file, validates it against the embedded CUE schema,
-// and returns a typed Lane instance.
-func Parse(fp FilePath) (*Lane, error) {
+// and returns a typed Lane instance together with the raw sha256 digest of
+// the file bytes. Hash and parse consume the same single read, so the digest
+// is bound to exactly the bytes the Lane was built from; it is carried into
+// the sealed attestation as lane_digest.
+func Parse(fp FilePath) (*Lane, Digest, error) {
 	raw, err := fp.Read()
 	if err != nil {
-		return nil, fmt.Errorf("read: %w", err)
+		return nil, Digest{}, fmt.Errorf("read: %w", err)
 	}
+	// The input is "sha256:" followed by 64 lowercase hex by construction, so
+	// it always satisfies #Digest and MustParseDigest's panic is unreachable.
+	// Using the canonical constructor keeps digest validation in one place and
+	// holds Parse at the cyclomatic-complexity ceiling.
+	sum := sha256.Sum256(raw)
+	dg := MustParseDigest("sha256:" + hex.EncodeToString(sum[:]))
 
 	// YAML to generic map (for CUE validation)
 	var asMap any
 	if yamlErr := yaml.Unmarshal(raw, &asMap); yamlErr != nil {
-		return nil, fmt.Errorf("yaml parse: %w", yamlErr)
+		return nil, Digest{}, fmt.Errorf("yaml parse: %w", yamlErr)
 	}
 
 	// Convert to JSON (CUE is a superset of JSON)
 	asJSON, err := json.Marshal(asMap)
 	if err != nil {
-		return nil, fmt.Errorf("json marshal: %w", err)
+		return nil, Digest{}, fmt.Errorf("json marshal: %w", err)
 	}
 
 	// Validate against embedded CUE schema
 	if err := validate(asJSON); err != nil {
-		return nil, fmt.Errorf("validation:\n%w", err)
+		return nil, Digest{}, fmt.Errorf("validation:\n%w", err)
 	}
 
 	// Deserialize from JSON into typed Lane struct.
 	// Using JSON (not YAML) because gengotypes only emits json struct tags.
 	var p Lane
 	if err := json.Unmarshal(asJSON, &p); err != nil {
-		return nil, fmt.Errorf("deserialize: %w", err)
+		return nil, Digest{}, fmt.Errorf("deserialize: %w", err)
 	}
 
 	// Validate: exactly one of image, image_from, pack, or deploy per step
@@ -87,24 +98,24 @@ func Parse(fp FilePath) (*Lane, error) {
 			count++
 		}
 		if count != 1 {
-			return nil, fmt.Errorf(
+			return nil, Digest{}, fmt.Errorf(
 				"step %q: exactly one of image, image_from, pack, or deploy required", s.Name)
 		}
 	}
 
 	if err := validateDeployPresence(&p); err != nil {
-		return nil, err
+		return nil, Digest{}, err
 	}
 
 	if err := validateResolver(&p); err != nil {
-		return nil, err
+		return nil, Digest{}, err
 	}
 
 	if err := ValidatePaths(&p); err != nil {
-		return nil, err
+		return nil, Digest{}, err
 	}
 
-	return &p, nil
+	return &p, dg, nil
 }
 
 // ValidatePaths rejects unsafe paths in outputs and pack dests.

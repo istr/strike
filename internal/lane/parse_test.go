@@ -52,7 +52,7 @@ func TestParseDuration(t *testing.T) {
 // --------------------------------------------------------------------------.
 
 func TestParse_ValidMinimal(t *testing.T) {
-	p, err := lane.Parse(mustFilePath(t, "testdata/valid_minimal.yaml"))
+	p, _, err := lane.Parse(mustFilePath(t, "testdata/valid_minimal.yaml"))
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
@@ -134,7 +134,7 @@ steps:
 	if err := os.WriteFile(path, yaml, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	p, err := lane.Parse(mustFilePath(t, path))
+	p, _, err := lane.Parse(mustFilePath(t, path))
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
@@ -213,7 +213,7 @@ steps:
 	if err := os.WriteFile(path, yaml, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	p, err := lane.Parse(mustFilePath(t, path))
+	p, _, err := lane.Parse(mustFilePath(t, path))
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
@@ -230,7 +230,7 @@ steps:
 }
 
 func TestParse_NonPinnedImageRejected(t *testing.T) {
-	_, err := lane.Parse(mustFilePath(t, "testdata/invalid_image_not_pinned.yaml"))
+	_, _, err := lane.Parse(mustFilePath(t, "testdata/invalid_image_not_pinned.yaml"))
 	if err == nil {
 		t.Fatal("expected error for non-pinned image")
 	}
@@ -240,7 +240,7 @@ func TestParse_NonPinnedImageRejected(t *testing.T) {
 }
 
 func TestParse_ForceRunTrue(t *testing.T) {
-	p, err := lane.Parse(mustFilePath(t, "testdata/valid_force_run.yaml"))
+	p, _, err := lane.Parse(mustFilePath(t, "testdata/valid_force_run.yaml"))
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
@@ -250,7 +250,7 @@ func TestParse_ForceRunTrue(t *testing.T) {
 }
 
 func TestParse_ForceRunDefaultFalse(t *testing.T) {
-	p, err := lane.Parse(mustFilePath(t, "testdata/valid_minimal.yaml"))
+	p, _, err := lane.Parse(mustFilePath(t, "testdata/valid_minimal.yaml"))
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
@@ -260,7 +260,7 @@ func TestParse_ForceRunDefaultFalse(t *testing.T) {
 }
 
 func TestParse_ValidDeploy(t *testing.T) {
-	p, err := lane.Parse(mustFilePath(t, "testdata/valid_deploy.yaml"))
+	p, _, err := lane.Parse(mustFilePath(t, "testdata/valid_deploy.yaml"))
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
@@ -291,7 +291,7 @@ func TestParse_Nonexistent(t *testing.T) {
 }
 
 func TestParse_InvalidYAML(t *testing.T) {
-	_, err := lane.Parse(mustFilePath(t, "testdata/invalid_yaml.yaml"))
+	_, _, err := lane.Parse(mustFilePath(t, "testdata/invalid_yaml.yaml"))
 	if err == nil {
 		t.Fatal("expected error for invalid YAML")
 	}
@@ -301,7 +301,7 @@ func TestParse_InvalidYAML(t *testing.T) {
 }
 
 func TestParse_InvalidSchema(t *testing.T) {
-	_, err := lane.Parse(mustFilePath(t, "testdata/invalid_schema.yaml"))
+	_, _, err := lane.Parse(mustFilePath(t, "testdata/invalid_schema.yaml"))
 	if err == nil {
 		t.Fatal("expected error for schema violation")
 	}
@@ -311,7 +311,7 @@ func TestParse_InvalidSchema(t *testing.T) {
 }
 
 func TestParse_StepMultiImage(t *testing.T) {
-	_, err := lane.Parse(mustFilePath(t, "testdata/invalid_step_multi.yaml"))
+	_, _, err := lane.Parse(mustFilePath(t, "testdata/invalid_step_multi.yaml"))
 	if err == nil {
 		t.Fatal("expected error for step with both image and pack")
 	}
@@ -407,7 +407,7 @@ func TestValidatePaths(t *testing.T) {
 }
 
 func TestParse_PathTraversal(t *testing.T) {
-	_, err := lane.Parse(mustFilePath(t, "testdata/invalid_path_traversal.yaml"))
+	_, _, err := lane.Parse(mustFilePath(t, "testdata/invalid_path_traversal.yaml"))
 	if err == nil {
 		t.Fatal("expected error for path traversal")
 	}
@@ -477,7 +477,7 @@ steps:
 		t.Fatal(err)
 	}
 
-	_, err := lane.Parse(mustFilePath(t, path))
+	_, _, err := lane.Parse(mustFilePath(t, path))
 	if err == nil {
 		t.Fatal("expected parse error for invalid deploy method type")
 	}
@@ -595,7 +595,7 @@ steps:
 			if err := os.WriteFile(path, []byte(yaml), 0o600); err != nil {
 				t.Fatal(err)
 			}
-			_, err := lane.Parse(mustFilePath(t, path))
+			_, _, err := lane.Parse(mustFilePath(t, path))
 			if tt.valid {
 				if err != nil {
 					t.Errorf("expected valid subpath %q, got error: %v", tt.subpath, err)

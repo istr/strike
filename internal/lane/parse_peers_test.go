@@ -26,7 +26,7 @@ func TestParse_PeersAccept(t *testing.T) {
 			if fpErr != nil {
 				t.Fatalf("NewFilePath(%s): %v", path, fpErr)
 			}
-			if _, err := lane.Parse(fp); err != nil {
+			if _, _, err := lane.Parse(fp); err != nil {
 				t.Errorf("Parse(%s): unexpected error: %v", path, err)
 			}
 		})
@@ -84,7 +84,7 @@ func TestParse_PeersReject(t *testing.T) {
 			if fpErr != nil {
 				t.Fatalf("NewFilePath(%s): %v", path, fpErr)
 			}
-			_, err := lane.Parse(fp)
+			_, _, err := lane.Parse(fp)
 			if err == nil {
 				t.Fatalf("Parse(%s): expected error, got nil", path)
 			}

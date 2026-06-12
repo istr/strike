@@ -52,7 +52,7 @@ func projectStatements(att *Attestation, oidc lane.OIDCConfig) (
 				BuildType: laneBuildType,
 				ExternalParameters: StrikeExternalParameters{
 					LaneID:        att.Sealed.LaneID,
-					LaneRef:       att.Sealed.LaneRef,
+					LaneDigest:    att.Sealed.LaneDigest,
 					Target:        att.Sealed.Target,
 					OIDC:          ProvenanceOIDC{Issuer: oidc.Issuer, Identity: oidc.Identity},
 					Peers:         att.Sealed.Peers,

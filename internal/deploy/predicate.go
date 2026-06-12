@@ -66,7 +66,7 @@ type StrikeExternalParameters struct {
 	Engine        *EngineConnection       `json:"engine,omitempty"`
 	OIDC          ProvenanceOIDC          `json:"oidc"`
 	LaneID        string                  `json:"lane_id"`
-	LaneRef       string                  `json:"lane_ref"`
+	LaneDigest    string                  `json:"lane_digest"`
 }
 
 // ProvenanceOIDC is the declared signing identity carried into the sealed

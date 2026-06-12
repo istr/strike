@@ -95,7 +95,7 @@ steps:
 	if fpErr != nil {
 		t.Fatalf("NewFilePath: %v", fpErr)
 	}
-	_, err := lane.Parse(fp)
+	_, _, err := lane.Parse(fp)
 	if err == nil {
 		t.Fatal("expected parse error: 'sources' field does not exist in schema")
 	}
@@ -110,7 +110,7 @@ func TestProvenanceCapture_EndToEnd(t *testing.T) {
 	if fpErr != nil {
 		t.Fatal(fpErr)
 	}
-	p, err := lane.Parse(fp)
+	p, _, err := lane.Parse(fp)
 	if err != nil {
 		t.Fatal(err)
 	}

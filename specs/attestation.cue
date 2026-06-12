@@ -72,8 +72,9 @@ package deploy
 	// target describes what was deployed to. Declared, lane-anchored.
 	target: #DeployTarget
 
-	// lane_ref is the digest of the lane definition file, computed by CP.
-	lane_ref: #Digest | ""
+	// lane_digest is the raw sha256 over the lane definition file bytes,
+	// computed by CP at parse time (hash and parse read the same bytes).
+	lane_digest: #Digest | ""
 
 	// artifacts maps artifact names to their signed provenance records.
 	// Each artifact's digest is consumer-dereferenceable from the registry

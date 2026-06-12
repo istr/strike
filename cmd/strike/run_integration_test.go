@@ -43,7 +43,7 @@ func assertLanePanicFree(t *testing.T, path string) {
 	if fpErr != nil {
 		t.Fatalf("lane.NewFilePath(%s): %v", path, fpErr)
 	}
-	p, err := lane.Parse(fp)
+	p, _, err := lane.Parse(fp)
 	if err != nil {
 		t.Fatalf("lane.Parse(%s): %v", path, err)
 	}

@@ -57,6 +57,7 @@ type runContext struct {
 	front          *front.Front
 	upstreamLook   capsule.UpstreamLookupFunc
 	lane           *lane.Lane
+	laneDigest     lane.Digest
 	dag            *lane.DAG
 	stepPorts      map[string]capsule.HostPorts       // mediated step name -> host ports
 	networkRecords map[string]capsule.Records         // step name -> records
@@ -139,6 +140,7 @@ func (rc *runContext) executeDeploy(ctx context.Context, step *lane.Step, stepNa
 		Keyless:        rc.lane.Keyless,
 		ArtifactRefs:   artifactRefs,
 		LaneID:         rc.lane.LaneID,
+		LaneDigest:     rc.laneDigest.String(),
 		CA:             rc.ca,
 		UpstreamLook:   rc.upstreamLook,
 		CAVolume:       rc.trust.ca,

@@ -36,11 +36,11 @@ func TestSLSAProvenanceStatement_Valid(t *testing.T) {
 			BuildDefinition: deploy.SLSABuildDefinition{
 				BuildType: "https://istr.dev/strike/buildtypes/lane/v1",
 				ExternalParameters: deploy.StrikeExternalParameters{
-					LaneID:  "demo",
-					LaneRef: "",
-					Target:  lane.DeployTarget{ID: "prod-1", Type: "registry", Description: "production"},
-					OIDC:    deploy.ProvenanceOIDC{Issuer: "https://idp.example.com", Identity: "strike@example.com"},
-					Peers:   map[string][]lane.Peer{},
+					LaneID:     "demo",
+					LaneDigest: "",
+					Target:     lane.DeployTarget{ID: "prod-1", Type: "registry", Description: "production"},
+					OIDC:       deploy.ProvenanceOIDC{Issuer: "https://idp.example.com", Identity: "strike@example.com"},
+					Peers:      map[string][]lane.Peer{},
 				},
 			},
 			RunDetails: deploy.SLSARunDetails{Builder: deploy.SLSABuilder{ID: "https://istr.dev/strike"}},

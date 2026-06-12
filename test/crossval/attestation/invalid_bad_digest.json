@@ -11,7 +11,7 @@
           "description": "test"
         },
         "artifacts": {},
-        "lane_ref": "",
+        "lane_digest": "",
         "peers": {}
       },
       "engine_dependent": {},

@@ -20,7 +20,7 @@ func TestResolver_FQDNRejectedByParse(t *testing.T) {
 	if fpErr != nil {
 		t.Fatalf("NewFilePath: %v", fpErr)
 	}
-	_, err := lane.Parse(fp)
+	_, _, err := lane.Parse(fp)
 	if err == nil {
 		t.Fatal("Parse must reject FQDN resolver host")
 	}
@@ -41,7 +41,7 @@ func TestResolver_MissingRejectedByParse(t *testing.T) {
 	if fpErr != nil {
 		t.Fatalf("NewFilePath: %v", fpErr)
 	}
-	_, err := lane.Parse(fp)
+	_, _, err := lane.Parse(fp)
 	if err == nil {
 		t.Fatal("Parse must reject lane without resolver")
 	}
@@ -129,7 +129,7 @@ steps:
 	if fpErr != nil {
 		t.Fatalf("NewFilePath: %v", fpErr)
 	}
-	if _, err := lane.Parse(fp); err != nil {
+	if _, _, err := lane.Parse(fp); err != nil {
 		t.Fatalf("Parse must accept IPv4-only resolver host: %v", err)
 	}
 }
@@ -213,7 +213,7 @@ steps:
 	if fpErr != nil {
 		t.Fatalf("NewFilePath: %v", fpErr)
 	}
-	if _, err := lane.Parse(fp); err != nil {
+	if _, _, err := lane.Parse(fp); err != nil {
 		t.Fatalf("Parse must accept IPv4 with port resolver host: %v", err)
 	}
 }

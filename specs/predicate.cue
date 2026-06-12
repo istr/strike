@@ -82,10 +82,10 @@ package deploy
 // identities the control plane observed and validated against the declared
 // anchors -- all control-plane-established, sound without engine trust.
 #StrikeExternalParameters: {
-	lane_id:  =~"^[a-z0-9][a-z0-9-]{0,62}$"
-	lane_ref: #Digest | ""
-	target:   #DeployTarget
-	oidc:     #ProvenanceOIDC
+	lane_id:     =~"^[a-z0-9][a-z0-9-]{0,62}$"
+	lane_digest: #Digest | ""
+	target:      #DeployTarget
+	oidc:        #ProvenanceOIDC
 	peers: [Step=string]: [...#Peer]
 	observed_peers?: [Endpoint=string]: #ObservedPeer
 	resolver?: #ResolverRecord

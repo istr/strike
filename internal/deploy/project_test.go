@@ -13,9 +13,9 @@ func TestProjectStatements(t *testing.T) {
 	rootless := true
 	att := &deploy.Attestation{
 		Sealed: deploy.Sealed{
-			LaneID:  "demo",
-			LaneRef: "",
-			Target:  lane.DeployTarget{ID: "prod-1", Type: "registry", Description: "production"},
+			LaneID:     "demo",
+			LaneDigest: "",
+			Target:     lane.DeployTarget{ID: "prod-1", Type: "registry", Description: "production"},
 			Artifacts: map[string]deploy.SignedArtifact{
 				"b-image": {Digest: "sha256:" + strings.Repeat("b", 64)},
 				"a-image": {Digest: "sha256:" + strings.Repeat("a", 64)},

@@ -54,7 +54,7 @@ type Sealed struct {
 	ObservedPeers map[string]ObservedPeer   `json:"observed_peers,omitempty"`
 	Target        lane.DeployTarget         `json:"target"`
 	LaneID        string                    `json:"lane_id"`
-	LaneRef       string                    `json:"lane_ref"`
+	LaneDigest    string                    `json:"lane_digest"`
 }
 
 // ---------------------------------------------------------------------------
@@ -334,6 +334,7 @@ type Deployer struct {
 	StepPorts      map[string]capsule.HostPorts // unit name -> host ports
 	NetworkRecords map[string]capsule.Records   // run/build step records, keyed by step name (injected by cmd/strike)
 	LaneID         string
+	LaneDigest     string                                                                                      // raw sha256 over the lane file bytes; sealed as lane_digest
 	StepName       string                                                                                      // deploy step name; method-container port key and capture-key prefix
 	CAVolume       string                                                                                      // lane-wide CA volume name; mounted r/o at /etc/ssl/certs
 	Keyless        lane.KeylessEndpoints                                                                       // lane-declared keyless endpoints (ADR-040 D2); every deploy dials Fulcio, Rekor v2, and the TSA
@@ -510,6 +511,7 @@ func (d *Deployer) buildAttestation(
 	return &Attestation{
 		Sealed: Sealed{
 			LaneID:        d.LaneID,
+			LaneDigest:    d.LaneDigest,
 			Target:        spec.Target,
 			Artifacts:     artifactDigests,
 			Resolver:      d.resolverRecord(),
@@ -642,6 +644,19 @@ func (d *Deployer) signStatements(ctx context.Context, att *Attestation, stepNam
 		token, tErr := ambientIDToken()
 		if tErr != nil {
 			return fmt.Errorf("step %q: %w", stepName, tErr)
+		}
+		// Observation over declaration, fail-closed at the source: the
+		// token's subject is the observed signing identity, the lane's
+		// oidc.identity the declared one. A mismatch aborts the deploy
+		// before any Fulcio contact instead of producing a bundle the
+		// verifier rejects against the same declaration later.
+		subject, sErr := subjectFromIDToken(token)
+		if sErr != nil {
+			return fmt.Errorf("step %q: %w", stepName, sErr)
+		}
+		if subject != d.OIDC.Identity {
+			return fmt.Errorf("step %q: keyless: token identity %q does not match the lane-declared identity %q",
+				stepName, subject, d.OIDC.Identity)
 		}
 		produce = func(ctx context.Context, eps lane.KeylessEndpoints, stmts [][]byte) ([][]byte, error) {
 			return produceKeylessBundles(ctx, eps, token, stmts)

@@ -1,6 +1,6 @@
 {
   "boundary": "ValidateAttestation",
-  "description": "lane_ref not matching #Digest pattern fails validation",
+  "description": "lane_digest not matching #Digest pattern fails validation",
   "inputs": {
     "attestation": {
       "sealed": {
@@ -11,7 +11,7 @@
           "description": "test"
         },
         "artifacts": {},
-        "lane_ref": "not-a-digest",
+        "lane_digest": "not-a-digest",
         "peers": {}
       },
       "engine_dependent": {},
@@ -25,6 +25,6 @@
   },
   "expected": {
     "valid": false,
-    "error_contains": "lane_ref"
+    "error_contains": "lane_digest"
   }
 }

@@ -164,25 +164,25 @@ func initRekor() *executor.RekorClient {
 // DAG dump or a half-started run. The checks are fully offline: file
 // resolution, parse, DAG construction, and the leaf-is-deploy policy
 // (ADR-039 D5). It returns the resolved file path, parsed lane, and DAG.
-func validateLane(path string) (fp lane.FilePath, p *lane.Lane, dag *lane.DAG, err error) {
+func validateLane(path string) (fp lane.FilePath, p *lane.Lane, dg lane.Digest, dag *lane.DAG, err error) {
 	fp, err = lane.NewFilePath(path)
 	if err != nil {
-		return fp, p, dag, err
+		return fp, p, dg, dag, err
 	}
-	p, err = lane.Parse(fp)
+	p, dg, err = lane.Parse(fp)
 	if err != nil {
-		return fp, p, dag, err
+		return fp, p, dg, dag, err
 	}
 	dag, err = lane.Build(p)
 	if err != nil {
-		return fp, p, dag, err
+		return fp, p, dg, dag, err
 	}
 	err = dag.ValidateLeavesAreDeploys(p)
-	return fp, p, dag, err
+	return fp, p, dg, dag, err
 }
 
 func cmdValidate(path string) {
-	_, p, _, err := validateLane(path)
+	_, p, _, _, err := validateLane(path)
 	if err != nil {
 		log.Fatalf("error: %v", err)
 	}
@@ -190,7 +190,7 @@ func cmdValidate(path string) {
 }
 
 func cmdDAG(path string) {
-	_, _, dag, err := validateLane(path)
+	_, _, _, dag, err := validateLane(path)
 	if err != nil {
 		log.Fatalf("error: %v", err)
 	}
@@ -214,7 +214,7 @@ func cmdDAG(path string) {
 }
 
 func cmdRun(ctx context.Context, path string, engine container.Engine) {
-	fp, p, dag, err := validateLane(path)
+	fp, p, laneDigest, dag, err := validateLane(path)
 	if err != nil {
 		log.Fatalf("error: %v", err)
 	}
@@ -243,6 +243,7 @@ func cmdRun(ctx context.Context, path string, engine container.Engine) {
 		ctx:            ctx,
 		engine:         engine,
 		lane:           p,
+		laneDigest:     laneDigest,
 		dag:            dag,
 		regClient:      &registry.Client{Engine: engine},
 		engineID:       engine.Identity(),

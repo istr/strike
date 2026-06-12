@@ -25,7 +25,7 @@ func TestAllFixturesBuild(t *testing.T) {
 				}
 				t.Fatalf("NewFilePath: %v", fpErr)
 			}
-			p, err := lane.Parse(fp)
+			p, _, err := lane.Parse(fp)
 			if err != nil {
 				if strings.HasPrefix(filepath.Base(path), "invalid_") {
 					return

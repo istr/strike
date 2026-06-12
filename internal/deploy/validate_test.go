@@ -98,7 +98,7 @@ func TestValidateAttestation_MissingTarget(t *testing.T) {
 	raw := `{
 		"sealed": {
 			"lane_id": "test-lane",
-			"lane_ref": "",
+			"lane_digest": "",
 			"artifacts": {},
 			"peers": {}
 		},
