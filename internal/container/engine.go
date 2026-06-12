@@ -212,30 +212,30 @@ type ConnectionInfo struct {
 	// if the OS trust store was used. Empty for Unix socket connections.
 	// Verifiers use this to assess the scope of trust behind the server
 	// certificate fingerprint.
-	CATrustMode string `json:"ca_trust_mode,omitempty"`
+	CATrustMode string `json:"caTrustMode,omitempty"`
 
 	// ServerCertFingerprint is the SHA-256 of the engine's leaf certificate.
 	// Empty for Unix socket connections.
-	ServerCertFingerprint string `json:"server_cert_fingerprint,omitempty"`
+	ServerCertFingerprint string `json:"serverCertFingerprint,omitempty"`
 
 	// ServerCertSubject is the Subject CN of the engine's certificate.
-	ServerCertSubject string `json:"server_cert_subject,omitempty"`
+	ServerCertSubject string `json:"serverCertSubject,omitempty"`
 
 	// ServerCertIssuer is the Issuer CN of the engine's certificate.
-	ServerCertIssuer string `json:"server_cert_issuer,omitempty"`
+	ServerCertIssuer string `json:"serverCertIssuer,omitempty"`
 
 	// ClientCertFingerprint is the SHA-256 of the controller's certificate.
 	// Empty unless mTLS is configured.
-	ClientCertFingerprint string `json:"client_cert_fingerprint,omitempty"`
+	ClientCertFingerprint string `json:"clientCertFingerprint,omitempty"`
 
 	// ClientCertSubject is the Subject CN of the controller's certificate.
-	ClientCertSubject string `json:"client_cert_subject,omitempty"`
+	ClientCertSubject string `json:"clientCertSubject,omitempty"`
 }
 
 // RuntimeInfo holds the engine's self-reported metadata from /info.
 type RuntimeInfo struct {
 	Version    string `json:"version"`
-	APIVersion string `json:"api_version"`
+	APIVersion string `json:"apiVersion"`
 	Rootless   bool   `json:"rootless"`
 	SELinux    bool   `json:"selinux"`
 	AppArmor   bool   `json:"apparmor"`

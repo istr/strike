@@ -27,7 +27,7 @@ package lane
 	uri:         string @go(URI)
 	commit:      string & =~"^[a-f0-9]{40}$|^[a-f0-9]{64}$" @go(Commit)
 	ref?:        string @go(Ref)
-	fetched_at?: string @go(FetchedAt)
+	fetchedAt?: string @go(FetchedAt)
 }
 
 // ---------------------------------------------------------------------------
@@ -39,7 +39,7 @@ package lane
 	type:        "tarball" @go(Type)
 	uri:         string @go(URI)
 	sha256:      string & =~"^[a-f0-9]{64}$" @go(SHA256)
-	fetched_at?: string @go(FetchedAt)
+	fetchedAt?: string @go(FetchedAt)
 }
 
 // ---------------------------------------------------------------------------
@@ -51,7 +51,7 @@ package lane
 	type:        "oci" @go(Type)
 	uri:         string @go(URI)
 	digest:      string & =~"^sha256:[a-f0-9]{64}$" @go(Digest)
-	fetched_at?: string @go(FetchedAt)
+	fetchedAt?: string @go(FetchedAt)
 }
 
 // ---------------------------------------------------------------------------
@@ -63,5 +63,5 @@ package lane
 	type:        "url" @go(Type)
 	uri:         string @go(URI)
 	sha256:      string & =~"^[a-f0-9]{64}$" @go(SHA256)
-	fetched_at?: string @go(FetchedAt)
+	fetchedAt?: string @go(FetchedAt)
 }

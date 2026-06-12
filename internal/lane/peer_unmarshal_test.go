@@ -72,8 +72,8 @@ func TestUnmarshalPeer_Discriminator(t *testing.T) {
 			input: `{
 				"type": "ssh",
 				"host": "git.example",
-				"known_hosts": [
-					{"key_type": "ssh-ed25519", "key": "AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl"}
+				"knownHosts": [
+					{"keyType": "ssh-ed25519", "key": "AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl"}
 				]
 			}`,
 			check: func(t *testing.T, p lane.Peer) {
@@ -161,7 +161,7 @@ func TestStep_UnmarshalJSON_Peers(t *testing.T) {
 			{
 				"type": "ssh",
 				"host": "git.example",
-				"known_hosts": [{"key_type": "ssh-ed25519", "key": "AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl"}]
+				"knownHosts": [{"keyType": "ssh-ed25519", "key": "AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl"}]
 			}
 		]
 	}`

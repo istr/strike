@@ -1,7 +1,7 @@
 # Rebuild strike from source to prove reproducibility.
 # Run by stage_2 inside the built strike image with source at /src.
 name: strike-bootstrap
-lane_id: strike-bootstrap
+laneId: strike-bootstrap
 registry: localhost/strike-bootstrap
 
 secrets:
@@ -15,7 +15,7 @@ resolver:
     fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 oidc:
   issuer: "https://idp.example.com"
-  client_id: "strike"
+  clientId: "strike"
   identity: "strike@example.com"
   trust:
     mode: cert_fingerprint

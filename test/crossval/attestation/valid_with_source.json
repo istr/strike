@@ -4,7 +4,7 @@
   "inputs": {
     "attestation": {
       "sealed": {
-        "lane_id": "test-lane",
+        "laneId": "test-lane",
         "target": {
           "id": "prod-registry",
           "type": "registry",
@@ -15,14 +15,14 @@
             "digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
           }
         },
-        "lane_digest": "",
+        "laneDigest": "",
         "peers": {}
       },
-      "engine_dependent": {},
+      "engineDependent": {},
       "informational": {
         "timestamp": "2024-01-01T00:00:00Z",
-        "pre_state_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-        "post_state_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "preStateDigest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "postStateDigest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
         "provenance": [
           {
             "type": "git",

@@ -182,18 +182,18 @@ func TestAttestationJSON(t *testing.T) {
 	if !ok {
 		t.Fatal("missing sealed object in JSON")
 	}
-	if sealed["lane_id"] != "test-lane" {
-		t.Errorf("sealed.lane_id = %v, want test-lane", sealed["lane_id"])
+	if sealed["laneId"] != "test-lane" {
+		t.Errorf("sealed.laneId = %v, want test-lane", sealed["laneId"])
 	}
 	info, ok := m["informational"].(map[string]any)
 	if !ok {
 		t.Fatal("missing informational object in JSON")
 	}
-	if _, ok := info["pre_state_digest"]; !ok {
-		t.Error("missing informational.pre_state_digest")
+	if _, ok := info["preStateDigest"]; !ok {
+		t.Error("missing informational.preStateDigest")
 	}
-	if _, ok := info["post_state_digest"]; !ok {
-		t.Error("missing informational.post_state_digest")
+	if _, ok := info["postStateDigest"]; !ok {
+		t.Error("missing informational.postStateDigest")
 	}
 }
 
@@ -658,8 +658,8 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 	if !ok {
 		t.Fatal("expected sealed.engine object in JSON")
 	}
-	if engMap["connection_type"] != connTypeTLS {
-		t.Errorf("JSON sealed.engine.connection_type = %v, want tls", engMap["connection_type"])
+	if engMap["connectionType"] != connTypeTLS {
+		t.Errorf("JSON sealed.engine.connectionType = %v, want tls", engMap["connectionType"])
 	}
 }
 

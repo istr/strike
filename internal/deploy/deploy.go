@@ -41,7 +41,7 @@ import (
 type Attestation struct {
 	Informational   *Informational    `json:"informational,omitempty"`
 	Signed          *SignedStatements `json:"-"`
-	EngineDependent EngineDependent   `json:"engine_dependent"`
+	EngineDependent EngineDependent   `json:"engineDependent"`
 	Sealed          Sealed            `json:"sealed"`
 }
 
@@ -51,10 +51,10 @@ type Sealed struct {
 	Peers         map[string][]lane.Peer    `json:"peers"`
 	Resolver      *ResolverRecord           `json:"resolver,omitempty"`
 	Engine        *EngineConnection         `json:"engine,omitempty"`
-	ObservedPeers map[string]ObservedPeer   `json:"observed_peers,omitempty"`
+	ObservedPeers map[string]ObservedPeer   `json:"observedPeers,omitempty"`
 	Target        lane.DeployTarget         `json:"target"`
-	LaneID        string                    `json:"lane_id"`
-	LaneDigest    string                    `json:"lane_digest"`
+	LaneID        string                    `json:"laneId"`
+	LaneDigest    string                    `json:"laneDigest"`
 }
 
 // ---------------------------------------------------------------------------
@@ -89,14 +89,14 @@ type ObservedPeer struct {
 // ObservedSSH is a validated SSH host identity.
 type ObservedSSH struct {
 	Type               string `json:"type"`
-	HostKeyFingerprint string `json:"host_key_fingerprint"`
-	HostKeyAlgo        string `json:"host_key_algo"`
+	HostKeyFingerprint string `json:"hostKeyFingerprint"`
+	HostKeyAlgo        string `json:"hostKeyAlgo"`
 }
 
 // ObservedTLS is a validated HTTPS server identity.
 type ObservedTLS struct {
 	Type                  string `json:"type"`
-	ServerCertFingerprint string `json:"server_cert_fingerprint"`
+	ServerCertFingerprint string `json:"serverCertFingerprint"`
 }
 
 // IdentityType implements ObservedIdentity.
@@ -167,15 +167,15 @@ func (p *ObservedPeer) UnmarshalJSON(data []byte) error {
 type EngineDependent struct {
 	// PeerAttribution maps each step to the peer endpoints its mediated
 	// connections reached ("host:port" keys into Sealed.ObservedPeers).
-	PeerAttribution map[string][]string `json:"peer_attribution,omitempty"`
+	PeerAttribution map[string][]string `json:"peerAttribution,omitempty"`
 }
 
 // Informational -- recorded for audit and IoC; no trust claim.
 type Informational struct {
 	Timestamp       clock.Time              `json:"timestamp,omitempty"`
-	EngineMetadata  *EngineMetadata         `json:"engine_metadata,omitempty"`
-	PreStateDigest  lane.Digest             `json:"pre_state_digest"`
-	PostStateDigest lane.Digest             `json:"post_state_digest"`
+	EngineMetadata  *EngineMetadata         `json:"engineMetadata,omitempty"`
+	PreStateDigest  lane.Digest             `json:"preStateDigest"`
+	PostStateDigest lane.Digest             `json:"postStateDigest"`
 	Provenance      []lane.ProvenanceRecord `json:"provenance"`
 }
 
@@ -204,19 +204,19 @@ type SBOMRecord struct {
 // engine. Lives under Sealed.Engine.
 type EngineConnection struct {
 	// ConnectionType is "unix", "tls", or "mtls".
-	ConnectionType string `json:"connection_type"`
+	ConnectionType string `json:"connectionType"`
 
 	// CATrustMode is "pinned" (explicit CA) or "system" (OS trust store).
 	// Empty for Unix socket connections.
-	CATrustMode string `json:"ca_trust_mode,omitempty"`
+	CATrustMode string `json:"caTrustMode,omitempty"`
 
 	// ServerCertFingerprint is sha256:<hex> of the engine's certificate.
 	// Empty for Unix socket connections.
-	ServerCertFingerprint string `json:"server_cert_fingerprint,omitempty"`
+	ServerCertFingerprint string `json:"serverCertFingerprint,omitempty"`
 
 	// ClientCertFingerprint is sha256:<hex> of the controller's certificate.
 	// Empty unless mTLS is configured.
-	ClientCertFingerprint string `json:"client_cert_fingerprint,omitempty"`
+	ClientCertFingerprint string `json:"clientCertFingerprint,omitempty"`
 }
 
 // EngineMetadata -- engine self-reports about itself. Lives under
@@ -245,20 +245,20 @@ type ResolverRecord struct {
 
 	// ServerCertFingerprint is sha256:<hex> of the resolver's leaf
 	// certificate, observed at the handshake.
-	ServerCertFingerprint string `json:"server_cert_fingerprint"`
+	ServerCertFingerprint string `json:"serverCertFingerprint"`
 
 	// TLSVersion is the negotiated TLS version, human-readable
 	// (e.g. "TLS 1.3").
-	TLSVersion string `json:"tls_version"`
+	TLSVersion string `json:"tlsVersion"`
 
 	// CipherSuite is the negotiated cipher suite, human-readable
 	// (e.g. "TLS_AES_128_GCM_SHA256").
-	CipherSuite string `json:"cipher_suite"`
+	CipherSuite string `json:"cipherSuite"`
 
 	// ServerName is the SNI sent during the handshake. Empty for
 	// IP-literal resolver hosts (RFC 6066 forbids IP-literal SNI),
 	// which is the common case for DoT endpoints like "1.1.1.1:853".
-	ServerName string `json:"server_name,omitempty"`
+	ServerName string `json:"serverName,omitempty"`
 }
 
 // HardenedRunOpts returns a RunOpts with the standard security profile.

@@ -1,5 +1,5 @@
 name: peers-https-unknown-trust-mode
-lane_id: peers-https-unknown-trust-mode
+laneId: peers-https-unknown-trust-mode
 registry: localhost:5555/test
 secrets: {}
 resolver:
@@ -9,7 +9,7 @@ resolver:
     fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 oidc:
   issuer: "https://idp.example.com"
-  client_id: "strike"
+  clientId: "strike"
   identity: "strike@example.com"
   trust:
     mode: cert_fingerprint

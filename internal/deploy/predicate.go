@@ -61,12 +61,12 @@ type SLSABuildDefinition struct {
 type StrikeExternalParameters struct {
 	Target        lane.DeployTarget       `json:"target"`
 	Peers         map[string][]lane.Peer  `json:"peers"`
-	ObservedPeers map[string]ObservedPeer `json:"observed_peers,omitempty"`
+	ObservedPeers map[string]ObservedPeer `json:"observedPeers,omitempty"`
 	Resolver      *ResolverRecord         `json:"resolver,omitempty"`
 	Engine        *EngineConnection       `json:"engine,omitempty"`
 	OIDC          ProvenanceOIDC          `json:"oidc"`
-	LaneID        string                  `json:"lane_id"`
-	LaneDigest    string                  `json:"lane_digest"`
+	LaneID        string                  `json:"laneId"`
+	LaneDigest    string                  `json:"laneDigest"`
 }
 
 // ProvenanceOIDC is the declared signing identity carried into the sealed
@@ -105,8 +105,8 @@ type EngineContextStatement struct {
 // EngineContextPredicate carries Layer-E claims only: engine self-reports and
 // engine-asserted step attribution. EngineConnection (Layer V) is not here.
 type EngineContextPredicate struct {
-	PeerAttribution map[string][]string `json:"peer_attribution,omitempty"`
-	EngineMetadata  *EngineMetadata     `json:"engine_metadata,omitempty"`
+	PeerAttribution map[string][]string `json:"peerAttribution,omitempty"`
+	EngineMetadata  *EngineMetadata     `json:"engineMetadata,omitempty"`
 }
 
 // InformationalStatement is the informational output: an in-toto Statement v1
@@ -130,7 +130,7 @@ type InformationalStatement struct {
 // it.
 type InformationalPredicate struct {
 	Timestamp       clock.Time              `json:"timestamp,omitempty"`
-	PreStateDigest  lane.Digest             `json:"pre_state_digest"`
-	PostStateDigest lane.Digest             `json:"post_state_digest"`
+	PreStateDigest  lane.Digest             `json:"preStateDigest"`
+	PostStateDigest lane.Digest             `json:"postStateDigest"`
 	Provenance      []lane.ProvenanceRecord `json:"provenance"`
 }

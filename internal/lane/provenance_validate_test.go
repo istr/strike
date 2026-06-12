@@ -13,7 +13,7 @@ func TestValidateProvenance_Git_Valid(t *testing.T) {
 		"uri": "https://github.com/foo/bar.git",
 		"commit": "0123456789abcdef0123456789abcdef01234567",
 		"ref": "refs/heads/main",
-		"fetched_at": "2026-04-21T10:00:00Z"
+		"fetchedAt": "2026-04-21T10:00:00Z"
 	}`)
 	rec, err := lane.ValidateProvenance("git", raw)
 	if err != nil {

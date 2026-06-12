@@ -24,13 +24,13 @@ type State struct {
 
 // StepResult records execution metadata for a completed step.
 type StepResult struct {
-	StartedAt clock.Time        `json:"started_at"`
+	StartedAt clock.Time        `json:"startedAt"`
 	Inputs    map[string]string `json:"inputs"`
 	Outputs   map[string]string `json:"outputs"`
 	Name      string            `json:"name"`
-	StepType  string            `json:"step_type"`
+	StepType  string            `json:"stepType"`
 	Duration  clock.Duration    `json:"duration"`
-	ExitCode  int               `json:"exit_code"`
+	ExitCode  int               `json:"exitCode"`
 }
 
 // NewState creates an empty lane state.

@@ -1,5 +1,5 @@
 name: deploy-test
-lane_id: deploy-test
+laneId: deploy-test
 registry: localhost:5555/test
 secrets: {}
 resolver:
@@ -9,7 +9,7 @@ resolver:
     fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 oidc:
   issuer: "https://idp.example.com"
-  client_id: "strike"
+  clientId: "strike"
   identity: "strike@example.com"
   trust:
     mode: cert_fingerprint
@@ -73,10 +73,10 @@ steps:
         type: registry
         description: deploy to registry
       attestation:
-        pre_state:
+        preState:
           required: false
           capture: []
-        post_state:
+        postState:
           required: false
           capture: []
     args: []

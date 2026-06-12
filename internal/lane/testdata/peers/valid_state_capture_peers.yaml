@@ -1,5 +1,5 @@
 name: peers-state-capture
-lane_id: peers-state-capture
+laneId: peers-state-capture
 registry: localhost:5555/test
 secrets: {}
 resolver:
@@ -9,7 +9,7 @@ resolver:
     fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 oidc:
   issuer: "https://idp.example.com"
-  client_id: "strike"
+  clientId: "strike"
   identity: "strike@example.com"
   trust:
     mode: cert_fingerprint
@@ -55,7 +55,7 @@ steps:
         type: registry
         description: prod
       attestation:
-        pre_state:
+        preState:
           required: false
           capture:
             - name: probe
@@ -67,7 +67,7 @@ steps:
                   trust:
                     mode: cert_fingerprint
                     fingerprint: sha256:3333333333333333333333333333333333333333333333333333333333333333
-        post_state:
+        postState:
           required: false
           capture: []
     args: []

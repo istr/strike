@@ -31,8 +31,8 @@ func TestDeploySpec_UnmarshalJSON_Discriminator(t *testing.T) {
 				"artifacts": {},
 				"target": {"type": "kubernetes", "description": "prod"},
 				"attestation": {
-					"pre_state": {"required": false, "capture": []},
-					"post_state": {"required": false, "capture": []},
+					"preState": {"required": false, "capture": []},
+					"postState": {"required": false, "capture": []}
 				}
 			}`,
 			check: func(t *testing.T, m lane.DeployMethod) {
@@ -59,8 +59,8 @@ func TestDeploySpec_UnmarshalJSON_Discriminator(t *testing.T) {
 				"artifacts": {},
 				"target": {"type": "registry", "description": "prod"},
 				"attestation": {
-					"pre_state": {"required": false, "capture": []},
-					"post_state": {"required": false, "capture": []},
+					"preState": {"required": false, "capture": []},
+					"postState": {"required": false, "capture": []}
 				}
 			}`,
 			check: func(t *testing.T, m lane.DeployMethod) {
@@ -86,8 +86,8 @@ func TestDeploySpec_UnmarshalJSON_Discriminator(t *testing.T) {
 				"artifacts": {},
 				"target": {"type": "custom", "description": "prod"},
 				"attestation": {
-					"pre_state": {"required": false, "capture": []},
-					"post_state": {"required": false, "capture": []},
+					"preState": {"required": false, "capture": []},
+					"postState": {"required": false, "capture": []}
 				}
 			}`,
 			check: func(t *testing.T, m lane.DeployMethod) {
@@ -153,8 +153,8 @@ func TestDeploySpec_RoundTrip(t *testing.T) {
 		"artifacts": {},
 		"target": {"type": "registry", "description": "test"},
 		"attestation": {
-			"pre_state": {"required": false, "capture": []},
-			"post_state": {"required": false, "capture": []},
+			"preState": {"required": false, "capture": []},
+			"postState": {"required": false, "capture": []}
 		}
 	}`
 

@@ -1,5 +1,5 @@
 name: peers-ssh-one
-lane_id: peers-ssh-one
+laneId: peers-ssh-one
 registry: localhost:5555/test
 secrets: {}
 resolver:
@@ -9,7 +9,7 @@ resolver:
     fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 oidc:
   issuer: "https://idp.example.com"
-  client_id: "strike"
+  clientId: "strike"
   identity: "strike@example.com"
   trust:
     mode: cert_fingerprint
@@ -45,6 +45,6 @@ steps:
     peers:
       - type: ssh
         host: git.example.com
-        known_hosts:
-          - key_type: ssh-ed25519
+        knownHosts:
+          - keyType: ssh-ed25519
             key: "-----BEGIN PUBLIC KEY-----\nABC\n-----END PUBLIC KEY-----"

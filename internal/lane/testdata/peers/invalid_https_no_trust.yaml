@@ -1,5 +1,5 @@
 name: peers-bad-https-1
-lane_id: peers-bad-https-1
+laneId: peers-bad-https-1
 registry: localhost:5555/test
 secrets: {}
 resolver:
@@ -9,7 +9,7 @@ resolver:
     fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 oidc:
   issuer: "https://idp.example.com"
-  client_id: "strike"
+  clientId: "strike"
   identity: "strike@example.com"
   trust:
     mode: cert_fingerprint

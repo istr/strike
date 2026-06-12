@@ -71,7 +71,7 @@ func AssembleImage(base v1.Image, spec *lane.PackSpec, inputPaths map[string]str
 	}
 
 	// 2. Add config file layers (literal content)
-	img, err = addConfigFileLayers(img, spec.Config_files)
+	img, err = addConfigFileLayers(img, spec.ConfigFiles)
 	if err != nil {
 		return nil, err
 	}

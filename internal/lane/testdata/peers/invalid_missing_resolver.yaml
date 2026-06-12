@@ -1,10 +1,10 @@
 name: peers-missing-resolver
-lane_id: peers-missing-resolver
+laneId: peers-missing-resolver
 registry: localhost:5555/test
 secrets: {}
 oidc:
   issuer: "https://idp.example.com"
-  client_id: "strike"
+  clientId: "strike"
   identity: "strike@example.com"
   trust:
     mode: cert_fingerprint

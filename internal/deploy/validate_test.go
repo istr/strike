@@ -97,16 +97,16 @@ func TestValidateAttestation_InvalidEngineConnectionType(t *testing.T) {
 func TestValidateAttestation_MissingTarget(t *testing.T) {
 	raw := `{
 		"sealed": {
-			"lane_id": "test-lane",
-			"lane_digest": "",
+			"laneId": "test-lane",
+			"laneDigest": "",
 			"artifacts": {},
 			"peers": {}
 		},
-		"engine_dependent": {},
+		"engineDependent": {},
 		"informational": {
 			"timestamp": "2025-01-15T10:30:00Z",
-			"pre_state_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-			"post_state_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+			"preStateDigest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+			"postStateDigest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
 			"provenance": []
 		}
 	}`

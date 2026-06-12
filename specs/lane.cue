@@ -19,7 +19,7 @@ package lane
 	// Stable identifier assigned at authoring time. Used by external
 	// verifiers to pair attestations against the same lane across runs.
 	// Distinct from `name`, which is human-display.
-	lane_id:  =~"^[a-z0-9][a-z0-9-]{0,62}$" @go(LaneID)
+	laneId:  =~"^[a-z0-9][a-z0-9-]{0,62}$" @go(LaneID)
 	registry: string & =~"^[a-z0-9./-]+"    @go(Registry)
 	secrets: {
 		[Name=string]: #SecretSource @go(Secrets)
@@ -32,7 +32,7 @@ package lane
 	// TSA), fail-closed; a lane that cannot reach them cannot produce a
 	// verifiable bundle (mirrors the oidc rationale).
 	keyless:  #KeylessEndpoints @go(Keyless)
-	base_sbom_signers?: [...#SBOMSigner] @go(BaseSBOMSigners,optional=nillable)
+	baseSbomSigners?: [...#SBOMSigner] @go(BaseSBOMSigners,optional=nillable)
 	defaults?: #LaneDefaults @go(Defaults,optional=nillable)
 }
 
@@ -52,7 +52,7 @@ package lane
 	@go(OIDCConfig)
 
 	issuer:    string    @go(Issuer)   // iss / issuer-url; config only, no IdP contact at validate/dag
-	client_id: string    @go(ClientID) // aud
+	clientId: string    @go(ClientID) // aud
 	identity:  string    @go(Identity) // expected SAN subject Fulcio writes into the cert
 	trust:     #TLSTrust @go(Trust,type="github.com/istr/strike/internal/transport".TLSTrust)
 }
@@ -117,7 +117,7 @@ package lane
 	@go(Step)
 	name:        string     @go(Name)
 	image?:      #ImageRef  @go(Image,optional=nillable)
-	image_from?: #ImageFrom @go(ImageFrom,optional=nillable)
+	imageFrom?: #ImageFrom @go(ImageFrom,optional=nillable)
 	args: [...string] @go(Args)
 	env: {
 		[string]: string @go(Env)
@@ -133,7 +133,7 @@ package lane
 	// `git clone` from a moving branch or `npm install` of a
 	// `latest` tag. Strike does not auto-detect
 	// non-determinism; lane authors declare it.
-	force_run?:  bool | *false   @go(ForceRun)
+	forceRun?:  bool | *false   @go(ForceRun)
 	timeout?:    #Duration       @go(Timeout,optional=nillable)
 	pack?:       #PackSpec       @go(Pack,optional=nillable)
 	deploy?:     #DeploySpec     @go(Deploy,optional=nillable)
@@ -197,9 +197,9 @@ package lane
 
 #OutputValidation: {
 	@go(OutputValidation)
-	content_type?: string @go(ContentType,optional=nillable)
-	min_size?:     int    @go(MinSize,optional=nillable)
-	max_size?:     int    @go(MaxSize,optional=nillable)
+	contentType?: string @go(ContentType,optional=nillable)
+	minSize?:     int    @go(MinSize,optional=nillable)
+	maxSize?:     int    @go(MaxSize,optional=nillable)
 }
 
 // ---------------------------------------------------------------------------
@@ -248,14 +248,14 @@ package lane
 	@go(SSHPeer)
 	type: "ssh" @go(Type)
 	host: #Host @go(Host,type="github.com/istr/strike/internal/transport".Host)
-	known_hosts: [...#KnownHostEntry] @go(KnownHosts)
+	knownHosts: [...#KnownHostEntry] @go(KnownHosts)
 }
 
 // KnownHostEntry is one server key, an OpenSSH known_hosts line
 // decomposed into typed fields.
 #KnownHostEntry: {
 	@go(KnownHostEntry)
-	key_type: "ssh-ed25519" | "ecdsa-sha2-nistp256" |
+	keyType: "ssh-ed25519" | "ecdsa-sha2-nistp256" |
 		"rsa-sha2-512" | "rsa-sha2-256" @go(KeyType)
 	// key is the base64-encoded public key body (no PEM armor).
 	key: =~"^[A-Za-z0-9+/]+={0,2}$" @go(Key)
@@ -282,7 +282,7 @@ package lane
 	base: #ImageRef @go(Base)
 	files: [...#PackFile] @go(Files)
 	packages?: [...#Package] @go(Packages)
-	config_files?: {
+	configFiles?: {
 		[Path=string]: #FileEntry @go(ConfigFiles)
 	}
 	config?: #ImageConfig @go(Config,optional=nillable)
@@ -343,7 +343,7 @@ package lane
 	target:      #DeployTarget    @go(Target)
 	attestation: #AttestationSpec @go(Attestation)
 	source?: {
-		git_image: #ImageRef
+		gitImage: #ImageRef
 	} @go(Source,optional=nillable)
 }
 
@@ -400,8 +400,8 @@ package lane
 
 #AttestationSpec: {
 	@go(AttestationSpec)
-	pre_state:  #StateCaptureSpec @go(PreState)
-	post_state: #StateCaptureSpec @go(PostState)
+	preState:  #StateCaptureSpec @go(PreState)
+	postState: #StateCaptureSpec @go(PostState)
 }
 
 #StateCaptureSpec: {
@@ -467,9 +467,9 @@ package lane
 	@go(Artifact)
 	type:          #ArtifactType @go(Type)
 	digest:        #Digest       @go(Digest,type=Digest)
-	local_path?:   string        @go(LocalPath,optional=nillable)
+	localPath?:   string        @go(LocalPath,optional=nillable)
 	size:          int & >=0     @go(Size)
-	content_type?: string        @go(ContentType,optional=nillable)
+	contentType?: string        @go(ContentType,optional=nillable)
 	metadata?: {
 		[string]: string @go(Metadata)
 	}
@@ -500,23 +500,23 @@ package lane
 	uuid: =~"^[0-9a-f]{64,}$" @go(UUID)
 
 	// log_index is the global sequence number in the transparency log.
-	log_index: int & >=0 @go(LogIndex)
+	logIndex: int & >=0 @go(LogIndex)
 
 	// log_id is the hex-encoded hash of the log's public key.
-	log_id: =~"^[a-f0-9]{64}$" @go(LogID)
+	logId: =~"^[a-f0-9]{64}$" @go(LogID)
 
 	// integrated_time is the Unix timestamp when the entry was added.
-	integrated_time: int & >0 @go(IntegratedTime)
+	integratedTime: int & >0 @go(IntegratedTime)
 
 	// body is the base64-encoded entry body.
 	body: string @go(Body)
 
 	// signed_entry_timestamp is the base64-encoded SET proving
 	// the log server processed this entry.
-	signed_entry_timestamp: string @go(SignedEntryTimestamp)
+	signedEntryTimestamp: string @go(SignedEntryTimestamp)
 
 	// inclusion_proof holds the Merkle tree proof for this entry.
-	inclusion_proof: #InclusionProof @go(InclusionProof)
+	inclusionProof: #InclusionProof @go(InclusionProof)
 }
 
 // InclusionProof holds the Merkle tree proof for a Rekor entry.
@@ -524,13 +524,13 @@ package lane
 	@go(InclusionProof)
 
 	// log_index is the leaf index in the Merkle tree.
-	log_index: int & >=0 @go(LogIndex)
+	logIndex: int & >=0 @go(LogIndex)
 
 	// root_hash is the hex-encoded tree root at inclusion time.
-	root_hash: =~"^[a-f0-9]{64}$" @go(RootHash)
+	rootHash: =~"^[a-f0-9]{64}$" @go(RootHash)
 
 	// tree_size is the number of leaves when the proof was generated.
-	tree_size: int & >=1 @go(TreeSize)
+	treeSize: int & >=1 @go(TreeSize)
 
 	// hashes are the hex-encoded sibling hashes from leaf to root.
 	hashes: [...=~"^[a-f0-9]{64}$"] @go(Hashes)

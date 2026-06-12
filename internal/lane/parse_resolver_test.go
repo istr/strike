@@ -55,7 +55,7 @@ func TestResolver_MissingRejectedByParse(t *testing.T) {
 func TestResolver_ValidIPv4(t *testing.T) {
 	yaml := []byte(`
 name: resolver-ipv4
-lane_id: resolver-ipv4
+laneId: resolver-ipv4
 registry: localhost:5555/test
 secrets: {}
 resolver:
@@ -65,7 +65,7 @@ resolver:
     fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 oidc:
   issuer: "https://idp.example.com"
-  client_id: "strike"
+  clientId: "strike"
   identity: "strike@example.com"
   trust:
     mode: cert_fingerprint
@@ -108,10 +108,10 @@ steps:
         type: registry
         description: minimal deploy step for D1
       attestation:
-        pre_state:
+        preState:
           required: false
           capture: []
-        post_state:
+        postState:
           required: false
           capture: []
     args: []
@@ -139,7 +139,7 @@ steps:
 func TestResolver_ValidIPv4WithPort(t *testing.T) {
 	yaml := []byte(`
 name: resolver-ipv4-port
-lane_id: resolver-ipv4-port
+laneId: resolver-ipv4-port
 registry: localhost:5555/test
 secrets: {}
 resolver:
@@ -149,7 +149,7 @@ resolver:
     fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 oidc:
   issuer: "https://idp.example.com"
-  client_id: "strike"
+  clientId: "strike"
   identity: "strike@example.com"
   trust:
     mode: cert_fingerprint
@@ -192,10 +192,10 @@ steps:
         type: registry
         description: minimal deploy step for D1
       attestation:
-        pre_state:
+        preState:
           required: false
           capture: []
-        post_state:
+        postState:
           required: false
           capture: []
     args: []

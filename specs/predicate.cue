@@ -82,12 +82,12 @@ package deploy
 // identities the control plane observed and validated against the declared
 // anchors -- all control-plane-established, sound without engine trust.
 #StrikeExternalParameters: {
-	lane_id:     =~"^[a-z0-9][a-z0-9-]{0,62}$"
-	lane_digest: #Digest | ""
+	laneId:     =~"^[a-z0-9][a-z0-9-]{0,62}$"
+	laneDigest: #Digest | ""
 	target:      #DeployTarget
 	oidc:        #ProvenanceOIDC
 	peers: [Step=string]: [...#Peer]
-	observed_peers?: [Endpoint=string]: #ObservedPeer
+	observedPeers?: [Endpoint=string]: #ObservedPeer
 	resolver?: #ResolverRecord
 	engine?:   #EngineConnection
 }
@@ -142,8 +142,8 @@ package deploy
 // observed engine connection (#EngineConnection) is NOT here -- it is Layer V
 // and rides in the sealed provenance's externalParameters (Fork C).
 #EngineContextPredicate: {
-	engine_metadata?: #EngineMetadata
-	peer_attribution?: [Step=string]: [...string]
+	engineMetadata?: #EngineMetadata
+	peerAttribution?: [Step=string]: [...string]
 }
 
 // ---------------------------------------------------------------------------
@@ -173,8 +173,8 @@ package deploy
 	// the pre/post-deploy state captures. The bytes were produced by the
 	// (untrusted) capture container and engine-relayed; CP's hash transports
 	// them, it does not lift them out of the container-asserted class.
-	pre_state_digest:  #Digest
-	post_state_digest: #Digest
+	preStateDigest:  #Digest
+	postStateDigest: #Digest
 
 	// provenance collects validated provenance records from transitive
 	// predecessor steps; each is container-written at step exit and

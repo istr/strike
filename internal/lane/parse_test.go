@@ -73,7 +73,7 @@ func TestParse_ValidMinimal(t *testing.T) {
 func TestParse_ValidDeployOnly(t *testing.T) {
 	yaml := []byte(`
 name: deploy-only
-lane_id: deploy-only
+laneId: deploy-only
 registry: localhost:5555/test
 secrets: {}
 resolver:
@@ -83,7 +83,7 @@ resolver:
     fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 oidc:
   issuer: "https://idp.example.com"
-  client_id: "strike"
+  clientId: "strike"
   identity: "strike@example.com"
   trust:
     mode: cert_fingerprint
@@ -117,10 +117,10 @@ steps:
         type: registry
         description: deploy-only lane
       attestation:
-        pre_state:
+        preState:
           required: false
           capture: []
-        post_state:
+        postState:
           required: false
           capture: []
     args: []
@@ -149,7 +149,7 @@ steps:
 func TestParse_BaseSBOMSigners(t *testing.T) {
 	yaml := []byte(`
 name: sbom-signer-lane
-lane_id: sbom-signer-lane
+laneId: sbom-signer-lane
 registry: localhost:5555/test
 secrets: {}
 resolver:
@@ -159,7 +159,7 @@ resolver:
     fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 oidc:
   issuer: "https://idp.example.com"
-  client_id: "strike"
+  clientId: "strike"
   identity: "strike@example.com"
   trust:
     mode: cert_fingerprint
@@ -180,7 +180,7 @@ keyless:
     trust:
       mode: cert_fingerprint
       fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
-base_sbom_signers:
+baseSbomSigners:
   - issuer: "https://accounts.google.com"
     identity: "sbom-builder@example.iam.gserviceaccount.com"
 steps:
@@ -196,10 +196,10 @@ steps:
         type: registry
         description: sbom signer test
       attestation:
-        pre_state:
+        preState:
           required: false
           capture: []
-        post_state:
+        postState:
           required: false
           capture: []
     args: []
@@ -434,7 +434,7 @@ resolver:
     fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 oidc:
   issuer: "https://idp.example.com"
-  client_id: "strike"
+  clientId: "strike"
   identity: "strike@example.com"
   trust:
     mode: cert_fingerprint
@@ -466,8 +466,8 @@ steps:
         type: registry
         description: x
       attestation:
-        pre_state: {required: false, capture: []}
-        post_state: {required: false, capture: []}
+        preState: {required: false, capture: []}
+        postState: {required: false, capture: []}
 `)
 
 	dir := t.TempDir()
@@ -493,7 +493,7 @@ steps:
 func TestParse_RelPathValidation(t *testing.T) {
 	tmpl := `
 name: test
-lane_id: test
+laneId: test
 registry: localhost:5555/test
 secrets: {}
 resolver:
@@ -503,7 +503,7 @@ resolver:
     fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 oidc:
   issuer: "https://idp.example.com"
-  client_id: "strike"
+  clientId: "strike"
   identity: "strike@example.com"
   trust:
     mode: cert_fingerprint
@@ -556,10 +556,10 @@ steps:
         type: registry
         description: minimal deploy step for D1
       attestation:
-        pre_state:
+        preState:
           required: false
           capture: []
-        post_state:
+        postState:
           required: false
           capture: []
     args: []

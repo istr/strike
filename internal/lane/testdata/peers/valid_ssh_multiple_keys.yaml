@@ -1,5 +1,5 @@
 name: peers-ssh-multi
-lane_id: peers-ssh-multi
+laneId: peers-ssh-multi
 registry: localhost:5555/test
 secrets: {}
 resolver:
@@ -9,7 +9,7 @@ resolver:
     fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 oidc:
   issuer: "https://idp.example.com"
-  client_id: "strike"
+  clientId: "strike"
   identity: "strike@example.com"
   trust:
     mode: cert_fingerprint
@@ -45,12 +45,12 @@ steps:
     peers:
       - type: ssh
         host: git.example.com
-        known_hosts:
-          - key_type: ssh-ed25519
+        knownHosts:
+          - keyType: ssh-ed25519
             key: AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl
-          - key_type: ecdsa-sha2-nistp256
+          - keyType: ecdsa-sha2-nistp256
             key: AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBHIOLkE5
-          - key_type: rsa-sha2-512
+          - keyType: rsa-sha2-512
             key: AAAAB3NzaC1yc2EAAAADAQABAAABAQDcdef
 
   - name: deploy
@@ -65,10 +65,10 @@ steps:
         type: registry
         description: minimal deploy step for D1
       attestation:
-        pre_state:
+        preState:
           required: false
           capture: []
-        post_state:
+        postState:
           required: false
           capture: []
     args: []

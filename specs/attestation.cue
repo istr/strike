@@ -60,21 +60,21 @@ package deploy
 // ADR-037 for the trust-layer theory.
 #Attestation: {
 	sealed:           #Sealed
-	engine_dependent: #EngineDependent
+	engineDependent: #EngineDependent
 	informational?:   #Informational
 }
 
 // Sealed -- CP-bound claims, sound under both trust(E) and ~trust(E).
 #Sealed: {
 	// lane_id is the stable identifier from the lane definition.
-	lane_id: =~"^[a-z0-9][a-z0-9-]{0,62}$"
+	laneId: =~"^[a-z0-9][a-z0-9-]{0,62}$"
 
 	// target describes what was deployed to. Declared, lane-anchored.
 	target: #DeployTarget
 
 	// lane_digest is the raw sha256 over the lane definition file bytes,
 	// computed by CP at parse time (hash and parse read the same bytes).
-	lane_digest: #Digest | ""
+	laneDigest: #Digest | ""
 
 	// artifacts maps artifact names to their signed provenance records.
 	// Each artifact's digest is consumer-dereferenceable from the registry
@@ -101,7 +101,7 @@ package deploy
 	// before any entry is written, so every entry here is a validated identity
 	// (Layer V). No step attribution: which step reached a peer is an
 	// engine-asserted fact and lives in engine_dependent.peer_attribution.
-	observed_peers?: [Endpoint=string]: #ObservedPeer
+	observedPeers?: [Endpoint=string]: #ObservedPeer
 }
 
 // ---------------------------------------------------------------------------
@@ -128,15 +128,15 @@ package deploy
 // anchor; host_key_algo is that key's algorithm.
 #ObservedSSH: {
 	type:                 "ssh"
-	host_key_fingerprint: string
-	host_key_algo:        string
+	hostKeyFingerprint: string
+	hostKeyAlgo:        string
 }
 
 // ObservedTLS is a validated HTTPS server identity. server_cert_fingerprint is
 // the SHA-256 of the leaf certificate that matched the declared anchor.
 #ObservedTLS: {
 	type:                    "https"
-	server_cert_fingerprint: string
+	serverCertFingerprint: string
 }
 
 // EngineDependent -- claims sound only under trust(E). Engine-asserted: the
@@ -159,7 +159,7 @@ package deploy
 	// peer_attribution maps each step to the peer endpoints its mediated
 	// connections reached ("host:port" keys into sealed.observed_peers).
 	// Engine-asserted (Layer E).
-	peer_attribution?: [Step=string]: [...string]
+	peerAttribution?: [Step=string]: [...string]
 }
 
 // Informational -- recorded for audit and IoC purposes; no trust claim.
@@ -174,16 +174,16 @@ package deploy
 	timestamp?: #Timestamp
 
 	// engine_metadata carries the engine's self-reports about itself.
-	engine_metadata?: #EngineMetadata
+	engineMetadata?: #EngineMetadata
 
 	// pre_state_digest is CP's canonical SHA-256 digest of pre-deploy
 	// state captures. The bytes were produced by the (untrusted) capture
 	// container and relayed by the engine; CP's hash transports them,
 	// it does not lift them out of the container-asserted class.
-	pre_state_digest: #Digest
+	preStateDigest: #Digest
 
 	// post_state_digest -- symmetric to pre_state_digest.
-	post_state_digest: #Digest
+	postStateDigest: #Digest
 
 	// provenance collects validated provenance records from transitive
 	// predecessor steps. Each record is container-written at step exit
@@ -200,18 +200,18 @@ package deploy
 // engine. Lives under sealed.engine.
 #EngineConnection: {
 	// connection_type is "unix", "tls", or "mtls". CP-determined.
-	connection_type: "unix" | "tls" | "mtls"
+	connectionType: "unix" | "tls" | "mtls"
 
 	// ca_trust_mode is "pinned" (explicit CA) or "system" (OS trust store).
 	// Empty for Unix socket connections. CP-configured.
-	ca_trust_mode?: "pinned" | "system" | ""
+	caTrustMode?: "pinned" | "system" | ""
 
 	// server_cert_fingerprint is sha256:<hex> of the engine's leaf cert,
 	// observed by CP during the TLS handshake.
-	server_cert_fingerprint?: string
+	serverCertFingerprint?: string
 
 	// client_cert_fingerprint is sha256:<hex> of the controller's own cert.
-	client_cert_fingerprint?: string
+	clientCertFingerprint?: string
 }
 
 // EngineMetadata -- engine self-reports about itself. Lives under
@@ -238,17 +238,17 @@ package deploy
 
 	// server_cert_fingerprint is sha256:<hex> of the resolver's leaf
 	// certificate, observed at the pre-flight handshake.
-	server_cert_fingerprint: string
+	serverCertFingerprint: string
 
 	// tls_version is the negotiated TLS version, human-readable.
-	tls_version: string
+	tlsVersion: string
 
 	// cipher_suite is the negotiated cipher suite, human-readable.
-	cipher_suite: string
+	cipherSuite: string
 
 	// server_name is the SNI sent during the handshake. Empty for
 	// IP-literal resolver hosts (RFC 6066 forbids IP-literal SNI).
-	server_name?: string
+	serverName?: string
 }
 
 // #DeployTarget is re-exported from lane via artifact.cue.

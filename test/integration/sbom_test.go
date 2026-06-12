@@ -56,7 +56,7 @@ func TestPackSBOM(t *testing.T) {
 				Entrypoint: []string{"/app"},
 				User:       lane.Ptr("65534:65534"),
 			},
-			Config_files: map[string]lane.FileEntry{
+			ConfigFiles: map[string]lane.FileEntry{
 				"/package-lock.json": {
 					Content: lockfileJSON,
 					Mode:    0o644,
@@ -213,7 +213,7 @@ func TestPackSBOM(t *testing.T) {
 					Entrypoint: []string{"/app"},
 					User:       lane.Ptr("65534:65534"),
 				},
-				Config_files: map[string]lane.FileEntry{
+				ConfigFiles: map[string]lane.FileEntry{
 					"/package-lock.json": {
 						Content: lockfileJSON,
 						Mode:    0o644,
