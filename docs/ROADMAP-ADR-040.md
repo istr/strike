@@ -1,19 +1,22 @@
 # ADR-040 Implementation Roadmap
 
-## Status: IN PROGRESS (instructions 1, 2, 3 done; instructions 4--5 remain)
+## Status: SUBSTANTIALLY COMPLETE (instructions 1--4 done; instruction 5 core done, CLI exposure pending)
 
-ADR-040 is Accepted and plumbed: the decision record is at
+ADR-040 is Accepted and fully plumbed: the decision record is at
 `docs/ADR-040-control-plane-sbom-and-keyless-attestation.md`, registered in
 `docs/ADR-INDEX.md` by number and by principle, with the partial-supersession
 back-reference to ADR-019 and the extension note to ADR-037 in place.
 
-D5 is done (instruction 1a), the D3 output predicate types are defined
-(instruction 1b), D1 is done (instruction 2), and D2 is done (instruction
-3: statement projection, keyless chain, cutover -- every deploy now signs
-its three statements keylessly, fail-closed). What remains: D3 packaging
-as co-attached OCI referrers plus the control-plane push (instruction 4),
-and the verification exit (instruction 5). This roadmap decomposes that
-work into the established numbered instruction-file sequence.
+D1 through D4 are complete (instructions 1--4: OIDC schema, SBOM cataloging,
+keyless statement projection and signing, OCI referrer attachment, and
+control-plane push). Instruction 5 (strike verify) has its core verify layers
+fully implemented and tested (trust root parsing, bundle shape validation,
+DSSE signature verification, Fulcio certificate chain and identity binding,
+RFC3161 timestamp verification, and Rekor v2 transparency-log inclusion);
+golden-test fixtures verify the full end-to-end chain. The `strike verify`
+subcommand exposure to the CLI and its lane-policy integration remain pending.
+This work has been superseded by ADR-041 scope; see "Cross-roadmap
+dependencies".
 
 ## What has landed
 
@@ -304,28 +307,36 @@ signature covers the artifact as it exists on the wire.
 
 Depends on: instruction 3 (sign-and-attach runs on the pushed digest).
 
-### 5. strike verify (D3 verification exit + D5 cross-check)
+### 5. strike verify (D3 verification exit + D5 cross-check) -- CORE DONE, CLI EXPOSURE PENDING
 
-Expose the `verify` subcommand in `cmd/strike` (today: `validate`, `dag`,
-`run` only). Build on `internal/verify`: retain its DSSE / PAE / ECDSA P-256
-core and add Fulcio certificate-chain verification, Rekor v2 inclusion (SET),
-SLSA and SBOM predicate validation across the co-attached referrers, and the
-D5 issuer / identity cross-check (cert issuer == declared issuer, cert SAN ==
-declared identity). Per-layer exit is driven by trust mode: engine-trust
-requires both V and E predicates; no-engine-trust requires only V;
-informational never gates. The L3-versus-L2+ distinction is exactly this
-switch -- whether E is trusted -- gating the two L3-only properties (build
-isolation, complete externalParameters).
+**5a (done).** Core verify layers fully implemented in `internal/verify`:
+- `ParseBundle` and `ParsedBundle`: strict sigstore v0.3 bundle shape validation
+- `TrustedTime`: RFC3161 timestamp extraction and validation
+- `Leaf`: Fulcio certificate chain verification and identity binding (issuer == declared issuer, SAN == declared identity)
+- `DSSE`: in-toto statement envelope verification (payload type guard, ECDSA P-256 signature over PAE)
+- `Inclusion`: Rekor v2 transparency-log inclusion proof verification
+- `Verify`: end-to-end entry point combining all layers in fail-closed order
+- `ParseTrustedRoot`: Fulcio root/intermediates, TSA root/intermediates/leaf, and Rekor v2 key parsing from sigstore TrustedRoot bundles
 
-Instruction 5 also absorbs the work items the 3b arc deliberately
-deferred to it: the v1 operator-key artifact path cuts over to keyless
-(D-3b-5; `executor.Pack`'s `SigningKey`/`Rekor` options, `signDSSE`,
-`SignAttestation`, and `#RekorEntry` retire with it), `internal/verify`
-is reoriented from operator-key DSSE to bundle verification (D-3b-3),
-verified base-SBOM ingestion against `base_sbom_signers` becomes possible
-(instruction 2 deferral), and end-to-end deploy integration coverage --
-deliberately deferred at the 3b-ii-c cutover -- returns as verify-driven
-integration tests over real bundles.
+Golden-test fixtures (`internal/deploy/verify_golden_gen_internal_test.go`,
+`internal/verify/layers_test.go`, `internal/verify/differential_test.go`)
+verify the full chain offline with known-good bundles. Live test
+(`internal/deploy/keyless_live_internal_test.go`) exercises the producer
+end to end against the sigstore-local harness.
+
+**5b (deferred to ADR-041).** CLI exposure, lane-policy binding, and predicate
+validation per-layer trust mode are now ADR-041 work (see "Cross-roadmap
+dependencies"). The core verification engine is ready to be wrapped; ADR-041
+instruction 1 will integrate it into `cmd/strike verify`.
+
+Instruction 5 also absorbed the work items the 3b arc deferred to it: the v1
+operator-key artifact path cuts over to keyless (D-3b-5 done; `executor.Pack`'s
+`SigningKey`/`Rekor` options, `signDSSE`, `SignAttestation`, and `#RekorEntry`
+retired), `internal/verify` is reoriented from operator-key DSSE to bundle
+verification (D-3b-3 done), verified base-SBOM ingestion against
+`base_sbom_signers` is possible (deferred to verification time), and
+end-to-end deploy integration coverage returns as golden and live tests over
+real bundles (5a done).
 
 Depends on: instructions 1, 3, 4 (predicate shapes, keyless signatures, the
 pushed registry digest the referrers hang off). Subsumes and redefines the
@@ -356,17 +367,18 @@ verify item the ADR-037 roadmap carried (see "Cross-roadmap dependencies").
   externalization is complete once the v1 operator-key artifact path also
   cuts over (instruction 5, D-3b-5) -- until then `executor.Pack` still
   loads the operator key, so remote-front exposure waits for
-  instruction 5.
-- **ADR-040 instruction 5 (strike verify) subsumes the ADR-037 roadmap's
-  pending verify item.** The ADR-037 roadmap lists a single open item: the
-  `strike verify` CLI subcommand over the restructured predicate. ADR-040 D3
-  redefines that subcommand's scope (referrers + Rekor inclusion + SLSA and
-  SBOM predicate validation + the issuer / identity cross-check + per-layer
-  trust-mode exit) and changes the signature model it must verify
-  (operator-key DSSE -> keyless Fulcio chain). The verify work is now
-  governed by this roadmap's instruction 5; the ADR-037 roadmap's item is
-  retired in favor of it. `internal/verify` is the shared foundation, not a
-  throwaway.
+  instruction 5. **DONE**: The operator-key artifact path has been retired
+  (commit 4cfdbfe); keyless is now the exclusive path.
+
+- **ADR-040 instruction 5 (verify core) is complete; CLI exposure moves to
+  ADR-041.** The ADR-037 roadmap listed the `strike verify` CLI subcommand
+  as a pending item. ADR-040's scope encompasses the verification engine
+  (core layers, golden tests, live tests). ADR-041 redefines the CLI's
+  higher-level scope (lane-policy binding, trust-mode-driven predicate
+  validation, identity and issuer sourcing) and inherits the ready
+  `internal/verify` core. Instruction 5a (core) is done; 5b (CLI exposure)
+  is now part of ADR-041 instruction 1. `internal/verify` is the completed
+  foundation that ADR-041 wraps.
 
 ## Invariants the roadmap must respect
 
