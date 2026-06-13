@@ -6,7 +6,7 @@
 // at sign time (a later instruction); this file defines the output shapes only.
 //
 // The layer boundary is physical (ADR-037, ADR-040 D3): the sealed (V) layer
-// is a standard SLSA Provenance v1 statement; the engine_dependent (E) layer
+// is a standard SLSA Provenance v1 statement; the engineDependent (E) layer
 // is a strike-defined engine-context statement; the informational layer is a
 // strike-defined informational statement. Each is signed as its own referrer.
 //
@@ -137,8 +137,8 @@ package deploy
 }
 
 // #EngineContextPredicate carries the Layer-E claims only: the engine's
-// self-reported metadata (engine_metadata) and the engine-asserted attribution
-// of mediated connections to steps (peer_attribution). The control-plane-
+// self-reported metadata (engineMetadata) and the engine-asserted attribution
+// of mediated connections to steps (peerAttribution). The control-plane-
 // observed engine connection (#EngineConnection) is NOT here -- it is Layer V
 // and rides in the sealed provenance's externalParameters (Fork C).
 #EngineContextPredicate: {
@@ -169,7 +169,7 @@ package deploy
 	// reproducible and omits it.
 	timestamp?: #Timestamp
 
-	// pre_state_digest / post_state_digest are CP's canonical SHA-256 digests of
+	// preStateDigest / postStateDigest are CP's canonical SHA-256 digests of
 	// the pre/post-deploy state captures. The bytes were produced by the
 	// (untrusted) capture container and engine-relayed; CP's hash transports
 	// them, it does not lift them out of the container-asserted class.

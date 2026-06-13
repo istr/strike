@@ -45,7 +45,7 @@ package deploy
 //                      against declared anchors, lane-anchoring) and binds
 //                      the consumer through a signed digest the consumer
 //                      itself dereferences.
-//   engine_dependent - sound only to a verifier who trusts the engine.
+//   engineDependent  - sound only to a verifier who trusts the engine.
 //                      Engine-action claims (step run, egress confinement,
 //                      connection routing). Empty in Phase 1; populated by
 //                      capsule-observed attribution in Phase 2.
@@ -66,13 +66,13 @@ package deploy
 
 // Sealed -- CP-bound claims, sound under both trust(E) and ~trust(E).
 #Sealed: {
-	// lane_id is the stable identifier from the lane definition.
+	// laneId is the stable identifier from the lane definition.
 	laneId: =~"^[a-z0-9][a-z0-9-]{0,62}$"
 
 	// target describes what was deployed to. Declared, lane-anchored.
 	target: #DeployTarget
 
-	// lane_digest is the raw sha256 over the lane definition file bytes,
+	// laneDigest is the raw sha256 over the lane definition file bytes,
 	// computed by CP at parse time (hash and parse read the same bytes).
 	laneDigest: #Digest | ""
 
@@ -92,20 +92,20 @@ package deploy
 
 	// engine carries the CP-observed connection facts about the engine.
 	// The engine's self-reports (version, rootless) live in
-	// informational.engine_metadata.
+	// informational.engineMetadata.
 	engine?: #EngineConnection
 
-	// observed_peers records, per peer endpoint ("host:port"), the connection
+	// observedPeers records, per peer endpoint ("host:port"), the connection
 	// identity the control plane observed and validated against the declared
 	// anchor, deduplicated across steps. A key/cert mismatch aborts the run
 	// before any entry is written, so every entry here is a validated identity
 	// (Layer V). No step attribution: which step reached a peer is an
-	// engine-asserted fact and lives in engine_dependent.peer_attribution.
+	// engine-asserted fact and lives in engineDependent.peerAttribution.
 	observedPeers?: [Endpoint=string]: #ObservedPeer
 }
 
 // ---------------------------------------------------------------------------
-// Observed peer identity (sealed.observed_peers)
+// Observed peer identity (sealed.observedPeers)
 // ---------------------------------------------------------------------------
 
 // ObservedPeer is one peer endpoint the control plane connected to and
@@ -123,16 +123,16 @@ package deploy
 	identity: #ObservedSSH | #ObservedTLS
 }
 
-// ObservedSSH is a validated SSH host identity. host_key_fingerprint is the
+// ObservedSSH is a validated SSH host identity. hostKeyFingerprint is the
 // SHA-256 of the key the server presented that matched the declared known_hosts
-// anchor; host_key_algo is that key's algorithm.
+// anchor; hostKeyAlgo is that key's algorithm.
 #ObservedSSH: {
 	type:                 "ssh"
 	hostKeyFingerprint: string
 	hostKeyAlgo:        string
 }
 
-// ObservedTLS is a validated HTTPS server identity. server_cert_fingerprint is
+// ObservedTLS is a validated HTTPS server identity. serverCertFingerprint is
 // the SHA-256 of the leaf certificate that matched the declared anchor.
 #ObservedTLS: {
 	type:                    "https"
@@ -153,11 +153,11 @@ package deploy
 // these records -- folding it in would be a category error. Hence there is, and
 // can be, no completeness flag.
 //
-// Phase 1 leaves peer_attribution empty; Phase-2 wiring (a separate
+// Phase 1 leaves peerAttribution empty; Phase-2 wiring (a separate
 // instruction) populates it from capsule-observed routing. Do not pre-populate.
 #EngineDependent: {
-	// peer_attribution maps each step to the peer endpoints its mediated
-	// connections reached ("host:port" keys into sealed.observed_peers).
+	// peerAttribution maps each step to the peer endpoints its mediated
+	// connections reached ("host:port" keys into sealed.observedPeers).
 	// Engine-asserted (Layer E).
 	peerAttribution?: [Step=string]: [...string]
 }
@@ -173,16 +173,16 @@ package deploy
 	// per SECURITY.md: Rekor integratedTime is canonical.
 	timestamp?: #Timestamp
 
-	// engine_metadata carries the engine's self-reports about itself.
+	// engineMetadata carries the engine's self-reports about itself.
 	engineMetadata?: #EngineMetadata
 
-	// pre_state_digest is CP's canonical SHA-256 digest of pre-deploy
+	// preStateDigest is CP's canonical SHA-256 digest of pre-deploy
 	// state captures. The bytes were produced by the (untrusted) capture
 	// container and relayed by the engine; CP's hash transports them,
 	// it does not lift them out of the container-asserted class.
 	preStateDigest: #Digest
 
-	// post_state_digest -- symmetric to pre_state_digest.
+	// postStateDigest -- symmetric to preStateDigest.
 	postStateDigest: #Digest
 
 	// provenance collects validated provenance records from transitive
@@ -199,23 +199,23 @@ package deploy
 // EngineConnection -- CP-observed/controlled connection facts about the
 // engine. Lives under sealed.engine.
 #EngineConnection: {
-	// connection_type is "unix", "tls", or "mtls". CP-determined.
+	// connectionType is "unix", "tls", or "mtls". CP-determined.
 	connectionType: "unix" | "tls" | "mtls"
 
-	// ca_trust_mode is "pinned" (explicit CA) or "system" (OS trust store).
+	// caTrustMode is "pinned" (explicit CA) or "system" (OS trust store).
 	// Empty for Unix socket connections. CP-configured.
 	caTrustMode?: "pinned" | "system" | ""
 
-	// server_cert_fingerprint is sha256:<hex> of the engine's leaf cert,
+	// serverCertFingerprint is sha256:<hex> of the engine's leaf cert,
 	// observed by CP during the TLS handshake.
 	serverCertFingerprint?: string
 
-	// client_cert_fingerprint is sha256:<hex> of the controller's own cert.
+	// clientCertFingerprint is sha256:<hex> of the controller's own cert.
 	clientCertFingerprint?: string
 }
 
 // EngineMetadata -- engine self-reports about itself. Lives under
-// informational.engine_metadata. These claims are the engine's word
+// informational.engineMetadata. These claims are the engine's word
 // about its own properties; they do not participate in the source-to-
 // deploy chain and are recorded only for audit context.
 #EngineMetadata: {
@@ -236,17 +236,17 @@ package deploy
 	// host is the declared DoT resolver endpoint (host:port).
 	host: string
 
-	// server_cert_fingerprint is sha256:<hex> of the resolver's leaf
+	// serverCertFingerprint is sha256:<hex> of the resolver's leaf
 	// certificate, observed at the pre-flight handshake.
 	serverCertFingerprint: string
 
-	// tls_version is the negotiated TLS version, human-readable.
+	// tlsVersion is the negotiated TLS version, human-readable.
 	tlsVersion: string
 
-	// cipher_suite is the negotiated cipher suite, human-readable.
+	// cipherSuite is the negotiated cipher suite, human-readable.
 	cipherSuite: string
 
-	// server_name is the SNI sent during the handshake. Empty for
+	// serverName is the SNI sent during the handshake. Empty for
 	// IP-literal resolver hosts (RFC 6066 forbids IP-literal SNI).
 	serverName?: string
 }

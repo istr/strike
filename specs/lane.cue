@@ -143,7 +143,7 @@ package lane
 	secrets: [...#SecretRef] @go(Secrets)
 	workdir?: #AbsPath @go(Workdir,optional=nillable)
 	peers?: [...#Peer] @go(Peers)
-	// force_run: when true, strike bypasses the cache check
+	// forceRun: when true, strike bypasses the cache check
 	// and runs the step unconditionally. The explicit escape
 	// hatch for intentionally non-deterministic steps such as
 	// `git clone` from a moving branch or `npm install` of a
@@ -154,7 +154,7 @@ package lane
 	pack?:       #PackSpec       @go(Pack,optional=nillable)
 	deploy?:     #DeploySpec     @go(Deploy,optional=nillable)
 	provenance?: #ProvenanceSpec @go(Provenance,optional=nillable)
-	// constraint: exactly one of image, image_from, pack, or deploy -- validated in Go
+	// constraint: exactly one of image, imageFrom, pack, or deploy -- validated in Go
 
 	// D2 (ADR-039): a deploy step is a DAG leaf and declares no output.
 	// Tying deploy presence to an empty outputs list keeps the constraint in
@@ -515,23 +515,23 @@ package lane
 	// Needed for lookups via GET /api/v1/log/entries/{uuid}.
 	uuid: =~"^[0-9a-f]{64,}$" @go(UUID)
 
-	// log_index is the global sequence number in the transparency log.
+	// logIndex is the global sequence number in the transparency log.
 	logIndex: int & >=0 @go(LogIndex)
 
-	// log_id is the hex-encoded hash of the log's public key.
+	// logId is the hex-encoded hash of the log's public key.
 	logId: =~"^[a-f0-9]{64}$" @go(LogID)
 
-	// integrated_time is the Unix timestamp when the entry was added.
+	// integratedTime is the Unix timestamp when the entry was added.
 	integratedTime: int & >0 @go(IntegratedTime)
 
 	// body is the base64-encoded entry body.
 	body: string @go(Body)
 
-	// signed_entry_timestamp is the base64-encoded SET proving
+	// signedEntryTimestamp is the base64-encoded SET proving
 	// the log server processed this entry.
 	signedEntryTimestamp: string @go(SignedEntryTimestamp)
 
-	// inclusion_proof holds the Merkle tree proof for this entry.
+	// inclusionProof holds the Merkle tree proof for this entry.
 	inclusionProof: #InclusionProof @go(InclusionProof)
 }
 
@@ -539,13 +539,13 @@ package lane
 #InclusionProof: {
 	@go(InclusionProof)
 
-	// log_index is the leaf index in the Merkle tree.
+	// logIndex is the leaf index in the Merkle tree.
 	logIndex: int & >=0 @go(LogIndex)
 
-	// root_hash is the hex-encoded tree root at inclusion time.
+	// rootHash is the hex-encoded tree root at inclusion time.
 	rootHash: =~"^[a-f0-9]{64}$" @go(RootHash)
 
-	// tree_size is the number of leaves when the proof was generated.
+	// treeSize is the number of leaves when the proof was generated.
 	treeSize: int & >=1 @go(TreeSize)
 
 	// hashes are the hex-encoded sibling hashes from leaf to root.
