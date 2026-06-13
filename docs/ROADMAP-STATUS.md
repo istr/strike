@@ -1,17 +1,17 @@
 # Strike Roadmap Status Summary
 
-**As of 2026-06-12**, the repository is at a major inflection point: the core
-verification engine is complete and in-process integration into the CLI is
-underway. This document provides a snapshot of the status of all active
-roadmaps.
+**As of 2026-06-13**, the repository is at a major inflection point: the core
+verification engine is complete and wrapped in a lane-aware CLI (`strike
+verify`, UC1 and UC2, with per-layer predicate validation and V/E gating). This
+document provides a snapshot of the status of all active roadmaps.
 
 ## Status overview
 
 | Roadmap | Status | Notes |
 |---------|--------|-------|
 | [ROADMAP-ADR-038](ROADMAP-ADR-038.md) | COMPLETE (+ dependency unblocked) | Protocol-mediated SSH; control-plane front; all items 1--9 complete. ADR-040 keyless unblocks remote-front exposure. |
-| [ROADMAP-ADR-040](ROADMAP-ADR-040.md) | SUBSTANTIALLY COMPLETE | Instructions 1--4 done (OIDC schema, SBOM, keyless signing, OCI referrers, control-plane push). Instruction 5a (verify core) done; 5b (CLI exposure) deferred to ADR-041. |
-| [ROADMAP-ADR-041](ROADMAP-ADR-041.md) | IN PROGRESS | Foundation (verify core, lane-digest sealing, identity enforcement) complete. Instructions 1--3 (CLI subcommand, lane-policy integration, predicate validation) pending. |
+| [ROADMAP-ADR-040](ROADMAP-ADR-040.md) | SUBSTANTIALLY COMPLETE | Instructions 1--4 done (OIDC schema, SBOM, keyless signing, OCI referrers, control-plane push). Instruction 5a (verify core) done; 5b (CLI exposure) landed via ADR-041. |
+| [ROADMAP-ADR-041](ROADMAP-ADR-041.md) | SUBSTANTIALLY COMPLETE | Foundation plus instructions 1--3 (CLI subcommand, lane-policy integration, predicate validation and V/E gating) landed. Deferred: v1-verifier teardown, base-SBOM signature verification. |
 | [ROADMAP-sigstore-test-harness](ROADMAP-sigstore-test-harness.md) | H1 DONE, H2 PENDING | Stack-up and trust-anchor export complete. WebAuthn/FIDO2 (H2) remains. |
 
 ## Narrative summary
@@ -54,9 +54,9 @@ and can proceed.
   issuer and cert SAN == declared identity.
 
 - **Instruction 5 (strike verify):** Core layers (5a) fully implemented and
-  tested. CLI exposure (5b) deferred to ADR-041 instruction 1 because it
-  requires lane-policy binding (ADR-041 scope). The `internal/verify` package
-  provides:
+  tested. CLI exposure (5b) landed via ADR-041 instructions 1--3 (lane-policy
+  binding, predicate validation, V/E trust-mode gating). The `internal/verify`
+  package provides:
   - `Verifier.Verify()` end-to-end entry point
   - Independent fail-closed layers: bundle shape, trusted time, leaf chain,
     DSSE signature, Rekor inclusion
@@ -64,7 +64,7 @@ and can proceed.
   - Golden-test fixtures verifying the full chain offline
   - Live tests against the sigstore-local harness
 
-### ADR-041: The lane as verification policy (IN PROGRESS)
+### ADR-041: The lane as verification policy (SUBSTANTIALLY COMPLETE)
 
 A new ADR that reframes verification around two use cases:
 - **UC1 (consumer):** "I have an image; is its signature valid?" Explicit
@@ -79,17 +79,21 @@ A new ADR that reframes verification around two use cases:
   subject == lane-declared identity before Fulcio contact. Fail-closed.
 - Verify core (`internal/verify`) ready to wrap with CLI and lane integration.
 
-**Pending work (instructions 1--3):**
-- Instruction 1: Lane schema extensions (`#TrustRoot`), expose `strike verify`
+**Landed (instructions 1--3):**
+- Instruction 1: Lane schema extensions (`#TrustRoot`), `strike verify`
   subcommand with UC1 and UC2 paths.
 - Instruction 2: Lane-policy integration (identity, issuer, trust root sourced
   from the lane).
-- Instruction 3: Per-layer predicate validation and trust-mode gating.
-- Triage: the Go engine-context `ConnectionInfo` emits `serverCertSubject`,
-  `serverCertIssuer`, and `clientCertSubject`, which the closed CUE
-  `#EngineConnection` does not declare. No current break (the sealed projection
-  drops them via Go-field copy). Decide: promote them into `#EngineConnection`
-  if they should be sealed, or document them as diagnostic-only.
+- Instruction 3: Per-layer predicate validation and V/E trust-mode gating
+  (`--no-engine-trust`), over the enriched goldens (instruction 3a).
+
+**Deferred:** the v1-verifier teardown (ADR-040 5c) and base-SBOM signature
+verification (ADR-040 2c). Triage still open: the Go engine-context
+`ConnectionInfo` emits `serverCertSubject`, `serverCertIssuer`, and
+`clientCertSubject`, which the closed CUE `#EngineConnection` does not declare.
+No current break (the sealed projection drops them via Go-field copy). Decide:
+promote them into `#EngineConnection` if they should be sealed, or document them
+as diagnostic-only.
 
 ### Sigstore-local test harness (H1 DONE)
 
@@ -110,40 +114,37 @@ live keyless chain and provides the local trust roots for verification.
    identities. The only durable secret is the OIDC identity. Remote-front
    exposure is unblocked.
 
-2. **Verification engine is ready.** The `internal/verify` package is
-   production-ready (core layers, golden tests, live tests). It awaits CLI
-   integration and lane-policy binding.
+2. **Verification engine is wired into the CLI.** The `internal/verify` package
+   (core layers, golden tests, live tests) is now driven by the `strike verify`
+   subcommand with lane-policy binding (UC1 and UC2).
 
-3. **Lane as policy is foundational.** The lane_digest binding and identity
-   enforcement are in place. The next phase (ADR-041 instructions 1--3)
-   wraps the verify core in a lane-aware CLI subcommand.
+3. **Lane as policy is realized.** The lane_digest binding and identity
+   enforcement are in place, and ADR-041 instructions 1--3 wrap the verify core
+   in a lane-aware CLI subcommand that gates on the lane digest under UC2.
 
 4. **Three trust layers are now observable.** ADR-037's V (sealed) and E
    (engine-dependent) layers are now separate OCI referrers. The informational
    layer is a third referrer. Verification can gate per-layer based on trust
    mode.
 
-## Sequencing for the next phase
+## Sequencing -- complete
 
-ADR-041 instruction 1 is the critical path:
-1. Confirm lane schema for `#TrustRoot` (digest-pinned reference + inline override)
-2. (LANDED, basic path) Expose `strike verify` subcommand with UC1 (explicit
-   parameters) and UC2 (lane as policy) paths
-3. (LANDED, basic path) Integrate `internal/verify.Verifier` into the command
-   handler
+The ADR-041 verify arc is landed:
+1. Lane schema for `#TrustRoot` (digest-pinned reference + inline override)
+2. `strike verify` subcommand with UC1 (explicit parameters) and UC2 (lane as
+   policy) paths
+3. `internal/verify.Verifier` integrated into the command handler
 
-Steps 2 and 3 are wired for the basic path -- bundle read, trust-root
-resolution, keyless verify per bundle, and the subject-digest check. Instruction
-3 (predicate validation, lane-digest gating) is the remaining work:
-- Instruction 2: Lane-policy plumbing (identity, issuer, root from lane) --
-  landed for the basic path.
-- Instruction 3: Predicate validation (SLSA Provenance, engine-context,
-  SBOM formats; trust-mode-driven gating) and the lane-digest binding.
+The basic path (bundle read, trust-root resolution, keyless verify per bundle,
+subject-digest check) and instruction 3 (per-layer predicate validation, V/E
+trust-mode gating, and the lane-digest binding) are landed over the enriched
+goldens. Remaining work is deferred beyond this arc: the v1-verifier teardown
+(ADR-040 5c) and base-SBOM signature verification (ADR-040 2c).
 
 ## References
 
 - [ADR-041 Decision Record](ADR-041-lane-as-verification-policy.md)
 - [ROADMAP-ADR-038](ROADMAP-ADR-038.md) -- Complete
 - [ROADMAP-ADR-040](ROADMAP-ADR-040.md) -- Substantially complete
-- [ROADMAP-ADR-041](ROADMAP-ADR-041.md) -- In progress
+- [ROADMAP-ADR-041](ROADMAP-ADR-041.md) -- Substantially complete
 - [ROADMAP-sigstore-test-harness](ROADMAP-sigstore-test-harness.md) -- H1 done, H2 pending

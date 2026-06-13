@@ -19,11 +19,12 @@ import (
 
 // verifyOptions are the parsed inputs for one verification.
 type verifyOptions struct {
-	subjectRef string
-	identity   string
-	issuer     string
-	trustRoot  string // --trust-root override path; "" if none
-	laneFile   string // --lane (UC2); "" selects UC1
+	subjectRef    string
+	identity      string
+	issuer        string
+	trustRoot     string // --trust-root override path; "" if none
+	laneFile      string // --lane (UC2); "" selects UC1
+	noEngineTrust bool   // --no-engine-trust: degrade the engine-context layer to informational
 }
 
 // cmdVerify parses the verify flags and runs the verification, exiting non-zero
@@ -36,6 +37,7 @@ func cmdVerify(args []string) {
 	fs.StringVar(&opts.issuer, "issuer", "", "expected OIDC issuer (UC1)")
 	fs.StringVar(&opts.trustRoot, "trust-root", "", "path to a trusted_root.json (override)")
 	fs.StringVar(&opts.laneFile, "lane", "", "lane file as verification policy (UC2)")
+	fs.BoolVar(&opts.noEngineTrust, "no-engine-trust", false, "do not gate on the engine-context layer (treat it as informational)")
 	if err := fs.Parse(args); err != nil {
 		os.Exit(2)
 	}
@@ -49,51 +51,141 @@ func cmdVerify(args []string) {
 	}
 }
 
-// resolveVerifyPolicy determines the (keyless, identity, issuer) the bundles
-// are checked against: UC1 takes identity and issuer from the flags, UC2 from
-// the lane (which also carries the keyless trust-root source). Combining
-// --identity/--issuer with --lane is rejected -- the lane is the single source
-// -- as is supplying neither mode. Split from runVerify to keep each focused.
-func resolveVerifyPolicy(opts verifyOptions) (lane.Keyless, string, string, error) {
+// verifyPolicy is the resolved verification policy: the keyless config and the
+// expected signer identity/issuer, plus the policy lane's digest in UC2 (""
+// in UC1, where there is no lane to bind the attestation to).
+type verifyPolicy struct {
+	keyless    lane.Keyless
+	identity   string
+	issuer     string
+	laneDigest string
+}
+
+// resolveVerifyPolicy determines the policy the bundles are checked against:
+// UC1 takes identity and issuer from the flags, UC2 from the lane (which also
+// carries the keyless trust-root source and, sealed into the attestation, the
+// lane digest the sealed predicate must match). Combining --identity/--issuer
+// with --lane is rejected -- the lane is the single source -- as is supplying
+// neither mode. Split from runVerify to keep each focused.
+func resolveVerifyPolicy(opts verifyOptions) (verifyPolicy, error) {
 	uc1 := opts.identity != "" || opts.issuer != ""
 	uc2 := opts.laneFile != ""
 	switch {
 	case uc1 && uc2:
-		return lane.Keyless{}, "", "", fmt.Errorf("--identity/--issuer cannot be combined with --lane; the lane is the source")
+		return verifyPolicy{}, fmt.Errorf("--identity/--issuer cannot be combined with --lane; the lane is the source")
 	case !uc1 && !uc2:
-		return lane.Keyless{}, "", "", fmt.Errorf("provide --lane (UC2), or --identity and --issuer (UC1)")
+		return verifyPolicy{}, fmt.Errorf("provide --lane (UC2), or --identity and --issuer (UC1)")
 	}
 	if uc2 {
-		_, p, _, _, err := validateLane(opts.laneFile)
+		_, p, dg, _, err := validateLane(opts.laneFile)
 		if err != nil {
-			return lane.Keyless{}, "", "", err
+			return verifyPolicy{}, err
 		}
-		return p.Keyless, p.OIDC.Identity, p.OIDC.Issuer, nil
+		return verifyPolicy{keyless: p.Keyless, identity: p.OIDC.Identity, issuer: p.OIDC.Issuer, laneDigest: dg.String()}, nil
 	}
 	if opts.identity == "" || opts.issuer == "" {
-		return lane.Keyless{}, "", "", fmt.Errorf("UC1 requires both --identity and --issuer")
+		return verifyPolicy{}, fmt.Errorf("UC1 requires both --identity and --issuer")
 	}
-	return lane.Keyless{}, opts.identity, opts.issuer, nil
+	return verifyPolicy{identity: opts.identity, issuer: opts.issuer}, nil
+}
+
+// Expected predicate types per layer; mirrors the producer's projection
+// (internal/deploy/project.go). A mismatch with the producer is caught by the
+// golden-fixture tests, which carry the producer's real predicates.
+const (
+	sealedPredicateType        = "https://slsa.dev/provenance/v1"
+	engineContextPredicateType = "https://istr.dev/strike/predicates/engine-context/v1"
+	informationalPredicateType = "https://istr.dev/strike/predicates/informational/v1"
+)
+
+var layerPredicateType = map[string]string{
+	"sealed":         sealedPredicateType,
+	"engine-context": engineContextPredicateType,
+	"informational":  informationalPredicateType,
+}
+
+// gateClass is how a layer's failure affects the verify exit under the current
+// trust mode.
+type gateClass int
+
+const (
+	gateNone gateClass = iota // never gates: informational, or engine-context under --no-engine-trust
+	gateV                     // Layer V: hard fail, no opt-out
+	gateE                     // Layer E: hard fail unless --no-engine-trust
+)
+
+// classifyLayer maps a bundle's layer to how its failure gates the exit under
+// the current trust mode (ADR-037 V/E model).
+func classifyLayer(layer string, noEngineTrust bool) gateClass {
+	switch layer {
+	case "sealed":
+		return gateV
+	case "engine-context":
+		if noEngineTrust {
+			return gateNone
+		}
+		return gateE
+	default: // informational or any unrecognized layer
+		return gateNone
+	}
+}
+
+// validatePredicate checks the verified statement's predicate for its layer: the
+// predicateType must match, and the sealed layer must carry a laneDigest --
+// which, in UC2 (laneDigest != ""), must equal the policy lane's digest. It does
+// not schema-validate the engine-context or informational bodies.
+func validatePredicate(layer string, statement []byte, laneDigest string) error {
+	var head struct {
+		PredicateType string `json:"predicateType"`
+	}
+	if err := json.Unmarshal(statement, &head); err != nil {
+		return fmt.Errorf("parse statement: %w", err)
+	}
+	if want, known := layerPredicateType[layer]; known && head.PredicateType != want {
+		return fmt.Errorf("predicateType %q is not the expected %q for the %s layer", head.PredicateType, want, layer)
+	}
+	if layer != "sealed" {
+		return nil
+	}
+	var s struct {
+		Predicate struct {
+			BuildDefinition struct {
+				ExternalParameters struct {
+					LaneDigest string `json:"laneDigest"`
+				} `json:"externalParameters"`
+			} `json:"buildDefinition"`
+		} `json:"predicate"`
+	}
+	if err := json.Unmarshal(statement, &s); err != nil {
+		return fmt.Errorf("parse sealed predicate: %w", err)
+	}
+	got := s.Predicate.BuildDefinition.ExternalParameters.LaneDigest
+	if got == "" {
+		return fmt.Errorf("sealed predicate carries no laneDigest")
+	}
+	if laneDigest != "" && got != laneDigest {
+		return fmt.Errorf("lane digest mismatch: attestation has %s, policy lane is %s", got, laneDigest)
+	}
+	return nil
 }
 
 // runVerify resolves the verification policy (UC1 explicit, or UC2 from the
 // lane), reads the attestation bundles attached to the subject, and verifies
-// each: the keyless chain via verify.Verify, and that the statement names the
-// requested artifact. Verified statements are written to out. An error is
-// returned if any bundle fails. Per-layer predicate validation and the
-// lane-digest binding are not done here (instruction 3); the artifact binding
-// rests on the referrer relationship and the subject check.
+// each layer: the keyless chain via verify.Verify, the subject-artifact check,
+// and per-layer predicate validation. The exit follows the ADR-037 V/E trust
+// model: a Layer-V (sealed) failure or absence is a hard fail with no opt-out;
+// a Layer-E (engine-context) failure or absence is a hard fail unless
+// --no-engine-trust degrades it to informational; the informational layer
+// never gates. Verified statements are written to out.
 func runVerify(ctx context.Context, out io.Writer, opts verifyOptions) error {
-	k, wantIdentity, wantIssuer, err := resolveVerifyPolicy(opts)
+	pol, err := resolveVerifyPolicy(opts)
 	if err != nil {
 		return err
 	}
-
-	tm, err := verify.ResolveTrustedMaterial(ctx, opts.trustRoot, k)
+	tm, err := verify.ResolveTrustedMaterial(ctx, opts.trustRoot, pol.keyless)
 	if err != nil {
 		return err
 	}
-
 	d, err := name.NewDigest(opts.subjectRef)
 	if err != nil {
 		return fmt.Errorf("subject must be digest-pinned: %w", err)
@@ -108,32 +200,79 @@ func runVerify(ctx context.Context, out io.Writer, opts verifyOptions) error {
 		return fmt.Errorf("no attestation bundles attached to %s", opts.subjectRef)
 	}
 
-	v := verify.New(tm, wantIdentity, wantIssuer)
-	failures := 0
+	v := verify.New(tm, pol.identity, pol.issuer)
+	seen := make(map[string]bool, len(bundles))
+	var vFail, eFail bool
 	for _, b := range bundles {
-		stmt, verr := v.Verify(b.Bundle)
-		if verr != nil {
-			log.Printf("FAIL  %s: %v", b.Statement, verr)
-			failures++
+		seen[b.Statement] = true
+		gate := classifyLayer(b.Statement, opts.noEngineTrust)
+		if berr := verifyBundle(v, b, wantHex, pol.laneDigest, out); berr != nil {
+			switch gate {
+			case gateV:
+				log.Printf("FAIL  %s: %v", b.Statement, berr)
+				vFail = true
+			case gateE:
+				log.Printf("FAIL  %s: %v", b.Statement, berr)
+				eFail = true
+			default:
+				log.Printf("INFO  %s: %v (not gating)", b.Statement, berr)
+			}
 			continue
-		}
-		if !subjectMatches(stmt, wantHex) {
-			log.Printf("FAIL  %s: statement subject is not %s", b.Statement, opts.subjectRef)
-			failures++
-			continue
-		}
-		if _, werr := out.Write(stmt); werr != nil {
-			return fmt.Errorf("write statement: %w", werr)
-		}
-		if _, werr := out.Write([]byte("\n")); werr != nil {
-			return fmt.Errorf("write statement: %w", werr)
 		}
 		log.Printf("OK    %s", b.Statement)
 	}
-	if failures > 0 {
-		return fmt.Errorf("%d of %d bundle(s) failed verification", failures, len(bundles))
+	checkPresence(seen, opts.noEngineTrust, &vFail, &eFail)
+	if vFail {
+		return fmt.Errorf("verification failed: a Layer-V (sealed) check did not pass")
+	}
+	if eFail {
+		return fmt.Errorf("verification failed: a Layer-E (engine-context) check did not pass; re-run with --no-engine-trust to verify without engine trust")
 	}
 	return nil
+}
+
+// verifyBundle runs, for one bundle, the keyless verify, the subject-artifact
+// check, and predicate validation, writing the verified statement to out on
+// success.
+func verifyBundle(v *verify.Verifier, b registry.StatementBundle, wantHex, laneDigest string, out io.Writer) error {
+	stmt, err := v.Verify(b.Bundle)
+	if err != nil {
+		return err
+	}
+	if !subjectMatches(stmt, wantHex) {
+		return fmt.Errorf("statement subject is not the requested artifact")
+	}
+	if err := validatePredicate(b.Statement, stmt, laneDigest); err != nil {
+		return err
+	}
+	if _, err := out.Write(stmt); err != nil {
+		return fmt.Errorf("write statement: %w", err)
+	}
+	if _, err := out.Write([]byte("\n")); err != nil {
+		return fmt.Errorf("write statement: %w", err)
+	}
+	return nil
+}
+
+// checkPresence enforces the layer presence rules: the sealed layer is
+// mandatory; engine-context is mandatory unless --no-engine-trust; a missing
+// engine-context (under the flag) or informational layer is reported, not gated.
+func checkPresence(seen map[string]bool, noEngineTrust bool, vFail, eFail *bool) {
+	if !seen["sealed"] {
+		*vFail = true
+		log.Printf("FAIL  sealed: required statement is absent")
+	}
+	if !seen["engine-context"] {
+		if noEngineTrust {
+			log.Printf("INFO  engine-context: absent (engine trust disabled)")
+		} else {
+			*eFail = true
+			log.Printf("FAIL  engine-context: required statement is absent")
+		}
+	}
+	if !seen["informational"] {
+		log.Printf("INFO  informational: absent")
+	}
 }
 
 // subjectMatches reports whether the in-toto statement names the requested

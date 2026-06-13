@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log"
 	"net/http/httptest"
 	"net/url"
 	"os"
@@ -117,6 +118,37 @@ func attachGolden(t *testing.T, host, subjectHex string, bundle []byte) {
 	}
 }
 
+// attachGoldenLayers attaches the named golden layers (e.g. "sealed",
+// "engine-context", "informational") as co-attached referrers of the subject
+// digest, each carrying its golden bundle. The three goldens share one subject
+// (the 3a synthetic attestation), so any subset binds to the same digest.
+func attachGoldenLayers(t *testing.T, host, subjectHex string, layers ...string) {
+	t.Helper()
+	h, err := v1.NewHash("sha256:" + subjectHex)
+	if err != nil {
+		t.Fatalf("subject hash: %v", err)
+	}
+	subject := v1.Descriptor{MediaType: types.OCIManifestSchema1, Size: 2, Digest: h}
+	sb := make([]registry.StatementBundle, 0, len(layers))
+	for _, layer := range layers {
+		sb = append(sb, registry.StatementBundle{Statement: layer, Bundle: goldenFile(t, layer+".sigstore.json")})
+	}
+	if err := registry.AttachStatementBundles(context.Background(), host+"/app:v1", subject, sb); err != nil {
+		t.Fatalf("AttachStatementBundles: %v", err)
+	}
+}
+
+// captureLog redirects the default logger to a buffer for the duration of the
+// test and returns it, so the non-gating "absent" diagnostics can be asserted.
+func captureLog(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	buf := &bytes.Buffer{}
+	prev := log.Writer()
+	log.SetOutput(buf)
+	t.Cleanup(func() { log.SetOutput(prev) })
+	return buf
+}
+
 // pushSubject pushes a minimal OCI image to ref and returns its descriptor,
 // mirroring internal/registry's referrer_test helper.
 func pushSubject(t *testing.T, ref string) v1.Descriptor {
@@ -149,15 +181,15 @@ func pushSubject(t *testing.T, ref string) v1.Descriptor {
 }
 
 // TestRunVerifyHappyPathUC1 runs the full read -> resolve -> verify ->
-// subject-match chain with no harness: the golden bundle, the golden trusted
-// root via --trust-root, and an in-memory registry. This is the round-trip the
-// override lever exists to enable.
+// subject-match -> predicate chain with no harness: the three golden bundles,
+// the golden trusted root via --trust-root, and an in-memory registry. UC1 has
+// no policy lane, so the sealed laneDigest is checked present but not matched.
+// This is the round-trip the override lever exists to enable.
 func TestRunVerifyHappyPathUC1(t *testing.T) {
-	bundle := goldenFile(t, "sealed.sigstore.json")
-	subjectHex := goldenSubjectHex(t, bundle)
+	subjectHex := goldenSubjectHex(t, goldenFile(t, "sealed.sigstore.json"))
 
 	host := localRegistry(t)
-	attachGolden(t, host, subjectHex, bundle)
+	attachGoldenLayers(t, host, subjectHex, "sealed", "engine-context", "informational")
 
 	var out bytes.Buffer
 	opts := verifyOptions{
@@ -169,14 +201,16 @@ func TestRunVerifyHappyPathUC1(t *testing.T) {
 	if err := runVerify(context.Background(), &out, opts); err != nil {
 		t.Fatalf("runVerify: %v", err)
 	}
-	// The verified in-toto statement, not arbitrary text, must reach stdout.
+	// Each verified in-toto statement, not arbitrary text, reaches stdout, one
+	// per line; the first must name the requested artifact.
+	first := bytes.SplitN(out.Bytes(), []byte("\n"), 2)[0]
 	var st struct {
 		Type    string `json:"_type"`
 		Subject []struct {
 			Digest map[string]string `json:"digest"`
 		} `json:"subject"`
 	}
-	if err := json.Unmarshal(out.Bytes(), &st); err != nil {
+	if err := json.Unmarshal(first, &st); err != nil {
 		t.Fatalf("output is not a JSON statement: %v (%q)", err, out.String())
 	}
 	if st.Type == "" || len(st.Subject) == 0 || st.Subject[0].Digest["sha256"] != subjectHex {
@@ -300,5 +334,137 @@ func TestSubjectMatches(t *testing.T) {
 				t.Fatalf("subjectMatches = %v, want %v", got, tt.wantMatch)
 			}
 		})
+	}
+}
+
+// TestValidatePredicate covers the per-layer predicate checks: predicateType
+// must match the layer, and the sealed layer must carry a laneDigest (always
+// present, and equal to the policy lane's digest in UC2; unconstrained in UC1).
+func TestValidatePredicate(t *testing.T) {
+	dgA := "sha256:" + strings.Repeat("a", 64)
+	dgB := "sha256:" + strings.Repeat("b", 64)
+	sealedStmt := func(dg string) []byte {
+		return []byte(`{"predicateType":"` + sealedPredicateType +
+			`","predicate":{"buildDefinition":{"externalParameters":{"laneDigest":"` + dg + `"}}}}`)
+	}
+	typed := func(pt string) []byte { return []byte(`{"predicateType":"` + pt + `"}`) }
+	tests := []struct {
+		name       string
+		layer      string
+		laneDigest string
+		statement  []byte
+		wantErr    bool
+	}{
+		{"sealed UC2 match", "sealed", dgA, sealedStmt(dgA), false},
+		{"sealed UC2 mismatch", "sealed", dgB, sealedStmt(dgA), true},
+		{"sealed absent laneDigest", "sealed", dgA, sealedStmt(""), true},
+		{"sealed UC1 present laneDigest", "sealed", "", sealedStmt(dgA), false},
+		{"sealed wrong predicateType", "sealed", "", typed("https://example.com/wrong"), true},
+		{"engine-context ok", "engine-context", "", typed(engineContextPredicateType), false},
+		{"engine-context wrong type", "engine-context", "", typed(sealedPredicateType), true},
+		{"informational ok", "informational", "", typed(informationalPredicateType), false},
+		{"informational wrong type", "informational", "", typed("https://example.com/wrong"), true},
+		{"malformed statement", "sealed", "", []byte("{not json"), true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validatePredicate(tt.layer, tt.statement, tt.laneDigest)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("validatePredicate(%q) err = %v, wantErr %v", tt.layer, err, tt.wantErr)
+			}
+		})
+	}
+}
+
+// TestClassifyLayer covers the V/E gate mapping under both trust modes.
+func TestClassifyLayer(t *testing.T) {
+	tests := []struct {
+		name          string
+		layer         string
+		noEngineTrust bool
+		want          gateClass
+	}{
+		{"sealed gates V", "sealed", false, gateV},
+		{"sealed ignores the flag", "sealed", true, gateV},
+		{"engine-context gates E", "engine-context", false, gateE},
+		{"engine-context degraded by flag", "engine-context", true, gateNone},
+		{"informational never gates", "informational", false, gateNone},
+		{"unknown never gates", "speculative", false, gateNone},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := classifyLayer(tt.layer, tt.noEngineTrust); got != tt.want {
+				t.Fatalf("classifyLayer(%q, %v) = %d, want %d", tt.layer, tt.noEngineTrust, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestRunVerifyUC2HappyPath: the lane is the policy. All three enriched bundles
+// attached; the sealed laneDigest matches the golden lane's digest (the 3a
+// construction guarantees it). The golden lane declares no inline trust root,
+// so the anchor comes from --trust-root.
+func TestRunVerifyUC2HappyPath(t *testing.T) {
+	subjectHex := goldenSubjectHex(t, goldenFile(t, "sealed.sigstore.json"))
+	host := localRegistry(t)
+	attachGoldenLayers(t, host, subjectHex, "sealed", "engine-context", "informational")
+
+	opts := verifyOptions{
+		subjectRef: host + "/app@sha256:" + subjectHex,
+		laneFile:   filepath.Join("..", "..", "internal", "verify", "testdata", "golden", "lane.yaml"),
+		trustRoot:  goldenTrustRootFile(t),
+	}
+	if err := runVerify(context.Background(), io.Discard, opts); err != nil {
+		t.Fatalf("runVerify UC2: %v", err)
+	}
+}
+
+// TestRunVerifyMissingEngineContext: an absent engine-context layer is an
+// E-violation without the flag, and a non-gating "absent" diagnostic with it.
+func TestRunVerifyMissingEngineContext(t *testing.T) {
+	subjectHex := goldenSubjectHex(t, goldenFile(t, "sealed.sigstore.json"))
+	host := localRegistry(t)
+	attachGoldenLayers(t, host, subjectHex, "sealed", "informational")
+
+	base := verifyOptions{
+		subjectRef: host + "/app@sha256:" + subjectHex,
+		identity:   goldenIdentity,
+		issuer:     goldenIssuer,
+		trustRoot:  goldenTrustRootFile(t),
+	}
+	if err := runVerify(context.Background(), io.Discard, base); err == nil {
+		t.Fatal("want error: an absent engine-context must gate without --no-engine-trust")
+	}
+
+	logBuf := captureLog(t)
+	withFlag := base
+	withFlag.noEngineTrust = true
+	if err := runVerify(context.Background(), io.Discard, withFlag); err != nil {
+		t.Fatalf("runVerify --no-engine-trust: %v", err)
+	}
+	if !strings.Contains(logBuf.String(), "engine-context: absent") {
+		t.Fatalf("want an engine-context absent diagnostic, got: %q", logBuf.String())
+	}
+}
+
+// TestRunVerifyMissingInformational: an absent informational layer never gates;
+// it is reported and the verify still succeeds.
+func TestRunVerifyMissingInformational(t *testing.T) {
+	subjectHex := goldenSubjectHex(t, goldenFile(t, "sealed.sigstore.json"))
+	host := localRegistry(t)
+	attachGoldenLayers(t, host, subjectHex, "sealed", "engine-context")
+
+	logBuf := captureLog(t)
+	opts := verifyOptions{
+		subjectRef: host + "/app@sha256:" + subjectHex,
+		identity:   goldenIdentity,
+		issuer:     goldenIssuer,
+		trustRoot:  goldenTrustRootFile(t),
+	}
+	if err := runVerify(context.Background(), io.Discard, opts); err != nil {
+		t.Fatalf("runVerify: %v", err)
+	}
+	if !strings.Contains(logBuf.String(), "informational: absent") {
+		t.Fatalf("want an informational absent diagnostic, got: %q", logBuf.String())
 	}
 }

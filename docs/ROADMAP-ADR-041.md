@@ -1,6 +1,9 @@
 # ADR-041 Implementation Roadmap
 
-## Status: IN PROGRESS (foundation done; instructions 1--3 remain)
+## Status: SUBSTANTIALLY COMPLETE (verify arc landed; instructions 1--3 done)
+
+Deferred beyond this arc: the v1-verifier teardown (ADR-040 instruction 5c) and
+base-SBOM signature verification (ADR-040 instruction 2c).
 
 ADR-041 is Accepted: the decision record is at
 `docs/ADR-041-lane-as-verification-policy.md`, registered in
@@ -9,10 +12,11 @@ ADR-041 is Accepted: the decision record is at
 The foundation is in place: ADR-040 instruction 5's core verify layers are
 complete in `internal/verify`, tested end-to-end with golden fixtures and
 live tests against the sigstore-local harness. Lane-digest computation and
-enforcement have been implemented in the producer path (commit 4cfdbfe). What
-remains is wrapping the verify core in the CLI, binding it to lane policy
-(identity, issuer, trust root), and exposing the two verification use cases:
-UC1 (consumer, explicit parameters) and UC2 (operator, lane as policy).
+enforcement have been implemented in the producer path (commit 4cfdbfe). The
+verify core is now wrapped in the CLI and bound to lane policy (identity,
+issuer, trust root), exposing both verification use cases -- UC1 (consumer,
+explicit parameters) and UC2 (operator, lane as policy) -- with per-layer
+predicate validation and V/E trust-mode gating (instruction 3).
 
 ## What has landed
 
@@ -67,13 +71,17 @@ TLS transport anchors (`#TLSTrust` on keyless endpoints) are producer
 concerns; the signature roots (Fulcio CA, Rekor keys, TSA cert) are
 consumer concerns, and they must be declared separately.
 
-### D4 -- Predicate validation and trust-mode gating
+### D4 -- Predicate validation and trust-mode gating (LANDED)
 
 ADR-040 D3 defines three predicate layers: sealed (V), engine-dependent (E),
-and informational. UC2 with engine trust gates on both V and E; UC2 without
-engine trust gates on V only. Per-layer validation (SLSA Provenance v1 schema,
-SBOM format compliance, engine-context predicate shape) is deferred to after
-instruction 3 (needs the lane configuration for trust-mode selection).
+and informational. `strike verify` now classifies each fetched bundle by layer
+and gates the exit on the V/E model: a Layer-V (sealed) failure or absence is a
+hard fail with no opt-out; a Layer-E (engine-context) failure or absence is a
+hard fail unless `--no-engine-trust` degrades it to informational; the
+informational layer never gates. Per-layer validation enforces the
+predicateType and the sealed laneDigest (present always; equal to the policy
+lane in UC2). Deep schema conformance (full SLSA Provenance v1 schema, SBOM
+format compliance) and base-SBOM signature verification remain deferred.
 
 ## Instruction-file sequence
 
@@ -105,24 +113,28 @@ Integrate `internal/verify.Verifier` with lane policy sources:
 - Resolve artifact digest from the reference (local pull if needed for referrers)
 - Call `Verifier.Verify()` on each referrer bundle, accumulate results
 
-### 3. Predicate validation and trust mode -- PENDING
+### 3. Predicate validation and trust mode -- LANDED
 
-Add per-layer validation and trust-mode gating:
-- Parse verified payload as in-toto statement (payload type / signature path)
-- Validate sealed predicate (SLSA Provenance v1 schema)
-- If engine-trust: validate engine_dependent predicate (engine-context shape)
-- If --sbom flag: validate SBOM predicates (format, component count)
-- Exit code and message per the passing/failing layers and trust mode
-- Enrich the golden bundles with real predicates before this lands. The
-  differential and tamper goldens currently carry `predicate: {}` (measured by
-  decoding the three committed DSSE payloads), so they exercise only envelope
-  verification -- signature, certificate chain, Rekor inclusion, RFC3161 time --
-  and never predicate or projection handling. Regenerate the three goldens from
-  statements with populated sealed / engine-context / informational predicates
-  so this instruction's per-layer validation is genuinely under test rather than
-  passing vacuously.
+Per-layer validation and trust-mode gating (`cmd/strike/verify.go`):
+- Each fetched bundle is classified by its layer ("sealed", "engine-context",
+  "informational") and its verified statement's predicateType checked against
+  that layer.
+- The sealed predicate must carry a laneDigest; under a lane policy (UC2) it
+  must equal that lane's digest -- the "produced by this lane" binding, a hard
+  Layer-V check.
+- The exit follows the V/E model: V hard (no opt-out); E hard unless
+  `--no-engine-trust`, which degrades the engine-context layer to informational;
+  informational never gates. A missing engine-context/informational layer is
+  reported, not silently passed.
+- The golden bundles carry real predicates (instruction 3a), so this validation
+  is under test rather than vacuous.
 
-Depends on: instruction 1 (lane schema and UC2 integration).
+Deferred: deep schema conformance (full SLSA Provenance v1, SBOM format
+compliance), base-SBOM signature verification, and a `--strict`
+(require-everything-green) mode.
+
+Depended on: instruction 1 (lane schema and UC2 integration) and instruction 3a
+(enriched goldens).
 
 ## Sequencing
 
