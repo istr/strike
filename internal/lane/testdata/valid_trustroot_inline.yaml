@@ -1,0 +1,84 @@
+name: trustroot-inline-lane
+laneId: trustroot-inline-lane
+registry: localhost:5555/test
+secrets: {}
+resolver:
+  host: "1.1.1.1:853"
+  trust:
+    mode: cert_fingerprint
+    fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+oidc:
+  issuer: "https://idp.example.com"
+  clientId: "strike"
+  identity: "strike@example.com"
+  trust:
+    mode: cert_fingerprint
+    fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+keyless:
+  endpoints:
+    fulcio:
+      url: "https://fulcio.example:5555"
+      trust:
+        mode: cert_fingerprint
+        fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+    rekor:
+      url: "https://rekor.example:3003"
+      trust:
+        mode: cert_fingerprint
+        fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+    tsa:
+      url: "https://tsa.example:3004"
+      trust:
+        mode: cert_fingerprint
+        fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+  trustRoot:
+    mediaType: "application/vnd.dev.sigstore.trustedroot+json;version=0.1"
+    tlogs:
+      - baseUrl: "https://rekor.localhost"
+        hashAlgorithm: "SHA2_256"
+        publicKey:
+          rawBytes: "MCowBQYDK2VwAyEAmHVoX6boMhRz9FlDPO0a3aAjXrBTB4Bccbs4HAPGq4s="
+          keyDetails: "PKIX_ED25519"
+          validFor:
+            start: "2026-06-11T20:41:45Z"
+        logId:
+          keyId: "Bu9Vz7GDxLLBUJlFtQ2LGizupTzCtkOYsHxhm8erpEs="
+    certificateAuthorities:
+      - uri: "https://fulcio.127.0.0.1.sslip.io:5555"
+        certChain:
+          certificates:
+            - rawBytes: "MIICFzCCAb2gAwIBAgIUJODT2HpMSA2FQ1v9EEuux3WvRsEwCgYIKoZIzj0EAwIwaDEMMAoGA1UEBhMDVVNBMQswCQYDVQQIEwJXQTERMA8GA1UEBxMIS2lya2xhbmQxFTATBgNVBAkTDDc2NyA2dGggU3QgUzEOMAwGA1UEERMFOTgwMzMxETAPBgNVBAoTCHNpZ3N0b3JlMB4XDTI2MDYxMTIwNDE0NVoXDTM2MDYxMTIwNDE0NVowaDEMMAoGA1UEBhMDVVNBMQswCQYDVQQIEwJXQTERMA8GA1UEBxMIS2lya2xhbmQxFTATBgNVBAkTDDc2NyA2dGggU3QgUzEOMAwGA1UEERMFOTgwMzMxETAPBgNVBAoTCHNpZ3N0b3JlMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEgAFK7WS43sO5+7j6NELeBG0t6ZVqoXZ7VA740lxcFu+8DxaytVlzmiay/ffSVZp2VhDO7rnRNgXSV3rEyEw/3qNFMEMwDgYDVR0PAQH/BAQDAgEGMBIGA1UdEwEB/wQIMAYBAf8CAQEwHQYDVR0OBBYEFCKKCQe3lmWpsJjlvkyrxO8/YTt1MAoGCCqGSM49BAMCA0gAMEUCIQDd4sIaE7yA5HzXKCu89N0okaKpU1drm5d2dGXV2cJJCwIgfiR5I7T8KaMR4uYscfwUQa5DejMOBFRYL4ktArL+DFM="
+        validFor:
+          start: "2026-06-11T20:41:45Z"
+          end: "2036-06-11T20:41:45Z"
+    timestampAuthorities:
+      - certChain:
+          certificates:
+            - rawBytes: "MIIBzTCCAXKgAwIBAgIUBeYi8GaOcIAOXmzO7ovngsZ7y7owCgYIKoZIzj0EAwIwMDEOMAwGA1UEChMFbG9jYWwxHjAcBgNVBAMTFVRlc3QgVFNBIEludGVybWVkaWF0ZTAeFw0yNjA2MTEyMDM1NDhaFw0zNTA2MTEyMDM4NDhaMDAxDjAMBgNVBAoTBWxvY2FsMR4wHAYDVQQDExVUZXN0IFRTQSBUaW1lc3RhbXBpbmcwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAAS8LoJMc0FoJ6zeQbSoOcShLQ9cQYISDwgMUwDbspXhyGyph5Si9kOGAshILs/wr+YXepZlHRAwrkFNd/2ewxbpo2owaDAOBgNVHQ8BAf8EBAMCB4AwHQYDVR0OBBYEFO+gAFTYS62uteNj23FA65R1dSjEMB8GA1UdIwQYMBaAFLmmPFcduVHtDtIPIM4wXJJFW1rcMBYGA1UdJQEB/wQMMAoGCCsGAQUFBwMIMAoGCCqGSM49BAMCA0kAMEYCIQCBw4SZE+OzTlGtP3a5X8mG4F3CDiuuAN9bz/TvYf4cvQIhALNgaA6SJZx2L9od/PCTS45yRZTG5LqOZZ6qXQl8HFBg"
+        validFor:
+          start: "2026-06-11T20:33:48Z"
+          end: "2036-06-11T20:38:48Z"
+steps:
+  - name: deploy
+    deploy:
+      method:
+        type: registry
+        source: docker.io/library/golang@sha256:abababababababababababababababababababababababababababababababab
+        target: registry.example.com/app:latest
+      artifacts: {}
+      target:
+        id: d1-minimal-target
+        type: registry
+        description: minimal deploy step for D1
+      attestation:
+        preState:
+          required: false
+          capture: []
+        postState:
+          required: false
+          capture: []
+    args: []
+    env: {}
+    inputs: []
+    secrets: []
+    outputs: []

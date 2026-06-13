@@ -10,6 +10,13 @@ import _ "embed"
 //go:embed lane.cue
 var LaneSchema string
 
+// TrustRootSchema is the embedded CUE replica of the sigstore trusted root.
+// Same package lane as LaneSchema -- lane.cue references #TrustedRootReplica,
+// so the two must be compiled together for runtime validation.
+//
+//go:embed sigstore-trustroot.cue
+var TrustRootSchema string
+
 // AttestationSchema is the embedded CUE schema for deploy attestations.
 //
 //go:embed attestation.cue

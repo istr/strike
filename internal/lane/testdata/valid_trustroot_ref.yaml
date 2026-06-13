@@ -1,5 +1,5 @@
-name: peers-multi
-laneId: peers-multi
+name: trustroot-ref-lane
+laneId: trustroot-ref-lane
 registry: localhost:5555/test
 secrets: {}
 resolver:
@@ -31,35 +31,13 @@ keyless:
       trust:
         mode: cert_fingerprint
         fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+  trustRootRef: "localhost:5555/trustroot@sha256:abababababababababababababababababababababababababababababababab"
 steps:
-  - name: fetch
-    image: docker.io/library/alpine@sha256:abababababababababababababababababababababababababababababababab
-    args: [sh, "-c", "true"]
-    workdir: /out
-    env: {}
-    inputs: []
-    secrets: []
-    outputs:
-      - name: ok
-        type: file
-        path: ok
-    peers:
-      - type: https
-        host: example.com
-        trust:
-          mode: cert_fingerprint
-          fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
-      - type: ssh
-        host: git.example.com
-        knownHosts:
-          - keyType: ssh-ed25519
-            key: AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl
-
   - name: deploy
     deploy:
       method:
         type: registry
-        source: localhost:5555/test/image:latest
+        source: docker.io/library/golang@sha256:abababababababababababababababababababababababababababababababab
         target: registry.example.com/app:latest
       artifacts: {}
       target:

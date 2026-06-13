@@ -27,6 +27,7 @@ var deploySchema = specs.AttestationSchema + "\n" +
 	stripForConcat(specs.ArtifactSchema) + "\n" +
 	stripForConcat(specs.PredicateSchema) + "\n" +
 	stripForConcat(specs.LaneSchema) + "\n" +
+	stripForConcat(specs.TrustRootSchema) + "\n" +
 	stripForConcat(specs.ProvenanceSchema) + "\n" +
 	stripForConcat(specs.TransportSchema)
 

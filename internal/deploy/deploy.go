@@ -337,7 +337,7 @@ type Deployer struct {
 	LaneDigest     string                                                                                      // raw sha256 over the lane file bytes; sealed as lane_digest
 	StepName       string                                                                                      // deploy step name; method-container port key and capture-key prefix
 	CAVolume       string                                                                                      // lane-wide CA volume name; mounted r/o at /etc/ssl/certs
-	Keyless        lane.KeylessEndpoints                                                                       // lane-declared keyless endpoints (ADR-040 D2); every deploy dials Fulcio, Rekor v2, and the TSA
+	Keyless        lane.Keyless                                                                                // lane-declared keyless config (ADR-040 D2, ADR-041); .Endpoints dials Fulcio, Rekor v2, TSA; .TrustRoot/.TrustRootRef carry the verify anchor
 	produceBundles func(ctx context.Context, eps lane.KeylessEndpoints, statements [][]byte) ([][]byte, error) // test seam; nil selects the real keyless chain
 	ownRecords     []capsule.Records                                                                           // method + capture container records, accumulated during Execute
 }
@@ -662,7 +662,7 @@ func (d *Deployer) signStatements(ctx context.Context, att *Attestation, stepNam
 			return produceKeylessBundles(ctx, eps, token, stmts)
 		}
 	}
-	bundles, err := produce(ctx, d.Keyless, statements)
+	bundles, err := produce(ctx, d.Keyless.Endpoints, statements)
 	if err != nil {
 		return fmt.Errorf("step %q: %w", stepName, err)
 	}

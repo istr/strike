@@ -111,6 +111,14 @@ Add per-layer validation and trust-mode gating:
 - If engine-trust: validate engine_dependent predicate (engine-context shape)
 - If --sbom flag: validate SBOM predicates (format, component count)
 - Exit code and message per the passing/failing layers and trust mode
+- Enrich the golden bundles with real predicates before this lands. The
+  differential and tamper goldens currently carry `predicate: {}` (measured by
+  decoding the three committed DSSE payloads), so they exercise only envelope
+  verification -- signature, certificate chain, Rekor inclusion, RFC3161 time --
+  and never predicate or projection handling. Regenerate the three goldens from
+  statements with populated sealed / engine-context / informational predicates
+  so this instruction's per-layer validation is genuinely under test rather than
+  passing vacuously.
 
 Depends on: instruction 1 (lane schema and UC2 integration).
 

@@ -29,14 +29,17 @@ func ParseDuration(d *Duration, defaultVal clock.Duration) (clock.Duration, erro
 var schema = buildSchema()
 
 func buildSchema() string {
-	// transport.cue shares package lane; strip the duplicate package
-	// declaration so the two files can be compiled as one CUE source.
+	// transport.cue and sigstore-trustroot.cue share package lane; strip the
+	// duplicate package declarations so the files compile as one CUE source.
+	// lane.cue references #TrustedRootReplica from sigstore-trustroot.cue.
 	var out []string
-	for _, line := range strings.Split(specs.TransportSchema, "\n") {
-		if strings.HasPrefix(strings.TrimSpace(line), "package ") {
-			continue
+	for _, src := range []string{specs.TransportSchema, specs.TrustRootSchema} {
+		for _, line := range strings.Split(src, "\n") {
+			if strings.HasPrefix(strings.TrimSpace(line), "package ") {
+				continue
+			}
+			out = append(out, line)
 		}
-		out = append(out, line)
 	}
 	return specs.LaneSchema + "\n" + strings.Join(out, "\n")
 }

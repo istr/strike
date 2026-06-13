@@ -194,6 +194,47 @@ func unmarshalOIDCConfig(data []byte) (OIDCConfig, error) {
 	}, nil
 }
 
+// unmarshalKeyless decodes the keyless block: the mandatory endpoint set plus
+// at most one trust-root source (inline trustRoot XOR trustRootRef). Declaring
+// both is an error. Resolution of the source to a usable trust root is deferred
+// to the verify boundary (late binding); this only parses and carries it.
+func unmarshalKeyless(data []byte) (Keyless, error) {
+	type alias struct {
+		Endpoints    json.RawMessage `json:"endpoints"`
+		TrustRoot    json.RawMessage `json:"trustRoot"`
+		TrustRootRef json.RawMessage `json:"trustRootRef"`
+	}
+	var aux alias
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return Keyless{}, fmt.Errorf("decode keyless: %w", err)
+	}
+	eps, err := unmarshalKeylessEndpoints(aux.Endpoints)
+	if err != nil {
+		return Keyless{}, err
+	}
+	k := Keyless{Endpoints: eps}
+	hasInline := len(aux.TrustRoot) != 0 && string(aux.TrustRoot) != jsonNull
+	hasRef := len(aux.TrustRootRef) != 0 && string(aux.TrustRootRef) != jsonNull
+	if hasInline && hasRef {
+		return Keyless{}, fmt.Errorf("keyless: trustRoot and trustRootRef are mutually exclusive")
+	}
+	switch {
+	case hasInline:
+		var tr TrustedRootReplica
+		if err := json.Unmarshal(aux.TrustRoot, &tr); err != nil {
+			return Keyless{}, fmt.Errorf("decode trustRoot: %w", err)
+		}
+		k.TrustRoot = &tr
+	case hasRef:
+		var ref ImageRef
+		if err := json.Unmarshal(aux.TrustRootRef, &ref); err != nil {
+			return Keyless{}, fmt.Errorf("decode trustRootRef: %w", err)
+		}
+		k.TrustRootRef = ref
+	}
+	return k, nil
+}
+
 // unmarshalKeylessEndpoints decodes the keyless endpoint set. Each
 // endpoint's Trust field is an interface (TLSTrust) and requires
 // discriminator dispatch via unmarshalTLSTrust.
@@ -275,7 +316,7 @@ func (p *Lane) UnmarshalJSON(data []byte) error {
 	if len(aux.Keyless) == 0 || string(aux.Keyless) == jsonNull {
 		return fmt.Errorf("lane: keyless required")
 	}
-	k, kerr := unmarshalKeylessEndpoints(aux.Keyless)
+	k, kerr := unmarshalKeyless(aux.Keyless)
 	if kerr != nil {
 		return fmt.Errorf("lane: %w", kerr)
 	}

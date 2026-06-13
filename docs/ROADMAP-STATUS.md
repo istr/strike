@@ -85,6 +85,11 @@ A new ADR that reframes verification around two use cases:
 - Instruction 2: Lane-policy integration (identity, issuer, trust root sourced
   from the lane).
 - Instruction 3: Per-layer predicate validation and trust-mode gating.
+- Triage: the Go engine-context `ConnectionInfo` emits `serverCertSubject`,
+  `serverCertIssuer`, and `clientCertSubject`, which the closed CUE
+  `#EngineConnection` does not declare. No current break (the sealed projection
+  drops them via Go-field copy). Decide: promote them into `#EngineConnection`
+  if they should be sealed, or document them as diagnostic-only.
 
 ### Sigstore-local test harness (H1 DONE)
 

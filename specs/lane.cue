@@ -27,11 +27,13 @@ package lane
 	steps: [#Step, ...#Step] @go(Steps)
 	resolver: #DNSResolver @go(Resolver,type="github.com/istr/strike/internal/transport".DNSResolver)
 	oidc:     #OIDCConfig  @go(OIDC)
-	// Keyless signing endpoints (ADR-040 3b). Required: every deploy
-	// attestation is produced through these endpoints (Fulcio, Rekor v2,
-	// TSA), fail-closed; a lane that cannot reach them cannot produce a
-	// verifiable bundle (mirrors the oidc rationale).
-	keyless:  #KeylessEndpoints @go(Keyless)
+	// Keyless signing+verification config (ADR-040 3b, ADR-041). `endpoints`
+	// is required: every deploy attestation is produced through Fulcio, Rekor
+	// v2, and the TSA, fail-closed. `trustRoot` (inline replica) XOR
+	// `trustRootRef` (OCI digest) supplies the verification anchor; at most
+	// one, and -- forward-constraint for verify -- absence here means the
+	// anchor MUST come from --trust-root, with NO implicit default.
+	keyless:  #Keyless @go(Keyless)
 	baseSbomSigners?: [...#SBOMSigner] @go(BaseSBOMSigners,optional=nillable)
 	defaults?: #LaneDefaults @go(Defaults,optional=nillable)
 }
@@ -70,6 +72,20 @@ package lane
 	rekor:  #HTTPSEndpoint @go(Rekor,type="github.com/istr/strike/internal/transport".HTTPSEndpoint)
 	tsa:    #HTTPSEndpoint @go(TSA,type="github.com/istr/strike/internal/transport".HTTPSEndpoint)
 }
+
+// Keyless wraps the endpoint set with at most one trust-root source.
+// trustRoot and trustRootRef are mutually exclusive and both optional (anchor
+// then supplied at verify, no implicit default). gengotypes collapses a CUE
+// disjunction to its base struct, so the mutual exclusion is enforced below
+// CUE, in unmarshalKeyless; `cue export` still carries both fields, so a
+// cross-language consumer keeps the XOR. Resolution of the source to a usable
+// trust root is late-bound at verify (instruction 2); this only carries the
+// parsed form.
+#Keyless: close({
+	endpoints:     #KeylessEndpoints   @go(Endpoints)
+	trustRoot?:    #TrustedRootReplica @go(TrustRoot,optional=nillable)
+	trustRootRef?: #ImageRef           @go(TrustRootRef)
+})
 
 // SBOMSigner is a trusted signer of a base-image SBOM (ADR-040 D1, option ii).
 // A base SBOM referrer is lifted to layer V only if its sigstore signature
