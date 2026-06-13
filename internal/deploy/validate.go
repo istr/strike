@@ -103,3 +103,27 @@ func ValidateAttestationJSON(data []byte) error {
 	}
 	return nil
 }
+
+// ValidateBundleJSON validates a marshaled sigstore bundle against the embedded
+// #Bundle schema (specs/sigstore-bundle.cue). It is the producer emission
+// guard: assembleKeylessBundle calls it before returning, so a bundle that does
+// not conform to strike's published wire contract is never emitted. The
+// consumer side (internal/verify) is intentionally not narrowed to this schema:
+// it parses arbitrary sigstore bundles via sigstore-go.
+func ValidateBundleJSON(data []byte) error {
+	ctx := cuecontext.New()
+
+	compiled := ctx.CompileString(stripForConcat(specs.BundleSchema)).
+		LookupPath(cue.ParsePath("#Bundle"))
+
+	expr, err := cuejson.Extract("bundle.json", data)
+	if err != nil {
+		return fmt.Errorf("extract bundle JSON: %w", err)
+	}
+
+	unified := compiled.Unify(ctx.BuildExpr(expr))
+	if err := lane.FormatValidationError(unified.Validate(cue.Concrete(true))); err != nil {
+		return fmt.Errorf("bundle schema violation:\n%w", err)
+	}
+	return nil
+}

@@ -75,5 +75,8 @@ func assembleKeylessBundle(env *protodsse.Envelope, leafCertDER []byte, tle *pro
 	if err != nil {
 		return nil, fmt.Errorf("keyless: marshal bundle: %w", err)
 	}
+	if err := ValidateBundleJSON(out); err != nil {
+		return nil, fmt.Errorf("keyless: %w", err)
+	}
 	return out, nil
 }

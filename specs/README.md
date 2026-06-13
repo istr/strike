@@ -19,6 +19,7 @@ for both input and output formats:
 | Published predicates  | `specs/predicate.cue`          | Signed in-toto / SLSA statements (the published output) |
 | Transport & trust     | `specs/transport.cue`          | Shared host, TLS-trust, DoT-resolver, and HTTPS-endpoint types |
 | Sigstore trust root   | `specs/sigstore-trustroot.cue` | TrustedRoot replica (keyless verification anchor) |
+| Sigstore bundle       | `specs/sigstore-bundle.cue`    | Published bundle (v0.3) emission contract, validated at sign time |
 
 CUE schemas are embedded in the Go binary via `//go:embed` and validated
 at runtime -- lane input before execution, attestation output before

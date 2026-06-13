@@ -45,3 +45,10 @@ var ProvenanceSchema string
 //
 //go:embed transport.cue
 var TransportSchema string
+
+// BundleSchema is the embedded CUE schema for the published sigstore bundle
+// (v0.3) -- the producer emission contract validated at sign time. Same
+// package deploy as AttestationSchema.
+//
+//go:embed sigstore-bundle.cue
+var BundleSchema string
