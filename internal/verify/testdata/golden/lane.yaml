@@ -1,0 +1,80 @@
+# Golden lane fixture for the keyless verifier (instruction 3a/3b).
+#
+# Parsed by TestVerifyGoldenGenerate to source the sealed predicate's lane
+# identity, declared OIDC, and lane digest; 3b loads the same file as its UC2
+# policy. The OIDC issuer/identity are the local sigstore harness signer
+# (tester@strike.localhost), and the keyless endpoints are the harness Fulcio,
+# Rekor v2, and TSA the generator already dials, trusted via the caddy root CA
+# bundle. The lane is never executed -- only parsed -- so the build step image
+# and registry refs are placeholders; what matters is that lane.Parse accepts
+# it and seals its digest.
+name: golden-lane
+laneId: golden-lane
+registry: localhost:5555/golden
+secrets: {}
+resolver:
+  host: "1.1.1.1:853"
+  trust:
+    mode: cert_fingerprint
+    fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+oidc:
+  issuer: "https://keycloak.127.0.0.1.sslip.io:8443/realms/sigstore"
+  clientId: "sigstore"
+  identity: "tester@strike.localhost"
+  trust:
+    mode: ca_bundle
+    path: /etc/ssl/certs/caddy-root.crt
+keyless:
+  endpoints:
+    fulcio:
+      url: "https://fulcio.127.0.0.1.sslip.io:5555"
+      trust:
+        mode: ca_bundle
+        path: /etc/ssl/certs/caddy-root.crt
+    rekor:
+      url: "https://rekor.127.0.0.1.sslip.io:3003"
+      trust:
+        mode: ca_bundle
+        path: /etc/ssl/certs/caddy-root.crt
+    tsa:
+      url: "https://tsa.127.0.0.1.sslip.io:3004"
+      trust:
+        mode: ca_bundle
+        path: /etc/ssl/certs/caddy-root.crt
+steps:
+  - name: build
+    image: docker.io/library/golang@sha256:abababababababababababababababababababababababababababababababab
+    args: ["go", "build"]
+    workdir: /out
+    env: {}
+    inputs: []
+    secrets: []
+    outputs:
+      - name: binary
+        type: file
+        path: binary
+  - name: deploy
+    deploy:
+      method:
+        type: registry
+        source: localhost:5555/golden/image:latest
+        target: registry.example.com/golden:latest
+      artifacts:
+        binary:
+          from: build.binary
+      target:
+        id: golden-target
+        type: registry
+        description: golden fixture deploy target
+      attestation:
+        preState:
+          required: false
+          capture: []
+        postState:
+          required: false
+          capture: []
+    args: []
+    env: {}
+    inputs: []
+    secrets: []
+    outputs: []

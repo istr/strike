@@ -57,11 +57,32 @@ func TestVerifyGoldenGenerate(t *testing.T) {
 	}
 
 	// One fixture bundle per statement kind the producer attaches as an OCI
-	// referrer (Execute step 8b).
+	// referrer (Execute step 8b). The statements are the real projected
+	// predicates (projectStatements) over a synthetic attestation, so the
+	// goldens exercise predicate validation, not only envelope verification.
+	// The lane identity and digest are taken from the golden lane fixture so a
+	// UC2 verify against that same lane matches what the sealed predicate
+	// carries.
 	names := []string{"sealed", "engine-context", "informational"}
+	lanePath, err := lane.NewFilePath(filepath.Join("..", "verify", "testdata", "golden", "lane.yaml"))
+	if err != nil {
+		t.Fatalf("golden lane path: %v", err)
+	}
+	goldenLane, laneDigest, err := lane.Parse(lanePath)
+	if err != nil {
+		t.Fatalf("parse golden lane: %v", err)
+	}
+	att := syntheticGoldenAttestation(laneDigest.String())
+	sealed, engineCtx, info, err := projectStatements(att, goldenLane.OIDC)
+	if err != nil {
+		t.Fatalf("projectStatements: %v", err)
+	}
 	statements := make([][]byte, len(names))
-	for i := range names {
-		statements[i], _ = liveStatement(i)
+	for i, s := range []any{sealed, engineCtx, info} {
+		statements[i], err = json.Marshal(s)
+		if err != nil {
+			t.Fatalf("marshal %s statement: %v", names[i], err)
+		}
 	}
 	ctx := context.Background()
 	bundles, err := produceKeylessBundles(ctx, eps, token, statements)
@@ -83,6 +104,37 @@ func TestVerifyGoldenGenerate(t *testing.T) {
 		t.Fatalf("write trusted_root.json: %v", err)
 	}
 	t.Logf("golden fixtures written to %s", goldenDir)
+}
+
+// syntheticGoldenAttestation builds a populated attestation for the golden
+// fixtures: enough in each layer that the projected sealed, engine-context, and
+// informational predicates are non-empty and exercise 3b's per-layer
+// validation. laneDigest is sealed verbatim so a UC2 verify against the golden
+// lane matches it.
+func syntheticGoldenAttestation(laneDigest string) *Attestation {
+	const artifactDigest = "1111111111111111111111111111111111111111111111111111111111111111"
+	return &Attestation{
+		Sealed: Sealed{
+			Artifacts: map[string]SignedArtifact{
+				"app": {Digest: "sha256:" + artifactDigest},
+			},
+			Target: lane.DeployTarget{
+				ID:          "golden-target",
+				Type:        "registry",
+				Description: "golden fixture deploy target",
+			},
+			LaneID:     "golden-lane",
+			LaneDigest: laneDigest,
+			Peers:      map[string][]lane.Peer{},
+		},
+		EngineDependent: EngineDependent{
+			PeerAttribution: map[string][]string{"deploy": {"registry.example:443"}},
+		},
+		Informational: &Informational{
+			PreStateDigest:  lane.Digest{Algorithm: "sha256", Hex: artifactDigest},
+			PostStateDigest: lane.Digest{Algorithm: "sha256", Hex: artifactDigest},
+		},
+	}
 }
 
 // goldenTrustedRoot assembles the trusted_root.json the verifier consumes
