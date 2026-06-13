@@ -11,7 +11,7 @@
 // Validation flow:
 //   deploy.Execute() -> Attestation struct -> JSON -> CUE validate
 //
-// This mirrors lane/schema.cue (input validation) but covers
+// This mirrors lane.cue (input validation) but covers
 // the output side. Together they provide a complete CUE-defined
 // contract for strike's data model.
 //

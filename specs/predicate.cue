@@ -13,10 +13,11 @@
 // Rekor inclusion lives in the sigstore bundle, never in a predicate payload
 // (ADR-013 satisfied structurally): no predicate here carries a rekor field.
 //
-// #Digest, #Timestamp, #DeployTarget, #Peer, #ObservedPeer, #ResolverRecord,
-// #EngineConnection, #EngineMetadata, and #ProvenanceRecord are defined in the
-// same package deploy (attestation.cue / artifact.cue) and are available here
-// without import.
+// Available here without import: #Timestamp, #ObservedPeer, #ResolverRecord,
+// #EngineConnection, and #EngineMetadata are defined in this package (deploy)
+// in attestation.cue; #Digest, #DeployTarget, #Peer, and #ProvenanceRecord are
+// defined in package lane and re-exported into deploy via artifact.cue
+// (#ProvenanceRecord lives in source-provenance.cue).
 
 package deploy
 
