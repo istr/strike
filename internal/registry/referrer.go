@@ -203,3 +203,46 @@ func fetchOneBundle(ctx context.Context, ref name.Digest) (*StatementBundle, err
 		Bundle:    bundle,
 	}, nil
 }
+
+// FetchTrustRoot pulls a sigstore trusted_root.json published as a single-layer
+// OCI image at a digest-pinned reference, returning the raw JSON bytes for
+// verify.ParseTrustedRoot. The reference must be digest-pinned -- name.NewDigest
+// rejects a tag -- because the digest is the trust anchor: the operator pins the
+// exact bytes they trust. The image is a plain artifact, not a referrer of
+// anything; its sole layer is the document. The read is bounded by maxBundleBytes
+// against a hostile or buggy registry.
+func FetchTrustRoot(ctx context.Context, ref string) ([]byte, error) {
+	d, err := name.NewDigest(ref)
+	if err != nil {
+		return nil, fmt.Errorf("trust root ref must be digest-pinned: %w", err)
+	}
+	img, err := remote.Image(d,
+		remote.WithAuthFromKeychain(authn.DefaultKeychain),
+		remote.WithContext(ctx))
+	if err != nil {
+		return nil, fmt.Errorf("fetch trust root %s: %w", ref, err)
+	}
+	layers, err := img.Layers()
+	if err != nil {
+		return nil, fmt.Errorf("trust root %s: layers: %w", ref, err)
+	}
+	if len(layers) != 1 {
+		return nil, fmt.Errorf("trust root %s: expected 1 layer, got %d", ref, len(layers))
+	}
+	rc, err := layers[0].Uncompressed()
+	if err != nil {
+		return nil, fmt.Errorf("trust root %s: open layer: %w", ref, err)
+	}
+	data, readErr := io.ReadAll(io.LimitReader(rc, maxBundleBytes+1))
+	closeErr := rc.Close()
+	if readErr != nil {
+		return nil, fmt.Errorf("trust root %s: read: %w", ref, readErr)
+	}
+	if closeErr != nil {
+		return nil, fmt.Errorf("trust root %s: close layer: %w", ref, closeErr)
+	}
+	if len(data) > maxBundleBytes {
+		return nil, fmt.Errorf("trust root %s: exceeds %d bytes", ref, maxBundleBytes)
+	}
+	return data, nil
+}

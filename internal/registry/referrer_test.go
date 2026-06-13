@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"strings"
 	"testing"
 
@@ -20,6 +21,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/types"
 
 	"github.com/istr/strike/internal/registry"
+	"github.com/istr/strike/internal/verify"
 )
 
 // localRegistry starts an in-memory OCI registry and returns its
@@ -216,6 +218,49 @@ func TestFetchStatementBundlesNoReferrers(t *testing.T) {
 	}
 	if len(got) != 0 {
 		t.Fatalf("fetched = %d, want 0", len(got))
+	}
+}
+
+func TestFetchTrustRootRoundTrip(t *testing.T) {
+	golden, err := os.ReadFile("../verify/testdata/golden/trusted_root.json")
+	if err != nil {
+		t.Fatalf("read golden: %v", err)
+	}
+	host := localRegistry(t, true)
+	ref := host + "/trust:v1"
+	img := mutate.MediaType(empty.Image, types.OCIManifestSchema1)
+	img, err = mutate.AppendLayers(img, static.NewLayer(golden, types.OCILayer))
+	if err != nil {
+		t.Fatalf("append layer: %v", err)
+	}
+	nameRef, err := name.ParseReference(ref)
+	if err != nil {
+		t.Fatalf("parse ref: %v", err)
+	}
+	if writeErr := remote.Write(nameRef, img); writeErr != nil {
+		t.Fatalf("push trust root: %v", writeErr)
+	}
+	digest, err := img.Digest()
+	if err != nil {
+		t.Fatalf("digest: %v", err)
+	}
+
+	got, err := registry.FetchTrustRoot(context.Background(), host+"/trust@"+digest.String())
+	if err != nil {
+		t.Fatalf("FetchTrustRoot: %v", err)
+	}
+	if !bytes.Equal(got, golden) {
+		t.Errorf("fetched bytes differ from golden")
+	}
+	if _, err := verify.ParseTrustedRoot(got); err != nil {
+		t.Fatalf("ParseTrustedRoot: %v", err)
+	}
+}
+
+func TestFetchTrustRootRejectsTag(t *testing.T) {
+	host := localRegistry(t, true)
+	if _, err := registry.FetchTrustRoot(context.Background(), host+"/trust:v1"); err == nil {
+		t.Fatal("FetchTrustRoot accepted a tag reference, want error")
 	}
 }
 
