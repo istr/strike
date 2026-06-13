@@ -46,8 +46,10 @@ Usage:
   strike validate [lane.yaml]   Validate without running
   strike dag      [lane.yaml]   Show DAG and exit
   strike compare  <file1> <file2> <output>   Compare two files by SHA-256
+  strike verify   [flags] <image@digest>     Verify an artifact's attestations
 
 Default file: lane.yaml in the current directory
+See docs/CLI-CONVENTIONS.md for verify flags and the UC1/UC2 modes.
 `
 
 func main() {
@@ -65,6 +67,12 @@ func main() {
 			log.Fatal("usage: strike compare <file1> <file2> <output>")
 		}
 		cmdCompare(os.Args[2], os.Args[3], os.Args[4])
+		return
+	}
+
+	// verify has its own flag-bearing arg layout.
+	if os.Args[1] == "verify" {
+		cmdVerify(os.Args[2:])
 		return
 	}
 

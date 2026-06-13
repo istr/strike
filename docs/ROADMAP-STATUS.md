@@ -127,14 +127,18 @@ live keyless chain and provides the local trust roots for verification.
 
 ADR-041 instruction 1 is the critical path:
 1. Confirm lane schema for `#TrustRoot` (digest-pinned reference + inline override)
-2. Expose `strike verify` subcommand with UC1 (explicit parameters) and UC2
-   (lane as policy) paths
-3. Integrate `internal/verify.Verifier` into the command handler
+2. (LANDED, basic path) Expose `strike verify` subcommand with UC1 (explicit
+   parameters) and UC2 (lane as policy) paths
+3. (LANDED, basic path) Integrate `internal/verify.Verifier` into the command
+   handler
 
-Once instruction 1 is done, instructions 2 and 3 can proceed in parallel:
-- Instruction 2: Lane-policy plumbing (identity, issuer, root from lane)
+Steps 2 and 3 are wired for the basic path -- bundle read, trust-root
+resolution, keyless verify per bundle, and the subject-digest check. Instruction
+3 (predicate validation, lane-digest gating) is the remaining work:
+- Instruction 2: Lane-policy plumbing (identity, issuer, root from lane) --
+  landed for the basic path.
 - Instruction 3: Predicate validation (SLSA Provenance, engine-context,
-  SBOM formats; trust-mode-driven gating)
+  SBOM formats; trust-mode-driven gating) and the lane-digest binding.
 
 ## References
 

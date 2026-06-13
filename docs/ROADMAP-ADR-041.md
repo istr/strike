@@ -43,10 +43,12 @@ UC1 (consumer, explicit parameters) and UC2 (operator, lane as policy).
 
 Grounded against the current snapshot.
 
-### D1 -- CLI subcommand exposure
+### D1 -- CLI subcommand exposure (LANDED)
 
-The `strike verify` subcommand does not yet exist. When added, it will
-expose the two use cases:
+The `strike verify` subcommand is wired (UC1 and UC2), reading bundles via
+referrers, resolving the trust root, and running the keyless verify per bundle
+plus a subject-digest check. The lane-digest binding and per-layer predicate
+validation remain (D4 / instruction 3). It exposes the two use cases:
 - UC1: `strike verify --identity=<id> --issuer=<iss> --trust-root=<path> <digest>`
 - UC2: `strike verify --lane=<lane.yaml> <digest>` (identity, issuer, root from lane)
 
@@ -89,7 +91,7 @@ own instruction file under the established conventions.
 - Optional `trust_root` field (UC2 default; UC1 explicit override)
 - Empty means "import from OCI referrers" (deferred to after instruction 3)
 
-**1c.** Expose `strike verify` subcommand in `cmd/strike`:
+**1c.** (LANDED) Expose `strike verify` subcommand in `cmd/strike`:
 - UC1: `strike verify --identity=<id> --issuer=<iss> --trust-root=<path> <image@digest>`
 - UC2: `strike verify --lane=<lane.yaml> <image@digest>`
 - Error if identity/issuer are provided with --lane (lane is the source)
