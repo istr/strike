@@ -3,6 +3,7 @@ package registry
 import (
 	"context"
 	"fmt"
+	"io"
 
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
@@ -23,6 +24,12 @@ const SigstoreBundleMediaType = "application/vnd.dev.sigstore.bundle.v0.3+json"
 // sealed, engine-context, or informational. Discovery convenience only; the
 // authoritative type is the predicateType inside the signed statement.
 const statementAnnotation = "dev.strike.statement"
+
+// maxBundleBytes bounds a single fetched referrer bundle. A real sigstore
+// statement bundle is a few KiB; this is generous headroom that still refuses
+// an unbounded allocation from a hostile or buggy registry, mirroring the 1 MiB
+// cap on the keyless HTTP clients.
+const maxBundleBytes = 8 << 20 // 8 MiB
 
 // StatementBundle pairs one projected statement name with its sigstore
 // bundle bytes for referrer attachment.
@@ -102,4 +109,97 @@ func AttachStatementBundles(ctx context.Context, target string, subject v1.Descr
 		}
 	}
 	return nil
+}
+
+// FetchStatementBundles is the consumer counterpart to AttachStatementBundles:
+// given a digest-pinned subject image, it discovers the sigstore statement
+// bundles attached as OCI 1.1 referrers, fetches each bundle's bytes, and
+// returns them paired with the projection name from the referrer's
+// dev.strike.statement annotation, in registry-listed order.
+//
+// This is a Layer-V read: the bytes come from the registry at the subject's
+// own digest, independently of any engine, so a downstream verifier checks the
+// actual published payload rather than a relayed copy. The subject must be
+// digest-pinned -- name.NewDigest rejects a tag -- because a mutable reference
+// cannot anchor a reproducible verification.
+//
+// Discovery is by artifact-type filter (the cosign-compatible referrers query);
+// identification and projection are read back from each fetched manifest (its
+// config media type and annotation), which is authoritative, rather than from
+// the index descriptor.
+func FetchStatementBundles(ctx context.Context, subjectRef string) ([]StatementBundle, error) {
+	ref, err := name.NewDigest(subjectRef)
+	if err != nil {
+		return nil, fmt.Errorf("subject must be digest-pinned: %w", err)
+	}
+	repo := ref.Context()
+	idx, err := remote.Referrers(ref,
+		remote.WithFilter("artifactType", SigstoreBundleMediaType),
+		remote.WithAuthFromKeychain(authn.DefaultKeychain),
+		remote.WithContext(ctx))
+	if err != nil {
+		return nil, fmt.Errorf("list referrers of %s: %w", subjectRef, err)
+	}
+	im, err := idx.IndexManifest()
+	if err != nil {
+		return nil, fmt.Errorf("referrers index: %w", err)
+	}
+	var out []StatementBundle
+	for _, d := range im.Manifests {
+		sb, err := fetchOneBundle(ctx, repo.Digest(d.Digest.String()))
+		if err != nil {
+			return nil, fmt.Errorf("referrer %s: %w", d.Digest, err)
+		}
+		if sb != nil {
+			out = append(out, *sb)
+		}
+	}
+	return out, nil
+}
+
+// fetchOneBundle fetches a single referrer manifest and its bundle layer. It
+// returns nil (no error) when the referrer is not a strike statement bundle,
+// so the caller skips it rather than failing the whole read.
+func fetchOneBundle(ctx context.Context, ref name.Digest) (*StatementBundle, error) {
+	img, err := remote.Image(ref,
+		remote.WithAuthFromKeychain(authn.DefaultKeychain),
+		remote.WithContext(ctx))
+	if err != nil {
+		return nil, fmt.Errorf("fetch: %w", err)
+	}
+	man, err := img.Manifest()
+	if err != nil {
+		return nil, fmt.Errorf("manifest: %w", err)
+	}
+	// Authoritative re-check: the artifact type the producer set lives in the
+	// config media type. Skip anything that is not a strike bundle.
+	if string(man.Config.MediaType) != SigstoreBundleMediaType {
+		return nil, nil
+	}
+	layers, err := img.Layers()
+	if err != nil {
+		return nil, fmt.Errorf("layers: %w", err)
+	}
+	if len(layers) != 1 {
+		return nil, fmt.Errorf("expected 1 layer, got %d", len(layers))
+	}
+	rc, err := layers[0].Uncompressed()
+	if err != nil {
+		return nil, fmt.Errorf("open layer: %w", err)
+	}
+	bundle, readErr := io.ReadAll(io.LimitReader(rc, maxBundleBytes+1))
+	closeErr := rc.Close()
+	if readErr != nil {
+		return nil, fmt.Errorf("read bundle: %w", readErr)
+	}
+	if closeErr != nil {
+		return nil, fmt.Errorf("close layer: %w", closeErr)
+	}
+	if len(bundle) > maxBundleBytes {
+		return nil, fmt.Errorf("bundle exceeds %d bytes", maxBundleBytes)
+	}
+	return &StatementBundle{
+		Statement: man.Annotations[statementAnnotation],
+		Bundle:    bundle,
+	}, nil
 }

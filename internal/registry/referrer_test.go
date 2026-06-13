@@ -1,6 +1,7 @@
 package registry_test
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"net/http/httptest"
@@ -149,6 +150,73 @@ func TestAttachStatementBundlesReferrersAPI(t *testing.T) {
 
 func TestAttachStatementBundlesFallbackTag(t *testing.T) {
 	testAttach(t, false)
+}
+
+func testFetch(t *testing.T, referrersAPI bool) {
+	t.Helper()
+	host := localRegistry(t, referrersAPI)
+	target := host + "/app:v1"
+	subject := pushSubject(t, target)
+
+	bundles := []registry.StatementBundle{
+		{Statement: "sealed", Bundle: []byte(`{"bundle":"sealed"}`)},
+		{Statement: "engine-context", Bundle: []byte(`{"bundle":"engine-context"}`)},
+		{Statement: "informational", Bundle: []byte(`{"bundle":"informational"}`)},
+	}
+	if err := registry.AttachStatementBundles(context.Background(), target, subject, bundles); err != nil {
+		t.Fatalf("AttachStatementBundles: %v", err)
+	}
+
+	subjectDigestRef := host + "/app@" + subject.Digest.String()
+	got, err := registry.FetchStatementBundles(context.Background(), subjectDigestRef)
+	if err != nil {
+		t.Fatalf("FetchStatementBundles: %v", err)
+	}
+	if len(got) != len(bundles) {
+		t.Fatalf("fetched = %d, want %d", len(got), len(bundles))
+	}
+	gotByName := map[string][]byte{}
+	for _, b := range got {
+		gotByName[b.Statement] = b.Bundle
+	}
+	for _, b := range bundles {
+		fetched, ok := gotByName[b.Statement]
+		if !ok {
+			t.Errorf("missing fetched bundle %q", b.Statement)
+			continue
+		}
+		if !bytes.Equal(fetched, b.Bundle) {
+			t.Errorf("bundle %q = %q, want %q", b.Statement, fetched, b.Bundle)
+		}
+	}
+}
+
+func TestFetchStatementBundlesReferrersAPI(t *testing.T) {
+	testFetch(t, true)
+}
+
+func TestFetchStatementBundlesFallbackTag(t *testing.T) {
+	testFetch(t, false)
+}
+
+func TestFetchStatementBundlesRejectsTag(t *testing.T) {
+	host := localRegistry(t, true)
+	if _, err := registry.FetchStatementBundles(context.Background(), host+"/app:v1"); err == nil {
+		t.Fatal("FetchStatementBundles accepted a tag reference, want error")
+	}
+}
+
+func TestFetchStatementBundlesNoReferrers(t *testing.T) {
+	host := localRegistry(t, true)
+	target := host + "/app:v1"
+	subject := pushSubject(t, target)
+	got, err := registry.FetchStatementBundles(context.Background(), host+"/app@"+subject.Digest.String())
+	if err != nil {
+		t.Fatalf("FetchStatementBundles: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("fetched = %d, want 0", len(got))
+	}
 }
 
 func TestCopyImageReturnsPushedDescriptor(t *testing.T) {
