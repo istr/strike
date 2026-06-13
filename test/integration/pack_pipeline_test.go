@@ -14,7 +14,6 @@ import (
 func TestPackPipeline(t *testing.T) {
 	engine := testutil.RequireEngine(t)
 	ctx := context.Background()
-	keyPEM := generateTestKey(t)
 
 	ensureImage(t, engine, goImage)
 	ensureImage(t, engine, staticBase)
@@ -23,7 +22,7 @@ func TestPackPipeline(t *testing.T) {
 	binPath := buildTestBinary(t, engine)
 
 	// 2. Pack: assemble OCI image.
-	result, outRoot, _ := packTestImage(t, binPath, keyPEM)
+	result, outRoot, _ := packTestImage(t, binPath)
 	defer testutil.CloseLog(t, outRoot, "pack pipeline outRoot")
 
 	t.Logf("image digest: %s", result.Digest)
@@ -62,7 +61,7 @@ func TestPackPipeline(t *testing.T) {
 	}
 	defer testutil.CloseLog(t, outRoot2, "pack pipeline outRoot2")
 
-	result2, err := executor.Pack(context.Background(), executor.PackOpts{
+	result2, err := executor.Pack(executor.PackOpts{
 		Spec: &lane.PackSpec{
 			Base: lane.ImageRef(staticBase),
 			Files: []lane.PackFile{
@@ -73,11 +72,9 @@ func TestPackPipeline(t *testing.T) {
 				User:       lane.Ptr("65534:65534"),
 			},
 		},
-		InputPaths:  map[string]string{"/app": binPath},
-		OutputRoot:  outRoot2,
-		OutputName:  "image.tar",
-		SigningKey:  keyPEM,
-		KeyPassword: nil,
+		InputPaths: map[string]string{"/app": binPath},
+		OutputRoot: outRoot2,
+		OutputName: "image.tar",
 	})
 	if err != nil {
 		t.Fatalf("pack (second run): %v", err)

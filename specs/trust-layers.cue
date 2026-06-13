@@ -71,8 +71,6 @@ fields: {
 
 	artifactDigest: {layer: "V", internal: "sealed.artifacts[].digest", published: "slsa-provenance", basis: "published artifact digest, consumer-dereferenceable by D (C3); -> subject / resolvedDependencies"}
 	artifactSBOM: {layer: "V", internal: "sealed.artifacts[].sbom", published: "slsa-provenance", basis: "SBOM produced in-process from bytes CP holds (sealed/V per ARCHITECTURE); document also emitted as its own OCI referrer"}
-	artifactSignature: {layer: "V", internal: "sealed.artifacts[].signature", published: "bundle", basis: "CP-produced signature; verification material rides in the Sigstore bundle"}
-	artifactRekor: {layer: "V", internal: "sealed.artifacts[].rekor", published: "bundle", basis: "Rekor-anchored; verified against the Rekor public key CP holds; kept out of the predicate payload (ADR-013)"}
 
 	// ---- Layer E: engine-asserted; sound only under trust(E) ----
 	peerAttribution: {layer: "E", internal: "engineDependent.peerAttribution", published: "engine-context", basis: "engine-asserted step<->peer binding; not sound against a malicious engine (C1)"}

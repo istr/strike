@@ -181,17 +181,8 @@ type Informational struct {
 
 // SignedArtifact is the provenance record for one artifact.
 type SignedArtifact struct {
-	Signature *SignatureRecord `json:"signature,omitempty"`
-	SBOM      *SBOMRecord      `json:"sbom,omitempty"`
-	Rekor     *lane.RekorEntry `json:"rekor,omitempty"`
-	Digest    string           `json:"digest"`
-}
-
-// SignatureRecord holds the signing metadata for an artifact.
-type SignatureRecord struct {
-	Annotations map[string]string `json:"annotations"`
-	Algorithm   string            `json:"algorithm"`
-	Payload     string            `json:"payload"`
+	SBOM   *SBOMRecord `json:"sbom,omitempty"`
+	Digest string      `json:"digest"`
 }
 
 // SBOMRecord holds SBOM metadata for an artifact.
@@ -677,7 +668,7 @@ func (d *Deployer) signStatements(ctx context.Context, att *Attestation, stepNam
 	return nil
 }
 
-// resolveArtifactDigests resolves all artifact references to their signed provenance records.
+// resolveArtifactDigests resolves all artifact references to their provenance records.
 // refs maps artifact name -> "step.output" state ref (pre-resolved by the caller from DAG edges).
 func resolveArtifactDigests(stepName string, refs map[string]string, state *lane.State) (map[string]SignedArtifact, error) {
 	artifacts := make(map[string]SignedArtifact)
@@ -688,7 +679,6 @@ func resolveArtifactDigests(stepName string, refs map[string]string, state *lane
 		}
 		artifacts[artName] = SignedArtifact{
 			Digest: a.Digest.String(),
-			Rekor:  a.Rekor,
 		}
 	}
 	return artifacts, nil

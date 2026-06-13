@@ -22,9 +22,8 @@ const bundleV03MediaType = "application/vnd.dev.sigstore.bundle.v0.3+json"
 // key and returns the DSSE envelope plus the raw signature (the signature is
 // also needed for the RFC3161 timestamp request).
 //
-// The signature is ASN.1 DER ECDSA, which is what sigstore verifiers expect.
-// This deliberately does NOT reuse executor.SignPayload: that path emits raw
-// r||s, strike's internal DSSE format, which a sigstore verifier rejects.
+// The signature is ASN.1 DER ECDSA, which is what sigstore verifiers expect
+// (a raw r||s encoding would be rejected).
 func signStatementKeyless(statementJSON []byte, key *ecdsa.PrivateKey) (*protodsse.Envelope, []byte, error) {
 	if key == nil {
 		return nil, nil, errors.New("keyless: signing key is required")

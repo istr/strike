@@ -1,7 +1,6 @@
 package integration_test
 
 import (
-	"context"
 	"encoding/json"
 	"io"
 	"os"
@@ -20,7 +19,6 @@ import (
 
 func TestPackSBOM(t *testing.T) {
 	engine := testutil.RequireEngine(t)
-	keyPEM := generateTestKey(t)
 
 	ensureImage(t, engine, goImage)
 	ensureImage(t, engine, staticBase)
@@ -46,7 +44,7 @@ func TestPackSBOM(t *testing.T) {
 	}
 	defer testutil.CloseLog(t, outRoot, "sbom test outRoot")
 
-	result, err := executor.Pack(context.Background(), executor.PackOpts{
+	result, err := executor.Pack(executor.PackOpts{
 		Spec: &lane.PackSpec{
 			Base: lane.ImageRef(staticBase),
 			Files: []lane.PackFile{
@@ -67,11 +65,9 @@ func TestPackSBOM(t *testing.T) {
 				},
 			},
 		},
-		InputPaths:  map[string]string{"/app": binPath},
-		OutputRoot:  outRoot,
-		OutputName:  "image.tar",
-		SigningKey:  keyPEM,
-		KeyPassword: nil,
+		InputPaths: map[string]string{"/app": binPath},
+		OutputRoot: outRoot,
+		OutputName: "image.tar",
 	})
 	if err != nil {
 		t.Fatalf("pack: %v", err)
@@ -203,7 +199,7 @@ func TestPackSBOM(t *testing.T) {
 		}
 		defer testutil.CloseLog(t, outRoot2, "sbom test outRoot2")
 
-		_, err := executor.Pack(context.Background(), executor.PackOpts{
+		_, err := executor.Pack(executor.PackOpts{
 			Spec: &lane.PackSpec{
 				Base: lane.ImageRef(staticBase),
 				Files: []lane.PackFile{
@@ -224,11 +220,9 @@ func TestPackSBOM(t *testing.T) {
 					},
 				},
 			},
-			InputPaths:  map[string]string{"/app": binPath},
-			OutputRoot:  outRoot2,
-			OutputName:  "image.tar",
-			SigningKey:  keyPEM,
-			KeyPassword: nil,
+			InputPaths: map[string]string{"/app": binPath},
+			OutputRoot: outRoot2,
+			OutputName: "image.tar",
 		})
 		if err != nil {
 			t.Fatalf("pack (second run): %v", err)

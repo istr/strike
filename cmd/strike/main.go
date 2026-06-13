@@ -5,7 +5,6 @@ import (
 	"context"
 	"io"
 	"log"
-	"net/http"
 	"net/netip"
 	"os"
 	"path/filepath"
@@ -14,7 +13,6 @@ import (
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/closer"
 	"github.com/istr/strike/internal/container"
-	"github.com/istr/strike/internal/executor"
 	"github.com/istr/strike/internal/front"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/registry"
@@ -132,40 +130,6 @@ func initEngine(ctx context.Context) container.Engine {
 	return engine
 }
 
-// initRekor constructs a RekorClient from environment variables.
-// Returns nil if REKOR_URL is not set (Rekor submission disabled).
-// Fatals if REKOR_URL is set but REKOR_PUBLIC_KEY is missing or invalid --
-// unverified Rekor responses provide no security value.
-func initRekor() *executor.RekorClient {
-	rekorURL := os.Getenv("REKOR_URL")
-	if rekorURL == "" {
-		return nil
-	}
-
-	pubKeyPath := os.Getenv("REKOR_PUBLIC_KEY")
-	if pubKeyPath == "" {
-		log.Fatal("error: REKOR_URL is set but REKOR_PUBLIC_KEY is not; " +
-			"unverified rekor responses provide no security value")
-	}
-
-	pubKeyPEM, err := os.ReadFile(filepath.Clean(pubKeyPath))
-	if err != nil {
-		log.Fatalf("error: read rekor public key: %v", err)
-	}
-
-	pubKey, err := executor.ParseRekorPublicKey(pubKeyPEM)
-	if err != nil {
-		log.Fatalf("error: parse rekor public key: %v", err)
-	}
-
-	log.Printf("INFO   rekor: %s", sanitizeForLog(rekorURL))
-	return &executor.RekorClient{
-		PublicKey: pubKey,
-		HTTP:      &http.Client{},
-		URL:       rekorURL,
-	}
-}
-
 // validateLane is the single validation gate. Every subcommand passes a
 // lane through it before doing anything else, so a lane that does not
 // validate yields exactly one error in any subcommand -- never a partial
@@ -264,7 +228,6 @@ func cmdRun(ctx context.Context, path string, engine container.Engine) {
 		networkRecords: map[string]capsule.Records{},
 		capsules:       map[string]*capsule.NetworkCapsule{},
 		laneRoot:       laneRoot,
-		rekor:          initRekor(),
 		resolverID:     resolverID,
 		laneDir:        laneDir,
 	}

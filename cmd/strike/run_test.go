@@ -12,7 +12,6 @@ import (
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/registry"
 	"github.com/istr/strike/internal/registry/regtest"
-	"github.com/istr/strike/internal/transport"
 )
 
 const testAlgoSHA256 = "sha256"
@@ -20,11 +19,6 @@ const testAlgoSHA256 = "sha256"
 const (
 	testFullDigestHex = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
 	testFullDigest    = "sha256:" + testFullDigestHex
-)
-
-const (
-	testCosignKeyRef    = "env://STRIKE_TEST_KEY"
-	testCosignUnlockRef = "env://STRIKE_TEST_PWD"
 )
 
 // newTestRC creates a minimal runContext with the given engine for testing.
@@ -415,114 +409,6 @@ func TestBuildInputDelivery_ExportsProducerOnce(t *testing.T) {
 }
 
 // --------------------------------------------------------------------------.
-// guardUnsignedImages
-// --------------------------------------------------------------------------.
-
-func TestGuardUnsignedImages_NoNetwork(t *testing.T) {
-	rc := newTestRC(t, &mockEngine{})
-	p := &lane.Lane{
-		Registry: "localhost:5555/test",
-		Steps: []lane.Step{
-			{
-				Name: "pack", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{Name: "img", Type: "image", Path: lane.Ptr(lane.RelPath("img.tar"))}},
-			},
-			{
-				Name: "publish", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Inputs: []lane.InputRef{{From: "pack.img", Mount: "/in/img"}},
-			},
-		},
-	}
-	rc.dag = buildTestDAG(t, p)
-	if err := rc.guardUnsignedImages(rc.dag.Steps["publish"], "test"); err != nil {
-		t.Fatalf("no-network step should not error: %v", err)
-	}
-}
-
-func TestGuardUnsignedImages_SignedOK(t *testing.T) {
-	rc := newTestRC(t, &mockEngine{})
-	p := &lane.Lane{
-		Registry: "localhost:5555/test",
-		Steps: []lane.Step{
-			{
-				Name: "pack", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{Name: "img", Type: "image", Path: lane.Ptr(lane.RelPath("img.tar"))}},
-			},
-			{
-				Name: "publish", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Peers:  []lane.Peer{lane.HTTPSPeer{Type: "https", Host: "localhost:5555", Trust: transport.FingerprintTrust{Mode: "cert_fingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}},
-				Inputs: []lane.InputRef{{From: "pack.img", Mount: "/in/img"}},
-			},
-		},
-	}
-	rc.dag = buildTestDAG(t, p)
-	if err := rc.laneState.Register("pack", "img", lane.Artifact{
-		Type: "image", Digest: lane.MustParseDigest("sha256:aabb000000000000000000000000000000000000000000000000000000000000"), Signed: true,
-	}); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := rc.guardUnsignedImages(rc.dag.Steps["publish"], "test"); err != nil {
-		t.Fatalf("signed image should be OK: %v", err)
-	}
-}
-
-func TestGuardUnsignedImages_UnsignedError(t *testing.T) {
-	rc := newTestRC(t, &mockEngine{})
-	p := &lane.Lane{
-		Registry: "localhost:5555/test",
-		Steps: []lane.Step{
-			{
-				Name: "pack", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{Name: "img", Type: "image", Path: lane.Ptr(lane.RelPath("img.tar"))}},
-			},
-			{
-				Name: "publish", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Peers:  []lane.Peer{lane.HTTPSPeer{Type: "https", Host: "localhost:5555", Trust: transport.FingerprintTrust{Mode: "cert_fingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}},
-				Inputs: []lane.InputRef{{From: "pack.img", Mount: "/in/img"}},
-			},
-		},
-	}
-	rc.dag = buildTestDAG(t, p)
-	if err := rc.laneState.Register("pack", "img", lane.Artifact{
-		Type: "image", Digest: lane.MustParseDigest("sha256:aabb000000000000000000000000000000000000000000000000000000000000"),
-	}); err != nil {
-		t.Fatal(err)
-	}
-
-	err := rc.guardUnsignedImages(rc.dag.Steps["publish"], "test")
-	if err == nil {
-		t.Fatal("expected error for unsigned image with network")
-	}
-	if !strings.Contains(err.Error(), "unsigned") {
-		t.Errorf("error should mention 'unsigned': %v", err)
-	}
-}
-
-func TestGuardUnsignedImages_NonImageInput(t *testing.T) {
-	rc := newTestRC(t, &mockEngine{})
-	p := &lane.Lane{
-		Registry: "localhost:5555/test",
-		Steps: []lane.Step{
-			{
-				Name: "compile", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{Name: "bin", Type: "file", Path: lane.Ptr(lane.RelPath("bin"))}},
-			},
-			{
-				Name: "run", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Peers:  []lane.Peer{lane.HTTPSPeer{Type: "https", Host: "localhost:5555", Trust: transport.FingerprintTrust{Mode: "cert_fingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}},
-				Inputs: []lane.InputRef{{From: "compile.bin", Mount: "/in/bin"}},
-			},
-		},
-	}
-	rc.dag = buildTestDAG(t, p)
-
-	if err := rc.guardUnsignedImages(rc.dag.Steps["run"], "test"); err != nil {
-		t.Fatalf("non-image input should be OK: %v", err)
-	}
-}
-
-// --------------------------------------------------------------------------.
 // computeSpecHash
 // --------------------------------------------------------------------------.
 
@@ -718,71 +604,6 @@ func TestCheckCache_EngineError(t *testing.T) {
 	}
 }
 
-func TestCheckCache_HitRestoresSignedFromAnnotation(t *testing.T) {
-	digest := testFullDigest
-	eng := &mockEngine{
-		inspectRV: &container.ImageInfo{
-			Digest: digest,
-			Annotations: map[string]string{
-				"dev.strike.content-size": "100",
-				"dev.strike.signed":       "true",
-			},
-		},
-	}
-	rc := newTestRC(t, eng)
-	step := &lane.Step{
-		Name:    "step1",
-		Outputs: []lane.OutputSpec{{Name: "img", Type: "image", Path: lane.Ptr(lane.RelPath("img.tar"))}},
-	}
-
-	hit, err := rc.checkCache(context.Background(), step, "step1", "step1", lane.MustParseDigest("sha256:abc0000000000000000000000000000000000000000000000000000000000000"))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !hit {
-		t.Fatal("expected cache hit")
-	}
-	art, err2 := rc.laneState.Resolve("step1.img")
-	if err2 != nil {
-		t.Fatalf("artifact not registered: %v", err2)
-	}
-	if !art.Signed {
-		t.Error("expected Signed=true from annotation")
-	}
-}
-
-func TestCheckCache_AbsentSignedAnnotationDefaultsFalse(t *testing.T) {
-	digest := testFullDigest
-	eng := &mockEngine{
-		inspectRV: &container.ImageInfo{
-			Digest: digest,
-			Annotations: map[string]string{
-				"dev.strike.content-size": "100",
-			},
-		},
-	}
-	rc := newTestRC(t, eng)
-	step := &lane.Step{
-		Name:    "step1",
-		Outputs: []lane.OutputSpec{{Name: "bin", Type: "file", Path: lane.Ptr(lane.RelPath("bin"))}},
-	}
-
-	hit, err := rc.checkCache(context.Background(), step, "step1", "step1", lane.MustParseDigest("sha256:abc0000000000000000000000000000000000000000000000000000000000000"))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !hit {
-		t.Fatal("expected cache hit")
-	}
-	art, err2 := rc.laneState.Resolve("step1.bin")
-	if err2 != nil {
-		t.Fatalf("artifact not registered: %v", err2)
-	}
-	if art.Signed {
-		t.Error("expected Signed=false when annotation absent")
-	}
-}
-
 // --------------------------------------------------------------------------.
 // resolveImageDigest
 // --------------------------------------------------------------------------.
@@ -942,56 +763,6 @@ func TestResolvePackInputPaths(t *testing.T) {
 	}
 	if !strings.HasSuffix(paths["/app"], "binary") {
 		t.Errorf("path should end in 'binary', got %q", paths["/app"])
-	}
-}
-
-// --------------------------------------------------------------------------.
-// resolvePackSecrets
-// --------------------------------------------------------------------------.
-
-func TestResolvePackSecrets_FromEnv(t *testing.T) {
-	rc := newTestRC(t, &mockEngine{})
-	rc.lane.Secrets = map[string]lane.SecretSource{
-		"cosign_key":      testCosignKeyRef,
-		"cosign_password": testCosignUnlockRef,
-	}
-
-	t.Setenv("STRIKE_TEST_KEY", "key-data")
-	t.Setenv("STRIKE_TEST_PWD", "pwd-data")
-
-	step := &lane.Step{
-		Secrets: []lane.SecretRef{
-			{Name: "cosign_key"},
-			{Name: "cosign_password"},
-		},
-	}
-
-	key, pwd, err := rc.resolvePackSecrets(step, "test")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(key) != "key-data" {
-		t.Errorf("key = %q, want key-data", key)
-	}
-	if string(pwd) != "pwd-data" {
-		t.Errorf("pwd = %q, want pwd-data", pwd)
-	}
-}
-
-func TestResolvePackSecrets_MissingDef(t *testing.T) {
-	rc := newTestRC(t, &mockEngine{})
-	rc.lane.Secrets = map[string]lane.SecretSource{}
-
-	step := &lane.Step{
-		Secrets: []lane.SecretRef{{Name: "cosign_key"}},
-	}
-
-	_, _, err := rc.resolvePackSecrets(step, "test")
-	if err == nil {
-		t.Fatal("expected error for missing secret definition")
-	}
-	if !strings.Contains(err.Error(), "not defined") {
-		t.Errorf("error should mention 'not defined': %v", err)
 	}
 }
 

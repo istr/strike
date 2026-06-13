@@ -3,11 +3,6 @@ package integration_test
 import (
 	"bytes"
 	"context"
-	"crypto/ecdsa"
-	"crypto/elliptic"
-	"crypto/rand"
-	"crypto/x509"
-	"encoding/pem"
 	"fmt"
 	"io"
 	"os"
@@ -46,21 +41,6 @@ func ensureImage(t *testing.T, engine container.Engine, ref string) {
 	if pullErr := engine.ImagePull(ctx, ref); pullErr != nil {
 		t.Fatalf("image pull %s: %v", ref, pullErr)
 	}
-}
-
-// generateTestKey creates a fresh ECDSA P-256 key pair and returns the
-// private key PEM. Each test run gets a unique key.
-func generateTestKey(t *testing.T) []byte {
-	t.Helper()
-	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	if err != nil {
-		t.Fatalf("generate test key: %v", err)
-	}
-	der, err := x509.MarshalPKCS8PrivateKey(key)
-	if err != nil {
-		t.Fatalf("marshal test key: %v", err)
-	}
-	return pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der})
 }
 
 // buildTestBinary compiles the test Go program in a container and returns
@@ -113,7 +93,7 @@ func buildTestBinary(t *testing.T, engine container.Engine) string {
 
 // packTestImage assembles an OCI image from a binary and returns
 // the pack result and the root-scoped output directory.
-func packTestImage(t *testing.T, binPath string, keyPEM []byte) (*executor.PackResult, *os.Root, string) {
+func packTestImage(t *testing.T, binPath string) (*executor.PackResult, *os.Root, string) {
 	t.Helper()
 	outDir := t.TempDir()
 	outRoot, err := os.OpenRoot(outDir)
@@ -121,7 +101,7 @@ func packTestImage(t *testing.T, binPath string, keyPEM []byte) (*executor.PackR
 		t.Fatal(err)
 	}
 
-	result, packErr := executor.Pack(context.Background(), executor.PackOpts{
+	result, packErr := executor.Pack(executor.PackOpts{
 		Spec: &lane.PackSpec{
 			Base: lane.ImageRef(staticBase),
 			Files: []lane.PackFile{
@@ -132,11 +112,9 @@ func packTestImage(t *testing.T, binPath string, keyPEM []byte) (*executor.PackR
 				User:       lane.Ptr("65534:65534"),
 			},
 		},
-		InputPaths:  map[string]string{"/app": binPath},
-		OutputRoot:  outRoot,
-		OutputName:  "image.tar",
-		SigningKey:  keyPEM,
-		KeyPassword: nil,
+		InputPaths: map[string]string{"/app": binPath},
+		OutputRoot: outRoot,
+		OutputName: "image.tar",
 	})
 	if packErr != nil {
 		closer.Warn(outRoot, "packTestImage error cleanup")

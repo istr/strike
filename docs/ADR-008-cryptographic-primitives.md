@@ -3,6 +3,12 @@
 Superseded in part by ADR-032 (peer TLS version floor): external-peer
 hops now floor at TLS 1.2, not 1.3.
 
+> **Amended by [ADR-043](ADR-043-retire-keyed-image-signing-and-rekor-v1.md):**
+> the scrypt + NaCl `secretbox` primitive for encrypted cosign-format private
+> keys is retired together with keyed image signing; strike no longer reads or
+> decrypts on-disk signing keys. ECDSA P-256, SHA-256, and `crypto/rand` remain
+> in use for ephemeral keyless signing and content addressing.
+
 ## Status
 
 Accepted.

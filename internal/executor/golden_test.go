@@ -1,19 +1,9 @@
 package executor_test
 
 import (
-	"context"
-	"crypto/ecdsa"
-	"crypto/elliptic"
-	"crypto/rand"
-	"crypto/sha256"
-	"crypto/x509"
-	"encoding/base64"
 	"encoding/json"
-	"encoding/pem"
 	"flag"
-	"io"
 	"io/fs"
-	"math/big"
 	"os"
 	"path/filepath"
 	"testing"
@@ -180,128 +170,6 @@ func TestSpecHash_Golden(t *testing.T) {
 				t.Errorf("hash mismatch:\n  got:  %s\n  want: %s", got, vec.Expected.Hash)
 			}
 		})
-	}
-}
-
-// --------------------------------------------------------------------------.
-// Golden test: SignManifest (crossval vector).
-// --------------------------------------------------------------------------.
-
-func TestSignManifest_Golden(t *testing.T) {
-	vec := loadVector[signVector](t, "sign", "ecdsa_p256_pkcs8.json")
-
-	// Generate an ephemeral key for this test run.
-	keyPEM, pubDERBase64 := generateEphemeralKey(t)
-	var password []byte
-	if vec.Inputs.Password != nil {
-		password = []byte(*vec.Inputs.Password)
-	}
-
-	signResult, err := executor.SignManifest(context.Background(), vec.Inputs.ManifestDigest, keyPEM, password, nil)
-	if err != nil {
-		t.Fatalf("SignManifest: %v", err)
-	}
-	sigImage := signResult.Image
-
-	// Extract signature from the OCI image annotations.
-	manifest, err := sigImage.Manifest()
-	if err != nil {
-		t.Fatalf("manifest: %v", err)
-	}
-	sig := manifest.Annotations["dev.sigstore.cosign/signature"]
-	if sig == "" {
-		t.Fatal("no signature annotation")
-	}
-
-	// Extract payload from the single layer.
-	layers, err := sigImage.Layers()
-	if err != nil || len(layers) == 0 {
-		t.Fatal("no signature layers")
-	}
-	rc, err := layers[0].Uncompressed()
-	if err != nil {
-		t.Fatalf("uncompress layer: %v", err)
-	}
-	payload, err := io.ReadAll(rc)
-	if closeErr := rc.Close(); closeErr != nil {
-		t.Fatalf("close layer reader: %v", closeErr)
-	}
-	if err != nil {
-		t.Fatalf("read payload: %v", err)
-	}
-
-	// Verify signature cryptographically with the ephemeral public key.
-	verifySigP256DER(t, pubDERBase64, payload, sig)
-
-	if *update {
-		updateVectorExpected(t, "sign", "ecdsa_p256_pkcs8.json", struct {
-			Payload string `json:"payload"`
-			Verify  struct {
-				Algorithm string `json:"algorithm"`
-			} `json:"verify"`
-		}{
-			Payload: string(payload),
-			Verify: struct {
-				Algorithm string `json:"algorithm"`
-			}{
-				Algorithm: "ECDSA-P256-SHA256",
-			},
-		})
-		return
-	}
-
-	if string(payload) != vec.Expected.Payload {
-		t.Errorf("payload mismatch:\n  got:  %s\n  want: %s", payload, vec.Expected.Payload)
-	}
-}
-
-// generateEphemeralKey creates a fresh ECDSA P-256 key pair and returns the
-// private key PEM and the base64-encoded DER public key (for verifySigP256DER).
-func generateEphemeralKey(t *testing.T) (privPEM []byte, pubDERBase64 string) {
-	t.Helper()
-	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	if err != nil {
-		t.Fatalf("generate ephemeral key: %v", err)
-	}
-	privDER, err := x509.MarshalPKCS8PrivateKey(key)
-	if err != nil {
-		t.Fatalf("marshal private key: %v", err)
-	}
-	pubDER, err := x509.MarshalPKIXPublicKey(&key.PublicKey)
-	if err != nil {
-		t.Fatalf("marshal public key: %v", err)
-	}
-	privPEM = pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: privDER})
-	pubDERBase64 = base64.StdEncoding.EncodeToString(pubDER)
-	return privPEM, pubDERBase64
-}
-
-// verifySigP256DER verifies a base64-encoded raw (r||s) ECDSA P-256 signature
-// against the given payload using a DER-encoded public key (base64).
-func verifySigP256DER(t *testing.T, pubKeyDERBase64 string, payload []byte, b64sig string) {
-	t.Helper()
-
-	pubDER := decodeBase64(t, pubKeyDERBase64)
-	pub, err := x509.ParsePKIXPublicKey(pubDER)
-	if err != nil {
-		t.Fatalf("parse public key: %v", err)
-	}
-	ecPub, ok := pub.(*ecdsa.PublicKey)
-	if !ok {
-		t.Fatal("public key is not ECDSA")
-	}
-
-	sigBytes := decodeBase64(t, b64sig)
-	if len(sigBytes) != 64 {
-		t.Fatalf("signature length = %d, want 64", len(sigBytes))
-	}
-
-	r := new(big.Int).SetBytes(sigBytes[:32])
-	s := new(big.Int).SetBytes(sigBytes[32:])
-	hash := sha256.Sum256(payload)
-
-	if !ecdsa.Verify(ecPub, hash[:], r, s) {
-		t.Error("signature verification failed")
 	}
 }
 

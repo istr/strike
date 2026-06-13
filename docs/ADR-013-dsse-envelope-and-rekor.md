@@ -1,5 +1,12 @@
 # ADR-013: DSSE Envelope Shape and Rekor Submission
 
+> **Amended by [ADR-043](ADR-043-retire-keyed-image-signing-and-rekor-v1.md):**
+> the keyed image-signing path (cosign-format `hashedrekord` submission), the
+> Rekor v1 REST client, and the `SignAttestation` collect-model envelope are
+> retired. Pack outputs are unsigned intermediates. The DSSE envelope shape, the
+> PAE encoding, and the rule that the rekor field is excluded from the signed
+> payload remain in force via the keyless deploy path (ADR-040).
+
 ## Status
 
 Accepted.

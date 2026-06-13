@@ -2,18 +2,8 @@ package deploy
 
 import (
 	"bytes"
-	"encoding/base64"
-	"encoding/json"
-	"fmt"
 	"strconv"
-
-	"github.com/istr/strike/internal/executor"
 )
-
-// AttestationPayloadType is the DSSE payload type for the internal
-// collect-model envelope (ADR-013). Retained only for SignAttestation, whose
-// production disposition is ADR-040 instruction 3b.
-const AttestationPayloadType = "application/vnd.strike.attestation+json"
 
 // InTotoPayloadType is the DSSE payload type for the projected output
 // statements (ADR-040 D3). The sealed SLSA provenance, the engine-context
@@ -39,47 +29,6 @@ type SignedStatements struct {
 	Sealed        SignedStatement
 	EngineContext SignedStatement
 	Informational SignedStatement
-}
-
-// DSSEEnvelope is a Dead Simple Signing Envelope (in-toto v1).
-type DSSEEnvelope struct {
-	PayloadType string          `json:"payloadType"`
-	Payload     string          `json:"payload"`
-	Signatures  []DSSESignature `json:"signatures"`
-}
-
-// DSSESignature is one signature within a DSSE envelope.
-type DSSESignature struct {
-	KeyID string `json:"keyid"`
-	Sig   string `json:"sig"`
-}
-
-// signDSSE wraps payload in a signed DSSE envelope with the given payload type:
-// base64url (no padding) payload, ECDSA P-256 signature over the PAE. If keyPEM
-// is nil, returns an error.
-func signDSSE(payload []byte, payloadType string, keyPEM, password []byte) ([]byte, error) {
-	if keyPEM == nil {
-		return nil, fmt.Errorf("signing key is required")
-	}
-	b64Payload := base64.RawURLEncoding.EncodeToString(payload)
-	paeBytes := PAEEncode(payloadType, payload)
-	b64sig, keyID, err := executor.SignPayload(paeBytes, keyPEM, password)
-	if err != nil {
-		return nil, fmt.Errorf("sign dsse: %w", err)
-	}
-	envelope := DSSEEnvelope{
-		PayloadType: payloadType,
-		Payload:     b64Payload,
-		Signatures:  []DSSESignature{{KeyID: keyID, Sig: b64sig}},
-	}
-	return json.Marshal(envelope)
-}
-
-// SignAttestation wraps internal collect-model JSON in a signed DSSE envelope
-// with the strike-specific payload type (ADR-013). Retained for the crossval
-// boundary; its production disposition is ADR-040 instruction 3b.
-func SignAttestation(attestationJSON, keyPEM, password []byte) ([]byte, error) {
-	return signDSSE(attestationJSON, AttestationPayloadType, keyPEM, password)
 }
 
 // PAEEncode constructs a DSSE Pre-Authentication Encoding.

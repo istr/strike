@@ -1,13 +1,8 @@
 // Artifact provenance record.
 //
 // A #SignedArtifact captures everything strike knows about an
-// artifact after pack + sign + SBOM generation + optional Rekor
-// submission. This is the unit of trust that flows from build
-// into deploy attestations.
-//
-// Rekor types (#RekorEntry, #InclusionProof) are defined in lane.cue
-// and re-exported here so the deploy package can reference them
-// without duplication.
+// artifact after pack + SBOM generation. This is the unit of
+// trust that flows from build into deploy attestations.
 
 package deploy
 
@@ -20,8 +15,6 @@ import "github.com/istr/strike/specs:lane"
 // remains self-contained for external verifiers (ADR-004).
 #Digest:           lane.#Digest
 #AbsPath:          lane.#AbsPath
-#RekorEntry:       lane.#RekorEntry
-#InclusionProof:   lane.#InclusionProof
 #ProvenanceRecord: lane.#ProvenanceRecord
 #DeployTarget:     lane.#DeployTarget
 #Peer:             lane.#Peer
@@ -37,26 +30,8 @@ import "github.com/istr/strike/specs:lane"
 	// digest is the content-addressed manifest digest.
 	digest: #Digest
 
-	// signature holds the signing record when the artifact was signed.
-	signature?: #SignatureRecord
-
 	// sbom holds SBOM metadata when an SBOM was generated.
 	sbom?: #SBOMRecord
-
-	// rekor holds the transparency log entry from a hashedrekord
-	// submission for this artifact's signature.
-	rekor?: #RekorEntry
-}
-
-#SignatureRecord: {
-	// algorithm identifies the signing algorithm.
-	algorithm: "ECDSA-P256-SHA256"
-
-	// payload is the base64-encoded signed payload (cosign format).
-	payload: string
-
-	// annotations are the key-value pairs attached to the signature.
-	annotations: [string]: string
 }
 
 #SBOMRecord: {

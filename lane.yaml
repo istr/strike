@@ -4,10 +4,6 @@ name: strike-bootstrap
 laneId: strike-bootstrap
 registry: localhost/strike-bootstrap
 
-secrets:
-  cosign_key:      env://COSIGN_PRIVATE_KEY
-  cosign_password: env://COSIGN_PASSWORD
-
 resolver:
   host: "1.1.1.1:853"
   trust:
@@ -71,11 +67,6 @@ steps:
         - from: build_binary.binary
           dest: /usr/bin/strike
           mode: 0o755
-    secrets:
-      - name: cosign_key
-        env: COSIGN_PRIVATE_KEY
-      - name: cosign_password
-        env: COSIGN_PASSWORD
     outputs:
       - name: image
         type: image

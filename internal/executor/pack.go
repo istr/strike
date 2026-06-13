@@ -1,11 +1,10 @@
 // Package executor implements container execution, OCI image assembly,
-// signing, and SBOM generation for strike lane steps.
+// and SBOM generation for strike lane steps.
 package executor
 
 import (
 	"archive/tar"
 	"bytes"
-	"context"
 	"fmt"
 	"io"
 	"io/fs"
@@ -31,20 +30,16 @@ import (
 
 // PackOpts is everything pack needs; callers in main.go assemble this.
 type PackOpts struct {
-	InputPaths  map[string]string
-	Spec        *lane.PackSpec
-	State       *lane.State
-	OutputRoot  *os.Root     // root-scoped output directory
-	Rekor       *RekorClient // optional Rekor transparency log client
-	OutputName  string       // filename within OutputRoot
-	SigningKey  []byte
-	KeyPassword []byte
+	InputPaths map[string]string
+	Spec       *lane.PackSpec
+	State      *lane.State
+	OutputRoot *os.Root // root-scoped output directory
+	OutputName string   // filename within OutputRoot
 }
 
 // PackResult holds the outputs of a successful pack operation.
 type PackResult struct {
-	Rekor  *lane.RekorEntry // verified Rekor entry (nil when Rekor is not configured)
-	Digest lane.Digest      // "sha256:..." manifest digest of the main image
+	Digest lane.Digest // "sha256:..." manifest digest of the main image
 }
 
 // AssembleResult holds the outputs of the pure image assembly step.
@@ -117,15 +112,12 @@ func AssembleImage(base v1.Image, spec *lane.PackSpec, inputPaths map[string]str
 }
 
 // Pack assembles an OCI image from the given options, generates an SBOM,
-// optionally signs the manifest, and writes the result as an OCI layout
-// tar. Signing is gated on opts.SigningKey: when nil, the image is left
-// unsigned and no signature manifest is written. The key is supplied iff
-// the step references a cosign_key secret (see executePack).
+// and writes the result as an OCI layout tar.
 //
 // Pack is the orchestrator: it handles I/O (pull, write) and delegates
-// to pure functions (AssembleImage, SignManifest, GenerateImageSBOM) for the
+// to pure functions (AssembleImage, GenerateImageSBOM) for the
 // security-critical computations.
-func Pack(ctx context.Context, opts PackOpts) (*PackResult, error) {
+func Pack(opts PackOpts) (*PackResult, error) {
 	// 1. Pull and verify the base image (network I/O)
 	base, err := pullVerified(string(opts.Spec.Base))
 	if err != nil {
@@ -161,29 +153,12 @@ func Pack(ctx context.Context, opts PackOpts) (*PackResult, error) {
 		return nil, fmt.Errorf("pack: spdx artifact: %w", err)
 	}
 
-	// 4. Sign the image manifest digest -- optional, gated on a cosign_key
-	// secret. An unsigned pack still produces a verifiable artifact: its
-	// integrity in the chain comes from the recorded manifest digest,
-	// pinned by consuming steps. The cosign manifest signature is an
-	// out-of-band guarantee for pushed images, not the provenance backbone.
-	var sigImage v1.Image
-	var rekorEntry *lane.RekorEntry
-	if opts.SigningKey != nil {
-		signRes, signErr := SignManifest(ctx, assembled.Digest.String(), opts.SigningKey, opts.KeyPassword, opts.Rekor)
-		if signErr != nil {
-			return nil, fmt.Errorf("pack: sign: %w", signErr)
-		}
-		sigImage = signRes.Image
-		rekorEntry = signRes.Rekor
-	}
-
-	// 5. Write OCI layout (filesystem I/O). The signature manifest is
-	// appended only when the image was signed.
-	if err := writeOCILayout(assembled.Image, []v1.Image{cdxImage, spdxImage}, sigImage, opts.OutputRoot, opts.OutputName, assembled.Digest.String()); err != nil {
+	// 4. Write OCI layout (filesystem I/O).
+	if err := writeOCILayout(assembled.Image, []v1.Image{cdxImage, spdxImage}, opts.OutputRoot, opts.OutputName, assembled.Digest.String()); err != nil {
 		return nil, err
 	}
 
-	return &PackResult{Digest: lane.MustParseDigest(assembled.Digest.String()), Rekor: rekorEntry}, nil
+	return &PackResult{Digest: lane.MustParseDigest(assembled.Digest.String())}, nil
 }
 
 // addFileLayers appends a layer for each file entry, returning the updated
@@ -326,9 +301,9 @@ func applyConfig(img v1.Image, spec *lane.PackSpec) (v1.Image, error) {
 	return img, nil
 }
 
-// writeOCILayout writes the main image, SBOM, and signature to an OCI layout
+// writeOCILayout writes the main image and SBOM to an OCI layout
 // tar in the given output root.
-func writeOCILayout(img v1.Image, sbomImages []v1.Image, sigImage v1.Image, outputRoot *os.Root, outputName, imgDigest string) error {
+func writeOCILayout(img v1.Image, sbomImages []v1.Image, outputRoot *os.Root, outputName, imgDigest string) error {
 	layoutDir, err := os.MkdirTemp("", "strike-pack-layout-")
 	if err != nil {
 		return fmt.Errorf("pack: temp dir: %w", err)
@@ -347,11 +322,6 @@ func writeOCILayout(img v1.Image, sbomImages []v1.Image, sigImage v1.Image, outp
 	for _, si := range sbomImages {
 		if err := lp.AppendImage(si); err != nil {
 			return fmt.Errorf("pack: append SBOM: %w", err)
-		}
-	}
-	if sigImage != nil {
-		if err := lp.AppendImage(sigImage); err != nil {
-			return fmt.Errorf("pack: append signature: %w", err)
 		}
 	}
 

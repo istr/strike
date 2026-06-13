@@ -14,15 +14,14 @@ import (
 
 // deploySchema combines the attestation, artifact, and lane CUE schemas.
 // All three are compiled together via string concatenation so that types
-// like #SignedArtifact and #RekorEntry are available when validating
-// #Attestation.
+// like #SignedArtifact are available when validating #Attestation.
 //
 // artifact.cue uses `import "github.com/istr/strike/specs:lane"` for
 // the `cue export` toolchain, but ctx.CompileString cannot resolve module
 // imports. stripForConcat removes package declarations, import blocks,
 // and cross-package re-export lines so the files can be concatenated
-// into a single CUE source. lane.cue provides #RekorEntry and
-// #InclusionProof directly.
+// into a single CUE source. lane.cue provides the shared base types
+// (e.g. #Digest, #ProvenanceRecord) directly.
 var deploySchema = specs.AttestationSchema + "\n" +
 	stripForConcat(specs.ArtifactSchema) + "\n" +
 	stripForConcat(specs.PredicateSchema) + "\n" +
@@ -58,7 +57,7 @@ func stripForConcat(src string) string {
 			}
 			continue
 		}
-		// Re-export lines referencing another CUE package (e.g. lane.#RekorEntry)
+		// Re-export lines referencing another CUE package (e.g. lane.#Digest)
 		if strings.Contains(line, "lane.#") {
 			continue
 		}

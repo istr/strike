@@ -22,11 +22,6 @@ import (
 // read by the cache-hit path to restore Artifact.Size without re-extraction.
 const ContentSizeAnnotation = "dev.strike.content-size"
 
-// SignedAnnotation is the OCI annotation key that records whether a pack
-// step signed this artifact. Written by executePack, read by the cache-hit
-// path to restore Artifact.Signed without re-inspection.
-const SignedAnnotation = "dev.strike.signed"
-
 // WrapImageOutputAsImage loads an existing OCI tar into the engine's local
 // store, tags it, and returns the manifest digest and the tar file size.
 // The controller-computed manifest digest is verified against the engine.

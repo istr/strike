@@ -63,7 +63,6 @@ type runContext struct {
 	networkRecords map[string]capsule.Records         // step name -> records
 	capsules       map[string]*capsule.NetworkCapsule // run-step name -> pre-built capsule
 	laneRoot       *os.Root
-	rekor          *executor.RekorClient // optional Rekor transparency log client
 	trust          trustVolumes
 	laneDir        string
 	resolverID     transport.ConnectionIdentity
@@ -110,9 +109,6 @@ func (rc *runContext) runStep(stepName string) error {
 	}
 	if cached {
 		return nil
-	}
-	if err := rc.guardUnsignedImages(step, safeName); err != nil {
-		return err
 	}
 
 	log.Printf("RUN    %s", safeName)
@@ -266,14 +262,12 @@ func (rc *runContext) checkCache(ctx context.Context, step *lane.Step, stepName,
 		return false, nil
 	}
 
-	signed := info.Annotations[registry.SignedAnnotation] == "true"
 	digest := lane.MustParseDigest(info.Digest)
 	for _, out := range step.Outputs {
 		if regErr := rc.laneState.Register(stepName, out.Name, lane.Artifact{
 			Type:   lane.ArtifactType(out.Type),
 			Digest: digest,
 			Size:   size,
-			Signed: signed,
 		}); regErr != nil {
 			return false, fmt.Errorf("cache hit register %s/%s: %w", stepName, out.Name, regErr)
 		}
@@ -281,27 +275,6 @@ func (rc *runContext) checkCache(ctx context.Context, step *lane.Step, stepName,
 
 	log.Printf("CACHED %s (%s)", safeName, tag)
 	return true, nil
-}
-
-func (rc *runContext) guardUnsignedImages(step *lane.Step, safeName string) error {
-	if len(step.Peers) == 0 {
-		return nil
-	}
-	for _, e := range rc.dag.InputEdges[string(step.Name)] {
-		if e.FromOutput.Type != artifactTypeImage {
-			continue
-		}
-		ref := string(e.FromStep.Name) + "." + e.FromOutput.Name
-		art, err := rc.laneState.Resolve(ref)
-		if err != nil {
-			return fmt.Errorf("%s: input at %q: %w", safeName, e.Mount, err)
-		}
-		if !art.Signed {
-			return fmt.Errorf("%s: input at %q is unsigned OCI image from %s",
-				safeName, e.Mount, ref)
-		}
-	}
-	return nil
 }
 
 func (rc *runContext) executePack(ctx context.Context, step *lane.Step, stepName, safeName string) error {
@@ -312,10 +285,6 @@ func (rc *runContext) executePack(ctx context.Context, step *lane.Step, stepName
 	defer removeStrikeScratch(outDir)
 
 	inputPaths, err := rc.resolvePackInputPaths(ctx, step, outDir, safeName)
-	if err != nil {
-		return err
-	}
-	signingKey, keyPassword, err := rc.resolvePackSecrets(step, safeName)
 	if err != nil {
 		return err
 	}
@@ -330,39 +299,26 @@ func (rc *runContext) executePack(ctx context.Context, step *lane.Step, stepName
 		return fmt.Errorf("%s: pack output requires a path", safeName)
 	}
 	outputName := filepath.Base(step.Outputs[0].Path.String())
-	result, err := executor.Pack(ctx, executor.PackOpts{
-		Spec:        step.Pack,
-		InputPaths:  inputPaths,
-		OutputRoot:  outRoot,
-		OutputName:  outputName,
-		SigningKey:  signingKey,
-		KeyPassword: keyPassword,
-		Rekor:       rc.rekor,
+	result, err := executor.Pack(executor.PackOpts{
+		Spec:       step.Pack,
+		InputPaths: inputPaths,
+		OutputRoot: outRoot,
+		OutputName: outputName,
 	})
 	if err != nil {
 		return fmt.Errorf("%s: pack failed: %w", safeName, err)
 	}
 
-	signed := signingKey != nil
-	if !signed {
-		log.Printf("WARN   %s: image unsigned (no cosign_key secret)", safeName)
-	}
 	if regErr := rc.laneState.Register(stepName, step.Outputs[0].Name, lane.Artifact{
 		Type:   artifactTypeImage,
 		Digest: result.Digest,
-		Rekor:  result.Rekor,
-		Signed: signed,
 	}); regErr != nil {
 		return fmt.Errorf("%s: register artifact: %w", safeName, regErr)
 	}
 
 	specHash := rc.state.specHashes[stepName]
 	tag := registry.WrapTag(rc.lane.LaneID, stepName, specHash)
-	var extra map[string]string
-	if signed {
-		extra = map[string]string{registry.SignedAnnotation: "true"}
-	}
-	if _, _, wrapErr := rc.regClient.WrapImageOutputAsImage(ctx, outRoot, outputName, tag, extra); wrapErr != nil {
+	if _, _, wrapErr := rc.regClient.WrapImageOutputAsImage(ctx, outRoot, outputName, tag, nil); wrapErr != nil {
 		return fmt.Errorf("%s: wrap image: %w", safeName, wrapErr)
 	}
 	log.Printf("OK     %s -> %s", safeName, result.Digest)
@@ -415,34 +371,6 @@ func (rc *runContext) resolvePackInputPaths(ctx context.Context, step *lane.Step
 		inputPaths[e.Dest.String()] = filepath.Join(inputDir, lane.OutputLayerName(*e.FromOutput))
 	}
 	return inputPaths, nil
-}
-
-func (rc *runContext) resolvePackSecrets(step *lane.Step, safeName string) ([]byte, []byte, error) {
-	return rc.resolveSigningSecrets(step, safeName)
-}
-
-func (rc *runContext) resolveSigningSecrets(step *lane.Step, safeName string) ([]byte, []byte, error) {
-	var signingKey, keyPassword []byte
-	for _, ref := range step.Secrets {
-		source, ok := rc.lane.Secrets[ref.Name]
-		if !ok {
-			return nil, nil, fmt.Errorf("%s: secret %q not defined", safeName, ref.Name)
-		}
-		val, err := lane.ReadSecret(source, rc.laneRoot)
-		if ref.Name == "cosign_key" {
-			if err != nil {
-				return nil, nil, fmt.Errorf("%s: secret cosign_key: %w", safeName, err)
-			}
-			signingKey = []byte(val.Expose())
-		}
-		if ref.Name == "cosign_password" {
-			if err != nil {
-				return nil, nil, fmt.Errorf("%s: secret cosign_password: %w", safeName, err)
-			}
-			keyPassword = []byte(val.Expose())
-		}
-	}
-	return signingKey, keyPassword, nil
 }
 
 func (rc *runContext) executeContainerStep(ctx context.Context, step *lane.Step, stepName, safeName, tag string) error {

@@ -96,8 +96,6 @@ const cueSchemaPath = "../../specs/crossval.cue"
 var boundaryToCUEType = map[string]string{
 	"AssembleImage":       "#AssembleVector",
 	"SpecHash":            "#SpecHashVector",
-	"SignManifest":        "#SignVector",
-	"SignAttestation":     "#SignAttestationVector",
 	"ValidateAttestation": "#AttestationVector",
 	"StateDigest":         "#StateDigestVector",
 	"RenderKnownHosts":    "#RenderKnownHostsVector",
@@ -216,27 +214,4 @@ type specHashInputs struct {
 
 type specHashExpected struct {
 	Hash string `json:"hash"`
-}
-
-type signVector struct {
-	Inputs      signInputs   `json:"inputs"`
-	Expected    signExpected `json:"expected"`
-	Boundary    string       `json:"boundary"`
-	Description string       `json:"description"`
-}
-
-type signInputs struct {
-	Password       *string `json:"password"`
-	ManifestDigest string  `json:"manifest_digest"`
-	KeyPEM         string  `json:"key_pem,omitempty"`
-}
-
-type signVerify struct {
-	Algorithm          string `json:"algorithm"`
-	PublicKeyDERBase64 string `json:"public_key_der_base64,omitempty"`
-}
-
-type signExpected struct {
-	Verify  signVerify `json:"verify"`
-	Payload string     `json:"payload"`
 }
