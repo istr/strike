@@ -83,8 +83,8 @@ func projectStatements(att *Attestation, oidc lane.OIDCConfig) (
 			PreStateDigest:  att.Informational.PreStateDigest,
 			PostStateDigest: att.Informational.PostStateDigest,
 			Provenance:      att.Informational.Provenance,
+			EngineMetadata:  att.Informational.EngineMetadata,
 		}
-		engineCtx.Predicate.EngineMetadata = att.Informational.EngineMetadata
 	}
 
 	return slsa, engineCtx, info, nil

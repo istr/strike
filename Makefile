@@ -13,6 +13,8 @@ specs: specs/lane.cue specs/sigstore-trustroot.cue specs/source-provenance.cue s
 	    --out jsonschema --force -o specs/lane.schema.json
 	cue export ./specs:deploy -e '#Attestation' \
 	    --out jsonschema --force -o specs/attestation.schema.json
+	cue export ./specs:trustlayers \
+	    --out json --force -o specs/trust-layers.json
 
 # Step 2: Generate Go types from the CUE lane schema.
 # Uses gengotypes for now; will move to JSON Schema input once

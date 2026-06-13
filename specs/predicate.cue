@@ -85,8 +85,8 @@ package deploy
 #StrikeExternalParameters: {
 	laneId:     =~"^[a-z0-9][a-z0-9-]{0,62}$"
 	laneDigest: #Digest | ""
-	target:      #DeployTarget
-	oidc:        #ProvenanceOIDC
+	target:     #DeployTarget
+	oidc:       #ProvenanceOIDC
 	peers: [Step=string]: [...#Peer]
 	observedPeers?: [Endpoint=string]: #ObservedPeer
 	resolver?: #ResolverRecord
@@ -137,13 +137,13 @@ package deploy
 	predicate:     #EngineContextPredicate
 }
 
-// #EngineContextPredicate carries the Layer-E claims only: the engine's
-// self-reported metadata (engineMetadata) and the engine-asserted attribution
-// of mediated connections to steps (peerAttribution). The control-plane-
-// observed engine connection (#EngineConnection) is NOT here -- it is Layer V
-// and rides in the sealed provenance's externalParameters (Fork C).
+// #EngineContextPredicate carries the Layer-E claim only: the engine-asserted
+// attribution of mediated connections to steps (peerAttribution). The
+// control-plane-observed engine connection (#EngineConnection) is NOT here --
+// it is Layer V and rides in the sealed provenance's externalParameters
+// (Fork C). The engine's self-report (engineMetadata) is NOT here either -- it
+// carries no trust claim and lives in the informational statement.
 #EngineContextPredicate: {
-	engineMetadata?: #EngineMetadata
 	peerAttribution?: [Step=string]: [...string]
 }
 
@@ -181,4 +181,11 @@ package deploy
 	// predecessor steps; each is container-written at step exit and
 	// engine-relayed. Recorded for audit and IoC, never gating.
 	provenance: [...#ProvenanceRecord]
+
+	// engineMetadata is the engine's self-report about itself (version, rootless
+	// mode). It carries no trust claim -- the engine asserting facts about
+	// itself participates in no source-to-deploy claim -- so it is
+	// informational, not an engine-context (Layer E) claim. (Layer E is the
+	// engine asserting facts about something else, e.g. peerAttribution.)
+	engineMetadata?: #EngineMetadata
 }

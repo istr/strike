@@ -58,15 +58,15 @@ func TestProjectStatements(t *testing.T) {
 		t.Error("engine connection (Layer V) missing from sealed externalParameters")
 	}
 
-	// Engine-context (E): engine metadata (Fork C) and peer attribution here.
-	if engineCtx.Predicate.EngineMetadata == nil || engineCtx.Predicate.EngineMetadata.Version != "5.3.1" {
-		t.Error("engine metadata not reclassified into engine-context (Layer E)")
-	}
+	// Engine-context (E): engine-asserted peer attribution only.
 	if len(engineCtx.Predicate.PeerAttribution) != 1 {
 		t.Error("peer attribution missing from engine-context")
 	}
 
-	// Informational: state digests and provenance here.
+	// Informational: engine self-report, state digests, and provenance here.
+	if info.Predicate.EngineMetadata == nil || info.Predicate.EngineMetadata.Version != "5.3.1" {
+		t.Error("engine metadata not classified as informational")
+	}
 	if info.Predicate.PreStateDigest.Hex != strings.Repeat("e", 64) {
 		t.Errorf("pre-state digest = %q", info.Predicate.PreStateDigest.Hex)
 	}

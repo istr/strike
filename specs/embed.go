@@ -52,3 +52,10 @@ var TransportSchema string
 //
 //go:embed sigstore-bundle.cue
 var BundleSchema string
+
+// TrustLayersSchema is the embedded single-source trust-layer map
+// (specs/trust-layers.cue). It is data, not a validation schema: the
+// conformance test asserts attestation.cue and predicate.cue agree with it.
+//
+//go:embed trust-layers.cue
+var TrustLayersSchema string

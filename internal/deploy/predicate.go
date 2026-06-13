@@ -102,11 +102,11 @@ type EngineContextStatement struct {
 	Subject       []Subject              `json:"subject"`
 }
 
-// EngineContextPredicate carries Layer-E claims only: engine self-reports and
-// engine-asserted step attribution. EngineConnection (Layer V) is not here.
+// EngineContextPredicate carries the Layer-E claim only: engine-asserted step
+// attribution. EngineConnection (Layer V) and the engine self-report
+// (engineMetadata, informational) are not here.
 type EngineContextPredicate struct {
 	PeerAttribution map[string][]string `json:"peerAttribution,omitempty"`
-	EngineMetadata  *EngineMetadata     `json:"engineMetadata,omitempty"`
 }
 
 // InformationalStatement is the informational output: an in-toto Statement v1
@@ -130,6 +130,7 @@ type InformationalStatement struct {
 // it.
 type InformationalPredicate struct {
 	Timestamp       clock.Time              `json:"timestamp,omitempty"`
+	EngineMetadata  *EngineMetadata         `json:"engineMetadata,omitempty"`
 	PreStateDigest  lane.Digest             `json:"preStateDigest"`
 	PostStateDigest lane.Digest             `json:"postStateDigest"`
 	Provenance      []lane.ProvenanceRecord `json:"provenance"`
