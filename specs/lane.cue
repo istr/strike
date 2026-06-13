@@ -19,8 +19,8 @@ package lane
 	// Stable identifier assigned at authoring time. Used by external
 	// verifiers to pair attestations against the same lane across runs.
 	// Distinct from `name`, which is human-display.
-	laneId:  =~"^[a-z0-9][a-z0-9-]{0,62}$" @go(LaneID)
-	registry: string & =~"^[a-z0-9./-]+"    @go(Registry)
+	laneId:   =~"^[a-z0-9][a-z0-9-]{0,62}$"                                           @go(LaneID)
+	registry: string & =~"^[a-z0-9]([a-z0-9.-]*[a-z0-9])?(:[0-9]+)?(/[a-z0-9._-]+)*$" @go(Registry)
 	secrets: {
 		[Name=string]: #SecretSource @go(Secrets)
 	}
@@ -33,7 +33,7 @@ package lane
 	// `trustRootRef` (OCI digest) supplies the verification anchor; at most
 	// one, and -- forward-constraint for verify -- absence here means the
 	// anchor MUST come from --trust-root, with NO implicit default.
-	keyless:  #Keyless @go(Keyless)
+	keyless: #Keyless @go(Keyless)
 	baseSbomSigners?: [...#SBOMSigner] @go(BaseSBOMSigners,optional=nillable)
 	defaults?: #LaneDefaults @go(Defaults,optional=nillable)
 }
@@ -53,10 +53,10 @@ package lane
 #OIDCConfig: {
 	@go(OIDCConfig)
 
-	issuer:    string    @go(Issuer)   // iss / issuer-url; config only, no IdP contact at validate/dag
+	issuer:   string    @go(Issuer)   // iss / issuer-url; config only, no IdP contact at validate/dag
 	clientId: string    @go(ClientID) // aud
-	identity:  string    @go(Identity) // expected SAN subject Fulcio writes into the cert
-	trust:     #TLSTrust @go(Trust,type="github.com/istr/strike/internal/transport".TLSTrust)
+	identity: string    @go(Identity) // expected SAN subject Fulcio writes into the cert
+	trust:    #TLSTrust @go(Trust,type="github.com/istr/strike/internal/transport".TLSTrust)
 }
 
 // KeylessEndpoints declares the sigstore services the keyless chain dials
@@ -131,8 +131,8 @@ package lane
 
 #Step: {
 	@go(Step)
-	name:        string     @go(Name)
-	image?:      #ImageRef  @go(Image,optional=nillable)
+	name:       string     @go(Name)
+	image?:     #ImageRef  @go(Image,optional=nillable)
 	imageFrom?: #ImageFrom @go(ImageFrom,optional=nillable)
 	args: [...string] @go(Args)
 	env: {
@@ -149,7 +149,7 @@ package lane
 	// `git clone` from a moving branch or `npm install` of a
 	// `latest` tag. Strike does not auto-detect
 	// non-determinism; lane authors declare it.
-	forceRun?:  bool | *false   @go(ForceRun)
+	forceRun?:   bool | *false   @go(ForceRun)
 	timeout?:    #Duration       @go(Timeout,optional=nillable)
 	pack?:       #PackSpec       @go(Pack,optional=nillable)
 	deploy?:     #DeploySpec     @go(Deploy,optional=nillable)
@@ -481,10 +481,10 @@ package lane
 // interface for artifact handover between pipeline phases.
 #Artifact: {
 	@go(Artifact)
-	type:          #ArtifactType @go(Type)
-	digest:        #Digest       @go(Digest,type=Digest)
+	type:         #ArtifactType @go(Type)
+	digest:       #Digest       @go(Digest,type=Digest)
 	localPath?:   string        @go(LocalPath,optional=nillable)
-	size:          int & >=0     @go(Size)
+	size:         int & >=0     @go(Size)
 	contentType?: string        @go(ContentType,optional=nillable)
 	metadata?: {
 		[string]: string @go(Metadata)

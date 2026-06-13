@@ -241,6 +241,19 @@ func TestParse_NonPinnedImageRejected(t *testing.T) {
 	}
 }
 
+// TestParse_InvalidRegistryRejected proves the registry pattern is anchored: a
+// value with a valid prefix but trailing garbage (accepted by the old unanchored
+// pattern) is now rejected.
+func TestParse_InvalidRegistryRejected(t *testing.T) {
+	_, _, err := lane.Parse(mustFilePath(t, "testdata/invalid_registry.yaml"))
+	if err == nil {
+		t.Fatal("expected error for malformed registry (trailing garbage)")
+	}
+	if !strings.Contains(err.Error(), "validation") {
+		t.Errorf("error should mention validation: %v", err)
+	}
+}
+
 func TestParse_ForceRunTrue(t *testing.T) {
 	p, _, err := lane.Parse(mustFilePath(t, "testdata/valid_force_run.yaml"))
 	if err != nil {
