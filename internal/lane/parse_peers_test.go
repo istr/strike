@@ -45,7 +45,7 @@ func TestParse_PeersReject(t *testing.T) {
 	}{
 		{"invalid_https_empty_host.yaml", "host"},
 		{"invalid_https_no_trust.yaml", "trust"},
-		{"invalid_https_unknown_trust_mode.yaml", "trust"},
+		{"invalid_https_unknown_trust_type.yaml", "trust"},
 		{"invalid_https_uppercase_host.yaml", "host"},
 		{"invalid_https_underscore_host.yaml", "host"},
 		{"invalid_https_short_fingerprint.yaml", "fingerprint"},

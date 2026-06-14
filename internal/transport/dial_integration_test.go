@@ -29,7 +29,7 @@ func TestDialVerified_CloudflareDoT_INTEGRATION(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*clock.Second)
 	defer cancel()
 	trust := transport.FingerprintTrust{
-		Mode:        "cert_fingerprint",
+		Type:        "certFingerprint",
 		Fingerprint: fingerprint,
 	}
 	conn, err := transport.DialVerified(ctx, "1.1.1.1:853", trust)

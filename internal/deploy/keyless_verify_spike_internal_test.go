@@ -49,7 +49,7 @@ func TestKeylessVerifySpike(t *testing.T) {
 		}
 	}
 
-	trust := transport.CABundleTrust{Mode: "ca_bundle", Path: caddyRoot}
+	trust := transport.CABundleTrust{Type: "caBundle", Path: caddyRoot}
 	eps := lane.KeylessEndpoints{
 		Fulcio: transport.HTTPSEndpoint{URL: "https://fulcio.127.0.0.1.sslip.io:5555", Trust: trust},
 		Rekor:  transport.HTTPSEndpoint{URL: "https://rekor.127.0.0.1.sslip.io:3003", Trust: trust},

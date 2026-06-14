@@ -79,31 +79,31 @@ secrets: {}
 resolver:
   host: "1.1.1.1:853"
   trust:
-    mode: cert_fingerprint
+    type: certFingerprint
     fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 oidc:
   issuer: "https://idp.example.com"
   clientId: "strike"
   identity: "strike@example.com"
   trust:
-    mode: cert_fingerprint
+    type: certFingerprint
     fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 keyless:
   endpoints:
     fulcio:
       url: "https://fulcio.example:5555"
       trust:
-        mode: cert_fingerprint
+        type: certFingerprint
         fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
     rekor:
       url: "https://rekor.example:3003"
       trust:
-        mode: cert_fingerprint
+        type: certFingerprint
         fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
     tsa:
       url: "https://tsa.example:3004"
       trust:
-        mode: cert_fingerprint
+        type: certFingerprint
         fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 steps:
   - name: deploy
@@ -156,31 +156,31 @@ secrets: {}
 resolver:
   host: "1.1.1.1:853"
   trust:
-    mode: cert_fingerprint
+    type: certFingerprint
     fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 oidc:
   issuer: "https://idp.example.com"
   clientId: "strike"
   identity: "strike@example.com"
   trust:
-    mode: cert_fingerprint
+    type: certFingerprint
     fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 keyless:
   endpoints:
     fulcio:
       url: "https://fulcio.example:5555"
       trust:
-        mode: cert_fingerprint
+        type: certFingerprint
         fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
     rekor:
       url: "https://rekor.example:3003"
       trust:
-        mode: cert_fingerprint
+        type: certFingerprint
         fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
     tsa:
       url: "https://tsa.example:3004"
       trust:
-        mode: cert_fingerprint
+        type: certFingerprint
         fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 baseSbomSigners:
   - issuer: "https://accounts.google.com"
@@ -445,31 +445,31 @@ secrets: {}
 resolver:
   host: "1.1.1.1:853"
   trust:
-    mode: cert_fingerprint
+    type: certFingerprint
     fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 oidc:
   issuer: "https://idp.example.com"
   clientId: "strike"
   identity: "strike@example.com"
   trust:
-    mode: cert_fingerprint
+    type: certFingerprint
     fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 keyless:
   endpoints:
     fulcio:
       url: "https://fulcio.example:5555"
       trust:
-        mode: cert_fingerprint
+        type: certFingerprint
         fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
     rekor:
       url: "https://rekor.example:3003"
       trust:
-        mode: cert_fingerprint
+        type: certFingerprint
         fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
     tsa:
       url: "https://tsa.example:3004"
       trust:
-        mode: cert_fingerprint
+        type: certFingerprint
         fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 steps:
   - name: bad-deploy
@@ -515,31 +515,31 @@ secrets: {}
 resolver:
   host: "1.1.1.1:853"
   trust:
-    mode: cert_fingerprint
+    type: certFingerprint
     fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 oidc:
   issuer: "https://idp.example.com"
   clientId: "strike"
   identity: "strike@example.com"
   trust:
-    mode: cert_fingerprint
+    type: certFingerprint
     fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 keyless:
   endpoints:
     fulcio:
       url: "https://fulcio.example:5555"
       trust:
-        mode: cert_fingerprint
+        type: certFingerprint
         fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
     rekor:
       url: "https://rekor.example:3003"
       trust:
-        mode: cert_fingerprint
+        type: certFingerprint
         fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
     tsa:
       url: "https://tsa.example:3004"
       trust:
-        mode: cert_fingerprint
+        type: certFingerprint
         fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 steps:
   - name: src

@@ -46,7 +46,7 @@ func unmarshalPeer(data []byte) (Peer, error) {
 }
 
 // unmarshalTLSTrust decodes a single trust JSON object into
-// the appropriate concrete branch type based on the "mode"
+// the appropriate concrete branch type based on the "type"
 // discriminator.
 func unmarshalTLSTrust(data []byte) (transport.TLSTrust, error) {
 	if len(data) == 0 || string(data) == jsonNull {
@@ -54,29 +54,29 @@ func unmarshalTLSTrust(data []byte) (transport.TLSTrust, error) {
 	}
 
 	var probe struct {
-		Mode string `json:"mode"`
+		Type string `json:"type"`
 	}
 	if err := json.Unmarshal(data, &probe); err != nil {
 		return nil, fmt.Errorf("trust: %w", err)
 	}
 
-	switch probe.Mode {
-	case "cert_fingerprint":
+	switch probe.Type {
+	case "certFingerprint":
 		var t transport.FingerprintTrust
 		if err := json.Unmarshal(data, &t); err != nil {
-			return nil, fmt.Errorf("decode cert_fingerprint trust: %w", err)
+			return nil, fmt.Errorf("decode certFingerprint trust: %w", err)
 		}
 		return t, nil
-	case "ca_bundle":
+	case "caBundle":
 		var t transport.CABundleTrust
 		if err := json.Unmarshal(data, &t); err != nil {
-			return nil, fmt.Errorf("decode ca_bundle trust: %w", err)
+			return nil, fmt.Errorf("decode caBundle trust: %w", err)
 		}
 		return t, nil
 	case "":
-		return nil, fmt.Errorf("trust missing mode discriminator")
+		return nil, fmt.Errorf("trust missing type discriminator")
 	default:
-		return nil, fmt.Errorf("unknown trust mode %q", probe.Mode)
+		return nil, fmt.Errorf("unknown trust type %q", probe.Type)
 	}
 }
 

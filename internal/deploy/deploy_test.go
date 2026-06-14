@@ -329,7 +329,7 @@ func TestDeployerExecute(t *testing.T) {
 						Name:    "version",
 						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 						Command: []string{"cat", "/version"},
-						Peers:   []lane.Peer{lane.HTTPSPeer{Type: "https", Host: "localhost:5555", Trust: transport.FingerprintTrust{Mode: "cert_fingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}},
+						Peers:   []lane.Peer{lane.HTTPSPeer{Type: "https", Host: "localhost:5555", Trust: transport.FingerprintTrust{Type: "certFingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}},
 					}},
 				},
 				PostState: lane.StateCaptureSpec{
@@ -337,7 +337,7 @@ func TestDeployerExecute(t *testing.T) {
 						Name:    "version",
 						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 						Command: []string{"cat", "/version"},
-						Peers:   []lane.Peer{lane.HTTPSPeer{Type: "https", Host: "localhost:5555", Trust: transport.FingerprintTrust{Mode: "cert_fingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}},
+						Peers:   []lane.Peer{lane.HTTPSPeer{Type: "https", Host: "localhost:5555", Trust: transport.FingerprintTrust{Type: "certFingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}},
 					}},
 				},
 			},
@@ -597,7 +597,7 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 						Name:    "version",
 						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 						Command: []string{"cat", "/version"},
-						Peers:   []lane.Peer{lane.HTTPSPeer{Type: "https", Host: "localhost:5555", Trust: transport.FingerprintTrust{Mode: "cert_fingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}},
+						Peers:   []lane.Peer{lane.HTTPSPeer{Type: "https", Host: "localhost:5555", Trust: transport.FingerprintTrust{Type: "certFingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}},
 					}},
 				},
 				PostState: lane.StateCaptureSpec{
@@ -605,7 +605,7 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 						Name:    "version",
 						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 						Command: []string{"cat", "/version"},
-						Peers:   []lane.Peer{lane.HTTPSPeer{Type: "https", Host: "localhost:5555", Trust: transport.FingerprintTrust{Mode: "cert_fingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}},
+						Peers:   []lane.Peer{lane.HTTPSPeer{Type: "https", Host: "localhost:5555", Trust: transport.FingerprintTrust{Type: "certFingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}},
 					}},
 				},
 			},
@@ -1187,7 +1187,7 @@ func deployStep() *lane.Step {
 						Name:    "version",
 						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 						Command: []string{"cat", "/version"},
-						Peers:   []lane.Peer{lane.HTTPSPeer{Type: "https", Host: "localhost:5555", Trust: transport.FingerprintTrust{Mode: "cert_fingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}},
+						Peers:   []lane.Peer{lane.HTTPSPeer{Type: "https", Host: "localhost:5555", Trust: transport.FingerprintTrust{Type: "certFingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}},
 					}},
 				},
 				PostState: lane.StateCaptureSpec{
@@ -1195,7 +1195,7 @@ func deployStep() *lane.Step {
 						Name:    "version",
 						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 						Command: []string{"cat", "/version"},
-						Peers:   []lane.Peer{lane.HTTPSPeer{Type: "https", Host: "localhost:5555", Trust: transport.FingerprintTrust{Mode: "cert_fingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}},
+						Peers:   []lane.Peer{lane.HTTPSPeer{Type: "https", Host: "localhost:5555", Trust: transport.FingerprintTrust{Type: "certFingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}},
 					}},
 				},
 			},
@@ -1248,7 +1248,7 @@ func TestDeployerExecute_ObservedPeersPopulated(t *testing.T) {
 		Type: "https",
 		Host: "api.example.com:443",
 		Trust: transport.FingerprintTrust{
-			Mode:        "cert_fingerprint",
+			Type:        "certFingerprint",
 			Fingerprint: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		},
 	}
@@ -1406,7 +1406,7 @@ func TestDeployerExecute_ObservedPeersConflictAborts(t *testing.T) {
 		Type: "https",
 		Host: "api.example.com:443",
 		Trust: transport.FingerprintTrust{
-			Mode:        "cert_fingerprint",
+			Type:        "certFingerprint",
 			Fingerprint: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		},
 	}
@@ -1414,7 +1414,7 @@ func TestDeployerExecute_ObservedPeersConflictAborts(t *testing.T) {
 		Type: "https",
 		Host: "api.example.com:443",
 		Trust: transport.FingerprintTrust{
-			Mode:        "cert_fingerprint",
+			Type:        "certFingerprint",
 			Fingerprint: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		},
 	}

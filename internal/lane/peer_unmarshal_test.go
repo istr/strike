@@ -22,7 +22,7 @@ func TestUnmarshalPeer_Discriminator(t *testing.T) {
 				"type": "https",
 				"host": "example.com",
 				"trust": {
-					"mode": "cert_fingerprint",
+					"type": "certFingerprint",
 					"fingerprint": "sha256:` + strings.Repeat("a", 64) + `"
 				}
 			}`,
@@ -38,18 +38,18 @@ func TestUnmarshalPeer_Discriminator(t *testing.T) {
 				if !ok {
 					t.Fatalf("Trust type = %T, want FingerprintTrust", h.Trust)
 				}
-				if ft.Mode != "cert_fingerprint" {
-					t.Errorf("Trust.Mode = %q, want cert_fingerprint", ft.Mode)
+				if ft.Type != "certFingerprint" {
+					t.Errorf("Trust.Type = %q, want certFingerprint", ft.Type)
 				}
 			},
 		},
 		{
-			name: "https with ca_bundle",
+			name: "https with caBundle",
 			input: `{
 				"type": "https",
 				"host": "internal.example",
 				"trust": {
-					"mode": "ca_bundle",
+					"type": "caBundle",
 					"path": "/etc/ssl/ca.pem"
 				}
 			}`,
@@ -110,13 +110,13 @@ func TestUnmarshalPeer_Discriminator(t *testing.T) {
 			wantErr: "trust required",
 		},
 		{
-			name: "https unknown trust mode",
+			name: "https unknown trust type",
 			input: `{
 				"type": "https",
 				"host": "example.com",
-				"trust": {"mode": "system_ca"}
+				"trust": {"type": "system_ca"}
 			}`,
-			wantErr: "unknown trust mode",
+			wantErr: "unknown trust type",
 		},
 	}
 
@@ -156,7 +156,7 @@ func TestStep_UnmarshalJSON_Peers(t *testing.T) {
 			{
 				"type": "https",
 				"host": "example.com",
-				"trust": {"mode": "cert_fingerprint", "fingerprint": "sha256:` + strings.Repeat("a", 64) + `"}
+				"trust": {"type": "certFingerprint", "fingerprint": "sha256:` + strings.Repeat("a", 64) + `"}
 			},
 			{
 				"type": "ssh",
@@ -194,7 +194,7 @@ func TestStep_RoundTrip(t *testing.T) {
 		"outputs": [],
 		"secrets": [],
 		"peers": [
-			{"type": "https", "host": "registry.example.com", "trust": {"mode": "cert_fingerprint", "fingerprint": "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}
+			{"type": "https", "host": "registry.example.com", "trust": {"type": "certFingerprint", "fingerprint": "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}
 		]
 	}`)
 

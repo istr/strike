@@ -15,31 +15,31 @@ secrets: {}
 resolver:
   host: "1.1.1.1:853"
   trust:
-    mode: cert_fingerprint
+    type: certFingerprint
     fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 oidc:
   issuer: "https://keycloak.127.0.0.1.sslip.io:8443/realms/sigstore"
   clientId: "sigstore"
   identity: "tester@strike.localhost"
   trust:
-    mode: ca_bundle
+    type: caBundle
     path: /etc/ssl/certs/caddy-root.crt
 keyless:
   endpoints:
     fulcio:
       url: "https://fulcio.127.0.0.1.sslip.io:5555"
       trust:
-        mode: ca_bundle
+        type: caBundle
         path: /etc/ssl/certs/caddy-root.crt
     rekor:
       url: "https://rekor.127.0.0.1.sslip.io:3003"
       trust:
-        mode: ca_bundle
+        type: caBundle
         path: /etc/ssl/certs/caddy-root.crt
     tsa:
       url: "https://tsa.127.0.0.1.sslip.io:3004"
       trust:
-        mode: ca_bundle
+        type: caBundle
         path: /etc/ssl/certs/caddy-root.crt
 steps:
   - name: build

@@ -157,7 +157,7 @@ func TestLookupHost_HappyPath(t *testing.T) {
 	decl := transport.DNSResolver{
 		Host: transport.Host(addr),
 		Trust: transport.FingerprintTrust{
-			Mode:        "cert_fingerprint",
+			Type:        "certFingerprint",
 			Fingerprint: fingerprint,
 		},
 	}
@@ -181,7 +181,7 @@ func TestLookupHost_FingerprintMismatch(t *testing.T) {
 	decl := transport.DNSResolver{
 		Host: transport.Host(addr),
 		Trust: transport.FingerprintTrust{
-			Mode:        "cert_fingerprint",
+			Type:        "certFingerprint",
 			Fingerprint: "sha256:" + strings.Repeat("0", 64),
 		},
 	}
@@ -200,7 +200,7 @@ func TestLookupHost_ServerUnreachable(t *testing.T) {
 	decl := transport.DNSResolver{
 		Host: "127.0.0.1:1",
 		Trust: transport.FingerprintTrust{
-			Mode:        "cert_fingerprint",
+			Type:        "certFingerprint",
 			Fingerprint: "sha256:" + strings.Repeat("a", 64),
 		},
 	}
@@ -218,7 +218,7 @@ func TestProbeResolver_HappyPath(t *testing.T) {
 	decl := transport.DNSResolver{
 		Host: transport.Host(addr),
 		Trust: transport.FingerprintTrust{
-			Mode:        "cert_fingerprint",
+			Type:        "certFingerprint",
 			Fingerprint: fingerprint,
 		},
 	}
@@ -242,7 +242,7 @@ func TestProbeResolver_FingerprintMismatch(t *testing.T) {
 	decl := transport.DNSResolver{
 		Host: transport.Host(addr),
 		Trust: transport.FingerprintTrust{
-			Mode:        "cert_fingerprint",
+			Type:        "certFingerprint",
 			Fingerprint: "sha256:" + strings.Repeat("0", 64),
 		},
 	}
@@ -259,7 +259,7 @@ func TestProbeResolver_NoResponse(t *testing.T) {
 	decl := transport.DNSResolver{
 		Host: transport.Host(addr),
 		Trust: transport.FingerprintTrust{
-			Mode:        "cert_fingerprint",
+			Type:        "certFingerprint",
 			Fingerprint: fingerprint,
 		},
 	}
@@ -281,7 +281,7 @@ func TestProbeResolver_ErrorChainHasNoSystemResolverReference(t *testing.T) {
 	decl := transport.DNSResolver{
 		Host: "127.0.0.1:1",
 		Trust: transport.FingerprintTrust{
-			Mode:        "cert_fingerprint",
+			Type:        "certFingerprint",
 			Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000",
 		},
 	}

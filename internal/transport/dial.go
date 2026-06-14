@@ -119,7 +119,7 @@ func BuildTLSConfig(trust TLSTrust) (*tls.Config, error) {
 		}
 		config.RootCAs = pool
 	default:
-		return nil, fmt.Errorf("transport: unknown trust mode: %T", trust)
+		return nil, fmt.Errorf("transport: unknown trust type: %T", trust)
 	}
 	return config, nil
 }

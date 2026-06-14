@@ -78,7 +78,7 @@ func testCertPair(t *testing.T, hosts ...string) (*tls.Certificate, string) {
 
 // testCAAndServerCert generates a test CA and a server cert
 // signed by it. Returns the server tls.Certificate and the CA
-// cert in PEM form ready to write to disk for ca_bundle testing.
+// cert in PEM form ready to write to disk for caBundle testing.
 func testCAAndServerCert(t *testing.T, hosts ...string) (*tls.Certificate, []byte) {
 	t.Helper()
 
@@ -179,7 +179,7 @@ func TestDialVerified_FingerprintMatch(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
 	defer cancel()
 	trust := transport.FingerprintTrust{
-		Mode:        "cert_fingerprint",
+		Type:        "certFingerprint",
 		Fingerprint: fingerprint,
 	}
 	conn, err := transport.DialVerified(ctx, addr, trust)
@@ -208,7 +208,7 @@ func TestDialVerified_FingerprintMismatch(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
 	defer cancel()
 	trust := transport.FingerprintTrust{
-		Mode:        "cert_fingerprint",
+		Type:        "certFingerprint",
 		Fingerprint: "sha256:" + strings.Repeat("0", 64),
 	}
 	_, err := transport.DialVerified(ctx, addr, trust)
@@ -236,7 +236,7 @@ func TestDialVerified_CABundleValid(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
 	defer cancel()
 	trust := transport.CABundleTrust{
-		Mode: "ca_bundle",
+		Type: "caBundle",
 		Path: caPath,
 	}
 	conn, err := transport.DialVerified(ctx, addr, trust)
@@ -270,7 +270,7 @@ func TestDialVerified_CABundleWrongCA(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
 	defer cancel()
 	trust := transport.CABundleTrust{
-		Mode: "ca_bundle",
+		Type: "caBundle",
 		Path: caPath,
 	}
 	_, err := transport.DialVerified(ctx, addr, trust)
@@ -292,7 +292,7 @@ func TestDialVerified_TLS12Accepted(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
 	defer cancel()
 	trust := transport.FingerprintTrust{
-		Mode:        "cert_fingerprint",
+		Type:        "certFingerprint",
 		Fingerprint: fingerprint,
 	}
 	conn, err := transport.DialVerified(ctx, addr, trust)
@@ -317,7 +317,7 @@ func TestDialVerified_TLS11Rejected(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
 	defer cancel()
 	trust := transport.FingerprintTrust{
-		Mode:        "cert_fingerprint",
+		Type:        "certFingerprint",
 		Fingerprint: fingerprint,
 	}
 	_, err := transport.DialVerified(ctx, addr, trust)
@@ -328,7 +328,7 @@ func TestDialVerified_TLS11Rejected(t *testing.T) {
 
 type fakeTrust struct{}
 
-func (fakeTrust) TrustMode() string { return "fake" }
+func (fakeTrust) TrustType() string { return "fake" }
 
 func TestBuildTLSConfig_UnknownTrust(t *testing.T) {
 	_, err := transport.BuildTLSConfig(fakeTrust{})
@@ -385,7 +385,7 @@ func TestDialVerified_SNIForFQDN(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
 	defer cancel()
 	trust := transport.FingerprintTrust{
-		Mode:        "cert_fingerprint",
+		Type:        "certFingerprint",
 		Fingerprint: fingerprint,
 	}
 	conn, err := transport.DialVerified(ctx, addr, trust)
@@ -420,7 +420,7 @@ func TestDialVerified_NoSNIForIPLiteral(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
 	defer cancel()
 	trust := transport.FingerprintTrust{
-		Mode:        "cert_fingerprint",
+		Type:        "certFingerprint",
 		Fingerprint: fingerprint,
 	}
 	conn, err := transport.DialVerified(ctx, addr, trust)

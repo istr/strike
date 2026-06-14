@@ -7,24 +7,24 @@ oidc:
   clientId: "strike"
   identity: "strike@example.com"
   trust:
-    mode: cert_fingerprint
+    type: certFingerprint
     fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 keyless:
   endpoints:
     fulcio:
       url: "https://fulcio.example:5555"
       trust:
-        mode: cert_fingerprint
+        type: certFingerprint
         fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
     rekor:
       url: "https://rekor.example:3003"
       trust:
-        mode: cert_fingerprint
+        type: certFingerprint
         fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
     tsa:
       url: "https://tsa.example:3004"
       trust:
-        mode: cert_fingerprint
+        type: certFingerprint
         fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 steps:
   - name: fetch
@@ -42,5 +42,5 @@ steps:
       - type: https
         host: example.com
         trust:
-          mode: cert_fingerprint
+          type: certFingerprint
           fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000

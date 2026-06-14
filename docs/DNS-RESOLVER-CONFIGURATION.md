@@ -16,12 +16,12 @@ direction" are planned but not yet implemented.
     resolver:
       host: "1.1.1.1:853"
       trust:
-        mode: cert_fingerprint
+        mode: certFingerprint
         fingerprint: sha256:<obtain via openssl, see below>
 
 The `host` field is an IP literal (IPv4 or IPv6) with an
 explicit port. The `trust` field is the same
-`cert_fingerprint | ca_bundle` discriminated union used by
+`certFingerprint | caBundle` discriminated union used by
 HTTPS peers. FQDNs are rejected for the host: the resolver
 is itself the resolution authority and cannot resolve its
 own hostname before it can be reached. The rejection is
@@ -48,7 +48,7 @@ Example:
     resolver:
       host: "1.1.1.1:853"
       trust:
-        mode: cert_fingerprint
+        mode: certFingerprint
         fingerprint: sha256:<obtain via openssl, see below>
 
 ### Quad9
@@ -63,7 +63,7 @@ Example:
     resolver:
       host: "9.9.9.9:853"
       trust:
-        mode: cert_fingerprint
+        mode: certFingerprint
         fingerprint: sha256:<obtain via openssl, see below>
 
 ### Google Public DNS
@@ -78,7 +78,7 @@ Example:
     resolver:
       host: "8.8.8.8:853"
       trust:
-        mode: cert_fingerprint
+        mode: certFingerprint
         fingerprint: sha256:<obtain via openssl, see below>
 
 ## Self-hosted DoT resolver: IPFire
@@ -94,7 +94,7 @@ Example with a self-signed certificate:
     resolver:
       host: "192.168.10.1:853"
       trust:
-        mode: cert_fingerprint
+        mode: certFingerprint
         fingerprint: sha256:<obtain via openssl from the local resolver>
 
 Example with a CA-bundle-issued certificate (internal CA):
@@ -102,16 +102,16 @@ Example with a CA-bundle-issued certificate (internal CA):
     resolver:
       host: "192.168.10.1:853"
       trust:
-        mode: ca_bundle
+        mode: caBundle
         path: /etc/strike/internal-ca.pem
 
-The `ca_bundle` path is a container-internal path; the executor
+The `caBundle` path is a container-internal path; the executor
 mounts the lane-relative bundle file there. See ADR-028 for
 the mount mechanics (Phase 2).
 
 ## Obtaining a certificate fingerprint
 
-Strike's `cert_fingerprint` trust mode requires the SHA-256
+Strike's `certFingerprint` trust mode requires the SHA-256
 fingerprint of the resolver's TLS server certificate. Obtain
 it once via `openssl s_client`, then paste into the lane.
 
@@ -147,7 +147,7 @@ Re-run the openssl command and update the lane when:
   typically captures) rotate more often -- monthly to yearly.
 - The operator renews the self-hosted resolver's certificate.
 
-Use `ca_bundle` mode instead of fingerprint pinning if cert
+Use `caBundle` mode instead of fingerprint pinning if cert
 rotation cadence makes fingerprint maintenance burdensome.
 
 ## Probe behavior

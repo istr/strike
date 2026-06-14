@@ -20,27 +20,27 @@ type Host string
 // the generator skips it; this hand-written interface provides
 // the Go-side discriminated union.
 type TLSTrust interface {
-	// TrustMode returns the discriminator ("cert_fingerprint", "ca_bundle").
-	TrustMode() string
+	// TrustType returns the discriminator ("certFingerprint", "caBundle").
+	TrustType() string
 }
 
 // FingerprintTrust pins a peer's server certificate by SHA-256 fingerprint.
 type FingerprintTrust struct {
-	Mode        string `json:"mode"`
+	Type        string `json:"type"`
 	Fingerprint string `json:"fingerprint"`
 }
 
-// TrustMode implements TLSTrust.
-func (t FingerprintTrust) TrustMode() string { return t.Mode }
+// TrustType implements TLSTrust.
+func (t FingerprintTrust) TrustType() string { return t.Type }
 
 // CABundleTrust validates a peer's server certificate against a CA bundle.
 type CABundleTrust struct {
-	Mode string `json:"mode"`
+	Type string `json:"type"`
 	Path string `json:"path"`
 }
 
-// TrustMode implements TLSTrust.
-func (t CABundleTrust) TrustMode() string { return t.Mode }
+// TrustType implements TLSTrust.
+func (t CABundleTrust) TrustType() string { return t.Type }
 
 // DNSResolver declares the DoT resolver strike uses for all
 // peer hostname resolution within a lane run. Mandatory per

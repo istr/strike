@@ -407,9 +407,9 @@ func peerAnchor(peer Peer) string {
 	case HTTPSPeer:
 		switch t := x.Trust.(type) {
 		case transport.FingerprintTrust:
-			return "https/cert_fingerprint/" + t.Fingerprint
+			return "https/certFingerprint/" + t.Fingerprint
 		case transport.CABundleTrust:
-			return "https/ca_bundle/" + t.Path
+			return "https/caBundle/" + t.Path
 		default:
 			return "https/unknown"
 		}

@@ -74,7 +74,7 @@ secrets: {}
 resolver:
   host: "1.1.1.1:853"
   trust:
-    mode: cert_fingerprint
+    type: certFingerprint
     fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 steps:
   - name: build

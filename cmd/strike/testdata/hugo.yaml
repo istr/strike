@@ -5,31 +5,31 @@ secrets: {}
 resolver:
   host: "1.1.1.1:853"
   trust:
-    mode: cert_fingerprint
+    type: certFingerprint
     fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 oidc:
   issuer: "https://idp.example.com"
   clientId: "strike"
   identity: "strike@example.com"
   trust:
-    mode: cert_fingerprint
+    type: certFingerprint
     fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 keyless:
   endpoints:
     fulcio:
       url: "https://fulcio.example:5555"
       trust:
-        mode: cert_fingerprint
+        type: certFingerprint
         fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
     rekor:
       url: "https://rekor.example:3003"
       trust:
-        mode: cert_fingerprint
+        type: certFingerprint
         fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
     tsa:
       url: "https://tsa.example:3004"
       trust:
-        mode: cert_fingerprint
+        type: certFingerprint
         fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 steps:
   - name: source
@@ -40,7 +40,7 @@ steps:
       - type: https
         host: example.com
         trust:
-          mode: cert_fingerprint
+          type: certFingerprint
           fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
     env: {}
     inputs: []
@@ -59,7 +59,7 @@ steps:
       - type: https
         host: registry.npmjs.org
         trust:
-          mode: cert_fingerprint
+          type: certFingerprint
           fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
     env:
       npm_config_cache: /tmp/.npm

@@ -119,7 +119,7 @@ steps:
       - type: https
         host: example.com
         trust:
-          mode: cert_fingerprint
+          mode: certFingerprint
           fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
     outputs:
       - { name: tree, type: directory, path: /out/tree }

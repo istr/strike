@@ -342,7 +342,7 @@ func TestTwoCapsules_DistinctPorts(t *testing.T) {
 
 	peers := []mediator.PeerTrust{{
 		Host:  "example.com",
-		Trust: transport.FingerprintTrust{Mode: "fingerprint", Fingerprint: "sha256:aaaa"},
+		Trust: transport.FingerprintTrust{Type: "fingerprint", Fingerprint: "sha256:aaaa"},
 	}}
 
 	c1, err := capsule.New("step-a", ports["step-a"], peers, nil, 0, ca, testUpstream())
@@ -542,7 +542,7 @@ func TestCapsule_ResolverSynthesizesStepAddr(t *testing.T) {
 
 	peers := []mediator.PeerTrust{{
 		Host:  transport.Host(sni),
-		Trust: transport.FingerprintTrust{Mode: "cert_fingerprint", Fingerprint: "sha256:aaaa"},
+		Trust: transport.FingerprintTrust{Type: "certFingerprint", Fingerprint: "sha256:aaaa"},
 	}}
 
 	c, err := capsule.New("synth-step", hp, peers, nil, 0, ca, testUpstream())
@@ -645,7 +645,7 @@ func TestCapsule_DNSThenConnect_EndToEnd(t *testing.T) {
 	peers := []mediator.PeerTrust{{
 		Host: transport.Host(sni),
 		Trust: transport.FingerprintTrust{
-			Mode:        "cert_fingerprint",
+			Type:        "certFingerprint",
 			Fingerprint: fp,
 		},
 	}}
@@ -740,7 +740,7 @@ func TestCapsule_DeniedName_NXDOMAIN(t *testing.T) {
 
 	peers := []mediator.PeerTrust{{
 		Host:  "allowed.example",
-		Trust: transport.FingerprintTrust{Mode: "cert_fingerprint", Fingerprint: "sha256:aaaa"},
+		Trust: transport.FingerprintTrust{Type: "certFingerprint", Fingerprint: "sha256:aaaa"},
 	}}
 
 	c, err := capsule.New("deny-step", hp, peers, nil, 0, ca, testUpstream())
@@ -777,7 +777,7 @@ func TestCapsule_AAAA_AllowedName_Empty(t *testing.T) {
 
 	peers := []mediator.PeerTrust{{
 		Host:  transport.Host(sni),
-		Trust: transport.FingerprintTrust{Mode: "cert_fingerprint", Fingerprint: "sha256:aaaa"},
+		Trust: transport.FingerprintTrust{Type: "certFingerprint", Fingerprint: "sha256:aaaa"},
 	}}
 
 	c, err := capsule.New("aaaa-step", hp, peers, nil, 0, ca, testUpstream())

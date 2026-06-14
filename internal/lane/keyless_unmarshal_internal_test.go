@@ -6,7 +6,7 @@ import (
 )
 
 func TestUnmarshalKeyless(t *testing.T) {
-	const fp = `{"mode":"cert_fingerprint","fingerprint":"sha256:0000000000000000000000000000000000000000000000000000000000000000"}`
+	const fp = `{"type":"certFingerprint","fingerprint":"sha256:0000000000000000000000000000000000000000000000000000000000000000"}`
 	const eps = `"endpoints": {
 		"fulcio": {"url": "https://fulcio.example:5555", "trust": ` + fp + `},
 		"rekor":  {"url": "https://rekor.example:3003", "trust": ` + fp + `},
@@ -38,8 +38,8 @@ func TestUnmarshalKeyless(t *testing.T) {
 			"rekor":  {"url": "https://r.example", "trust": ` + fp + `},
 			"tsa":    {"url": "https://t.example", "trust": ` + fp + `}
 		}}`, wantErr: "keyless fulcio: trust required"},
-		{name: "unknown trust mode", in: `{"endpoints": {
-			"fulcio": {"url": "https://f.example", "trust": {"mode": "system_ca"}},
+		{name: "unknown trust type", in: `{"endpoints": {
+			"fulcio": {"url": "https://f.example", "trust": {"type": "system_ca"}},
 			"rekor":  {"url": "https://r.example", "trust": ` + fp + `},
 			"tsa":    {"url": "https://t.example", "trust": ` + fp + `}
 		}}`, wantErr: "keyless fulcio:"},
@@ -62,7 +62,7 @@ func TestUnmarshalKeyless(t *testing.T) {
 			if got.Endpoints.Fulcio.URL != "https://fulcio.example:5555" {
 				t.Errorf("fulcio url = %q", got.Endpoints.Fulcio.URL)
 			}
-			if got.Endpoints.TSA.Trust == nil || got.Endpoints.TSA.Trust.TrustMode() != "cert_fingerprint" {
+			if got.Endpoints.TSA.Trust == nil || got.Endpoints.TSA.Trust.TrustType() != "certFingerprint" {
 				t.Errorf("tsa trust not dispatched: %#v", got.Endpoints.TSA.Trust)
 			}
 			if tt.wantInline && (got.TrustRoot == nil || got.TrustRoot.MediaType != "x") {

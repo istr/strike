@@ -248,8 +248,8 @@ func TestNew_EmptyPeersIsValid(t *testing.T) {
 func TestNew_RejectsDuplicatePeer(t *testing.T) {
 	ca := newTestCA(t)
 	peers := []mediator.PeerTrust{
-		{Host: "example.com", Trust: transport.FingerprintTrust{Mode: "cert_fingerprint", Fingerprint: "sha256:aaa"}},
-		{Host: "example.com", Trust: transport.FingerprintTrust{Mode: "cert_fingerprint", Fingerprint: "sha256:bbb"}},
+		{Host: "example.com", Trust: transport.FingerprintTrust{Type: "certFingerprint", Fingerprint: "sha256:aaa"}},
+		{Host: "example.com", Trust: transport.FingerprintTrust{Type: "certFingerprint", Fingerprint: "sha256:bbb"}},
 	}
 	_, err := mediator.New("step", peers, ca, unreachableLookup())
 	if err == nil || !strings.Contains(err.Error(), "duplicate") {
@@ -260,8 +260,8 @@ func TestNew_RejectsDuplicatePeer(t *testing.T) {
 func TestNew_CanonicalizesPeerHosts(t *testing.T) {
 	ca := newTestCA(t)
 	peers := []mediator.PeerTrust{
-		{Host: "Example.COM", Trust: transport.FingerprintTrust{Mode: "cert_fingerprint", Fingerprint: "sha256:aaa"}},
-		{Host: "example.com.", Trust: transport.FingerprintTrust{Mode: "cert_fingerprint", Fingerprint: "sha256:bbb"}},
+		{Host: "Example.COM", Trust: transport.FingerprintTrust{Type: "certFingerprint", Fingerprint: "sha256:aaa"}},
+		{Host: "example.com.", Trust: transport.FingerprintTrust{Type: "certFingerprint", Fingerprint: "sha256:bbb"}},
 	}
 	_, err := mediator.New("step", peers, ca, unreachableLookup())
 	if err == nil || !strings.Contains(err.Error(), "duplicate") {
@@ -330,7 +330,7 @@ func TestServe_AllowedSNI_EndToEnd(t *testing.T) {
 
 	peers := []mediator.PeerTrust{
 		{Host: transport.Host(sni), Trust: transport.FingerprintTrust{
-			Mode:        "cert_fingerprint",
+			Type:        "certFingerprint",
 			Fingerprint: fp,
 		}},
 	}
@@ -383,7 +383,7 @@ func TestServe_DeniedSNI_HandshakeFails(t *testing.T) {
 
 	peers := []mediator.PeerTrust{
 		{Host: "allowed.example", Trust: transport.FingerprintTrust{
-			Mode: "cert_fingerprint", Fingerprint: "sha256:aaa",
+			Type: "certFingerprint", Fingerprint: "sha256:aaa",
 		}},
 	}
 
@@ -440,7 +440,7 @@ func TestServe_EmptySNI_Denied(t *testing.T) {
 
 	peers := []mediator.PeerTrust{
 		{Host: "allowed.example", Trust: transport.FingerprintTrust{
-			Mode: "cert_fingerprint", Fingerprint: "sha256:aaa",
+			Type: "certFingerprint", Fingerprint: "sha256:aaa",
 		}},
 	}
 
@@ -462,7 +462,7 @@ func TestServe_UpstreamLookupError(t *testing.T) {
 
 	peers := []mediator.PeerTrust{
 		{Host: transport.Host(sni), Trust: transport.FingerprintTrust{
-			Mode: "cert_fingerprint", Fingerprint: "sha256:aaa",
+			Type: "certFingerprint", Fingerprint: "sha256:aaa",
 		}},
 	}
 
@@ -501,7 +501,7 @@ func TestServe_UpstreamNoAddresses(t *testing.T) {
 
 	peers := []mediator.PeerTrust{
 		{Host: transport.Host(sni), Trust: transport.FingerprintTrust{
-			Mode: "cert_fingerprint", Fingerprint: "sha256:aaa",
+			Type: "certFingerprint", Fingerprint: "sha256:aaa",
 		}},
 	}
 
@@ -539,7 +539,7 @@ func TestServe_UpstreamDialFails(t *testing.T) {
 	// which should have no listener.
 	peers := []mediator.PeerTrust{
 		{Host: transport.Host(sni), Trust: transport.FingerprintTrust{
-			Mode: "cert_fingerprint", Fingerprint: "sha256:aaa",
+			Type: "certFingerprint", Fingerprint: "sha256:aaa",
 		}},
 	}
 
@@ -585,7 +585,7 @@ func TestServe_UpstreamHandshakeFails(t *testing.T) {
 
 	peers := []mediator.PeerTrust{
 		{Host: transport.Host(sni), Trust: transport.FingerprintTrust{
-			Mode:        "cert_fingerprint",
+			Type:        "certFingerprint",
 			Fingerprint: wrongFP,
 		}},
 	}
@@ -624,7 +624,7 @@ func TestServe_ConcurrentConnections(t *testing.T) {
 	// Tests concurrency safety under -race.
 	peers := []mediator.PeerTrust{
 		{Host: transport.Host(sni), Trust: transport.FingerprintTrust{
-			Mode: "cert_fingerprint", Fingerprint: "sha256:aaa",
+			Type: "certFingerprint", Fingerprint: "sha256:aaa",
 		}},
 	}
 

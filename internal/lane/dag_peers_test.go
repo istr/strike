@@ -15,7 +15,7 @@ func httpsPeer(host string) lane.Peer {
 		Type: "https",
 		Host: transport.Host(host),
 		Trust: transport.FingerprintTrust{
-			Mode:        "cert_fingerprint",
+			Type:        "certFingerprint",
 			Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000",
 		},
 	}

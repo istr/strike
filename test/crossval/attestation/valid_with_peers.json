@@ -22,7 +22,7 @@
               "type": "https",
               "host": "api.example.com",
               "trust": {
-                "mode": "cert_fingerprint",
+                "type": "certFingerprint",
                 "fingerprint": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
               }
             }

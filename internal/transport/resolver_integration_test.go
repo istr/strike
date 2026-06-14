@@ -28,7 +28,7 @@ func TestProbeResolver_CloudflareDoT_INTEGRATION(t *testing.T) {
 	decl := transport.DNSResolver{
 		Host: "1.1.1.1:853",
 		Trust: transport.FingerprintTrust{
-			Mode:        "cert_fingerprint",
+			Type:        "certFingerprint",
 			Fingerprint: fingerprint,
 		},
 	}

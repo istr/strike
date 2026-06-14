@@ -164,7 +164,7 @@ func TestExecute_WithoutSSHPeer(t *testing.T) {
 					Type: "https",
 					Host: transport.Host("api.example.com"),
 					Trust: transport.FingerprintTrust{
-						Mode:        "cert_fingerprint",
+						Type:        "certFingerprint",
 						Fingerprint: "sha256:abc",
 					},
 				},

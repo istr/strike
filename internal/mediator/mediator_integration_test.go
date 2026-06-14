@@ -30,7 +30,7 @@ func TestMediator_CloudflareHTTPS_INTEGRATION(t *testing.T) {
 	dotDecl := transport.DNSResolver{
 		Host: "1.1.1.1:853",
 		Trust: transport.FingerprintTrust{
-			Mode:        "cert_fingerprint",
+			Type:        "certFingerprint",
 			Fingerprint: dotFingerprint,
 		},
 	}
@@ -48,7 +48,7 @@ func TestMediator_CloudflareHTTPS_INTEGRATION(t *testing.T) {
 		{
 			Host: "one.one.one.one",
 			Trust: transport.FingerprintTrust{
-				Mode:        "cert_fingerprint",
+				Type:        "certFingerprint",
 				Fingerprint: httpsFingerprint,
 			},
 		},

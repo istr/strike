@@ -25,20 +25,20 @@ package lane
 // store is explicitly not an option (deferred per ADR-021); all
 // trust is per-peer-declared.
 //
-// The discriminator is `mode`. Cross-implementation readers can
-// dispatch on `mode` without parsing the rest of the object.
+// The discriminator is `type`. Cross-implementation readers can
+// dispatch on `type` without parsing the rest of the object.
 // ----------------------------------------------------------------
 #TLSTrust: (#FingerprintTrust | #CABundleTrust) @go(-)
 
 #FingerprintTrust: {
 	@go(-)
-	mode:        "cert_fingerprint"
+	type:        "certFingerprint"
 	fingerprint: =~"^sha256:[a-f0-9]{64}$"
 }
 
 #CABundleTrust: {
 	@go(-)
-	mode: "ca_bundle"
+	type: "caBundle"
 	// path is a container-internal path. The executor mounts the lane-
 	// relative bundle file there in Phase 2; in Phase 1 the field is
 	// declaratory only.
@@ -52,7 +52,7 @@ package lane
 // under the top-level `resolver:` field of #Lane. The resolver
 // is treated as a peer in the same trust sense as any HTTPS peer
 // (per ADR-028): the lane author supplies a TLS trust anchor
-// (`cert_fingerprint` or `ca_bundle`), the controller verifies
+// (`certFingerprint` or `caBundle`), the controller verifies
 // the resolver's TLS identity on the first handshake of a lane
 // run, and that identity flows into the deploy attestation.
 //

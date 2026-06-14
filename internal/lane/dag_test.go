@@ -642,8 +642,8 @@ func TestBuild_PeerAnchorConflict(t *testing.T) {
 		},
 	}
 
-	fpA := transport.FingerprintTrust{Mode: "cert_fingerprint", Fingerprint: "sha256:" + strings.Repeat("a", 64)}
-	fpB := transport.FingerprintTrust{Mode: "cert_fingerprint", Fingerprint: "sha256:" + strings.Repeat("b", 64)}
+	fpA := transport.FingerprintTrust{Type: "certFingerprint", Fingerprint: "sha256:" + strings.Repeat("a", 64)}
+	fpB := transport.FingerprintTrust{Type: "certFingerprint", Fingerprint: "sha256:" + strings.Repeat("b", 64)}
 
 	httpsStep := func(name, host string, tr transport.TLSTrust) lane.Step {
 		return lane.Step{
