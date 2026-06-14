@@ -73,7 +73,9 @@ distinct:
   scope-marked otherwise), matching `README.md` and the soundness note's
   commitment 1.
 
-## Open arcs (recommended order)
+## Open arcs
+
+Execute in the order documented in ROADMAP-STATUS.md.
 
 ### 1. D-D field-add -- engine-cert subject / issuer into `#EngineConnection`
 
@@ -96,7 +98,7 @@ At-tree state verified at `8721d0ff`; B-1 is done, the rest pending.
 
 | ID | Finding | At-tree state |
 |----|---------|---------------|
-| B-2 | `gitCommit` canonical width | Pending. `predicate.cue` `gitCommit` is 40-hex only; `source-provenance.cue` `commit` allows 40 or 64. Divergent. |
+| B-2 | `gitCommit` canonical width | Landed. `predicate.cue` `gitCommit` widened to 40-or-64, matching `source-provenance.cue` `commit`. |
 | B-3 | `#Subject` should reuse `#ResourceDescriptor` (remove bespoke type) | Pending. Both still defined separately in `predicate.cue` (l.41 vs l.50). |
 | B-4 | `id` / `name` normalization (stop overloading `name`) | Pending; re-survey at write time. |
 | B-5 | Unify producer refs on `#OutputRef`; reconcile `from` / `source` | Pending. Both still used in `lane.cue` (l.190 / 314 / 380 / 397 / 440). |
@@ -105,7 +107,8 @@ At-tree state verified at `8721d0ff`; B-1 is done, the rest pending.
 | B-8 | Apply `#AbsPath` / `#RelPath` consistently or comment opaque path fields | Partial. Types exist and are applied in places; audit coverage at write time. |
 | B-9 | P3 polish: `#SignerIdentity` dedup, `clientId` -> `audience`, `trustRootRef` `@go` symmetry, default-disjunction order | Pending. |
 
-Recommended D-F order: B-2, B-3, B-6, B-7 first (single-concern schema fixes),
+Execute in the order documented in ROADMAP-STATUS.md:
+B-2, B-3, B-6, B-7 first (single-concern schema fixes),
 then B-4 / B-5 (naming, broader blast radius), then B-8 / B-9 (polish). Each is
 its own PR per the ratification.
 
