@@ -124,6 +124,39 @@ choice. This is the same invariant `AGENTS.md` and `CONTRIBUTING.md`
 state for the codebase, applied to the authoring step: the decision is
 made by the operator, not discovered by the agent mid-edit.
 
+## Planning state lives in a roadmap, never in the chat
+
+The analysis model tracks planning state through exactly one mechanism: a
+checked-in `docs/ROADMAP-*.md` file. There is no second place. The moment a
+planning effort needs structure -- a numbered sequence of arcs, a status
+table, a checklist of findings, a "landed vs open" ledger, or any other
+tracking scheme -- that structure is authored into an existing or a new
+`docs/ROADMAP-*.md`, not maintained in the conversation. Planning that lives
+only in the chat transcript, in a handover note, or in an upload is not
+tracked; it is in flight and one compaction away from loss.
+
+A roadmap is a working document with a lifecycle, not a permanent record. It
+is created when an arc of work is large enough to outlive a single session,
+updated in place as items land, and removed with `git rm` once every item it
+tracks has landed or moved to its own roadmap. This is the complement of the
+ADR convention's archival rule for completed roadmaps: the roadmap is not only
+where finished planning is retired, it is where planning is born -- nothing is
+tracked anywhere else first.
+
+Handover notes and retrospectives may summarize a roadmap and point at it, but
+they do not own the tracking. When a handover or a chat starts enumerating open
+work under its own labels, that is the signal a roadmap is missing or stale, and
+the fix is to write it into the roadmap -- not to let the labels accrete in
+prose. This is the same single-sourcing the product applies to meaning: the
+roadmap is the one definition of what is planned, and every other document
+refers to it rather than restating it.
+
+The cost of getting this wrong has already been paid: a context compaction that
+blurred an iterative arc sequence, leaving a handover to reconstruct
+landed-vs-open state from a transcript because it had never been committed to a
+roadmap. A roadmap is grounded, diffable, reviewable in a PR, and survives the
+session boundary; a chat-resident plan is none of these.
+
 ## Anti-initiative is structural, not advisory
 
 General-purpose models exhibit a documented bias toward doing more than

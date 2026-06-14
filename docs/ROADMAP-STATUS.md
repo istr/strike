@@ -1,6 +1,6 @@
 # Strike Roadmap Status Summary
 
-**As of 2026-06-13**, the repository is at a major inflection point: the core
+**As of 2026-06-14**, the repository is at a major inflection point: the core
 verification engine is complete and wrapped in a lane-aware CLI (`strike
 verify`, UC1 and UC2, with per-layer predicate validation and V/E gating). This
 document provides a snapshot of the status of all active roadmaps.
@@ -13,6 +13,7 @@ document provides a snapshot of the status of all active roadmaps.
 | [ROADMAP-ADR-040](ROADMAP-ADR-040.md) | SUBSTANTIALLY COMPLETE | Instructions 1--4 done (OIDC schema, SBOM, keyless signing, OCI referrers, control-plane push). Instruction 5a (verify core) done; 5b (CLI exposure) landed via ADR-041. |
 | [ROADMAP-ADR-041](ROADMAP-ADR-041.md) | SUBSTANTIALLY COMPLETE | Foundation plus instructions 1--3 (CLI subcommand, lane-policy integration, predicate validation and V/E gating) landed. Deferred: v1-verifier teardown, base-SBOM signature verification. |
 | [ROADMAP-sigstore-test-harness](ROADMAP-sigstore-test-harness.md) | H1 DONE, H2 PENDING | Stack-up and trust-anchor export complete. WebAuthn/FIDO2 (H2) remains. |
+| [ROADMAP-cue-spec-review](ROADMAP-cue-spec-review.md) | OPEN | Post-formalization D-arcs. Landed: A, D-A, D-C, D-D formalization, D-E, C-5, B-1, C-3. Open: D-B+D-G (canonical-time + principle), D-D field-add, D-F (B-2--B-9). |
 
 ## Narrative summary
 
@@ -107,6 +108,21 @@ live keyless chain and provides the local trust roots for verification.
 - **H2 (WebAuthn/FIDO2):** Open. Identity hardware-gated at the IdP;
   unblocks the real identity-gated producer path.
 
+### CUE spec review (post-formalization D-arcs, OPEN)
+
+Tracked in [ROADMAP-cue-spec-review](ROADMAP-cue-spec-review.md). The arcs
+derived from `RETROSPECTIVE-cue-spec-review.md` are partly landed at `8721d0ff`:
+cluster A (docs), D-A (keyed signing + Rekor v1 removal, ADR-043), D-C
+(`engineMetadata` -> informational), the D-D trust-boundary formalization, D-E
+(Bundle/DSSE in CUE), C-5, B-1, and C-3. Three arcs remain: D-B+D-G
+(canonical-time correction to RFC3161 TSA plus the "Meaning is single-sourced"
+principle and the aim-sentence qualification, operator-owned), the D-D field-add
+(engine-cert subject/issuer into `#EngineConnection` at layer V), and the D-F
+queue (schema-naming findings B-2--B-9, one instruction each). The deferred set
+(base-SBOM signature verification, engine hardening, DNS centralization, full
+TLS demux, the osv-scalibr PR, and the `TestPackSBOM/deterministic_sbom` flake)
+is carried in that roadmap.
+
 ## Key completions and implications
 
 1. **Keyless externalization is complete.** The v1 operator-key artifact
@@ -148,3 +164,4 @@ goldens. Remaining work is deferred beyond this arc: the v1-verifier teardown
 - [ROADMAP-ADR-040](ROADMAP-ADR-040.md) -- Substantially complete
 - [ROADMAP-ADR-041](ROADMAP-ADR-041.md) -- Substantially complete
 - [ROADMAP-sigstore-test-harness](ROADMAP-sigstore-test-harness.md) -- H1 done, H2 pending
+- [ROADMAP-cue-spec-review](ROADMAP-cue-spec-review.md) -- Open (D-B+D-G, D-D field-add, D-F: B-2--B-9)
