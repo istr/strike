@@ -19,7 +19,7 @@ package lane
 	// Stable identifier assigned at authoring time. Used by external
 	// verifiers to pair attestations against the same lane across runs.
 	// Distinct from `name`, which is human-display.
-	laneId:   =~"^[a-z0-9][a-z0-9-]{0,62}$"                                           @go(LaneID)
+	laneId:   #Identifier                                                             @go(LaneID,type=string)
 	registry: string & =~"^[a-z0-9]([a-z0-9.-]*[a-z0-9])?(:[0-9]+)?(/[a-z0-9._-]+)*$" @go(Registry)
 	secrets: {
 		[Name=string]: #SecretSource @go(Secrets)
@@ -124,6 +124,12 @@ package lane
 
 // RelPath is a canonical relative path (no leading "/").
 #RelPath: #Path & =~"^[^/]"
+
+// #Identifier is a stable, cross-referenceable entity id. The grammar is the
+// RFC 1123 DNS label (lowercase alphanumeric and '-', start and end
+// alphanumeric, at most 63 chars) so an id is usable verbatim as a Kubernetes
+// resource name, an OCI tag component, and a DNS label.
+#Identifier: =~"^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$"
 
 // ---------------------------------------------------------------------------
 // Step -- the union type
@@ -403,7 +409,7 @@ package lane
 	// Stable identifier assigned at authoring time. External verifiers use
 	// this to pair pre/post-state digests across consecutive deploys
 	// to the same target.
-	id:          =~"^[a-z0-9][a-z0-9-]{0,62}$" @go(ID)
+	id:          #Identifier                    @go(ID,type=string)
 	type:        string                        @go(Type)
 	description: string                        @go(Description)
 	url?:        string                        @go(URL,optional=nillable)

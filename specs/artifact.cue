@@ -15,6 +15,7 @@ import "github.com/istr/strike/specs:lane"
 // remains self-contained for external verifiers (ADR-004).
 #Digest:           lane.#Digest
 #AbsPath:          lane.#AbsPath
+#Identifier:       lane.#Identifier
 #ProvenanceRecord: lane.#ProvenanceRecord
 #DeployTarget:     lane.#DeployTarget
 #Peer:             lane.#Peer

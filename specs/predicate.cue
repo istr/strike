@@ -86,7 +86,7 @@ package deploy
 // identities the control plane observed and validated against the declared
 // anchors -- all control-plane-established, sound without engine trust.
 #StrikeExternalParameters: {
-	laneId:     =~"^[a-z0-9][a-z0-9-]{0,62}$"
+	laneId:     #Identifier
 	laneDigest: #Digest | ""
 	target:     #DeployTarget
 	oidc:       #ProvenanceOIDC

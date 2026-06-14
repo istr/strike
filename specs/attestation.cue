@@ -67,7 +67,7 @@ package deploy
 // Sealed -- CP-bound claims, sound under both trust(E) and ~trust(E).
 #Sealed: {
 	// laneId is the stable identifier from the lane definition.
-	laneId: =~"^[a-z0-9][a-z0-9-]{0,62}$"
+	laneId: #Identifier
 
 	// target describes what was deployed to. Declared, lane-anchored.
 	target: #DeployTarget
