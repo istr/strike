@@ -9,15 +9,15 @@ document provides a snapshot of the status of all active roadmaps.
 
 | Roadmap | Status | Notes |
 |---------|--------|-------|
-| [ROADMAP-ADR-038](ROADMAP-ADR-038.md) | COMPLETE (+ dependency unblocked) | Protocol-mediated SSH; control-plane front; all items 1--9 complete. ADR-040 keyless unblocks remote-front exposure. |
+| [ROADMAP-ADR-038](ROADMAP-ADR-038.md) | PARTIAL (1--7 done; 8--9 remain) | Protocol-mediated SSH; control-plane front. Items 8 (DoT resolver + TLS mediator rehosting onto the front) and 9 (SSH-mediated per-connection records) remain. Remote-front exposure unblocked by ADR-040 keyless. |
 | [ROADMAP-ADR-040](ROADMAP-ADR-040.md) | SUBSTANTIALLY COMPLETE | Instructions 1--4 done (OIDC schema, SBOM, keyless signing, OCI referrers, control-plane push). Instruction 5a (verify core) done; 5b (CLI exposure) landed via ADR-041. |
-| [ROADMAP-ADR-041](ROADMAP-ADR-041.md) | SUBSTANTIALLY COMPLETE | Foundation plus instructions 1--3 (CLI subcommand, lane-policy integration, predicate validation and V/E gating) landed. Deferred: v1-verifier teardown, base-SBOM signature verification. |
+| [ROADMAP-ADR-041](ROADMAP-ADR-041.md) | SUBSTANTIALLY COMPLETE | Foundation plus instructions 1--3 (CLI subcommand, lane-policy integration, predicate validation and V/E gating) landed. Genuine residual: trust-root auto-import from OCI referrers (currently fail-closed). |
 | [ROADMAP-sigstore-test-harness](ROADMAP-sigstore-test-harness.md) | H1 DONE, H2 PENDING | Stack-up and trust-anchor export complete. WebAuthn/FIDO2 (H2) remains. |
 | [ROADMAP-cue-spec-review](ROADMAP-cue-spec-review.md) | OPEN | Post-formalization D-arcs. Landed: A, D-A, D-C, D-D formalization, D-E, C-5, B-1, C-3. Open: D-B+D-G (canonical-time + principle), D-D field-add, D-F (B-2--B-9). |
 
 ## Narrative summary
 
-### ADR-038: Protocol-mediated SSH (COMPLETE)
+### ADR-038: Protocol-mediated SSH (PARTIAL)
 
 Items 1--7 (control-plane front, STRIKE_PEER token, SSH server/client,
 command allowlist, per-step capsule context, in-container agent removal,
@@ -88,13 +88,15 @@ A new ADR that reframes verification around two use cases:
 - Instruction 3: Per-layer predicate validation and V/E trust-mode gating
   (`--no-engine-trust`), over the enriched goldens (instruction 3a).
 
-**Deferred:** the v1-verifier teardown (ADR-040 5c) and base-SBOM signature
-verification (ADR-040 2c). Triage still open: the Go engine-context
-`ConnectionInfo` emits `serverCertSubject`, `serverCertIssuer`, and
-`clientCertSubject`, which the closed CUE `#EngineConnection` does not declare.
-No current break (the sealed projection drops them via Go-field copy). Decide:
-promote them into `#EngineConnection` if they should be sealed, or document them
-as diagnostic-only.
+**Genuine residual (this roadmap):** trust-root auto-import from OCI referrers.
+When the lane declares no trust root and no `--trust-root` is passed, verify is
+fail-closed (`internal/verify.ErrNoTrustRoot`); deriving the trust root from the
+image's referrers is a future enhancement, not a regression.
+
+**Tracked elsewhere (not this roadmap):** base-SBOM signature verification lives
+in ROADMAP-ADR-040 (instruction 2c); the engine-cert subject/issuer field-add
+lives in ROADMAP-cue-spec-review (D-D field-add). The v1-verifier teardown is
+complete -- the keyed path is gone from non-test code.
 
 ### Sigstore-local test harness (H1 DONE)
 
@@ -143,19 +145,62 @@ is carried in that roadmap.
    layer is a third referrer. Verification can gate per-layer based on trust
    mode.
 
-## Sequencing -- complete
+## Execution order (cross-roadmap)
 
-The ADR-041 verify arc is landed:
-1. Lane schema for `#TrustRoot` (digest-pinned reference + inline override)
-2. `strike verify` subcommand with UC1 (explicit parameters) and UC2 (lane as
-   policy) paths
-3. `internal/verify.Verifier` integrated into the command handler
+This is the single source for the cross-roadmap execution order. It groups the
+open work from every roadmap into phases by dependency and risk; each item
+points to the roadmap that owns its detail. Re-sort this section as priorities
+change -- the per-roadmap detail stays in the owning roadmaps, only the ordering
+lives here.
 
-The basic path (bundle read, trust-root resolution, keyless verify per bundle,
-subject-digest check) and instruction 3 (per-layer predicate validation, V/E
-trust-mode gating, and the lane-digest binding) are landed over the enriched
-goldens. Remaining work is deferred beyond this arc: the v1-verifier teardown
-(ADR-040 5c) and base-SBOM signature verification (ADR-040 2c).
+The only hard cross-roadmap dependency is the engine/transport chain in
+Phase 3: the D-D field-add records the engine-cert fields at Layer V and is the
+precursor the engine-hardening arc builds on, which in turn gates the
+front-rehosting and the remote-engine horizon. Everything else is independent
+and parallelizable.
+
+**Phase 0 -- roadmap truth and the order itself (docs only).** Reconcile the
+stale subsections so planning state is accurate, rehome cross-roadmap references
+to a single owner, and install this section. (This phase.)
+
+**Phase 1 -- contract hygiene (low risk, parallelizable).**
+- D-B+D-G: canonical-time correction (RFC3161 TSA) plus the "Meaning is
+  single-sourced" principle and the aim-sentence qualification. Operator-owned,
+  docs only, first. (ROADMAP-cue-spec-review)
+- D-F B-2..B-9: schema-naming findings, one instruction each, order B-2, B-3,
+  B-6, B-7 -> B-4, B-5 -> B-8, B-9. (ROADMAP-cue-spec-review)
+- D-D field-add: engine-cert subject/issuer into `#EngineConnection` at Layer V;
+  CUE-first gate. Lands here and unlocks Phase 3. (ROADMAP-cue-spec-review)
+
+**Phase 2 -- verification completeness.**
+- Base-SBOM signature verification (2c), unblocked by the verify core.
+  (ROADMAP-ADR-040)
+- cosign independent-verify conformance check: the "offline-verifiable without
+  contacting strike" promise under independent tooling.
+  (ROADMAP-sigstore-test-harness)
+- Trust-root auto-import from OCI referrers, lifting the current fail-closed
+  posture. (ROADMAP-ADR-041)
+- H2 WebAuthn/FIDO2: schedule when the hardware-gated identity path is needed.
+  (ROADMAP-sigstore-test-harness)
+
+**Phase 3 -- engine/transport hardening (gated on the Phase 1 D-D field-add).**
+- Engine hardening / transport-unification, flipping `hardenedByDeclaration` to
+  true. (ROADMAP-cue-spec-review, deferred set)
+- ADR-038 item 8: rehost the DoT resolver and TLS mediator onto the front,
+  together with DNS centralization (same surface).
+  (ROADMAP-ADR-038; DNS centralization in ROADMAP-cue-spec-review)
+- ADR-038 item 9: SSH-mediated per-connection observed records (collection side
+  already landed). (ROADMAP-ADR-038)
+
+**Phase 4 -- horizon (deferred, blocked, or organic).**
+- Full TLS single-port demux: blocked on L3 source-IP preservation, which pasta
+  splice-only cannot provide; remote-engine / routed-netns horizon.
+  (ROADMAP-cue-spec-review, deferred set)
+- Upstream osv-scalibr PR: organic ecosystem work, no longer needed for strike.
+  (ROADMAP-cue-spec-review, deferred set)
+- `TestPackSBOM/deterministic_sbom` flake, the ARCHITECTURE.md threat-row
+  judgment, and the `SignedArtifact` rename. (ROADMAP-cue-spec-review,
+  deferred set)
 
 ## References
 

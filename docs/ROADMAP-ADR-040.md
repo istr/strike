@@ -166,26 +166,26 @@ statement path is the OIDC identity (ambient `SIGSTORE_ID_TOKEN`,
 D-3b-4). Remaining D2 surface: the v1 operator-key artifact path
 (`executor.Pack`) cuts over in instruction 5 (D-3b-5).
 
-### D3 -- cosign-compatible OCI referrers, layered by trust -- PARTIAL (shapes + signing done; packaging remains)
+### D3 -- cosign-compatible OCI referrers, layered by trust -- DONE
 
-The three layers (sealed V / engine_dependent E / informational) exist as
-predicate sections inside one attestation (ADR-037). ADR-040 D3 makes the
-V / E boundary physical: each layer becomes a separate, co-attached referrer
-(sealed = standard SLSA Provenance v1; engine_dependent = a strike-defined
-predicate type `https://istr.dev/strike/predicates/engine-context/v1`;
-informational = signed byproducts that never gate). The output predicate
-types are defined (instruction 1b), the projection from the internal
-`#Attestation` into the three statements is live (instruction 3a), and
-each statement is signed keylessly as its own sigstore bundle
-(instruction 3b). What remains: attaching the three bundles as
-co-attached OCI referrers on the pushed digest (instruction 4) and the
-per-layer verification exit (instruction 5).
+The three layers (sealed V / engine_dependent E / informational) are now
+physically separate, co-attached OCI referrers on the pushed digest (sealed =
+standard SLSA Provenance v1; engine_dependent = the strike-defined predicate
+type `https://istr.dev/strike/predicates/engine-context/v1`; informational =
+signed byproducts that never gate). The output predicate types are defined
+(instruction 1b), the projection from the internal `#Attestation` into the
+three statements is live (instruction 3a), each statement is signed keylessly
+as its own sigstore bundle (instruction 3b), the bundles are attached as
+referrers on the registry digest (instruction 4), and the per-layer
+verification exit is implemented (instruction 5a, exposed via ADR-041). The
+V / E boundary is physical, not a convention inside one signature.
 
-### D4 -- the control plane owns the registry push
+### D4 -- the control plane owns the registry push -- DONE
 
-No `remote.Write` push path exists in production code. The control plane
-does not yet push; signing-and-attach therefore cannot yet run on the
-registry digest. Lands in instruction 4.
+The control plane pushes the assembled image via go-containerregistry
+`remote.Write`; signing and referrer attachment run on the registry digest, so
+the signature covers the artifact as it exists on the wire. The engine pulls by
+digest but never pushes.
 
 ### D5 -- lane-wide OIDC identity, pinned -- DONE (instruction 1a)
 

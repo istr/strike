@@ -2,8 +2,9 @@
 
 ## Status: SUBSTANTIALLY COMPLETE (verify arc landed; instructions 1--3 done)
 
-Deferred beyond this arc: the v1-verifier teardown (ADR-040 instruction 5c) and
-base-SBOM signature verification (ADR-040 instruction 2c).
+Genuine residual in this roadmap: trust-root auto-import from OCI referrers
+(currently fail-closed). Base-SBOM signature verification is tracked in
+ROADMAP-ADR-040 (instruction 2c); the v1-verifier teardown is complete.
 
 ADR-041 is Accepted: the decision record is at
 `docs/ADR-041-lane-as-verification-policy.md`, registered in
@@ -88,16 +89,23 @@ format compliance) and base-SBOM signature verification remain deferred.
 CUE-first for lane schema extensions; then implementation. Each item is its
 own instruction file under the established conventions.
 
-### 1. Lane schema and verify subcommand -- PENDING
+### 1. Lane schema and verify subcommand -- LANDED
 
-**1a.** Add `#TrustRoot` schema to `specs/lane.cue`:
-- `#TrustRootRef`: digest-pinned reference (fetch by OCI descriptor, verify digest)
-- `#InlineRoot`: inline PEM certificate bundle (for testing and emergency override)
-- Per-keyless-endpoint optional override (fulcio_root, rekor_keys, tsa_root)
+**1a. (LANDED)** Trust-root sourcing in the lane keyless config:
+- `trustRootRef`: digest-pinned reference, fetched by OCI descriptor
+  (`registry.FetchTrustRoot`) and digest-verified.
+- `trustRoot`: inline TrustedRoot replica (testing and emergency override).
+- Resolution order in `internal/verify.ResolveTrustedMaterial`: explicit
+  `--trust-root` path, else inline `trustRoot`, else `trustRootRef`, else
+  fail-closed `ErrNoTrustRoot`. The single-bundle model superseded the sketched
+  per-endpoint override (fulcio_root / rekor_keys / tsa_root); that idea is not
+  adopted.
 
-**1b.** Add to keyless config:
-- Optional `trust_root` field (UC2 default; UC1 explicit override)
-- Empty means "import from OCI referrers" (deferred to after instruction 3)
+**1b. (LANDED, with one residual)** The keyless config carries the optional
+trust root (UC2 default; UC1 explicit override via `--trust-root`). Empty
+currently means fail-closed (`ErrNoTrustRoot`), not auto-import; deriving the
+trust root from the image's OCI referrers when none is declared is the one
+genuine residual (see Open items).
 
 **1c.** (LANDED) Expose `strike verify` subcommand in `cmd/strike`:
 - UC1: `strike verify --identity=<id> --issuer=<iss> --trust-root=<path> <image@digest>`
@@ -105,7 +113,7 @@ own instruction file under the established conventions.
 - Error if identity/issuer are provided with --lane (lane is the source)
 - Exit code 0 on success; 1 on verification failure (with layer sentinel in stderr)
 
-### 2. UC2 lane-policy integration -- PENDING
+### 2. UC2 lane-policy integration -- LANDED
 
 Integrate `internal/verify.Verifier` with lane policy sources:
 - Load lane, extract identity, issuer, keyless endpoints from it
@@ -162,16 +170,19 @@ Per the established handover pattern:
 
 ## Open items
 
-- **Trust-root import from OCI referrers.** ADR-041 D3 mentions "empty means
-  import from OCI referrers" as a future path, but requires the referrer
-  attachment to land first (ADR-040 instruction 4, done) and verification
-  integration (instruction 2, pending). Exact mechanics (cert pinning in
-  referrer attachment, inline vs by-reference) deferred to after instruction
-  2 when the data flow is clear.
-- **Per-endpoint trust-root override.** Instruction 1a sketches per-endpoint
-  optional overrides (fulcio_root, rekor_keys, tsa_root). Decision: inline
-  in the lane (trusted by admission), or fetch by digest? Deferred to schema
-  confirmation gate (1a).
+- **Trust-root import from OCI referrers (genuine residual).** Both
+  preconditions have landed -- referrer attachment (ADR-040 instruction 4) and
+  UC2 verification integration (instruction 2). Today verify is fail-closed when
+  no trust root is declared (`internal/verify.ErrNoTrustRoot`); deriving the
+  trust root from the image's referrers when none is declared is a future
+  enhancement. Exact mechanics (cert pinning in the referrer attachment, inline
+  vs by-reference) are decided when the feature is taken up. This is the one
+  item that keeps this roadmap open. Sequenced in Phase 2; see the execution
+  order in ROADMAP-STATUS.md.
+- **Per-endpoint trust-root override -- resolved by redesign.** The sketched
+  per-endpoint overrides (fulcio_root / rekor_keys / tsa_root) were not adopted;
+  the shipped model is a single TrustedRoot bundle, inline (`trustRoot`) or by
+  reference (`trustRootRef`). No further work.
 
 ## Cross-roadmap dependencies
 
