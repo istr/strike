@@ -36,6 +36,51 @@ cosign: by the time the stack was up, 3b-i/3b-ii-b had already produced
 the hand-rolled producer and the sigstore-go crossval oracle, so cosign
 as an early bring-up producer was unnecessary.
 
+## Downstream consumers -- golden-bundle regeneration is a hard dependency
+
+The harness is no longer only an H1/H2 milestone tracker; it is a build-time
+dependency for any schema or naming change that touches a file whose digest is
+sealed into a golden verifier bundle under
+`internal/verify/testdata/golden/`. The golden bundles seal a `laneDigest` over
+`golden/lane.yaml`, and the DSSE signature covers the payload, so re-keying that
+lane (or otherwise changing the sealed file's bytes) re-hashes it and invalidates
+the sealed digest. Such a change is NOT hermetic and the bundle cannot be
+hand-edited; it must be regenerated against this harness. This was learned the
+hard way: the B-6 `#TLSTrust` rename was planned as hermetic on the strength of a
+plaintext grep that cannot see into the base64 DSSE payload, and it failed
+`make test` on the one golden-sealed lane digest. The gate for future
+instructions: before calling a fixture-touching change hermetic, decode the
+golden DSSE payloads and look for sealed `*Digest` fields over any file the
+change edits, not just the literal token being renamed.
+
+The regeneration flow (`TestVerifyGoldenGenerate`, the env-gated generator in
+`internal/deploy/`, runs rootless via `CONTAINER_HOST`):
+
+```
+make -C test/sigstore-local up
+make -C test/sigstore-local rekor-pubkey
+make -C test/sigstore-local tsa-certchain
+SIGSTORE_ID_TOKEN="$(make -s -C test/sigstore-local token)" \
+  go test ./internal/deploy/ -run '^TestVerifyGoldenGenerate$' -count=1
+make -C test/sigstore-local down
+```
+
+`make up` brings the stack up rootless and exports the Caddy root
+(`pki/caddy-root.crt`); `make rekor-pubkey` exports the Rekor log public key
+(`pki/rekor-ed25519-pub.pem`) for trust-root assembly; `make tsa-certchain`
+re-fetches the TSA chain (`pki/tsa-certchain.pem`), which must be re-fetched each
+startup because the TSA mints a fresh signing cert per boot. The generator reads
+those three harness materials and rewrites all four goldens (`sealed`, `engine-context`,
+`informational`.sigstore.json plus `trusted_root.json`). The resulting golden
+diff is large and non-deterministic -- fresh Fulcio / Rekor / TSA material every
+run -- and that is expected: the reproducibility invariant does not apply to live
+sigstore fixtures. A regenerated set must then pass `make test` fully offline (no
+`SIGSTORE_ID_TOKEN`).
+
+Cross-referenced from ROADMAP-cue-spec-review.md, whose remaining D-F items
+inherit this gate when they re-key `golden/lane.yaml` (B-7 is the next such
+case).
+
 ## Purpose and relationship to ADR-040
 
 ROADMAP-ADR-040.md lists this harness as a parallel track outside the

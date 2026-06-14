@@ -1,6 +1,6 @@
 # CUE Spec Review Roadmap (post trust-boundary formalization)
 
-## Status: OPEN -- two arcs remain (D-D field-add, D-F: B-4..B-9)
+## Status: OPEN -- two arcs remain (D-D field-add, D-F: B-4, B-5, B-7..B-9)
 
 This roadmap is the single source for the work-arcs derived from
 `RETROSPECTIVE-cue-spec-review.md`. The post-formalization handover note
@@ -92,6 +92,33 @@ caveat: the engine dial uses standard `net/http` TLS (`container/tls.go`
 observed-but-not-pinned; the field-add records them at V truthfully, and the
 later engine-transport arc is what flips `hardenedByDeclaration` to true.
 
+**Docked finding -- `caTrustMode` vocabulary (from the B-6 follow-on).** The
+per-peer trust discriminator `#TLSTrust.type` (`certFingerprint` | `caBundle`,
+landed in B-6) and the engine CA-trust selector `#EngineConnection.caTrustMode`
+(`pinned` | `system`) are the same kind of choice -- how a server certificate is
+trusted -- named with different suffixes (`type` vs `Mode`). The
+"`mode`-for-scalars, `type`-for-unions" defense does not hold: the sibling scalar
+enum `connectionType` (`"unix" | "tls" | "mtls"`) on the very same
+`#EngineConnection` already uses `type`. So the split is not a signal; it is the
+de-overloading / least-surprise class this review exists to catch (cf. B-4 "stop
+overloading name", B-5 "reconcile from/source"). Recommended direction (ratify at
+write time, NOT yet ratified): retire the `Mode` suffix for kind-selectors,
+`caTrustMode` -> `caTrustType`, matching `#TLSTrust.type` and the sibling
+`connectionType`; `connectionType` stays. The values `pinned | system` most
+likely stay as-is -- a different mechanism vocabulary than
+`certFingerprint | caBundle`, plausibly on purpose -- decide explicitly at write
+time. This is docked here, not split out, because `#EngineConnection` lives under
+`#Sealed.engine` (`specs/attestation.cue` ~l.96), so `caTrustMode` is in the
+signed payload: renaming it changes the sealed wire format and inherits the
+golden-bundle + crossval regen dependency (see the golden-regen note under D-F
+below), exactly the sealed shape the D-D field-add already opens and regenerates.
+Grounding pins (anchor `22426cc2`): `specs/attestation.cue` `#EngineConnection:`
+~l.201, `connectionType:` ~l.203, `caTrustMode?:` ~l.207; Go mirror
+`internal/deploy/deploy.go` `CATrustMode` ~l.202 (`json:"caTrustMode,omitempty"`),
+projection ~l.982. Open decisions for the future instruction: exact target name;
+whether the values move; whether this folds into the D-D field-add or stands
+alone as a new D-F item.
+
 ### D-F -- B-2..B-9 schema findings (one instruction each)
 
 At-tree state verified at `8721d0ff`; B-1 is done, the rest pending.
@@ -102,15 +129,28 @@ At-tree state verified at `8721d0ff`; B-1 is done, the rest pending.
 | B-3 | `#Subject` should reuse `#ResourceDescriptor` (remove bespoke type) | Landed. `#Subject` is now `#ResourceDescriptor` refined with required name and digest; no duplicated structure, Go mirror unchanged. |
 | B-4 | `id` / `name` normalization (stop overloading `name`) | Pending; re-survey at write time. |
 | B-5 | Unify producer refs on `#OutputRef`; reconcile `from` / `source` | Pending. Both still used in `lane.cue` (l.190 / 314 / 380 / 397 / 440). |
-| B-6 | `#TLSTrust` discriminator `mode` -> `type` + one enum casing | Pending. `transport.cue` still uses `mode: "cert_fingerprint"` / `"ca_bundle"`; `#Peer` / `#TrustRoot` already use `type:` -- this is the inconsistency. |
-| B-7 | De-overload "attestation" (rename the state-capture config) | Pending. `lane.cue` still says "state attestation" (l.6, l.350). |
+| B-6 | `#TLSTrust` discriminator `mode` -> `type` + one enum casing | Landed `22426cc2`. `transport.cue` `#TLSTrust` keys on `type:` with values `certFingerprint` / `caBundle`; the hand-mirrored Go (`@go(-)`) moved in lockstep, and the golden bundles were regenerated (re-keying `golden/lane.yaml` re-hashes its sealed `laneDigest`). |
+| B-7 | De-overload "attestation" (rename the state-capture config) | Pending. `lane.cue` still says "state attestation" (l.6, l.350). Carries the golden-regen gate: the golden lane declares a deploy step with a state-capture (`attestation:`) block, so this rename re-keys `golden/lane.yaml` -- plan the regen step from the outset (see the golden-regen note below), do not plan it as hermetic. |
 | B-8 | Apply `#AbsPath` / `#RelPath` consistently or comment opaque path fields | Partial. Types exist and are applied in places; audit coverage at write time. |
 | B-9 | P3 polish: `#SignerIdentity` dedup, `clientId` -> `audience`, `trustRootRef` `@go` symmetry, default-disjunction order | Pending. |
 
 Execute in the order documented in ROADMAP-STATUS.md:
-B-6, B-7 first (single-concern schema fixes),
+B-7 next (single-concern schema fix; B-6 landed at `22426cc2`),
 then B-4 / B-5 (naming, broader blast radius), then B-8 / B-9 (polish). Each is
 its own PR per the ratification.
+
+**Golden-bundle regen is a hard dependency for golden-affecting B-x items.** Any
+schema or naming change that re-keys `internal/verify/testdata/golden/lane.yaml`
+-- or changes the bytes of any file whose digest is sealed into a golden DSSE
+bundle -- is NOT hermetic: the sealed predicate seals a digest over the file and
+the DSSE signature covers the payload, so the bundle must be regenerated against
+the local sigstore harness, never hand-edited. Before calling such a change
+hermetic, decode the base64 DSSE payloads and look for sealed `*Digest` fields
+over any file the change edits; a plaintext grep over base64 payloads is
+insufficient (it is exactly what produced the B-6 `make test` defect --
+observation defeats declaration). The regen recipe lives in
+ROADMAP-sigstore-test-harness.md under "Downstream consumers". B-7 inherits this
+gate (see its row above).
 
 ## Deferred (out of this arc)
 
