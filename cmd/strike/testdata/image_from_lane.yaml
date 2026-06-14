@@ -1,5 +1,5 @@
 name: image-from-test
-laneId: image-from-test
+id: image-from-test
 registry: localhost:5555/test
 secrets: {}
 resolver:
@@ -32,7 +32,7 @@ keyless:
         type: certFingerprint
         fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 steps:
-  - name: build_base
+  - id: build_base
     image: docker.io/library/golang@sha256:abababababababababababababababababababababababababababababababab
     args: [go, build, -o, /out/base]
     workdir: /out
@@ -40,10 +40,10 @@ steps:
     inputs: []
     secrets: []
     outputs:
-      - name: custom_image
+      - id: custom_image
         type: image
         path: custom.tar
-  - name: use_base
+  - id: use_base
     imageFrom:
       step: build_base
       output: custom_image
@@ -53,11 +53,11 @@ steps:
     inputs: []
     secrets: []
     outputs:
-      - name: result
+      - id: result
         type: file
         path: result.txt
 
-  - name: deploy
+  - id: deploy
     deploy:
       method:
         type: registry

@@ -1,5 +1,5 @@
 name: peers-state-capture
-laneId: peers-state-capture
+id: peers-state-capture
 registry: localhost:5555/test
 secrets: {}
 resolver:
@@ -32,7 +32,7 @@ keyless:
         type: certFingerprint
         fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 steps:
-  - name: build
+  - id: build
     image: docker.io/library/alpine@sha256:abababababababababababababababababababababababababababababababab
     args: [touch, /out/binary]
     workdir: /out
@@ -40,10 +40,10 @@ steps:
     inputs: []
     secrets: []
     outputs:
-      - name: image
+      - id: image
         type: image
         path: image
-  - name: deploy
+  - id: deploy
     deploy:
       method:
         type: custom
@@ -59,7 +59,7 @@ steps:
         preState:
           required: false
           captures:
-            - name: probe
+            - id: probe
               image: alpine@sha256:1111111111111111111111111111111111111111111111111111111111111111
               command: [cat, /version]
               peers:

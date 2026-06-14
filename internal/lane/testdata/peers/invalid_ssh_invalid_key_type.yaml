@@ -1,5 +1,5 @@
 name: peers-ssh-one
-laneId: peers-ssh-one
+id: peers-ssh-one
 registry: localhost:5555/test
 secrets: {}
 resolver:
@@ -32,7 +32,7 @@ keyless:
         type: certFingerprint
         fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 steps:
-  - name: clone
+  - id: clone
     image: docker.io/library/alpine@sha256:abababababababababababababababababababababababababababababababab
     args: [git, clone, "git@git.example.com:org/repo"]
     workdir: /out
@@ -40,7 +40,7 @@ steps:
     inputs: []
     secrets: []
     outputs:
-      - name: tree
+      - id: tree
         type: directory
         path: tree
     peers:

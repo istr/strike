@@ -1,5 +1,5 @@
 name: not-pinned
-laneId: not-pinned
+id: not-pinned
 registry: localhost:5555/test
 secrets: {}
 resolver:
@@ -32,13 +32,13 @@ keyless:
         type: certFingerprint
         fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 steps:
-  - name: build
+  - id: build
     image: golang:1.22
     args: [go, build]
     env: {}
     inputs: []
     secrets: []
     outputs:
-      - name: binary
+      - id: binary
         type: file
         path: binary

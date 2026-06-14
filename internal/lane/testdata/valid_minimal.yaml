@@ -1,5 +1,5 @@
 name: minimal-lane
-laneId: minimal-lane
+id: minimal-lane
 registry: localhost:5555/test
 secrets: {}
 resolver:
@@ -32,7 +32,7 @@ keyless:
         type: certFingerprint
         fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 steps:
-  - name: deploy
+  - id: deploy
     deploy:
       method:
         type: registry

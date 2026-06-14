@@ -19,7 +19,7 @@ package lane
 	// Stable identifier assigned at authoring time. Used by external
 	// verifiers to pair attestations against the same lane across runs.
 	// Distinct from `name`, which is human-display.
-	laneId:   #Identifier                                                             @go(LaneID,type=string)
+	id:       #Identifier                                                             @go(ID,type=string)
 	registry: string & =~"^[a-z0-9]([a-z0-9.-]*[a-z0-9])?(:[0-9]+)?(/[a-z0-9._-]+)*$" @go(Registry)
 	secrets: {
 		[Name=string]: #SecretSource @go(Secrets)
@@ -137,7 +137,7 @@ package lane
 
 #Step: {
 	@go(Step)
-	name:       string     @go(Name)
+	id:         string     @go(ID)
 	image?:     #ImageRef  @go(Image,optional=nillable)
 	imageFrom?: #ImageFrom @go(ImageFrom,optional=nillable)
 	args: [...string] @go(Args)
@@ -193,7 +193,7 @@ package lane
 #InputRef: {
 	@go(InputRef)
 
-	from:     string   @go(From)                      // "step_name.output_name"
+	from:     string   @go(From)                      // "{step.id}.{output.id}"
 	subpath?: #RelPath @go(Subpath,optional=nillable) // path within producer output; nil mounts whole output
 	mount:    #AbsPath @go(Mount)
 	digest?:  #Digest  @go(Digest,type=*Digest)
@@ -207,7 +207,7 @@ package lane
 
 #OutputSpec: {
 	@go(OutputSpec)
-	name: string        @go(Name)
+	id:   string        @go(ID)
 	type: #ArtifactType @go(Type)
 	// path is relative to the step workdir (the single writable volume).
 	// Absent means the whole workdir is the artifact; a value selects a
@@ -440,7 +440,7 @@ package lane
 
 #Capture: {
 	@go(Capture)
-	name:  string    @go(Name)
+	id:    string    @go(ID)
 	image: #ImageRef @go(Image)
 	command: [...string] @go(Command)
 	peers?: [...#Peer] @go(Peers)

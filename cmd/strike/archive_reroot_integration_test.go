@@ -95,7 +95,7 @@ func TestWholeWorkdirOutput_Integration(t *testing.T) {
 	}
 
 	// Path-less directory output: the whole workdir is the output.
-	out := lane.OutputSpec{Name: "node_modules", Type: "directory"}
+	out := lane.OutputSpec{ID: "node_modules", Type: "directory"}
 	archivePath, strip, dest := archiveReroot("/out", out)
 
 	stream, archErr := eng.ContainerArchive(ctx, id, archivePath)

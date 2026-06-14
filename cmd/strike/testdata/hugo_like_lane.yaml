@@ -1,5 +1,5 @@
 name: hugo-test
-laneId: hugo-test
+id: hugo-test
 registry: localhost:5555/test
 secrets: {}
 resolver:
@@ -32,7 +32,7 @@ keyless:
         type: certFingerprint
         fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 steps:
-  - name: npm_install
+  - id: npm_install
     image: docker.io/library/node@sha256:abababababababababababababababababababababababababababababababab
     args: [npm, ci]
     workdir: /out
@@ -40,10 +40,10 @@ steps:
     inputs: []
     secrets: []
     outputs:
-      - name: node_modules
+      - id: node_modules
         type: directory
         path: node_modules
-  - name: build
+  - id: build
     image: docker.io/library/hugo@sha256:cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd
     args: [hugo]
     workdir: /out
@@ -53,11 +53,11 @@ steps:
         mount: /src/node_modules
     secrets: []
     outputs:
-      - name: site
+      - id: site
         type: directory
         path: www
 
-  - name: deploy
+  - id: deploy
     deploy:
       method:
         type: registry

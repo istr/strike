@@ -102,7 +102,7 @@ func Parse(fp FilePath) (*Lane, Digest, error) {
 		}
 		if count != 1 {
 			return nil, Digest{}, fmt.Errorf(
-				"step %q: exactly one of image, image_from, pack, or deploy required", s.Name)
+				"step %q: exactly one of image, image_from, pack, or deploy required", s.ID)
 		}
 	}
 
@@ -140,25 +140,25 @@ func ValidatePaths(p *Lane) error {
 // validateStepPaths checks one step's output, pack-dest, and workdir paths.
 func validateStepPaths(s Step) error {
 	if len(s.Outputs) > 0 && s.Workdir == nil && s.Pack == nil {
-		return fmt.Errorf("step %q: declares outputs but no workdir", s.Name)
+		return fmt.Errorf("step %q: declares outputs but no workdir", s.ID)
 	}
 	for _, out := range s.Outputs {
 		if out.Path != nil {
 			if err := out.Path.Validate(); err != nil {
-				return fmt.Errorf("step %q: output path %q: %w", s.Name, *out.Path, err)
+				return fmt.Errorf("step %q: output path %q: %w", s.ID, *out.Path, err)
 			}
 		}
 	}
 	if s.Pack != nil {
 		for _, f := range s.Pack.Files {
 			if err := f.Dest.Validate(); err != nil {
-				return fmt.Errorf("step %q: pack dest %q: %w", s.Name, f.Dest, err)
+				return fmt.Errorf("step %q: pack dest %q: %w", s.ID, f.Dest, err)
 			}
 		}
 	}
 	if s.Workdir != nil {
 		if err := s.Workdir.Validate(); err != nil {
-			return fmt.Errorf("step %q: workdir %q: %w", s.Name, *s.Workdir, err)
+			return fmt.Errorf("step %q: workdir %q: %w", s.ID, *s.Workdir, err)
 		}
 	}
 	return nil

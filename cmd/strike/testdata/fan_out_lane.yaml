@@ -1,5 +1,5 @@
 name: fan-out-test
-laneId: fan-out-test
+id: fan-out-test
 registry: localhost:5555/test
 secrets: {}
 resolver:
@@ -32,7 +32,7 @@ keyless:
         type: certFingerprint
         fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 steps:
-  - name: generate
+  - id: generate
     image: docker.io/library/alpine@sha256:abababababababababababababababababababababababababababababababab
     args: [sh, -c, "echo ok"]
     workdir: /out
@@ -40,16 +40,16 @@ steps:
     inputs: []
     secrets: []
     outputs:
-      - name: data
+      - id: data
         type: file
         path: data.json
-      - name: config
+      - id: config
         type: file
         path: config.yaml
-      - name: manifest
+      - id: manifest
         type: file
         path: manifest.txt
-  - name: consumer_a
+  - id: consumer_a
     image: docker.io/library/alpine@sha256:cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd
     args: [sh, -c, "cat /input/data.json > /out/a.txt"]
     workdir: /out
@@ -59,10 +59,10 @@ steps:
         mount: /input/data.json
     secrets: []
     outputs:
-      - name: out
+      - id: out
         type: file
         path: a.txt
-  - name: consumer_b
+  - id: consumer_b
     image: docker.io/library/alpine@sha256:cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd
     args: [sh, -c, "cat /input/config.yaml > /out/b.txt"]
     workdir: /out
@@ -72,10 +72,10 @@ steps:
         mount: /input/config.yaml
     secrets: []
     outputs:
-      - name: out
+      - id: out
         type: file
         path: b.txt
-  - name: consumer_c
+  - id: consumer_c
     image: docker.io/library/alpine@sha256:cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd
     args: [sh, -c, "cat /input/manifest.txt > /out/c.txt"]
     workdir: /out
@@ -85,11 +85,11 @@ steps:
         mount: /input/manifest.txt
     secrets: []
     outputs:
-      - name: out
+      - id: out
         type: file
         path: c.txt
 
-  - name: deploy
+  - id: deploy
     deploy:
       method:
         type: registry

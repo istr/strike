@@ -1,5 +1,5 @@
 name: bad-registry
-laneId: bad-registry
+id: bad-registry
 registry: "registry.example.com extra-garbage"
 secrets: {}
 resolver:
@@ -32,7 +32,7 @@ keyless:
         type: certFingerprint
         fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 steps:
-  - name: deploy
+  - id: deploy
     deploy:
       method:
         type: registry

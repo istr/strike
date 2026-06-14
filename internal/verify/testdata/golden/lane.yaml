@@ -9,7 +9,7 @@
 # and registry refs are placeholders; what matters is that lane.Parse accepts
 # it and seals its digest.
 name: golden-lane
-laneId: golden-lane
+id: golden-lane
 registry: localhost:5555/golden
 secrets: {}
 resolver:
@@ -42,7 +42,7 @@ keyless:
         type: caBundle
         path: /etc/ssl/certs/caddy-root.crt
 steps:
-  - name: build
+  - id: build
     image: docker.io/library/golang@sha256:abababababababababababababababababababababababababababababababab
     args: ["go", "build"]
     workdir: /out
@@ -50,10 +50,10 @@ steps:
     inputs: []
     secrets: []
     outputs:
-      - name: binary
+      - id: binary
         type: file
         path: binary
-  - name: deploy
+  - id: deploy
     deploy:
       method:
         type: registry

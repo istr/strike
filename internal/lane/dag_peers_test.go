@@ -25,14 +25,14 @@ func httpsPeer(host string) lane.Peer {
 // Caller fills in name and peers.
 func minStep(name string, peers []lane.Peer) lane.Step {
 	return lane.Step{
-		Name:    name,
+		ID:      name,
 		Image:   lane.Ptr(lane.ImageRef("alpine:3.20")),
 		Args:    []string{"echo", "ok"},
 		Env:     map[string]string{},
 		Inputs:  []lane.InputRef{},
 		Secrets: []lane.SecretRef{},
 		Outputs: []lane.OutputSpec{
-			{Name: "out", Type: "file", Path: lane.Ptr(lane.RelPath("o"))},
+			{ID: "out", Type: "file", Path: lane.Ptr(lane.RelPath("o"))},
 		},
 		Peers: peers,
 	}

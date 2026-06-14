@@ -94,7 +94,7 @@ func TestExecute_WithSSHPeer(t *testing.T) {
 		SSHVolume: "strike-ssh-test-step-12345",
 		Secrets:   nil,
 		Step: &lane.Step{
-			Name:  "test-step",
+			ID:    "test-step",
 			Image: lane.Ptr(lane.ImageRef("alpine:latest")),
 			Args:  []string{"true"},
 			Peers: []lane.Peer{
@@ -156,7 +156,7 @@ func TestExecute_WithoutSSHPeer(t *testing.T) {
 		CAVolume: caPath,
 		Secrets:  nil,
 		Step: &lane.Step{
-			Name:  "test-step",
+			ID:    "test-step",
 			Image: lane.Ptr(lane.ImageRef("alpine:latest")),
 			Args:  []string{"true"},
 			Peers: []lane.Peer{
@@ -202,7 +202,7 @@ func TestRunExecute_Seeds_PassedThrough(t *testing.T) {
 		CAVolume: caPath,
 		Secrets:  nil,
 		Step: &lane.Step{
-			Name:    "consumer",
+			ID:      "consumer",
 			Image:   lane.Ptr(lane.ImageRef("alpine:latest")),
 			Args:    []string{"cat", "/work/binary"},
 			Workdir: lane.Ptr(lane.AbsPath("/work")),

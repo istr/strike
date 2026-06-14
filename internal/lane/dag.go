@@ -84,10 +84,10 @@ func Build(p *Lane) (*DAG, error) {
 
 	for i := range p.Steps {
 		s := &p.Steps[i]
-		if _, exists := d.Steps[string(s.Name)]; exists {
-			return nil, fmt.Errorf("duplicate step name: %q", s.Name)
+		if _, exists := d.Steps[string(s.ID)]; exists {
+			return nil, fmt.Errorf("duplicate step name: %q", s.ID)
 		}
-		d.Steps[string(s.Name)] = s
+		d.Steps[string(s.ID)] = s
 	}
 
 	if err := d.resolveImageFromEdges(p); err != nil {
@@ -126,7 +126,7 @@ func Build(p *Lane) (*DAG, error) {
 
 func (d *DAG) resolveImageFromEdges(p *Lane) error {
 	for _, s := range p.Steps {
-		name := string(s.Name)
+		name := string(s.ID)
 		if s.ImageFrom == nil {
 			continue
 		}
@@ -142,7 +142,7 @@ func (d *DAG) resolveImageFromEdges(p *Lane) error {
 		}
 		if out.Type != "image" {
 			return fmt.Errorf("step %q: image_from output %q in step %q is %q, not image",
-				name, out.Name, from, out.Type)
+				name, out.ID, from, out.Type)
 		}
 		d.ImageFromEdges[name] = ImageFromEdge{FromStep: fromStep, FromOutput: out}
 		d.addEdge(name, from)
@@ -152,7 +152,7 @@ func (d *DAG) resolveImageFromEdges(p *Lane) error {
 
 func (d *DAG) resolveInputEdges(p *Lane) error {
 	for _, s := range p.Steps {
-		name := string(s.Name)
+		name := string(s.ID)
 		for _, inp := range s.Inputs {
 			refStep, refOutput, err := parseRef(inp.From)
 			if err != nil {
@@ -186,7 +186,7 @@ func (d *DAG) resolveInputEdges(p *Lane) error {
 
 func (d *DAG) resolvePackEdges(p *Lane) error {
 	for _, s := range p.Steps {
-		name := string(s.Name)
+		name := string(s.ID)
 		if s.Pack == nil {
 			continue
 		}
@@ -227,7 +227,7 @@ func (d *DAG) resolvePackFileEdge(name string, f PackFile) error {
 // so callers must not mutate s after Build returns.
 func findOutput(s *Step, name string) *OutputSpec {
 	for i := range s.Outputs {
-		if s.Outputs[i].Name == name {
+		if s.Outputs[i].ID == name {
 			return &s.Outputs[i]
 		}
 	}
@@ -236,7 +236,7 @@ func findOutput(s *Step, name string) *OutputSpec {
 
 func (d *DAG) resolveDeployEdges(p *Lane) error {
 	for _, s := range p.Steps {
-		name := string(s.Name)
+		name := string(s.ID)
 		if s.Deploy == nil {
 			continue
 		}
@@ -276,7 +276,7 @@ func (d *DAG) validateProvenancePaths(p *Lane) error {
 		}
 		provPath := s.Provenance.Path
 		if err := provPath.Validate(); err != nil {
-			return fmt.Errorf("step %q: provenance.path %q: %w", s.Name, provPath, err)
+			return fmt.Errorf("step %q: provenance.path %q: %w", s.ID, provPath, err)
 		}
 		found := false
 		for _, out := range s.Outputs {
@@ -291,7 +291,7 @@ func (d *DAG) validateProvenancePaths(p *Lane) error {
 		}
 		if !found {
 			return fmt.Errorf("step %q: provenance.path %q is not within any declared output",
-				s.Name, provPath)
+				s.ID, provPath)
 		}
 	}
 	return nil
@@ -308,14 +308,14 @@ func (d *DAG) validateDeployLeaves(p *Lane) error {
 		if s.Deploy == nil {
 			continue
 		}
-		dependents := d.reverse[string(s.Name)]
+		dependents := d.reverse[string(s.ID)]
 		if len(dependents) == 0 {
 			continue
 		}
 		sorted := append([]string(nil), dependents...)
 		sort.Strings(sorted)
 		return fmt.Errorf("deploy step %q must be a DAG leaf but is depended on by %v",
-			s.Name, sorted)
+			s.ID, sorted)
 	}
 	return nil
 }
@@ -342,11 +342,11 @@ func (d *DAG) ValidateLeavesAreDeploys(p *Lane) error {
 		if s.Deploy != nil {
 			continue
 		}
-		if len(d.reverse[string(s.Name)]) == 0 {
+		if len(d.reverse[string(s.ID)]) == 0 {
 			return fmt.Errorf("step %q is a non-deploy DAG leaf: nothing consumes "+
 				"its output and it is not a deploy step; a gate must produce an "+
 				"output the deploy consumes so it sits in the chain (ADR-039 D5)",
-				s.Name)
+				s.ID)
 		}
 	}
 	return nil
@@ -437,7 +437,7 @@ func peerAnchor(peer Peer) string {
 // and makes composition explicit and content-addressed.
 func (d *DAG) validateMountDisjointness(p *Lane) error {
 	for _, s := range p.Steps {
-		edges := d.InputEdges[string(s.Name)]
+		edges := d.InputEdges[string(s.ID)]
 		if len(edges) < 2 {
 			continue
 		}
@@ -447,7 +447,7 @@ func (d *DAG) validateMountDisjointness(p *Lane) error {
 				if mountsConflict(a, b) {
 					return fmt.Errorf(
 						"step %q: input mounts %q and %q overlap; compose them in a pack step",
-						s.Name, a, b)
+						s.ID, a, b)
 				}
 			}
 		}

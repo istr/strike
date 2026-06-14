@@ -337,7 +337,7 @@ type Deployer struct {
 // peer_attribution map for one deploy step's sub-tree, and folds the deploy
 // step's state-capture declared peers into declaredPeers under the deploy step
 // name (ADR-039 D4). declaredPeers is the CollectPeers result for this deploy
-// step (it already contains the deploy method's own peers under step.Name).
+// step (it already contains the deploy method's own peers under step.ID).
 //
 // observed_peers is deduplicated per "host:port" with no step attribution
 // (Layer V); a second observation of the same endpoint with a different
@@ -355,7 +355,7 @@ func (d *Deployer) collectObservedPeers(
 	// Predecessors and the deploy step's method container: declared-peer steps
 	// of the sub-tree. Only steps with declared peers can have connections; the
 	// deploy step's own method records live in ownRecords (folded below), so the
-	// step.Name lookup here only matches run/build predecessors.
+	// step.ID lookup here only matches run/build predecessors.
 	for stepName := range declaredPeers {
 		if recs, ok := d.NetworkRecords[stepName]; ok {
 			if err := ingestRecords(stepName, recs, observed, attribution); err != nil {
@@ -367,15 +367,15 @@ func (d *Deployer) collectObservedPeers(
 	// Deploy step's own units (method + captures): fold under the deploy step
 	// name (a1). Also fold the capture declared peers into declaredPeers.
 	for _, recs := range d.ownRecords {
-		if err := ingestRecords(string(step.Name), recs, observed, attribution); err != nil {
+		if err := ingestRecords(string(step.ID), recs, observed, attribution); err != nil {
 			return nil, nil, err
 		}
 	}
 	for _, sc := range step.Deploy.Recording.PreState.Captures {
-		declaredPeers[string(step.Name)] = append(declaredPeers[string(step.Name)], sc.Peers...)
+		declaredPeers[string(step.ID)] = append(declaredPeers[string(step.ID)], sc.Peers...)
 	}
 	for _, sc := range step.Deploy.Recording.PostState.Captures {
-		declaredPeers[string(step.Name)] = append(declaredPeers[string(step.Name)], sc.Peers...)
+		declaredPeers[string(step.ID)] = append(declaredPeers[string(step.ID)], sc.Peers...)
 	}
 
 	return observed, attribution, nil
@@ -494,7 +494,7 @@ func (d *Deployer) buildAttestation(
 	started clock.Time, preDigest, postDigest lane.Digest,
 ) (*Attestation, error) {
 	engineConn, engineMeta := d.engineRecords()
-	declaredPeers := d.DAG.CollectPeers(string(step.Name))
+	declaredPeers := d.DAG.CollectPeers(string(step.ID))
 	observedPeers, peerAttribution, err := d.collectObservedPeers(step, declaredPeers)
 	if err != nil {
 		return nil, err
@@ -527,7 +527,7 @@ func (d *Deployer) buildAttestation(
 // action, capture post-state, and build the attestation.
 func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.State) (*Attestation, error) {
 	if step.Deploy == nil {
-		return nil, fmt.Errorf("step %q: not a deploy step", step.Name)
+		return nil, fmt.Errorf("step %q: not a deploy step", step.ID)
 	}
 	spec := *step.Deploy
 	started := clock.Wall()
@@ -536,52 +536,52 @@ func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.Sta
 	preCaptures, err := d.captureState(ctx, spec.Recording.PreState)
 	if err != nil {
 		if spec.Recording.PreState.Required {
-			return nil, fmt.Errorf("step %q: pre-state capture failed: %w", step.Name, err)
+			return nil, fmt.Errorf("step %q: pre-state capture failed: %w", step.ID, err)
 		}
-		log.Printf("WARN   deploy %s: pre-state capture failed: %v", step.Name, err)
+		log.Printf("WARN   deploy %s: pre-state capture failed: %v", step.ID, err)
 	}
 	preDigest := StateDigest(preCaptures)
 
 	// 2. Resolve artifact digests.
-	artifactDigests, err := resolveArtifactDigests(step.Name, d.ArtifactRefs, state)
+	artifactDigests, err := resolveArtifactDigests(step.ID, d.ArtifactRefs, state)
 	if err != nil {
 		return nil, err
 	}
 
 	// 3. Collect provenance records from transitive predecessors.
-	provenance := state.CollectProvenance(d.DAG, string(step.Name))
+	provenance := state.CollectProvenance(d.DAG, string(step.ID))
 
 	// 4. Execute deploy action. For registry deploys the returned attach
 	// target carries the pushed manifest descriptor; nil otherwise.
 	attach, execErr := d.executeMethod(ctx, spec, step.Peers)
 	if execErr != nil {
-		return nil, fmt.Errorf("step %q: deploy action failed: %w", step.Name, execErr)
+		return nil, fmt.Errorf("step %q: deploy action failed: %w", step.ID, execErr)
 	}
 
 	// 5. Capture post-state -> canonical digest.
 	postCaptures, err := d.captureState(ctx, spec.Recording.PostState)
 	if err != nil {
 		if spec.Recording.PostState.Required {
-			return nil, fmt.Errorf("step %q: post-state capture failed: %w", step.Name, err)
+			return nil, fmt.Errorf("step %q: post-state capture failed: %w", step.ID, err)
 		}
-		log.Printf("WARN   deploy %s: post-state capture failed: %v", step.Name, err)
+		log.Printf("WARN   deploy %s: post-state capture failed: %v", step.ID, err)
 	}
 	postDigest := StateDigest(postCaptures)
 
 	// 6. Build attestation.
 	att, obsErr := d.buildAttestation(step, spec, artifactDigests, provenance, started, preDigest, postDigest)
 	if obsErr != nil {
-		return nil, fmt.Errorf("step %q: %w", step.Name, obsErr)
+		return nil, fmt.Errorf("step %q: %w", step.ID, obsErr)
 	}
 
 	// 7. Validate attestation against CUE schema.
 	if err := ValidateAttestation(att); err != nil {
-		return nil, fmt.Errorf("step %q: attestation invalid: %w", step.Name, err)
+		return nil, fmt.Errorf("step %q: attestation invalid: %w", step.ID, err)
 	}
 
 	// 8. Project into the three output statements and produce one keyless
 	// sigstore bundle per statement (ADR-040 D2/D3), fail-closed.
-	if err := d.signStatements(ctx, att, step.Name); err != nil {
+	if err := d.signStatements(ctx, att, step.ID); err != nil {
 		return nil, err
 	}
 
@@ -595,13 +595,13 @@ func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.Sta
 			{Statement: "engine-context", Bundle: att.Signed.EngineContext.Bundle},
 			{Statement: "informational", Bundle: att.Signed.Informational.Bundle},
 		}); err != nil {
-			return nil, fmt.Errorf("step %q: attach statement bundles: %w", step.Name, err)
+			return nil, fmt.Errorf("step %q: attach statement bundles: %w", step.ID, err)
 		}
 	}
 
 	// 9. Record in lane state.
 	if err := d.recordAttestation(att, step, state, started); err != nil {
-		return nil, fmt.Errorf("step %q: %w", step.Name, err)
+		return nil, fmt.Errorf("step %q: %w", step.ID, err)
 	}
 
 	return att, nil
@@ -693,7 +693,7 @@ func (d *Deployer) recordAttestation(att *Attestation, step *lane.Step, state *l
 	attHex := hex.EncodeToString(sha256Sum(attJSON))
 
 	attDigest := lane.Digest{Algorithm: "sha256", Hex: attHex}
-	if err := state.Register(step.Name, "attestation", lane.Artifact{
+	if err := state.Register(step.ID, "attestation", lane.Artifact{
 		Type:        "file",
 		Digest:      attDigest,
 		Size:        int64(len(attJSON)),
@@ -703,7 +703,7 @@ func (d *Deployer) recordAttestation(att *Attestation, step *lane.Step, state *l
 	}
 
 	state.RecordStep(lane.StepResult{
-		Name:      step.Name,
+		Name:      step.ID,
 		StepType:  "deploy",
 		StartedAt: started,
 		Duration:  clock.Since(started),
@@ -723,7 +723,7 @@ func (d *Deployer) captureState(ctx context.Context, spec lane.CaptureSet) ([]ca
 	for _, sc := range spec.Captures {
 		snap, err := d.captureOne(ctx, sc)
 		if err != nil {
-			return captures, fmt.Errorf("capture %q: %w", sc.Name, err)
+			return captures, fmt.Errorf("capture %q: %w", sc.ID, err)
 		}
 		captures = append(captures, snap)
 	}
@@ -733,10 +733,10 @@ func (d *Deployer) captureState(ctx context.Context, spec lane.CaptureSet) ([]ca
 // captureOne runs a state capture command inside a container.
 func (d *Deployer) captureOne(ctx context.Context, sc lane.Capture) (captureSnap, error) {
 	if sc.Image == "" {
-		return captureSnap{}, fmt.Errorf("capture %q: image is required", sc.Name)
+		return captureSnap{}, fmt.Errorf("capture %q: image is required", sc.ID)
 	}
 	if len(sc.Command) == 0 {
-		return captureSnap{}, fmt.Errorf("capture %q: command is required", sc.Name)
+		return captureSnap{}, fmt.Errorf("capture %q: command is required", sc.ID)
 	}
 
 	var stdout, stderr bytes.Buffer
@@ -750,14 +750,14 @@ func (d *Deployer) captureOne(ctx context.Context, sc lane.Capture) (captureSnap
 		})
 	}
 
-	caps, err := d.startUnitCapsule(ctx, captureKey(d.StepName, sc.Name), sc.Peers)
+	caps, err := d.startUnitCapsule(ctx, captureKey(d.StepName, sc.ID), sc.Peers)
 	if err != nil {
 		return captureSnap{}, err
 	}
 	defer func() {
 		d.ownRecords = append(d.ownRecords, caps.Records())
 		if stopErr := caps.Stop(); stopErr != nil {
-			log.Printf("WARN   capture %s: capsule stop: %v", sc.Name, stopErr)
+			log.Printf("WARN   capture %s: capsule stop: %v", sc.ID, stopErr)
 		}
 	}()
 
@@ -775,15 +775,15 @@ func (d *Deployer) captureOne(ctx context.Context, sc lane.Capture) (captureSnap
 
 	exitCode, err := d.Engine.ContainerRun(ctx, opts)
 	if err != nil {
-		return captureSnap{}, fmt.Errorf("capture %q: %w", sc.Name, err)
+		return captureSnap{}, fmt.Errorf("capture %q: %w", sc.ID, err)
 	}
 	if exitCode != 0 {
 		return captureSnap{}, fmt.Errorf("capture %q: exit code %d: %s",
-			sc.Name, exitCode, stderr.String())
+			sc.ID, exitCode, stderr.String())
 	}
 
 	return captureSnap{
-		name:   sc.Name,
+		name:   sc.ID,
 		image:  string(sc.Image),
 		output: stdout.Bytes(),
 	}, nil

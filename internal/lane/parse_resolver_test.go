@@ -55,7 +55,7 @@ func TestResolver_MissingRejectedByParse(t *testing.T) {
 func TestResolver_ValidIPv4(t *testing.T) {
 	yaml := []byte(`
 name: resolver-ipv4
-laneId: resolver-ipv4
+id: resolver-ipv4
 registry: localhost:5555/test
 secrets: {}
 resolver:
@@ -88,7 +88,7 @@ keyless:
         type: certFingerprint
         fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 steps:
-  - name: build
+  - id: build
     image: docker.io/library/alpine@sha256:abababababababababababababababababababababababababababababababab
     args: ["true"]
     workdir: /work
@@ -96,8 +96,10 @@ steps:
     inputs: []
     secrets: []
     outputs:
-      - { name: out, type: file, path: x }
-  - name: deploy
+      - id: out
+        type: file
+        path: x
+  - id: deploy
     deploy:
       method:
         type: registry
@@ -140,7 +142,7 @@ steps:
 func TestResolver_ValidIPv4WithPort(t *testing.T) {
 	yaml := []byte(`
 name: resolver-ipv4-port
-laneId: resolver-ipv4-port
+id: resolver-ipv4-port
 registry: localhost:5555/test
 secrets: {}
 resolver:
@@ -173,7 +175,7 @@ keyless:
         type: certFingerprint
         fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 steps:
-  - name: build
+  - id: build
     image: docker.io/library/alpine@sha256:abababababababababababababababababababababababababababababababab
     args: ["true"]
     workdir: /work
@@ -181,8 +183,10 @@ steps:
     inputs: []
     secrets: []
     outputs:
-      - { name: out, type: file, path: x }
-  - name: deploy
+      - id: out
+        type: file
+        path: x
+  - id: deploy
     deploy:
       method:
         type: registry

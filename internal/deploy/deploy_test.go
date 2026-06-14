@@ -313,7 +313,7 @@ func TestDeployerExecute(t *testing.T) {
 	}
 
 	step := &lane.Step{
-		Name: "deploy-prod",
+		ID: "deploy-prod",
 		Deploy: &lane.DeploySpec{
 			Method: lane.DeployCustom{
 				Type:  "custom",
@@ -326,7 +326,7 @@ func TestDeployerExecute(t *testing.T) {
 			Recording: lane.StateRecording{
 				PreState: lane.CaptureSet{
 					Captures: []lane.Capture{{
-						Name:    "version",
+						ID:      "version",
 						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 						Command: []string{"cat", "/version"},
 						Peers:   []lane.Peer{lane.HTTPSPeer{Type: "https", Host: "localhost:5555", Trust: transport.FingerprintTrust{Type: "certFingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}},
@@ -334,7 +334,7 @@ func TestDeployerExecute(t *testing.T) {
 				},
 				PostState: lane.CaptureSet{
 					Captures: []lane.Capture{{
-						Name:    "version",
+						ID:      "version",
 						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 						Command: []string{"cat", "/version"},
 						Peers:   []lane.Peer{lane.HTTPSPeer{Type: "https", Host: "localhost:5555", Trust: transport.FingerprintTrust{Type: "certFingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}},
@@ -417,7 +417,7 @@ func TestDeployerExecuteRegistryAttachesReferrers(t *testing.T) {
 	}
 
 	step := &lane.Step{
-		Name: "deploy-prod",
+		ID: "deploy-prod",
 		Deploy: &lane.DeploySpec{
 			Method: lane.DeployRegistry{
 				Type:   "registry",
@@ -501,7 +501,7 @@ func TestDeployerExecute_MissingArtifact(t *testing.T) {
 	state := lane.NewState() // empty -- no artifacts registered
 
 	step := &lane.Step{
-		Name: "deploy-prod",
+		ID: "deploy-prod",
 		Deploy: &lane.DeploySpec{
 			Method: lane.DeployCustom{Type: "custom", Image: "img@sha256:0000000000000000000000000000000000000000000000000000000000000000"},
 			Artifacts: map[string]lane.ArtifactRef{
@@ -581,7 +581,7 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 	}
 
 	step := &lane.Step{
-		Name: "deploy-prod",
+		ID: "deploy-prod",
 		Deploy: &lane.DeploySpec{
 			Method: lane.DeployCustom{
 				Type:  "custom",
@@ -594,7 +594,7 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 			Recording: lane.StateRecording{
 				PreState: lane.CaptureSet{
 					Captures: []lane.Capture{{
-						Name:    "version",
+						ID:      "version",
 						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 						Command: []string{"cat", "/version"},
 						Peers:   []lane.Peer{lane.HTTPSPeer{Type: "https", Host: "localhost:5555", Trust: transport.FingerprintTrust{Type: "certFingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}},
@@ -602,7 +602,7 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 				},
 				PostState: lane.CaptureSet{
 					Captures: []lane.Capture{{
-						Name:    "version",
+						ID:      "version",
 						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 						Command: []string{"cat", "/version"},
 						Peers:   []lane.Peer{lane.HTTPSPeer{Type: "https", Host: "localhost:5555", Trust: transport.FingerprintTrust{Type: "certFingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}},
@@ -678,7 +678,7 @@ func TestEngineRecord_NilEngineID(t *testing.T) {
 	}
 
 	step := &lane.Step{
-		Name: "deploy-nil-engine",
+		ID: "deploy-nil-engine",
 		Deploy: &lane.DeploySpec{
 			Method: lane.DeployCustom{
 				Type:  "custom",
@@ -739,7 +739,7 @@ func TestEngineRecord_WithRuntime(t *testing.T) {
 	}
 
 	step := &lane.Step{
-		Name: "deploy-runtime",
+		ID: "deploy-runtime",
 		Deploy: &lane.DeploySpec{
 			Method: lane.DeployCustom{
 				Type:  "custom",
@@ -810,7 +810,7 @@ func TestEngineRecord_WithoutRuntime(t *testing.T) {
 	}
 
 	step := &lane.Step{
-		Name: "deploy-no-runtime",
+		ID: "deploy-no-runtime",
 		Deploy: &lane.DeploySpec{
 			Method: lane.DeployCustom{
 				Type:  "custom",
@@ -872,7 +872,7 @@ func TestResolverRecord_NilResolverID(t *testing.T) {
 	}
 
 	step := &lane.Step{
-		Name: "deploy-nil-resolver",
+		ID: "deploy-nil-resolver",
 		Deploy: &lane.DeploySpec{
 			Method: lane.DeployCustom{
 				Type:  "custom",
@@ -927,7 +927,7 @@ func TestResolverRecord_Populated(t *testing.T) {
 	}
 
 	step := &lane.Step{
-		Name: "deploy-resolver",
+		ID: "deploy-resolver",
 		Deploy: &lane.DeploySpec{
 			Method: lane.DeployCustom{
 				Type:  "custom",
@@ -982,7 +982,7 @@ func TestResolverRecord_Populated(t *testing.T) {
 func TestDeployerExecute_NotDeployStep(t *testing.T) {
 	eng := newTLSTestEngine(t, containerMock(t, ""))
 	state := lane.NewState()
-	step := &lane.Step{Name: "build", Deploy: nil}
+	step := &lane.Step{ID: "build", Deploy: nil}
 	d := &deploy.Deployer{Engine: eng, LaneID: "test-lane"}
 	deploy.SetProduceBundles(d, stubProduceBundles())
 	_, err := d.Execute(context.Background(), step, state)
@@ -1016,7 +1016,7 @@ func TestDeployerExecute_RequiredPreStateFails(t *testing.T) {
 	state := lane.NewState()
 
 	step := &lane.Step{
-		Name: "deploy-fail-pre",
+		ID: "deploy-fail-pre",
 		Deploy: &lane.DeploySpec{
 			Method: lane.DeployCustom{
 				Type:  "custom",
@@ -1028,7 +1028,7 @@ func TestDeployerExecute_RequiredPreStateFails(t *testing.T) {
 				PreState: lane.CaptureSet{
 					Required: true,
 					Captures: []lane.Capture{{
-						Name:    "version",
+						ID:      "version",
 						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 						Command: []string{"cat", "/version"},
 					}},
@@ -1171,7 +1171,7 @@ func TestDeployerExecute_KeylessFailureIsFatal(t *testing.T) {
 // deployStep returns a minimal deploy step for Rekor tests.
 func deployStep() *lane.Step {
 	return &lane.Step{
-		Name: "deploy-prod",
+		ID: "deploy-prod",
 		Deploy: &lane.DeploySpec{
 			Method: lane.DeployCustom{
 				Type:  "custom",
@@ -1184,7 +1184,7 @@ func deployStep() *lane.Step {
 			Recording: lane.StateRecording{
 				PreState: lane.CaptureSet{
 					Captures: []lane.Capture{{
-						Name:    "version",
+						ID:      "version",
 						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 						Command: []string{"cat", "/version"},
 						Peers:   []lane.Peer{lane.HTTPSPeer{Type: "https", Host: "localhost:5555", Trust: transport.FingerprintTrust{Type: "certFingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}},
@@ -1192,7 +1192,7 @@ func deployStep() *lane.Step {
 				},
 				PostState: lane.CaptureSet{
 					Captures: []lane.Capture{{
-						Name:    "version",
+						ID:      "version",
 						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 						Command: []string{"cat", "/version"},
 						Peers:   []lane.Peer{lane.HTTPSPeer{Type: "https", Host: "localhost:5555", Trust: transport.FingerprintTrust{Type: "certFingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}},
@@ -1266,19 +1266,19 @@ func TestDeployerExecute_ObservedPeersPopulated(t *testing.T) {
 		Registry: "localhost:5555/test",
 		Steps: []lane.Step{
 			{
-				Name:    "build",
+				ID:      "build",
 				Image:   lane.Ptr(lane.ImageRef("alpine:3.20")),
 				Args:    []string{"echo", "ok"},
 				Env:     map[string]string{},
 				Inputs:  []lane.InputRef{},
 				Secrets: []lane.SecretRef{},
 				Outputs: []lane.OutputSpec{
-					{Name: "image", Type: "image", Path: lane.Ptr(lane.RelPath("o"))},
+					{ID: "image", Type: "image", Path: lane.Ptr(lane.RelPath("o"))},
 				},
 				Peers: []lane.Peer{buildPeer, buildSSHPeer},
 			},
 			{
-				Name: "deploy-prod",
+				ID: "deploy-prod",
 				Deploy: &lane.DeploySpec{
 					Method: lane.DeployCustom{
 						Type:  "custom",
@@ -1424,31 +1424,31 @@ func TestDeployerExecute_ObservedPeersConflictAborts(t *testing.T) {
 		Registry: "localhost:5555/test",
 		Steps: []lane.Step{
 			{
-				Name:    "step-a",
+				ID:      "step-a",
 				Image:   lane.Ptr(lane.ImageRef("alpine:3.20")),
 				Args:    []string{"echo", "ok"},
 				Env:     map[string]string{},
 				Inputs:  []lane.InputRef{},
 				Secrets: []lane.SecretRef{},
 				Outputs: []lane.OutputSpec{
-					{Name: "out", Type: "file", Path: lane.Ptr(lane.RelPath("a"))},
+					{ID: "out", Type: "file", Path: lane.Ptr(lane.RelPath("a"))},
 				},
 				Peers: []lane.Peer{peerA},
 			},
 			{
-				Name:    "step-b",
+				ID:      "step-b",
 				Image:   lane.Ptr(lane.ImageRef("alpine:3.20")),
 				Args:    []string{"echo", "ok"},
 				Env:     map[string]string{},
 				Inputs:  []lane.InputRef{},
 				Secrets: []lane.SecretRef{},
 				Outputs: []lane.OutputSpec{
-					{Name: "out", Type: "image", Path: lane.Ptr(lane.RelPath("b"))},
+					{ID: "out", Type: "image", Path: lane.Ptr(lane.RelPath("b"))},
 				},
 				Peers: []lane.Peer{peerB},
 			},
 			{
-				Name: "deploy-conflict",
+				ID: "deploy-conflict",
 				Deploy: &lane.DeploySpec{
 					Method: lane.DeployCustom{
 						Type:  "custom",

@@ -1,5 +1,5 @@
 name: test-lane
-laneId: test-lane
+id: test-lane
 registry: localhost:5555/test
 secrets: {}
 resolver:
@@ -32,7 +32,7 @@ keyless:
         type: certFingerprint
         fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 steps:
-  - name: clone
+  - id: clone
     image: docker.io/library/alpine@sha256:abababababababababababababababababababababababababababababababab
     args: ["git", "clone", "https://example.com/repo"]
     workdir: /out
@@ -41,10 +41,10 @@ steps:
     secrets: []
     forceRun: true
     outputs:
-      - name: src
+      - id: src
         type: directory
         path: src
-  - name: deploy
+  - id: deploy
     deploy:
       method:
         type: registry

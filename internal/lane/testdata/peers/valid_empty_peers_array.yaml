@@ -1,5 +1,5 @@
 name: peers-empty
-laneId: peers-empty
+id: peers-empty
 registry: localhost:5555/test
 secrets: {}
 resolver:
@@ -32,7 +32,7 @@ keyless:
         type: certFingerprint
         fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 steps:
-  - name: peerless
+  - id: peerless
     image: docker.io/library/alpine@sha256:abababababababababababababababababababababababababababababababab
     args: [echo, "ok"]
     workdir: /out
@@ -40,12 +40,12 @@ steps:
     inputs: []
     secrets: []
     outputs:
-      - name: ok
+      - id: ok
         type: file
         path: ok
     peers: []
 
-  - name: deploy
+  - id: deploy
     deploy:
       method:
         type: registry

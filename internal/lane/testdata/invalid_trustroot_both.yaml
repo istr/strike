@@ -1,5 +1,5 @@
 name: trustroot-both-lane
-laneId: trustroot-both-lane
+id: trustroot-both-lane
 registry: localhost:5555/test
 secrets: {}
 resolver:
@@ -60,7 +60,7 @@ keyless:
           end: "2036-06-11T20:38:48Z"
   trustRootRef: "localhost:5555/trustroot@sha256:abababababababababababababababababababababababababababababababab"
 steps:
-  - name: deploy
+  - id: deploy
     deploy:
       method:
         type: registry

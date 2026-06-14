@@ -1,5 +1,5 @@
 name: trustroot-ref-lane
-laneId: trustroot-ref-lane
+id: trustroot-ref-lane
 registry: localhost:5555/test
 secrets: {}
 resolver:
@@ -33,7 +33,7 @@ keyless:
         fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
   trustRootRef: "localhost:5555/trustroot@sha256:abababababababababababababababababababababababababababababababab"
 steps:
-  - name: deploy
+  - id: deploy
     deploy:
       method:
         type: registry

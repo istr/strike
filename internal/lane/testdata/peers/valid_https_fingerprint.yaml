@@ -1,5 +1,5 @@
 name: peers-https-fp
-laneId: peers-https-fp
+id: peers-https-fp
 registry: localhost:5555/test
 secrets: {}
 resolver:
@@ -32,7 +32,7 @@ keyless:
         type: certFingerprint
         fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 steps:
-  - name: fetch
+  - id: fetch
     image: docker.io/library/alpine@sha256:abababababababababababababababababababababababababababababababab
     args: [wget, "https://example.com/file"]
     workdir: /out
@@ -40,7 +40,7 @@ steps:
     inputs: []
     secrets: []
     outputs:
-      - name: file
+      - id: file
         type: file
         path: file
     peers:
@@ -50,7 +50,7 @@ steps:
           type: certFingerprint
           fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 
-  - name: deploy
+  - id: deploy
     deploy:
       method:
         type: registry

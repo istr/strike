@@ -1,5 +1,5 @@
 name: hugo
-laneId: hugo
+id: hugo
 registry: localhost:5555/test
 secrets: {}
 resolver:
@@ -32,7 +32,7 @@ keyless:
         type: certFingerprint
         fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 steps:
-  - name: source
+  - id: source
     image: docker.io/library/busybox@sha256:abababababababababababababababababababababababababababababababab
     args: [git, clone, --depth, "1", "https://example.com/site.git", /work/tree]
     workdir: /work
@@ -46,12 +46,14 @@ steps:
     inputs: []
     secrets: []
     outputs:
-      - { name: tree, type: directory, path: tree }
+      - id: tree
+        type: directory
+        path: tree
     provenance:
       type: git
       path: tree/provenance.json
 
-  - name: npm_install
+  - id: npm_install
     image: docker.io/library/node@sha256:cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd
     args: [npm, ci, --ignore-scripts, --no-bin-links]
     workdir: /work
@@ -68,9 +70,11 @@ steps:
       - { from: source.tree, subpath: package-lock.json, mount: /work/package-lock.json }
     secrets: []
     outputs:
-      - { name: node_modules, type: directory, path: node_modules }
+      - id: node_modules
+        type: directory
+        path: node_modules
 
-  - name: workspace
+  - id: workspace
     args: []
     env: {}
     inputs: []
@@ -81,9 +85,11 @@ steps:
         - { from: source.tree, dest: /work }
         - { from: npm_install.node_modules, dest: /work/node_modules }
     outputs:
-      - { name: image, type: image, path: workspace.tar }
+      - id: image
+        type: image
+        path: workspace.tar
 
-  - name: build
+  - id: build
     imageFrom:
       step: workspace
       output: image
@@ -93,9 +99,11 @@ steps:
     inputs: []
     secrets: []
     outputs:
-      - { name: site, type: directory, path: public }
+      - id: site
+        type: directory
+        path: public
 
-  - name: pack_site
+  - id: pack_site
     args: []
     env: {}
     inputs: []
@@ -107,9 +115,11 @@ steps:
       config:
         entrypoint: [nginx, -g, "daemon off;"]
     outputs:
-      - { name: image, type: image, path: image.tar }
+      - id: image
+        type: image
+        path: image.tar
 
-  - name: deploy
+  - id: deploy
     deploy:
       method:
         type: custom

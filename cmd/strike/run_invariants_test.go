@@ -18,17 +18,17 @@ func TestBuild_RejectsNestedInputMounts(t *testing.T) {
 		Registry: "localhost:5555/test",
 		Steps: []lane.Step{
 			{
-				Name: "src", Image: lane.Ptr(lane.ImageRef("img@sha256:" + strings.Repeat("a", 64))),
+				ID: "src", Image: lane.Ptr(lane.ImageRef("img@sha256:" + strings.Repeat("a", 64))),
 				Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{Name: "tree", Type: "directory", Path: lane.Ptr(lane.RelPath("tree"))}},
+				Outputs: []lane.OutputSpec{{ID: "tree", Type: "directory", Path: lane.Ptr(lane.RelPath("tree"))}},
 			},
 			{
-				Name: "deps", Image: lane.Ptr(lane.ImageRef("img@sha256:" + strings.Repeat("b", 64))),
+				ID: "deps", Image: lane.Ptr(lane.ImageRef("img@sha256:" + strings.Repeat("b", 64))),
 				Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{Name: "modules", Type: "directory", Path: lane.Ptr(lane.RelPath("modules"))}},
+				Outputs: []lane.OutputSpec{{ID: "modules", Type: "directory", Path: lane.Ptr(lane.RelPath("modules"))}},
 			},
 			{
-				Name: "build", Image: lane.Ptr(lane.ImageRef("img@sha256:" + strings.Repeat("c", 64))),
+				ID: "build", Image: lane.Ptr(lane.ImageRef("img@sha256:" + strings.Repeat("c", 64))),
 				Args: []string{}, Env: map[string]string{},
 				Inputs: []lane.InputRef{
 					{From: "src.tree", Mount: "/work"},
@@ -50,9 +50,9 @@ func TestBuild_RejectsProvenancePathOutsideOutputs(t *testing.T) {
 	p := &lane.Lane{
 		Steps: []lane.Step{
 			{
-				Name: "src", Image: lane.Ptr(lane.ImageRef("img@sha256:" + strings.Repeat("a", 64))),
+				ID: "src", Image: lane.Ptr(lane.ImageRef("img@sha256:" + strings.Repeat("a", 64))),
 				Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{Name: "tree", Type: "directory", Path: lane.Ptr(lane.RelPath("tree"))}},
+				Outputs: []lane.OutputSpec{{ID: "tree", Type: "directory", Path: lane.Ptr(lane.RelPath("tree"))}},
 				Provenance: &lane.ProvenanceSpec{
 					Type: "git",
 					Path: "../escape.json",
@@ -77,7 +77,7 @@ resolver:
     type: certFingerprint
     fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 steps:
-  - name: build
+  - id: build
     image: img@sha256:` + strings.Repeat("a", 64) + `
     args: []
     env: {}
@@ -85,7 +85,9 @@ steps:
     sources:
       - { path: ".", mount: /src }
     outputs:
-      - { name: bin, type: file, path: /out/bin }
+      - id: bin
+        type: file
+        path: /out/bin
 `
 	tmpFile := filepath.Join(t.TempDir(), "bad.yaml")
 	if err := os.WriteFile(tmpFile, []byte(yaml), 0o600); err != nil {

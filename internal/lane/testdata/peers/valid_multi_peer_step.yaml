@@ -1,5 +1,5 @@
 name: peers-multi
-laneId: peers-multi
+id: peers-multi
 registry: localhost:5555/test
 secrets: {}
 resolver:
@@ -32,7 +32,7 @@ keyless:
         type: certFingerprint
         fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 steps:
-  - name: fetch
+  - id: fetch
     image: docker.io/library/alpine@sha256:abababababababababababababababababababababababababababababababab
     args: [sh, "-c", "true"]
     workdir: /out
@@ -40,7 +40,7 @@ steps:
     inputs: []
     secrets: []
     outputs:
-      - name: ok
+      - id: ok
         type: file
         path: ok
     peers:
@@ -55,7 +55,7 @@ steps:
           - keyType: ssh-ed25519
             key: AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl
 
-  - name: deploy
+  - id: deploy
     deploy:
       method:
         type: registry

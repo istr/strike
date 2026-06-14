@@ -1,5 +1,5 @@
 name: multi-lane
-laneId: multi-lane
+id: multi-lane
 registry: localhost:5555/test
 secrets: {}
 resolver:
@@ -32,7 +32,7 @@ keyless:
         type: certFingerprint
         fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 steps:
-  - name: both
+  - id: both
     image: docker.io/library/golang@sha256:abababababababababababababababababababababababababababababababab
     pack:
       base: "docker.io/library/scratch@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"

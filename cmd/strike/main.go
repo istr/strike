@@ -172,7 +172,7 @@ func cmdDAG(path string) {
 		edges := dag.InputEdges[name]
 		deps := make([]string, len(edges))
 		for j, e := range edges {
-			deps[j] = string(e.FromStep.Name) + "." + e.FromOutput.Name
+			deps[j] = string(e.FromStep.ID) + "." + e.FromOutput.ID
 		}
 		if len(deps) > 0 {
 			log.Printf("  %d. %s <- %v", i+1, name, deps) // #nosec G706 -- name/deps from parsed lane YAML
@@ -283,7 +283,7 @@ func probeResolver(ctx context.Context, p *lane.Lane) transport.ConnectionIdenti
 // initLaneCA creates the lane-wide ephemeral CA. The returned cleanup
 // function closes the CA.
 func initLaneCA(p *lane.Lane) (*transport.EphemeralCA, func()) {
-	ca, caErr := transport.New(string(p.LaneID))
+	ca, caErr := transport.New(string(p.ID))
 	if caErr != nil {
 		log.Fatalf("error: ephemeral CA: %v", caErr)
 	}
@@ -317,15 +317,15 @@ func allocateMediatedPorts(p *lane.Lane) map[string]capsule.HostPorts {
 		case s.Pack != nil:
 			continue
 		case s.Deploy != nil:
-			reqs = append(reqs, capsule.StepPortReq{Name: string(s.Name)})
+			reqs = append(reqs, capsule.StepPortReq{Name: string(s.ID)})
 			for _, sc := range s.Deploy.Recording.PreState.Captures {
-				reqs = append(reqs, capsule.StepPortReq{Name: captureKey(string(s.Name), sc.Name)})
+				reqs = append(reqs, capsule.StepPortReq{Name: captureKey(string(s.ID), sc.ID)})
 			}
 			for _, sc := range s.Deploy.Recording.PostState.Captures {
-				reqs = append(reqs, capsule.StepPortReq{Name: captureKey(string(s.Name), sc.Name)})
+				reqs = append(reqs, capsule.StepPortReq{Name: captureKey(string(s.ID), sc.ID)})
 			}
 		default:
-			reqs = append(reqs, capsule.StepPortReq{Name: string(s.Name)})
+			reqs = append(reqs, capsule.StepPortReq{Name: string(s.ID)})
 		}
 	}
 	ports, err := capsule.AllocatePorts(reqs)

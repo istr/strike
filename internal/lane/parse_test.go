@@ -62,8 +62,8 @@ func TestParse_ValidMinimal(t *testing.T) {
 	if len(p.Steps) != 1 {
 		t.Fatalf("step count = %d, want 1", len(p.Steps))
 	}
-	if p.Steps[0].Name != "deploy" {
-		t.Errorf("step name = %q, want deploy", p.Steps[0].Name)
+	if p.Steps[0].ID != "deploy" {
+		t.Errorf("step name = %q, want deploy", p.Steps[0].ID)
 	}
 	if p.Steps[0].Deploy == nil {
 		t.Error("step[0].Deploy is nil, want non-nil")
@@ -73,7 +73,7 @@ func TestParse_ValidMinimal(t *testing.T) {
 func TestParse_ValidDeployOnly(t *testing.T) {
 	yaml := []byte(`
 name: deploy-only
-laneId: deploy-only
+id: deploy-only
 registry: localhost:5555/test
 secrets: {}
 resolver:
@@ -106,7 +106,7 @@ keyless:
         type: certFingerprint
         fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 steps:
-  - name: deploy
+  - id: deploy
     deploy:
       method:
         type: registry
@@ -150,7 +150,7 @@ steps:
 func TestParse_BaseSBOMSigners(t *testing.T) {
 	yaml := []byte(`
 name: sbom-signer-lane
-laneId: sbom-signer-lane
+id: sbom-signer-lane
 registry: localhost:5555/test
 secrets: {}
 resolver:
@@ -186,7 +186,7 @@ baseSbomSigners:
   - issuer: "https://accounts.google.com"
     identity: "sbom-builder@example.iam.gserviceaccount.com"
 steps:
-  - name: deploy
+  - id: deploy
     deploy:
       method:
         type: registry
@@ -343,62 +343,62 @@ func TestValidatePaths(t *testing.T) {
 	}{
 		{
 			name:    "relative output path is valid",
-			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Workdir: lane.Ptr(lane.AbsPath("/work")), Outputs: []lane.OutputSpec{{Path: lane.Ptr(lane.RelPath("node_modules"))}}}}},
+			lane:    &lane.Lane{Steps: []lane.Step{{ID: "s", Workdir: lane.Ptr(lane.AbsPath("/work")), Outputs: []lane.OutputSpec{{Path: lane.Ptr(lane.RelPath("node_modules"))}}}}},
 			wantErr: "",
 		},
 		{
 			name:    "absolute output path rejected",
-			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Workdir: lane.Ptr(lane.AbsPath("/work")), Outputs: []lane.OutputSpec{{Path: lane.Ptr(lane.RelPath("/out.txt"))}}}}},
+			lane:    &lane.Lane{Steps: []lane.Step{{ID: "s", Workdir: lane.Ptr(lane.AbsPath("/work")), Outputs: []lane.OutputSpec{{Path: lane.Ptr(lane.RelPath("/out.txt"))}}}}},
 			wantErr: "must be relative",
 		},
 		{
 			name:    "non-canonical output path rejected",
-			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Workdir: lane.Ptr(lane.AbsPath("/work")), Outputs: []lane.OutputSpec{{Path: lane.Ptr(lane.RelPath("src/../etc/passwd"))}}}}},
+			lane:    &lane.Lane{Steps: []lane.Step{{ID: "s", Workdir: lane.Ptr(lane.AbsPath("/work")), Outputs: []lane.OutputSpec{{Path: lane.Ptr(lane.RelPath("src/../etc/passwd"))}}}}},
 			wantErr: "must be canonical",
 		},
 		{
 			name:    "outputs without workdir rejected",
-			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Outputs: []lane.OutputSpec{{Path: lane.Ptr(lane.RelPath("out"))}}}}},
+			lane:    &lane.Lane{Steps: []lane.Step{{ID: "s", Outputs: []lane.OutputSpec{{Path: lane.Ptr(lane.RelPath("out"))}}}}},
 			wantErr: "declares outputs but no workdir",
 		},
 		{
 			name:    "workdir absolute canonical",
-			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Image: lane.Ptr(lane.ImageRef("img")), Workdir: lane.Ptr(lane.AbsPath("/src"))}}},
+			lane:    &lane.Lane{Steps: []lane.Step{{ID: "s", Image: lane.Ptr(lane.ImageRef("img")), Workdir: lane.Ptr(lane.AbsPath("/src"))}}},
 			wantErr: "",
 		},
 		{
 			name:    "workdir root",
-			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Image: lane.Ptr(lane.ImageRef("img")), Workdir: lane.Ptr(lane.AbsPath("/"))}}},
+			lane:    &lane.Lane{Steps: []lane.Step{{ID: "s", Image: lane.Ptr(lane.ImageRef("img")), Workdir: lane.Ptr(lane.AbsPath("/"))}}},
 			wantErr: "",
 		},
 		{
 			name:    "workdir nested",
-			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Image: lane.Ptr(lane.ImageRef("img")), Workdir: lane.Ptr(lane.AbsPath("/out/www"))}}},
+			lane:    &lane.Lane{Steps: []lane.Step{{ID: "s", Image: lane.Ptr(lane.ImageRef("img")), Workdir: lane.Ptr(lane.AbsPath("/out/www"))}}},
 			wantErr: "",
 		},
 		{
 			name:    "workdir relative rejected",
-			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Image: lane.Ptr(lane.ImageRef("img")), Workdir: lane.Ptr(lane.AbsPath("src"))}}},
+			lane:    &lane.Lane{Steps: []lane.Step{{ID: "s", Image: lane.Ptr(lane.ImageRef("img")), Workdir: lane.Ptr(lane.AbsPath("src"))}}},
 			wantErr: "must be absolute",
 		},
 		{
 			name:    "workdir dot-dot rejected",
-			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Image: lane.Ptr(lane.ImageRef("img")), Workdir: lane.Ptr(lane.AbsPath("/src/../etc"))}}},
+			lane:    &lane.Lane{Steps: []lane.Step{{ID: "s", Image: lane.Ptr(lane.ImageRef("img")), Workdir: lane.Ptr(lane.AbsPath("/src/../etc"))}}},
 			wantErr: "must be canonical",
 		},
 		{
 			name:    "workdir dot rejected",
-			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Image: lane.Ptr(lane.ImageRef("img")), Workdir: lane.Ptr(lane.AbsPath("/src/./build"))}}},
+			lane:    &lane.Lane{Steps: []lane.Step{{ID: "s", Image: lane.Ptr(lane.ImageRef("img")), Workdir: lane.Ptr(lane.AbsPath("/src/./build"))}}},
 			wantErr: "must be canonical",
 		},
 		{
 			name:    "workdir double slash rejected",
-			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Image: lane.Ptr(lane.ImageRef("img")), Workdir: lane.Ptr(lane.AbsPath("/src//out"))}}},
+			lane:    &lane.Lane{Steps: []lane.Step{{ID: "s", Image: lane.Ptr(lane.ImageRef("img")), Workdir: lane.Ptr(lane.AbsPath("/src//out"))}}},
 			wantErr: "must be canonical",
 		},
 		{
 			name:    "workdir trailing slash rejected",
-			lane:    &lane.Lane{Steps: []lane.Step{{Name: "s", Image: lane.Ptr(lane.ImageRef("img")), Workdir: lane.Ptr(lane.AbsPath("/src/"))}}},
+			lane:    &lane.Lane{Steps: []lane.Step{{ID: "s", Image: lane.Ptr(lane.ImageRef("img")), Workdir: lane.Ptr(lane.AbsPath("/src/"))}}},
 			wantErr: "must be canonical",
 		},
 	}
@@ -472,7 +472,7 @@ keyless:
         type: certFingerprint
         fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 steps:
-  - name: bad-deploy
+  - id: bad-deploy
     deploy:
       method:
         type: nonsense
@@ -509,7 +509,7 @@ steps:
 func TestParse_RelPathValidation(t *testing.T) {
 	tmpl := `
 name: test
-laneId: test
+id: test
 registry: localhost:5555/test
 secrets: {}
 resolver:
@@ -542,7 +542,7 @@ keyless:
         type: certFingerprint
         fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 steps:
-  - name: src
+  - id: src
     image: img@sha256:abababababababababababababababababababababababababababababababab
     args: ["true"]
     workdir: /work
@@ -550,8 +550,10 @@ steps:
     inputs: []
     secrets: []
     outputs:
-      - { name: tree, type: directory, path: tree }
-  - name: consumer
+      - id: tree
+        type: directory
+        path: tree
+  - id: consumer
     image: img@sha256:cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd
     args: ["true"]
     env: {}
@@ -561,7 +563,7 @@ steps:
         mount: /in/x
     secrets: []
     outputs: []
-  - name: deploy
+  - id: deploy
     deploy:
       method:
         type: registry

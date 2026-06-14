@@ -1,5 +1,5 @@
 name: trustroot-inline-lane
-laneId: trustroot-inline-lane
+id: trustroot-inline-lane
 registry: localhost:5555/test
 secrets: {}
 resolver:
@@ -59,7 +59,7 @@ keyless:
           start: "2026-06-11T20:33:48Z"
           end: "2036-06-11T20:38:48Z"
 steps:
-  - name: deploy
+  - id: deploy
     deploy:
       method:
         type: registry

@@ -12,5 +12,5 @@ func OutputLayerName(out OutputSpec) string {
 	if out.Path != nil {
 		return path.Base(out.Path.String())
 	}
-	return out.Name
+	return out.ID
 }

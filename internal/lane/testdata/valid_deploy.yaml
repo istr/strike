@@ -1,5 +1,5 @@
 name: deploy-lane
-laneId: deploy-lane
+id: deploy-lane
 registry: localhost:5555/test
 secrets: {}
 resolver:
@@ -32,7 +32,7 @@ keyless:
         type: certFingerprint
         fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 steps:
-  - name: build
+  - id: build
     image: docker.io/library/golang@sha256:abababababababababababababababababababababababababababababababab
     args: ["go", "build"]
     workdir: /out
@@ -40,10 +40,10 @@ steps:
     inputs: []
     secrets: []
     outputs:
-      - name: binary
+      - id: binary
         type: file
         path: binary
-  - name: deploy
+  - id: deploy
     deploy:
       method:
         type: registry

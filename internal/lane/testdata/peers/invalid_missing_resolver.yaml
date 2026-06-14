@@ -1,5 +1,5 @@
 name: peers-missing-resolver
-laneId: peers-missing-resolver
+id: peers-missing-resolver
 registry: localhost:5555/test
 secrets: {}
 oidc:
@@ -27,7 +27,7 @@ keyless:
         type: certFingerprint
         fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 steps:
-  - name: fetch
+  - id: fetch
     image: docker.io/library/alpine@sha256:abababababababababababababababababababababababababababababababab
     args: [wget, "https://example.com/file"]
     workdir: /out
@@ -35,7 +35,7 @@ steps:
     inputs: []
     secrets: []
     outputs:
-      - name: file
+      - id: file
         type: file
         path: file
     peers:
