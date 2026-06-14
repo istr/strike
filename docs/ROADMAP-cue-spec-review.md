@@ -1,6 +1,6 @@
 # CUE Spec Review Roadmap (post trust-boundary formalization)
 
-## Status: OPEN -- two arcs remain (D-D field-add, D-F: B-2..B-9)
+## Status: OPEN -- two arcs remain (D-D field-add, D-F: B-4..B-9)
 
 This roadmap is the single source for the work-arcs derived from
 `RETROSPECTIVE-cue-spec-review.md`. The post-formalization handover note
@@ -77,7 +77,7 @@ distinct:
 
 Execute in the order documented in ROADMAP-STATUS.md.
 
-### 1. D-D field-add -- engine-cert subject / issuer into `#EngineConnection`
+### D-D field-add -- engine-cert subject / issuer into `#EngineConnection`
 
 A schema field-add (CUE-first ratification gate applies) plus wiring the Go
 projection to stop dropping the fields. The Go `ConnectionInfo` / `TLSIdentity`
@@ -92,7 +92,7 @@ caveat: the engine dial uses standard `net/http` TLS (`container/tls.go`
 observed-but-not-pinned; the field-add records them at V truthfully, and the
 later engine-transport arc is what flips `hardenedByDeclaration` to true.
 
-### 2. D-F -- B-2..B-9 schema findings (one instruction each)
+### D-F -- B-2..B-9 schema findings (one instruction each)
 
 At-tree state verified at `8721d0ff`; B-1 is done, the rest pending.
 
@@ -108,7 +108,7 @@ At-tree state verified at `8721d0ff`; B-1 is done, the rest pending.
 | B-9 | P3 polish: `#SignerIdentity` dedup, `clientId` -> `audience`, `trustRootRef` `@go` symmetry, default-disjunction order | Pending. |
 
 Execute in the order documented in ROADMAP-STATUS.md:
-B-2, B-3, B-6, B-7 first (single-concern schema fixes),
+B-6, B-7 first (single-concern schema fixes),
 then B-4 / B-5 (naming, broader blast radius), then B-8 / B-9 (polish). Each is
 its own PR per the ratification.
 
