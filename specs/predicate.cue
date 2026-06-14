@@ -28,11 +28,12 @@ package deploy
 // #DigestSet is an in-toto DigestSet. Typed to the algorithms strike emits
 // rather than an open map (map[string]string is prohibited for structured
 // data; a typed subset is a conformant DigestSet instance). Image subjects
-// carry sha256; git resolved-dependencies carry gitCommit.
+// carry sha256; git resolved-dependencies carry gitCommit (40-hex SHA-1 or
+// 64-hex SHA-256, matching the source-provenance commit width).
 #DigestSet: {
 	sha256?:    =~"^[a-f0-9]{64}$"
 	sha512?:    =~"^[a-f0-9]{128}$"
-	gitCommit?: =~"^[a-f0-9]{40}$"
+	gitCommit?: =~"^[a-f0-9]{40}$|^[a-f0-9]{64}$"
 }
 
 // #ResourceDescriptor is the in-toto ResourceDescriptor. strike emits only the
