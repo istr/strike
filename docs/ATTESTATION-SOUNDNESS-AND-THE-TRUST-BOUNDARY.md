@@ -223,6 +223,69 @@ deployments. It also maps to *who verifies*: V-zone -> sound to **any** verifier
 E-zone -> sound only to a verifier who **trusts the engine**; informational ->
 meaningful only under trust the verifier **brings independently**.
 
+## Decision procedure
+
+The three-way split is not assigned field by field; it is derived from one input
+-- the *provenance* of a fact's bytes -- by a fixed rule table. This is what makes
+"no E-link recorded as a V-link" structural rather than editorial: the layer is a
+consequence of the provenance, and an author cannot quietly promote a fact by
+relabelling it.
+
+**Provenance.** Exactly one kind holds for each fact:
+
+- **cpSealed** -- CP computes or holds canonical, reproducible bytes (declared
+  lane scalars, CP-computed digests, the in-process SBOM). A verifier recomputes
+  them; the two things CP can verify without E (above) are exactly this kind.
+- **cpObserved** -- CP observed *and verified* an external party's identity: a
+  front-observed, pinned-or-checked TLS handshake (a declared peer, the resolver,
+  the engine connection). Verification is what admits an external fact to V; mere
+  trust does not.
+- **engineChainAssertion** -- the engine asserts a fact about the source-to-deploy
+  chain that CP relies on under trust(E) (the step-to-peer attribution).
+- **engineSelfReport** -- the engine asserts a fact about *itself* (version,
+  rootless mode). It participates in no chain claim.
+- **containerProduced** -- bytes produced by the untrusted container and
+  engine-relayed (state-capture digests, container-written provenance). CP's hash
+  transports them; hashing does not lift them out of the container-asserted class.
+- **hostAsserted** -- a value CP reads from the host under a bare trust assumption,
+  of unknown origin and carrying no cryptographic claim, superseded by a canonical
+  source (the deploy wall-clock; Rekor `integratedTime` is canonical, per
+  SECURITY.md "Wallclock trust"). The same kind would cover host-environment facts
+  about the attesting process -- kernel, distribution, uid -- were any recorded.
+
+**The rule table.**
+
+    V              <- cpSealed | cpObserved
+    E              <- engineChainAssertion
+    informational  <- engineSelfReport | containerProduced | hostAsserted
+
+A fact's layer is the table applied to its provenance. Two asymmetries follow and
+are load-bearing:
+
+1. **Verification, not trust, admits an external fact to V.** cpObserved is a
+   verified observation (pinned cert, checked handshake); a value CP merely trusts
+   -- the host wall-clock -- is hostAsserted and stays informational, even though
+   CP "knows" it. This is the V criterion ("no false positives") read forward: V
+   carries only what survives an adversary, and an unverified ambient reading does
+   not.
+2. **Declaration hardens an observation; it never confers a layer.** When the lane
+   declares an expected value for a cpObserved fact, CP checks the observation
+   against the declaration and hard-fails on mismatch -- the observation is
+   *hardened*, not promoted. Declaration is not an input to the rule table at all,
+   so a fact that is declared but never observed cannot reach V by construction.
+   The converse does not hold: declaring a fact CP did not observe attests nothing.
+
+**This procedure is machine-enforced.** The rule table lives once, as data, in
+`specs/trust-layers.cue` (`layerOf`); each field states only its provenance and
+derives its layer. The conformance test in
+`internal/deploy/trustlayers_conformance_internal_test.go` restates the rules
+independently and fails if the table drifts from them, checks that every field's
+derived layer matches the section it occupies in the schema, and enforces that
+only a cpObserved fact is declaration-hardened. The map also records, per fact,
+whether it is hardened today: the pinned resolver and the dialed peers are; the
+engine connection is observed but not yet declaration-hardened, and that gap is
+visible in the data rather than buried in prose.
+
 ## What this commits us to
 
 1. **The aim sentence must be qualified.** "End-to-end software attestation and
@@ -236,8 +299,11 @@ meaningful only under trust the verifier **brings independently**.
    three-section split *is* that self-description; it is what makes "best effort"
    honest rather than misleading.
 3. **No code change claims an E-link is a V-link.** Any implementation recording
-   an E-dependent value in a V position is unsound -- the stage-2 bug class to
-   hunt.
+   an E-dependent value in a V position is unsound. This is no longer only a
+   review obligation: the decision procedure above derives each field's layer from
+   its provenance in `specs/trust-layers.cue`, and the conformance test fails if a
+   schema places a field off its derived layer -- the stage-2 bug class, hunted
+   structurally.
 
 ## Open placement (operator's call)
 
