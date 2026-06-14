@@ -117,13 +117,13 @@ steps:
         id: deploy-only-target
         type: registry
         description: deploy-only lane
-      attestation:
+      recording:
         preState:
           required: false
-          capture: []
+          captures: []
         postState:
           required: false
-          capture: []
+          captures: []
     args: []
     env: {}
     inputs: []
@@ -197,13 +197,13 @@ steps:
         id: sbom-signer-target
         type: registry
         description: sbom signer test
-      attestation:
+      recording:
         preState:
           required: false
-          capture: []
+          captures: []
         postState:
           required: false
-          capture: []
+          captures: []
     args: []
     env: {}
     inputs: []
@@ -481,7 +481,7 @@ steps:
       target:
         type: registry
         description: x
-      attestation:
+      recording:
         preState: {required: false, capture: []}
         postState: {required: false, capture: []}
 `)
@@ -572,13 +572,13 @@ steps:
         id: d1-minimal-target
         type: registry
         description: minimal deploy step for D1
-      attestation:
+      recording:
         preState:
           required: false
-          capture: []
+          captures: []
         postState:
           required: false
-          capture: []
+          captures: []
     args: []
     env: {}
     inputs: []

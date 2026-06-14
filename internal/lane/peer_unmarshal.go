@@ -136,10 +136,10 @@ func (s *Step) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// UnmarshalJSON implements json.Unmarshaler for StateCapture.
-// Same dispatch as Step but on the StateCapture peers field.
-func (sc *StateCapture) UnmarshalJSON(data []byte) error {
-	type alias StateCapture
+// UnmarshalJSON implements json.Unmarshaler for Capture.
+// Same dispatch as Step but on the Capture peers field.
+func (sc *Capture) UnmarshalJSON(data []byte) error {
+	type alias Capture
 	aux := struct {
 		*alias
 		Peers []json.RawMessage `json:"peers,omitempty"`

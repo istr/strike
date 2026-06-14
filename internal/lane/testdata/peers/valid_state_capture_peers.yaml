@@ -55,10 +55,10 @@ steps:
         id: prod-registry
         type: registry
         description: prod
-      attestation:
+      recording:
         preState:
           required: false
-          capture:
+          captures:
             - name: probe
               image: alpine@sha256:1111111111111111111111111111111111111111111111111111111111111111
               command: [cat, /version]
@@ -70,7 +70,7 @@ steps:
                     fingerprint: sha256:3333333333333333333333333333333333333333333333333333333333333333
         postState:
           required: false
-          capture: []
+          captures: []
     args: []
     env: {}
     inputs: []

@@ -66,13 +66,13 @@ steps:
         id: golden-target
         type: registry
         description: golden fixture deploy target
-      attestation:
+      recording:
         preState:
           required: false
-          capture: []
+          captures: []
         postState:
           required: false
-          capture: []
+          captures: []
     args: []
     env: {}
     inputs: []

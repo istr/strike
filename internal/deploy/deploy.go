@@ -371,10 +371,10 @@ func (d *Deployer) collectObservedPeers(
 			return nil, nil, err
 		}
 	}
-	for _, sc := range step.Deploy.Attestation.PreState.Capture {
+	for _, sc := range step.Deploy.Recording.PreState.Captures {
 		declaredPeers[string(step.Name)] = append(declaredPeers[string(step.Name)], sc.Peers...)
 	}
-	for _, sc := range step.Deploy.Attestation.PostState.Capture {
+	for _, sc := range step.Deploy.Recording.PostState.Captures {
 		declaredPeers[string(step.Name)] = append(declaredPeers[string(step.Name)], sc.Peers...)
 	}
 
@@ -533,9 +533,9 @@ func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.Sta
 	started := clock.Wall()
 
 	// 1. Capture pre-state -> canonical digest.
-	preCaptures, err := d.captureState(ctx, spec.Attestation.PreState)
+	preCaptures, err := d.captureState(ctx, spec.Recording.PreState)
 	if err != nil {
-		if spec.Attestation.PreState.Required {
+		if spec.Recording.PreState.Required {
 			return nil, fmt.Errorf("step %q: pre-state capture failed: %w", step.Name, err)
 		}
 		log.Printf("WARN   deploy %s: pre-state capture failed: %v", step.Name, err)
@@ -559,9 +559,9 @@ func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.Sta
 	}
 
 	// 5. Capture post-state -> canonical digest.
-	postCaptures, err := d.captureState(ctx, spec.Attestation.PostState)
+	postCaptures, err := d.captureState(ctx, spec.Recording.PostState)
 	if err != nil {
-		if spec.Attestation.PostState.Required {
+		if spec.Recording.PostState.Required {
 			return nil, fmt.Errorf("step %q: post-state capture failed: %w", step.Name, err)
 		}
 		log.Printf("WARN   deploy %s: post-state capture failed: %v", step.Name, err)
@@ -718,9 +718,9 @@ func (a *Attestation) JSON() ([]byte, error) {
 }
 
 // captureState runs all state capture commands and returns the raw captures.
-func (d *Deployer) captureState(ctx context.Context, spec lane.StateCaptureSpec) ([]captureSnap, error) {
+func (d *Deployer) captureState(ctx context.Context, spec lane.CaptureSet) ([]captureSnap, error) {
 	var captures []captureSnap
-	for _, sc := range spec.Capture {
+	for _, sc := range spec.Captures {
 		snap, err := d.captureOne(ctx, sc)
 		if err != nil {
 			return captures, fmt.Errorf("capture %q: %w", sc.Name, err)
@@ -731,7 +731,7 @@ func (d *Deployer) captureState(ctx context.Context, spec lane.StateCaptureSpec)
 }
 
 // captureOne runs a state capture command inside a container.
-func (d *Deployer) captureOne(ctx context.Context, sc lane.StateCapture) (captureSnap, error) {
+func (d *Deployer) captureOne(ctx context.Context, sc lane.Capture) (captureSnap, error) {
 	if sc.Image == "" {
 		return captureSnap{}, fmt.Errorf("capture %q: image is required", sc.Name)
 	}

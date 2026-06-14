@@ -106,13 +106,13 @@ steps:
         id: d1-minimal-target
         type: registry
         description: minimal deploy step for D1
-      attestation:
+      recording:
         preState:
           required: false
-          capture: []
+          captures: []
         postState:
           required: false
-          capture: []
+          captures: []
     args: []
     env: {}
     inputs: []

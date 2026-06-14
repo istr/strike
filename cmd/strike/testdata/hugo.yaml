@@ -121,13 +121,13 @@ steps:
         id: site-registry
         type: registry
         description: push site image to registry
-      attestation:
+      recording:
         preState:
           required: false
-          capture: []
+          captures: []
         postState:
           required: false
-          capture: []
+          captures: []
     args: []
     env: {}
     inputs: []

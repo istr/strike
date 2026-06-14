@@ -73,13 +73,13 @@ steps:
         id: deploy-registry
         type: registry
         description: deploy to registry
-      attestation:
+      recording:
         preState:
           required: false
-          capture: []
+          captures: []
         postState:
           required: false
-          capture: []
+          captures: []
     args: []
     env: {}
     inputs: []

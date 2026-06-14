@@ -3,7 +3,7 @@
 // Three step types, one supply chain:
 //   run:    execute a command in a container, produce typed artifacts
 //   pack:   assemble an OCI image from artifacts (no container, no RUN)
-//   deploy: apply artifacts to a target, produce state attestation
+//   deploy: apply artifacts to a target, produce state recording
 
 package lane
 
@@ -347,7 +347,7 @@ package lane
 }
 
 // ---------------------------------------------------------------------------
-// Deploy -- apply to target, mandatory state attestation
+// Deploy -- apply to target, mandatory state recording
 // ---------------------------------------------------------------------------
 
 #DeploySpec: {
@@ -356,8 +356,8 @@ package lane
 	artifacts: {
 		[Name=string]: #ArtifactRef @go(Artifacts)
 	}
-	target:      #DeployTarget    @go(Target)
-	attestation: #AttestationSpec @go(Attestation)
+	target:    #DeployTarget   @go(Target)
+	recording: #StateRecording @go(Recording)
 	source?: {
 		gitImage: #ImageRef
 	} @go(Source,optional=nillable)
@@ -411,23 +411,28 @@ package lane
 }
 
 // ---------------------------------------------------------------------------
-// State capture
+// State recording: pre/post captures are the input to the recording
+// operation. The output carries two digests (pre_state_digest,
+// post_state_digest). No detection, no drift policy -- see ADR-016.
 // ---------------------------------------------------------------------------
 
-#AttestationSpec: {
-	@go(AttestationSpec)
-	preState:  #StateCaptureSpec @go(PreState)
-	postState: #StateCaptureSpec @go(PostState)
+#StateRecording: {
+	@go(StateRecording)
+	preState:  #CaptureSet @go(PreState)
+	postState: #CaptureSet @go(PostState)
 }
 
-#StateCaptureSpec: {
-	@go(StateCaptureSpec)
+#CaptureSet: {
+	@go(CaptureSet)
+	// required means the capture must run successfully for the recording to be
+	// valid -- execution success, not a drift reaction. strike takes no action
+	// on state differences (ADR-016); do not add policy fields here.
 	required: *true | bool @go(Required)
-	capture: [...#StateCapture] @go(Capture)
+	captures: [...#Capture] @go(Captures)
 }
 
-#StateCapture: {
-	@go(StateCapture)
+#Capture: {
+	@go(Capture)
 	name:  string    @go(Name)
 	image: #ImageRef @go(Image)
 	command: [...string] @go(Command)
