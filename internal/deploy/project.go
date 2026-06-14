@@ -27,11 +27,13 @@ const (
 //     identity, declared and observed peers, observed resolver, and the
 //     CP-observed engine connection, in SLSA's typed externalParameters (Fork
 //     D). Sound without engine trust. No wall-clock (reproducible).
-//   - engine_dependent (Layer E) -> engine-context: the engine's self-reported
-//     metadata (Fork C: reclassified to E in the output) and the
-//     engine-asserted peer attribution. Sound only under trust(E).
-//   - informational -> informational: deploy wall-clock, pre/post-state
-//     digests, container-asserted provenance. Never gates.
+//   - engine_dependent (Layer E) -> engine-context: the engine-asserted peer
+//     attribution (peerAttribution). Sound only under trust(E). The engine's
+//     self-report (engineMetadata) is NOT here -- it carries no trust claim and
+//     projects to the informational statement below.
+//   - informational -> informational: deploy wall-clock, pre/post-state digests,
+//     container-asserted provenance, and the engine self-report (engineMetadata).
+//     Never gates.
 //
 // oidc is the lane-declared signing identity (ADR-040 D5); only issuer and
 // identity are carried (the strike verify cross-check targets).

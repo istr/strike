@@ -9,25 +9,19 @@
 // PROJECTIONS of this map. A conformance test asserts both agree with it. Do not
 // restate the classification in prose anywhere -- link to this file instead.
 //
-// SOURCE OF THE CLASSIFICATION. Derived from
-// ATTESTATION-SOUNDNESS-AND-THE-TRUST-BOUNDARY.md:
-//   V             Sound to any verifier without engine trust -- CP-sealed or
-//                 CP-observed. Declared lane scalars, published artifact
-//                 digest/signature/SBOM, front-observed peer/resolver/engine
-//                 identity, Rekor-anchored material.
-//   E             Sound only under trust(E). Engine-asserted binding of a network
-//                 action to a step (C1 attribution); not sound against a malicious
-//                 engine.
-//   informational No trust claim. Container-asserted content (untrusted subject,
-//                 regardless of engine trust) and engine self-reports that do not
-//                 participate in the source-to-deploy chain.
-//
-// THE DISCRIMINATOR. Who produced the bytes: CP-produced or CP-observed -> V;
-// engine-asserted -> E; container-produced -> informational (engine trust does
-// not lift it, because the container is a separate untrusted subject).
+// HOW THE LAYER IS DECIDED. The layer is NOT assigned per field. Each field states
+// only its `provenance` -- who produced the bytes, and for external facts whether
+// CP verified them -- and its `layer` is DERIVED from that provenance through the
+// fixed rule table `layerOf` below. This makes "no E-link recorded as a V-link"
+// structural: an author cannot promote a fact by relabelling it, only by changing a
+// provenance the conformance test cross-checks against the schema. The rules and
+// their two asymmetries (verification-not-trust admits to V; declaration hardens an
+// observation but never confers a layer) are stated in
+// ATTESTATION-SOUNDNESS-AND-THE-TRUST-BOUNDARY.md "Decision procedure".
 //
 // EXPORT. `make specs` exports this to specs/trust-layers.json for external
-// verifiers and policy engines. It is DATA, not a JSON Schema.
+// verifiers and policy engines (now including the layerOf rule table). It is DATA,
+// not a JSON Schema.
 
 package trustlayers
 
@@ -37,17 +31,77 @@ package trustlayers
 // Sigstore bundle, never in a predicate payload (ADR-013). "none" = not emitted.
 #PublishedIn: "slsa-provenance" | "engine-context" | "informational" | "bundle" | "none"
 
-#Entry: {
-	layer:     #TrustLayer
-	internal:  string       // path in attestation.cue's #Attestation, or "-" if not in the collect-model
-	published: #PublishedIn // statement in predicate.cue that carries it
-	basis:     string       // one-line soundness rationale
+// #Provenance -- the SOLE input to the layer decision: who produced a fact's bytes
+// and, for external facts, whether CP verified them. Exactly one kind holds per
+// fact; the layer is a consequence (layerOf), never stated by hand.
+//
+//   cpSealed             CP computes/holds canonical, reproducible bytes (declared
+//                        lane scalars, CP-computed digests, the in-process SBOM).
+//                        A verifier recomputes them; sound without engine trust.
+//   cpObserved           CP observed AND verified an external party's identity
+//                        (front-observed, pinned/checked TLS: a declared peer, the
+//                        resolver, the engine connection). Verification is what
+//                        admits an external fact to V; mere trust does not.
+//   engineChainAssertion The engine asserts a source-to-deploy chain fact CP relies
+//                        on under trust(E) (peerAttribution). Sound only under E.
+//   engineSelfReport     The engine asserts a fact about ITSELF (version, rootless
+//                        mode). Participates in no chain claim; no trust claim.
+//   containerProduced    Bytes produced by the untrusted container and engine-
+//                        relayed (state-capture digests, container-written
+//                        provenance). CP's hash transports them; it does not lift
+//                        them out of the container-asserted class.
+//   hostAsserted         A value CP reads from the host under a bare trust
+//                        assumption, of unknown origin and carrying no cryptographic
+//                        claim, superseded by a canonical source (the deploy
+//                        wall-clock; Rekor integratedTime is canonical, per
+//                        SECURITY.md "Wallclock trust"). The kind also fits
+//                        host-environment facts about the attesting process --
+//                        kernel, distro, uid -- were any ever recorded (none are
+//                        today; YAGNI).
+#Provenance: "cpSealed" | "cpObserved" | "engineChainAssertion" | "engineSelfReport" | "containerProduced" | "hostAsserted"
+
+// layerOf -- the decision procedure AS DATA: the one place the V / E /
+// informational rules are encoded. Read it as the rule table:
+//   V             <- cpSealed | cpObserved
+//   E             <- engineChainAssertion
+//   informational <- engineSelfReport | containerProduced | hostAsserted
+// A field's `layer` is layerOf[its provenance]. Declaration is NOT a key here, so a
+// declared-but-unobserved fact cannot reach V by construction. The pattern
+// constraint pins keys to #Provenance and values to #TrustLayer; the conformance
+// test pins the table to the rules above.
+layerOf: [#Provenance]: #TrustLayer
+layerOf: {
+	cpSealed:             "V"
+	cpObserved:           "V"
+	engineChainAssertion: "E"
+	engineSelfReport:     "informational"
+	containerProduced:    "informational"
+	hostAsserted:         "informational"
 }
 
-// Section anchors: each top-level section of #Attestation, the published
-// statement that mirrors it, and the layer the whole section carries. The
-// simplest conformance check is "every field of a section has the section's
-// layer"; the per-field map below additionally pins each field's published home.
+#Entry: {
+	// provenance -- the producer/verification kind; the SOLE input to `layer`.
+	provenance: #Provenance
+	// layer -- DERIVED from provenance via layerOf; never assigned by hand.
+	layer: #TrustLayer & layerOf[provenance]
+	// hardenedByDeclaration -- true iff the lane declares an expected value for this
+	// fact that CP checks against its observation at runtime, hard-failing on
+	// mismatch. Only a cpObserved fact can be hardened (you cannot check an
+	// observation never made); the conformance test enforces that. Records today's
+	// reality: the pinned resolver and the dialed peers are hardened by the transport
+	// verifier; the engine connection is observed but NOT yet hardened (no declared-
+	// expected engine identity -- the engine-transport arc closes this), so its row
+	// is deliberately false and the gap is machine-visible.
+	hardenedByDeclaration: bool | *false
+	internal:  string       // path in attestation.cue's #Attestation, or "-" if not in the collect-model
+	published: #PublishedIn // statement in predicate.cue that carries it
+	rationale: string       // one-line soundness rationale (human context; not load-bearing)
+}
+
+// Section anchors: each top-level section of #Attestation, the published statement
+// that mirrors it, and the layer the whole section carries. The simplest
+// conformance check is "every field of a section has the section's layer"; the
+// per-field map below additionally pins each field's published home.
 sections: [string]: {layer: #TrustLayer, statement: #PublishedIn}
 sections: {
 	sealed: {layer: "V", statement: "slsa-provenance"}
@@ -55,41 +109,35 @@ sections: {
 	informational: {layer: "informational", statement: "informational"}
 }
 
-// Per-field map. Key = stable logical field id (path-independent), so the same
-// fact keys the same row regardless of where each schema nests it.
+// Per-field map. Key = stable logical field id (path-independent), so the same fact
+// keys the same row regardless of where each schema nests it. (The field whose id
+// is "provenance" carries container-written records; its key coincides with the
+// #Entry attribute name by chance, not by relation.)
 fields: [string]: #Entry
 fields: {
-	// ---- Layer V: CP-sealed or CP-observed; sound without engine trust ----
-	laneId: {layer: "V", internal: "sealed.laneId", published: "slsa-provenance", basis: "declared lane scalar"}
-	laneDigest: {layer: "V", internal: "sealed.laneDigest", published: "slsa-provenance", basis: "CP hashes the lane file itself (data CP holds, cat. 1)"}
-	target: {layer: "V", internal: "sealed.target", published: "slsa-provenance", basis: "declared, lane-anchored"}
-	oidc: {layer: "V", internal: "-", published: "slsa-provenance", basis: "declared signing identity; injected at sign time from lane OIDC config (absent from the collect-model)"}
-	peers: {layer: "V", internal: "sealed.peers", published: "slsa-provenance", basis: "declared, lane-anchored"}
-	resolver: {layer: "V", internal: "sealed.resolver", published: "slsa-provenance", basis: "CP-observed resolver TLS identity at the pre-flight handshake (front-observed)"}
-	engine: {layer: "V", internal: "sealed.engine", published: "slsa-provenance", basis: "CP-observed/controlled engine connection facts (#EngineConnection); NOT the self-report"}
-	observedPeers: {layer: "V", internal: "sealed.observedPeers", published: "slsa-provenance", basis: "CP-validated peer identity, dialed per the lane spec (front-observed)"}
+	// ---- V: CP-sealed canonical bytes (cpSealed) ----
+	laneId: {provenance: "cpSealed", internal: "sealed.laneId", published: "slsa-provenance", rationale: "declared lane scalar"}
+	laneDigest: {provenance: "cpSealed", internal: "sealed.laneDigest", published: "slsa-provenance", rationale: "CP hashes the lane file itself (data CP holds)"}
+	target: {provenance: "cpSealed", internal: "sealed.target", published: "slsa-provenance", rationale: "declared, lane-anchored"}
+	oidc: {provenance: "cpSealed", internal: "-", published: "slsa-provenance", rationale: "declared signing identity; injected at sign time from lane OIDC config (absent from the collect-model)"}
+	peers: {provenance: "cpSealed", internal: "sealed.peers", published: "slsa-provenance", rationale: "declared, lane-anchored"}
 
-	artifactDigest: {layer: "V", internal: "sealed.artifacts[].digest", published: "slsa-provenance", basis: "published artifact digest, consumer-dereferenceable by D (C3); -> subject / resolvedDependencies"}
-	artifactSBOM: {layer: "V", internal: "sealed.artifacts[].sbom", published: "slsa-provenance", basis: "SBOM produced in-process from bytes CP holds (sealed/V per ARCHITECTURE); document also emitted as its own OCI referrer"}
+	// ---- V: CP-verified external observations (cpObserved) ----
+	resolver: {provenance: "cpObserved", hardenedByDeclaration: true, internal: "sealed.resolver", published: "slsa-provenance", rationale: "CP-observed resolver TLS identity at the pre-flight handshake (front-observed), pinned per the lane"}
+	engine: {provenance: "cpObserved", internal: "sealed.engine", published: "slsa-provenance", rationale: "CP-observed engine connection facts (#EngineConnection); NOT the self-report. Observed but not yet declaration-hardened"}
+	observedPeers: {provenance: "cpObserved", hardenedByDeclaration: true, internal: "sealed.observedPeers", published: "slsa-provenance", rationale: "CP-validated peer identity, dialed and verified per the lane spec (front-observed)"}
 
-	// ---- Layer E: engine-asserted; sound only under trust(E) ----
-	peerAttribution: {layer: "E", internal: "engineDependent.peerAttribution", published: "engine-context", basis: "engine-asserted step<->peer binding; not sound against a malicious engine (C1)"}
+	// ---- V: CP-sealed artifact outputs (cpSealed) ----
+	artifactDigest: {provenance: "cpSealed", internal: "sealed.artifacts[].digest", published: "slsa-provenance", rationale: "published artifact digest, consumer-dereferenceable by D (C3); -> subject / resolvedDependencies"}
+	artifactSBOM: {provenance: "cpSealed", internal: "sealed.artifacts[].sbom", published: "slsa-provenance", rationale: "SBOM produced in-process from bytes CP holds; document also emitted as its own OCI referrer"}
 
-	// ---- informational: no trust claim (container-asserted or out-of-chain) ----
-	timestamp: {layer: "informational", internal: "informational.timestamp", published: "informational", basis: "CP wall-clock at deploy start; Rekor integratedTime is canonical"}
-	engineMetadata: {layer: "informational", internal: "informational.engineMetadata", published: "informational", basis: "engine self-report (version, rootless); does not participate in the source-to-deploy chain"}
-	preStateDigest: {layer: "informational", internal: "informational.preStateDigest", published: "informational", basis: "container-produced, engine-relayed; CP's hash transports the bytes, it does not lift them out of the container-asserted class"}
-	postStateDigest: {layer: "informational", internal: "informational.postStateDigest", published: "informational", basis: "symmetric to preStateDigest"}
-	provenance: {layer: "informational", internal: "informational.provenance", published: "informational", basis: "container-written source-provenance records, engine-relayed; audit/IoC only, never gating"}
+	// ---- E: engine chain assertion (engineChainAssertion) ----
+	peerAttribution: {provenance: "engineChainAssertion", internal: "engineDependent.peerAttribution", published: "engine-context", rationale: "engine-asserted step<->peer binding; not sound against a malicious engine (C1)"}
+
+	// ---- informational: no trust claim ----
+	timestamp: {provenance: "hostAsserted", internal: "informational.timestamp", published: "informational", rationale: "host wall-clock at deploy start, trusted not verified; Rekor integratedTime is canonical"}
+	engineMetadata: {provenance: "engineSelfReport", internal: "informational.engineMetadata", published: "informational", rationale: "engine self-report (version, rootless); does not participate in the source-to-deploy chain"}
+	preStateDigest: {provenance: "containerProduced", internal: "informational.preStateDigest", published: "informational", rationale: "container-produced, engine-relayed; CP's hash transports the bytes, it does not lift them out of the container-asserted class"}
+	postStateDigest: {provenance: "containerProduced", internal: "informational.postStateDigest", published: "informational", rationale: "symmetric to preStateDigest"}
+	provenance: {provenance: "containerProduced", internal: "informational.provenance", published: "informational", rationale: "container-written source-provenance records, engine-relayed; audit/IoC only, never gating"}
 }
-
-// KNOWN DIVERGENCE (kept as a comment, not a field, so a conformance test cannot
-// whitelist it as an expected pass). This map is canonical; the schemas conform
-// to it, not the reverse:
-//
-//   engineMetadata -- predicate.cue currently files this under
-//   #EngineContextPredicate (Layer E). Canonical layer above is `informational`
-//   (soundness note: engine self-reports do not participate in the
-//   source-to-deploy chain). FIX: move engineMetadata into the informational
-//   statement (#InformationalPredicate) in predicate.cue. The Stage-1 conformance
-//   test is expected to fail on this row until the move is made.
