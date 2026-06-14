@@ -127,10 +127,6 @@ Recorded here so they are not lost; none is started under this roadmap.
   surfaced during the D-D arc, not yet actioned.
 - **`SignedArtifact` rename** -- post-keyless the name is a digest+SBOM
   misnomer; cosmetic cleanup.
-- **`TestPackSBOM/deterministic_sbom` flake** -- SBOM serialization
-  non-determinism seen during the formalization gate run. Touches
-  "reproducibility is enforced" directly; worth its own diagnostic arc -- is the
-  serialization non-deterministic, or is the test's expectation wrong?
 
 ## Archival
 

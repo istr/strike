@@ -122,8 +122,7 @@ qualification). Two arcs remain: the D-D field-add (engine-cert subject/issuer
 into `#EngineConnection` at layer V), and the D-F queue (schema-naming findings
 B-2--B-9, one instruction each). The deferred set
 (base-SBOM signature verification, engine hardening, DNS centralization, full
-TLS demux, the osv-scalibr PR, and the `TestPackSBOM/deterministic_sbom` flake)
-is carried in that roadmap.
+TLS demux, and the osv-scalibr PR) is carried in that roadmap.
 
 ## Key completions and implications
 
@@ -194,9 +193,8 @@ and parallelizable.
   (ROADMAP-cue-spec-review, deferred set)
 - Upstream osv-scalibr PR: organic ecosystem work, no longer needed for strike.
   (ROADMAP-cue-spec-review, deferred set)
-- `TestPackSBOM/deterministic_sbom` flake, the ARCHITECTURE.md threat-row
-  judgment, and the `SignedArtifact` rename. (ROADMAP-cue-spec-review,
-  deferred set)
+- The ARCHITECTURE.md threat-row judgment and the `SignedArtifact` rename.
+  (ROADMAP-cue-spec-review, deferred set)
 
 ## References
 

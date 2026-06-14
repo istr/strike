@@ -10,6 +10,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 
 	"github.com/istr/strike/internal/closer"
 
@@ -234,7 +235,13 @@ func addConfigFileLayers(img v1.Image, configFiles map[string]lane.FileEntry) (v
 	if configFiles == nil {
 		return img, nil
 	}
-	for path, entry := range configFiles {
+	paths := make([]string, 0, len(configFiles))
+	for path := range configFiles {
+		paths = append(paths, path)
+	}
+	sort.Strings(paths)
+	for _, path := range paths {
+		entry := configFiles[path]
 		if entry.Mode < 0 || entry.Mode > 0o7777 {
 			return nil, fmt.Errorf("pack: config file %q: invalid mode %#o", path, entry.Mode)
 		}
@@ -269,8 +276,13 @@ func applyConfig(img v1.Image, spec *lane.PackSpec) (v1.Image, error) {
 	cfg = cfg.DeepCopy()
 
 	if spec.Config.Env != nil {
-		for k, v := range spec.Config.Env {
-			cfg.Config.Env = appendEnv(cfg.Config.Env, k, v)
+		keys := make([]string, 0, len(spec.Config.Env))
+		for k := range spec.Config.Env {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			cfg.Config.Env = appendEnv(cfg.Config.Env, k, spec.Config.Env[k])
 		}
 	}
 	if spec.Config.Entrypoint != nil {
