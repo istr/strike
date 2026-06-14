@@ -47,8 +47,10 @@ package deploy
 	downloadLocation?: string
 }
 
-// #Subject is one in-toto statement subject: a deployed artifact.
-#Subject: {
+// #Subject is one in-toto statement subject: a deployed artifact. It is an
+// in-toto ResourceDescriptor (reused, not re-declared) with name and digest
+// required, since a deployed artifact must be named and content-addressed.
+#Subject: #ResourceDescriptor & {
 	name:   string
 	digest: #DigestSet
 }

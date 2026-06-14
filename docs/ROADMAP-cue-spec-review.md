@@ -99,7 +99,7 @@ At-tree state verified at `8721d0ff`; B-1 is done, the rest pending.
 | ID | Finding | At-tree state |
 |----|---------|---------------|
 | B-2 | `gitCommit` canonical width | Landed. `predicate.cue` `gitCommit` widened to 40-or-64, matching `source-provenance.cue` `commit`. |
-| B-3 | `#Subject` should reuse `#ResourceDescriptor` (remove bespoke type) | Pending. Both still defined separately in `predicate.cue` (l.41 vs l.50). |
+| B-3 | `#Subject` should reuse `#ResourceDescriptor` (remove bespoke type) | Landed. `#Subject` is now `#ResourceDescriptor` refined with required name and digest; no duplicated structure, Go mirror unchanged. |
 | B-4 | `id` / `name` normalization (stop overloading `name`) | Pending; re-survey at write time. |
 | B-5 | Unify producer refs on `#OutputRef`; reconcile `from` / `source` | Pending. Both still used in `lane.cue` (l.190 / 314 / 380 / 397 / 440). |
 | B-6 | `#TLSTrust` discriminator `mode` -> `type` + one enum casing | Pending. `transport.cue` still uses `mode: "cert_fingerprint"` / `"ca_bundle"`; `#Peer` / `#TrustRoot` already use `type:` -- this is the inconsistency. |

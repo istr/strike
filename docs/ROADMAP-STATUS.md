@@ -13,7 +13,7 @@ document provides a snapshot of the status of all active roadmaps.
 | [ROADMAP-ADR-040](ROADMAP-ADR-040.md) | SUBSTANTIALLY COMPLETE | Instructions 1--4 done (OIDC schema, SBOM, keyless signing, OCI referrers, control-plane push). Instruction 5a (verify core) done; 5b (CLI exposure) landed via ADR-041. |
 | [ROADMAP-ADR-041](ROADMAP-ADR-041.md) | SUBSTANTIALLY COMPLETE | Foundation plus instructions 1--3 (CLI subcommand, lane-policy integration, predicate validation and V/E gating) landed. Genuine residual: trust-root auto-import from OCI referrers (currently fail-closed). |
 | [ROADMAP-sigstore-test-harness](ROADMAP-sigstore-test-harness.md) | H1 DONE, H2 PENDING | Stack-up and trust-anchor export complete. WebAuthn/FIDO2 (H2) remains. |
-| [ROADMAP-cue-spec-review](ROADMAP-cue-spec-review.md) | OPEN | Post-formalization D-arcs. Landed: A, D-A, D-C, D-D formalization, D-E, C-5, B-1, C-3, D-B+D-G. Open: D-D field-add, D-F (B-2--B-9). |
+| [ROADMAP-cue-spec-review](ROADMAP-cue-spec-review.md) | OPEN | Post-formalization D-arcs. Landed: A, D-A, D-C, D-D formalization, D-E, C-5, B-1, C-3, D-B+D-G, D-F B-3. Open: D-D field-add, D-F (B-2, B-4--B-9). |
 
 ## Narrative summary
 
@@ -162,7 +162,8 @@ and parallelizable.
 - D-B+D-G (LANDED): canonical-time correction (RFC3161 TSA) plus the "Meaning is
   single-sourced" principle and the aim-sentence qualification. Operator-owned,
   docs only, first. (ROADMAP-cue-spec-review)
-- D-F B-2..B-9: schema-naming findings, one instruction each, order B-2, B-3,
+- D-F B-3 (LANDED): `#Subject` reuses `#ResourceDescriptor` via refinement; Go mirror unchanged.
+- D-F B-2, B-4..B-9: schema-naming findings, one instruction each, order B-2,
   B-6, B-7 -> B-4, B-5 -> B-8, B-9. (ROADMAP-cue-spec-review)
 - D-D field-add: engine-cert subject/issuer into `#EngineConnection` at Layer V;
   CUE-first gate. Lands here and unlocks Phase 3. (ROADMAP-cue-spec-review)
