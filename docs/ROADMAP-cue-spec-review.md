@@ -215,6 +215,18 @@ underdetermined and tracked separately.
 
 B-5 (`#OutputRef`; reconcile `from` / `source`) stays a strictly separate arc.
 
+**Docked finding -- output-side symmetry would be a restructuring, not a rename.**
+B-4b (Option 1) leaves the attestation/predicate output fields `laneId` /
+`laneDigest` untouched: in the flat signed predicate they are self-documenting,
+and renaming `laneId` -> `id` on its own would strand it beside `laneDigest` as
+the lopsided `{id, laneDigest}`. Genuine input/output symmetry would not be a flat
+rename but a nesting -- `#StrikeExternalParameters: {lane: {id: #Identifier,
+digest: #Digest}, ...}`, with the matching change to `#Sealed`. That blast radius
+is strictly larger than B-4b's: it changes the signed wire format, the
+cross-validation vectors, the trust-layers `internal` paths (`sealed.laneId` ->
+`sealed.lane.id`), the published SLSA-provenance mapping, and the hand-mirrored Go
+output structs. Deferred; out of the B-4 arc.
+
 ## Deferred (out of this arc)
 
 Recorded here so they are not lost; none is started under this roadmap.
