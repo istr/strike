@@ -13,7 +13,7 @@ document provides a snapshot of the status of all active roadmaps.
 | [ROADMAP-ADR-040](ROADMAP-ADR-040.md) | SUBSTANTIALLY COMPLETE | Instructions 1--4 done (OIDC schema, SBOM, keyless signing, OCI referrers, control-plane push). Instruction 5a (verify core) done; 5b (CLI exposure) landed via ADR-041. |
 | [ROADMAP-ADR-041](ROADMAP-ADR-041.md) | SUBSTANTIALLY COMPLETE | Foundation plus instructions 1--3 (CLI subcommand, lane-policy integration, predicate validation and V/E gating) landed. Genuine residual: trust-root auto-import from OCI referrers (currently fail-closed). |
 | [ROADMAP-sigstore-test-harness](ROADMAP-sigstore-test-harness.md) | H1 DONE, H2 PENDING | Stack-up and trust-anchor export complete. WebAuthn/FIDO2 (H2) remains. |
-| [ROADMAP-cue-spec-review](ROADMAP-cue-spec-review.md) | OPEN | Post-formalization D-arcs. Landed: A, D-A, D-C, D-D formalization, D-E, C-5, B-1, C-3, D-B+D-G, D-F B-2, B-3, B-6. Open: D-D field-add, D-F (B-4, B-5, B-7--B-9). |
+| [ROADMAP-cue-spec-review](ROADMAP-cue-spec-review.md) | OPEN | Post-formalization D-arcs. Landed: A, D-A, D-C, D-D formalization, D-E, C-5, B-1, C-3, D-B+D-G, D-F B-2, B-3, B-6, B-7. Open: D-D field-add, D-F (B-4, B-5, B-8--B-9). |
 
 ## Narrative summary
 
@@ -120,7 +120,7 @@ cluster A (docs), D-A (keyed signing + Rekor v1 removal, ADR-043), D-C
 RFC3161 TSA plus the "Meaning is single-sourced" principle and the aim-sentence
 qualification). Two arcs remain: the D-D field-add (engine-cert subject/issuer
 into `#EngineConnection` at layer V), and the D-F queue (schema-naming findings
-B-4, B-5, B-7--B-9, one instruction each; B-2, B-3, B-6 landed). The deferred set
+B-4, B-5, B-8--B-9, one instruction each; B-2, B-3, B-6, B-7 landed). The deferred set
 (base-SBOM signature verification, engine hardening, DNS centralization, full
 TLS demux, and the osv-scalibr PR) is carried in that roadmap.
 
@@ -167,8 +167,11 @@ and parallelizable.
 - D-F B-6 (LANDED): `#TLSTrust` discriminator `mode` -> `type` + enum camelCasing
   (`certFingerprint` / `caBundle`); hand-mirrored Go and golden bundles moved in
   lockstep. (ROADMAP-cue-spec-review)
-- D-F B-4, B-5, B-7..B-9: schema-naming findings, one instruction each, order
-  B-7 -> B-4, B-5 -> B-8, B-9. (ROADMAP-cue-spec-review)
+- D-F B-7 (LANDED): deploy state-capture config renamed `attestation` ->
+  `recording` (`#StateRecording` / `#CaptureSet` / `#Capture`); the
+  cryptographic-attestation family unchanged. (ROADMAP-cue-spec-review)
+- D-F B-4, B-5, B-8..B-9: schema-naming findings, one instruction each, order
+  B-4, B-5 -> B-8, B-9. (ROADMAP-cue-spec-review)
 - D-D field-add: engine-cert subject/issuer into `#EngineConnection` at Layer V;
   CUE-first gate. Lands here and unlocks Phase 3. (ROADMAP-cue-spec-review)
 
@@ -208,4 +211,4 @@ and parallelizable.
 - [ROADMAP-ADR-040](ROADMAP-ADR-040.md) -- Substantially complete
 - [ROADMAP-ADR-041](ROADMAP-ADR-041.md) -- Substantially complete
 - [ROADMAP-sigstore-test-harness](ROADMAP-sigstore-test-harness.md) -- H1 done, H2 pending
-- [ROADMAP-cue-spec-review](ROADMAP-cue-spec-review.md) -- Open (D-D field-add, D-F: B-4, B-5, B-7--B-9)
+- [ROADMAP-cue-spec-review](ROADMAP-cue-spec-review.md) -- Open (D-D field-add, D-F: B-4, B-5, B-8--B-9)

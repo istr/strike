@@ -1,6 +1,6 @@
 # CUE Spec Review Roadmap (post trust-boundary formalization)
 
-## Status: OPEN -- two arcs remain (D-D field-add, D-F: B-4, B-5, B-7..B-9)
+## Status: OPEN -- two arcs remain (D-D field-add, D-F: B-4, B-5, B-8..B-9)
 
 This roadmap is the single source for the work-arcs derived from
 `RETROSPECTIVE-cue-spec-review.md`. The post-formalization handover note
@@ -130,14 +130,13 @@ At-tree state verified at `8721d0ff`; B-1 is done, the rest pending.
 | B-4 | `id` / `name` normalization (stop overloading `name`) | Pending; re-survey at write time. |
 | B-5 | Unify producer refs on `#OutputRef`; reconcile `from` / `source` | Pending. Both still used in `lane.cue` (l.190 / 314 / 380 / 397 / 440). |
 | B-6 | `#TLSTrust` discriminator `mode` -> `type` + one enum casing | Landed `22426cc2`. `transport.cue` `#TLSTrust` keys on `type:` with values `certFingerprint` / `caBundle`; the hand-mirrored Go (`@go(-)`) moved in lockstep, and the golden bundles were regenerated (re-keying `golden/lane.yaml` re-hashes its sealed `laneDigest`). |
-| B-7 | De-overload "attestation" (rename the state-capture config) | Pending. `lane.cue` still says "state attestation" (l.6, l.350). Carries the golden-regen gate: the golden lane declares a deploy step with a state-capture (`attestation:`) block, so this rename re-keys `golden/lane.yaml` -- plan the regen step from the outset (see the golden-regen note below), do not plan it as hermetic. |
+| B-7 | De-overload "attestation" (rename the state-capture config) | Landed `d8cabc2`. `recording` / `#StateRecording` (plus `#CaptureSet` / `#Capture`) replaces the `attestation` / `#AttestationSpec` config; the cryptographic-attestation family is untouched; golden bundles regenerated. ADR-016 vocabulary. |
 | B-8 | Apply `#AbsPath` / `#RelPath` consistently or comment opaque path fields | Partial. Types exist and are applied in places; audit coverage at write time. |
 | B-9 | P3 polish: `#SignerIdentity` dedup, `clientId` -> `audience`, `trustRootRef` `@go` symmetry, default-disjunction order | Pending. |
 
 Execute in the order documented in ROADMAP-STATUS.md:
-B-7 next (single-concern schema fix; B-6 landed at `22426cc2`),
-then B-4 / B-5 (naming, broader blast radius), then B-8 / B-9 (polish). Each is
-its own PR per the ratification.
+B-4 / B-5 next (naming, broader blast radius; B-6/B-7 landed),
+then B-8 / B-9 (polish). Each is its own PR per the ratification.
 
 **Golden-bundle regen is a hard dependency for golden-affecting B-x items.** Any
 schema or naming change that re-keys `internal/verify/testdata/golden/lane.yaml`
