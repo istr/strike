@@ -13,9 +13,9 @@ package lane
 // ---------------------------------------------------------------------------
 
 #ProvenanceRecord: (#GitProvenanceRecord |
-                   #TarballProvenanceRecord |
-                   #OCIProvenanceRecord |
-                   #URLProvenanceRecord) @go(-)
+	#TarballProvenanceRecord |
+	#OCIProvenanceRecord |
+	#URLProvenanceRecord) @go(-)
 
 // ---------------------------------------------------------------------------
 // Git
@@ -23,11 +23,11 @@ package lane
 
 #GitProvenanceRecord: {
 	@go(GitProvenanceRecord)
-	type:        "git" @go(Type)
-	uri:         string @go(URI)
-	commit:      string & =~"^[a-f0-9]{40}$|^[a-f0-9]{64}$" @go(Commit)
-	ref?:        string @go(Ref)
-	fetchedAt?: string @go(FetchedAt)
+	type:       "git"                                      @go(Type)
+	uri:        string                                     @go(URI)
+	commit:     string & =~"^[a-f0-9]{40}$|^[a-f0-9]{64}$" @go(Commit)
+	ref?:       string                                     @go(Ref)
+	fetchedAt?: string                                     @go(FetchedAt)
 }
 
 // ---------------------------------------------------------------------------
@@ -36,10 +36,10 @@ package lane
 
 #TarballProvenanceRecord: {
 	@go(TarballProvenanceRecord)
-	type:        "tarball" @go(Type)
-	uri:         string @go(URI)
-	sha256:      string & =~"^[a-f0-9]{64}$" @go(SHA256)
-	fetchedAt?: string @go(FetchedAt)
+	type:       "tarball"                   @go(Type)
+	uri:        string                      @go(URI)
+	sha256:     string & =~"^[a-f0-9]{64}$" @go(SHA256)
+	fetchedAt?: string                      @go(FetchedAt)
 }
 
 // ---------------------------------------------------------------------------
@@ -48,10 +48,10 @@ package lane
 
 #OCIProvenanceRecord: {
 	@go(OCIProvenanceRecord)
-	type:        "oci" @go(Type)
-	uri:         string @go(URI)
-	digest:      string & =~"^sha256:[a-f0-9]{64}$" @go(Digest)
-	fetchedAt?: string @go(FetchedAt)
+	type:       "oci"                              @go(Type)
+	uri:        string                             @go(URI)
+	digest:     string & =~"^sha256:[a-f0-9]{64}$" @go(Digest)
+	fetchedAt?: string                             @go(FetchedAt)
 }
 
 // ---------------------------------------------------------------------------
@@ -60,8 +60,8 @@ package lane
 
 #URLProvenanceRecord: {
 	@go(URLProvenanceRecord)
-	type:        "url" @go(Type)
-	uri:         string @go(URI)
-	sha256:      string & =~"^[a-f0-9]{64}$" @go(SHA256)
-	fetchedAt?: string @go(FetchedAt)
+	type:       "url"                       @go(Type)
+	uri:        string                      @go(URI)
+	sha256:     string & =~"^[a-f0-9]{64}$" @go(SHA256)
+	fetchedAt?: string                      @go(FetchedAt)
 }

@@ -59,9 +59,9 @@ package deploy
 // See docs/ATTESTATION-SOUNDNESS-AND-THE-TRUST-BOUNDARY.md and
 // ADR-037 for the trust-layer theory.
 #Attestation: {
-	sealed:           #Sealed
+	sealed:          #Sealed
 	engineDependent: #EngineDependent
-	informational?:   #Informational
+	informational?:  #Informational
 }
 
 // Sealed -- CP-bound claims, sound under both trust(E) and ~trust(E).
@@ -88,7 +88,6 @@ package deploy
 	// peers maps step name to the network peer declarations attached to
 	// that step. Declared, lane-anchored.
 	peers: [Step=string]: [...#Peer]
-
 
 	// engine carries the CP-observed connection facts about the engine.
 	// The engine's self-reports (version, rootless) live in
@@ -127,7 +126,7 @@ package deploy
 // SHA-256 of the key the server presented that matched the declared known_hosts
 // anchor; hostKeyAlgo is that key's algorithm.
 #ObservedSSH: {
-	type:                 "ssh"
+	type:               "ssh"
 	hostKeyFingerprint: string
 	hostKeyAlgo:        string
 }
@@ -135,7 +134,7 @@ package deploy
 // ObservedTLS is a validated HTTPS server identity. serverCertFingerprint is
 // the SHA-256 of the leaf certificate that matched the declared anchor.
 #ObservedTLS: {
-	type:                    "https"
+	type:                  "https"
 	serverCertFingerprint: string
 }
 

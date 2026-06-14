@@ -409,11 +409,11 @@ package lane
 	// Stable identifier assigned at authoring time. External verifiers use
 	// this to pair pre/post-state digests across consecutive deploys
 	// to the same target.
-	id:          #Identifier                    @go(ID,type=string)
-	type:        string                        @go(Type)
-	description: string                        @go(Description)
-	url?:        string                        @go(URL,optional=nillable)
-	namespace?:  string                        @go(Namespace,optional=nillable)
+	id:          #Identifier @go(ID,type=string)
+	type:        string      @go(Type)
+	description: string      @go(Description)
+	url?:        string      @go(URL,optional=nillable)
+	namespace?:  string      @go(Namespace,optional=nillable)
 }
 
 // ---------------------------------------------------------------------------
@@ -430,6 +430,7 @@ package lane
 
 #CaptureSet: {
 	@go(CaptureSet)
+
 	// required means the capture must run successfully for the recording to be
 	// valid -- execution success, not a drift reaction. strike takes no action
 	// on state differences (ADR-016); do not add policy fields here.

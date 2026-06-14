@@ -43,8 +43,8 @@ package crossval
 			args: [...string]
 			env: [string]: string
 		}
-		image_digest:  =~"^sha256:[a-f0-9]{64}$"
-		input_hashes:  [string]: =~"^sha256:[a-f0-9]{64}$"
+		image_digest: =~"^sha256:[a-f0-9]{64}$"
+		input_hashes: [string]:  =~"^sha256:[a-f0-9]{64}$"
 		source_hashes: [string]: =~"^sha256:[a-f0-9]{64}$"
 	}
 	expected: {
@@ -69,9 +69,9 @@ package crossval
 	boundary: "StateDigest"
 	inputs: {
 		captures: [...{
-			name:           string
-			image:          string
-			output_base64:  string
+			name:          string
+			image:         string
+			output_base64: string
 		}]
 	}
 	expected: {

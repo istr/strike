@@ -55,7 +55,10 @@ lint-arch:
 lint-ci:
 	golangci-lint run ./...
 
-lint: lint-ci lint-from lint-arch lint-ascii lint-adr-index
+lint-cue-fmt:
+	cue fmt --check --files specs
+
+lint: lint-ci lint-from lint-arch lint-ascii lint-adr-index lint-cue-fmt
 
 test:
 	go test -race -coverprofile=coverage.out -covermode=atomic ./...

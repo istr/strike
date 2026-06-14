@@ -93,9 +93,9 @@ layerOf: {
 	// expected engine identity -- the engine-transport arc closes this), so its row
 	// is deliberately false and the gap is machine-visible.
 	hardenedByDeclaration: bool | *false
-	internal:  string       // path in attestation.cue's #Attestation, or "-" if not in the collect-model
-	published: #PublishedIn // statement in predicate.cue that carries it
-	rationale: string       // one-line soundness rationale (human context; not load-bearing)
+	internal:              string       // path in attestation.cue's #Attestation, or "-" if not in the collect-model
+	published:             #PublishedIn // statement in predicate.cue that carries it
+	rationale:             string       // one-line soundness rationale (human context; not load-bearing)
 }
 
 // Section anchors: each top-level section of #Attestation, the published statement
