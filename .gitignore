@@ -11,6 +11,7 @@ coverage.out
 *.key
 /*.md
 !/AGENTS.md
+!/AI-WORKFLOW.md
 !/ARCHITECTURE.md
 !/CONTRIBUTING.md
 !/DESIGN-PRINCIPLES.md

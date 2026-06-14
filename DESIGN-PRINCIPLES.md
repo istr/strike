@@ -336,9 +336,9 @@ an afterthought.
   Level 3 mapping, and the controller-engine protocol.
 - [SECURITY.md](SECURITY.md) -- threat model and vulnerability
   reporting.
-- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) -- code quality, style,
-  and toolchain rules that implement these principles.
 - [AGENTS.md](AGENTS.md) -- instructions for AI coding agents.
-- [docs/AI-WORKFLOW.md](docs/AI-WORKFLOW.md) -- the human-AI
+- [AI-WORKFLOW.md](AI-WORKFLOW.md) -- the human-AI
   collaboration model, neutral-checkpoint reviews, and retrospective
   practice.
+- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) -- code quality, style,
+  and toolchain rules that implement these principles.
