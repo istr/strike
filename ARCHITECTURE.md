@@ -220,13 +220,14 @@ Source provenance and attestation signing close the original open ends:
   and a boolean `all_signed` flag for policy gates. Git runs in a
   container (preserving the no-exec.Command invariant).
 
-- **Attestation signing** wraps the deploy attestation in a DSSE
-  envelope signed with the same cosign key that signs image manifests.
-  The signed DSSE envelope is submitted to Rekor as a `dsse` entry,
-  providing independent third-party timestamping of the signing event.
-  This completes the Rekor chain: each artifact's signature has a
-  transparency log entry (hashedrekord), and the attestation that
-  references those artifacts also has a transparency log entry (dsse).
+- **Attestation signing** wraps the deploy attestation in DSSE
+  envelopes signed keylessly: an ephemeral key certified by Fulcio
+  against the lane's declared OIDC identity, submitted to a Rekor v2
+  transparency log as `dsse` entries and timestamped by an RFC3161 TSA.
+  The collect-model attestation is projected into three in-toto
+  statements -- SLSA provenance, engine-context, and informational --
+  along the Layer V / Layer E boundary. Verification is offline, without
+  contacting strike or the original engine (ADR-039, ADR-040).
 
 Together, these complete the chain from developer keystroke to verified
 production state.

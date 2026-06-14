@@ -203,7 +203,6 @@ internal/
     podman.go                     Container execution via Engine API
     validate.go                   Output validation (magic bytes, size bounds)
     pack.go                       OCI image assembly (native Go, no container)
-    sign.go                       ECDSA P-256 cosign-compatible signing
     catalog.go                    Native SBOM cataloger (CycloneDX + SPDX 2.3)
     flatten.go                    In-memory image flattening (image -> fs.FS)
   registry/

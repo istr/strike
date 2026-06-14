@@ -37,7 +37,7 @@ The following are in scope for security reports:
 ## Threat model
 
 strike operates in a security-sensitive domain: it executes arbitrary container
-images, handles signing keys, manages secrets, and interacts with OCI
+images, performs keyless signing, manages secrets, and interacts with OCI
 registries. The threat model assumes:
 
 **Trusted:** The lane definition author (the person writing `lane.yaml`) and
@@ -139,8 +139,7 @@ SBOMs are attached as signed OCI 1.1 referrer artifacts. The bootstrap process
 proves reproducibility through binary comparison.
 
 **A02 Cryptographic Failures** -- Signing uses ECDSA P-256 via Go's
-`crypto/ecdsa` with `crypto/rand`. Key derivation for encrypted cosign keys
-uses scrypt with NaCl secretbox. No use of `math/rand` for security-relevant
+`crypto/ecdsa` with `crypto/rand`. No use of `math/rand` for security-relevant
 operations. No TLS configuration overrides.
 
 **A01 Broken Access Control** -- Step containers run with `--cap-drop=ALL`,
@@ -181,8 +180,6 @@ strike is designed with a minimal attack surface:
 - **Secrets via API request body** -- passed as JSON over Unix socket in the
   container create request, never via process arguments or strike's own
   environment.
-- **Unsigned images cannot leave the local store** -- a network-enabled step
-  that receives an unsigned OCI image input is rejected before execution.
 - **Read-only root filesystem** -- step containers cannot modify their image.
 - **No capabilities** -- `--cap-drop=ALL` removes all Linux capabilities.
 - **No privilege escalation** -- `--security-opt=no-new-privileges` prevents
@@ -195,13 +192,10 @@ strike is designed with a minimal attack surface:
   set via `CONTAINER_TLS_CA`, only that CA is trusted. Otherwise the
   system CA store is used. Mutual TLS is supported when client cert and
   key are provided via `CONTAINER_TLS_CERT` and `CONTAINER_TLS_KEY`.
-- **Transparency logging** -- artifact signatures are submitted to a Rekor
-  transparency log as `hashedrekord` entries. Deploy attestations (signed
-  DSSE envelopes) are submitted as `dsse` entries. Both entry types are
-  verified via signed entry timestamps (SET) before acceptance -- a forged
-  Rekor response is a hard error, not a transient failure. Rekor submission
-  is optional (skip when `REKOR_URL` is unset) and fail-open on transient
-  errors (network/timeout/5xx), but fail-closed on SET verification failure.
+- **Transparency logging** -- deploy attestations (keyless DSSE envelopes)
+  are submitted to a Rekor v2 transparency log as `dsse` entries and
+  verified against the log's inclusion proof before acceptance -- a forged
+  Rekor response is a hard error, not a transient failure.
 - **Audit logging** -- when `STRIKE_AUDIT=1` is set, every API request
   to the container engine is logged with method, path, response status,
   and duration. Request bodies are never logged (they may contain secrets).

@@ -619,6 +619,21 @@ make check      # lint + test + vuln + build (CI entry point)
 - Do not refactor main.go into a "framework" or "engine" -- the procedural
   orchestration is intentional and auditable.
 - Do not create wrapper types around standard library types without clear need.
+- Do not change a function signature or remove an exported symbol without
+  searching the entire module for callers -- `internal/`, `cmd/`, and `test/`
+  alike. Integration tests under `test/` are real callers of production APIs:
+  the compiler catches a missed production caller, but a missed test caller
+  surfaces only when the gate runs. Apply the same change to every caller in
+  the same step, and prune any helper the removal leaves orphaned.
+- Do not improvise when an instruction file's before-snippet does not match the
+  tree. A whitespace-only difference on a line you are deleting is immaterial:
+  delete the line and note the divergence in your report. Any other mismatch
+  means the tree has drifted from the instruction -- stop and report rather
+  than adapting the edit.
+- Do not alter retained code to satisfy a literal acceptance grep. If a `grep`
+  for a removed symbol still matches because the same token legitimately
+  survives in a kept path, the acceptance criterion is flawed, not the change:
+  report the criterion, and leave the retained code alone.
 
 ## Commit messages
 

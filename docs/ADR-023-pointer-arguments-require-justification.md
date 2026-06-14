@@ -1,5 +1,12 @@
 # ADR-023: Pointer Arguments Require Justification
 
+> **Amended by [ADR-043](ADR-043-retire-keyed-image-signing-and-rekor-v1.md):**
+> the `*RekorClient` receivers, `submitToRekor`, `executor.SignManifest`'s
+> `rekor *RekorClient` parameter, and the `Deployer.Rekor` field cited below as
+> examples are removed with keyed image signing. The decision and its remaining
+> examples (`TLSConfig`, `*lane.DeploySpec`, `*Step.Deploy` / `*Step.Pack`) are
+> unaffected.
+
 ## Status
 
 Accepted.

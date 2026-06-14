@@ -64,6 +64,24 @@ caught error. Pinning the before-snippets to a named working-tree hash
 turns the project's own determinism discipline inward onto its
 development process.
 
+Two corollaries earned in practice. First, a before-snippet has to be taken
+from the pinned tree itself, not from a working copy or an upload that predates
+the pin. When earlier, not-yet-pushed work has reformatted a file, an upload of
+it can differ from the tree in whitespace alone, and a byte-exact snippet cut
+from the upload then fails to match for a reason that has nothing to do with
+drift -- noise that trains the agent to treat stop-and-report as a false alarm.
+Pin the snippet to the named hash, or have the agent re-read the file at that
+hash before applying.
+
+Second, an acceptance check has to be scoped to what was removed, not to a
+token. When a deleted path and a retained path share a term -- a keyed path and
+a keyless path both naming `hashedrekord`, say -- a blanket "this grep returns
+nothing" criterion cannot pass without cutting code that was meant to stay.
+Write the criterion against the deleted artifact (a removed type, a deleted
+file), and treat a criterion that can only be satisfied by touching retained
+code as a defect in the criterion, to be surfaced by the agent rather than
+satisfied by it.
+
 Instruction files are ephemeral working papers, not tracked history. They
 exist to move one change from analysis to execution and are discarded once
 it lands; their numbering carries no meaning and need not be contiguous or
@@ -186,6 +204,15 @@ documentation-drift findings could be planned but not verified against
 the snapshot. The lesson: the snapshot must contain everything the review
 reasons about, and exclusions must be surgical (exclude the instruction
 files by path, not all markdown by glob).
+
+The same completeness applies to the searches run against the snapshot, not
+only to its contents. A removal arc enumerated the callers of a changed
+function signature by grepping `internal/` and `cmd/` and leaving out `test/`;
+the three integration-test callers it missed compiled only because the coding
+agent re-derived them at execution time, not because the instruction listed
+them. The lesson generalizes the one above: scope a blast-radius search to the
+whole module, `test/` included, because integration tests call production APIs
+exactly as production code does.
 
 A complementary structural check removes the dependence on a human
 reading the snapshot at all: compare `ls docs/ADR-*.md` against

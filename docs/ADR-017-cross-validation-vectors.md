@@ -1,5 +1,12 @@
 # ADR-017: Cross-Validation Through Golden Vectors and JSON Schema Export
 
+> **Amended by [ADR-043](ADR-043-retire-keyed-image-signing-and-rekor-v1.md):**
+> the `SignManifest` and `SignAttestation` boundaries and their crossval
+> vectors are retired with keyed image signing. The covered boundaries are now
+> `AssembleImage`, `SpecHash`, `ValidateAttestation`, `StateDigest`, and
+> `RenderKnownHosts`; the parametrized-key-material note below describes how a
+> signing vector would be handled, not a current one.
+
 ## Status
 
 Accepted.
