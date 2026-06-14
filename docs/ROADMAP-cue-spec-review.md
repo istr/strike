@@ -127,7 +127,7 @@ At-tree state verified at `8721d0ff`; B-1 is done, the rest pending.
 |----|---------|---------------|
 | B-2 | `gitCommit` canonical width | Landed. `predicate.cue` `gitCommit` widened to 40-or-64, matching `source-provenance.cue` `commit`. |
 | B-3 | `#Subject` should reuse `#ResourceDescriptor` (remove bespoke type) | Landed. `#Subject` is now `#ResourceDescriptor` refined with required name and digest; no duplicated structure, Go mirror unchanged. |
-| B-4 | `id` / `name` normalization (stop overloading `name`) | Pending; re-survey at write time. |
+| B-4 | `id` / `name` normalization (stop overloading `name`) | Ratified -- three stages (B-4a/b/c) via a canonical `#Identifier` type; see "B-4 -- ratified plan" below. |
 | B-5 | Unify producer refs on `#OutputRef`; reconcile `from` / `source` | Pending. Both still used in `lane.cue` (l.190 / 314 / 380 / 397 / 440). |
 | B-6 | `#TLSTrust` discriminator `mode` -> `type` + one enum casing | Landed `22426cc2`. `transport.cue` `#TLSTrust` keys on `type:` with values `certFingerprint` / `caBundle`; the hand-mirrored Go (`@go(-)`) moved in lockstep, and the golden bundles were regenerated (re-keying `golden/lane.yaml` re-hashes its sealed `laneDigest`). |
 | B-7 | De-overload "attestation" (rename the state-capture config) | Landed `d8cabc2`. `recording` / `#StateRecording` (plus `#CaptureSet` / `#Capture`) replaces the `attestation` / `#AttestationSpec` config; the cryptographic-attestation family is untouched; golden bundles regenerated. ADR-016 vocabulary. |
@@ -150,6 +150,70 @@ insufficient (it is exactly what produced the B-6 `make test` defect --
 observation defeats declaration). The regen recipe lives in
 ROADMAP-sigstore-test-harness.md under "Downstream consumers". B-7 inherits this
 gate (see its row above).
+
+### B-4 -- ratified plan (`id` / `name` normalization via `#Identifier`)
+
+The overload: `name` does double duty as both human-display and the
+cross-reference identifier across several types, while the identifier role is
+itself named three ways -- `#Lane.laneId`, `#DeployTarget.id`, and `#Step.name`
+(no separate id). The same identifier pattern `=~"^[a-z0-9][a-z0-9-]{0,62}$"` is
+copy-pasted inline four times across two packages (`lane.cue` l.22 / l.406;
+`attestation.cue` l.70; `predicate.cue` l.89) -- a single-sourcing violation.
+That pattern is a *loose* RFC 1123 DNS label: correct charset and the 63-char
+DNS-label length, but it does not force an alphanumeric final character
+(`build-` wrongly passes).
+
+**Ratified convention.** A cross-referenced entity identifier is named `id` and
+constrained by a single canonical type; `name` is human-display only. Grounded
+in the ecosystem: GitHub Actions uses `id` (the reference handle) plus `name`
+(UI display); "label" is rejected because in Kubernetes / OCI a label is a
+key-value selection map, not a display string.
+
+**Canonical type (ratified).** Define once in `package lane`, reference
+everywhere the entity-identifier role appears -- including the `package deploy`
+mirrors, which already import `package lane`:
+
+```
+// #Identifier is a stable, cross-referenceable entity id. The grammar is the
+// RFC 1123 DNS label (lowercase alphanumeric and '-', start and end
+// alphanumeric, at most 63 chars) so an id is usable verbatim as a Kubernetes
+// resource name, an OCI tag component, and a DNS label.
+#Identifier: =~"^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$"
+```
+
+Strict RFC 1123 (leading digit allowed); underscores are out (they break
+k8s / OCI / DNS), which forces a small value migration. No separate ADR.
+
+**Reference set.** Adopt `#Identifier` for: `#Lane` id (was `laneId`, plus its
+mirrors in `attestation.cue` and `predicate.cue`), `#DeployTarget.id`, and --
+after the rename -- `#Step.id`, `#OutputSpec.id`, `#Capture.id`. Explicitly
+excluded (different vocabularies): `clientId` (OAuth aud), `logId` / `keyId`
+(base64), `#SLSABuilder.id` (a URI per the SLSA spec), `uid` / `gid` (POSIX
+ints). `#SecretRef.name` is out of scope entirely -- that type is semantically
+underdetermined and tracked separately.
+
+**Three stages, each its own PR (isolated by risk):**
+
+- **B-4a -- single-source the identifier (pure refactor, lowest risk).** Add
+  `#Identifier`; replace the four inline patterns with it. The end-anchor
+  tightening breaks nothing (no current `laneId` / `#DeployTarget.id` value ends
+  in a hyphen). No rename, no value migration. Settles the cross-package wiring
+  once.
+- **B-4b -- rename `name` -> `id` (mechanical, large).** Identifier-role
+  `name` -> `id` and `laneId` -> `id`; Go fields and YAML keys. Each field keeps
+  its current type: `#Lane.id` / `#DeployTarget.id` stay `#Identifier` (from
+  B-4a); the freshly renamed `#Step.id` / `#OutputSpec.id` / `#Capture.id` stay
+  plain `string` for now. No value migration. Golden regen (the `name:` -> `id:`
+  key recase re-keys `golden/lane.yaml`).
+- **B-4c -- apply `#Identifier` and migrate values (semantic).** Type the renamed
+  `#Step.id` / `#OutputSpec.id` / `#Capture.id` as `#Identifier`, and migrate the
+  underscore identifiers to hyphens in the four fixtures that carry them
+  (`fan_out_lane.yaml`, `hugo.yaml`, `hugo_like_lane.yaml`,
+  `image_from_lane.yaml`), fixing the dotted `"step.output"` references in
+  lockstep. Golden regen if affected (the golden lane is already slug-clean, so
+  its values need no migration).
+
+B-5 (`#OutputRef`; reconcile `from` / `source`) stays a strictly separate arc.
 
 ## Deferred (out of this arc)
 
