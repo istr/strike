@@ -634,6 +634,22 @@ make check      # lint + test + vuln + build (CI entry point)
   for a removed symbol still matches because the same token legitimately
   survives in a kept path, the acceptance criterion is flawed, not the change:
   report the criterion, and leave the retained code alone.
+- Do not pull arbitrary line windows out of a file to discover what it
+  contains. `sed -n 'A,Bp'`, `head -n N`, and `tail -n N` over a file you have
+  not first searched are forbidden as a discovery step: a line window is a guess
+  about where the answer is, made before you know where it is, and a wrong guess
+  produces output that looks complete while silently omitting the rest -- which
+  turns "I did not see it" into a false "it is not there." This is a borrowed
+  terminal idiom (corpus examples window files because scrolling a TTY is
+  tedious, not because it is correct) and it saves no meaningful context on a
+  small file. To learn whether something exists or where it is, `grep -n` over
+  the whole file, or read the whole file when it is small; an existence or
+  absence claim must rest on a whole-file search or a full read, never on a
+  slice. A window is legitimate only after a search has located the target and
+  only for surrounding context the search cannot give cleanly -- prefer
+  `grep -n -C3 PATTERN file` (or `-A`/`-B`), where the match anchors the window,
+  and reach for a bare `sed -n 'A,Bp'` only when a prior grep already supplied
+  line A. Never base a negative finding on a windowed view.
 
 ## Commit messages
 

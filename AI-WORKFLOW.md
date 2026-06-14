@@ -251,3 +251,42 @@ A complementary structural check removes the dependence on a human
 reading the snapshot at all: compare `ls docs/ADR-*.md` against
 `ADR-INDEX.md` in CI, so an ADR that exists on disk but is missing from
 the index fails the build instead of waiting for the next review.
+
+## Inspect the whole file, never a ritual window
+
+Both sides of the loop share a failure: inspecting a file through an arbitrary
+line window -- `sed -n 'A,Bp'`, `head`, `tail` -- as the way to find out what the
+file contains, rather than to read a region already located. The window is a
+guess about where the answer lives, committed before the answer's location is
+known, and when the guess is wrong the output does not announce its
+incompleteness: a truncated slice of a target list looks exactly like a complete
+target list, so a wrong window becomes a confident "it is not there." A line
+window is a declaration about where to observe, and a negation drawn from a
+declaration is the move the product's "observation defeats declaration" principle
+forbids -- here turned inward on the development tooling.
+
+The habit is a borrowed idiom, not a reasoned choice. The shell examples the
+models learned from window files because scrolling a terminal is tedious, an
+ergonomic reason with nothing to do with an agent reading a file into context;
+the surface form survived and its rationale did not. On a small file the
+windowing saves no meaningful context and buys an unbounded correctness risk, and
+because the risk is invisible at the moment it is taken, the feedback that would
+retire the habit rarely arrives.
+
+The concrete failure that fixed this as a rule: an analysis session concluded
+that a harness Makefile target did not exist by reading a window that ended a few
+lines above the target's definition, asserted the absence, and was corrected by a
+whole-file grep the operator ran. The target had been there throughout, named in
+the `.PHONY` line the window also cut off.
+
+The rule -- stated imperatively for the agent in AGENTS.md and as practice here
+-- is that an existence or absence claim rests on a whole-file search (`grep -n`
+over the whole file) or a full read, never on a slice. A line window is
+legitimate only after a search has located the target and only to read the
+surrounding context the search cannot give cleanly: prefer
+`grep -n -C3 PATTERN file`, where the match anchors the window, over a
+hand-guessed `sed -n 'A,Bp'`, and reserve the bare span for when a prior grep
+already supplied line A. It is the same discipline the snapshot-hygiene lesson
+applies to blast-radius searches -- scope the observation to the whole artifact,
+because what you are looking for is exactly as likely to sit outside your window
+as inside it.
