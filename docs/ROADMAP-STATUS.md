@@ -13,7 +13,7 @@ document provides a snapshot of the status of all active roadmaps.
 | [ROADMAP-ADR-040](ROADMAP-ADR-040.md) | SUBSTANTIALLY COMPLETE | Instructions 1--4 done (OIDC schema, SBOM, keyless signing, OCI referrers, control-plane push). Instruction 5a (verify core) done; 5b (CLI exposure) landed via ADR-041. |
 | [ROADMAP-ADR-041](ROADMAP-ADR-041.md) | SUBSTANTIALLY COMPLETE | Foundation plus instructions 1--3 (CLI subcommand, lane-policy integration, predicate validation and V/E gating) landed. Genuine residual: trust-root auto-import from OCI referrers (currently fail-closed). |
 | [ROADMAP-sigstore-test-harness](ROADMAP-sigstore-test-harness.md) | H1 DONE, H2 PENDING | Stack-up and trust-anchor export complete. WebAuthn/FIDO2 (H2) remains. |
-| [ROADMAP-cue-spec-review](ROADMAP-cue-spec-review.md) | OPEN | Post-formalization D-arcs. Landed: A, D-A, D-C, D-D formalization, D-E, C-5, B-1, C-3. Open: D-B+D-G (canonical-time + principle), D-D field-add, D-F (B-2--B-9). |
+| [ROADMAP-cue-spec-review](ROADMAP-cue-spec-review.md) | OPEN | Post-formalization D-arcs. Landed: A, D-A, D-C, D-D formalization, D-E, C-5, B-1, C-3, D-B+D-G. Open: D-D field-add, D-F (B-2--B-9). |
 
 ## Narrative summary
 
@@ -116,11 +116,11 @@ Tracked in [ROADMAP-cue-spec-review](ROADMAP-cue-spec-review.md). The arcs
 derived from `RETROSPECTIVE-cue-spec-review.md` are partly landed at `8721d0ff`:
 cluster A (docs), D-A (keyed signing + Rekor v1 removal, ADR-043), D-C
 (`engineMetadata` -> informational), the D-D trust-boundary formalization, D-E
-(Bundle/DSSE in CUE), C-5, B-1, and C-3. Three arcs remain: D-B+D-G
-(canonical-time correction to RFC3161 TSA plus the "Meaning is single-sourced"
-principle and the aim-sentence qualification, operator-owned), the D-D field-add
-(engine-cert subject/issuer into `#EngineConnection` at layer V), and the D-F
-queue (schema-naming findings B-2--B-9, one instruction each). The deferred set
+(Bundle/DSSE in CUE), C-5, B-1, C-3, and D-B+D-G (canonical-time correction to
+RFC3161 TSA plus the "Meaning is single-sourced" principle and the aim-sentence
+qualification). Two arcs remain: the D-D field-add (engine-cert subject/issuer
+into `#EngineConnection` at layer V), and the D-F queue (schema-naming findings
+B-2--B-9, one instruction each). The deferred set
 (base-SBOM signature verification, engine hardening, DNS centralization, full
 TLS demux, the osv-scalibr PR, and the `TestPackSBOM/deterministic_sbom` flake)
 is carried in that roadmap.
@@ -159,12 +159,8 @@ precursor the engine-hardening arc builds on, which in turn gates the
 front-rehosting and the remote-engine horizon. Everything else is independent
 and parallelizable.
 
-**Phase 0 -- roadmap truth and the order itself (docs only).** Reconcile the
-stale subsections so planning state is accurate, rehome cross-roadmap references
-to a single owner, and install this section. (This phase.)
-
 **Phase 1 -- contract hygiene (low risk, parallelizable).**
-- D-B+D-G: canonical-time correction (RFC3161 TSA) plus the "Meaning is
+- D-B+D-G (LANDED): canonical-time correction (RFC3161 TSA) plus the "Meaning is
   single-sourced" principle and the aim-sentence qualification. Operator-owned,
   docs only, first. (ROADMAP-cue-spec-review)
 - D-F B-2..B-9: schema-naming findings, one instruction each, order B-2, B-3,

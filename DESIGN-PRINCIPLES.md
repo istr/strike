@@ -2,8 +2,12 @@
 
 strike is a rootless, shell-free, container-native CI/CD executor. Its
 architecture is derived from a small set of principles chosen to support
-two goals simultaneously: **end-to-end software attestation and provenance
-tracing**, and **systematic reduction of the supply-chain attack surface**.
+two goals simultaneously: **software attestation and provenance tracing** --
+end-to-end when the container engine shares the controller's trust domain
+(local rootless, or remote with an attested TCB), best-effort and scope-marked
+when it does not (see
+[SECURITY.md](SECURITY.md#attestation-soundness-best-effort-vs-end-to-end)) --
+and **systematic reduction of the supply-chain attack surface**.
 
 These principles are the axioms of the project. Schemas, APIs, and
 implementation details evolve. The principles are meant to be an invariant.
@@ -107,6 +111,23 @@ impossible. This also provides the foundation for a dual-language
 verification approach: a secondary implementation in a different
 language can consume the exported schemas and verify strike's outputs
 independently.
+
+
+## Meaning is single-sourced
+
+Every fact has exactly one authoritative definition, and everything else refers
+to it. A constraint is expressed once -- as one CUE definition, one rule-table
+row, one principle -- and never restated in a second place that can drift from
+the first. When the same meaning is written twice, the copies diverge silently:
+a schema says one thing and its prose comment says another, a rationale string
+outlives the rule it explained, a doc asserts a property the code stopped
+guaranteeing. Single-sourcing makes that class of drift structurally impossible
+rather than a matter of diligence. It applies to the trust-layer derivation (the
+layer is computed from provenance by one rule table, not asserted per field), to
+the schemas (one CUE definition, types generated from it), and to the project's
+own planning state (one roadmap, not a chat transcript). The cost it imposes --
+a reference instead of a convenient restatement -- is the price of never having
+two sources of truth disagree.
 
 
 ## Secrets are typed

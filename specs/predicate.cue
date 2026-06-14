@@ -116,8 +116,8 @@ package deploy
 }
 
 // #SLSABuildMetadata carries only reproducible fields. Wall-clock timestamps
-// are NOT placed in the sealed provenance: ADR-037 holds Rekor integratedTime
-// as canonical and treats wall-clock as informational, and reproducibility
+// are NOT placed in the sealed provenance: the RFC3161 TSA token is the trusted
+// time (ADR-040) and wall-clock is informational, and reproducibility
 // (byte-identical sealed output for byte-identical inputs) forbids a live clock
 // here. invocationId is present for parity, populated only with a reproducible
 // value if any.
@@ -165,8 +165,8 @@ package deploy
 
 #InformationalPredicate: {
 	// timestamp is CP's wall-clock at deploy start. Informational, not the
-	// canonical time: Rekor integratedTime is canonical (ADR-037). This is the
-	// one output statement that carries a wall-clock; the sealed provenance is
+	// trusted time: the RFC3161 TSA token is the trusted time (ADR-040). This is
+	// the one output statement that carries a wall-clock; the sealed provenance is
 	// reproducible and omits it.
 	timestamp?: #Timestamp
 

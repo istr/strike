@@ -249,8 +249,8 @@ relabelling it.
   transports them; hashing does not lift them out of the container-asserted class.
 - **hostAsserted** -- a value CP reads from the host under a bare trust assumption,
   of unknown origin and carrying no cryptographic claim, superseded by a canonical
-  source (the deploy wall-clock; Rekor `integratedTime` is canonical, per
-  SECURITY.md "Wallclock trust"). The same kind would cover host-environment facts
+  source (the deploy wall-clock; the RFC3161 TSA token is the trusted time, per
+  ADR-040). The same kind would cover host-environment facts
   about the attesting process -- kernel, distribution, uid -- were any recorded.
 
 **The rule table.**

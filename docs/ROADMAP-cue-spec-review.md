@@ -1,6 +1,6 @@
 # CUE Spec Review Roadmap (post trust-boundary formalization)
 
-## Status: OPEN -- three arcs remain (D-B+D-G, D-D field-add, D-F: B-2..B-9)
+## Status: OPEN -- two arcs remain (D-D field-add, D-F: B-2..B-9)
 
 This roadmap is the single source for the work-arcs derived from
 `RETROSPECTIVE-cue-spec-review.md`. The post-formalization handover note
@@ -61,41 +61,21 @@ distinct:
 - **C-3 -- published-envelope mediaType.** Published envelopes use
   `application/vnd.in-toto+json`; the strike mediaType is an internal label
   only. Resolved, no change needed.
+- **D-B + D-G -- trusted time and single-sourcing.** D-B corrected every spot
+  that claimed Rekor `integratedTime` is canonical to "the RFC3161 TSA token is
+  the trusted time (ADR-040)": `SECURITY.md` wallclock section,
+  `ATTESTATION-SOUNDNESS-AND-THE-TRUST-BOUNDARY.md`, `specs/attestation.cue`,
+  `specs/predicate.cue` (two comments), and `specs/trust-layers.cue` (comment +
+  the timestamp-row rationale -- one more spot, `attestation.cue`, than this
+  roadmap had enumerated). D-G added the "Meaning is single-sourced" principle to
+  `DESIGN-PRINCIPLES.md` after "Declarative type enforcement (CUE first)" and
+  qualified the aim sentence (end-to-end under a trusted engine, best-effort and
+  scope-marked otherwise), matching `README.md` and the soundness note's
+  commitment 1.
 
 ## Open arcs (recommended order)
 
-### 1. D-B + D-G -- canonical-time correction + principle (operator-owned)
-
-One instruction; docs and principle only; low risk. Verified still-stale
-at-tree:
-
-- `specs/predicate.cue` (l.118-120, l.168) and `SECURITY.md` ("Wallclock
-  trust", ~l.102-108) still assert Rekor `integratedTime` as canonical trusted
-  time. D-B ratified the opposite: trusted time = RFC3161 TSA, per ADR-040
-  ("Rekor v2 supplies no integrated timestamp"). Re-cite ADR-040 (amendment
-  blockquote on ADR-037 or a direct re-cite).
-- Self-inflicted enlargement to own to the operator: the formalization arc
-  propagated the same stale framing into two more spots while grounding on the
-  SECURITY.md wallclock section -- the `specs/trust-layers.cue` `timestamp` row
-  rationale and the new "Decision procedure" section in
-  `ATTESTATION-SOUNDNESS-AND-THE-TRUST-BOUNDARY.md`. The D-B instruction must
-  correct these two as well.
-- Decide with the operator whether D-B is a citation correction
-  (`integratedTime` -> TSA RFC3161, cite ADR-040) or a fuller rewrite; the
-  SECURITY.md wallclock section reads as considered prose. Ground directly
-  against ADR-040 and ADR-037 at write time.
-- D-2 principle "Meaning is single-sourced" is absent from
-  `DESIGN-PRINCIPLES.md` (none of its `## ` headers match). Proposed placement:
-  after "Declarative type enforcement (CUE first)". Note `trust-layers.cue`
-  already cites this principle by name -- a restatement-drift the principle
-  itself names.
-- D-1 aim sentence in `DESIGN-PRINCIPLES.md` (l.5-6) still states "end-to-end
-  software attestation and provenance tracing" unqualified; the soundness note's
-  commitment 1 requires the "sound under a trusted engine; best-effort,
-  scope-marked otherwise" conditional. README is already qualified; re-confirm
-  ARCHITECTURE.md at write time.
-
-### 2. D-D field-add -- engine-cert subject / issuer into `#EngineConnection`
+### 1. D-D field-add -- engine-cert subject / issuer into `#EngineConnection`
 
 A schema field-add (CUE-first ratification gate applies) plus wiring the Go
 projection to stop dropping the fields. The Go `ConnectionInfo` / `TLSIdentity`
@@ -110,7 +90,7 @@ caveat: the engine dial uses standard `net/http` TLS (`container/tls.go`
 observed-but-not-pinned; the field-add records them at V truthfully, and the
 later engine-transport arc is what flips `hardenedByDeclaration` to true.
 
-### 3. D-F -- B-2..B-9 schema findings (one instruction each)
+### 2. D-F -- B-2..B-9 schema findings (one instruction each)
 
 At-tree state verified at `8721d0ff`; B-1 is done, the rest pending.
 

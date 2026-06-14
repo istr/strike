@@ -170,7 +170,7 @@ package deploy
 // source-to-deploy chain.
 #Informational: {
 	// timestamp is CP's wall-clock at deploy start. Not security-relevant
-	// per SECURITY.md: Rekor integratedTime is canonical.
+	// per SECURITY.md: the RFC3161 TSA token is the trusted time (ADR-040).
 	timestamp?: #Timestamp
 
 	// engineMetadata carries the engine's self-reports about itself.

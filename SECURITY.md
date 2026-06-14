@@ -100,12 +100,13 @@ affects two concrete security surfaces:
   compromise, but is a real failure mode.
 
 The deploy-attestation timestamps strike writes into predicate
-fields are not, by themselves, security-relevant: the canonical
-time of an attestation event is what Rekor records in its
-`integratedTime` field at log inclusion. Verifiers cross-check
-predicate timestamps against the Rekor inclusion proof; a
-strike-side wallclock error is detectable downstream and does not
-forge a cryptographic claim.
+fields are not, by themselves, security-relevant: the trusted
+time of an attestation event is the RFC3161 TSA token carried in
+the sigstore bundle (Rekor v2 supplies no integrated timestamp; see
+[ADR-040](docs/ADR-040-control-plane-sbom-and-keyless-attestation.md)).
+Verifiers cross-check predicate timestamps against that trusted
+timestamp; a strike-side wallclock error is detectable downstream
+and does not forge a cryptographic claim.
 
 strike does not currently implement
 [RFC 8915 NTS](https://www.rfc-editor.org/info/rfc8915) directly.
@@ -115,8 +116,8 @@ NTS-secured sources -- e.g., the PTB `ptbtime1-4.ptb.de` servers,
 or equivalent services operated by national metrology institutes.
 Direct NTS integration in strike is intentionally deferred: the
 attack surface is bounded by lane TTL (1h per the ephemeral-CA
-validity window), and Rekor anchors the canonical time
-of attestation events externally to strike. A lane-declared NTS
+validity window), and the RFC3161 TSA token anchors the trusted
+time of attestation events externally to strike. A lane-declared NTS
 time source -- mirroring the `resolver` schema with `host` and
 `trust` fields -- remains an option if a concrete operational
 need emerges.

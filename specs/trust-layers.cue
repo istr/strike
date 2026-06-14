@@ -53,8 +53,8 @@ package trustlayers
 //   hostAsserted         A value CP reads from the host under a bare trust
 //                        assumption, of unknown origin and carrying no cryptographic
 //                        claim, superseded by a canonical source (the deploy
-//                        wall-clock; Rekor integratedTime is canonical, per
-//                        SECURITY.md "Wallclock trust"). The kind also fits
+//                        wall-clock; the RFC3161 TSA token is the trusted time,
+//                        per ADR-040). The kind also fits
 //                        host-environment facts about the attesting process --
 //                        kernel, distro, uid -- were any ever recorded (none are
 //                        today; YAGNI).
@@ -135,7 +135,7 @@ fields: {
 	peerAttribution: {provenance: "engineChainAssertion", internal: "engineDependent.peerAttribution", published: "engine-context", rationale: "engine-asserted step<->peer binding; not sound against a malicious engine (C1)"}
 
 	// ---- informational: no trust claim ----
-	timestamp: {provenance: "hostAsserted", internal: "informational.timestamp", published: "informational", rationale: "host wall-clock at deploy start, trusted not verified; Rekor integratedTime is canonical"}
+	timestamp: {provenance: "hostAsserted", internal: "informational.timestamp", published: "informational", rationale: "host wall-clock at deploy start, trusted not verified; the RFC3161 TSA token is the trusted time"}
 	engineMetadata: {provenance: "engineSelfReport", internal: "informational.engineMetadata", published: "informational", rationale: "engine self-report (version, rootless); does not participate in the source-to-deploy chain"}
 	preStateDigest: {provenance: "containerProduced", internal: "informational.preStateDigest", published: "informational", rationale: "container-produced, engine-relayed; CP's hash transports the bytes, it does not lift them out of the container-asserted class"}
 	postStateDigest: {provenance: "containerProduced", internal: "informational.postStateDigest", published: "informational", rationale: "symmetric to preStateDigest"}
