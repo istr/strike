@@ -53,7 +53,7 @@ steps:
       type: git
       path: tree/provenance.json
 
-  - id: npm_install
+  - id: npm-install
     image: docker.io/library/node@sha256:cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd
     args: [npm, ci, --ignore-scripts, --no-bin-links]
     workdir: /work
@@ -70,7 +70,7 @@ steps:
       - { from: source.tree, subpath: package-lock.json, mount: /work/package-lock.json }
     secrets: []
     outputs:
-      - id: node_modules
+      - id: node-modules
         type: directory
         path: node_modules
 
@@ -83,7 +83,7 @@ steps:
       base: docker.io/library/busybox@sha256:efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef
       files:
         - { from: source.tree, dest: /work }
-        - { from: npm_install.node_modules, dest: /work/node_modules }
+        - { from: npm-install.node-modules, dest: /work/node_modules }
     outputs:
       - id: image
         type: image
@@ -103,7 +103,7 @@ steps:
         type: directory
         path: public
 
-  - id: pack_site
+  - id: pack-site
     args: []
     env: {}
     inputs: []
@@ -126,7 +126,7 @@ steps:
         image: docker.io/library/alpine@sha256:1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a
       artifacts:
         site:
-          from: pack_site.image
+          from: pack-site.image
       target:
         id: site-registry
         type: registry

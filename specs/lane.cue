@@ -137,9 +137,9 @@ package lane
 
 #Step: {
 	@go(Step)
-	id:         string     @go(ID)
-	image?:     #ImageRef  @go(Image,optional=nillable)
-	imageFrom?: #ImageFrom @go(ImageFrom,optional=nillable)
+	id:         #Identifier @go(ID,type=string)
+	image?:     #ImageRef   @go(Image,optional=nillable)
+	imageFrom?: #ImageFrom  @go(ImageFrom,optional=nillable)
 	args: [...string] @go(Args)
 	env: {
 		[string]: string @go(Env)
@@ -207,7 +207,7 @@ package lane
 
 #OutputSpec: {
 	@go(OutputSpec)
-	id:   string        @go(ID)
+	id:   #Identifier   @go(ID,type=string)
 	type: #ArtifactType @go(Type)
 	// path is relative to the step workdir (the single writable volume).
 	// Absent means the whole workdir is the artifact; a value selects a
@@ -440,8 +440,8 @@ package lane
 
 #Capture: {
 	@go(Capture)
-	id:    string    @go(ID)
-	image: #ImageRef @go(Image)
+	id:    #Identifier @go(ID,type=string)
+	image: #ImageRef   @go(Image)
 	command: [...string] @go(Command)
 	peers?: [...#Peer] @go(Peers)
 	mounts?: [...#CaptureMount] @go(Mounts)

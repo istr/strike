@@ -140,7 +140,7 @@ func TestProvenanceCapture_EndToEnd(t *testing.T) {
 		}
 	}
 
-	// deploy traverses the full DAG: deploy -> pack_site -> build -> workspace -> {source, npm_install}.
+	// deploy traverses the full DAG: deploy -> pack-site -> build -> workspace -> {source, npm-install}.
 	// source has provenance; CollectProvenance from deploy should find it.
 	records := state.CollectProvenance(dag, "deploy")
 	if len(records) == 0 {

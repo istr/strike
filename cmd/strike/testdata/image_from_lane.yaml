@@ -32,7 +32,7 @@ keyless:
         type: certFingerprint
         fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 steps:
-  - id: build_base
+  - id: build-base
     image: docker.io/library/golang@sha256:abababababababababababababababababababababababababababababababab
     args: [go, build, -o, /out/base]
     workdir: /out
@@ -40,13 +40,13 @@ steps:
     inputs: []
     secrets: []
     outputs:
-      - id: custom_image
+      - id: custom-image
         type: image
         path: custom.tar
-  - id: use_base
+  - id: use-base
     imageFrom:
-      step: build_base
-      output: custom_image
+      step: build-base
+      output: custom-image
     args: [/app/run]
     workdir: /out
     env: {}
@@ -65,7 +65,7 @@ steps:
         target: registry.example.com/app:latest
       artifacts:
         result:
-          from: use_base.result
+          from: use-base.result
       target:
         id: d1-minimal-target
         type: registry

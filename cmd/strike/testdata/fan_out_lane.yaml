@@ -49,7 +49,7 @@ steps:
       - id: manifest
         type: file
         path: manifest.txt
-  - id: consumer_a
+  - id: consumer-a
     image: docker.io/library/alpine@sha256:cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd
     args: [sh, -c, "cat /input/data.json > /out/a.txt"]
     workdir: /out
@@ -62,7 +62,7 @@ steps:
       - id: out
         type: file
         path: a.txt
-  - id: consumer_b
+  - id: consumer-b
     image: docker.io/library/alpine@sha256:cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd
     args: [sh, -c, "cat /input/config.yaml > /out/b.txt"]
     workdir: /out
@@ -75,7 +75,7 @@ steps:
       - id: out
         type: file
         path: b.txt
-  - id: consumer_c
+  - id: consumer-c
     image: docker.io/library/alpine@sha256:cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd
     args: [sh, -c, "cat /input/manifest.txt > /out/c.txt"]
     workdir: /out
@@ -97,11 +97,11 @@ steps:
         target: registry.example.com/app:latest
       artifacts:
         a:
-          from: consumer_a.out
+          from: consumer-a.out
         b:
-          from: consumer_b.out
+          from: consumer-b.out
         c:
-          from: consumer_c.out
+          from: consumer-c.out
       target:
         id: d1-minimal-target
         type: registry
