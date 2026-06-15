@@ -14,7 +14,8 @@ import (
 var _ Artifact
 
 // State tracks artifacts and step results across lane execution.
-// All artifact references use "step_name.output_name" keys.
+// All artifact references use the producer's canonical output ref as the
+// key (OutputRef.Ref, "step_name.output_name").
 type State struct {
 	Artifacts  map[string]Artifact         `json:"artifacts"`
 	Steps      map[string]StepResult       `json:"steps"`
@@ -53,9 +54,10 @@ func (s *State) RecordProvenance(stepName string, rec ProvenanceRecord) error {
 	return nil
 }
 
-// Register adds an artifact to the state under "step_name.output_name".
+// Register adds an artifact to the state under the producer's canonical
+// output ref (OutputRef.Ref, "step_name.output_name").
 func (s *State) Register(stepName, outputName string, a Artifact) error {
-	key := stepName + "." + outputName
+	key := OutputRef{Step: stepName, Output: outputName}.Ref()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, exists := s.Artifacts[key]; exists {
@@ -68,7 +70,8 @@ func (s *State) Register(stepName, outputName string, a Artifact) error {
 	return nil
 }
 
-// Resolve looks up an artifact by "step_name.output_name" reference.
+// Resolve looks up an artifact by its producer's canonical output ref
+// (OutputRef.Ref, "step_name.output_name").
 func (s *State) Resolve(ref string) (Artifact, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

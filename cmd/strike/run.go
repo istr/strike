@@ -124,7 +124,7 @@ func (rc *runContext) executeDeploy(ctx context.Context, step *lane.Step, stepNa
 
 	artifactRefs := make(map[string]string)
 	for _, e := range rc.dag.DeployEdges[stepName] {
-		artifactRefs[e.ArtifactName] = string(e.FromStep.ID) + "." + e.FromOutput.ID
+		artifactRefs[e.ArtifactName] = lane.OutputRef{Step: e.FromStep.ID, Output: e.FromOutput.ID}.Ref()
 	}
 
 	d := &deploy.Deployer{
@@ -191,7 +191,7 @@ func (rc *runContext) resolveImageDigest(ctx context.Context, step *lane.Step, s
 	}
 	if edge, ok := rc.dag.ImageFromEdges[string(step.ID)]; ok {
 		fromStep := string(edge.FromStep.ID)
-		ref := fromStep + "." + edge.FromOutput.ID
+		ref := lane.OutputRef{Step: fromStep, Output: edge.FromOutput.ID}.Ref()
 		art, err := rc.laneState.Resolve(ref)
 		if err != nil {
 			return lane.Digest{}, fmt.Errorf("%s: image_from %s: %w",
@@ -220,7 +220,7 @@ func (rc *runContext) computeSpecHash(step *lane.Step, stepName string, imageDig
 	// is mounted. The hashed value remains the producer's spec hash.
 	inputHashes := map[string]lane.Digest{}
 	for _, e := range rc.dag.InputEdges[string(step.ID)] {
-		from := string(e.FromStep.ID) + "." + e.FromOutput.ID
+		from := lane.OutputRef{Step: e.FromStep.ID, Output: e.FromOutput.ID}.Ref()
 		subpath := ""
 		if e.Subpath != nil {
 			subpath = string(*e.Subpath)
@@ -347,7 +347,7 @@ func (rc *runContext) resolvePackInputPaths(ctx context.Context, step *lane.Step
 		fromStep := string(e.FromStep.ID)
 		fromOutput := e.FromOutput.ID
 
-		art, artErr := rc.laneState.Resolve(fromStep + "." + fromOutput)
+		art, artErr := rc.laneState.Resolve(lane.OutputRef{Step: fromStep, Output: fromOutput}.Ref())
 		if artErr != nil {
 			return nil, fmt.Errorf("%s: pack input %s.%s: %w", safeName, fromStep, fromOutput, artErr)
 		}
@@ -556,7 +556,7 @@ func (rc *runContext) buildInputDelivery(ctx context.Context, step *lane.Step) (
 		imageCache = make(map[string][]byte) // producer tag -> image tar, exported once
 	)
 	for _, e := range edges {
-		ref := string(e.FromStep.ID) + "." + e.FromOutput.ID
+		ref := lane.OutputRef{Step: e.FromStep.ID, Output: e.FromOutput.ID}.Ref()
 		if _, artErr := rc.laneState.Resolve(ref); artErr != nil {
 			return nil, nil, fmt.Errorf("input at %q: source artifact %s not found: %w",
 				e.Mount, ref, artErr)

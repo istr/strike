@@ -172,7 +172,7 @@ func cmdDAG(path string) {
 		edges := dag.InputEdges[name]
 		deps := make([]string, len(edges))
 		for j, e := range edges {
-			deps[j] = string(e.FromStep.ID) + "." + e.FromOutput.ID
+			deps[j] = lane.OutputRef{Step: e.FromStep.ID, Output: e.FromOutput.ID}.Ref()
 		}
 		if len(deps) > 0 {
 			log.Printf("  %d. %s <- %v", i+1, name, deps) // #nosec G706 -- name/deps from parsed lane YAML
