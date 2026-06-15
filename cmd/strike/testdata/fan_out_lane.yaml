@@ -55,7 +55,9 @@ steps:
     workdir: /out
     env: {}
     inputs:
-      - from: generate.data
+      - from:
+          step: generate
+          output: data
         mount: /input/data.json
     secrets: []
     outputs:
@@ -68,7 +70,9 @@ steps:
     workdir: /out
     env: {}
     inputs:
-      - from: generate.config
+      - from:
+          step: generate
+          output: config
         mount: /input/config.yaml
     secrets: []
     outputs:
@@ -81,7 +85,9 @@ steps:
     workdir: /out
     env: {}
     inputs:
-      - from: generate.manifest
+      - from:
+          step: generate
+          output: manifest
         mount: /input/manifest.txt
     secrets: []
     outputs:
@@ -97,11 +103,17 @@ steps:
         target: registry.example.com/app:latest
       artifacts:
         a:
-          from: consumer-a.out
+          from:
+            step: consumer-a
+            output: out
         b:
-          from: consumer-b.out
+          from:
+            step: consumer-b
+            output: out
         c:
-          from: consumer-c.out
+          from:
+            step: consumer-c
+            output: out
       target:
         id: d1-minimal-target
         type: registry

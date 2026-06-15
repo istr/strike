@@ -225,7 +225,7 @@ func TestCollectPeers_StepsWithoutPeersOmitted(t *testing.T) {
 
 func withInput(s lane.Step, fromStep, fromOutput, mount string) lane.Step {
 	s.Inputs = append(s.Inputs, lane.InputRef{
-		From:  fromStep + "." + fromOutput,
+		From:  lane.OutputRef{Step: fromStep, Output: fromOutput},
 		Mount: lane.AbsPath(mount),
 	})
 	return s

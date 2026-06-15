@@ -50,7 +50,9 @@ steps:
         image: alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000
       artifacts:
         image:
-          from: build.image
+          from:
+            step: build
+            output: image
       target:
         id: prod-registry
         type: registry

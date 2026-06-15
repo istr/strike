@@ -48,7 +48,9 @@ steps:
     pack:
       base: docker.io/library/static@sha256:cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd
       files:
-        - from: compile.binary
+        - from:
+            step: compile
+            output: binary
           dest: /app
           mode: 0o755
       config:
@@ -68,7 +70,9 @@ steps:
         image: docker.io/library/alpine@sha256:efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef
       artifacts:
         img:
-          from: pack.image
+          from:
+            step: pack
+            output: image
       target:
         id: deploy-registry
         type: registry

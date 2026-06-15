@@ -52,7 +52,9 @@ steps:
         target: registry.example.com/app:latest
       artifacts:
         src:
-          from: clone.src
+          from:
+            step: clone
+            output: src
       target:
         id: d1-minimal-target
         type: registry

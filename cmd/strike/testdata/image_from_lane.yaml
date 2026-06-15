@@ -65,7 +65,9 @@ steps:
         target: registry.example.com/app:latest
       artifacts:
         result:
-          from: use-base.result
+          from:
+            step: use-base
+            output: result
       target:
         id: d1-minimal-target
         type: registry

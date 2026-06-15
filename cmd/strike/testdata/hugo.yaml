@@ -66,8 +66,16 @@ steps:
     env:
       npm_config_cache: /tmp/.npm
     inputs:
-      - { from: source.tree, subpath: package.json, mount: /work/package.json }
-      - { from: source.tree, subpath: package-lock.json, mount: /work/package-lock.json }
+      - from:
+          step: source
+          output: tree
+        subpath: package.json
+        mount: /work/package.json
+      - from:
+          step: source
+          output: tree
+        subpath: package-lock.json
+        mount: /work/package-lock.json
     secrets: []
     outputs:
       - id: node-modules
@@ -82,8 +90,14 @@ steps:
     pack:
       base: docker.io/library/busybox@sha256:efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef
       files:
-        - { from: source.tree, dest: /work }
-        - { from: npm-install.node-modules, dest: /work/node_modules }
+        - from:
+            step: source
+            output: tree
+          dest: /work
+        - from:
+            step: npm-install
+            output: node-modules
+          dest: /work/node_modules
     outputs:
       - id: image
         type: image
@@ -111,7 +125,10 @@ steps:
     pack:
       base: docker.io/library/busybox@sha256:efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef
       files:
-        - { from: build.site, dest: /usr/share/nginx/html }
+        - from:
+            step: build
+            output: site
+          dest: /usr/share/nginx/html
       config:
         entrypoint: [nginx, -g, "daemon off;"]
     outputs:
@@ -126,7 +143,9 @@ steps:
         image: docker.io/library/alpine@sha256:1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a
       artifacts:
         site:
-          from: pack-site.image
+          from:
+            step: pack-site
+            output: image
       target:
         id: site-registry
         type: registry

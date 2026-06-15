@@ -31,8 +31,8 @@ func TestBuild_RejectsNestedInputMounts(t *testing.T) {
 				ID: "build", Image: lane.Ptr(lane.ImageRef("img@sha256:" + strings.Repeat("c", 64))),
 				Args: []string{}, Env: map[string]string{},
 				Inputs: []lane.InputRef{
-					{From: "src.tree", Mount: "/work"},
-					{From: "deps.modules", Mount: "/work/node_modules"},
+					{From: lane.OutputRef{Step: "src", Output: "tree"}, Mount: "/work"},
+					{From: lane.OutputRef{Step: "deps", Output: "modules"}, Mount: "/work/node_modules"},
 				},
 			},
 		},

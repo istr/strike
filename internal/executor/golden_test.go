@@ -36,7 +36,7 @@ func writeVectorFiles(t *testing.T, specFiles []lane.PackFile, vecFiles map[stri
 	t.Helper()
 	fromToDest := make(map[string]string, len(specFiles))
 	for _, pf := range specFiles {
-		fromToDest[pf.From] = pf.Dest.String()
+		fromToDest[pf.From.Step+"."+pf.From.Output] = pf.Dest.String()
 	}
 	tmp := t.TempDir()
 	inputPaths := make(map[string]string, len(vecFiles))
@@ -187,7 +187,7 @@ func TestAssembleImage_Deterministic(t *testing.T) {
 
 	spec := &lane.PackSpec{
 		Files: []lane.PackFile{
-			{From: "step.out", Dest: "/app", Mode: 0o755},
+			{From: lane.OutputRef{Step: "step", Output: "out"}, Dest: "/app", Mode: 0o755},
 		},
 	}
 	inputs := map[string]string{"/app": binPath}
@@ -215,7 +215,7 @@ func TestAssembleImage_WithMutatedBase(t *testing.T) {
 
 	spec := &lane.PackSpec{
 		Files: []lane.PackFile{
-			{From: "step.out", Dest: "/app", Mode: 0o755},
+			{From: lane.OutputRef{Step: "step", Output: "out"}, Dest: "/app", Mode: 0o755},
 		},
 	}
 	inputs := map[string]string{"/app": binPath}

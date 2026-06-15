@@ -558,7 +558,9 @@ steps:
     args: ["true"]
     env: {}
     inputs:
-      - from: src.tree
+      - from:
+          step: src
+          output: tree
         subpath: %s
         mount: /in/x
     secrets: []

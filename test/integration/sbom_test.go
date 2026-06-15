@@ -48,7 +48,7 @@ func TestPackSBOM(t *testing.T) {
 		Spec: &lane.PackSpec{
 			Base: lane.ImageRef(staticBase),
 			Files: []lane.PackFile{
-				{From: "build.app", Dest: "/app", Mode: 0o755},
+				{From: lane.OutputRef{Step: "build", Output: "app"}, Dest: "/app", Mode: 0o755},
 			},
 			Config: &lane.ImageConfig{
 				Entrypoint: []string{"/app"},
@@ -203,7 +203,7 @@ func TestPackSBOM(t *testing.T) {
 			Spec: &lane.PackSpec{
 				Base: lane.ImageRef(staticBase),
 				Files: []lane.PackFile{
-					{From: "build.app", Dest: "/app", Mode: 0o755},
+					{From: lane.OutputRef{Step: "build", Output: "app"}, Dest: "/app", Mode: 0o755},
 				},
 				Config: &lane.ImageConfig{
 					Entrypoint: []string{"/app"},

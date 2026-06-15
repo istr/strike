@@ -12,15 +12,6 @@ import (
 	"github.com/istr/strike/internal/transport"
 )
 
-// parseRef splits a "step_name.output_name" reference into its parts.
-func parseRef(ref string) (step, output string, err error) {
-	parts := strings.SplitN(ref, ".", 2)
-	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		return "", "", fmt.Errorf("invalid reference %q: expected step_name.output_name", ref)
-	}
-	return parts[0], parts[1], nil
-}
-
 // InputEdge is a fully resolved step.inputs[i] entry.
 // FromStep and FromOutput are guaranteed non-nil by Build.
 // Subpath is nil when the entire producer output is mounted.
@@ -154,10 +145,8 @@ func (d *DAG) resolveInputEdges(p *Lane) error {
 	for _, s := range p.Steps {
 		name := string(s.ID)
 		for _, inp := range s.Inputs {
-			refStep, refOutput, err := parseRef(inp.From)
-			if err != nil {
-				return fmt.Errorf("step %q: input at %q: %w", name, inp.Mount, err)
-			}
+			refStep := inp.From.Step
+			refOutput := inp.From.Output
 			fromStep, ok := d.Steps[refStep]
 			if !ok {
 				return fmt.Errorf("step %q: input at %q references unknown step %q",
@@ -200,18 +189,16 @@ func (d *DAG) resolvePackEdges(p *Lane) error {
 }
 
 func (d *DAG) resolvePackFileEdge(name string, f PackFile) error {
-	stepName, outputName, err := parseRef(f.From)
-	if err != nil {
-		return fmt.Errorf("step %q: pack file: %w", name, err)
-	}
+	stepName := f.From.Step
+	outputName := f.From.Output
 	fromStep, ok := d.Steps[stepName]
 	if !ok {
-		return fmt.Errorf("step %q: pack file from %q: unknown step %q", name, f.From, stepName)
+		return fmt.Errorf("step %q: pack file references unknown step %q", name, stepName)
 	}
 	out := findOutput(fromStep, outputName)
 	if out == nil {
-		return fmt.Errorf("step %q: pack file from %q: output %q not found in step %q",
-			name, f.From, outputName, stepName)
+		return fmt.Errorf("step %q: pack file output %q not found in step %q",
+			name, outputName, stepName)
 	}
 	d.PackFileEdges[name] = append(d.PackFileEdges[name], PackFileEdge{
 		Dest:       f.Dest,
@@ -241,10 +228,8 @@ func (d *DAG) resolveDeployEdges(p *Lane) error {
 			continue
 		}
 		for artName, artRef := range s.Deploy.Artifacts {
-			stepName, outputName, err := parseRef(artRef.From)
-			if err != nil {
-				return fmt.Errorf("step %q: deploy artifact %q: %w", name, artName, err)
-			}
+			stepName := artRef.From.Step
+			outputName := artRef.From.Output
 			fromStep, ok := d.Steps[stepName]
 			if !ok {
 				return fmt.Errorf("step %q: deploy artifact %q references unknown step %q",

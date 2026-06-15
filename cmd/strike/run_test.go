@@ -75,7 +75,7 @@ func TestBuildInputDelivery_Single(t *testing.T) {
 			{
 				ID: "test", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
 				Workdir: lane.Ptr(lane.AbsPath("/work")),
-				Inputs:  []lane.InputRef{{From: "compile.bin", Mount: "/work/binary"}},
+				Inputs:  []lane.InputRef{{From: lane.OutputRef{Step: "compile", Output: "bin"}, Mount: "/work/binary"}},
 			},
 		},
 	}
@@ -127,8 +127,8 @@ func TestBuildInputDelivery_Multiple(t *testing.T) {
 				ID: "consumer", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
 				Workdir: lane.Ptr(lane.AbsPath("/work")),
 				Inputs: []lane.InputRef{
-					{From: "s1.a", Mount: "/work/a"},
-					{From: "s2.b", Mount: "/work/b"},
+					{From: lane.OutputRef{Step: "s1", Output: "a"}, Mount: "/work/a"},
+					{From: lane.OutputRef{Step: "s2", Output: "b"}, Mount: "/work/b"},
 				},
 			},
 		},
@@ -182,7 +182,7 @@ func TestBuildInputDelivery_MissingSubpath(t *testing.T) {
 				ID: "consumer", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
 				Workdir: lane.Ptr(lane.AbsPath("/work")),
 				Inputs: []lane.InputRef{
-					{From: "src.tree", Subpath: lane.Ptr(lane.RelPath("nonexistent.json")), Mount: "/work/x"},
+					{From: lane.OutputRef{Step: "src", Output: "tree"}, Subpath: lane.Ptr(lane.RelPath("nonexistent.json")), Mount: "/work/x"},
 				},
 			},
 		},
@@ -227,7 +227,7 @@ func TestBuildInputDelivery_OutsideWorkdir_DirectoryMount(t *testing.T) {
 			{
 				ID: "consumer", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
 				Workdir: lane.Ptr(lane.AbsPath("/work")),
-				Inputs:  []lane.InputRef{{From: "src.tree", Mount: "/outside/tree"}},
+				Inputs:  []lane.InputRef{{From: lane.OutputRef{Step: "src", Output: "tree"}, Mount: "/outside/tree"}},
 			},
 		},
 	}
@@ -286,7 +286,7 @@ func TestBuildInputDelivery_NoWorkdir_Mounts(t *testing.T) {
 			},
 			{
 				ID: "consumer", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Inputs: []lane.InputRef{{From: "src.tree", Mount: "/in/tree"}},
+				Inputs: []lane.InputRef{{From: lane.OutputRef{Step: "src", Output: "tree"}, Mount: "/in/tree"}},
 			},
 		},
 	}
@@ -333,7 +333,7 @@ func TestBuildInputDelivery_SingleFileOutside_Rejected(t *testing.T) {
 			{
 				ID: "consumer", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
 				Workdir: lane.Ptr(lane.AbsPath("/work")),
-				Inputs:  []lane.InputRef{{From: "src.bin", Mount: "/outside/binary"}},
+				Inputs:  []lane.InputRef{{From: lane.OutputRef{Step: "src", Output: "bin"}, Mount: "/outside/binary"}},
 			},
 		},
 	}
@@ -370,8 +370,8 @@ func TestBuildInputDelivery_ExportsProducerOnce(t *testing.T) {
 				ID: "consumer", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
 				Workdir: lane.Ptr(lane.AbsPath("/work")),
 				Inputs: []lane.InputRef{
-					{From: "src.tree", Subpath: lane.Ptr(lane.RelPath("a.txt")), Mount: "/work/a.txt"},
-					{From: "src.tree", Subpath: lane.Ptr(lane.RelPath("b.txt")), Mount: "/work/b.txt"},
+					{From: lane.OutputRef{Step: "src", Output: "tree"}, Subpath: lane.Ptr(lane.RelPath("a.txt")), Mount: "/work/a.txt"},
+					{From: lane.OutputRef{Step: "src", Output: "tree"}, Subpath: lane.Ptr(lane.RelPath("b.txt")), Mount: "/work/b.txt"},
 				},
 			},
 		},
@@ -730,7 +730,7 @@ func TestResolvePackInputPaths(t *testing.T) {
 				ID: "pack", Env: map[string]string{}, Args: []string{},
 				Pack: &lane.PackSpec{
 					Base:  "scratch",
-					Files: []lane.PackFile{{From: "compile.bin", Dest: "/app"}},
+					Files: []lane.PackFile{{From: lane.OutputRef{Step: "compile", Output: "bin"}, Dest: "/app"}},
 				},
 				Outputs: []lane.OutputSpec{{ID: "img", Type: "image", Path: lane.Ptr(lane.RelPath("img.tar"))}},
 			},

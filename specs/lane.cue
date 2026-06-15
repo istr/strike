@@ -190,13 +190,20 @@ package lane
 // Input types
 // ---------------------------------------------------------------------------
 
+// A reference to a named output of a step earlier in this lane.
+#OutputRef: {
+	@go(OutputRef)
+	step:   #Identifier @go(Step,type=string)
+	output: #Identifier @go(Output,type=string)
+}
+
 #InputRef: {
 	@go(InputRef)
 
-	from:     string   @go(From)                      // "{step.id}.{output.id}"
-	subpath?: #RelPath @go(Subpath,optional=nillable) // path within producer output; nil mounts whole output
-	mount:    #AbsPath @go(Mount)
-	digest?:  #Digest  @go(Digest,type=*Digest)
+	from:     #OutputRef @go(From)
+	subpath?: #RelPath   @go(Subpath,optional=nillable) // path within producer output; nil mounts whole output
+	mount:    #AbsPath   @go(Mount)
+	digest?:  #Digest    @go(Digest,type=*Digest)
 }
 
 // ---------------------------------------------------------------------------
@@ -317,7 +324,7 @@ package lane
 
 #PackFile: {
 	@go(PackFile)
-	from: string       @go(From)
+	from: #OutputRef   @go(From)
 	dest: #AbsPath     @go(Dest)
 	mode: *0o755 | int @go(Mode)
 	uid?: int          @go(UID,optional=nillable)
@@ -400,7 +407,7 @@ package lane
 
 #ArtifactRef: {
 	@go(ArtifactRef)
-	from: string @go(From)
+	from: #OutputRef @go(From)
 }
 
 #DeployTarget: {

@@ -61,7 +61,9 @@ steps:
         target: registry.example.com/golden:latest
       artifacts:
         binary:
-          from: build.binary
+          from:
+            step: build
+            output: binary
       target:
         id: golden-target
         type: registry

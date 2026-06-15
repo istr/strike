@@ -53,7 +53,9 @@ steps:
           type: certFingerprint
           fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
     inputs:
-      - from: src.tree
+      - from:
+          step: src
+          output: tree
         mount: /src
     outputs:
       - id: binary
@@ -64,7 +66,9 @@ steps:
     pack:
       base: cgr.dev/chainguard/static@sha256:2fdfacc8d61164aa9e20909dceec7cc28b9feb66580e8e1a65b9f2443c53b61b
       files:
-        - from: build-binary.binary
+        - from:
+            step: build-binary
+            output: binary
           dest: /usr/bin/strike
           mode: 0o755
     outputs:

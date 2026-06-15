@@ -49,7 +49,9 @@ steps:
     workdir: /out
     env: {}
     inputs:
-      - from: npm-install.node-modules
+      - from:
+          step: npm-install
+          output: node-modules
         mount: /src/node_modules
     secrets: []
     outputs:
@@ -65,7 +67,9 @@ steps:
         target: registry.example.com/app:latest
       artifacts:
         site:
-          from: build.site
+          from:
+            step: build
+            output: site
       target:
         id: d1-minimal-target
         type: registry

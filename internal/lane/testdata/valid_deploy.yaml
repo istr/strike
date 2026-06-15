@@ -51,7 +51,9 @@ steps:
         target: registry.example.com/app:latest
       artifacts:
         binary:
-          from: build.binary
+          from:
+            step: build
+            output: binary
       target:
         id: prod-registry
         type: registry

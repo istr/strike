@@ -24,7 +24,7 @@ func TestAssembleImage_DirectoryInput(t *testing.T) {
 
 	spec := &lane.PackSpec{
 		Base:  "scratch",
-		Files: []lane.PackFile{{From: "src.tree", Dest: "/target"}},
+		Files: []lane.PackFile{{From: lane.OutputRef{Step: "src", Output: "tree"}, Dest: "/target"}},
 	}
 	inputPaths := map[string]string{"/target": src}
 
@@ -52,7 +52,7 @@ func TestAssembleImage_DirectoryInput_DeterministicDigest(t *testing.T) {
 		src := setupDirTree(t, map[string]string{"sub/f.txt": "content"})
 		spec := &lane.PackSpec{
 			Base:  "scratch",
-			Files: []lane.PackFile{{From: "s.tree", Dest: "/app"}},
+			Files: []lane.PackFile{{From: lane.OutputRef{Step: "s", Output: "tree"}, Dest: "/app"}},
 		}
 		result, err := executor.AssembleImage(empty.Image, spec, map[string]string{"/app": src})
 		if err != nil {
@@ -80,7 +80,7 @@ func TestAssembleImage_DirectoryInput_RejectsSymlinks(t *testing.T) {
 
 	spec := &lane.PackSpec{
 		Base:  "scratch",
-		Files: []lane.PackFile{{From: "s.tree", Dest: "/out"}},
+		Files: []lane.PackFile{{From: lane.OutputRef{Step: "s", Output: "tree"}, Dest: "/out"}},
 	}
 	_, err := executor.AssembleImage(empty.Image, spec, map[string]string{"/out": src})
 	if err == nil {
