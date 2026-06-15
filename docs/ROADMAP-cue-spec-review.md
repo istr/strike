@@ -127,7 +127,7 @@ At-tree state verified at `8721d0ff`; B-1 is done, the rest pending.
 |----|---------|---------------|
 | B-2 | `gitCommit` canonical width | Landed. `predicate.cue` `gitCommit` widened to 40-or-64, matching `source-provenance.cue` `commit`. |
 | B-3 | `#Subject` should reuse `#ResourceDescriptor` (remove bespoke type) | Landed. `#Subject` is now `#ResourceDescriptor` refined with required name and digest; no duplicated structure, Go mirror unchanged. |
-| B-4 | `id` / `name` normalization (stop overloading `name`) | B-4a (`52026b17`) and B-4b (`8916ca08`) landed; only B-4c remains. See "B-4 -- ratified plan" below. |
+| B-4 | `id` / `name` normalization (stop overloading `name`) | Landed. B-4a (`52026b17`), B-4b (`8916ca08`), B-4c (`bf6756c6`). See "B-4 -- ratified plan" below. |
 | B-5 | Unify producer refs on `#OutputRef`; reconcile `from` / `source` | Pending. Both still used in `lane.cue` (l.190 / 314 / 380 / 397 / 440). |
 | B-6 | `#TLSTrust` discriminator `mode` -> `type` + one enum casing | Landed `22426cc2`. `transport.cue` `#TLSTrust` keys on `type:` with values `certFingerprint` / `caBundle`; the hand-mirrored Go (`@go(-)`) moved in lockstep, and the golden bundles were regenerated (re-keying `golden/lane.yaml` re-hashes its sealed `laneDigest`). |
 | B-7 | De-overload "attestation" (rename the state-capture config) | Landed `d8cabc2`. `recording` / `#StateRecording` (plus `#CaptureSet` / `#Capture`) replaces the `attestation` / `#AttestationSpec` config; the cryptographic-attestation family is untouched; golden bundles regenerated. ADR-016 vocabulary. |
@@ -205,7 +205,7 @@ underdetermined and tracked separately.
   B-4a); the freshly renamed `#Step.id` / `#OutputSpec.id` / `#Capture.id` stay
   plain `string` for now. No value migration. Golden regen (the `name:` -> `id:`
   key recase re-keys `golden/lane.yaml`).
-- **B-4c -- apply `#Identifier` and migrate values (semantic).** Type the renamed
+- **B-4c -- apply `#Identifier` and migrate values (semantic).** Landed `bf6756c6`. Type the renamed
   `#Step.id` / `#OutputSpec.id` / `#Capture.id` as `#Identifier`, and migrate the
   underscore identifiers to hyphens in the four fixtures that carry them
   (`fan_out_lane.yaml`, `hugo.yaml`, `hugo_like_lane.yaml`,
