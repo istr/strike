@@ -308,8 +308,8 @@ func (d *Deployer) applyCapsule(opts *container.RunOpts, caps *capsule.NetworkCa
 
 // captureKey is the stepPorts key for a state-capture container; it
 // must match cmd/strike/run.go captureKey.
-func captureKey(stepName, captureName string) string {
-	return "capture:" + stepName + ":" + captureName
+func captureKey(stepID, captureID string) string {
+	return "capture:" + stepID + ":" + captureID
 }
 
 // Deployer executes deploy steps and produces attestations.
@@ -326,7 +326,7 @@ type Deployer struct {
 	NetworkRecords map[string]capsule.Records   // run/build step records, keyed by step name (injected by cmd/strike)
 	LaneID         string
 	LaneDigest     string                                                                                      // raw sha256 over the lane file bytes; sealed as lane_digest
-	StepName       string                                                                                      // deploy step name; method-container port key and capture-key prefix
+	StepID         string                                                                                      // deploy step name; method-container port key and capture-key prefix
 	CAVolume       string                                                                                      // lane-wide CA volume name; mounted r/o at /etc/ssl/certs
 	Keyless        lane.Keyless                                                                                // lane-declared keyless config (ADR-040 D2, ADR-041); .Endpoints dials Fulcio, Rekor v2, TSA; .TrustRoot/.TrustRootRef carry the verify anchor
 	produceBundles func(ctx context.Context, eps lane.KeylessEndpoints, statements [][]byte) ([][]byte, error) // test seam; nil selects the real keyless chain
@@ -356,9 +356,9 @@ func (d *Deployer) collectObservedPeers(
 	// of the sub-tree. Only steps with declared peers can have connections; the
 	// deploy step's own method records live in ownRecords (folded below), so the
 	// step.ID lookup here only matches run/build predecessors.
-	for stepName := range declaredPeers {
-		if recs, ok := d.NetworkRecords[stepName]; ok {
-			if err := ingestRecords(stepName, recs, observed, attribution); err != nil {
+	for stepID := range declaredPeers {
+		if recs, ok := d.NetworkRecords[stepID]; ok {
+			if err := ingestRecords(stepID, recs, observed, attribution); err != nil {
 				return nil, nil, err
 			}
 		}
@@ -617,16 +617,16 @@ func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.Sta
 // transparency proof, so no Rekor entry is mirrored into the collect-model.
 // For registry deploys, the bundles are then attached as OCI referrers of
 // the pushed manifest digest (Execute step 8b).
-func (d *Deployer) signStatements(ctx context.Context, att *Attestation, stepName string) error {
+func (d *Deployer) signStatements(ctx context.Context, att *Attestation, stepID string) error {
 	slsa, engineCtx, info, err := projectStatements(att, d.OIDC)
 	if err != nil {
-		return fmt.Errorf("step %q: project statements: %w", stepName, err)
+		return fmt.Errorf("step %q: project statements: %w", stepID, err)
 	}
 	statements := make([][]byte, 0, 3)
 	for _, stmt := range []any{slsa, engineCtx, info} {
 		stmtJSON, mErr := json.Marshal(stmt)
 		if mErr != nil {
-			return fmt.Errorf("step %q: marshal statement: %w", stepName, mErr)
+			return fmt.Errorf("step %q: marshal statement: %w", stepID, mErr)
 		}
 		statements = append(statements, stmtJSON)
 	}
@@ -634,7 +634,7 @@ func (d *Deployer) signStatements(ctx context.Context, att *Attestation, stepNam
 	if produce == nil {
 		token, tErr := ambientIDToken()
 		if tErr != nil {
-			return fmt.Errorf("step %q: %w", stepName, tErr)
+			return fmt.Errorf("step %q: %w", stepID, tErr)
 		}
 		// Observation over declaration, fail-closed at the source: the
 		// token's subject is the observed signing identity, the lane's
@@ -643,11 +643,11 @@ func (d *Deployer) signStatements(ctx context.Context, att *Attestation, stepNam
 		// verifier rejects against the same declaration later.
 		subject, sErr := subjectFromIDToken(token)
 		if sErr != nil {
-			return fmt.Errorf("step %q: %w", stepName, sErr)
+			return fmt.Errorf("step %q: %w", stepID, sErr)
 		}
 		if subject != d.OIDC.Identity {
 			return fmt.Errorf("step %q: keyless: token identity %q does not match the lane-declared identity %q",
-				stepName, subject, d.OIDC.Identity)
+				stepID, subject, d.OIDC.Identity)
 		}
 		produce = func(ctx context.Context, eps lane.KeylessEndpoints, stmts [][]byte) ([][]byte, error) {
 			return produceKeylessBundles(ctx, eps, token, stmts)
@@ -655,10 +655,10 @@ func (d *Deployer) signStatements(ctx context.Context, att *Attestation, stepNam
 	}
 	bundles, err := produce(ctx, d.Keyless.Endpoints, statements)
 	if err != nil {
-		return fmt.Errorf("step %q: %w", stepName, err)
+		return fmt.Errorf("step %q: %w", stepID, err)
 	}
 	if len(bundles) != len(statements) {
-		return fmt.Errorf("step %q: keyless: got %d bundles, want %d", stepName, len(bundles), len(statements))
+		return fmt.Errorf("step %q: keyless: got %d bundles, want %d", stepID, len(bundles), len(statements))
 	}
 	att.Signed = &SignedStatements{
 		Sealed:        SignedStatement{Bundle: bundles[0]},
@@ -670,12 +670,12 @@ func (d *Deployer) signStatements(ctx context.Context, att *Attestation, stepNam
 
 // resolveArtifactDigests resolves all artifact references to their provenance records.
 // refs maps artifact name -> "step.output" state ref (pre-resolved by the caller from DAG edges).
-func resolveArtifactDigests(stepName string, refs map[string]string, state *lane.State) (map[string]SignedArtifact, error) {
+func resolveArtifactDigests(stepID string, refs map[string]string, state *lane.State) (map[string]SignedArtifact, error) {
 	artifacts := make(map[string]SignedArtifact)
 	for artName, ref := range refs {
 		a, resolveErr := state.Resolve(ref)
 		if resolveErr != nil {
-			return nil, fmt.Errorf("step %q: artifact %q: %w", stepName, artName, resolveErr)
+			return nil, fmt.Errorf("step %q: artifact %q: %w", stepID, artName, resolveErr)
 		}
 		artifacts[artName] = SignedArtifact{
 			Digest: a.Digest.String(),
@@ -750,7 +750,7 @@ func (d *Deployer) captureOne(ctx context.Context, sc lane.Capture) (captureSnap
 		})
 	}
 
-	caps, err := d.startUnitCapsule(ctx, captureKey(d.StepName, sc.ID), sc.Peers)
+	caps, err := d.startUnitCapsule(ctx, captureKey(d.StepID, sc.ID), sc.Peers)
 	if err != nil {
 		return captureSnap{}, err
 	}
@@ -848,14 +848,14 @@ func (d *Deployer) executeKubernetesDeploy(ctx context.Context, m lane.DeployKub
 		{Source: kubeconfig, Target: "/root/.kube/config", ReadOnly: true},
 	}
 
-	caps, err := d.startUnitCapsule(ctx, d.StepName, peers)
+	caps, err := d.startUnitCapsule(ctx, d.StepID, peers)
 	if err != nil {
 		return err
 	}
 	defer func() {
 		d.ownRecords = append(d.ownRecords, caps.Records())
 		if stopErr := caps.Stop(); stopErr != nil {
-			log.Printf("WARN   deploy %s: capsule stop: %v", d.StepName, stopErr)
+			log.Printf("WARN   deploy %s: capsule stop: %v", d.StepID, stopErr)
 		}
 	}()
 
@@ -887,14 +887,14 @@ func (d *Deployer) executeCustomDeploy(ctx context.Context, m lane.DeployCustom,
 		return fmt.Errorf("custom deploy: image required")
 	}
 
-	caps, err := d.startUnitCapsule(ctx, d.StepName, peers)
+	caps, err := d.startUnitCapsule(ctx, d.StepID, peers)
 	if err != nil {
 		return err
 	}
 	defer func() {
 		d.ownRecords = append(d.ownRecords, caps.Records())
 		if stopErr := caps.Stop(); stopErr != nil {
-			log.Printf("WARN   deploy %s: capsule stop: %v", d.StepName, stopErr)
+			log.Printf("WARN   deploy %s: capsule stop: %v", d.StepID, stopErr)
 		}
 	}()
 

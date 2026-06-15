@@ -64,7 +64,7 @@ var ErrResolverClosed = errors.New("resolver: closed")
 type Resolver struct {
 	synthAddr netip.Addr
 	allowlist map[string]struct{}
-	stepName  string
+	stepID    string
 	records   []QueryRecord
 	mu        sync.Mutex
 	closed    bool
@@ -72,7 +72,7 @@ type Resolver struct {
 
 // New constructs a Resolver for one step.
 //
-//   - stepName identifies the step in QueryRecord and logs.
+//   - stepID identifies the step in QueryRecord and logs.
 //   - allowlist enumerates the FQDNs the step is permitted to
 //     resolve. Entries are normalized (lowercase, trailing dot
 //     stripped) and de-duplicated; passing an empty allowlist is
@@ -80,9 +80,9 @@ type Resolver struct {
 //   - synthAddr is the step's loopback address. Allowed names
 //     resolve to it (A record); the container then connects there,
 //     reaching the step's mediator. Must be IPv4.
-func New(stepName string, allowlist []transport.Host, synthAddr netip.Addr) (*Resolver, error) {
-	if stepName == "" {
-		return nil, errors.New("resolver: stepName must not be empty")
+func New(stepID string, allowlist []transport.Host, synthAddr netip.Addr) (*Resolver, error) {
+	if stepID == "" {
+		return nil, errors.New("resolver: stepID must not be empty")
 	}
 	if !synthAddr.Is4() {
 		return nil, fmt.Errorf("resolver: synthAddr must be IPv4, got %s", synthAddr)
@@ -98,7 +98,7 @@ func New(stepName string, allowlist []transport.Host, synthAddr netip.Addr) (*Re
 	}
 
 	return &Resolver{
-		stepName:  stepName,
+		stepID:    stepID,
 		allowlist: set,
 		synthAddr: synthAddr,
 	}, nil
@@ -204,14 +204,14 @@ func (r *Resolver) handleUDPQuery(ctx context.Context, udp net.PacketConn, addr 
 		return
 	}
 	if _, err := udp.WriteTo(resp, addr); err != nil {
-		log.Printf("WARN   resolver[%s]: udp write to %s: %v", r.stepName, addr, err)
+		log.Printf("WARN   resolver[%s]: udp write to %s: %v", r.stepID, addr, err)
 	}
 }
 
 func (r *Resolver) handleTCPConn(ctx context.Context, conn net.Conn) {
 	defer func() {
 		if err := conn.Close(); err != nil {
-			log.Printf("WARN   resolver[%s]: tcp close: %v", r.stepName, err)
+			log.Printf("WARN   resolver[%s]: tcp close: %v", r.stepID, err)
 		}
 	}()
 	for {
@@ -233,7 +233,7 @@ func (r *Resolver) handleTCPConn(ctx context.Context, conn net.Conn) {
 			return
 		}
 		if err := writeTCPMessage(conn, resp); err != nil {
-			log.Printf("WARN   resolver[%s]: tcp write: %v", r.stepName, err)
+			log.Printf("WARN   resolver[%s]: tcp write: %v", r.stepID, err)
 			return
 		}
 	}

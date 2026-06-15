@@ -189,23 +189,23 @@ func (d *DAG) resolvePackEdges(p *Lane) error {
 }
 
 func (d *DAG) resolvePackFileEdge(name string, f PackFile) error {
-	stepName := f.From.Step
-	outputName := f.From.Output
-	fromStep, ok := d.Steps[stepName]
+	stepID := f.From.Step
+	outputID := f.From.Output
+	fromStep, ok := d.Steps[stepID]
 	if !ok {
-		return fmt.Errorf("step %q: pack file references unknown step %q", name, stepName)
+		return fmt.Errorf("step %q: pack file references unknown step %q", name, stepID)
 	}
-	out := findOutput(fromStep, outputName)
+	out := findOutput(fromStep, outputID)
 	if out == nil {
 		return fmt.Errorf("step %q: pack file output %q not found in step %q",
-			name, outputName, stepName)
+			name, outputID, stepID)
 	}
 	d.PackFileEdges[name] = append(d.PackFileEdges[name], PackFileEdge{
 		Dest:       f.Dest,
 		FromStep:   fromStep,
 		FromOutput: out,
 	})
-	d.addEdge(name, stepName)
+	d.addEdge(name, stepID)
 	return nil
 }
 
@@ -228,24 +228,24 @@ func (d *DAG) resolveDeployEdges(p *Lane) error {
 			continue
 		}
 		for artName, artRef := range s.Deploy.Artifacts {
-			stepName := artRef.From.Step
-			outputName := artRef.From.Output
-			fromStep, ok := d.Steps[stepName]
+			stepID := artRef.From.Step
+			outputID := artRef.From.Output
+			fromStep, ok := d.Steps[stepID]
 			if !ok {
 				return fmt.Errorf("step %q: deploy artifact %q references unknown step %q",
-					name, artName, stepName)
+					name, artName, stepID)
 			}
-			out := findOutput(fromStep, outputName)
+			out := findOutput(fromStep, outputID)
 			if out == nil {
 				return fmt.Errorf("step %q: deploy artifact %q: output %q not found in step %q",
-					name, artName, outputName, stepName)
+					name, artName, outputID, stepID)
 			}
 			d.DeployEdges[name] = append(d.DeployEdges[name], DeployArtifactEdge{
 				ArtifactName: artName,
 				FromStep:     fromStep,
 				FromOutput:   out,
 			})
-			d.addEdge(name, stepName)
+			d.addEdge(name, stepID)
 		}
 	}
 	return nil

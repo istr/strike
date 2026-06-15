@@ -56,18 +56,18 @@ func SpecHash(
 // The hash is truncated to 16 hex characters for OCI tag length constraints.
 // Format: registry:step-name-<first16hex>
 // Example: ghcr.io/istr/strike-cache:build-package-a3f9c2b1d4e7f801.
-func Tag(registry, stepName string, hash lane.Digest) string {
+func Tag(registry, stepID string, hash lane.Digest) string {
 	short := hash.Hex
 	if len(short) > 16 {
 		short = short[:16]
 	}
-	return fmt.Sprintf("%s:%s-%s", registry, stepName, short)
+	return fmt.Sprintf("%s:%s-%s", registry, stepID, short)
 }
 
 // WrapTag builds the local engine tag used by wrapOutputs and input extraction.
-// Format: localhost/strike/{laneID}/{stepName}:{specHashHex}.
-func WrapTag(laneID, stepName string, specHash lane.Digest) string {
-	return fmt.Sprintf("localhost/strike/%s/%s:%s", laneID, stepName, specHash.Hex)
+// Format: localhost/strike/{laneID}/{stepID}:{specHashHex}.
+func WrapTag(laneID, stepID string, specHash lane.Digest) string {
+	return fmt.Sprintf("localhost/strike/%s/%s:%s", laneID, stepID, specHash.Hex)
 }
 
 // hashReader computes SHA256 of the data from r.

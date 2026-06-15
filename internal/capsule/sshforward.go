@@ -72,7 +72,7 @@ func SplitSSHHostPort(h string) (string, uint16) {
 // consistency pass.)
 type sshForwarder struct {
 	upstreamLook UpstreamLookupFunc
-	stepName     string
+	stepID       string
 	host         string
 	clients      map[*ssh.Client]struct{}
 	records      []SSHConnectionRecord
@@ -81,7 +81,7 @@ type sshForwarder struct {
 }
 
 // newSSHForwarder constructs a forwarder for one SSH target.
-func newSSHForwarder(stepName string, t SSHTarget, upstreamLook UpstreamLookupFunc) (*sshForwarder, error) {
+func newSSHForwarder(stepID string, t SSHTarget, upstreamLook UpstreamLookupFunc) (*sshForwarder, error) {
 	if upstreamLook == nil {
 		return nil, errors.New("capsule: sshforward upstreamLook must not be nil")
 	}
@@ -90,7 +90,7 @@ func newSSHForwarder(stepName string, t SSHTarget, upstreamLook UpstreamLookupFu
 		return nil, fmt.Errorf("capsule: sshforward empty host in %q", t.Host)
 	}
 	return &sshForwarder{
-		stepName:     stepName,
+		stepID:       stepID,
 		host:         host,
 		port:         port,
 		upstreamLook: upstreamLook,

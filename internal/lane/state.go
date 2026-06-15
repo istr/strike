@@ -44,20 +44,20 @@ func NewState() *State {
 }
 
 // RecordProvenance stores a validated provenance record for a step.
-func (s *State) RecordProvenance(stepName string, rec ProvenanceRecord) error {
+func (s *State) RecordProvenance(stepID string, rec ProvenanceRecord) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, exists := s.Provenance[stepName]; exists {
-		return fmt.Errorf("provenance for step %q already recorded", stepName)
+	if _, exists := s.Provenance[stepID]; exists {
+		return fmt.Errorf("provenance for step %q already recorded", stepID)
 	}
-	s.Provenance[stepName] = rec
+	s.Provenance[stepID] = rec
 	return nil
 }
 
 // Register adds an artifact to the state under the producer's canonical
 // output ref (OutputRef.Ref, "step_name.output_name").
-func (s *State) Register(stepName, outputName string, a Artifact) error {
-	key := OutputRef{Step: stepName, Output: outputName}.Ref()
+func (s *State) Register(stepID, outputID string, a Artifact) error {
+	key := OutputRef{Step: stepID, Output: outputID}.Ref()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, exists := s.Artifacts[key]; exists {

@@ -28,16 +28,16 @@ func (s *Sealed) UnmarshalJSON(data []byte) error {
 		return nil
 	}
 	out := make(map[string][]lane.Peer, len(aux.Peers))
-	for stepName, rawPeers := range aux.Peers {
+	for stepID, rawPeers := range aux.Peers {
 		peers := make([]lane.Peer, len(rawPeers))
 		for i, raw := range rawPeers {
 			p, err := lane.UnmarshalPeer(raw)
 			if err != nil {
-				return fmt.Errorf("attestation peers[%q][%d]: %w", stepName, i, err)
+				return fmt.Errorf("attestation peers[%q][%d]: %w", stepID, i, err)
 			}
 			peers[i] = p
 		}
-		out[stepName] = peers
+		out[stepID] = peers
 	}
 	s.Peers = out
 	return nil

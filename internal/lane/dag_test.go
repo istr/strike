@@ -196,7 +196,7 @@ func TestBuild_DeployArtifactEdge(t *testing.T) {
 // TestBuild -- error cases.
 // --------------------------------------------------------------------------.
 
-func TestBuild_DuplicateStepName(t *testing.T) {
+func TestBuild_DuplicateStepID(t *testing.T) {
 	p := &lane.Lane{
 		Steps: []lane.Step{
 			{ID: "build", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{}},

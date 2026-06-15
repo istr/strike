@@ -129,10 +129,10 @@ func unreachableLookup() mediator.UpstreamLookupFunc {
 
 // startMediator constructs a mediator and starts Serve in a
 // goroutine. Returns the mediator and the listener address.
-func startMediator(t *testing.T, stepName string, peers []mediator.PeerTrust, ca *transport.EphemeralCA, lookup mediator.UpstreamLookupFunc) (*mediator.Mediator, string, context.CancelFunc) {
+func startMediator(t *testing.T, stepID string, peers []mediator.PeerTrust, ca *transport.EphemeralCA, lookup mediator.UpstreamLookupFunc) (*mediator.Mediator, string, context.CancelFunc) {
 	t.Helper()
 
-	m, err := mediator.New(stepName, peers, ca, lookup)
+	m, err := mediator.New(stepID, peers, ca, lookup)
 	if err != nil {
 		t.Fatalf("mediator.New: %v", err)
 	}
@@ -214,11 +214,11 @@ func waitForRecords(ctx context.Context, m *mediator.Mediator, n int) []mediator
 
 // Tests.
 
-func TestNew_RejectsEmptyStepName(t *testing.T) {
+func TestNew_RejectsEmptyStepID(t *testing.T) {
 	ca := newTestCA(t)
 	_, err := mediator.New("", nil, ca, unreachableLookup())
-	if err == nil || !strings.Contains(err.Error(), "stepName") {
-		t.Fatalf("expected stepName error, got: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "stepID") {
+		t.Fatalf("expected stepID error, got: %v", err)
 	}
 }
 

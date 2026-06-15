@@ -250,8 +250,8 @@ func cmdRun(ctx context.Context, path string, engine container.Engine) {
 	// serve).
 	ft.Start(ctx)
 
-	for _, stepName := range dag.Order {
-		if stepErr := rc.runStep(stepName); stepErr != nil {
+	for _, stepID := range dag.Order {
+		if stepErr := rc.runStep(stepID); stepErr != nil {
 			log.Fatalf("error: %v", stepErr)
 		}
 	}
@@ -306,7 +306,7 @@ func initFront(ctx context.Context) (*front.Front, func()) {
 // allocateMediatedPorts pre-allocates a host-port block for every
 // container unit in lane-file order: each run step, each deploy step's
 // method container (keyed by the step name), and each pre/post
-// state-capture container (keyed "capture:<stepName>:<captureName>" to
+// state-capture container (keyed "capture:<stepID>:<captureID>" to
 // stay collision-free across parallel deploy steps). Pack steps launch
 // no step container and are skipped.
 func allocateMediatedPorts(p *lane.Lane) map[string]capsule.HostPorts {
@@ -339,8 +339,8 @@ func allocateMediatedPorts(p *lane.Lane) map[string]capsule.HostPorts {
 // Pre and post captures of the same name within one deploy step share
 // a key (they run sequentially), but captures in different deploy
 // steps do not collide.
-func captureKey(stepName, captureName string) string {
-	return "capture:" + stepName + ":" + captureName
+func captureKey(stepID, captureID string) string {
+	return "capture:" + stepID + ":" + captureID
 }
 
 func cmdCompare(file1, file2, output string) {

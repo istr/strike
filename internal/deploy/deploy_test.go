@@ -354,7 +354,7 @@ func TestDeployerExecute(t *testing.T) {
 		CA:           ca,
 		UpstreamLook: look,
 		CAVolume:     caPath,
-		StepName:     "deploy-prod",
+		StepID:       "deploy-prod",
 		StepPorts:    ports,
 	}
 	deploy.SetProduceBundles(d, stubProduceBundles())
@@ -445,7 +445,7 @@ func TestDeployerExecuteRegistryAttachesReferrers(t *testing.T) {
 		CA:           ca,
 		UpstreamLook: look,
 		CAVolume:     caPath,
-		StepName:     "deploy-prod",
+		StepID:       "deploy-prod",
 		StepPorts:    ports,
 	}
 	deploy.SetProduceBundles(d, stubProduceBundles())
@@ -622,7 +622,7 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 		CA:           ca,
 		UpstreamLook: look,
 		CAVolume:     caPath,
-		StepName:     "deploy-prod",
+		StepID:       "deploy-prod",
 		StepPorts:    ports,
 	}
 	deploy.SetProduceBundles(d, stubProduceBundles())
@@ -702,7 +702,7 @@ func TestEngineRecord_NilEngineID(t *testing.T) {
 		CA:           ca,
 		UpstreamLook: look,
 		CAVolume:     caPath,
-		StepName:     "deploy-nil-engine",
+		StepID:       "deploy-nil-engine",
 		StepPorts:    ports,
 	}
 	deploy.SetProduceBundles(d, stubProduceBundles())
@@ -762,7 +762,7 @@ func TestEngineRecord_WithRuntime(t *testing.T) {
 		CA:           ca,
 		UpstreamLook: look,
 		CAVolume:     caPath,
-		StepName:     "deploy-runtime",
+		StepID:       "deploy-runtime",
 		StepPorts:    ports,
 	}
 	deploy.SetProduceBundles(d, stubProduceBundles())
@@ -833,7 +833,7 @@ func TestEngineRecord_WithoutRuntime(t *testing.T) {
 		CA:           ca,
 		UpstreamLook: look,
 		CAVolume:     caPath,
-		StepName:     "deploy-no-runtime",
+		StepID:       "deploy-no-runtime",
 		StepPorts:    ports,
 	}
 	deploy.SetProduceBundles(d, stubProduceBundles())
@@ -895,7 +895,7 @@ func TestResolverRecord_NilResolverID(t *testing.T) {
 		CA:           ca,
 		UpstreamLook: look,
 		CAVolume:     caPath,
-		StepName:     "deploy-nil-resolver",
+		StepID:       "deploy-nil-resolver",
 		StepPorts:    ports,
 	}
 	deploy.SetProduceBundles(d, stubProduceBundles())
@@ -950,7 +950,7 @@ func TestResolverRecord_Populated(t *testing.T) {
 		CA:           ca,
 		UpstreamLook: look,
 		CAVolume:     caPath,
-		StepName:     "deploy-resolver",
+		StepID:       "deploy-resolver",
 		StepPorts:    ports,
 	}
 	deploy.SetProduceBundles(d, stubProduceBundles())
@@ -1046,7 +1046,7 @@ func TestDeployerExecute_RequiredPreStateFails(t *testing.T) {
 		CA:           ca,
 		UpstreamLook: look,
 		CAVolume:     caPath,
-		StepName:     "deploy-fail-pre",
+		StepID:       "deploy-fail-pre",
 		StepPorts:    ports,
 	}
 	deploy.SetProduceBundles(d, stubProduceBundles())
@@ -1099,7 +1099,7 @@ func TestDeployerExecute_KeylessBundles(t *testing.T) {
 		CA:           ca,
 		UpstreamLook: look,
 		CAVolume:     caPath,
-		StepName:     "deploy-prod",
+		StepID:       "deploy-prod",
 		StepPorts:    ports,
 	}
 	deploy.SetProduceBundles(d, stubProduceBundles())
@@ -1151,7 +1151,7 @@ func TestDeployerExecute_KeylessFailureIsFatal(t *testing.T) {
 		CA:           ca,
 		UpstreamLook: look,
 		CAVolume:     caPath,
-		StepName:     "deploy-prod",
+		StepID:       "deploy-prod",
 		StepPorts:    ports,
 	}
 	wantErr := errors.New("keyless: fulcio unreachable")
@@ -1342,7 +1342,7 @@ func TestDeployerExecute_ObservedPeersPopulated(t *testing.T) {
 		CA:             ca,
 		UpstreamLook:   look,
 		CAVolume:       caPath,
-		StepName:       "deploy-prod",
+		StepID:         "deploy-prod",
 		StepPorts:      ports,
 		NetworkRecords: networkRecords,
 	}
@@ -1514,7 +1514,7 @@ func TestDeployerExecute_ObservedPeersConflictAborts(t *testing.T) {
 		CA:             ca,
 		UpstreamLook:   look,
 		CAVolume:       caPath,
-		StepName:       "deploy-conflict",
+		StepID:         "deploy-conflict",
 		StepPorts:      ports,
 		NetworkRecords: networkRecords,
 	}

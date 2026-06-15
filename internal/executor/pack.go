@@ -315,7 +315,7 @@ func applyConfig(img v1.Image, spec *lane.PackSpec) (v1.Image, error) {
 
 // writeOCILayout writes the main image and SBOM to an OCI layout
 // tar in the given output root.
-func writeOCILayout(img v1.Image, sbomImages []v1.Image, outputRoot *os.Root, outputName, imgDigest string) error {
+func writeOCILayout(img v1.Image, sbomImages []v1.Image, outputRoot *os.Root, outputID, imgDigest string) error {
 	layoutDir, err := os.MkdirTemp("", "strike-pack-layout-")
 	if err != nil {
 		return fmt.Errorf("pack: temp dir: %w", err)
@@ -337,7 +337,7 @@ func writeOCILayout(img v1.Image, sbomImages []v1.Image, outputRoot *os.Root, ou
 		}
 	}
 
-	if err := tarDirectoryToRoot(layoutDir, outputRoot, outputName); err != nil {
+	if err := tarDirectoryToRoot(layoutDir, outputRoot, outputID); err != nil {
 		return fmt.Errorf("pack: tar layout: %w", err)
 	}
 	return nil
@@ -549,8 +549,8 @@ func appendEnv(env []string, key, value string) []string {
 }
 
 // tarDirectoryToRoot tars a directory and writes the output through outputRoot.
-func tarDirectoryToRoot(srcDir string, outputRoot *os.Root, outputName string) (err error) {
-	f, err := outputRoot.Create(outputName)
+func tarDirectoryToRoot(srcDir string, outputRoot *os.Root, outputID string) (err error) {
+	f, err := outputRoot.Create(outputID)
 	if err != nil {
 		return err
 	}

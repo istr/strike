@@ -93,7 +93,7 @@ type NetworkCapsule struct {
 	resolver    *resolver.Resolver
 	serveGroup  *errgroup.Group
 	serveCancel context.CancelFunc
-	stepName    string
+	stepID      string
 	pastaArgs   []string
 	sshForwards []*sshForwarder
 	sshPins     [][]ssh.PublicKey
@@ -113,7 +113,7 @@ const (
 
 // New constructs a NetworkCapsule for one step.
 //
-//   - stepName identifies the step in records and logs.
+//   - stepID identifies the step in records and logs.
 //   - hostPorts is the per-step host-port pair allocated by
 //     AllocatePorts. The resolver binds 127.0.0.1:hostPorts.Resolver,
 //     the mediator 127.0.0.1:hostPorts.Mediator; the container
@@ -127,7 +127,7 @@ const (
 //   - upstreamLook resolves names via the lane's DoT resolver.
 //     Must be non-nil and concurrency-safe.
 func New(
-	stepName string,
+	stepID string,
 	hostPorts HostPorts,
 	peers []mediator.PeerTrust,
 	sshTargets []SSHTarget,
@@ -135,7 +135,7 @@ func New(
 	ca *transport.EphemeralCA,
 	upstreamLook UpstreamLookupFunc,
 ) (*NetworkCapsule, error) {
-	if err := validateNewArgs(stepName, sshTargets, frontHostPort, ca, upstreamLook); err != nil {
+	if err := validateNewArgs(stepID, sshTargets, frontHostPort, ca, upstreamLook); err != nil {
 		return nil, err
 	}
 
@@ -147,11 +147,11 @@ func New(
 		allowlist = append(allowlist, transport.Host(t.Host))
 	}
 
-	res, err := resolver.New(stepName, allowlist, loopbackV4)
+	res, err := resolver.New(stepID, allowlist, loopbackV4)
 	if err != nil {
 		return nil, fmt.Errorf("capsule: resolver: %w", err)
 	}
-	med, err := mediator.New(stepName, peers, ca, mediator.UpstreamLookupFunc(upstreamLook))
+	med, err := mediator.New(stepID, peers, ca, mediator.UpstreamLookupFunc(upstreamLook))
 	if err != nil {
 		return nil, fmt.Errorf("capsule: mediator: %w", err)
 	}
@@ -160,7 +160,7 @@ func New(
 	sshTokens := make([]string, len(sshTargets))
 	sshPins := make([][]ssh.PublicKey, len(sshTargets))
 	for k, t := range sshTargets {
-		fwd, fErr := newSSHForwarder(stepName, t, upstreamLook)
+		fwd, fErr := newSSHForwarder(stepID, t, upstreamLook)
 		if fErr != nil {
 			return nil, fmt.Errorf("capsule: ssh forwarder: %w", fErr)
 		}
@@ -181,7 +181,7 @@ func New(
 	}
 
 	return &NetworkCapsule{
-		stepName:    stepName,
+		stepID:      stepID,
 		hostPorts:   hostPorts,
 		resolver:    res,
 		mediator:    med,
@@ -194,9 +194,9 @@ func New(
 	}, nil
 }
 
-func validateNewArgs(stepName string, sshTargets []SSHTarget, frontHostPort uint16, ca *transport.EphemeralCA, upstreamLook UpstreamLookupFunc) error {
-	if stepName == "" {
-		return errors.New("capsule: stepName must not be empty")
+func validateNewArgs(stepID string, sshTargets []SSHTarget, frontHostPort uint16, ca *transport.EphemeralCA, upstreamLook UpstreamLookupFunc) error {
+	if stepID == "" {
+		return errors.New("capsule: stepID must not be empty")
 	}
 	if ca == nil {
 		return errors.New("capsule: ca must not be nil")

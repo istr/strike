@@ -68,9 +68,9 @@ type runContext struct {
 	resolverID     transport.ConnectionIdentity
 }
 
-func (rc *runContext) runStep(stepName string) error {
-	step := rc.dag.Steps[stepName]
-	safeName := sanitizeForLog(stepName)
+func (rc *runContext) runStep(stepID string) error {
+	step := rc.dag.Steps[stepID]
+	safeName := sanitizeForLog(stepID)
 
 	// Timeout resolution: explicit step value > lane-wide default > hard floor.
 	var rawTimeout *lane.Duration
@@ -91,19 +91,19 @@ func (rc *runContext) runStep(stepName string) error {
 	// Deploy steps have their own execution model -- no image resolution,
 	// no spec hash caching. Dispatch early.
 	if step.Deploy != nil {
-		return rc.executeDeploy(ctx, step, stepName, safeName)
+		return rc.executeDeploy(ctx, step, stepID, safeName)
 	}
 
 	imageDigest, err := rc.resolveImageDigest(ctx, step, safeName)
 	if err != nil {
 		return err
 	}
-	specHash, tag, err := rc.computeSpecHash(step, stepName, imageDigest)
+	specHash, tag, err := rc.computeSpecHash(step, stepID, imageDigest)
 	if err != nil {
 		return err
 	}
 
-	cached, cacheErr := rc.checkCache(ctx, step, stepName, safeName, specHash)
+	cached, cacheErr := rc.checkCache(ctx, step, stepID, safeName, specHash)
 	if cacheErr != nil {
 		return cacheErr
 	}
@@ -114,16 +114,16 @@ func (rc *runContext) runStep(stepName string) error {
 	log.Printf("RUN    %s", safeName)
 
 	if step.Pack != nil {
-		return rc.executePack(ctx, step, stepName, safeName)
+		return rc.executePack(ctx, step, stepID, safeName)
 	}
-	return rc.executeContainerStep(ctx, step, stepName, safeName, tag)
+	return rc.executeContainerStep(ctx, step, stepID, safeName, tag)
 }
 
-func (rc *runContext) executeDeploy(ctx context.Context, step *lane.Step, stepName, safeName string) error {
+func (rc *runContext) executeDeploy(ctx context.Context, step *lane.Step, stepID, safeName string) error {
 	log.Printf("DEPLOY %s", safeName)
 
 	artifactRefs := make(map[string]string)
-	for _, e := range rc.dag.DeployEdges[stepName] {
+	for _, e := range rc.dag.DeployEdges[stepID] {
 		artifactRefs[e.ArtifactName] = lane.OutputRef{Step: e.FromStep.ID, Output: e.FromOutput.ID}.Ref()
 	}
 
@@ -140,7 +140,7 @@ func (rc *runContext) executeDeploy(ctx context.Context, step *lane.Step, stepNa
 		CA:             rc.ca,
 		UpstreamLook:   rc.upstreamLook,
 		CAVolume:       rc.trust.ca,
-		StepName:       stepName,
+		StepID:         stepID,
 		StepPorts:      rc.stepPorts,
 		NetworkRecords: rc.networkRecords,
 	}
@@ -156,7 +156,7 @@ func (rc *runContext) executeDeploy(ctx context.Context, step *lane.Step, stepNa
 	}
 	log.Printf("OK     %s -> %s/%s", safeName, att.Sealed.LaneID, att.Sealed.Target.ID)
 
-	outDir, err := os.MkdirTemp("", "strike-"+stepName+"-")
+	outDir, err := os.MkdirTemp("", "strike-"+stepID+"-")
 	if err != nil {
 		return fmt.Errorf("%s: create temp dir: %w", safeName, err)
 	}
@@ -213,7 +213,7 @@ func (rc *runContext) resolveImageDigest(ctx context.Context, step *lane.Step, s
 	return digest, nil
 }
 
-func (rc *runContext) computeSpecHash(step *lane.Step, stepName string, imageDigest lane.Digest) (lane.Digest, string, error) {
+func (rc *runContext) computeSpecHash(step *lane.Step, stepID string, imageDigest lane.Digest) (lane.Digest, string, error) {
 	// Per ADR-027, an input is identified in the spec hash by the
 	// canonical triple (from, mount, subpath); mount is unique per step
 	// by disjointness, and subpath is "" when the whole producer output
@@ -230,18 +230,18 @@ func (rc *runContext) computeSpecHash(step *lane.Step, stepName string, imageDig
 	}
 
 	key := registry.SpecHash(step, imageDigest, inputHashes, map[string]lane.Digest{})
-	tag := registry.Tag(rc.lane.Registry, stepName, key)
-	rc.state.specHashes[stepName] = key
+	tag := registry.Tag(rc.lane.Registry, stepID, key)
+	rc.state.specHashes[stepID] = key
 	return key, tag, nil
 }
 
-func (rc *runContext) checkCache(ctx context.Context, step *lane.Step, stepName, safeName string, specHash lane.Digest) (bool, error) {
+func (rc *runContext) checkCache(ctx context.Context, step *lane.Step, stepID, safeName string, specHash lane.Digest) (bool, error) {
 	if step.ForceRun {
 		log.Printf("FORCED %s", safeName)
 		return false, nil
 	}
 
-	tag := registry.WrapTag(rc.lane.ID, stepName, specHash)
+	tag := registry.WrapTag(rc.lane.ID, stepID, specHash)
 	info, err := rc.engine.ImageInspect(ctx, tag)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
@@ -264,12 +264,12 @@ func (rc *runContext) checkCache(ctx context.Context, step *lane.Step, stepName,
 
 	digest := lane.MustParseDigest(info.Digest)
 	for _, out := range step.Outputs {
-		if regErr := rc.laneState.Register(stepName, out.ID, lane.Artifact{
+		if regErr := rc.laneState.Register(stepID, out.ID, lane.Artifact{
 			Type:   lane.ArtifactType(out.Type),
 			Digest: digest,
 			Size:   size,
 		}); regErr != nil {
-			return false, fmt.Errorf("cache hit register %s/%s: %w", stepName, out.ID, regErr)
+			return false, fmt.Errorf("cache hit register %s/%s: %w", stepID, out.ID, regErr)
 		}
 	}
 
@@ -277,8 +277,8 @@ func (rc *runContext) checkCache(ctx context.Context, step *lane.Step, stepName,
 	return true, nil
 }
 
-func (rc *runContext) executePack(ctx context.Context, step *lane.Step, stepName, safeName string) error {
-	outDir, err := os.MkdirTemp("", "strike-"+stepName+"-")
+func (rc *runContext) executePack(ctx context.Context, step *lane.Step, stepID, safeName string) error {
+	outDir, err := os.MkdirTemp("", "strike-"+stepID+"-")
 	if err != nil {
 		return fmt.Errorf("%s: create temp dir: %w", safeName, err)
 	}
@@ -298,27 +298,27 @@ func (rc *runContext) executePack(ctx context.Context, step *lane.Step, stepName
 	if step.Outputs[0].Path == nil {
 		return fmt.Errorf("%s: pack output requires a path", safeName)
 	}
-	outputName := filepath.Base(step.Outputs[0].Path.String())
+	outputID := filepath.Base(step.Outputs[0].Path.String())
 	result, err := executor.Pack(executor.PackOpts{
 		Spec:       step.Pack,
 		InputPaths: inputPaths,
 		OutputRoot: outRoot,
-		OutputName: outputName,
+		OutputName: outputID,
 	})
 	if err != nil {
 		return fmt.Errorf("%s: pack failed: %w", safeName, err)
 	}
 
-	if regErr := rc.laneState.Register(stepName, step.Outputs[0].ID, lane.Artifact{
+	if regErr := rc.laneState.Register(stepID, step.Outputs[0].ID, lane.Artifact{
 		Type:   artifactTypeImage,
 		Digest: result.Digest,
 	}); regErr != nil {
 		return fmt.Errorf("%s: register artifact: %w", safeName, regErr)
 	}
 
-	specHash := rc.state.specHashes[stepName]
-	tag := registry.WrapTag(rc.lane.ID, stepName, specHash)
-	if _, _, wrapErr := rc.regClient.WrapImageOutputAsImage(ctx, outRoot, outputName, tag, nil); wrapErr != nil {
+	specHash := rc.state.specHashes[stepID]
+	tag := registry.WrapTag(rc.lane.ID, stepID, specHash)
+	if _, _, wrapErr := rc.regClient.WrapImageOutputAsImage(ctx, outRoot, outputID, tag, nil); wrapErr != nil {
 		return fmt.Errorf("%s: wrap image: %w", safeName, wrapErr)
 	}
 	log.Printf("OK     %s -> %s", safeName, result.Digest)
@@ -373,7 +373,7 @@ func (rc *runContext) resolvePackInputPaths(ctx context.Context, step *lane.Step
 	return inputPaths, nil
 }
 
-func (rc *runContext) executeContainerStep(ctx context.Context, step *lane.Step, stepName, safeName, tag string) error {
+func (rc *runContext) executeContainerStep(ctx context.Context, step *lane.Step, stepID, safeName, tag string) error {
 	secrets, err := lane.ResolveSecrets(step.Secrets, rc.lane.Secrets, rc.laneRoot)
 	if err != nil {
 		return fmt.Errorf("%s: secrets: %w", safeName, err)
@@ -396,13 +396,13 @@ func (rc *runContext) executeContainerStep(ctx context.Context, step *lane.Step,
 		}()
 	}
 
-	caps, ok := rc.capsules[stepName]
+	caps, ok := rc.capsules[stepID]
 	if !ok {
 		return fmt.Errorf("%s: no pre-built capsule", safeName)
 	}
 	defer func() {
 		caps.CloseOutbound()
-		rc.networkRecords[stepName] = caps.Records()
+		rc.networkRecords[stepID] = caps.Records()
 	}()
 
 	run := executor.Run{
@@ -412,10 +412,10 @@ func (rc *runContext) executeContainerStep(ctx context.Context, step *lane.Step,
 		ImageVolumes: inputMounts,
 		VolumeName:   volName,
 		Secrets:      secrets,
-		ImageRef:     rc.state.imageFromTags[stepName],
+		ImageRef:     rc.state.imageFromTags[stepID],
 		Capsule:      caps,
 		CAVolume:     rc.trust.ca,
-		SSHVolume:    rc.trust.ssh[stepName],
+		SSHVolume:    rc.trust.ssh[stepID],
 	}
 	containerID, execErr := run.Execute(ctx)
 	if containerID != "" {
@@ -429,7 +429,7 @@ func (rc *runContext) executeContainerStep(ctx context.Context, step *lane.Step,
 		return fmt.Errorf("%s: execution failed: %w", safeName, execErr)
 	}
 
-	if err := rc.wrapOutputs(ctx, step, stepName, safeName, containerID); err != nil {
+	if err := rc.wrapOutputs(ctx, step, stepID, safeName, containerID); err != nil {
 		return err
 	}
 	if step.Provenance != nil {
@@ -440,10 +440,10 @@ func (rc *runContext) executeContainerStep(ctx context.Context, step *lane.Step,
 	return rc.pushAndReport(ctx, step, safeName, tag)
 }
 
-func (rc *runContext) wrapOutputs(ctx context.Context, step *lane.Step, stepName, safeName, containerID string) error {
-	specHash := rc.state.specHashes[stepName]
+func (rc *runContext) wrapOutputs(ctx context.Context, step *lane.Step, stepID, safeName, containerID string) error {
+	specHash := rc.state.specHashes[stepID]
 	for _, out := range step.Outputs {
-		if wrapErr := rc.wrapArchivedOutput(ctx, step, stepName, safeName, containerID, out, specHash); wrapErr != nil {
+		if wrapErr := rc.wrapArchivedOutput(ctx, step, stepID, safeName, containerID, out, specHash); wrapErr != nil {
 			return wrapErr
 		}
 	}
@@ -453,9 +453,9 @@ func (rc *runContext) wrapOutputs(ctx context.Context, step *lane.Step, stepName
 // wrapArchivedOutput archives one output from the held container, wraps it
 // into a content-addressed image (a canonicalized layer for file/directory,
 // a loaded image for the image type), and registers the artifact.
-func (rc *runContext) wrapArchivedOutput(ctx context.Context, step *lane.Step, stepName, safeName, containerID string, out lane.OutputSpec, specHash lane.Digest) error {
+func (rc *runContext) wrapArchivedOutput(ctx context.Context, step *lane.Step, stepID, safeName, containerID string, out lane.OutputSpec, specHash lane.Digest) error {
 	workdir := step.Workdir.String()
-	tag := registry.WrapTag(rc.lane.ID, stepName, specHash)
+	tag := registry.WrapTag(rc.lane.ID, stepID, specHash)
 
 	// archiveReroot computes the archive path and the strip/dest prefixes for
 	// re-rooting the archive stream into the output's OCI layer. See its doc
@@ -493,7 +493,7 @@ func (rc *runContext) wrapArchivedOutput(ctx context.Context, step *lane.Step, s
 		log.Printf("INFO   %s: output %q has no file content; if unintended, check the step workdir and output path", safeName, out.ID)
 	}
 
-	if regErr := rc.laneState.Register(stepName, out.ID, lane.Artifact{
+	if regErr := rc.laneState.Register(stepID, out.ID, lane.Artifact{
 		Type:   lane.ArtifactType(out.Type),
 		Digest: digest,
 		Size:   size,
@@ -832,9 +832,9 @@ func (rc *runContext) removeTrustVolumes(ctx context.Context, tv trustVolumes) {
 			log.Printf("WARN   remove ca volume: %v", err)
 		}
 	}
-	for stepName, n := range tv.ssh {
+	for stepID, n := range tv.ssh {
 		if err := rc.engine.VolumeRemove(ctx, n); err != nil {
-			log.Printf("WARN   remove ssh volume for %s: %v", stepName, err)
+			log.Printf("WARN   remove ssh volume for %s: %v", stepID, err)
 		}
 	}
 }

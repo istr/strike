@@ -120,10 +120,10 @@ func parseRCode(t *testing.T, raw []byte) dnsmessage.RCode {
 
 // Tests.
 
-func TestNew_RejectsEmptyStepName(t *testing.T) {
+func TestNew_RejectsEmptyStepID(t *testing.T) {
 	_, err := resolver.New("", nil, testSynthAddr)
 	if err == nil {
-		t.Fatal("expected error for empty stepName")
+		t.Fatal("expected error for empty stepID")
 	}
 }
 

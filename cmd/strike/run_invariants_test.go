@@ -125,18 +125,18 @@ func TestProvenanceCapture_EndToEnd(t *testing.T) {
 
 	// Simulate provenance capture for steps that declare provenance.
 	// This exercises ValidateProvenance -> RecordProvenance -> CollectProvenance.
-	for _, stepName := range dag.Order {
-		step := dag.Steps[stepName]
+	for _, stepID := range dag.Order {
+		step := dag.Steps[stepID]
 		if step.Provenance == nil {
 			continue
 		}
 		raw := fakeProvenanceJSON(t, step.Provenance.Type)
 		rec, err := lane.ValidateProvenance(step.Provenance.Type, raw)
 		if err != nil {
-			t.Fatalf("ValidateProvenance(%s): %v", stepName, err)
+			t.Fatalf("ValidateProvenance(%s): %v", stepID, err)
 		}
-		if err := state.RecordProvenance(stepName, rec); err != nil {
-			t.Fatalf("RecordProvenance(%s): %v", stepName, err)
+		if err := state.RecordProvenance(stepID, rec); err != nil {
+			t.Fatalf("RecordProvenance(%s): %v", stepID, err)
 		}
 	}
 

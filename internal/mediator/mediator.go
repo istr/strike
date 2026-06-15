@@ -73,7 +73,7 @@ type Mediator struct {
 	peers        map[string]transport.TLSTrust // canonical SNI -> trust
 	ca           *transport.EphemeralCA
 	upstreamLook UpstreamLookupFunc
-	stepName     string
+	stepID       string
 	records      []ConnectionRecord
 	mu           sync.Mutex
 	closed       bool
@@ -81,7 +81,7 @@ type Mediator struct {
 
 // New constructs a Mediator for one step.
 //
-//   - stepName identifies the step in ConnectionRecord and logs.
+//   - stepID identifies the step in ConnectionRecord and logs.
 //   - peers enumerates the (SNI, trust) pairs the step may reach.
 //     Entries are canonicalized (lowercase host, trailing dot
 //     stripped, port suffix removed). An empty peers slice yields
@@ -91,9 +91,9 @@ type Mediator struct {
 //     the same lane run.
 //   - upstreamLook resolves SNI to addresses via the lane's
 //     allowlisted DoT resolver. Must be non-nil.
-func New(stepName string, peers []PeerTrust, ca *transport.EphemeralCA, upstreamLook UpstreamLookupFunc) (*Mediator, error) {
-	if stepName == "" {
-		return nil, errors.New("mediator: stepName must not be empty")
+func New(stepID string, peers []PeerTrust, ca *transport.EphemeralCA, upstreamLook UpstreamLookupFunc) (*Mediator, error) {
+	if stepID == "" {
+		return nil, errors.New("mediator: stepID must not be empty")
 	}
 	if ca == nil {
 		return nil, errors.New("mediator: ca must not be nil")
@@ -115,7 +115,7 @@ func New(stepName string, peers []PeerTrust, ca *transport.EphemeralCA, upstream
 	}
 
 	return &Mediator{
-		stepName:     stepName,
+		stepID:       stepID,
 		peers:        peerMap,
 		ca:           ca,
 		upstreamLook: upstreamLook,
@@ -201,7 +201,7 @@ func (m *Mediator) acceptLoop(ctx context.Context, listener net.Listener) error 
 func (m *Mediator) handleConn(ctx context.Context, raw net.Conn) {
 	defer func() {
 		if err := raw.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
-			log.Printf("WARN   mediator[%s]: raw conn close: %v", m.stepName, err)
+			log.Printf("WARN   mediator[%s]: raw conn close: %v", m.stepID, err)
 		}
 	}()
 
@@ -210,7 +210,7 @@ func (m *Mediator) handleConn(ctx context.Context, raw net.Conn) {
 		MinVersion:     tls.VersionTLS13,
 	}
 	clientSide := tls.Server(raw, tlsConfig)
-	defer closer.Warn(clientSide, fmt.Sprintf("mediator[%s]: client tls", m.stepName))
+	defer closer.Warn(clientSide, fmt.Sprintf("mediator[%s]: client tls", m.stepID))
 
 	handshakeCtx, cancel := context.WithTimeout(ctx, handshakeTimeout)
 	defer cancel()
@@ -236,13 +236,13 @@ func (m *Mediator) handleConn(ctx context.Context, raw net.Conn) {
 
 	upstreamConn, identity, resolved, err := m.dialUpstream(handshakeCtx, sni, trust)
 	if err != nil {
-		log.Printf("WARN   mediator[%s]: upstream %s failed: %v", m.stepName, sni, err)
+		log.Printf("WARN   mediator[%s]: upstream %s failed: %v", m.stepID, sni, err)
 		m.appendRecord(ConnectionRecord{
 			Time: clock.Wall(), SNI: sni, Decision: DecisionError, Err: err.Error(),
 		})
 		return
 	}
-	defer closer.Warn(upstreamConn, fmt.Sprintf("mediator[%s]: upstream %s", m.stepName, sni))
+	defer closer.Warn(upstreamConn, fmt.Sprintf("mediator[%s]: upstream %s", m.stepID, sni))
 
 	m.appendRecord(ConnectionRecord{
 		Time:     clock.Wall(),
@@ -253,7 +253,7 @@ func (m *Mediator) handleConn(ctx context.Context, raw net.Conn) {
 	})
 
 	if err := proxyBidirectional(ctx, clientSide, upstreamConn); err != nil {
-		log.Printf("WARN   mediator[%s]: proxy %s: %v", m.stepName, sni, err)
+		log.Printf("WARN   mediator[%s]: proxy %s: %v", m.stepID, sni, err)
 	}
 }
 

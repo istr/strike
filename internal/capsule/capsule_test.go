@@ -69,11 +69,11 @@ func testHostKeyLine(t *testing.T) string {
 	return strings.TrimSpace(string(ssh.MarshalAuthorizedKey(pub)))
 }
 
-func TestNew_RejectsEmptyStepName(t *testing.T) {
+func TestNew_RejectsEmptyStepID(t *testing.T) {
 	ca := testCA(t)
 	_, err := capsule.New("", testPorts(), nil, nil, 0, ca, testUpstream())
 	if err == nil {
-		t.Error("expected error for empty stepName, got nil")
+		t.Error("expected error for empty stepID, got nil")
 	}
 }
 
