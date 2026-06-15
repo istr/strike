@@ -304,8 +304,13 @@ Recorded here so they are not lost; none is started under this roadmap.
   give `OutputRef` one canonical string encoder (`func (OutputRef) Ref()
   string`) with a doc comment pinning the no-`.` dependency, route the writer
   sites and `lane.State` through it, and add a test asserting the invariant.
-  Touches the content-addressing path, so its own ratified arc with golden
-  regen; not started.
+  Landed on branch `b5b-producer-ref-encoding` (`ae12db3`): `OutputRef.Ref`
+  is the single encoder, all six `run.go` / `main.go` writers and `lane.State`
+  route through it, and `TestOutputRef_RefRejectsDottedIdentifier` (over
+  `invalid_dotted_ref.yaml`) is the `#Identifier`-no-`.` tripwire. Proved
+  byte-stable -- it touches the content-addressing path but `make check` passes
+  against the existing golden bundles with no regen, so no golden arc was
+  needed after all.
 
 ## Archival
 
