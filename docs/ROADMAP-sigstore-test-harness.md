@@ -78,8 +78,7 @@ sigstore fixtures. A regenerated set must then pass `make test` fully offline (n
 `SIGSTORE_ID_TOKEN`).
 
 Cross-referenced from ROADMAP-cue-spec-review.md, whose remaining D-F items
-inherit this gate when they re-key `golden/lane.yaml` (B-7 is the next such
-case).
+inherit this gate when they re-key `golden/lane.yaml`.
 
 ## Purpose and relationship to ADR-040
 

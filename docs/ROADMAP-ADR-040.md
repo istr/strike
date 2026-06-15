@@ -1,6 +1,6 @@
 # ADR-040 Implementation Roadmap
 
-## Status: SUBSTANTIALLY COMPLETE (instructions 1--4 done; instruction 5 core done, CLI exposure pending)
+## Status: SUBSTANTIALLY COMPLETE (instructions 1--4 done; instruction 5 core done, CLI exposure landed via ADR-041)
 
 ADR-040 is Accepted and fully plumbed: the decision record is at
 `docs/ADR-040-control-plane-sbom-and-keyless-attestation.md`, registered in
@@ -14,7 +14,7 @@ fully implemented and tested (trust root parsing, bundle shape validation,
 DSSE signature verification, Fulcio certificate chain and identity binding,
 RFC3161 timestamp verification, and Rekor v2 transparency-log inclusion);
 golden-test fixtures verify the full end-to-end chain. The `strike verify`
-subcommand exposure to the CLI and its lane-policy integration remain pending.
+subcommand exposure to the CLI and its lane-policy integration landed via ADR-041 instructions 1--3.
 This work has been superseded by ADR-041 scope; see "Cross-roadmap
 dependencies".
 
@@ -307,7 +307,7 @@ signature covers the artifact as it exists on the wire.
 
 Depends on: instruction 3 (sign-and-attach runs on the pushed digest).
 
-### 5. strike verify (D3 verification exit + D5 cross-check) -- CORE DONE, CLI EXPOSURE PENDING
+### 5. strike verify (D3 verification exit + D5 cross-check) -- CORE DONE, CLI EXPOSURE LANDED (ADR-041)
 
 **5a (done).** Core verify layers fully implemented in `internal/verify`:
 - `ParseBundle` and `ParsedBundle`: strict sigstore v0.3 bundle shape validation

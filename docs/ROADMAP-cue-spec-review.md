@@ -1,14 +1,13 @@
 # CUE Spec Review Roadmap (post trust-boundary formalization)
 
-## Status: OPEN -- two arcs remain (D-D field-add, D-F: B-4, B-5, B-8..B-9)
+## Status: OPEN -- two arcs remain (D-D field-add, D-F: B-8..B-9)
 
 This roadmap is the single source for the work-arcs derived from
 `RETROSPECTIVE-cue-spec-review.md`. The post-formalization handover note
 summarizes this state but does not own it. State below is grounded at commit
-`8721d0ff78b771b012f311c059c5ccd9b36fcb84` ("refactor: derive the trust layer
-from provenance, machine-checked"); re-ground at write time before authoring any
-instruction, because the formalization landed on a branch and the mainline tip
-may differ.
+`be54f740405a13732288f472543e451a2c10e1ff` ("refactor: name step/output/capture
+id variables ...ID, not ...Name"); re-ground at write time before authoring any
+instruction, because the mainline tip may have advanced.
 
 ## Two label spaces -- do not conflate them
 
@@ -33,7 +32,7 @@ distinct:
 | D-F | Naming / validation conventions (B-1..B-9). | Treat each as a separate instruction -- one B-finding per PR. |
 | D-G | Adopt "Meaning is single-sourced" (D-2), qualify the aim sentence (D-1), canonical-time doc fixes, stale ARCHITECTURE.md passage. | Do exactly that; bundle with D-B into one instruction. Operator-owned. |
 
-## What has landed (verified at-tree, 8721d0ff)
+## What has landed
 
 - **Cluster A (docs sweep).** `specs/README.md` lists all schemas and separates
   internal (`attestation.cue`) from published (`predicate.cue`);
@@ -45,7 +44,7 @@ distinct:
 - **D-C -- `engineMetadata` -> informational.** Done in schema, Go structs, and
   projection: `predicate.cue` files it under `#InformationalPredicate`;
   `project.go` routes it to the informational statement. Resolves C-4.
-- **D-D formalization -- trust-boundary decision procedure.** Landed `8721d0ff`.
+- **D-D formalization -- trust-boundary decision procedure.**
   Layer is derived from provenance via the `layerOf` rule table in
   `specs/trust-layers.cue`; machine-checked by `TestLayerDecisionProcedure`;
   `hardenedByDeclaration` records the resolver/observedPeers-hardened vs
@@ -121,14 +120,12 @@ alone as a new D-F item.
 
 ### D-F -- B-2..B-9 schema findings (one instruction each)
 
-At-tree state verified at `8721d0ff`; B-1 is done, the rest pending.
-
 | ID | Finding | At-tree state |
 |----|---------|---------------|
 | B-2 | `gitCommit` canonical width | Landed. `predicate.cue` `gitCommit` widened to 40-or-64, matching `source-provenance.cue` `commit`. |
 | B-3 | `#Subject` should reuse `#ResourceDescriptor` (remove bespoke type) | Landed. `#Subject` is now `#ResourceDescriptor` refined with required name and digest; no duplicated structure, Go mirror unchanged. |
 | B-4 | `id` / `name` normalization (stop overloading `name`) | Landed. B-4a (`52026b17`), B-4b (`8916ca08`), B-4c (`bf6756c6`). See "B-4 -- ratified plan" below. |
-| B-5 | Unify producer refs on `#OutputRef`; reconcile `from` / `source` | Implemented on branch `b5-outputref` (`232bece`). Option A (structured `#OutputRef`) for the three dotted producer refs; `parseRef` deleted, fixtures migrated, golden bundles regenerated, and -- beyond the instruction's listed set -- every in-tree Go caller (~80 sites) migrated. `imageFrom` stays its own arc (see Deferred). Schema-level only: the dotted `"step.output"` encoding survives at runtime, split to a follow-up (see Deferred "producer-ref runtime encoding"). See "B-5 -- ratified plan" below. |
+| B-5 | Unify producer refs on `#OutputRef`; reconcile `from` / `source` | Landed `232bece`. Option A (structured `#OutputRef`) for the three dotted producer refs; `parseRef` deleted, fixtures migrated, golden bundles regenerated, and -- beyond the instruction's listed set -- every in-tree Go caller (~80 sites) migrated. `imageFrom` stays its own arc (see Deferred). The dotted `"step.output"` runtime encoding was split to a follow-up, now landed (`ae12db3`); see Deferred "producer-ref runtime encoding". See "B-5 -- ratified plan" below. |
 | B-6 | `#TLSTrust` discriminator `mode` -> `type` + one enum casing | Landed `22426cc2`. `transport.cue` `#TLSTrust` keys on `type:` with values `certFingerprint` / `caBundle`; the hand-mirrored Go (`@go(-)`) moved in lockstep, and the golden bundles were regenerated (re-keying `golden/lane.yaml` re-hashes its sealed `laneDigest`). |
 | B-7 | De-overload "attestation" (rename the state-capture config) | Landed `d8cabc2`. `recording` / `#StateRecording` (plus `#CaptureSet` / `#Capture`) replaces the `attestation` / `#AttestationSpec` config; the cryptographic-attestation family is untouched; golden bundles regenerated. ADR-016 vocabulary. |
 | B-8 | Apply `#AbsPath` / `#RelPath` consistently or comment opaque path fields | Partial. Types exist and are applied in places; audit coverage at write time. |
@@ -264,7 +261,7 @@ dotted-string parser is deleted (code-is-liability).
 
 ## Deferred (out of this arc)
 
-Recorded here so they are not lost. The three B-5 follow-ons are ratified to run in order: (1) the `...Name` -> `...ID` id naming, (2) the producer-ref runtime encoding, (3) the `imageFromStep` rebuild; the remaining items are unscheduled.
+Recorded here so they are not lost. Of the three B-5 follow-ons, (1) the `...Name` -> `...ID` id naming and (2) the producer-ref runtime encoding have landed; only (3) the `imageFromStep` rebuild remains. The other items are unscheduled.
 
 - **2c base-SBOM signature verification** -- unblocked by the keyless consumer,
   not started. Also noted in ROADMAP-ADR-040 and ROADMAP-ADR-041.
@@ -319,8 +316,8 @@ Recorded here so they are not lost. The three B-5 follow-ons are ratified to run
   no schema change). Genuine names stay: `safeName` (sanitized log name), the
   `pack` `OutputName` field (a filename), `ServerName` / `CommonName` (TLS /
   X.509), and the OCI-layer / volume / package names. It touches the same
-  `captureKey` and port-key sites as the runtime-encoding arc, so it runs
-  first -- a pure rename with no behavior change. Ratified; not started.
+  `captureKey` and port-key sites as the runtime-encoding arc, and ran first
+  of the three -- a pure rename with no behavior change. Landed `be54f740`.
 - **Artifact / secret map-key id normalization** -- B-4 normalized the step /
   output / capture ids, but the `artifacts: { [Name=string]: #ArtifactRef }`
   and `secrets: { [Name=string]: ... }` map keys are still typed plain `Name`.
