@@ -264,7 +264,7 @@ dotted-string parser is deleted (code-is-liability).
 
 ## Deferred (out of this arc)
 
-Recorded here so they are not lost; none is started under this roadmap.
+Recorded here so they are not lost. The three B-5 follow-ons are ratified to run in order: (1) the `...Name` -> `...ID` id naming, (2) the producer-ref runtime encoding, (3) the `imageFromStep` rebuild; the remaining items are unscheduled.
 
 - **2c base-SBOM signature verification** -- unblocked by the keyless consumer,
   not started. Also noted in ROADMAP-ADR-040 and ROADMAP-ADR-041.
@@ -311,6 +311,22 @@ Recorded here so they are not lost; none is started under this roadmap.
   byte-stable -- it touches the content-addressing path but `make check` passes
   against the existing golden bundles with no regen, so no golden arc was
   needed after all.
+- **Step / output / capture id naming (`...Name` -> `...ID`)** -- after B-4
+  gave steps, outputs, and captures an `id`, the Go side still names the
+  locals and one field that hold those ids `...Name`. Rename `stepName` ->
+  `stepID`, `outputName` -> `outputID`, `captureName` -> `captureID`, and the
+  `internal/deploy` `StepName` field -> `StepID` (no JSON / wire tag; pure Go,
+  no schema change). Genuine names stay: `safeName` (sanitized log name), the
+  `pack` `OutputName` field (a filename), `ServerName` / `CommonName` (TLS /
+  X.509), and the OCI-layer / volume / package names. It touches the same
+  `captureKey` and port-key sites as the runtime-encoding arc, so it runs
+  first -- a pure rename with no behavior change. Ratified; not started.
+- **Artifact / secret map-key id normalization** -- B-4 normalized the step /
+  output / capture ids, but the `artifacts: { [Name=string]: #ArtifactRef }`
+  and `secrets: { [Name=string]: ... }` map keys are still typed plain `Name`.
+  Whether to retype them as `[ID=#Identifier]` is an open schema question -- a
+  wire change, unlike the Go-only rename above -- and would be its own B-item
+  if taken. Not started.
 
 ## Archival
 
