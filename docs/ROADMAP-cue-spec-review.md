@@ -128,7 +128,7 @@ At-tree state verified at `8721d0ff`; B-1 is done, the rest pending.
 | B-2 | `gitCommit` canonical width | Landed. `predicate.cue` `gitCommit` widened to 40-or-64, matching `source-provenance.cue` `commit`. |
 | B-3 | `#Subject` should reuse `#ResourceDescriptor` (remove bespoke type) | Landed. `#Subject` is now `#ResourceDescriptor` refined with required name and digest; no duplicated structure, Go mirror unchanged. |
 | B-4 | `id` / `name` normalization (stop overloading `name`) | Landed. B-4a (`52026b17`), B-4b (`8916ca08`), B-4c (`bf6756c6`). See "B-4 -- ratified plan" below. |
-| B-5 | Unify producer refs on `#OutputRef`; reconcile `from` / `source` | Ratified -- Option A (structured `#OutputRef`) for the three dotted producer refs; single arc. `imageFrom` is a step ref, not a producer-output ref -- split to its own arc (see Deferred). See "B-5 -- ratified plan" below. |
+| B-5 | Unify producer refs on `#OutputRef`; reconcile `from` / `source` | Implemented on branch `b5-outputref` (`232bece`). Option A (structured `#OutputRef`) for the three dotted producer refs; `parseRef` deleted, fixtures migrated, golden bundles regenerated, and -- beyond the instruction's listed set -- every in-tree Go caller (~80 sites) migrated. `imageFrom` stays its own arc (see Deferred). Schema-level only: the dotted `"step.output"` encoding survives at runtime, split to a follow-up (see Deferred "producer-ref runtime encoding"). See "B-5 -- ratified plan" below. |
 | B-6 | `#TLSTrust` discriminator `mode` -> `type` + one enum casing | Landed `22426cc2`. `transport.cue` `#TLSTrust` keys on `type:` with values `certFingerprint` / `caBundle`; the hand-mirrored Go (`@go(-)`) moved in lockstep, and the golden bundles were regenerated (re-keying `golden/lane.yaml` re-hashes its sealed `laneDigest`). |
 | B-7 | De-overload "attestation" (rename the state-capture config) | Landed `d8cabc2`. `recording` / `#StateRecording` (plus `#CaptureSet` / `#Capture`) replaces the `attestation` / `#AttestationSpec` config; the cryptographic-attestation family is untouched; golden bundles regenerated. ADR-016 vocabulary. |
 | B-8 | Apply `#AbsPath` / `#RelPath` consistently or comment opaque path fields | Partial. Types exist and are applied in places; audit coverage at write time. |
@@ -288,6 +288,24 @@ Recorded here so they are not lost; none is started under this roadmap.
   `pack` / `deploy` XOR (already enforced in `parse.go`), and have the
   resolver pull the step's canonical engine image
   `localhost/strike/<lane-id>/<step-id>`. Its own arc; not started.
+- **Producer-ref runtime encoding** -- B-5 unified the producer-output-ref
+  *input* on `#OutputRef`, but the same concept is still encoded as the dotted
+  `"step.output"` string at runtime: `lane.State` keys (`state.go` Register /
+  Resolve) plus ~7 `step + "." + output` constructions in `cmd/strike/run.go`
+  (deploy artifact refs, the spec-hash / cache-tag input per ADR-027, and the
+  image_from / pack / run input resolutions) and `cmd/strike/main.go` (order
+  display). The dotted-string parser (`parseRef`) is gone, but the writers
+  remain -- the dotted form is now write-only with no single home, and
+  spec-hash / cache stability silently depends on `#Identifier` excluding `.`,
+  pinned by no comment and no test. Not a bug: the reconstruction is
+  byte-identical to the former author string, so caches stay warm and the
+  digest-only attestation is unchanged (it resolves the ref to a digest, never
+  stores it). But it is a single-source-of-truth residual. Correct direction:
+  give `OutputRef` one canonical string encoder (`func (OutputRef) Ref()
+  string`) with a doc comment pinning the no-`.` dependency, route the writer
+  sites and `lane.State` through it, and add a test asserting the invariant.
+  Touches the content-addressing path, so its own ratified arc with golden
+  regen; not started.
 
 ## Archival
 
