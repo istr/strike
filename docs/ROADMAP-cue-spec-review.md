@@ -128,7 +128,7 @@ At-tree state verified at `8721d0ff`; B-1 is done, the rest pending.
 | B-2 | `gitCommit` canonical width | Landed. `predicate.cue` `gitCommit` widened to 40-or-64, matching `source-provenance.cue` `commit`. |
 | B-3 | `#Subject` should reuse `#ResourceDescriptor` (remove bespoke type) | Landed. `#Subject` is now `#ResourceDescriptor` refined with required name and digest; no duplicated structure, Go mirror unchanged. |
 | B-4 | `id` / `name` normalization (stop overloading `name`) | Landed. B-4a (`52026b17`), B-4b (`8916ca08`), B-4c (`bf6756c6`). See "B-4 -- ratified plan" below. |
-| B-5 | Unify producer refs on `#OutputRef`; reconcile `from` / `source` | Ratified -- Option A (structured `#OutputRef`), two stages B-5a / B-5b. See "B-5 -- ratified plan" below. |
+| B-5 | Unify producer refs on `#OutputRef`; reconcile `from` / `source` | Ratified -- Option A (structured `#OutputRef`) for the three dotted producer refs; single arc. `imageFrom` is a step ref, not a producer-output ref -- split to its own arc (see Deferred). See "B-5 -- ratified plan" below. |
 | B-6 | `#TLSTrust` discriminator `mode` -> `type` + one enum casing | Landed `22426cc2`. `transport.cue` `#TLSTrust` keys on `type:` with values `certFingerprint` / `caBundle`; the hand-mirrored Go (`@go(-)`) moved in lockstep, and the golden bundles were regenerated (re-keying `golden/lane.yaml` re-hashes its sealed `laneDigest`). |
 | B-7 | De-overload "attestation" (rename the state-capture config) | Landed `d8cabc2`. `recording` / `#StateRecording` (plus `#CaptureSet` / `#Capture`) replaces the `attestation` / `#AttestationSpec` config; the cryptographic-attestation family is untouched; golden bundles regenerated. ADR-016 vocabulary. |
 | B-8 | Apply `#AbsPath` / `#RelPath` consistently or comment opaque path fields | Partial. Types exist and are applied in places; audit coverage at write time. |
@@ -230,14 +230,19 @@ output structs. Deferred; out of the B-4 arc.
 ### B-5 -- ratified plan (`#OutputRef`; unify producer refs)
 
 Ratified direction: Option A -- a structured canonical type
-`#OutputRef: {step: #Identifier, output: #Identifier}`, replacing the four
-divergent encodings of the producer-output-reference concept. At anchor
-`673f5cfd` those are `#InputRef.from` (dotted string, l.196),
-`#PackFile.from` (dotted, l.320), `#ArtifactRef.from` (dotted, l.403), and
-`#ImageFrom` (structured `step` / `output`, l.183). The three dotted forms
-all parse through one splitter, `parseRef` in `internal/lane/dag.go` (call
-sites at the input / pack-file / artifact references); `#ImageFrom` is
-already structured and its Go consumers read `.Step` / `.Output` directly.
+`#OutputRef: {step: #Identifier, output: #Identifier}`, replacing the three
+dotted encodings of the producer-output-reference concept. At anchor
+`673f5cfd` those are `#InputRef.from` (l.196), `#PackFile.from` (l.320), and
+`#ArtifactRef.from` (l.403), each a dotted `"step.output"` string. They all
+parse through one splitter, `parseRef` in `internal/lane/dag.go` (call sites
+at the input / pack-file / artifact references).
+
+`#ImageFrom` is NOT a producer-output ref and is out of B-5. It expresses
+multi-stage "base image = the image a previous step produced" -- a reference
+to a step, not to a named output. It is rebuilt in its own arc (see
+Deferred) as `imageFromStep: #Identifier`, XOR with `image`, resolved by
+pulling the step's canonical engine image
+`localhost/strike/<lane-id>/<step-id>`.
 
 "Reconcile `from` / `source`" resolves by demonstration: no `source` field
 is a producer ref. `#DeployRegistry.source` / `target` are registry image
@@ -245,20 +250,13 @@ locations, `#DeploySpec.source.gitImage` is an `#ImageRef`, and
 `#CaptureMount.source` is a mount path. They stay a distinct concept, out of
 B-5 scope; a later pure-naming pass, if wanted, is its own arc.
 
-Two stages, smallest-first to land the new type before the churn:
-
-- **B-5a -- introduce `#OutputRef`, fold `#ImageFrom`.** Define `#OutputRef`
-  and point `#Step.imageFrom?` at it; remove the now-redundant `#ImageFrom`
-  type. Its values are already structured and slug-clean (B-4c), and its Go
-  field stays `ImageFrom *OutputRef` with identical `.Step` / `.Output`
-  accessors, so no fixture and no consumer-code change. This stage proves
-  the type end to end (CUE plus gengotypes plus resolver).
-- **B-5b -- migrate the dotted refs, retire the parser.** Re-type
-  `#InputRef.from` / `#PackFile.from` / `#ArtifactRef.from` as `#OutputRef`;
-  migrate every dotted `from: step.output` fixture value to the structured
-  form; delete `parseRef` and rewire its three call sites to read
-  `.From.Step` / `.From.Output`; drop `parseref_internal_test.go` (the
-  parser it covers is gone). This is the churn-heavy stage.
+Single arc (the earlier `#ImageFrom` fold that motivated a split proved to
+be a different concept; see above). Define `#OutputRef`; re-type
+`#InputRef.from` / `#PackFile.from` / `#ArtifactRef.from` as `#OutputRef`;
+migrate every dotted `from: step.output` fixture value to the structured
+form; delete `parseRef` and rewire its three call sites to read
+`.From.Step` / `.From.Output`; drop `parseref_internal_test.go` (the parser
+it covers is gone).
 
 Field naming stays `from:` (its value becomes `#OutputRef`); a rename was
 not adopted. Each ref component is validated as `#Identifier`, and the
@@ -282,6 +280,14 @@ Recorded here so they are not lost; none is started under this roadmap.
   surfaced during the D-D arc, not yet actioned.
 - **`SignedArtifact` rename** -- post-keyless the name is a digest+SBOM
   misnomer; cosmetic cleanup.
+- **`imageFromStep` rebuild** -- `#Step.imageFrom` (`#ImageFrom {step,
+  output}`) mis-models multi-stage base images. Correct model: a step's base
+  image is `image` (digest-pinned external) XOR a previous step's produced
+  image, referenced by step id alone. Rebuild as `imageFromStep:
+  #Identifier` (drop `output`), keep the existing `image` / `imageFrom` /
+  `pack` / `deploy` XOR (already enforced in `parse.go`), and have the
+  resolver pull the step's canonical engine image
+  `localhost/strike/<lane-id>/<step-id>`. Its own arc; not started.
 
 ## Archival
 
