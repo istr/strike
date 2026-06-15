@@ -12,10 +12,9 @@ func TestRegisterAndResolve(t *testing.T) {
 	s := lane.NewState()
 
 	a := lane.Artifact{
-		Type:      "file",
-		Digest:    lane.MustParseDigest("sha256:abc1230000000000000000000000000000000000000000000000000000000000"),
-		Size:      1024,
-		LocalPath: lane.Ptr("/tmp/out/binary"),
+		Type:   "file",
+		Digest: lane.MustParseDigest("sha256:abc1230000000000000000000000000000000000000000000000000000000000"),
+		Size:   1024,
 	}
 
 	if err := s.Register("build", "binary", a); err != nil {

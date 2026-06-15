@@ -352,8 +352,8 @@ package lane
 	}
 	entrypoint?: [...string] @go(Entrypoint)
 	cmd?: [...string] @go(Cmd)
-	workdir?: string @go(Workdir,optional=nillable)
-	user?:    string @go(User,optional=nillable)
+	workdir?: #AbsPath @go(Workdir,optional=nillable)
+	user?:    string   @go(User,optional=nillable)
 	labels?: {
 		[string]: string @go(Labels)
 	}
@@ -380,18 +380,25 @@ package lane
 
 #DeployKubernetes: {
 	@go(DeployKubernetes)
-	type:        "kubernetes"                     @go(Type)
-	image:       #ImageRef                        @go(Image)
-	namespace:   string                           @go(Namespace)
-	strategy:    *"apply" | "replace" | "rollout" @go(Strategy)
-	kubeconfig?: string                           @go(Kubeconfig,optional=nillable)
+	type:      "kubernetes"                     @go(Type)
+	image:     #ImageRef                        @go(Image)
+	namespace: string                           @go(Namespace)
+	strategy:  *"apply" | "replace" | "rollout" @go(Strategy)
+	// kubeconfig is a host-side path to a kubeconfig file, resolved by
+	// ResolveKubeconfig (explicit value, then $KUBECONFIG, then the
+	// default). It is intentionally unconstrained: host paths may be
+	// relative or contain "..", and are not the forward-slash container
+	// paths that #AbsPath / #RelPath model.
+	kubeconfig?: string @go(Kubeconfig,optional=nillable)
 }
 
 #DeployRegistry: {
 	@go(DeployRegistry)
-	type:   "registry" @go(Type)
-	source: string     @go(Source)
-	target: string     @go(Target)
+	type: "registry" @go(Type)
+	// source and target are registry image references (the copy source and
+	// destination), not filesystem paths; they flow to registry.CopyImage.
+	source: string @go(Source)
+	target: string @go(Target)
 }
 
 #DeployCustom: {
@@ -456,6 +463,10 @@ package lane
 
 #CaptureMount: {
 	@go(CaptureMount)
+
+	// source is an engine mount source -- the produced image or named
+	// storage the engine resolves -- not a host path. target is the
+	// absolute mount point inside the capture container.
 	source: string   @go(Source)
 	target: #AbsPath @go(Target)
 }
@@ -502,7 +513,6 @@ package lane
 	@go(Artifact)
 	type:         #ArtifactType @go(Type)
 	digest:       #Digest       @go(Digest,type=Digest)
-	localPath?:   string        @go(LocalPath,optional=nillable)
 	size:         int & >=0     @go(Size)
 	contentType?: string        @go(ContentType,optional=nillable)
 	metadata?: {
