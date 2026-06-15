@@ -127,7 +127,7 @@ At-tree state verified at `8721d0ff`; B-1 is done, the rest pending.
 |----|---------|---------------|
 | B-2 | `gitCommit` canonical width | Landed. `predicate.cue` `gitCommit` widened to 40-or-64, matching `source-provenance.cue` `commit`. |
 | B-3 | `#Subject` should reuse `#ResourceDescriptor` (remove bespoke type) | Landed. `#Subject` is now `#ResourceDescriptor` refined with required name and digest; no duplicated structure, Go mirror unchanged. |
-| B-4 | `id` / `name` normalization (stop overloading `name`) | Ratified -- three stages (B-4a/b/c) via a canonical `#Identifier` type; see "B-4 -- ratified plan" below. |
+| B-4 | `id` / `name` normalization (stop overloading `name`) | B-4a (`52026b17`) and B-4b (`8916ca08`) landed; only B-4c remains. See "B-4 -- ratified plan" below. |
 | B-5 | Unify producer refs on `#OutputRef`; reconcile `from` / `source` | Pending. Both still used in `lane.cue` (l.190 / 314 / 380 / 397 / 440). |
 | B-6 | `#TLSTrust` discriminator `mode` -> `type` + one enum casing | Landed `22426cc2`. `transport.cue` `#TLSTrust` keys on `type:` with values `certFingerprint` / `caBundle`; the hand-mirrored Go (`@go(-)`) moved in lockstep, and the golden bundles were regenerated (re-keying `golden/lane.yaml` re-hashes its sealed `laneDigest`). |
 | B-7 | De-overload "attestation" (rename the state-capture config) | Landed `d8cabc2`. `recording` / `#StateRecording` (plus `#CaptureSet` / `#Capture`) replaces the `attestation` / `#AttestationSpec` config; the cryptographic-attestation family is untouched; golden bundles regenerated. ADR-016 vocabulary. |
@@ -194,12 +194,12 @@ underdetermined and tracked separately.
 
 **Three stages, each its own PR (isolated by risk):**
 
-- **B-4a -- single-source the identifier (pure refactor, lowest risk).** Add
+- **B-4a -- single-source the identifier (pure refactor, lowest risk).** Landed `52026b17`. Add
   `#Identifier`; replace the four inline patterns with it. The end-anchor
   tightening breaks nothing (no current `laneId` / `#DeployTarget.id` value ends
   in a hyphen). No rename, no value migration. Settles the cross-package wiring
   once.
-- **B-4b -- rename `name` -> `id` (mechanical, large).** Identifier-role
+- **B-4b -- rename `name` -> `id` (mechanical, large).** Landed `8916ca08`. Identifier-role
   `name` -> `id` and `laneId` -> `id`; Go fields and YAML keys. Each field keeps
   its current type: `#Lane.id` / `#DeployTarget.id` stay `#Identifier` (from
   B-4a); the freshly renamed `#Step.id` / `#OutputSpec.id` / `#Capture.id` stay
