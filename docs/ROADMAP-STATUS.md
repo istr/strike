@@ -185,10 +185,10 @@ and parallelizable.
 - D-F B-9 (LANDED): `clientId` -> `audience` and `forceRun` default-first; the
   `#SignerIdentity` dedup and `trustRootRef` `@go` symmetry recorded wontfix.
   (ROADMAP-cue-spec-review)
-- D-F B-8 / B-9 and the D-D field-add are LANDED. The D-D field-add re-modeled
-  `#EngineConnection` as a discriminated union in transport.cue (engine-cert
-  subject/issuer sealed at Layer V, caTrustType); Phase 3 is unblocked.
-  (ROADMAP-cue-spec-review)
+- D-D field-add (LANDED): re-modeled `#EngineConnection` as a discriminated
+  union in transport.cue (engine-cert subject/issuer sealed at Layer V,
+  `caTrustType`); the cue-spec-review arcs are complete and Phase 3 is
+  unblocked (`8694653`). (ROADMAP-cue-spec-review)
 
 **Phase 2 -- verification completeness.**
 - Base-SBOM signature verification (2c), unblocked by the verify core.

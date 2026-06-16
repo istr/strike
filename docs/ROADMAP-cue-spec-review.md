@@ -1,6 +1,8 @@
 # CUE Spec Review Roadmap (post trust-boundary formalization)
 
-## Status: COMPLETE -- D-D field-add landed; D-F queue complete
+## Status: ARCS COMPLETE -- A--D, B-1..B-9, and the D-D field-add all landed.
+File retained as the registry for the Deferred backlog (see Archival); not yet
+removable.
 
 This roadmap is the single source for the work-arcs derived from
 `RETROSPECTIVE-cue-spec-review.md`. The post-formalization handover note
@@ -276,6 +278,14 @@ Recorded here so they are not lost. Of the three B-5 follow-ons, (1) the `...Nam
 - **Engine hardening / transport-unification** -- the larger arc that flips the
   engine `hardenedByDeclaration` to true; entangled with DNS centralization and
   the remote-engine horizon. D-D's field-add is the small precursor.
+- **Observed-TLS identity consolidation** -- deferred out of D-D. The observed
+  TLS server identity now appears in three places with diverging shapes:
+  `#ObservedTLS` (peers; `type` + fingerprint only), `#ResolverRecord` (resolver;
+  fingerprint + tlsVersion / cipherSuite / serverName), and the D-D engine
+  union's `#EngineServerTLS` (fingerprint + subject + issuer + caTrustType).
+  Whether to factor one shared observed-TLS-server-identity type in
+  transport.cue ("Meaning is single-sourced") or keep them role-distinct is an
+  open schema question -- its own arc, not started.
 - **DNS centralization** -- DoT client + container-facing resolver to the front.
 - **Full TLS single-port demux** -- remote-engine / routed rootless-netns
   horizon (needs L3 source-IP preservation; pasta splice-only cannot provide it).
