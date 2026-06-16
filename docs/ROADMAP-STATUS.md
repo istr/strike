@@ -202,8 +202,9 @@ engine/transport cluster on the now-landed D-D foundation; the rest is parked.
 1. ARCHITECTURE.md threat-row judgment (LANDED) -- "Signing key exfiltrated"
    corrected for keyless model (ADR-043); no persistent key so key rotation
    does not apply; Rekor CT logs every signature. (`560a60f`)
-2. `SignedArtifact` rename -- post-keyless the name is a digest+SBOM misnomer;
-   a pure Go rename, no wire change. Low risk. Fill.
+2. `ArtifactRecord` rename (LANDED) -- post-keyless the old `SignedArtifact`
+   name was a digest+SBOM misnomer; a pure Go rename, wire-neutral, no golden.
+   (`148c1f5`)
 3. cosign independent-verify conformance -- validates the "offline-verifiable
    without contacting strike" promise under independent tooling. Test-only, no
    production risk; lands first of the verification work as a regression
