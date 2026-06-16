@@ -47,7 +47,7 @@ type Attestation struct {
 
 // Sealed -- CP-bound claims, sound to any verifier without engine trust.
 type Sealed struct {
-	Artifacts     map[string]SignedArtifact  `json:"artifacts"`
+	Artifacts     map[string]ArtifactRecord  `json:"artifacts"`
 	Peers         map[string][]lane.Peer     `json:"peers"`
 	Resolver      *ResolverRecord            `json:"resolver,omitempty"`
 	Engine        transport.EngineConnection `json:"engine,omitempty"`
@@ -179,8 +179,8 @@ type Informational struct {
 	Provenance      []lane.ProvenanceRecord `json:"provenance"`
 }
 
-// SignedArtifact is the provenance record for one artifact.
-type SignedArtifact struct {
+// ArtifactRecord is the provenance record for one artifact.
+type ArtifactRecord struct {
 	SBOM   *SBOMRecord `json:"sbom,omitempty"`
 	Digest string      `json:"digest"`
 }
@@ -470,7 +470,7 @@ func appendUniqueString(s []string, v string) []string {
 // including observed-peer collection and peer-attribution wiring.
 func (d *Deployer) buildAttestation(
 	step *lane.Step, spec lane.DeploySpec,
-	artifactDigests map[string]SignedArtifact,
+	artifactDigests map[string]ArtifactRecord,
 	provenance []lane.ProvenanceRecord,
 	started clock.Time, preDigest, postDigest lane.Digest,
 ) (*Attestation, error) {
@@ -651,14 +651,14 @@ func (d *Deployer) signStatements(ctx context.Context, att *Attestation, stepID 
 
 // resolveArtifactDigests resolves all artifact references to their provenance records.
 // refs maps artifact name -> "step.output" state ref (pre-resolved by the caller from DAG edges).
-func resolveArtifactDigests(stepID string, refs map[string]string, state *lane.State) (map[string]SignedArtifact, error) {
-	artifacts := make(map[string]SignedArtifact)
+func resolveArtifactDigests(stepID string, refs map[string]string, state *lane.State) (map[string]ArtifactRecord, error) {
+	artifacts := make(map[string]ArtifactRecord)
 	for artName, ref := range refs {
 		a, resolveErr := state.Resolve(ref)
 		if resolveErr != nil {
 			return nil, fmt.Errorf("step %q: artifact %q: %w", stepID, artName, resolveErr)
 		}
-		artifacts[artName] = SignedArtifact{
+		artifacts[artName] = ArtifactRecord{
 			Digest: a.Digest.String(),
 		}
 	}

@@ -163,7 +163,7 @@ func TestAttestationJSON(t *testing.T) {
 		Sealed: deploy.Sealed{
 			LaneID:    "test-lane",
 			Target:    lane.DeployTarget{ID: "prod-1", Type: "registry", Description: "test"},
-			Artifacts: map[string]deploy.SignedArtifact{"image": {Digest: "sha256:abc"}},
+			Artifacts: map[string]deploy.ArtifactRecord{"image": {Digest: "sha256:abc"}},
 		},
 		Informational: &deploy.Informational{
 			PreStateDigest:  lane.MustParseDigest("sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
@@ -1220,7 +1220,7 @@ func TestValidateAttestation_InvalidLaneID(t *testing.T) {
 		Sealed: deploy.Sealed{
 			LaneID:    "INVALID_LANE_ID",
 			Target:    lane.DeployTarget{ID: "prod-1", Type: "registry", Description: "test"},
-			Artifacts: map[string]deploy.SignedArtifact{},
+			Artifacts: map[string]deploy.ArtifactRecord{},
 			Peers:     map[string][]lane.Peer{},
 		},
 		Informational: &deploy.Informational{

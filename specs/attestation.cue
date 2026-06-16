@@ -5,7 +5,7 @@
 // trust chain -- it must be formally specified, not just implicitly
 // defined by Go struct tags.
 //
-// Companion file: artifact.cue defines #SignedArtifact and related
+// Companion file: artifact.cue defines #ArtifactRecord and related
 // provenance types (same package deploy, merged automatically by CUE).
 //
 // Validation flow:
@@ -79,7 +79,7 @@ package deploy
 	// artifacts maps artifact names to their signed provenance records.
 	// Each artifact's digest is consumer-dereferenceable from the registry
 	// (C3 sealed boundary).
-	artifacts: [Name=string]: #SignedArtifact
+	artifacts: [Name=string]: #ArtifactRecord
 
 	// resolver records the DoT resolver's observed TLS identity, matched
 	// against the declared anchor at the pre-flight handshake.

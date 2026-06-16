@@ -97,7 +97,7 @@ func projectStatements(att *Attestation, oidc lane.OIDCConfig) (
 // subject. The list is sorted by name: the sealed statement must be
 // reproducible (byte-identical inputs -> byte-identical output), and Go map
 // iteration order is not stable.
-func projectSubject(artifacts map[string]SignedArtifact) ([]Subject, error) {
+func projectSubject(artifacts map[string]ArtifactRecord) ([]Subject, error) {
 	subjects := make([]Subject, 0, len(artifacts))
 	for name, art := range artifacts {
 		d, err := lane.ParseDigest(art.Digest)

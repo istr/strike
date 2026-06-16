@@ -1,6 +1,6 @@
 // Artifact provenance record.
 //
-// A #SignedArtifact captures everything strike knows about an
+// An #ArtifactRecord captures everything strike knows about an
 // artifact after pack + SBOM generation. This is the unit of
 // trust that flows from build into deploy attestations.
 
@@ -27,8 +27,8 @@ import "github.com/istr/strike/specs:lane"
 #EngineConnection: lane.#EngineConnection
 #KnownHostEntry:   lane.#KnownHostEntry
 
-// SignedArtifact is the provenance record for one artifact.
-#SignedArtifact: {
+// ArtifactRecord is the provenance record for one artifact.
+#ArtifactRecord: {
 	// digest is the content-addressed manifest digest.
 	digest: #Digest
 

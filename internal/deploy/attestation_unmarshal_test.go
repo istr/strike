@@ -19,7 +19,7 @@ func TestSealed_UnmarshalEngine(t *testing.T) {
 		LaneID:     "demo",
 		LaneDigest: "",
 		Target:     lane.DeployTarget{ID: "prod-1", Type: "registry", Description: "production"},
-		Artifacts:  map[string]deploy.SignedArtifact{},
+		Artifacts:  map[string]deploy.ArtifactRecord{},
 		Peers:      map[string][]lane.Peer{},
 		Engine: transport.EngineMTLS{
 			Type:                  "mtls",

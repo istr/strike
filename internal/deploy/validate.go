@@ -14,7 +14,7 @@ import (
 
 // deploySchema combines the attestation, artifact, and lane CUE schemas.
 // All three are compiled together via string concatenation so that types
-// like #SignedArtifact are available when validating #Attestation.
+// like #ArtifactRecord are available when validating #Attestation.
 //
 // artifact.cue uses `import "github.com/istr/strike/specs:lane"` for
 // the `cue export` toolchain, but ctx.CompileString cannot resolve module

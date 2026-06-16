@@ -115,7 +115,7 @@ func syntheticGoldenAttestation(laneDigest string) *Attestation {
 	const artifactDigest = "1111111111111111111111111111111111111111111111111111111111111111"
 	return &Attestation{
 		Sealed: Sealed{
-			Artifacts: map[string]SignedArtifact{
+			Artifacts: map[string]ArtifactRecord{
 				"app": {Digest: "sha256:" + artifactDigest},
 			},
 			Target: lane.DeployTarget{

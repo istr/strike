@@ -17,7 +17,7 @@ func TestProjectStatements(t *testing.T) {
 			LaneID:     "demo",
 			LaneDigest: "",
 			Target:     lane.DeployTarget{ID: "prod-1", Type: "registry", Description: "production"},
-			Artifacts: map[string]deploy.SignedArtifact{
+			Artifacts: map[string]deploy.ArtifactRecord{
 				"b-image": {Digest: "sha256:" + strings.Repeat("b", 64)},
 				"a-image": {Digest: "sha256:" + strings.Repeat("a", 64)},
 			},
