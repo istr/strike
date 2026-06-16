@@ -5,9 +5,9 @@ ISSUER    := https://keycloak.127.0.0.1.sslip.io:8443/realms/sigstore
 DISCOVERY := $(ISSUER)/.well-known/openid-configuration
 CADDY_ROOT := pki/caddy-root.crt
 
-.PHONY: keys up down clean caddy-root check-issuer preflight token tsa-certchain rekor-pubkey
+.PHONY: keys up down clean caddy-root check-issuer preflight token tsa-certchain rekor-pubkey ctlog-pubkey
 
-keys: pki/rekor-ed25519.pem pki/rekor-ed25519-pub.pem ## generate the rekor log signer key (ed25519) and its public key
+keys: pki/rekor-ed25519.pem pki/rekor-ed25519-pub.pem pki/fulcio-root.crt pki/fulcio-root.key pki/ctfe.key pki/ctfe-pub.pem ## generate signing keys: rekor ed25519, the Fulcio fileca root, and the CT log (ctfe) key
 
 pki/rekor-ed25519.pem:
 	openssl genpkey -algorithm ed25519 -out $@
@@ -30,6 +30,11 @@ up: keys ## bring the stack up, export the caddy root, wait for readiness
 	  curl --cacert $(CADDY_ROOT) -sf https://rekor.127.0.0.1.sslip.io:3003/healthz 2>/dev/null | grep -q SERVING && { echo "rekor ready"; exit 0; }; \
 	  sleep 2; \
 	done; echo "rekor not ready in time" >&2; exit 1
+	@echo "waiting for tesseract /healthz (in-network)..."
+	@for i in $$(seq 1 30); do \
+	  $(COMPOSE) --profile tools run --rm probe -sf http://tesseract:6962/healthz >/dev/null 2>&1 && { echo "tesseract ready"; exit 0; }; \
+	  sleep 2; \
+	done; echo "tesseract not ready in time" >&2; exit 1
 	@echo "stack ready"
 
 preflight: keys ## bring up each service alone (no deps) and report init hangs
@@ -83,3 +88,26 @@ tsa-certchain: $(CADDY_ROOT) ## fetch the TSA certificate chain (PEM); always re
 	done; echo "TSA certchain not available" >&2; exit 1
 
 rekor-pubkey: pki/rekor-ed25519-pub.pem ## export the rekor log public key (for trust-root assembly)
+
+# Persistent Fulcio fileca root (replaces ephemeralca so the CT log can pin a
+# stable accepted root). Grouped target: one recipe produces both files.
+pki/fulcio-root.crt pki/fulcio-root.key &:
+	openssl ecparam -genkey -name prime256v1 -noout -out pki/fulcio-root.unenc.key
+	openssl pkcs8 -topk8 -in pki/fulcio-root.unenc.key -out pki/fulcio-root.key -passout pass:fulcio
+	openssl req -x509 -new -key pki/fulcio-root.unenc.key -out pki/fulcio-root.crt -days 365 \
+	  -subj "/CN=strike-local-fulcio-ca" \
+	  -addext "basicConstraints=critical,CA:TRUE" \
+	  -addext "keyUsage=critical,keyCertSign,cRLSign"
+	rm -f pki/fulcio-root.unenc.key
+	chmod 644 pki/fulcio-root.crt pki/fulcio-root.key
+
+# CT log (ctfe) signer key, ECDSA P256 SEC1. chmod 644: the nonroot TesseraCT
+# container cannot read a 0600 key under rootless userns (same as the rekor key).
+pki/ctfe.key:
+	openssl ecparam -genkey -name prime256v1 -noout -out $@
+	chmod 644 $@
+
+pki/ctfe-pub.pem: pki/ctfe.key
+	openssl ec -in $< -pubout -out $@
+
+ctlog-pubkey: pki/ctfe-pub.pem ## export the CT log (ctfe) public key (for trust-root assembly)

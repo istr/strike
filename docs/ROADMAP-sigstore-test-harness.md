@@ -147,7 +147,10 @@ Lean, three mandatory services:
   ships a POSIX backend with no cloud dependencies. Only the hashedrekord and
   dsse entry types remain in v2; dsse is the one strike uses.
 
-Omitted for the lean cut: CT log, TUF.
+Omitted for the lean cut: TUF. (CT log was initially omitted too; it is re-added
+in H3 below, because a CT log is required for Fulcio leaves to carry an embedded
+SCT so the independent cosign conformance check verifies with no insecure flag.
+TUF stays out.)
 
 Toggle, default off: a timestamp authority. Rekor v2 no longer returns inline
 signed timestamps -- clients fetch them from a separate TSA. Whether keyless
@@ -249,6 +252,38 @@ ADR-040 instruction 3, strike's in-process oauthflow.
 
 Depends on: trusted-root-and-smoke.
 
+### ct-log-tessera (H3) -- CT log for non-insecure SCT conformance
+
+Goal: Fulcio leaves carry an embedded SCT so the independent cosign conformance
+check verifies offline with no `--insecure-*` flag.
+
+The feasibility spike returned GO with Fulcio v1.6.6 unchanged: a TesseraCT POSIX
+log (Tessera, no Trillian; digest-pinned image), in-network only, with Fulcio
+moved to a persistent `fileca` and `--ct-log-url=.../strike-ct`, produced a leaf
+whose embedded SCT cosign verified offline against the ctfe key in the trusted
+root (exit 0, no insecure flag). Key validated facts: `fileca` is the clean
+prerequisite (the log pins accepted roots); the CT log signer is ECDSA P256
+(SEC1); CT keys need `chmod 644` for the nonroot container under rootless userns;
+the CT `ctlogs` log id is RFC6962 `sha256(DER SubjectPublicKeyInfo)`, distinct
+from the Rekor v2 C2SP signed-note key id the generator already hand-derives.
+
+Sequence:
+
+- 3a (this arc) -- harness CT enablement: TesseraCT service (in-network), Fulcio
+  fileca + ct-log-url, key generation and `make ctlog-pubkey`, plus this roadmap
+  record. strike's verify is left ignoring the CT material (non-breaking).
+- 3b -- add the `ctlogs` entry to `goldenTrustedRoot` (RFC6962 log id; Rekor
+  entry unchanged) and regenerate the goldens against the CT-enabled harness.
+- 3c -- the flag-clean cosign conformance target (no `--insecure-ignore-sct`),
+  gating exit on the V (sealed) layer only.
+
+Deferred follow-on (separate ratification, production verify-path): whether
+strike's own verify should enforce the embedded SCT for posture symmetry with
+cosign is its own item, sequenced after this arc.
+
+Depends on: trusted-root-and-smoke. Owns the detail for the cross-roadmap CT arc
+referenced from ROADMAP-STATUS step 3.
+
 ## The four failure points to expect at run time
 
 These are where bring-up iterates; they are the reason the stack is
@@ -272,7 +307,8 @@ first one):
 - Rootless Podman, no root, no systemd; one compose file usable under
   podman compose and docker compose.
 - Static TrustedRoot, no TUF.
-- Lean inventory; CT log and TUF out; TSA off by default.
+- Lean inventory; TUF out. (CT log re-added in H3 for non-insecure SCT
+  conformance; TSA resolved on by default -- Rekor v2 Path 1.)
 - FIDO2 token and browser stay on the host; strike and cosign are
   FIDO2-agnostic (Variant A).
 - Images digest-pinned; the harness produces a known, declared identity so

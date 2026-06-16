@@ -44,9 +44,11 @@ plaintext endpoint -- a strike keyless producer pins this root as its
 - `keycloak/realm-export.json` -- realm `sigstore`, public client `sigstore`,
   direct access grant on, verified test user `tester` / `tester`,
   email `tester@strike.localhost`.
-- `pki/` -- generated ed25519 rekor signer key, its exported public key
-  (`rekor-ed25519-pub.pem`, for trust-root assembly), and the exported Caddy
-  root (`caddy-root.crt`). Never committed.
+- `pki/` -- generated ed25519 rekor signer key and its exported public key
+  (`rekor-ed25519-pub.pem`), the persistent Fulcio fileca root
+  (`fulcio-root.crt` + encrypted `fulcio-root.key`), the CT log (ctfe) signer
+  key (`ctfe.key`) and its exported public key (`ctfe-pub.pem`, for trust-root
+  assembly), and the exported Caddy root (`caddy-root.crt`). Never committed.
 
 ## Canonical issuer and trust anchor
 
@@ -132,6 +134,21 @@ offline against the trust root plus that proof. The tile read API is for log
 monitors only, which this harness does not run. If a monitor is ever needed,
 serve the rekor storage dir with a Caddy file_server profile -- do not add a
 separate nginx for it.
+
+## Certificate transparency (CT) log
+
+Fulcio runs against a persistent `fileca` root and submits each issuance to an
+in-network TesseraCT log (`tesseract`, Tessera POSIX backend, no Trillian) at
+`http://tesseract:6962/strike-ct`. The log embeds an SCT in the issued leaf, so
+the leaf is self-describing: an independent verifier checks the SCT offline
+against the CT log public key (`make ctlog-pubkey` exports `pki/ctfe-pub.pem`)
+in the trusted root, and never dials the log. The CT log is therefore in-network
+only -- it has no host port and no Caddy route.
+
+`fileca` (not `ephemeralca`) is required: the CT log pins its accepted roots
+(`--roots_pem_file`), so the issuing CA must be fixed before the log starts. A
+side effect is that the Fulcio root stops rotating per boot; only the TSA cert
+and the per-signing leaf still rotate.
 
 ## First-run risks (verify here, iterate if needed)
 

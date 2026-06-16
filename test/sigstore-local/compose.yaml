@@ -11,6 +11,7 @@ networks:
 volumes:
   posix_storage: {}
   caddy_data: {}
+  ct_storage: {}
 
 services:
   caddy:
@@ -60,18 +61,24 @@ services:
     command:
       - serve
       - --port=5555
-      - --ca=ephemeralca
-      - --ct-log-url=
+      - --ca=fileca
+      - --fileca-cert=/pki/fulcio-root.crt
+      - --fileca-key=/pki/fulcio-root.key
+      - --fileca-key-passwd=fulcio
+      - --ct-log-url=http://tesseract:6962/strike-ct
       - --config-path=/etc/fulcio/config.yaml
     volumes:
       - ./fulcio/config.yaml:/etc/fulcio/config.yaml:ro
       - ./pki/caddy-root.crt:/etc/ssl/certs/ca-certificates.crt:ro
+      - ./pki:/pki:ro
     environment:
       - SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
     networks:
       - sigstore
     depends_on:
       keycloak:
+        condition: service_started
+      tesseract:
         condition: service_started
     # No container healthcheck: the image lacks a shell for a TCP probe.
     # Functional readiness is the issuer poll in `make up` and the next
@@ -131,5 +138,27 @@ services:
       - --port=3000
       - --timestamp-signer=memory
       - --timestamp-signer-hash=sha256
+    networks:
+      - sigstore
+
+  tesseract:
+    # Static-CT-API CT log on Tessera (POSIX) -- the CTFE, no Trillian. In-network
+    # only: cosign never dials it; the SCT is embedded in the leaf at issuance and
+    # verified offline against the ctfe key in the trusted root. Distroless/nonroot
+    # (no shell) -- no container healthcheck; /healthz is on the root mux and is
+    # polled functionally from `make up`. Image is digest-pinned (validated by the
+    # CT feasibility spike).
+    image: ghcr.io/transparency-dev/tesseract/posix@sha256:3f13c41877dc63995b0273604a54b61c5b573557c5b8f4466b30e523db0b100f
+    command:
+      - --private_key=/pki/ctfe.key
+      - --origin=strike-ct
+      - --path_prefix=strike-ct
+      - --storage_dir=/data/ct
+      - --roots_pem_file=/pki/fulcio-root.crt
+      - --ext_key_usages=CodeSigning
+      - --http_endpoint=0.0.0.0:6962
+    volumes:
+      - ./pki:/pki:ro
+      - ct_storage:/data/ct:U
     networks:
       - sigstore
