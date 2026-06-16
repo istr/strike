@@ -205,19 +205,23 @@ engine/transport cluster on the now-landed D-D foundation; the rest is parked.
 2. `ArtifactRecord` rename (LANDED) -- post-keyless the old `SignedArtifact`
    name was a digest+SBOM misnomer; a pure Go rename, wire-neutral, no golden.
    (`148c1f5`)
-3. cosign independent-verify conformance, CT-gated -- validates the
+3. cosign independent-verify conformance, CT-gated (LANDED) -- validated the
    "offline-verifiable without contacting strike" promise under independent
    tooling (cosign), as the regression baseline for the verification work. The
    feasibility spike (GO) found cosign enforces a >= 1 SCT threshold with no
-   non-insecure bypass, so the harness gains a CT log first. Three steps: 3a --
-   harness CT enablement (TesseraCT POSIX, in-network; Fulcio on fileca +
-   ct-log-url; no Trillian); 3b -- add the ctlogs entry to goldenTrustedRoot and
-   regenerate the goldens against the CT-enabled harness; 3c -- the flag-clean
-   cosign conformance target (no --insecure-ignore-sct), gating exit on the V
-   layer. Test-only, no production risk. (ROADMAP-sigstore-test-harness)
-   Deferred follow-on (separate ratification, production verify-path): strike's
-   own verify currently ignores the embedded SCT; whether it should enforce it
-   for posture symmetry with cosign is its own item, sequenced after this arc.
+   non-insecure bypass, so the harness gained a CT log first. Landed in four
+   commits: 3a -- harness CT enablement (TesseraCT POSIX; Fulcio on fileca +
+   ct-log-url; no Trillian) (`41661d4`), TLS-fronted behind Caddy (`658fb3a`);
+   3b -- ctlogs entry in goldenTrustedRoot + golden regen against the CT-enabled
+   harness (`7546fca`); 3c -- the flag-clean `make conformance` target (no
+   --insecure-ignore-sct), gating exit on the V layer (`386dba2`).
+   (ROADMAP-sigstore-test-harness)
+   Deferred follow-ons (separate ratification), both sequenced after this arc,
+   detail in ROADMAP-sigstore-test-harness H3: (1) production verify-path --
+   strike's own verify ignores the embedded SCT; whether it should enforce it
+   for posture symmetry with cosign is its own item. (2) full cosign
+   compatibility -- liveTrustRoot does not yet carry the ctlogs entry (only the
+   golden generator does); pulling it in is the remaining live-path step.
 4. Base-SBOM signature verification (2c) -- completes the SBOM verification
    feature; the verify core is done, so a shallow dependency. (ROADMAP-ADR-040)
 5. Trust-root auto-import from OCI referrers -- lifts the current fail-closed
