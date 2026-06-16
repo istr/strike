@@ -171,7 +171,7 @@ func (sc *Capture) UnmarshalJSON(data []byte) error {
 func unmarshalOIDCConfig(data []byte) (OIDCConfig, error) {
 	type alias struct {
 		Issuer   string          `json:"issuer"`
-		ClientID string          `json:"clientId"`
+		Audience string          `json:"audience"`
 		Identity string          `json:"identity"`
 		Trust    json.RawMessage `json:"trust"`
 	}
@@ -188,7 +188,7 @@ func unmarshalOIDCConfig(data []byte) (OIDCConfig, error) {
 	}
 	return OIDCConfig{
 		Issuer:   aux.Issuer,
-		ClientID: aux.ClientID,
+		Audience: aux.Audience,
 		Identity: aux.Identity,
 		Trust:    t,
 	}, nil

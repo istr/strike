@@ -19,7 +19,7 @@ resolver:
     fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 oidc:
   issuer: "https://keycloak.127.0.0.1.sslip.io:8443/realms/sigstore"
-  clientId: "sigstore"
+  audience: "sigstore"
   identity: "tester@strike.localhost"
   trust:
     type: caBundle

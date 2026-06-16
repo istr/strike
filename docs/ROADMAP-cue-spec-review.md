@@ -1,6 +1,6 @@
 # CUE Spec Review Roadmap (post trust-boundary formalization)
 
-## Status: OPEN -- two arcs remain (D-D field-add, D-F: B-8..B-9)
+## Status: OPEN -- one arc remains (D-D field-add); D-F queue complete
 
 This roadmap is the single source for the work-arcs derived from
 `RETROSPECTIVE-cue-spec-review.md`. The post-formalization handover note
@@ -128,12 +128,12 @@ alone as a new D-F item.
 | B-5 | Unify producer refs on `#OutputRef`; reconcile `from` / `source` | Landed `232bece`. Option A (structured `#OutputRef`) for the three dotted producer refs; `parseRef` deleted, fixtures migrated, golden bundles regenerated, and -- beyond the instruction's listed set -- every in-tree Go caller (~80 sites) migrated. `imageFrom` stays its own arc (see Deferred). The dotted `"step.output"` runtime encoding was split to a follow-up, now landed (`ae12db3`); see Deferred "producer-ref runtime encoding". See "B-5 -- ratified plan" below. |
 | B-6 | `#TLSTrust` discriminator `mode` -> `type` + one enum casing | Landed `22426cc2`. `transport.cue` `#TLSTrust` keys on `type:` with values `certFingerprint` / `caBundle`; the hand-mirrored Go (`@go(-)`) moved in lockstep, and the golden bundles were regenerated (re-keying `golden/lane.yaml` re-hashes its sealed `laneDigest`). |
 | B-7 | De-overload "attestation" (rename the state-capture config) | Landed `d8cabc2`. `recording` / `#StateRecording` (plus `#CaptureSet` / `#Capture`) replaces the `attestation` / `#AttestationSpec` config; the cryptographic-attestation family is untouched; golden bundles regenerated. ADR-016 vocabulary. |
-| B-8 | Apply `#AbsPath` / `#RelPath` consistently or comment opaque path fields | Partial. Types exist and are applied in places; audit coverage at write time. |
-| B-9 | P3 polish: `#SignerIdentity` dedup, `clientId` -> `audience`, `trustRootRef` `@go` symmetry, default-disjunction order | Pending. |
+| B-8 | Apply `#AbsPath` / `#RelPath` consistently or comment opaque path fields | Landed `5dd7ea1`. `#ImageConfig.workdir` typed `#AbsPath`; dead `#Artifact.localPath` removed; the path-like `string` fields that are not container paths (`#DeployRegistry.source` / `target`, `#CaptureMount.source`, `#DeployKubernetes.kubeconfig`) carry clarifying comments. `entrypoint` / `cmd` / `args` stay `[...string]` (command vectors). |
+| B-9 | P3 polish: `#SignerIdentity` dedup, `clientId` -> `audience`, `trustRootRef` `@go` symmetry, default-disjunction order | Landed (this commit), partial scope. Done: `clientId` -> `audience` (the OIDC `aud` claim; matches the spelled-out `issuer` / `identity` convention), and the lone default-disjunction outlier `forceRun` reordered to default-first (`*false | bool`). WONTFIX: `#SignerIdentity` dedup -- `#OIDCConfig` (signer identity) and `#SBOMSigner` (trusted-signer allowlist) are semantically disjoint; a shared type would be a false-consolidated anchor against "identity is asymmetric", over a two-string surface. WONTFIX: `trustRootRef` `@go` symmetry -- the asymmetry reflects a real struct-vs-string type difference (`#TrustedRootReplica` needs a nillable pointer; `#ImageRef` uses empty-as-absent), so symmetry would pointer-ize `ImageRef` for no gain. |
 
-Execute in the order documented in ROADMAP-STATUS.md:
-B-4 / B-5 next (naming, broader blast radius; B-6/B-7 landed),
-then B-8 / B-9 (polish). Each is its own PR per the ratification.
+The D-F queue is complete: B-1..B-9 have all landed or been dispositioned
+wontfix (see the table above). The only remaining arc in this roadmap is the
+D-D field-add.
 
 **Golden-bundle regen is a hard dependency for golden-affecting B-x items.** Any
 schema or naming change that re-keys `internal/verify/testdata/golden/lane.yaml`

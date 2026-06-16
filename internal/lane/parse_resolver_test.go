@@ -65,7 +65,7 @@ resolver:
     fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 oidc:
   issuer: "https://idp.example.com"
-  clientId: "strike"
+  audience: "strike"
   identity: "strike@example.com"
   trust:
     type: certFingerprint
@@ -152,7 +152,7 @@ resolver:
     fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 oidc:
   issuer: "https://idp.example.com"
-  clientId: "strike"
+  audience: "strike"
   identity: "strike@example.com"
   trust:
     type: certFingerprint

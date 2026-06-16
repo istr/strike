@@ -54,7 +54,7 @@ package lane
 	@go(OIDCConfig)
 
 	issuer:   string    @go(Issuer)   // iss / issuer-url; config only, no IdP contact at validate/dag
-	clientId: string    @go(ClientID) // aud
+	audience: string    @go(Audience) // aud
 	identity: string    @go(Identity) // expected SAN subject Fulcio writes into the cert
 	trust:    #TLSTrust @go(Trust,type="github.com/istr/strike/internal/transport".TLSTrust)
 }
@@ -155,7 +155,7 @@ package lane
 	// `git clone` from a moving branch or `npm install` of a
 	// `latest` tag. Strike does not auto-detect
 	// non-determinism; lane authors declare it.
-	forceRun?:   bool | *false   @go(ForceRun)
+	forceRun?:   *false | bool   @go(ForceRun)
 	timeout?:    #Duration       @go(Timeout,optional=nillable)
 	pack?:       #PackSpec       @go(Pack,optional=nillable)
 	deploy?:     #DeploySpec     @go(Deploy,optional=nillable)

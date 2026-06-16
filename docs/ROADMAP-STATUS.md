@@ -13,7 +13,7 @@ document provides a snapshot of the status of all active roadmaps.
 | [ROADMAP-ADR-040](ROADMAP-ADR-040.md) | SUBSTANTIALLY COMPLETE | Instructions 1--4 done (OIDC schema, SBOM, keyless signing, OCI referrers, control-plane push). Instruction 5a (verify core) done; 5b (CLI exposure) landed via ADR-041. |
 | [ROADMAP-ADR-041](ROADMAP-ADR-041.md) | SUBSTANTIALLY COMPLETE | Foundation plus instructions 1--3 (CLI subcommand, lane-policy integration, predicate validation and V/E gating) landed. Genuine residual: trust-root auto-import from OCI referrers (currently fail-closed). |
 | [ROADMAP-sigstore-test-harness](ROADMAP-sigstore-test-harness.md) | H1 DONE, H2 PENDING | Stack-up and trust-anchor export complete. WebAuthn/FIDO2 (H2) remains. |
-| [ROADMAP-cue-spec-review](ROADMAP-cue-spec-review.md) | OPEN | Post-formalization D-arcs. Landed: A, D-A, D-C, D-D formalization, D-E, C-5, B-1, C-3, D-B+D-G, D-F B-2, B-3, B-4, B-5, B-6, B-7. Open: D-D field-add, D-F (B-8--B-9). |
+| [ROADMAP-cue-spec-review](ROADMAP-cue-spec-review.md) | OPEN | Post-formalization D-arcs. Landed: A, D-A, D-C, D-D formalization, D-E, C-5, B-1, C-3, D-B+D-G, D-F B-2..B-8; B-9 landed (clientId -> audience, forceRun default-first) with two wontfixes. Open: D-D field-add only. |
 
 ## Narrative summary
 
@@ -118,9 +118,12 @@ cluster A (docs), D-A (keyed signing + Rekor v1 removal, ADR-043), D-C
 (`engineMetadata` -> informational), the D-D trust-boundary formalization, D-E
 (Bundle/DSSE in CUE), C-5, B-1, C-3, and D-B+D-G (canonical-time correction to
 RFC3161 TSA plus the "Meaning is single-sourced" principle and the aim-sentence
-qualification). Two arcs remain: the D-D field-add (engine-cert subject/issuer
-into `#EngineConnection` at layer V), and the D-F queue (schema-naming findings
-B-8--B-9, one instruction each; B-2--B-7 landed). The B-5 follow-ons (the
+qualification). The D-F queue is now complete (B-1..B-9 landed or wontfix; B-8
+typed the path fields, B-9 renamed `clientId` -> `audience` and reordered the
+`forceRun` default to default-first, recording the `#SignerIdentity` dedup and
+the `trustRootRef` `@go` symmetry as wontfix). One arc remains: the D-D
+field-add (engine-cert subject/issuer into `#EngineConnection` at layer V). The
+B-5 follow-ons (the
 `...Name` -> `...ID` Go rename and the producer-ref runtime encoding) have
 landed; only the `imageFromStep` rebuild remains parked. The deferred set
 (base-SBOM signature verification, engine hardening, DNS centralization, full
@@ -176,7 +179,11 @@ and parallelizable.
   (ROADMAP-cue-spec-review)
 - D-F B-5 (LANDED): producer refs unified on `#OutputRef` (`232bece`); the
   runtime-encoding follow-on landed too (`ae12db3`). (ROADMAP-cue-spec-review)
-- D-F B-8..B-9: schema-naming findings, one instruction each.
+- D-F B-8 (LANDED): path-type consolidation -- `#ImageConfig.workdir` typed
+  `#AbsPath`, dead `#Artifact.localPath` removed, opaque path-like fields
+  commented (`5dd7ea1`). (ROADMAP-cue-spec-review)
+- D-F B-9 (LANDED): `clientId` -> `audience` and `forceRun` default-first; the
+  `#SignerIdentity` dedup and `trustRootRef` `@go` symmetry recorded wontfix.
   (ROADMAP-cue-spec-review)
 - D-D field-add: engine-cert subject/issuer into `#EngineConnection` at Layer V;
   CUE-first gate. Lands here and unlocks Phase 3. (ROADMAP-cue-spec-review)
@@ -217,4 +224,4 @@ and parallelizable.
 - [ROADMAP-ADR-040](ROADMAP-ADR-040.md) -- Substantially complete
 - [ROADMAP-ADR-041](ROADMAP-ADR-041.md) -- Substantially complete
 - [ROADMAP-sigstore-test-harness](ROADMAP-sigstore-test-harness.md) -- H1 done, H2 pending
-- [ROADMAP-cue-spec-review](ROADMAP-cue-spec-review.md) -- Open (D-D field-add, D-F: B-8--B-9)
+- [ROADMAP-cue-spec-review](ROADMAP-cue-spec-review.md) -- Open (D-D field-add; D-F queue complete)

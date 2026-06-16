@@ -4,7 +4,7 @@ registry: localhost:5555/test
 secrets: {}
 oidc:
   issuer: "https://idp.example.com"
-  clientId: "strike"
+  audience: "strike"
   identity: "strike@example.com"
   trust:
     type: certFingerprint
