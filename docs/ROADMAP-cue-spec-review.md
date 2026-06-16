@@ -1,6 +1,6 @@
 # CUE Spec Review Roadmap (post trust-boundary formalization)
 
-## Status: OPEN -- one arc remains (D-D field-add); D-F queue complete
+## Status: COMPLETE -- D-D field-add landed; D-F queue complete
 
 This roadmap is the single source for the work-arcs derived from
 `RETROSPECTIVE-cue-spec-review.md`. The post-formalization handover note
@@ -76,6 +76,14 @@ distinct:
 
 Execute in the order documented in ROADMAP-STATUS.md.
 
+> LANDED (this commit). Re-modeled as a discriminated union
+> (`#EngineUnix | #EngineTLS | #EngineMTLS`, discriminator `type`) in
+> `specs/transport.cue`, bridged via `artifact.cue`, consumed at
+> `sealed.engine` like `#Peer`. The observed server cert subject/issuer and
+> client subject are now sealed (Layer V); `caTrustMode` -> `caTrustType`.
+> The flat-struct field-add the prose below describes was superseded by the
+> union shape. Not golden-affecting (engine nil in the golden).
+
 ### D-D field-add -- engine-cert subject / issuer into `#EngineConnection`
 
 A schema field-add (CUE-first ratification gate applies) plus wiring the Go
@@ -100,8 +108,8 @@ trusted -- named with different suffixes (`type` vs `Mode`). The
 enum `connectionType` (`"unix" | "tls" | "mtls"`) on the very same
 `#EngineConnection` already uses `type`. So the split is not a signal; it is the
 de-overloading / least-surprise class this review exists to catch (cf. B-4 "stop
-overloading name", B-5 "reconcile from/source"). Recommended direction (ratify at
-write time, NOT yet ratified): retire the `Mode` suffix for kind-selectors,
+overloading name", B-5 "reconcile from/source"). RATIFIED and landed in D-D:
+retire the `Mode` suffix for kind-selectors,
 `caTrustMode` -> `caTrustType`, matching `#TLSTrust.type` and the sibling
 `connectionType`; `connectionType` stays. The values `pinned | system` most
 likely stay as-is -- a different mechanism vocabulary than

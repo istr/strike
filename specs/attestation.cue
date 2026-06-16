@@ -195,24 +195,6 @@ package deploy
 // Engine identity
 // ---------------------------------------------------------------------------
 
-// EngineConnection -- CP-observed/controlled connection facts about the
-// engine. Lives under sealed.engine.
-#EngineConnection: {
-	// connectionType is "unix", "tls", or "mtls". CP-determined.
-	connectionType: "unix" | "tls" | "mtls"
-
-	// caTrustMode is "pinned" (explicit CA) or "system" (OS trust store).
-	// Empty for Unix socket connections. CP-configured.
-	caTrustMode?: "pinned" | "system" | ""
-
-	// serverCertFingerprint is sha256:<hex> of the engine's leaf cert,
-	// observed by CP during the TLS handshake.
-	serverCertFingerprint?: string
-
-	// clientCertFingerprint is sha256:<hex> of the controller's own cert.
-	clientCertFingerprint?: string
-}
-
 // EngineMetadata -- engine self-reports about itself. Lives under
 // informational.engineMetadata. These claims are the engine's word
 // about its own properties; they do not participate in the source-to-

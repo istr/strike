@@ -119,10 +119,10 @@ func initEngine(ctx context.Context) container.Engine {
 		switch id.Connection.Type {
 		case "mtls":
 			log.Printf("INFO   engine: mTLS, ca=%s (server=%s, client=%s)",
-				id.Connection.CATrustMode, id.Connection.ServerCertSubject, id.Connection.ClientCertSubject)
+				id.Connection.CATrustType, id.Connection.ServerCertSubject, id.Connection.ClientCertSubject)
 		case "tls":
 			log.Printf("INFO   engine: server-TLS, ca=%s (server=%s)",
-				id.Connection.CATrustMode, id.Connection.ServerCertSubject)
+				id.Connection.CATrustType, id.Connection.ServerCertSubject)
 		case "unix":
 			// No log -- Unix socket is the normal case.
 		}

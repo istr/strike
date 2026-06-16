@@ -46,9 +46,9 @@ func TestValidateAttestation_WithEngine(t *testing.T) {
 			Artifacts: map[string]deploy.SignedArtifact{
 				"app": {Digest: "sha256:1111111111111111111111111111111111111111111111111111111111111111"},
 			},
-			Engine: &deploy.EngineConnection{
-				ConnectionType:        "tls",
-				CATrustMode:           "pinned",
+			Engine: transport.EngineTLS{
+				Type:                  "tls",
+				CATrustType:           "pinned",
 				ServerCertFingerprint: "sha256:cccccccccccccccccccccc",
 			},
 			Peers: map[string][]lane.Peer{},
@@ -76,8 +76,8 @@ func TestValidateAttestation_InvalidEngineConnectionType(t *testing.T) {
 			LaneID:    "test-lane",
 			Target:    lane.DeployTarget{ID: "test-1", Type: "registry", Description: "test"},
 			Artifacts: map[string]deploy.SignedArtifact{},
-			Engine: &deploy.EngineConnection{
-				ConnectionType: "plaintext", // not in enum
+			Engine: transport.EngineTLS{
+				Type: "plaintext", // not in enum
 			},
 			Peers: map[string][]lane.Peer{},
 		},

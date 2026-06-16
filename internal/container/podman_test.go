@@ -541,7 +541,7 @@ func TestPinnedCAProducesExclusivePool(t *testing.T) {
 	}
 }
 
-func TestCATrustModeInIdentity_Pinned(t *testing.T) {
+func TestCATrustTypeInIdentity_Pinned(t *testing.T) {
 	eng := newTLSTestEngine(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -554,8 +554,8 @@ func TestCATrustModeInIdentity_Pinned(t *testing.T) {
 	if id == nil {
 		t.Fatal("expected identity")
 	}
-	if id.Connection.CATrustMode != "pinned" {
-		t.Errorf("CATrustMode = %q, want pinned", id.Connection.CATrustMode)
+	if id.Connection.CATrustType != "pinned" {
+		t.Errorf("CATrustType = %q, want pinned", id.Connection.CATrustType)
 	}
 }
 

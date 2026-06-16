@@ -208,11 +208,11 @@ type ConnectionInfo struct {
 	// Type is "unix", "tls", or "mtls".
 	Type string `json:"type"`
 
-	// CATrustMode is "pinned" if an explicit CA was configured, or "system"
+	// CATrustType is "pinned" if an explicit CA was configured, or "system"
 	// if the OS trust store was used. Empty for Unix socket connections.
 	// Verifiers use this to assess the scope of trust behind the server
 	// certificate fingerprint.
-	CATrustMode string `json:"caTrustMode,omitempty"`
+	CATrustType string `json:"caTrustType,omitempty"`
 
 	// ServerCertFingerprint is the SHA-256 of the engine's leaf certificate.
 	// Empty for Unix socket connections.

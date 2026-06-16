@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/transport"
 )
 
 // UnmarshalJSON implements json.Unmarshaler for Sealed.
@@ -16,12 +17,20 @@ func (s *Sealed) UnmarshalJSON(data []byte) error {
 	type alias Sealed
 	aux := struct {
 		*alias
-		Peers map[string][]json.RawMessage `json:"peers,omitempty"`
+		Peers  map[string][]json.RawMessage `json:"peers,omitempty"`
+		Engine json.RawMessage              `json:"engine,omitempty"`
 	}{
 		alias: (*alias)(s),
 	}
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return err
+	}
+	if len(aux.Engine) != 0 && string(aux.Engine) != "null" {
+		conn, err := transport.UnmarshalEngineConnection(aux.Engine)
+		if err != nil {
+			return fmt.Errorf("attestation engine: %w", err)
+		}
+		s.Engine = conn
 	}
 	if len(aux.Peers) == 0 {
 		s.Peers = nil

@@ -7,6 +7,7 @@ import (
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/deploy"
 	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/transport"
 )
 
 func TestProjectStatements(t *testing.T) {
@@ -21,7 +22,7 @@ func TestProjectStatements(t *testing.T) {
 				"a-image": {Digest: "sha256:" + strings.Repeat("a", 64)},
 			},
 			Peers:  map[string][]lane.Peer{},
-			Engine: &deploy.EngineConnection{ConnectionType: "tls", CATrustMode: "pinned", ServerCertFingerprint: "sha256:cc"},
+			Engine: transport.EngineTLS{Type: "tls", CATrustType: "pinned", ServerCertFingerprint: "sha256:cc"},
 		},
 		EngineDependent: deploy.EngineDependent{
 			PeerAttribution: map[string][]string{"build": {"git.example.com:22"}},

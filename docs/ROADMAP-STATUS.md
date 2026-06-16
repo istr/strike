@@ -13,7 +13,7 @@ document provides a snapshot of the status of all active roadmaps.
 | [ROADMAP-ADR-040](ROADMAP-ADR-040.md) | SUBSTANTIALLY COMPLETE | Instructions 1--4 done (OIDC schema, SBOM, keyless signing, OCI referrers, control-plane push). Instruction 5a (verify core) done; 5b (CLI exposure) landed via ADR-041. |
 | [ROADMAP-ADR-041](ROADMAP-ADR-041.md) | SUBSTANTIALLY COMPLETE | Foundation plus instructions 1--3 (CLI subcommand, lane-policy integration, predicate validation and V/E gating) landed. Genuine residual: trust-root auto-import from OCI referrers (currently fail-closed). |
 | [ROADMAP-sigstore-test-harness](ROADMAP-sigstore-test-harness.md) | H1 DONE, H2 PENDING | Stack-up and trust-anchor export complete. WebAuthn/FIDO2 (H2) remains. |
-| [ROADMAP-cue-spec-review](ROADMAP-cue-spec-review.md) | OPEN | Post-formalization D-arcs. Landed: A, D-A, D-C, D-D formalization, D-E, C-5, B-1, C-3, D-B+D-G, D-F B-2..B-8; B-9 landed (clientId -> audience, forceRun default-first) with two wontfixes. Open: D-D field-add only. |
+| [ROADMAP-cue-spec-review](ROADMAP-cue-spec-review.md) | COMPLETE | Post-formalization D-arcs all landed: A, D-A, D-C, D-D (formalization + field-add as the engine-connection union, caTrustType), D-E, C-5, B-1, C-3, D-B+D-G, D-F B-1..B-9. |
 
 ## Narrative summary
 
@@ -185,8 +185,10 @@ and parallelizable.
 - D-F B-9 (LANDED): `clientId` -> `audience` and `forceRun` default-first; the
   `#SignerIdentity` dedup and `trustRootRef` `@go` symmetry recorded wontfix.
   (ROADMAP-cue-spec-review)
-- D-D field-add: engine-cert subject/issuer into `#EngineConnection` at Layer V;
-  CUE-first gate. Lands here and unlocks Phase 3. (ROADMAP-cue-spec-review)
+- D-F B-8 / B-9 and the D-D field-add are LANDED. The D-D field-add re-modeled
+  `#EngineConnection` as a discriminated union in transport.cue (engine-cert
+  subject/issuer sealed at Layer V, caTrustType); Phase 3 is unblocked.
+  (ROADMAP-cue-spec-review)
 
 **Phase 2 -- verification completeness.**
 - Base-SBOM signature verification (2c), unblocked by the verify core.
@@ -224,4 +226,4 @@ and parallelizable.
 - [ROADMAP-ADR-040](ROADMAP-ADR-040.md) -- Substantially complete
 - [ROADMAP-ADR-041](ROADMAP-ADR-041.md) -- Substantially complete
 - [ROADMAP-sigstore-test-harness](ROADMAP-sigstore-test-harness.md) -- H1 done, H2 pending
-- [ROADMAP-cue-spec-review](ROADMAP-cue-spec-review.md) -- Open (D-D field-add; D-F queue complete)
+- [ROADMAP-cue-spec-review](ROADMAP-cue-spec-review.md) -- Complete (all D-arcs landed)

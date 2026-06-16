@@ -42,7 +42,10 @@ import (
 	"github.com/istr/strike/internal/transport"
 )
 
-const connTypeTLS = "tls"
+const (
+	connTypeTLS  = "tls"
+	connTypeMTLS = "mtls"
+)
 
 // deployCapsuleFields populates the capsule-related Deployer fields needed
 // by tests that exercise captureOne or method execution. portKeys lists
@@ -634,11 +637,15 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 	if att.Sealed.Engine == nil {
 		t.Fatal("expected non-nil Engine record in attestation")
 	}
-	if att.Sealed.Engine.ConnectionType != connTypeTLS {
-		t.Errorf("Engine.ConnectionType = %q, want tls", att.Sealed.Engine.ConnectionType)
+	if att.Sealed.Engine.ConnectionType() != connTypeTLS {
+		t.Errorf("Engine.ConnectionType = %q, want tls", att.Sealed.Engine.ConnectionType())
 	}
-	if !strings.HasPrefix(att.Sealed.Engine.ServerCertFingerprint, "sha256:") {
-		t.Errorf("Engine.ServerCertFingerprint = %q, want sha256: prefix", att.Sealed.Engine.ServerCertFingerprint)
+	tlsConn, ok := att.Sealed.Engine.(transport.EngineTLS)
+	if !ok {
+		t.Fatalf("Engine type = %T, want transport.EngineTLS", att.Sealed.Engine)
+	}
+	if !strings.HasPrefix(tlsConn.ServerCertFingerprint, "sha256:") {
+		t.Errorf("Engine.ServerCertFingerprint = %q, want sha256: prefix", tlsConn.ServerCertFingerprint)
 	}
 
 	// Verify it round-trips through JSON
@@ -658,8 +665,8 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 	if !ok {
 		t.Fatal("expected sealed.engine object in JSON")
 	}
-	if engMap["connectionType"] != connTypeTLS {
-		t.Errorf("JSON sealed.engine.connectionType = %v, want tls", engMap["connectionType"])
+	if engMap["type"] != connTypeTLS {
+		t.Errorf("JSON sealed.engine.type = %v, want tls", engMap["type"])
 	}
 }
 
@@ -718,8 +725,8 @@ func TestEngineRecord_NilEngineID(t *testing.T) {
 func TestEngineRecord_WithRuntime(t *testing.T) {
 	id := &container.EngineIdentity{
 		Connection: container.ConnectionInfo{
-			Type:                  connTypeTLS,
-			CATrustMode:           "pinned",
+			Type:                  connTypeMTLS,
+			CATrustType:           "pinned",
 			ServerCertFingerprint: "sha256:abc",
 			ClientCertFingerprint: "sha256:def",
 		},
@@ -773,14 +780,18 @@ func TestEngineRecord_WithRuntime(t *testing.T) {
 	if att.Sealed.Engine == nil {
 		t.Fatal("expected non-nil Engine connection record")
 	}
-	if att.Sealed.Engine.ConnectionType != connTypeTLS {
-		t.Errorf("ConnectionType = %q, want tls", att.Sealed.Engine.ConnectionType)
+	if att.Sealed.Engine.ConnectionType() != connTypeMTLS {
+		t.Errorf("ConnectionType = %q, want mtls", att.Sealed.Engine.ConnectionType())
 	}
-	if att.Sealed.Engine.ServerCertFingerprint != "sha256:abc" {
-		t.Errorf("ServerCertFingerprint = %q, want sha256:abc", att.Sealed.Engine.ServerCertFingerprint)
+	mtlsConn, ok := att.Sealed.Engine.(transport.EngineMTLS)
+	if !ok {
+		t.Fatalf("Engine type = %T, want transport.EngineMTLS", att.Sealed.Engine)
 	}
-	if att.Sealed.Engine.ClientCertFingerprint != "sha256:def" {
-		t.Errorf("ClientCertFingerprint = %q, want sha256:def", att.Sealed.Engine.ClientCertFingerprint)
+	if mtlsConn.ServerCertFingerprint != "sha256:abc" {
+		t.Errorf("ServerCertFingerprint = %q, want sha256:abc", mtlsConn.ServerCertFingerprint)
+	}
+	if mtlsConn.ClientCertFingerprint != "sha256:def" {
+		t.Errorf("ClientCertFingerprint = %q, want sha256:def", mtlsConn.ClientCertFingerprint)
 	}
 	if att.Informational.EngineMetadata == nil {
 		t.Fatal("expected non-nil EngineMetadata")
@@ -844,8 +855,8 @@ func TestEngineRecord_WithoutRuntime(t *testing.T) {
 	if att.Sealed.Engine == nil {
 		t.Fatal("expected non-nil Engine connection record")
 	}
-	if att.Sealed.Engine.ConnectionType != "unix" {
-		t.Errorf("ConnectionType = %q, want unix", att.Sealed.Engine.ConnectionType)
+	if att.Sealed.Engine.ConnectionType() != "unix" {
+		t.Errorf("ConnectionType = %q, want unix", att.Sealed.Engine.ConnectionType())
 	}
 	if att.Informational.EngineMetadata == nil {
 		t.Fatal("expected non-nil EngineMetadata")

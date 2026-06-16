@@ -47,14 +47,14 @@ type Attestation struct {
 
 // Sealed -- CP-bound claims, sound to any verifier without engine trust.
 type Sealed struct {
-	Artifacts     map[string]SignedArtifact `json:"artifacts"`
-	Peers         map[string][]lane.Peer    `json:"peers"`
-	Resolver      *ResolverRecord           `json:"resolver,omitempty"`
-	Engine        *EngineConnection         `json:"engine,omitempty"`
-	ObservedPeers map[string]ObservedPeer   `json:"observedPeers,omitempty"`
-	Target        lane.DeployTarget         `json:"target"`
-	LaneID        string                    `json:"laneId"`
-	LaneDigest    string                    `json:"laneDigest"`
+	Artifacts     map[string]SignedArtifact  `json:"artifacts"`
+	Peers         map[string][]lane.Peer     `json:"peers"`
+	Resolver      *ResolverRecord            `json:"resolver,omitempty"`
+	Engine        transport.EngineConnection `json:"engine,omitempty"`
+	ObservedPeers map[string]ObservedPeer    `json:"observedPeers,omitempty"`
+	Target        lane.DeployTarget          `json:"target"`
+	LaneID        string                     `json:"laneId"`
+	LaneDigest    string                     `json:"laneDigest"`
 }
 
 // ---------------------------------------------------------------------------
@@ -189,25 +189,6 @@ type SignedArtifact struct {
 type SBOMRecord struct {
 	Format string `json:"format"`
 	Digest string `json:"digest"`
-}
-
-// EngineConnection -- CP-observed/controlled connection facts about the
-// engine. Lives under Sealed.Engine.
-type EngineConnection struct {
-	// ConnectionType is "unix", "tls", or "mtls".
-	ConnectionType string `json:"connectionType"`
-
-	// CATrustMode is "pinned" (explicit CA) or "system" (OS trust store).
-	// Empty for Unix socket connections.
-	CATrustMode string `json:"caTrustMode,omitempty"`
-
-	// ServerCertFingerprint is sha256:<hex> of the engine's certificate.
-	// Empty for Unix socket connections.
-	ServerCertFingerprint string `json:"serverCertFingerprint,omitempty"`
-
-	// ClientCertFingerprint is sha256:<hex> of the controller's certificate.
-	// Empty unless mTLS is configured.
-	ClientCertFingerprint string `json:"clientCertFingerprint,omitempty"`
 }
 
 // EngineMetadata -- engine self-reports about itself. Lives under
@@ -974,15 +955,33 @@ func ResolveKubeconfig(override string) (string, error) {
 
 // engineRecords returns the sealed engine connection facts (CP-observed)
 // and the informational engine metadata (engine self-reports).
-func (d *Deployer) engineRecords() (*EngineConnection, *EngineMetadata) {
+func (d *Deployer) engineRecords() (transport.EngineConnection, *EngineMetadata) {
 	if d.EngineID == nil {
 		return nil, nil
 	}
-	conn := &EngineConnection{
-		ConnectionType:        d.EngineID.Connection.Type,
-		CATrustMode:           d.EngineID.Connection.CATrustMode,
-		ServerCertFingerprint: d.EngineID.Connection.ServerCertFingerprint,
-		ClientCertFingerprint: d.EngineID.Connection.ClientCertFingerprint,
+	c := d.EngineID.Connection
+	var conn transport.EngineConnection
+	switch c.Type {
+	case "mtls":
+		conn = transport.EngineMTLS{
+			Type:                  c.Type,
+			CATrustType:           c.CATrustType,
+			ServerCertFingerprint: c.ServerCertFingerprint,
+			ServerCertSubject:     c.ServerCertSubject,
+			ServerCertIssuer:      c.ServerCertIssuer,
+			ClientCertFingerprint: c.ClientCertFingerprint,
+			ClientCertSubject:     c.ClientCertSubject,
+		}
+	case "tls":
+		conn = transport.EngineTLS{
+			Type:                  c.Type,
+			CATrustType:           c.CATrustType,
+			ServerCertFingerprint: c.ServerCertFingerprint,
+			ServerCertSubject:     c.ServerCertSubject,
+			ServerCertIssuer:      c.ServerCertIssuer,
+		}
+	default: // "unix"
+		conn = transport.EngineUnix{Type: c.Type}
 	}
 	meta := &EngineMetadata{}
 	if d.EngineID.Runtime != nil {

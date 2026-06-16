@@ -24,6 +24,7 @@ import "github.com/istr/strike/specs:lane"
 #TLSTrust:         lane.#TLSTrust
 #FingerprintTrust: lane.#FingerprintTrust
 #CABundleTrust:    lane.#CABundleTrust
+#EngineConnection: lane.#EngineConnection
 #KnownHostEntry:   lane.#KnownHostEntry
 
 // SignedArtifact is the provenance record for one artifact.
