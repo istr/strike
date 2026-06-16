@@ -347,6 +347,88 @@ Still open:
 - Whether direct access grant stays enabled after H2 for CI convenience, or
   is removed so the only path is WebAuthn. Operator choice.
 
+As-built (2026-06-17, ADR-040 2c spike): a `cosign attest` producer path was
+exercised against this harness to fix the base-SBOM referrer and bundle shape
+(findings in `ROADMAP-ADR-040.md`, "2c spike" subsection). cosign v3.1.1, as a
+producer, needs `--signing-config` plus `--trusted-root` (it dropped
+`--fulcio-url` / `--rekor-url` / `--timestamp-server-url`). No permanent harness
+target was added; the throwaway local registry and the producer/inspect commands
+were ad-hoc and are recorded here verbatim. Reproduction (from
+`test/sigstore-local`, `SSL_CERT_FILE=pki/caddy-root.crt` exported for cosign's
+TLS to the harness):
+
+```
+make up && make tsa-certchain
+TOKEN=$(make token 2>/dev/null | tr -d '[:space:]')        # trailing newline breaks the Authorization header
+
+# throwaway plaintext local registry (client is cosign on the host)
+podman run -d --name strike-2c-reg -p 5001:5000 docker.io/library/registry:3
+
+# throwaway base image, pushed by digest
+printf 'x\n' > hello.txt
+printf 'FROM scratch\nCOPY hello.txt /hello.txt\n' > Containerfile
+podman build -t localhost:5001/strike-base:spike -f Containerfile .
+podman push --tls-verify=false localhost:5001/strike-base:spike
+DBASE=$(skopeo inspect --tls-verify=false docker://localhost:5001/strike-base:spike | jq -r .Digest)
+
+# Fulcio served chain (fileca root is a single self-signed cert here)
+curl --cacert pki/caddy-root.crt -sf \
+  https://fulcio.127.0.0.1.sslip.io:5555/api/v2/trustBundle \
+  | jq -r '.chains[0].certificates[]' > fulcio-chain.pem
+
+cosign signing-config create \
+  --fulcio="url=https://fulcio.127.0.0.1.sslip.io:5555,api-version=1,start-time=2024-01-01T00:00:00Z,operator=strike-local" \
+  --rekor="url=https://rekor.127.0.0.1.sslip.io:3003,api-version=2,start-time=2024-01-01T00:00:00Z,operator=strike-local" \
+  --rekor-config=ANY \
+  --oidc-provider="url=https://keycloak.127.0.0.1.sslip.io:8443/realms/sigstore,api-version=1,start-time=2024-01-01T00:00:00Z,operator=strike-local" \
+  --tsa="url=https://tsa.127.0.0.1.sslip.io:3004/api/v1/timestamp,api-version=1,start-time=2024-01-01T00:00:00Z,operator=strike-local" \
+  --tsa-config=ANY --out sc.json
+
+# rekor url HOST must equal the v2 note origin (rekor.localhost); origin= derives the logId
+cosign trusted-root create \
+  --fulcio="url=https://fulcio.127.0.0.1.sslip.io:5555,certificate-chain=fulcio-chain.pem" \
+  --rekor="url=https://rekor.localhost,public-key=pki/rekor-ed25519-pub.pem,start-time=2024-01-01T00:00:00Z,origin=rekor.localhost" \
+  --ctfe="url=https://ct.127.0.0.1.sslip.io:6962/strike-ct,public-key=pki/ctfe-pub.pem,start-time=2024-01-01T00:00:00Z" \
+  --tsa="url=https://tsa.127.0.0.1.sslip.io:3004/api/v1/timestamp,certificate-chain=pki/tsa-certchain.pem" \
+  --out tr.json
+
+IMG="localhost:5001/strike-base@${DBASE}"
+cosign attest --predicate sbom.cdx.json  --type cyclonedx \
+  --signing-config sc.json --trusted-root tr.json --identity-token "$TOKEN" \
+  --allow-http-registry=true --allow-insecure-registry=true --yes "$IMG"
+cosign attest --predicate sbom.spdx.json --type spdxjson \
+  --signing-config sc.json --trusted-root tr.json --identity-token "$TOKEN" \
+  --allow-http-registry=true --allow-insecure-registry=true --yes "$IMG"
+
+# inspect: referrer manifests, the referrers fallback-tag index, the bundle layer
+cosign tree --allow-http-registry --allow-insecure-registry "$IMG"
+skopeo inspect --tls-verify=false --raw docker://localhost:5001/strike-base@<referrer-digest>
+skopeo inspect --tls-verify=false --raw \
+  docker://localhost:5001/strike-base:sha256-${DBASE#sha256:}     # referrers fallback index
+curl -s http://localhost:5001/v2/strike-base/blobs/<layer-digest> # the v0.3 bundle
+
+# self-verify (flag-clean; the harness has a CT log, so no --insecure-ignore-sct)
+cosign verify-attestation --trusted-root tr.json \
+  --certificate-identity tester@strike.localhost \
+  --certificate-oidc-issuer https://keycloak.127.0.0.1.sslip.io:8443/realms/sigstore \
+  --type cyclonedx --allow-http-registry --allow-insecure-registry "$IMG"
+
+# cleanup
+podman rm -f strike-2c-reg
+```
+
+Note: distribution `registry:3` did not serve the OCI referrers API at
+`/v2/<name>/referrers/<digest>` in this run (404); cosign wrote, and `cosign
+tree` / go-containerregistry read, the OCI fallback-tag index
+(`sha256-<digest>`). strike's `remote.Referrers` uses the same fallback, so
+base-SBOM discovery is unaffected.
+
+Candidate item: if base-SBOM live testing for 2c wants a reproducible path, a
+small harness target (sign a throwaway base image with `cosign attest` against
+the harness signing-config) would capture the commands above. Not built in this
+spike -- the harness shell corpus is already flagged debt, and 2c is authored
+from the recorded finding, not from a live target.
+
 ## References
 
 - ADR-040-control-plane-sbom-and-keyless-attestation.md -- the governing ADR

@@ -253,6 +253,129 @@ after instruction 5 (needs Fulcio/Rekor verification machinery). Base OS
 packages are still captured for catalogable bases because flattening includes
 the base layers and the cataloger reads their dpkg database directly.
 
+### 2c spike: base-SBOM referrer shape (cosign attest)
+
+Measurement spike (2026-06-17) against the live `test/sigstore-local` harness to
+fix the OCI referrer and sigstore-bundle shape that `cosign attest` produces for
+a base image, as the grounding for instruction 2c. Docs only; no production Go,
+CUE, golden, or dependency change. Reproduction commands are in
+`ROADMAP-sigstore-test-harness.md` (Open items, as-built note).
+
+**Tooling and producer invocation.** cosign v3.1.1 (go1.26.3, linux/amd64). As a
+producer, v3.1.x has dropped `--fulcio-url` / `--rekor-url` /
+`--timestamp-server-url`; the keyless path is `--signing-config` plus
+`--trusted-root`. The signing-config was built with `cosign signing-config
+create` pointing at the harness endpoints (Fulcio `api-version=1`; Rekor
+`api-version=2`, `rekor-config=ANY`; TSA `tsa-config=ANY`; the sslip.io OIDC
+provider). The trusted-root was built with `cosign trusted-root create` from the
+harness materials; for the Rekor v2 (tiled) log the `--rekor` spec needs both
+`origin=rekor.localhost` (which makes cosign derive the C2SP signed-note logId --
+it matched the golden `trusted_root.json` logId byte for byte) and a
+`url=https://rekor.localhost` whose host equals that origin (cosign builds the
+checkpoint note verifier from the tlog `baseUrl` host; an sslip.io URL there
+fails the post-sign inclusion self-check with "note has no verifiable
+signatures"). Two operational notes: `--use-signing-config` and
+`--signing-config` are mutually exclusive (omit the former); and the
+`--identity-token` value must be whitespace-stripped, since a trailing newline
+makes Fulcio reject the `Authorization` header. The attest call itself was, per
+type:
+
+```
+cosign attest --predicate <sbom.json> --type cyclonedx \
+  --signing-config <sc.json> --trusted-root <tr.json> \
+  --identity-token <token> \
+  --allow-http-registry=true --allow-insecure-registry=true --yes \
+  localhost:5001/strike-base-clean@<D_base>
+```
+
+SBOM content is a minimal valid CycloneDX 1.5 (and SPDX 2.3) JSON; the spike is
+about the wrapper, not the SBOM body. `--type spdxjson` is the form cosign
+accepts for the SPDX JSON document. `D_base` was
+`sha256:66950e31f2f64d23d8f148fd5ab6bf6c2b5fa8493e1cde7f0500765828cc7347` (a
+throwaway `FROM scratch` image pushed to a local registry).
+
+**Q1 (referrer discovery).** The referrers-index descriptor and the referrer
+manifest both carry `artifactType:
+application/vnd.dev.sigstore.bundle.v0.3+json` -- exactly strike's filter
+constant, so `remote.Referrers(D_base, WithFilter("artifactType",
+"application/vnd.dev.sigstore.bundle.v0.3+json"))` returns it (gate 1 PASS). The
+referrer manifest has exactly one layer, of media type
+`application/vnd.dev.sigstore.bundle.v0.3+json` (gate 3 PASS). But the manifest
+config media type is `application/vnd.oci.empty.v1+json` (the 2-byte `{}` empty
+config), not the bundle media type, so strike's authoritative re-check in
+`fetchOneBundle` (`man.Config.MediaType != SigstoreBundleMediaType`) is the
+first gate to fail and the referrer is silently skipped (gate 2 FAIL). cosign
+and strike both place the artifact type on the OCI 1.1 manifest, but by
+different conventions: strike's own producer leaves the manifest `artifactType`
+empty and carries the type in the config media type (the OCI fallback rule),
+whereas cosign sets an explicit manifest `artifactType` and an empty config.
+Both are discoverable by the artifactType filter; only strike's config-media-type
+re-check distinguishes them, and it rejects cosign.
+
+**Q2 (statement location).** The in-toto statement is the DSSE payload inside the
+sigstore bundle, and the bundle is the single layer payload -- not an
+annotation. cosign does not set the `dev.strike.statement` annotation; the
+referrer manifest annotations are `dev.sigstore.bundle.content: dsse-envelope`,
+`dev.sigstore.bundle.predicateType: <predicate URI>`, and
+`org.opencontainers.image.created`. strike's `fetchOneBundle` would therefore
+read an empty projection name (`man.Annotations["dev.strike.statement"]` is
+absent), though it never reaches that line because gate 2 already skipped the
+referrer.
+
+**Q3 (predicate type).** As cosign emits them: CycloneDX (`--type cyclonedx`) ->
+`https://cyclonedx.org/bom`; SPDX (`--type spdxjson`) -> `https://spdx.dev/Document`.
+The in-toto statement `_type` is `https://in-toto.io/Statement/v0.1` and the DSSE
+`payloadType` is `application/vnd.in-toto+json`.
+
+**Q4 (subject binding).** The statement's `subject[0].digest` is
+`{ "sha256": "66950e31f2f64d23d8f148fd5ab6bf6c2b5fa8493e1cde7f0500765828cc7347" }`,
+which equals `D_base` (the image manifest digest strike pulled), keyed by the
+algorithm name `sha256`. `subject[0].name` is the registry repository path
+(`localhost:5001/strike-base-clean`, no tag or digest). This is the binding 2c's
+subject check keys on: `subject[].digest.sha256 == D_base` hex.
+
+**Q5 (bundle shape vs `verify.Verify`).** The bundle's top-level JSON keys are
+`mediaType`, `verificationMaterial`, `dsseEnvelope`. `mediaType` is
+`application/vnd.dev.sigstore.bundle.v0.3+json`. The DSSE envelope has exactly
+one signature. `verificationMaterial` carries `certificate` (a single leaf, raw
+DER -- not an `x509CertificateChain`, not a bare public key), exactly one
+`tlogEntries` entry that has an `inclusionProof` (and no `inclusionPromise` --
+i.e. a real Rekor v2 inclusion proof, not a SET-only entry), and exactly one
+`timestampVerificationData.rfc3161Timestamps` token. That is precisely the
+strict shape `ParseBundle` requires. The only strike-specific envelope guard,
+the DSSE payload-type check (`deploy.InTotoPayloadType ==
+"application/vnd.in-toto+json"`), matches; `verify.Verify` does not inspect the
+statement `_type`, so the `v0.1` statement type is immaterial. cosign's own
+`verify-attestation` (against the image, with `--check-claims=true`, which also
+re-confirms the `D_base` subject binding) and `verify-blob-attestation` (on the
+extracted bundle layer, mirroring the `conformance` target) both succeed
+flag-clean -- no `--insecure-ignore-sct`, confirming the embedded SCT verifies
+against the CT log in the trusted root.
+
+**Go / no-go on reuse.**
+
+- `internal/registry` referrer fetch (`FetchStatementBundles` /
+  `fetchOneBundle`): NO-GO as-is. Discovery (gate 1, the artifactType filter)
+  and the single-layer check (gate 3) hold, but the config-media-type re-check
+  (gate 2) rejects every cosign referrer because cosign uses the OCI empty
+  config, and the `dev.strike.statement` annotation (gate 4) is absent. 2c needs
+  a dedicated base-SBOM fetch path: reuse the same `remote.Referrers` artifactType
+  filter for discovery, but drop or invert the config-media-type re-check, take
+  the single layer as the bundle, and read the predicate type from the layer's
+  in-toto statement (or the `dev.sigstore.bundle.predicateType` annotation)
+  rather than `dev.strike.statement`. This is a producer/consumer wrapper
+  convention mismatch, not a change to strike's trust model; strike's own fetch
+  stays purpose-built for strike's own producer.
+
+- `internal/verify.Verify`: GO as-is. The cosign bundle satisfies `ParseBundle`
+  and the whole fail-closed pipeline (RFC3161 trusted time, Fulcio leaf chain
+  and bound identity, DSSE signature, Rekor v2 inclusion) with no adapter; the
+  cosign self-verification confirms it end to end. 2c reuses `verify.Verify`
+  verbatim and adds only the base-SBOM-specific checks around it: the
+  `subject[].digest.sha256 == D_base` binding (Q4) and the identity match against
+  the lane's `base_sbom_signers` entry (Fulcio cert OIDC issuer and SAN), which
+  `verify.New(tm, identity, issuer)` already enforces via the leaf-identity layer.
+
 ### 3. Statement projection and keyless signing (D2 + D3)
 
 **3a (done).** Project the internal `#Attestation` into the three output
