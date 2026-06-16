@@ -169,7 +169,7 @@ IAN = Integrity, Authenticity, Non-Repudiation from the CIAAN model.
 |------------------------------|-----------|--------------|-----------------|---------------|
 | Engine returns wrong digest  | preserved | preserved    | preserved       | Controller re-verifies via go-containerregistry |
 | Engine injects layer         | broken    | broken       | preserved [R]   | Reproducibility check; Rekor log mismatch |
-| Signing key exfiltrated      | preserved | broken       | broken          | Rekor certificate transparency; key rotation |
+| Signing key exfiltrated      | preserved | broken       | broken          | No persistent key (keyless, ADR-043); Rekor CT logs every signature [K] |
 | OIDC token intercepted       | preserved | broken       | broken          | Short token lifetime (seconds); Fulcio CT |
 | Socket hijacked (Unix)       | broken    | broken       | broken          | Filesystem monitoring; audit log gaps |
 | Socket hijacked (TCP)        | preserved | preserved    | preserved       | TLS prevents connection; mTLS when enabled |
@@ -179,6 +179,13 @@ IAN = Integrity, Authenticity, Non-Repudiation from the CIAAN model.
 [R] Rekor transparency log entry survives engine compromise.
 [S] Go checksum database provides post-incident detection.
 [G] Git history provides attribution.
+[K] ADR-043 retired keyed signing: the ECDSA P-256 signing key is
+    ephemeral, generated per signature and discarded, so there is no
+    persistent key to exfiltrate and "key rotation" does not apply.
+    Authenticity and non-repudiation break only if an attacker also
+    obtains the OIDC identity that authorizes Fulcio issuance (see "OIDC
+    token intercepted"); any forged signature is itself recorded in the
+    Rekor transparency log.
 
 ## Non-repudiation chain
 
