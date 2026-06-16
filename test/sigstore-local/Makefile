@@ -5,7 +5,7 @@ ISSUER    := https://keycloak.127.0.0.1.sslip.io:8443/realms/sigstore
 DISCOVERY := $(ISSUER)/.well-known/openid-configuration
 CADDY_ROOT := pki/caddy-root.crt
 
-.PHONY: keys up down clean caddy-root check-issuer preflight token tsa-certchain rekor-pubkey ctlog-pubkey
+.PHONY: keys up down clean caddy-root check-issuer preflight token tsa-certchain rekor-pubkey ctlog-pubkey conformance
 
 keys: pki/rekor-ed25519.pem pki/rekor-ed25519-pub.pem pki/fulcio-root.crt pki/fulcio-root.key pki/ctfe.key pki/ctfe-pub.pem ## generate signing keys: rekor ed25519, the Fulcio fileca root, and the CT log (ctfe) key
 
@@ -111,3 +111,31 @@ pki/ctfe-pub.pem: pki/ctfe.key
 	openssl ec -in $< -pubout -out $@
 
 ctlog-pubkey: pki/ctfe-pub.pem ## export the CT log (ctfe) public key (for trust-root assembly)
+
+conformance: ## cosign independent-verify of the golden bundles, offline (V gates exit; E/informational reported)
+	@echo "== conformance: cosign independent verification of golden bundles (no insecure flags) =="
+	@if cosign verify-blob-attestation \
+	  --bundle ../../internal/verify/testdata/golden/sealed.sigstore.json \
+	  --trusted-root ../../internal/verify/testdata/golden/trusted_root.json \
+	  --certificate-identity tester@strike.localhost \
+	  --certificate-oidc-issuer $(ISSUER) \
+	  --type https://slsa.dev/provenance/v1 \
+	  --check-claims=false >/dev/null 2>&1; then \
+	    echo "  OK   sealed (V)"; \
+          else \
+	    { echo "  FAIL sealed (V) -- conformance gate failed" >&2; exit 1; }; \
+          fi
+	@for e in "engine-context https://istr.dev/strike/predicates/engine-context/v1" "informational https://istr.dev/strike/predicates/informational/v1"; do \
+	  set -- $$e; \
+	  if cosign verify-blob-attestation \
+	      --bundle ../../internal/verify/testdata/golden/$$1.sigstore.json \
+	      --trusted-root ../../internal/verify/testdata/golden/trusted_root.json \
+	      --certificate-identity tester@strike.localhost \
+	      --certificate-oidc-issuer $(ISSUER) \
+	      --type $$2 --check-claims=false >/dev/null 2>&1; then \
+	    echo "  OK   $$1 (reported, non-gating)"; \
+	  else \
+	    echo "  WARN $$1 verification failed (reported, non-gating)"; \
+	  fi; \
+	done
+	@echo "conformance OK (V verified)"

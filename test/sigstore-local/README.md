@@ -179,8 +179,22 @@ and the per-signing leaf still rotate.
 2. `aud` == client-id -- token audience must equal `sigstore`.
 3. `email` + `email_verified: true` -- present via the `email` scope and the
    verified test user.
-4. Client versions -- cosign >= v3.0.1 or >= v2.6.0 for Rekor v2 (used in the
-   next instruction, not here).
+4. Client versions -- cosign >= v3.0.1 or >= v2.6.0 for Rekor v2 (used by
+   `make conformance`; see "Conformance" below).
+
+## Conformance (independent cosign verification)
+
+`make conformance` verifies the committed golden bundles
+(`internal/verify/testdata/golden/`) with cosign as an independent verifier,
+fully offline -- no harness bring-up. It is the regression baseline for the
+verification arcs: if strike's emitted bundles stop verifying under independent
+tooling, this fails. cosign verifies the embedded SCT against the CT log key in
+the trusted root, so no insecure flag is needed.
+
+All three statement layers (sealed, engine-context, informational) are verified
+and reported, but only the sealed (V) layer gates the exit; the engine-context
+and informational layers never block, mirroring strike's own trust model.
+Requires cosign (>= v3.0.1 or >= v2.6.0 for Rekor v2).
 
 ## Downstream coupling (not implemented here)
 
