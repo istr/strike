@@ -13,7 +13,7 @@ document provides a snapshot of the status of all active roadmaps.
 | [ROADMAP-ADR-040](ROADMAP-ADR-040.md) | SUBSTANTIALLY COMPLETE | Instructions 1--4 done (OIDC schema, SBOM, keyless signing, OCI referrers, control-plane push). Instruction 5a (verify core) done; 5b (CLI exposure) landed via ADR-041. |
 | [ROADMAP-ADR-041](ROADMAP-ADR-041.md) | SUBSTANTIALLY COMPLETE | Foundation plus instructions 1--3 (CLI subcommand, lane-policy integration, predicate validation and V/E gating) landed. Genuine residual: trust-root auto-import from OCI referrers (currently fail-closed). |
 | [ROADMAP-sigstore-test-harness](ROADMAP-sigstore-test-harness.md) | H1 DONE, H2 PENDING | Stack-up and trust-anchor export complete. WebAuthn/FIDO2 (H2) remains. |
-| [ROADMAP-cue-spec-review](ROADMAP-cue-spec-review.md) | COMPLETE | Post-formalization D-arcs all landed: A, D-A, D-C, D-D (formalization + field-add as the engine-connection union, caTrustType), D-E, C-5, B-1, C-3, D-B+D-G, D-F B-1..B-9. |
+| ROADMAP-cue-spec-review (retired) | RETIRED | All review arcs landed (A, D-A, D-C, D-D, D-E, C-5, B-1, C-3, D-B+D-G, D-F B-1..B-9); the deferred backlog moved into the execution order below. History in git. |
 
 ## Narrative summary
 
@@ -110,10 +110,11 @@ live keyless chain and provides the local trust roots for verification.
 - **H2 (WebAuthn/FIDO2):** Open. Identity hardware-gated at the IdP;
   unblocks the real identity-gated producer path.
 
-### CUE spec review (post-formalization D-arcs, OPEN)
+### CUE spec review (post-formalization D-arcs, COMPLETE -- roadmap retired)
 
-Tracked in [ROADMAP-cue-spec-review](ROADMAP-cue-spec-review.md). The arcs
-derived from `RETROSPECTIVE-cue-spec-review.md` are partly landed at `8721d0ff`:
+Tracked in the now-retired ROADMAP-cue-spec-review (history in git; its deferred
+backlog migrated into the execution order below). The arcs derived from
+`RETROSPECTIVE-cue-spec-review.md` all landed:
 cluster A (docs), D-A (keyed signing + Rekor v1 removal, ADR-043), D-C
 (`engineMetadata` -> informational), the D-D trust-boundary formalization, D-E
 (Bundle/DSSE in CUE), C-5, B-1, C-3, and D-B+D-G (canonical-time correction to
@@ -190,40 +191,83 @@ and parallelizable.
   `caTrustType`); the cue-spec-review arcs are complete and Phase 3 is
   unblocked (`8694653`). (ROADMAP-cue-spec-review)
 
-**Phase 2 -- verification completeness.**
-- Base-SBOM signature verification (2c), unblocked by the verify core.
-  (ROADMAP-ADR-040)
-- cosign independent-verify conformance check: the "offline-verifiable without
-  contacting strike" promise under independent tooling.
-  (ROADMAP-sigstore-test-harness)
-- Trust-root auto-import from OCI referrers, lifting the current fail-closed
-  posture. (ROADMAP-ADR-041)
-- H2 WebAuthn/FIDO2: schedule when the hardware-gated identity path is needed.
-  (ROADMAP-sigstore-test-harness)
+The completed contract-hygiene work is Phase 1 above. All remaining open work,
+across every roadmap, is the single ratified sequence below (risk / effort /
+dependency-depth weighed). Steps 1-2 are near-zero-risk fill that can land
+anytime; 3-7 are the verification and independent-schema arcs; 8-11 are the
+engine/transport cluster on the now-landed D-D foundation; the rest is parked.
 
-**Phase 3 -- engine/transport hardening (gated on the Phase 1 D-D field-add).**
-- Engine hardening / transport-unification, flipping `hardenedByDeclaration` to
-  true. (ROADMAP-cue-spec-review, deferred set)
-- ADR-038 item 8: rehost the DoT resolver and TLS mediator onto the front,
-  together with DNS centralization (same surface).
-  (ROADMAP-ADR-038; DNS centralization in ROADMAP-cue-spec-review)
-- ADR-038 item 9: SSH-mediated per-connection observed records (collection side
-  already landed). (ROADMAP-ADR-038)
+**Active execution order (ratified).**
 
-**Phase 4 -- horizon (deferred, blocked, or organic).**
-- Full TLS single-port demux: blocked on L3 source-IP preservation, which pasta
-  splice-only cannot provide; remote-engine / routed-netns horizon.
-  (ROADMAP-cue-spec-review, deferred set)
-- Upstream osv-scalibr PR: organic ecosystem work, no longer needed for strike.
-  (ROADMAP-cue-spec-review, deferred set)
-- The ARCHITECTURE.md threat-row judgment and the `SignedArtifact` rename.
-  (ROADMAP-cue-spec-review, deferred set)
+1. ARCHITECTURE.md threat-row judgment ("Signing key exfiltrated", ~l.172) --
+   docs-only judgment surfaced during the D-D arc; trivial, zero risk. Fill.
+2. `SignedArtifact` rename -- post-keyless the name is a digest+SBOM misnomer;
+   a pure Go rename, no wire change. Low risk. Fill.
+3. cosign independent-verify conformance -- validates the "offline-verifiable
+   without contacting strike" promise under independent tooling. Test-only, no
+   production risk; lands first of the verification work as a regression
+   baseline for what follows. (ROADMAP-sigstore-test-harness)
+4. Base-SBOM signature verification (2c) -- completes the SBOM verification
+   feature; the verify core is done, so a shallow dependency. (ROADMAP-ADR-040)
+5. Trust-root auto-import from OCI referrers -- lifts the current fail-closed
+   posture; security-sensitive, so it follows 3-4, when the path is exercised
+   and the cosign baseline can catch regressions. (ROADMAP-ADR-041)
+6. Artifact / secret map-key id normalization -- B-4 normalized step / output /
+   capture ids, but `artifacts: { [Name=string]: ... }` and `secrets:` map keys
+   are still plain `Name`. Retype as `[ID=#Identifier]`: a wire change (golden-
+   affecting, cold-harness regen), otherwise low risk. Independent of the engine
+   cluster. (migrated from cue-spec-review)
+7. `imageFromStep` rebuild -- `#Step.imageFrom` (`#ImageFrom {step, output}`)
+   mis-models multi-stage base images. Correct model: a step's base image is
+   `image` (digest-pinned external) XOR a previous step's produced image,
+   referenced by step id alone. Rebuild as `imageFromStep: #Identifier` (drop
+   `output`), keep the `image` / `imageFrom` / `pack` / `deploy` XOR (enforced
+   in `parse.go`), and have the resolver pull the step's canonical engine image
+   `localhost/strike/<lane-id>/<step-id>`. Independent; not golden-affecting
+   (the golden lane is single-stage). Settle the schema before the engine
+   cluster. (migrated from cue-spec-review)
+8. Observed-TLS identity consolidation -- ENGINE-CLUSTER LEAD. The observed TLS
+   server identity appears in three diverging shapes: `#ObservedTLS` (peers;
+   type + fingerprint), `#ResolverRecord` (resolver; fingerprint + tlsVersion /
+   cipherSuite / serverName), and the engine union's `#EngineServerTLS`
+   (fingerprint + subject + issuer + caTrustType). Decide here whether to factor
+   one shared observed-TLS-server-identity type in transport.cue ("Meaning is
+   single-sourced") or keep them role-distinct, so the hardening matching (10)
+   is written once against a settled shape. Golden-affecting (resolver sealed).
+   (migrated from cue-spec-review)
+9. ADR-038 item 9: SSH-mediated per-connection observed records -- the
+   collection side (`collectObservedPeers` / `ingestRecords`) already landed;
+   the SSH mediator must emit per-connection records (host-key fingerprint,
+   negotiated algorithms, allowlisted command) into the capsule records, as the
+   TLS and DoT mediators already do. Self-contained; completes observed-peer
+   coverage. Parallelizable with 8. (ROADMAP-ADR-038)
+10. Engine hardening / transport-unification -- flips the engine
+    `hardenedByDeclaration` to true. DEEP: there is no declared engine identity
+    in the lane schema yet, so this creates the declaration side plus the
+    matching of the observed identity (sealed by D-D) against the declared one.
+    Highest risk / effort / dependency-depth; lands on the 8 + 9 foundation.
+    (ROADMAP-ADR-038; detail migrated from cue-spec-review)
+11. ADR-038 item 8: rehost the DoT resolver and TLS mediator onto the front,
+    with DNS centralization (same surface) -- independent of the trust flip but
+    the same front surface; high effort. Last substantive arc; can run in
+    parallel under a separate operator since both touch the front.
+    (ROADMAP-ADR-038; DNS centralization migrated from cue-spec-review)
+
+**Parked -- blocked, organic, or schedule-when-needed.**
+- Full TLS single-port demux -- blocked on L3 source-IP preservation, which
+  pasta splice-only cannot provide; remote-engine / routed-netns horizon.
+  (migrated from cue-spec-review)
+- Upstream osv-scalibr PR -- organic ecosystem work, no longer needed for
+  strike; decouples disk-image extractors from the filesystem extractor import
+  path. (migrated from cue-spec-review)
+- H2 WebAuthn/FIDO2 -- schedule when the hardware-gated identity path is needed.
+  (ROADMAP-sigstore-test-harness)
 
 ## References
 
 - [ADR-041 Decision Record](ADR-041-lane-as-verification-policy.md)
-- [ROADMAP-ADR-038](ROADMAP-ADR-038.md) -- Complete
+- [ROADMAP-ADR-038](ROADMAP-ADR-038.md) -- PARTIAL (items 8-9 remain)
 - [ROADMAP-ADR-040](ROADMAP-ADR-040.md) -- Substantially complete
 - [ROADMAP-ADR-041](ROADMAP-ADR-041.md) -- Substantially complete
 - [ROADMAP-sigstore-test-harness](ROADMAP-sigstore-test-harness.md) -- H1 done, H2 pending
-- [ROADMAP-cue-spec-review](ROADMAP-cue-spec-review.md) -- Complete (all D-arcs landed)
+- ROADMAP-cue-spec-review -- RETIRED (all arcs landed; deferred backlog migrated into the execution order; history in git)
