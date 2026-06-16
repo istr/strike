@@ -199,8 +199,9 @@ engine/transport cluster on the now-landed D-D foundation; the rest is parked.
 
 **Active execution order (ratified).**
 
-1. ARCHITECTURE.md threat-row judgment ("Signing key exfiltrated", ~l.172) --
-   docs-only judgment surfaced during the D-D arc; trivial, zero risk. Fill.
+1. ARCHITECTURE.md threat-row judgment (LANDED) -- "Signing key exfiltrated"
+   corrected for keyless model (ADR-043); no persistent key so key rotation
+   does not apply; Rekor CT logs every signature. (`560a60f`)
 2. `SignedArtifact` rename -- post-keyless the name is a digest+SBOM misnomer;
    a pure Go rename, no wire change. Low risk. Fill.
 3. cosign independent-verify conformance -- validates the "offline-verifiable
