@@ -2,6 +2,7 @@ package deploy
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
@@ -39,9 +40,10 @@ func TestVerifyGoldenGenerate(t *testing.T) {
 	caddyRoot := filepath.Join(harness, "pki", "caddy-root.crt")
 	rekorPub := filepath.Join(harness, "pki", "rekor-ed25519-pub.pem")
 	tsaChain := filepath.Join(harness, "pki", "tsa-certchain.pem")
-	for _, f := range []string{caddyRoot, rekorPub, tsaChain} {
+	ctfePub := filepath.Join(harness, "pki", "ctfe-pub.pem")
+	for _, f := range []string{caddyRoot, rekorPub, tsaChain, ctfePub} {
 		if _, statErr := os.Stat(f); statErr != nil {
-			t.Fatalf("harness material missing (run make up / rekor-pubkey / tsa-certchain): %v", statErr)
+			t.Fatalf("harness material missing (run make up / rekor-pubkey / tsa-certchain / ctlog-pubkey): %v", statErr)
 		}
 	}
 
@@ -100,7 +102,7 @@ func TestVerifyGoldenGenerate(t *testing.T) {
 		}
 	}
 	if err := os.WriteFile(filepath.Join(goldenDir, "trusted_root.json"),
-		goldenTrustedRoot(ctx, t, eps.Fulcio, rekorPub, tsaChain), 0o600); err != nil {
+		goldenTrustedRoot(ctx, t, eps.Fulcio, rekorPub, tsaChain, ctfePub), 0o600); err != nil {
 		t.Fatalf("write trusted_root.json: %v", err)
 	}
 	t.Logf("golden fixtures written to %s", goldenDir)
@@ -143,7 +145,7 @@ func syntheticGoldenAttestation(laneDigest string) *Attestation {
 // public key, and the fetched TSA certificate chain -- but serialized as a
 // protojson trustrootpb.TrustedRoot instead of sigstore-go's root.TrustedRoot.
 // The last certificate of each chain is the trust anchor.
-func goldenTrustedRoot(ctx context.Context, t *testing.T, fulcioEp transport.HTTPSEndpoint, rekorPubPath, tsaChainPath string) []byte {
+func goldenTrustedRoot(ctx context.Context, t *testing.T, fulcioEp transport.HTTPSEndpoint, rekorPubPath, tsaChainPath, ctfePubPath string) []byte {
 	t.Helper()
 
 	fulcioCerts := fetchFulcioChain(ctx, t, fulcioEp)
@@ -186,6 +188,19 @@ func goldenTrustedRoot(ctx context.Context, t *testing.T, fulcioEp transport.HTT
 	}
 	tsaRoot := tsaCerts[len(tsaCerts)-1]
 
+	ctfePEM, err := os.ReadFile(filepath.Clean(ctfePubPath))
+	if err != nil {
+		t.Fatalf("read ctfe public key: %v", err)
+	}
+	ctfeBlock, _ := pem.Decode(ctfePEM)
+	if ctfeBlock == nil {
+		t.Fatalf("ctfe public key is not PEM")
+	}
+	// RFC6962 CT log id is sha256(DER SubjectPublicKeyInfo), i.e. the PEM body
+	// of an openssl `ec -pubout` PUBLIC KEY block. This differs from the Rekor
+	// v2 C2SP signed-note key id computed by sha256LogID above.
+	ctLogID := sha256.Sum256(ctfeBlock.Bytes)
+
 	tr := &trustrootpb.TrustedRoot{
 		MediaType: "application/vnd.dev.sigstore.trustedroot+json;version=0.1",
 		CertificateAuthorities: []*trustrootpb.CertificateAuthority{{
@@ -218,6 +233,20 @@ func goldenTrustedRoot(ctx context.Context, t *testing.T, fulcioEp transport.HTT
 				},
 			},
 			LogId: &protocommon.LogId{KeyId: logID},
+		}},
+		Ctlogs: []*trustrootpb.TransparencyLogInstance{{
+			BaseUrl:       "https://ct.127.0.0.1.sslip.io:6962/strike-ct",
+			HashAlgorithm: protocommon.HashAlgorithm_SHA2_256,
+			PublicKey: &protocommon.PublicKey{
+				RawBytes:   ctfeBlock.Bytes,
+				KeyDetails: protocommon.PublicKeyDetails_PKIX_ECDSA_P256_SHA_256,
+				// The ctfe key has no certificate validity of its own; the
+				// Fulcio root NotBefore is a safe lower bound.
+				ValidFor: &protocommon.TimeRange{
+					Start: timestamppb.New(fulcioRoot.NotBefore),
+				},
+			},
+			LogId: &protocommon.LogId{KeyId: ctLogID[:]},
 		}},
 	}
 	out, err := protojson.Marshal(tr)

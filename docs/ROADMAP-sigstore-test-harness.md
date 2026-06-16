@@ -60,6 +60,7 @@ The regeneration flow (`TestVerifyGoldenGenerate`, the env-gated generator in
 make -C test/sigstore-local up
 make -C test/sigstore-local rekor-pubkey
 make -C test/sigstore-local tsa-certchain
+make -C test/sigstore-local ctlog-pubkey
 SIGSTORE_ID_TOKEN="$(make -s -C test/sigstore-local token)" \
   go test ./internal/deploy/ -run '^TestVerifyGoldenGenerate$' -count=1
 make -C test/sigstore-local down
@@ -69,9 +70,11 @@ make -C test/sigstore-local down
 (`pki/caddy-root.crt`); `make rekor-pubkey` exports the Rekor log public key
 (`pki/rekor-ed25519-pub.pem`) for trust-root assembly; `make tsa-certchain`
 re-fetches the TSA chain (`pki/tsa-certchain.pem`), which must be re-fetched each
-startup because the TSA mints a fresh signing cert per boot. The generator reads
-those three harness materials and rewrites all four goldens (`sealed`, `engine-context`,
-`informational`.sigstore.json plus `trusted_root.json`). The resulting golden
+startup because the TSA mints a fresh signing cert per boot; `make ctlog-pubkey`
+exports the CT log public key (`pki/ctfe-pub.pem`) for the trusted-root ctlogs
+entry. The generator reads those four harness materials and rewrites all four
+goldens (`sealed`, `engine-context`, `informational`.sigstore.json plus
+`trusted_root.json`). The resulting golden
 diff is large and non-deterministic -- fresh Fulcio / Rekor / TSA material every
 run -- and that is expected: the reproducibility invariant does not apply to live
 sigstore fixtures. A regenerated set must then pass `make test` fully offline (no
@@ -280,6 +283,13 @@ Sequence:
 Deferred follow-on (separate ratification, production verify-path): whether
 strike's own verify should enforce the embedded SCT for posture symmetry with
 cosign is its own item, sequenced after this arc.
+
+Deferred follow-on (full cosign compatibility): liveTrustRoot (the trust root
+TestKeylessLive assembles) does not yet carry the ctlogs entry -- only the golden
+generator does, so strike's own verify stays SCT-ignoring there. Pulling the
+ctlogs entry into liveTrustRoot is the remaining step toward full cosign
+compatibility of the live path; deferred until after the golden / conformance
+arc (3b / 3c).
 
 Depends on: trusted-root-and-smoke. Owns the detail for the cross-roadmap CT arc
 referenced from ROADMAP-STATUS step 3.
