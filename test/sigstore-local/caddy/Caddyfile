@@ -22,3 +22,8 @@ tsa.127.0.0.1.sslip.io:3004 {
 	tls internal
 	reverse_proxy tsa:3000
 }
+
+ct.127.0.0.1.sslip.io:6962 {
+	tls internal
+	reverse_proxy tesseract:6962
+}

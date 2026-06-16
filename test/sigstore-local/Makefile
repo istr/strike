@@ -30,9 +30,9 @@ up: keys ## bring the stack up, export the caddy root, wait for readiness
 	  curl --cacert $(CADDY_ROOT) -sf https://rekor.127.0.0.1.sslip.io:3003/healthz 2>/dev/null | grep -q SERVING && { echo "rekor ready"; exit 0; }; \
 	  sleep 2; \
 	done; echo "rekor not ready in time" >&2; exit 1
-	@echo "waiting for tesseract /healthz (in-network)..."
+	@echo "waiting for tesseract /healthz (TLS validated against caddy root)..."
 	@for i in $$(seq 1 30); do \
-	  $(COMPOSE) --profile tools run --rm probe -sf http://tesseract:6962/healthz >/dev/null 2>&1 && { echo "tesseract ready"; exit 0; }; \
+	  curl --cacert $(CADDY_ROOT) -sf https://ct.127.0.0.1.sslip.io:6962/healthz >/dev/null 2>&1 && { echo "tesseract ready"; exit 0; }; \
 	  sleep 2; \
 	done; echo "tesseract not ready in time" >&2; exit 1
 	@echo "stack ready"

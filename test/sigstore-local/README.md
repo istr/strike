@@ -137,13 +137,15 @@ separate nginx for it.
 
 ## Certificate transparency (CT) log
 
-Fulcio runs against a persistent `fileca` root and submits each issuance to an
-in-network TesseraCT log (`tesseract`, Tessera POSIX backend, no Trillian) at
-`http://tesseract:6962/strike-ct`. The log embeds an SCT in the issued leaf, so
-the leaf is self-describing: an independent verifier checks the SCT offline
-against the CT log public key (`make ctlog-pubkey` exports `pki/ctfe-pub.pem`)
-in the trusted root, and never dials the log. The CT log is therefore in-network
-only -- it has no host port and no Caddy route.
+Fulcio runs against a persistent `fileca` root and submits each issuance to a
+TesseraCT log (`tesseract`, Tessera POSIX backend, no Trillian) fronted by Caddy
+TLS at `https://ct.127.0.0.1.sslip.io:6962/strike-ct`, validated against the
+Caddy root like every other endpoint -- there is no plaintext hop. The log
+embeds an SCT in the issued leaf, so the leaf is self-describing: an independent
+verifier checks the SCT offline against the CT log public key (`make
+ctlog-pubkey` exports `pki/ctfe-pub.pem`) in the trusted root, and never dials
+the log. Fulcio reaches the log in-network through the Caddy alias; the port is
+published so `make up` can poll its health.
 
 `fileca` (not `ephemeralca`) is required: the CT log pins its accepted roots
 (`--roots_pem_file`), so the issuing CA must be fixed before the log starts. A

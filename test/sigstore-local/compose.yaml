@@ -26,11 +26,15 @@ services:
           # In-network resolution of the canonical issuer host overrides
           # sslip.io; must equal the issuer hostname character for character.
           - keycloak.127.0.0.1.sslip.io
+          # Fulcio submits issuance to the CT log in-network over TLS; the alias
+          # routes the CT host to Caddy, which fronts tesseract.
+          - ct.127.0.0.1.sslip.io
     ports:
       - "8443:8443"
       - "5555:5555"
       - "3003:3003"
       - "3004:3004"
+      - "6962:6962"
     depends_on:
       keycloak:
         condition: service_started
@@ -65,7 +69,7 @@ services:
       - --fileca-cert=/pki/fulcio-root.crt
       - --fileca-key=/pki/fulcio-root.key
       - --fileca-key-passwd=fulcio
-      - --ct-log-url=http://tesseract:6962/strike-ct
+      - --ct-log-url=https://ct.127.0.0.1.sslip.io:6962/strike-ct
       - --config-path=/etc/fulcio/config.yaml
     volumes:
       - ./fulcio/config.yaml:/etc/fulcio/config.yaml:ro
