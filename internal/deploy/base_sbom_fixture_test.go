@@ -30,10 +30,10 @@ func readFixtureMeta(t *testing.T) fixtureMeta {
 	return m
 }
 
-// TestBaseSBOMFixtureVerifiesUnderStrike confirms strike's own verify.Verify
+// TestBaseSBOMFixtureVerifiesUnderStrike confirms strike's own verify.New(...).Verify
 // accepts the recorded cosign attest CycloneDX bundle end to end and that the
 // signed payload binds to the recorded base digest. This is the empirical
-// "verify.Verify: GO" confirmation the 2c spike inferred but did not run.
+// "verify.New(...).Verify: GO" confirmation the 2c spike inferred but did not run.
 func TestBaseSBOMFixtureVerifiesUnderStrike(t *testing.T) {
 	meta := readFixtureMeta(t)
 	tr, err := os.ReadFile("testdata/base-sbom/trusted_root.json")

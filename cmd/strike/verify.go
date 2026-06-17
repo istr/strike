@@ -171,7 +171,7 @@ func validatePredicate(layer string, statement []byte, laneDigest string) error 
 
 // runVerify resolves the verification policy (UC1 explicit, or UC2 from the
 // lane), reads the attestation bundles attached to the subject, and verifies
-// each layer: the keyless chain via verify.Verify, the subject-artifact check,
+// each layer: the keyless chain via verify.New(...).Verify, the subject-artifact check,
 // and per-layer predicate validation. The exit follows the ADR-037 V/E trust
 // model: a Layer-V (sealed) failure or absence is a hard fail with no opt-out;
 // a Layer-E (engine-context) failure or absence is a hard fail unless

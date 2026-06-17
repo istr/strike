@@ -37,7 +37,7 @@ func TestProjectStatements(t *testing.T) {
 	}
 	oidc := lane.OIDCConfig{Issuer: "https://idp.example.com", Identity: "deployer@example.com"}
 
-	slsa, engineCtx, info, err := deploy.ProjectStatements(att, oidc)
+	slsa, engineCtx, info, err := deploy.ProjectStatements(att, oidc, nil)
 	if err != nil {
 		t.Fatalf("projectStatements: %v", err)
 	}

@@ -75,7 +75,7 @@ func TestVerifyGoldenGenerate(t *testing.T) {
 		t.Fatalf("parse golden lane: %v", err)
 	}
 	att := syntheticGoldenAttestation(laneDigest.String())
-	sealed, engineCtx, info, err := projectStatements(att, goldenLane.OIDC)
+	sealed, engineCtx, info, err := projectStatements(att, goldenLane.OIDC, nil)
 	if err != nil {
 		t.Fatalf("projectStatements: %v", err)
 	}

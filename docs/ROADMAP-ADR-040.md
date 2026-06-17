@@ -376,6 +376,16 @@ against the CT log in the trusted root.
   the lane's `base_sbom_signers` entry (Fulcio cert OIDC issuer and SAN), which
   `verify.New(tm, identity, issuer)` already enforces via the leaf-identity layer.
 
+**Deferred live e2e (2c).** Instruction 2c-ii-b lands the deploy-side wiring with
+hermetic coverage that drives `verifyOneBaseSBOM` against the committed cosign
+fixture -- happy path, subject binding, and signer match -- so the trust contract
+is exercised without a registry or DAG. One live end-to-end run against the
+`test/sigstore-local` harness remains deferred. It would cover, together, two
+things the hermetic tests cannot: (a) cosign-faithful empty-config referrer
+discoverability, which the in-memory test registry cannot reproduce (per 2c-i),
+and (b) the full fetch -> verify -> resolvedDependencies path end to end, from
+`FetchBaseSBOMReferrers` through `verifyBaseSBOMs` to the sealed SLSA provenance.
+
 ### 3. Statement projection and keyless signing (D2 + D3)
 
 **3a (done).** Project the internal `#Attestation` into the three output

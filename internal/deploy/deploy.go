@@ -295,23 +295,30 @@ func captureKey(stepID, captureID string) string {
 
 // Deployer executes deploy steps and produces attestations.
 type Deployer struct {
-	Engine         container.Engine
-	ArtifactRefs   map[string]string // pre-resolved: artifact name -> "step.output" state ref
-	EngineID       *container.EngineIdentity
-	ResolverID     *transport.ConnectionIdentity // DoT resolver identity from the pre-flight probe; nil if unavailable
-	DAG            *lane.DAG
-	OIDC           lane.OIDCConfig // lane-declared signing identity (ADR-040 D5); carried into the sealed provenance externalParameters
-	CA             *transport.EphemeralCA
-	UpstreamLook   capsule.UpstreamLookupFunc
-	StepPorts      map[string]capsule.HostPorts // unit name -> host ports
-	NetworkRecords map[string]capsule.Records   // run/build step records, keyed by step name (injected by cmd/strike)
-	LaneID         string
-	LaneDigest     string                                                                                      // raw sha256 over the lane file bytes; sealed as lane_digest
-	StepID         string                                                                                      // deploy step name; method-container port key and capture-key prefix
-	CAVolume       string                                                                                      // lane-wide CA volume name; mounted r/o at /etc/ssl/certs
-	Keyless        lane.Keyless                                                                                // lane-declared keyless config (ADR-040 D2, ADR-041); .Endpoints dials Fulcio, Rekor v2, TSA; .TrustRoot/.TrustRootRef carry the verify anchor
-	produceBundles func(ctx context.Context, eps lane.KeylessEndpoints, statements [][]byte) ([][]byte, error) // test seam; nil selects the real keyless chain
-	ownRecords     []capsule.Records                                                                           // method + capture container records, accumulated during Execute
+	Engine          container.Engine
+	ArtifactRefs    map[string]string // pre-resolved: artifact name -> "step.output" state ref
+	EngineID        *container.EngineIdentity
+	ResolverID      *transport.ConnectionIdentity // DoT resolver identity from the pre-flight probe; nil if unavailable
+	DAG             *lane.DAG
+	OIDC            lane.OIDCConfig // lane-declared signing identity (ADR-040 D5); carried into the sealed provenance externalParameters
+	CA              *transport.EphemeralCA
+	UpstreamLook    capsule.UpstreamLookupFunc
+	StepPorts       map[string]capsule.HostPorts // unit name -> host ports
+	NetworkRecords  map[string]capsule.Records   // run/build step records, keyed by step name (injected by cmd/strike)
+	LaneID          string
+	LaneDigest      string                                                                                      // raw sha256 over the lane file bytes; sealed as lane_digest
+	StepID          string                                                                                      // deploy step name; method-container port key and capture-key prefix
+	CAVolume        string                                                                                      // lane-wide CA volume name; mounted r/o at /etc/ssl/certs
+	Keyless         lane.Keyless                                                                                // lane-declared keyless config (ADR-040 D2, ADR-041); .Endpoints dials Fulcio, Rekor v2, TSA; .TrustRoot/.TrustRootRef carry the verify anchor
+	BaseSBOMSigners []lane.SBOMSigner                                                                           // ADR-040 2c: declared base-SBOM signers; lane build requires a Keyless trust root when non-empty
+	produceBundles  func(ctx context.Context, eps lane.KeylessEndpoints, statements [][]byte) ([][]byte, error) // test seam; nil selects the real keyless chain
+	// ResolveBaseSBOMVerify resolves the lane trust root and returns a base-SBOM
+	// bundle verifier (ADR-040 2c). It is the injection seam for internal/verify:
+	// deploy orchestrates base-SBOM verification but does not import the verifier
+	// (ADR-044 forbids the intra-orchestration edge), so cmd/strike wires it.
+	// Required (non-nil) whenever the lane declares base SBOM signers.
+	ResolveBaseSBOMVerify func(ctx context.Context) (VerifyBaseSBOMFunc, error)
+	ownRecords            []capsule.Records // method + capture container records, accumulated during Execute
 }
 
 // collectObservedPeers builds the Layer-V observed_peers map and the Layer-E
@@ -599,7 +606,11 @@ func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.Sta
 // For registry deploys, the bundles are then attached as OCI referrers of
 // the pushed manifest digest (Execute step 8b).
 func (d *Deployer) signStatements(ctx context.Context, att *Attestation, stepID string) error {
-	slsa, engineCtx, info, err := projectStatements(att, d.OIDC)
+	baseSBOMDeps, err := d.verifyBaseSBOMs(ctx, stepID)
+	if err != nil {
+		return err
+	}
+	slsa, engineCtx, info, err := projectStatements(att, d.OIDC, baseSBOMDeps)
 	if err != nil {
 		return fmt.Errorf("step %q: project statements: %w", stepID, err)
 	}

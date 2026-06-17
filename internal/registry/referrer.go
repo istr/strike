@@ -264,8 +264,8 @@ func FetchTrustRoot(ctx context.Context, ref string) ([]byte, error) {
 // therefore scope only, never trust. Trust is the signer identity and subject
 // binding the verifying caller checks over the returned bundle.
 const (
-	predicateTypeCycloneDX = "https://cyclonedx.org/bom"
-	predicateTypeSPDX      = "https://spdx.dev/Document"
+	PredicateTypeCycloneDX = "https://cyclonedx.org/bom"
+	PredicateTypeSPDX      = "https://spdx.dev/Document"
 )
 
 // bundlePredicateTypeAnnotation is the OCI manifest annotation under which
@@ -279,7 +279,7 @@ const bundlePredicateTypeAnnotation = "dev.sigstore.bundle.predicateType"
 // PredicateType is the unsigned annotation hint used for scope selection; the
 // authoritative predicate type lives inside the signed statement and is read by
 // the verifying caller. Bundle is the raw sigstore v0.3 bundle (DSSE envelope
-// plus verification material), handed to verify.Verify unchanged.
+// plus verification material), handed to the verifying caller unchanged.
 type BaseSBOMReferrer struct {
 	Digest        string // referrer manifest digest, "sha256:..."
 	PredicateType string // scope-selector hint, not trust-bearing
@@ -326,7 +326,7 @@ func fetchOneBaseSBOM(ctx context.Context, ref name.Digest) (*BaseSBOMReferrer, 
 		return nil, fmt.Errorf("manifest: %w", err)
 	}
 	pt := man.Annotations[bundlePredicateTypeAnnotation]
-	if pt != predicateTypeCycloneDX && pt != predicateTypeSPDX {
+	if pt != PredicateTypeCycloneDX && pt != PredicateTypeSPDX {
 		return nil, nil // not an SBOM attestation; skip
 	}
 	layers, err := img.Layers()
