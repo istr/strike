@@ -164,9 +164,11 @@ TLS demux, and the osv-scalibr PR) is carried in that roadmap.
    formalizes the tier-assignment criterion. The DSSE/in-toto wire primitives
    (`PAEEncode` / `PayloadType` / `MediaType`) live in a role-neutral foundation
    package `internal/bundle`; `verify` no longer depends on `deploy`; foundation
-   forbids any internal dependency and orchestration forbids intra-tier edges;
-   the deploy/verify coupling is expressed as a cmd-wired injection seam rather
-   than an import.
+   forbids any internal dependency and orchestration forbids intra-tier edges.
+   ADR-044 was then sharpened to forbid satisfying a forbidden tier edge by
+   composition-root injection; `internal/verify` is reclassified to the services
+   tier and `internal/deploy` imports it as a legal downward static edge (the
+   earlier cmd-wired injection seam is gone).
 
 ## Execution order (cross-roadmap)
 

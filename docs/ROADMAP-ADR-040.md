@@ -562,11 +562,6 @@ verify item the ADR-037 roadmap carried (see "Cross-roadmap dependencies").
   push / OIDC schema), allocating ADR-041 ff. Permanent ADR numbering makes
   the split cheap but it must be decided before instruction 1 if a split is
   wanted. Default, absent a decision: keep ADR-040 consolidated as plumbed.
-- **ADR-038 index discrepancy (flag, do not fix here).** The ADR-038 decision
-  record states Status: Accepted, but `docs/ADR-INDEX.md` lists ADR-038 as
-  Proposed. This is a pre-existing inconsistency, surfaced for the operator;
-  it is not ADR-040 work. (The earlier ADR-039 index gap noted in the
-  handover is now resolved -- 039 is present and Accepted.)
 
 ## References
 
