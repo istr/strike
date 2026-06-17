@@ -1,7 +1,8 @@
 # .go-arch-lint.yml
 # Enforces the internal package layering of github.com/istr/strike.
-# Invariant: dependencies may not point upward across tiers. Intra-tier and
-# downward edges are allowed (cycles are already prevented by the compiler).
+# Invariant: dependencies may not point upward across tiers; downward edges are
+# allowed. foundation depends on nothing internal; services may have intra-tier
+# edges, orchestration may not.
 # Test files and non-product code (tools, fixtures) are out of scope.
 #
 #   entry          I=1.00      cmd/strike
@@ -9,7 +10,7 @@
 #   services       I~0.43-0.67 container, lane, copier, mediator, registry,
 #                              capsule, front, resolver
 #   transport      I=0.22      transport                 (base infrastructure)
-#   foundation     I=0.00      clock, closer, egress, probe, specs  (sinks; common)
+#   foundation     I=0.00      bundle, clock, closer, egress, probe, specs  (sinks; no internal deps)
 
 version: 3
 
@@ -30,6 +31,7 @@ exclude:
 components:
   foundation:
     in:
+      - internal/bundle
       - internal/clock
       - internal/closer
       - internal/egress
@@ -55,22 +57,24 @@ components:
   entry:
     in: cmd/strike
 
-commonComponents:
-  - foundation                # any tier may depend on the stable sinks
-
 deps:
-  # transport has no entry: it uses only foundation (common).
+  # foundation has no mayDependOn: it depends on nothing internal (ADR-044).
+  transport:
+    mayDependOn:
+      - foundation
   services:
     mayDependOn:
       - services              # allow intra-tier edges (capsule->mediator, etc.)
       - transport
+      - foundation
   orchestration:
     mayDependOn:
-      - orchestration         # allow deploy->executor
       - services
       - transport
+      - foundation
   entry:
     mayDependOn:
       - orchestration
       - services
       - transport
+      - foundation

@@ -13,6 +13,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/istr/strike/internal/bundle"
 	"github.com/istr/strike/internal/lane"
 )
 
@@ -86,7 +87,7 @@ func produceKeylessBundles(ctx context.Context, eps lane.KeylessEndpoints, idTok
 		if err != nil {
 			return nil, fmt.Errorf("keyless: statement %d: %w", i, err)
 		}
-		pae := PAEEncode(InTotoPayloadType, stmt)
+		pae := bundle.PAEEncode(bundle.PayloadType, stmt)
 		paeDigest := sha256.Sum256(pae)
 		tle, err := rekorSubmitKeyless(ctx, eps.Rekor, paeDigest[:], sig, leafDER)
 		if err != nil {

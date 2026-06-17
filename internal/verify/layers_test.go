@@ -22,8 +22,8 @@ import (
 	trustrootpb "github.com/sigstore/protobuf-specs/gen/pb-go/trustroot/v1"
 	"google.golang.org/protobuf/encoding/protojson"
 
+	"github.com/istr/strike/internal/bundle"
 	"github.com/istr/strike/internal/clock"
-	"github.com/istr/strike/internal/deploy"
 	"github.com/istr/strike/internal/verify"
 )
 
@@ -40,14 +40,14 @@ var oidIssuerV2 = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 57264, 1, 8}
 // wire shape without any production export.
 func signStatementInline(t *testing.T, stmt []byte, key *ecdsa.PrivateKey) (*protodsse.Envelope, []byte) {
 	t.Helper()
-	pae := deploy.PAEEncode(deploy.InTotoPayloadType, stmt)
+	pae := bundle.PAEEncode(bundle.PayloadType, stmt)
 	digest := sha256.Sum256(pae)
 	sig, err := ecdsa.SignASN1(rand.Reader, key, digest[:])
 	if err != nil {
 		t.Fatalf("sign: %v", err)
 	}
 	return &protodsse.Envelope{
-		PayloadType: deploy.InTotoPayloadType,
+		PayloadType: bundle.PayloadType,
 		Payload:     stmt,
 		Signatures:  []*protodsse.Signature{{Sig: sig}},
 	}, sig
@@ -58,7 +58,7 @@ func signStatementInline(t *testing.T, stmt []byte, key *ecdsa.PrivateKey) (*pro
 // verify; the timestamp covers its bytes).
 func signedEnvelopeWithSig(sig []byte) *protodsse.Envelope {
 	return &protodsse.Envelope{
-		PayloadType: deploy.InTotoPayloadType,
+		PayloadType: bundle.PayloadType,
 		Payload:     []byte("{}"),
 		Signatures:  []*protodsse.Signature{{Sig: sig}},
 	}
@@ -249,7 +249,7 @@ func TestParseTrustedRoot(t *testing.T) {
 func validBundle(t *testing.T, mutate func(*protobundle.Bundle)) []byte {
 	t.Helper()
 	pb := &protobundle.Bundle{
-		MediaType: "application/vnd.dev.sigstore.bundle.v0.3+json",
+		MediaType: bundle.MediaType,
 		VerificationMaterial: &protobundle.VerificationMaterial{
 			Content: &protobundle.VerificationMaterial_Certificate{
 				Certificate: &commonpb.X509Certificate{RawBytes: []byte("leaf-der")},
@@ -281,7 +281,7 @@ func TestParseBundle(t *testing.T) {
 	if string(pb.LeafDER) != "leaf-der" || string(pb.RFC3161) != "token" || pb.TLE.GetLogIndex() != 7 {
 		t.Fatalf("ParseBundle extracted wrong content: %+v", pb)
 	}
-	if pb.Envelope.GetPayloadType() != deploy.InTotoPayloadType {
+	if pb.Envelope.GetPayloadType() != bundle.PayloadType {
 		t.Fatalf("envelope payload type = %q", pb.Envelope.GetPayloadType())
 	}
 

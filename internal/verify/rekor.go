@@ -15,8 +15,8 @@ import (
 	"golang.org/x/mod/sumdb/note"
 	"google.golang.org/protobuf/encoding/protojson"
 
+	"github.com/istr/strike/internal/bundle"
 	"github.com/istr/strike/internal/clock"
-	"github.com/istr/strike/internal/deploy"
 )
 
 // Inclusion verifies the Rekor v2 transparency-log inclusion of the bundle's
@@ -43,7 +43,7 @@ func Inclusion(pb *ParsedBundle, tm *TrustedMaterial, leaf *x509.Certificate) er
 	if hr == nil {
 		return fmt.Errorf("%w: not a hashedrekord_v002 entry", ErrInclusion)
 	}
-	pae := deploy.PAEEncode(pb.Envelope.GetPayloadType(), pb.Envelope.GetPayload())
+	pae := bundle.PAEEncode(pb.Envelope.GetPayloadType(), pb.Envelope.GetPayload())
 	paeDigest := sha256.Sum256(pae)
 	if hr.GetData().GetAlgorithm() != commonpb.HashAlgorithm_SHA2_256 ||
 		!bytes.Equal(hr.GetData().GetDigest(), paeDigest[:]) {

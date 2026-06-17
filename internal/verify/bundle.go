@@ -5,10 +5,9 @@ import (
 
 	protobundle "github.com/sigstore/protobuf-specs/gen/pb-go/bundle/v1"
 	"google.golang.org/protobuf/encoding/protojson"
-)
 
-// bundleV03MediaType is the only bundle media type the verifier accepts.
-const bundleV03MediaType = "application/vnd.dev.sigstore.bundle.v0.3+json"
+	"github.com/istr/strike/internal/bundle"
+)
 
 // ParseBundle validates the strict shape of a sigstore v0.3 bundle and
 // extracts its content: exactly one DSSE envelope with one signature, one
@@ -19,7 +18,7 @@ func ParseBundle(jsonBytes []byte) (*ParsedBundle, error) {
 	if err := protojson.Unmarshal(jsonBytes, &pb); err != nil {
 		return nil, fmt.Errorf("%w: unmarshal: %w", ErrBundleShape, err)
 	}
-	if pb.GetMediaType() != bundleV03MediaType {
+	if pb.GetMediaType() != bundle.MediaType {
 		return nil, fmt.Errorf("%w: media type %q", ErrBundleShape, pb.GetMediaType())
 	}
 	env := pb.GetDsseEnvelope()

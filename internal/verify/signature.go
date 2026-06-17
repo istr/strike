@@ -6,7 +6,7 @@ import (
 	"crypto/x509"
 	"fmt"
 
-	"github.com/istr/strike/internal/deploy"
+	"github.com/istr/strike/internal/bundle"
 )
 
 // DSSE checks the bundle's DSSE signature over the in-toto statement
@@ -16,14 +16,14 @@ import (
 // pre-authentication encoding -- the same PAE the producer signed.
 func DSSE(pb *ParsedBundle, leaf *x509.Certificate) ([]byte, error) {
 	env := pb.Envelope
-	if env.GetPayloadType() != deploy.InTotoPayloadType {
+	if env.GetPayloadType() != bundle.PayloadType {
 		return nil, fmt.Errorf("%w: got %q", ErrPayloadType, env.GetPayloadType())
 	}
 	pub, ok := leaf.PublicKey.(*ecdsa.PublicKey)
 	if !ok {
 		return nil, fmt.Errorf("%w: leaf key is %T, not ECDSA", ErrSignature, leaf.PublicKey)
 	}
-	pae := deploy.PAEEncode(env.GetPayloadType(), env.GetPayload())
+	pae := bundle.PAEEncode(env.GetPayloadType(), env.GetPayload())
 	digest := sha256.Sum256(pae)
 	if !ecdsa.VerifyASN1(pub, digest[:], env.GetSignatures()[0].GetSig()) {
 		return nil, ErrSignature
