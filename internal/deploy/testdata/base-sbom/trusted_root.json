@@ -1,0 +1,78 @@
+{
+  "mediaType": "application/vnd.dev.sigstore.trustedroot+json;version=0.1",
+  "tlogs": [
+    {
+      "baseUrl": "https://rekor.localhost",
+      "hashAlgorithm": "SHA2_256",
+      "publicKey": {
+        "rawBytes": "MCowBQYDK2VwAyEA8NFRUeYo6IRfKGktpt0UEBYHVg+wXZ9CCCcwLZBLBt0=",
+        "keyDetails": "PKIX_ED25519",
+        "validFor": {
+          "start": "2024-01-01T00:00:00Z"
+        }
+      },
+      "logId": {
+        "keyId": "ErEXIHxGFpncD5HKkJ4g1eupxlzL5ft3zP3tONtsaPo="
+      }
+    }
+  ],
+  "certificateAuthorities": [
+    {
+      "subject": {
+        "commonName": "strike-local-fulcio-ca"
+      },
+      "uri": "https://fulcio.127.0.0.1.sslip.io:5555",
+      "certChain": {
+        "certificates": [
+          {
+            "rawBytes": "MIIBpzCCAU2gAwIBAgIUM2OBjGxFAOUEXNDgqi49/nRex0swCgYIKoZIzj0EAwIwITEfMB0GA1UEAwwWc3RyaWtlLWxvY2FsLWZ1bGNpby1jYTAeFw0yNjA2MTYyMDM2MjRaFw0yNzA2MTYyMDM2MjRaMCExHzAdBgNVBAMMFnN0cmlrZS1sb2NhbC1mdWxjaW8tY2EwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAAQ60kpgWhSxeH4lR5in2kd4K1nQG4HVvtS6iCdTdNJ/jA5mkDAnVeyjAe1Hu8E1OI1kshbun1kSGXGHllP6udUEo2MwYTAdBgNVHQ4EFgQUYmvQXHZ1PY+34TFGEDpNn1EtvZwwHwYDVR0jBBgwFoAUYmvQXHZ1PY+34TFGEDpNn1EtvZwwDwYDVR0TAQH/BAUwAwEB/zAOBgNVHQ8BAf8EBAMCAQYwCgYIKoZIzj0EAwIDSAAwRQIgT0c3KW73GpPprna3WUunWs1JTYJLh2A7KOa3BI35GW8CIQCDGfzZ76pn+iELsgU3kBjxGLMF4dD5Z5Y2keGiDDjFBg=="
+          }
+        ]
+      },
+      "validFor": {
+        "start": "2026-06-16T20:36:24Z"
+      }
+    }
+  ],
+  "ctlogs": [
+    {
+      "baseUrl": "https://ct.127.0.0.1.sslip.io:6962/strike-ct",
+      "hashAlgorithm": "SHA2_256",
+      "publicKey": {
+        "rawBytes": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAErV3tORJ6EwosQxjr36PmnNP6hcX+wdzG+3W5hvCs/LaKnU0s4HMJQjtbmlbC+sNO/UOF+iCRVwvKbVD7ePVPAQ==",
+        "keyDetails": "PKIX_ECDSA_P256_SHA_256",
+        "validFor": {
+          "start": "2024-01-01T00:00:00Z"
+        }
+      },
+      "logId": {
+        "keyId": "6mJftPSPP8Bj8MTvfd9RR2E6HbWMIlXd1mRCAVs3VqM="
+      }
+    }
+  ],
+  "timestampAuthorities": [
+    {
+      "subject": {
+        "organization": "local",
+        "commonName": "Test TSA Root"
+      },
+      "uri": "https://tsa.127.0.0.1.sslip.io:3004/api/v1/timestamp",
+      "certChain": {
+        "certificates": [
+          {
+            "rawBytes": "MIIBzDCCAXKgAwIBAgIUVGzksnbNiumnlXqQgL5sUD/sJFwwCgYIKoZIzj0EAwIwMDEOMAwGA1UEChMFbG9jYWwxHjAcBgNVBAMTFVRlc3QgVFNBIEludGVybWVkaWF0ZTAeFw0yNjA2MTcxMDU2NDhaFw0zNTA2MTcxMDU5NDhaMDAxDjAMBgNVBAoTBWxvY2FsMR4wHAYDVQQDExVUZXN0IFRTQSBUaW1lc3RhbXBpbmcwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAAQj2XBHc0cFf15W6JUWCE7SLgVQzuuHb2giwzZBxgMN86QUdGsC7janbbPwHPBNfQkwuKN7O2E8f7wvE0kvjW86o2owaDAOBgNVHQ8BAf8EBAMCB4AwHQYDVR0OBBYEFCIzJPVL63UcegeZGO41yDrejpUlMB8GA1UdIwQYMBaAFHWBSmWm0cytUSF66YgM/42mkoKRMBYGA1UdJQEB/wQMMAoGCCsGAQUFBwMIMAoGCCqGSM49BAMCA0gAMEUCIQDT7euR2wUqp319mwTvsOfl498sKKNvdusLt/BFvjBbxwIgVFkqTgUokrISIiWgrXYQHf9DKyMM9ALUNu8BrYOEqno="
+          },
+          {
+            "rawBytes": "MIIB0TCCAXigAwIBAgIUV5rIaNY1AmtZfE+wdWfeb/xR7a8wCgYIKoZIzj0EAwIwKDEOMAwGA1UEChMFbG9jYWwxFjAUBgNVBAMTDVRlc3QgVFNBIFJvb3QwHhcNMjYwNjE3MTA1NDQ4WhcNMzYwNjE3MTA1OTQ4WjAwMQ4wDAYDVQQKEwVsb2NhbDEeMBwGA1UEAxMVVGVzdCBUU0EgSW50ZXJtZWRpYXRlMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEZq4FAEcAX7ZydnY2EILFJe0knpL9m8If6BcETwY+a2s4IUFElaQrvgjALGaC3AePrgqIPOeUkw2lVQQUyB3XXKN4MHYwDgYDVR0PAQH/BAQDAgEGMBMGA1UdJQQMMAoGCCsGAQUFBwMIMA8GA1UdEwEB/wQFMAMBAf8wHQYDVR0OBBYEFHWBSmWm0cytUSF66YgM/42mkoKRMB8GA1UdIwQYMBaAFDEh6js7OOVQ1koKKXKSNwRhH3d8MAoGCCqGSM49BAMCA0cAMEQCIG2YfMTM8VvA2awUrdirXqu66iiSfjFHY4sKVe5MZhkZAiAJxUjWjt5wY3cT1WIaaJ5m2qIWZ9y3Js72bD0xL2IAPQ=="
+          },
+          {
+            "rawBytes": "MIIBlDCCATqgAwIBAgIUTvgACNfKJZW6y8AE4ahSe5I2GDUwCgYIKoZIzj0EAwIwKDEOMAwGA1UEChMFbG9jYWwxFjAUBgNVBAMTDVRlc3QgVFNBIFJvb3QwHhcNMjYwNjE3MTA1NDQ4WhcNMzYwNjE3MTA1OTQ4WjAoMQ4wDAYDVQQKEwVsb2NhbDEWMBQGA1UEAxMNVGVzdCBUU0EgUm9vdDBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABMAbtPwJXNbNSQDmN37TldHRNTfdSqzPpF+pnlxg0TR9Wht4IF92qzvD9puyuLKWVwiHvxYIhjDjL4YB/smE76WjQjBAMA4GA1UdDwEB/wQEAwIBBjAPBgNVHRMBAf8EBTADAQH/MB0GA1UdDgQWBBQxIeo7OzjlUNZKCilykjcEYR93fDAKBggqhkjOPQQDAgNIADBFAiEAwGvdwa8tqHwzPtzicNzBjsTF2PYvdYu+SM3Y7ZsYhUUCIF/VC56CqMfxzQy+fARgUEzQ8xa/BWthEAvwVk8fjOIO"
+          }
+        ]
+      },
+      "validFor": {
+        "start": "2026-06-17T10:56:48Z"
+      }
+    }
+  ]
+}

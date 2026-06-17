@@ -1,0 +1,7 @@
+{
+  "subjectDigest": "sha256:daacc03f3a9e52e71e4b0b502bb07fbca91abeab06624a80948a85288cf7627d",
+  "identity": "tester@strike.localhost",
+  "issuer": "https://keycloak.127.0.0.1.sslip.io:8443/realms/sigstore",
+  "cyclonedxPredicateType": "https://cyclonedx.org/bom",
+  "spdxPredicateType": "https://spdx.dev/Document"
+}

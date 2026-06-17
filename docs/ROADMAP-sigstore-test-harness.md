@@ -429,6 +429,25 @@ the harness signing-config) would capture the commands above. Not built in this
 spike -- the harness shell corpus is already flagged debt, and 2c is authored
 from the recorded finding, not from a live target.
 
+As-built (2026-06-17, ADR-040 2c-ii fixture): the base-SBOM testdata fixture for
+instruction 2c-ii was produced from the recorded recipe above. A throwaway
+`scratch` base image was pushed by digest to a local `registry:3`
+(`DBASE=sha256:daacc03f3a9e52e71e4b0b502bb07fbca91abeab06624a80948a85288cf7627d`),
+and `cosign attest --type cyclonedx` / `--type spdxjson` signed it keyless
+against the harness as identity `tester@strike.localhost`, issuer
+`https://keycloak.127.0.0.1.sslip.io:8443/realms/sigstore`. The two v0.3 bundle
+layers were read from the referrers fallback-tag index and committed with the
+`cosign trusted-root create` output as four frozen files under
+`internal/deploy/testdata/base-sbom/` (`cyclonedx.bundle.json`,
+`spdx.bundle.json`, `trusted_root.json`, `meta.json`). strike's own
+`verify.Verify` accepts the CycloneDX bundle end to end and binds the signed
+in-toto payload to `DBASE` -- the empirical "verify.Verify: GO" the 2c spike
+inferred but did not run, now a permanent regression check
+(`TestBaseSBOMFixtureVerifiesUnderStrike` in `internal/deploy`). Like the golden
+bundles, this is a live-sigstore fixture: the four files are a self-consistent
+bundle/trusted-root pair, exempt from the harness reproducibility invariant, and
+are never regenerated unless deliberately re-recorded.
+
 ## References
 
 - ADR-040-control-plane-sbom-and-keyless-attestation.md -- the governing ADR
