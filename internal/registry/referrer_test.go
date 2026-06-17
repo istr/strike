@@ -285,3 +285,117 @@ func TestCopyImageReturnsPushedDescriptor(t *testing.T) {
 		t.Errorf("copied manifest not at target: %v", err)
 	}
 }
+
+// pushBaseSBOMReferrer attaches one cosign-style SBOM attestation referrer of
+// subject under repo: a single bundle-typed layer carrying content, cosign's
+// predicate-type annotation, and an artifact type discoverable by the referrers
+// filter. Returns the referrer manifest digest.
+func pushBaseSBOMReferrer(t *testing.T, repo name.Repository, subject v1.Descriptor, predicateType string, content []byte) string {
+	t.Helper()
+	img, err := registry.ArtifactImage(content, registry.SigstoreBundleMediaType, subject)
+	if err != nil {
+		t.Fatalf("artifact image: %v", err)
+	}
+	img = mutate.ConfigMediaType(img, types.MediaType(registry.SigstoreBundleMediaType))
+	annotated, ok := mutate.Annotations(img, map[string]string{
+		"dev.sigstore.bundle.predicateType": predicateType,
+	}).(v1.Image)
+	if !ok {
+		t.Fatal("annotate: unexpected type")
+	}
+	withSubject, ok := mutate.Subject(annotated, subject).(v1.Image)
+	if !ok {
+		t.Fatal("subject: unexpected type")
+	}
+	digest, err := withSubject.Digest()
+	if err != nil {
+		t.Fatalf("digest: %v", err)
+	}
+	if err := remote.Write(repo.Digest(digest.String()), withSubject); err != nil {
+		t.Fatalf("write referrer: %v", err)
+	}
+	return digest.String()
+}
+
+// The cosign-faithful empty-config path (artifactType on the manifest field,
+// OCI empty config) is covered by the deferred live e2e (2c-ii / E4): the
+// in-memory ggcr registry indexes a referrer's artifactType from config.mediaType
+// only, so it cannot make such a referrer discoverable by the artifactType filter.
+func TestFetchBaseSBOMReferrers(t *testing.T) {
+	host := localRegistry(t, true)
+	target := host + "/base:v1"
+	subject := pushSubject(t, target)
+	repo, err := name.NewRepository(host + "/base")
+	if err != nil {
+		t.Fatalf("repo: %v", err)
+	}
+	cdxDigest := pushBaseSBOMReferrer(t, repo, subject, "https://cyclonedx.org/bom", []byte("cdx-bundle"))
+	pushBaseSBOMReferrer(t, repo, subject, "https://spdx.dev/Document", []byte("spdx-bundle"))
+	// A non-SBOM attestation under the same artifactType filter: must be skipped.
+	pushBaseSBOMReferrer(t, repo, subject, "https://slsa.dev/provenance/v1", []byte("slsa-bundle"))
+
+	got, err := registry.FetchBaseSBOMReferrers(context.Background(), host+"/base@"+subject.Digest.String())
+	if err != nil {
+		t.Fatalf("FetchBaseSBOMReferrers: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("fetched %d SBOM referrers, want 2 (cyclonedx + spdx; slsa skipped)", len(got))
+	}
+	byPredicate := map[string]registry.BaseSBOMReferrer{}
+	for _, r := range got {
+		byPredicate[r.PredicateType] = r
+	}
+	cdx, ok := byPredicate["https://cyclonedx.org/bom"]
+	if !ok {
+		t.Fatal("cyclonedx referrer missing")
+	}
+	if !bytes.Equal(cdx.Bundle, []byte("cdx-bundle")) {
+		t.Errorf("cyclonedx bundle = %q, want %q", cdx.Bundle, "cdx-bundle")
+	}
+	if cdx.Digest != cdxDigest {
+		t.Errorf("cyclonedx digest = %q, want %q", cdx.Digest, cdxDigest)
+	}
+	if _, ok := byPredicate["https://spdx.dev/Document"]; !ok {
+		t.Fatal("spdx referrer missing")
+	}
+}
+
+func TestFetchBaseSBOMReferrersSkipsStrikeOwnBundle(t *testing.T) {
+	host := localRegistry(t, true)
+	target := host + "/base:v1"
+	subject := pushSubject(t, target)
+	// strike's own producer convention: discoverable, but no SBOM predicate-type
+	// annotation, so it is not a base SBOM and must be skipped.
+	if err := registry.AttachStatementBundles(context.Background(), target, subject, []registry.StatementBundle{
+		{Statement: "sealed", Bundle: []byte("strike-bundle")},
+	}); err != nil {
+		t.Fatalf("attach: %v", err)
+	}
+	got, err := registry.FetchBaseSBOMReferrers(context.Background(), host+"/base@"+subject.Digest.String())
+	if err != nil {
+		t.Fatalf("FetchBaseSBOMReferrers: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("fetched %d, want 0 (strike's own bundle is not a base SBOM)", len(got))
+	}
+}
+
+func TestFetchBaseSBOMReferrersRejectsTag(t *testing.T) {
+	host := localRegistry(t, true)
+	if _, err := registry.FetchBaseSBOMReferrers(context.Background(), host+"/base:v1"); err == nil {
+		t.Fatal("accepted a tag reference, want error")
+	}
+}
+
+func TestFetchBaseSBOMReferrersNoReferrers(t *testing.T) {
+	host := localRegistry(t, true)
+	target := host + "/base:v1"
+	subject := pushSubject(t, target)
+	got, err := registry.FetchBaseSBOMReferrers(context.Background(), host+"/base@"+subject.Digest.String())
+	if err != nil {
+		t.Fatalf("FetchBaseSBOMReferrers: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("fetched %d, want 0", len(got))
+	}
+}

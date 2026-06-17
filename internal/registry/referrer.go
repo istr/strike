@@ -132,26 +132,36 @@ func FetchStatementBundles(ctx context.Context, subjectRef string) ([]StatementB
 	if err != nil {
 		return nil, fmt.Errorf("subject must be digest-pinned: %w", err)
 	}
+	return fetchReferrers(ctx, ref, fetchOneBundle)
+}
+
+// fetchReferrers discovers the sigstore-bundle referrers of a digest-pinned
+// subject -- the same artifactType filter both producers (strike's own and
+// cosign) are indexed under -- maps each referrer manifest through fetch, and
+// drops the nil results fetch returns for referrers it skips. It is shared by
+// FetchStatementBundles (strike's own bundles) and FetchBaseSBOMReferrers
+// (cosign base SBOMs), which differ only in the per-referrer reader.
+func fetchReferrers[T any](ctx context.Context, ref name.Digest, fetch func(context.Context, name.Digest) (*T, error)) ([]T, error) {
 	repo := ref.Context()
 	idx, err := remote.Referrers(ref,
 		remote.WithFilter("artifactType", SigstoreBundleMediaType),
 		remote.WithAuthFromKeychain(authn.DefaultKeychain),
 		remote.WithContext(ctx))
 	if err != nil {
-		return nil, fmt.Errorf("list referrers of %s: %w", subjectRef, err)
+		return nil, fmt.Errorf("list referrers of %s: %w", ref, err)
 	}
 	im, err := idx.IndexManifest()
 	if err != nil {
 		return nil, fmt.Errorf("referrers index: %w", err)
 	}
-	var out []StatementBundle
+	var out []T
 	for _, d := range im.Manifests {
-		sb, err := fetchOneBundle(ctx, repo.Digest(d.Digest.String()))
+		v, err := fetch(ctx, repo.Digest(d.Digest.String()))
 		if err != nil {
 			return nil, fmt.Errorf("referrer %s: %w", d.Digest, err)
 		}
-		if sb != nil {
-			out = append(out, *sb)
+		if v != nil {
+			out = append(out, *v)
 		}
 	}
 	return out, nil
@@ -245,4 +255,112 @@ func FetchTrustRoot(ctx context.Context, ref string) ([]byte, error) {
 		return nil, fmt.Errorf("trust root %s: exceeds %d bytes", ref, maxBundleBytes)
 	}
 	return data, nil
+}
+
+// Base-SBOM predicate types strike recognizes as scope selectors when reading a
+// base image's signed SBOM attestations (cosign attest --type cyclonedx |
+// spdxjson). They select which referrers are treated as the base's SBOM
+// attestations; they are read from an unsigned manifest annotation and are
+// therefore scope only, never trust. Trust is the signer identity and subject
+// binding the verifying caller checks over the returned bundle.
+const (
+	predicateTypeCycloneDX = "https://cyclonedx.org/bom"
+	predicateTypeSPDX      = "https://spdx.dev/Document"
+)
+
+// bundlePredicateTypeAnnotation is the OCI manifest annotation under which
+// cosign records the in-toto predicate type of an attestation referrer.
+const bundlePredicateTypeAnnotation = "dev.sigstore.bundle.predicateType"
+
+// BaseSBOMReferrer is one cosign-produced, SBOM-typed sigstore bundle attached
+// as an OCI referrer of a base image. Digest is the referrer manifest digest --
+// the stable, content-addressed handle a downstream verifier dereferences to
+// re-verify the base SBOM offline, without contacting strike or the engine.
+// PredicateType is the unsigned annotation hint used for scope selection; the
+// authoritative predicate type lives inside the signed statement and is read by
+// the verifying caller. Bundle is the raw sigstore v0.3 bundle (DSSE envelope
+// plus verification material), handed to verify.Verify unchanged.
+type BaseSBOMReferrer struct {
+	Digest        string // referrer manifest digest, "sha256:..."
+	PredicateType string // scope-selector hint, not trust-bearing
+	Bundle        []byte
+}
+
+// FetchBaseSBOMReferrers lists the SBOM attestations attached to a digest-pinned
+// base image as OCI referrers and returns each as raw bundle bytes plus its
+// referrer-manifest digest. Discovery uses the same artifactType filter as
+// strike's own bundles -- cosign sets that artifactType explicitly, strike via
+// the config fallback, and the registry indexes the effective type either way.
+// Unlike fetchOneBundle (strike's own producer), this does NOT re-check the
+// manifest config media type -- cosign leaves the OCI empty config there -- and
+// reads the bundle from the single layer, whose media type both producers set
+// to the bundle type, rather than from a strike-private annotation. Only the
+// SBOM predicate types are returned; other attestation referrers (for example a
+// SLSA provenance attestation) are skipped. Verification -- signer identity and
+// subject binding -- is the caller's responsibility; this is fetch only.
+//
+// The subject must be digest-pinned (name.NewDigest rejects a tag) because a
+// mutable reference cannot anchor a reproducible verification.
+func FetchBaseSBOMReferrers(ctx context.Context, baseRef string) ([]BaseSBOMReferrer, error) {
+	ref, err := name.NewDigest(baseRef)
+	if err != nil {
+		return nil, fmt.Errorf("base image must be digest-pinned: %w", err)
+	}
+	return fetchReferrers(ctx, ref, fetchOneBaseSBOM)
+}
+
+// fetchOneBaseSBOM fetches a single referrer and returns it when it is an
+// SBOM-typed sigstore bundle, or nil (no error) when it is some other
+// attestation to be skipped. A referrer that selects as an SBOM but is
+// malformed -- wrong layer count or a non-bundle layer media type -- is an
+// error, not a skip, so a broken base SBOM surfaces rather than vanishing.
+func fetchOneBaseSBOM(ctx context.Context, ref name.Digest) (*BaseSBOMReferrer, error) {
+	img, err := remote.Image(ref,
+		remote.WithAuthFromKeychain(authn.DefaultKeychain),
+		remote.WithContext(ctx))
+	if err != nil {
+		return nil, fmt.Errorf("fetch: %w", err)
+	}
+	man, err := img.Manifest()
+	if err != nil {
+		return nil, fmt.Errorf("manifest: %w", err)
+	}
+	pt := man.Annotations[bundlePredicateTypeAnnotation]
+	if pt != predicateTypeCycloneDX && pt != predicateTypeSPDX {
+		return nil, nil // not an SBOM attestation; skip
+	}
+	layers, err := img.Layers()
+	if err != nil {
+		return nil, fmt.Errorf("layers: %w", err)
+	}
+	if len(layers) != 1 {
+		return nil, fmt.Errorf("expected 1 layer, got %d", len(layers))
+	}
+	mt, err := layers[0].MediaType()
+	if err != nil {
+		return nil, fmt.Errorf("layer media type: %w", err)
+	}
+	if string(mt) != SigstoreBundleMediaType {
+		return nil, fmt.Errorf("layer media type %q is not %s", mt, SigstoreBundleMediaType)
+	}
+	rc, err := layers[0].Uncompressed()
+	if err != nil {
+		return nil, fmt.Errorf("open layer: %w", err)
+	}
+	bundle, readErr := io.ReadAll(io.LimitReader(rc, maxBundleBytes+1))
+	closeErr := rc.Close()
+	if readErr != nil {
+		return nil, fmt.Errorf("read bundle: %w", readErr)
+	}
+	if closeErr != nil {
+		return nil, fmt.Errorf("close layer: %w", closeErr)
+	}
+	if len(bundle) > maxBundleBytes {
+		return nil, fmt.Errorf("bundle exceeds %d bytes", maxBundleBytes)
+	}
+	return &BaseSBOMReferrer{
+		Digest:        ref.DigestStr(),
+		PredicateType: pt,
+		Bundle:        bundle,
+	}, nil
 }
