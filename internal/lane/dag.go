@@ -106,6 +106,9 @@ func Build(p *Lane) (*DAG, error) {
 	if err := d.validatePeerAnchors(p); err != nil {
 		return nil, err
 	}
+	if err := d.validateBaseSBOMTrustAnchor(p); err != nil {
+		return nil, err
+	}
 
 	order, err := kahnSort(d)
 	if err != nil {
@@ -676,4 +679,62 @@ func (d *DAG) treeNode(sb *strings.Builder, node, prefix string, lastParent bool
 		sb.WriteString(childPrefix + connector + dep + "\n")
 		d.treeNode(sb, dep, childPrefix, last, visited)
 	}
+}
+
+// PackBaseRefs returns the distinct, digest-pinned base image references of the
+// pack steps in the transitive predecessor sub-tree of fromStep, sorted for
+// deterministic attestation output. It mirrors State.CollectProvenance's walk
+// over the dependency edges (excluding fromStep itself), reading PackSpec.Base
+// for each pack step reached. These are the base images whose signed SBOMs the
+// deploy step's producer-side verification considers.
+func (d *DAG) PackBaseRefs(fromStep string) []ImageRef {
+	if d == nil {
+		return nil
+	}
+	visited := map[string]bool{}
+	var walk func(name string)
+	walk = func(name string) {
+		if visited[name] {
+			return
+		}
+		visited[name] = true
+		for _, dep := range d.edges[name] {
+			walk(dep)
+		}
+	}
+	walk(fromStep)
+	delete(visited, fromStep)
+
+	seen := map[ImageRef]bool{}
+	var out []ImageRef
+	for name := range visited {
+		s := d.Steps[name]
+		if s == nil || s.Pack == nil {
+			continue
+		}
+		if !seen[s.Pack.Base] {
+			seen[s.Pack.Base] = true
+			out = append(out, s.Pack.Base)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	return out
+}
+
+// validateBaseSBOMTrustAnchor enforces that a lane declaring base SBOM signers
+// also declares a resolvable keyless trust root: producer-side base-SBOM
+// signature verification has nothing to verify against otherwise. Like a mutable
+// image reference, declaring signers without an anchor is a structural error
+// caught at lane build, not a deploy-time surprise. The receiver is unused, kept
+// for symmetry with the other build validations.
+func (d *DAG) validateBaseSBOMTrustAnchor(p *Lane) error {
+	if len(p.BaseSBOMSigners) == 0 {
+		return nil
+	}
+	if p.Keyless.TrustRoot == nil && p.Keyless.TrustRootRef == "" {
+		return fmt.Errorf(
+			"lane declares baseSbomSigners but no keyless trust root (trustRoot or trustRootRef); " +
+				"base-SBOM verification has no anchor")
+	}
+	return nil
 }
