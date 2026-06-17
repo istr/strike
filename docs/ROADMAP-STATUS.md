@@ -69,8 +69,7 @@ and can proceed.
   fetch path (`internal/registry` `FetchBaseSBOMReferrers`, 2c-i), the lane
   build guard primitives (`internal/lane` `PackBaseRefs` /
   `validateBaseSBOMTrustAnchor`, 2c-ii-a), and producer-side verification in
-  `internal/deploy` reached through the `ResolveBaseSBOMVerify` /
-  `VerifyBaseSBOMFunc` injection seam wired by `cmd/strike` (2c-ii-b) are all
+  `internal/deploy` calling `internal/verify` directly (2c-ii-b) are all
   implemented. Verified base SBOMs are recorded in SLSA `resolvedDependencies`
   by referrer-manifest digest with a fail-closed three-way contract (declared
   signer / SBOM predicate type / base-digest subject binding). The live e2e
@@ -246,10 +245,12 @@ engine/transport cluster on the now-landed D-D foundation; the rest is parked.
    `FetchBaseSBOMReferrers` artifactType-filter path, no config re-check
    (2c-i, `0e4b9a8e`); `internal/lane` `PackBaseRefs` /
    `validateBaseSBOMTrustAnchor` build guard (2c-ii-a, `c3b079ae`);
-   producer-side base-SBOM verification in `internal/deploy` via the
-   `ResolveBaseSBOMVerify` / `VerifyBaseSBOMFunc` injection seam wired by
-   `cmd/strike`, recording verified base SBOMs in `resolvedDependencies` by
-   referrer digest with a fail-closed three-way contract (2c-ii-b, `bc35f1e8`).
+   producer-side base-SBOM verification in `internal/deploy` calling
+   `internal/verify` directly, recording verified base SBOMs in
+   `resolvedDependencies` by referrer digest with a fail-closed three-way
+   contract (2c-ii-b, `bc35f1e8`; the cmd-wired injection seam it originally
+   shipped with was removed once `internal/verify` was placed at its
+   criterion-correct services tier -- see the ADR-044 arc below).
    Deferred: live e2e against the harness (ROADMAP-ADR-040). (ROADMAP-ADR-040)
 4x. ADR-044 / `internal/bundle` / arch-lint arc (LANDED, mid-2c) --
    deterministic tier-assignment criterion formalized in ADR-044 (`c214dae5`);
@@ -257,9 +258,14 @@ engine/transport cluster on the now-landed D-D foundation; the rest is parked.
    `MediaType`) extracted into the `internal/bundle` foundation package;
    `verify -> deploy` import edge severed; `.go-arch-lint.yml` tightened
    (foundation forbids any internal dependency; orchestration forbids intra-tier
-   edges); deploy/verify coupling expressed as the cmd-wired injection seam
-   above rather than a direct import (`ec2d4ed`). No owning roadmap beyond
-   ADR-044 itself.
+   edges); deploy/verify coupling initially expressed as the cmd-wired injection
+   seam above rather than a direct import (`ec2d4ed`). That seam was a
+   circumvention, not a resolution: ADR-044 was subsequently sharpened to forbid
+   satisfying a forbidden tier edge by composition-root injection, `internal/verify`
+   was reclassified to its criterion-correct services tier, and `internal/deploy`
+   now imports it as a legal downward static edge (the seam --
+   `VerifyBaseSBOMFunc`, the `Deployer` field, the cmd closure -- is gone). No
+   owning roadmap beyond ADR-044 itself.
 5. Trust-root auto-import from OCI referrers -- lifts the current fail-closed
    posture; security-sensitive, so it follows 3-4, when the path is exercised
    and the cosign baseline can catch regressions. (ROADMAP-ADR-041)

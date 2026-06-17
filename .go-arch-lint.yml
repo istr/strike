@@ -8,7 +8,7 @@
 #   entry          I=1.00      cmd/strike
 #   orchestration  I~0.71-0.91 executor, deploy
 #   services       I~0.43-0.67 container, lane, copier, mediator, registry,
-#                              capsule, front, resolver
+#                              capsule, front, resolver, verify
 #   transport      I=0.22      transport                 (base infrastructure)
 #   foundation     I=0.00      bundle, clock, closer, egress, probe, specs  (sinks; no internal deps)
 
@@ -16,7 +16,7 @@ version: 3
 
 allow:
   depOnAnyVendor: true        # only internal layering is enforced here
-  deepScan: false             # govern static imports, not DI/call-graph flows
+  deepScan: true              # govern static imports, and DI/call-graph flows
 
 # Test code is not part of the shipped architecture and legitimately crosses
 # layers; exclude it. Non-product directories are excluded as well.
@@ -49,11 +49,11 @@ components:
       - internal/capsule
       - internal/front
       - internal/resolver
+      - internal/verify
   orchestration:
     in:
       - internal/executor
       - internal/deploy
-      - internal/verify
   entry:
     in: cmd/strike
 

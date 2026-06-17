@@ -44,15 +44,6 @@ func loadBaseSBOMFixture(t *testing.T) (*verify.TrustedMaterial, baseSBOMMeta, [
 	return tm, m, bundle
 }
 
-// verifierFor builds the base-SBOM verify seam from a fixed trust root, mirroring
-// what cmd/strike wires in production. Test code may import internal/verify; the
-// deploy production package may not (ADR-044).
-func verifierFor(tm *verify.TrustedMaterial) VerifyBaseSBOMFunc {
-	return func(s lane.SBOMSigner, bundle []byte) ([]byte, error) {
-		return verify.New(tm, s.Identity, s.Issuer).Verify(bundle)
-	}
-}
-
 func TestVerifyOneBaseSBOM_HappyPath(t *testing.T) {
 	tm, m, bundle := loadBaseSBOMFixture(t)
 	d := &Deployer{BaseSBOMSigners: []lane.SBOMSigner{{Issuer: m.Issuer, Identity: m.Identity}}}
@@ -60,7 +51,7 @@ func TestVerifyOneBaseSBOM_HappyPath(t *testing.T) {
 	baseHex := strings.TrimPrefix(m.SubjectDigest, "sha256:")
 	refDigest := "sha256:" + strings.Repeat("b", 64)
 
-	dep, recorded, err := d.verifyOneBaseSBOM(verifierFor(tm), base, baseHex, registry.BaseSBOMReferrer{
+	dep, recorded, err := d.verifyOneBaseSBOM(tm, base, baseHex, registry.BaseSBOMReferrer{
 		Digest:        refDigest,
 		PredicateType: m.CycloneDXPredicateType,
 		Bundle:        bundle,
@@ -88,7 +79,7 @@ func TestVerifyOneBaseSBOM_SubjectMismatchFails(t *testing.T) {
 	base := lane.ImageRef("localhost/strike-base@sha256:" + strings.Repeat("c", 64))
 	wrongHex := strings.Repeat("c", 64)
 
-	_, recorded, err := d.verifyOneBaseSBOM(verifierFor(tm), base, wrongHex, registry.BaseSBOMReferrer{
+	_, recorded, err := d.verifyOneBaseSBOM(tm, base, wrongHex, registry.BaseSBOMReferrer{
 		Digest:        "sha256:" + strings.Repeat("b", 64),
 		PredicateType: m.CycloneDXPredicateType,
 		Bundle:        bundle,
@@ -107,7 +98,7 @@ func TestVerifyOneBaseSBOM_WrongSignerFails(t *testing.T) {
 	base := lane.ImageRef("localhost/strike-base@" + m.SubjectDigest)
 	baseHex := strings.TrimPrefix(m.SubjectDigest, "sha256:")
 
-	_, recorded, err := d.verifyOneBaseSBOM(verifierFor(tm), base, baseHex, registry.BaseSBOMReferrer{
+	_, recorded, err := d.verifyOneBaseSBOM(tm, base, baseHex, registry.BaseSBOMReferrer{
 		Digest:        "sha256:" + strings.Repeat("b", 64),
 		PredicateType: m.CycloneDXPredicateType,
 		Bundle:        bundle,
@@ -131,10 +122,10 @@ func TestVerifyBaseSBOMs_NoSignersIsNoop(t *testing.T) {
 	}
 }
 
-func TestVerifyBaseSBOMs_SignersWithoutVerifierFails(t *testing.T) {
+func TestVerifyBaseSBOMs_SignersWithoutTrustRootFails(t *testing.T) {
 	d := &Deployer{BaseSBOMSigners: []lane.SBOMSigner{{Issuer: "https://issuer.example", Identity: "signer@example"}}}
 	_, err := d.verifyBaseSBOMs(context.Background(), "deploy")
 	if err == nil {
-		t.Fatal("expected fail-closed error when signers are declared but no verifier is wired")
+		t.Fatal("expected fail-closed error when signers are declared but no trust root resolves")
 	}
 }

@@ -25,7 +25,6 @@ import (
 	"github.com/istr/strike/internal/mediator"
 	"github.com/istr/strike/internal/registry"
 	"github.com/istr/strike/internal/transport"
-	"github.com/istr/strike/internal/verify"
 )
 
 // runState holds accumulated state across steps during a lane execution.
@@ -128,38 +127,23 @@ func (rc *runContext) executeDeploy(ctx context.Context, step *lane.Step, stepID
 		artifactRefs[e.ArtifactName] = lane.OutputRef{Step: e.FromStep.ID, Output: e.FromOutput.ID}.Ref()
 	}
 
-	// Base-SBOM verify seam (ADR-040 2c): the deploy package orchestrates
-	// base-SBOM verification but does not import internal/verify (ADR-044
-	// forbids the intra-orchestration edge), so the composition root wires it.
-	// The trust root is resolved once, lazily, on the first verifying deploy.
-	resolveBaseSBOMVerify := func(ctx context.Context) (deploy.VerifyBaseSBOMFunc, error) {
-		tm, err := verify.ResolveTrustedMaterial(ctx, "", rc.lane.Keyless)
-		if err != nil {
-			return nil, err
-		}
-		return func(s lane.SBOMSigner, bundle []byte) ([]byte, error) {
-			return verify.New(tm, s.Identity, s.Issuer).Verify(bundle)
-		}, nil
-	}
-
 	d := &deploy.Deployer{
-		Engine:                rc.engine,
-		EngineID:              rc.engineID,
-		ResolverID:            &rc.resolverID,
-		DAG:                   rc.dag,
-		OIDC:                  rc.lane.OIDC,
-		Keyless:               rc.lane.Keyless,
-		BaseSBOMSigners:       rc.lane.BaseSBOMSigners,
-		ResolveBaseSBOMVerify: resolveBaseSBOMVerify,
-		ArtifactRefs:          artifactRefs,
-		LaneID:                rc.lane.ID,
-		LaneDigest:            rc.laneDigest.String(),
-		CA:                    rc.ca,
-		UpstreamLook:          rc.upstreamLook,
-		CAVolume:              rc.trust.ca,
-		StepID:                stepID,
-		StepPorts:             rc.stepPorts,
-		NetworkRecords:        rc.networkRecords,
+		Engine:          rc.engine,
+		EngineID:        rc.engineID,
+		ResolverID:      &rc.resolverID,
+		DAG:             rc.dag,
+		OIDC:            rc.lane.OIDC,
+		Keyless:         rc.lane.Keyless,
+		BaseSBOMSigners: rc.lane.BaseSBOMSigners,
+		ArtifactRefs:    artifactRefs,
+		LaneID:          rc.lane.ID,
+		LaneDigest:      rc.laneDigest.String(),
+		CA:              rc.ca,
+		UpstreamLook:    rc.upstreamLook,
+		CAVolume:        rc.trust.ca,
+		StepID:          stepID,
+		StepPorts:       rc.stepPorts,
+		NetworkRecords:  rc.networkRecords,
 	}
 
 	att, err := d.Execute(ctx, step, rc.laneState)

@@ -66,6 +66,19 @@ new edge. A package is never placed in a higher tier in anticipation of
 dependencies it does not yet have; doing so would make the criterion
 non-deterministic.
 
+**The rule governs the logical dependency, not the import graph alone.** A tier
+edge forbidden by the no-upward rule, the foundation no-internal-dependency rule,
+or the orchestration no-intra-tier-edge rule may not be satisfied by injecting the
+dependency from the composition root -- a function-typed field, a consumer-defined
+interface, reflection, or any indirection whose effect is to relocate the
+forbidden import to a higher tier while the depended-on functionality stays where
+it is. When package A's correctness depends on package B's functionality, that is a
+dependency whether or not A names B in an import statement; it is resolved by
+placing B, or the shared functionality, at its criterion-correct tier so the edge
+is a legal static import -- not by hiding it behind a seam. Injection remains
+legitimate only for genuine polymorphism or test substitution that does not cross
+a tier boundary to evade this rule.
+
 ## Consequences
 
 - Tier membership becomes a checkable property: a reviewer (or a future CI guard)
@@ -84,6 +97,12 @@ non-deterministic.
   accumulate into an internally coupled cluster. The foundation tier holds no
   intra-tier edges today, so the rule is enforceable immediately. (Enforcing it
   in `.go-arch-lint.yml` is implementation, separate from this decision.)
+- `internal/verify` depends only on services-tier (`lane`, `registry`) and
+  foundation-tier (`clock`, `bundle`) packages, so by this criterion it is a
+  services package, not orchestration. It was initially mis-placed in
+  orchestration; the injection seam that let `internal/deploy` reach it without a
+  static import is removed in favor of the legal downward import once `verify`
+  sits at its criterion-correct tier.
 
 ## Principles
 

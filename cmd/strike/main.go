@@ -287,7 +287,12 @@ func initLaneCA(p *lane.Lane) (*transport.EphemeralCA, func()) {
 	if caErr != nil {
 		log.Fatalf("error: ephemeral CA: %v", caErr)
 	}
-	return ca, func() { closer.Warn(ca, "ephemeral CA") }
+	// Hand the cleanup closure the value as an io.Closer, not the concrete
+	// *transport.EphemeralCA: closer.Warn is polymorphic over io.Closer, and
+	// holding the interface keeps the foundation closer from acquiring a
+	// call-graph edge onto transport under deepScan (ADR-044).
+	var c io.Closer = ca
+	return ca, func() { closer.Warn(c, "ephemeral CA") }
 }
 
 // initFront starts the lane-run control-plane front (ADR-038 D2) on a host-
@@ -300,7 +305,11 @@ func initFront(ctx context.Context) (*front.Front, func()) {
 		log.Fatalf("error: front: %v", ftErr)
 	}
 	log.Printf("FRONT  bound @ %s", ft.Addr())
-	return ft, func() { closer.Warn(ft, "front") }
+	// io.Closer, not the concrete *front.Front, for the same reason as the CA
+	// cleanup in initLaneCA: keep the foundation closer free of a deepScan
+	// call-graph edge onto services (ADR-044).
+	var c io.Closer = ft
+	return ft, func() { closer.Warn(c, "front") }
 }
 
 // allocateMediatedPorts pre-allocates a host-port block for every

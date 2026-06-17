@@ -312,13 +312,7 @@ type Deployer struct {
 	Keyless         lane.Keyless                                                                                // lane-declared keyless config (ADR-040 D2, ADR-041); .Endpoints dials Fulcio, Rekor v2, TSA; .TrustRoot/.TrustRootRef carry the verify anchor
 	BaseSBOMSigners []lane.SBOMSigner                                                                           // ADR-040 2c: declared base-SBOM signers; lane build requires a Keyless trust root when non-empty
 	produceBundles  func(ctx context.Context, eps lane.KeylessEndpoints, statements [][]byte) ([][]byte, error) // test seam; nil selects the real keyless chain
-	// ResolveBaseSBOMVerify resolves the lane trust root and returns a base-SBOM
-	// bundle verifier (ADR-040 2c). It is the injection seam for internal/verify:
-	// deploy orchestrates base-SBOM verification but does not import the verifier
-	// (ADR-044 forbids the intra-orchestration edge), so cmd/strike wires it.
-	// Required (non-nil) whenever the lane declares base SBOM signers.
-	ResolveBaseSBOMVerify func(ctx context.Context) (VerifyBaseSBOMFunc, error)
-	ownRecords            []capsule.Records // method + capture container records, accumulated during Execute
+	ownRecords      []capsule.Records                                                                           // method + capture container records, accumulated during Execute
 }
 
 // collectObservedPeers builds the Layer-V observed_peers map and the Layer-E

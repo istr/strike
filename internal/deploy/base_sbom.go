@@ -8,16 +8,8 @@ import (
 
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/registry"
+	"github.com/istr/strike/internal/verify"
 )
-
-// VerifyBaseSBOMFunc verifies one base-SBOM sigstore bundle against one declared
-// signer (its identity and issuer) and a resolved lane trust root, returning the
-// verified in-toto statement payload, or an error if the bundle does not verify.
-// It is the verify-side primitive the deploy package consumes through the
-// ResolveBaseSBOMVerify injection seam: deploy orchestrates base-SBOM
-// verification but does not import internal/verify, which ADR-044 forbids as an
-// intra-orchestration edge.
-type VerifyBaseSBOMFunc func(signer lane.SBOMSigner, bundle []byte) ([]byte, error)
 
 // verifyBaseSBOMs fetches and verifies the signed SBOM attestations of every
 // base image in the deploy step's sub-tree, returning one resolved-dependency
@@ -26,16 +18,13 @@ type VerifyBaseSBOMFunc func(signer lane.SBOMSigner, bundle []byte) ([]byte, err
 // does not bind to the base digest, aborts the deploy. A base with no SBOM
 // referrer yields no descriptor and no error. When the lane declares no base
 // SBOM signers, this is a no-op (the lane build guard guarantees a resolvable
-// trust root whenever signers are present). Signers without an injected verifier
-// is a wiring error and fails closed.
+// trust root whenever signers are present; a declared-but-unresolvable trust root
+// fails closed here).
 func (d *Deployer) verifyBaseSBOMs(ctx context.Context, stepID string) ([]ResourceDescriptor, error) {
 	if len(d.BaseSBOMSigners) == 0 {
 		return nil, nil
 	}
-	if d.ResolveBaseSBOMVerify == nil {
-		return nil, fmt.Errorf("base SBOM: signers declared but no verifier wired")
-	}
-	verifyOne, err := d.ResolveBaseSBOMVerify(ctx)
+	tm, err := verify.ResolveTrustedMaterial(ctx, "", d.Keyless)
 	if err != nil {
 		return nil, fmt.Errorf("base SBOM: resolve trust root: %w", err)
 	}
@@ -50,7 +39,7 @@ func (d *Deployer) verifyBaseSBOMs(ctx context.Context, stepID string) ([]Resour
 			return nil, fmt.Errorf("base SBOM: fetch referrers of %s: %w", base, err)
 		}
 		for _, r := range referrers {
-			dep, recorded, err := d.verifyOneBaseSBOM(verifyOne, base, baseDigest, r)
+			dep, recorded, err := d.verifyOneBaseSBOM(tm, base, baseDigest, r)
 			if err != nil {
 				return nil, err
 			}
@@ -69,13 +58,13 @@ func (d *Deployer) verifyBaseSBOMs(ctx context.Context, stepID string) ([]Resour
 // (else fail-closed). The returned descriptor references the referrer-manifest
 // digest, the stable handle for offline re-verification.
 func (d *Deployer) verifyOneBaseSBOM(
-	verifyOne VerifyBaseSBOMFunc, base lane.ImageRef, baseDigest string, r registry.BaseSBOMReferrer,
+	tm *verify.TrustedMaterial, base lane.ImageRef, baseDigest string, r registry.BaseSBOMReferrer,
 ) (ResourceDescriptor, bool, error) {
 	var payload []byte
 	var lastErr error
 	matched := false
 	for _, s := range d.BaseSBOMSigners {
-		p, verr := verifyOne(s, r.Bundle)
+		p, verr := verify.New(tm, s.Identity, s.Issuer).Verify(r.Bundle)
 		if verr == nil {
 			payload = p
 			matched = true

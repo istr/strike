@@ -157,9 +157,13 @@ config re-check, 2c-i, `0e4b9a8e`); the `internal/lane` build guard primitives
 (`DAG.PackBaseRefs`, `validateBaseSBOMTrustAnchor`, 2c-ii-a, `c3b079ae`); the
 `internal/bundle` extraction and ADR-044 deterministic tier tightening that
 severed the `verify -> deploy` import edge (`c214dae5`, `ec2d4ed`); and
-producer-side base-SBOM verification in `internal/deploy`, reached through the
-`ResolveBaseSBOMVerify` / `VerifyBaseSBOMFunc` injection seam wired by
-`cmd/strike` (2c-ii-b, `bc35f1e8`). Verified base SBOMs are recorded in SLSA
+producer-side base-SBOM verification in `internal/deploy` (2c-ii-b, `bc35f1e8`).
+This initially reached `internal/verify` through a `cmd/strike`-wired injection
+seam (`ResolveBaseSBOMVerify` / `VerifyBaseSBOMFunc`); the seam was later removed
+when ADR-044 was sharpened to forbid composition-root injection of a forbidden
+tier edge and `internal/verify` was reclassified to its criterion-correct
+services tier, making `deploy -> verify` a legal downward static import. Verified
+base SBOMs are recorded in SLSA
 `resolvedDependencies` by referrer-manifest digest; fail-closed three-way
 contract (verifies against a declared signer / signed predicate type is an SBOM
 / signed subject binds to the base digest). Hermetic tests against the
