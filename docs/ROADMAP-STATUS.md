@@ -1,6 +1,6 @@
 # Strike Roadmap Status Summary
 
-**As of 2026-06-15**, the repository is at a major inflection point: the core
+**As of 2026-06-17**, the repository is at a major inflection point: the core
 verification engine is complete and wrapped in a lane-aware CLI (`strike
 verify`, UC1 and UC2, with per-layer predicate validation and V/E gating). This
 document provides a snapshot of the status of all active roadmaps.
@@ -10,7 +10,7 @@ document provides a snapshot of the status of all active roadmaps.
 | Roadmap | Status | Notes |
 |---------|--------|-------|
 | [ROADMAP-ADR-038](ROADMAP-ADR-038.md) | PARTIAL (1--7 done; 8--9 remain) | Protocol-mediated SSH; control-plane front. Items 8 (DoT resolver + TLS mediator rehosting onto the front) and 9 (SSH-mediated per-connection records) remain. Remote-front exposure unblocked by ADR-040 keyless. |
-| [ROADMAP-ADR-040](ROADMAP-ADR-040.md) | SUBSTANTIALLY COMPLETE | Instructions 1--4 done (OIDC schema, SBOM, keyless signing, OCI referrers, control-plane push). Instruction 5a (verify core) done; 5b (CLI exposure) landed via ADR-041. |
+| [ROADMAP-ADR-040](ROADMAP-ADR-040.md) | SUBSTANTIALLY COMPLETE | Instructions 1--4 done (OIDC schema, SBOM, keyless signing, OCI referrers, control-plane push). Instruction 5a (verify core) done; 5b (CLI exposure) landed via ADR-041. Instruction 2c (base-SBOM signature verification) landed; live e2e against the harness remains. |
 | [ROADMAP-ADR-041](ROADMAP-ADR-041.md) | SUBSTANTIALLY COMPLETE | Foundation plus instructions 1--3 (CLI subcommand, lane-policy integration, predicate validation and V/E gating) landed. Genuine residual: trust-root auto-import from OCI referrers (currently fail-closed). |
 | [ROADMAP-sigstore-test-harness](ROADMAP-sigstore-test-harness.md) | H1 DONE, H2 PENDING | Stack-up and trust-anchor export complete. WebAuthn/FIDO2 (H2) remains. |
 | ROADMAP-cue-spec-review (retired) | RETIRED | All review arcs landed (A, D-A, D-C, D-D, D-E, C-5, B-1, C-3, D-B+D-G, D-F B-1..B-9); the deferred backlog moved into the execution order below. History in git. |
@@ -64,6 +64,17 @@ and can proceed.
   - `ParseTrustedRoot()` for sigstore TrustedRoot bundle parsing
   - Golden-test fixtures verifying the full chain offline
   - Live tests against the sigstore-local harness
+
+- **Instruction 2c (base-SBOM signature verification):** Landed. The registry
+  fetch path (`internal/registry` `FetchBaseSBOMReferrers`, 2c-i), the lane
+  build guard primitives (`internal/lane` `PackBaseRefs` /
+  `validateBaseSBOMTrustAnchor`, 2c-ii-a), and producer-side verification in
+  `internal/deploy` reached through the `ResolveBaseSBOMVerify` /
+  `VerifyBaseSBOMFunc` injection seam wired by `cmd/strike` (2c-ii-b) are all
+  implemented. Verified base SBOMs are recorded in SLSA `resolvedDependencies`
+  by referrer-manifest digest with a fail-closed three-way contract (declared
+  signer / SBOM predicate type / base-digest subject binding). The live e2e
+  against the harness is the only residual.
 
 ### ADR-041: The lane as verification policy (SUBSTANTIALLY COMPLETE)
 
@@ -150,6 +161,14 @@ TLS demux, and the osv-scalibr PR) is carried in that roadmap.
    layer is a third referrer. Verification can gate per-layer based on trust
    mode.
 
+5. **Deterministic tier assignment and foundation package landed.** ADR-044
+   formalizes the tier-assignment criterion. The DSSE/in-toto wire primitives
+   (`PAEEncode` / `PayloadType` / `MediaType`) live in a role-neutral foundation
+   package `internal/bundle`; `verify` no longer depends on `deploy`; foundation
+   forbids any internal dependency and orchestration forbids intra-tier edges;
+   the deploy/verify coupling is expressed as a cmd-wired injection seam rather
+   than an import.
+
 ## Execution order (cross-roadmap)
 
 This is the single source for the cross-roadmap execution order. It groups the
@@ -222,8 +241,25 @@ engine/transport cluster on the now-landed D-D foundation; the rest is parked.
    for posture symmetry with cosign is its own item. (2) full cosign
    compatibility -- liveTrustRoot does not yet carry the ctlogs entry (only the
    golden generator does); pulling it in is the remaining live-path step.
-4. Base-SBOM signature verification (2c) -- completes the SBOM verification
-   feature; the verify core is done, so a shallow dependency. (ROADMAP-ADR-040)
+4. Base-SBOM signature verification (2c) (LANDED) -- cosign fixture and
+   strike-verify smoke gate (`e1721cf3`); `internal/registry`
+   `FetchBaseSBOMReferrers` artifactType-filter path, no config re-check
+   (2c-i, `0e4b9a8e`); `internal/lane` `PackBaseRefs` /
+   `validateBaseSBOMTrustAnchor` build guard (2c-ii-a, `c3b079ae`);
+   producer-side base-SBOM verification in `internal/deploy` via the
+   `ResolveBaseSBOMVerify` / `VerifyBaseSBOMFunc` injection seam wired by
+   `cmd/strike`, recording verified base SBOMs in `resolvedDependencies` by
+   referrer digest with a fail-closed three-way contract (2c-ii-b, `bc35f1e8`).
+   Deferred: live e2e against the harness (ROADMAP-ADR-040). (ROADMAP-ADR-040)
+4x. ADR-044 / `internal/bundle` / arch-lint arc (LANDED, mid-2c) --
+   deterministic tier-assignment criterion formalized in ADR-044 (`c214dae5`);
+   role-neutral DSSE/in-toto wire primitives (`PAEEncode` / `PayloadType` /
+   `MediaType`) extracted into the `internal/bundle` foundation package;
+   `verify -> deploy` import edge severed; `.go-arch-lint.yml` tightened
+   (foundation forbids any internal dependency; orchestration forbids intra-tier
+   edges); deploy/verify coupling expressed as the cmd-wired injection seam
+   above rather than a direct import (`ec2d4ed`). No owning roadmap beyond
+   ADR-044 itself.
 5. Trust-root auto-import from OCI referrers -- lifts the current fail-closed
    posture; security-sensitive, so it follows 3-4, when the path is exercised
    and the cosign baseline can catch regressions. (ROADMAP-ADR-041)

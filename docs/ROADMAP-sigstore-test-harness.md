@@ -340,6 +340,12 @@ Resolved at run time:
 
 Still open:
 
+- 2c live end-to-end test. The remaining 2c step is an e2e run against this
+  harness: cosign-faithful empty-config referrer discoverability (confirmed
+  unaffected by the registry:3 fallback-tag behavior above) plus the full
+  fetch -> verify -> resolvedDependencies path end to end, from
+  `FetchBaseSBOMReferrers` through `verifyBaseSBOMs` to the sealed SLSA
+  provenance. Anchored in ROADMAP-ADR-040 ("Deferred live e2e (2c)").
 - cosign independent-verify path. The original cosign smoke was overtaken
   by strike's own live test; the cosign verify-attestation independence
   check (and a possibly needed assembled trusted-root.json) belongs to

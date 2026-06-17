@@ -3,8 +3,8 @@
 ## Status: SUBSTANTIALLY COMPLETE (verify arc landed; instructions 1--3 done)
 
 Genuine residual in this roadmap: trust-root auto-import from OCI referrers
-(currently fail-closed). Base-SBOM signature verification is tracked in
-ROADMAP-ADR-040 (instruction 2c); the v1-verifier teardown is complete.
+(currently fail-closed). Base-SBOM signature verification (ROADMAP-ADR-040 instruction 2c) has landed;
+the v1-verifier teardown is complete.
 
 ADR-041 is Accepted: the decision record is at
 `docs/ADR-041-lane-as-verification-policy.md`, registered in

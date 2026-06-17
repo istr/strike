@@ -1,6 +1,6 @@
 # ADR-040 Implementation Roadmap
 
-## Status: SUBSTANTIALLY COMPLETE (instructions 1--4 done; instruction 5 core done, CLI exposure landed via ADR-041)
+## Status: SUBSTANTIALLY COMPLETE (instructions 1--4 done; instruction 5 core done, CLI exposure landed via ADR-041; instruction 2c base-SBOM signature verification landed, live e2e against the harness remains)
 
 ADR-040 is Accepted and fully plumbed: the decision record is at
 `docs/ADR-040-control-plane-sbom-and-keyless-attestation.md`, registered in
@@ -149,11 +149,23 @@ path and the unverified ADR-019 base-SBOM referrer fetch are removed in
 their entirety. An empty catalog is surfaced as INFO. Engine-backed e2e
 test verifies the full pipeline including determinism.
 
-**Deferred.** Verified base-SBOM ingestion against the declared
-`base_sbom_signers` is deferred to after instruction 5 (needs the
-Fulcio/Rekor verification machinery). Base OS packages are still captured
-for catalogable bases because flattening includes the base layers and the
-cataloger reads their dpkg database directly.
+**LANDED (instruction 2c).** Verified base-SBOM ingestion against the declared
+`base_sbom_signers` is implemented. The arc: a cosign v0.3 bundle fixture and
+strike-verify smoke gate (`e1721cf3`); the `internal/registry` base-SBOM
+referrer fetch path (`FetchBaseSBOMReferrers`, artifactType discovery, no
+config re-check, 2c-i, `0e4b9a8e`); the `internal/lane` build guard primitives
+(`DAG.PackBaseRefs`, `validateBaseSBOMTrustAnchor`, 2c-ii-a, `c3b079ae`); the
+`internal/bundle` extraction and ADR-044 deterministic tier tightening that
+severed the `verify -> deploy` import edge (`c214dae5`, `ec2d4ed`); and
+producer-side base-SBOM verification in `internal/deploy`, reached through the
+`ResolveBaseSBOMVerify` / `VerifyBaseSBOMFunc` injection seam wired by
+`cmd/strike` (2c-ii-b, `bc35f1e8`). Verified base SBOMs are recorded in SLSA
+`resolvedDependencies` by referrer-manifest digest; fail-closed three-way
+contract (verifies against a declared signer / signed predicate type is an SBOM
+/ signed subject binds to the base digest). Hermetic tests against the
+committed cosign fixture. Base OS packages are still captured for catalogable
+bases because flattening includes the base layers and the cataloger reads their
+dpkg database directly.
 
 ### D2 -- keyless signing, in-process -- DONE (3b-i + 3b-ii)
 
@@ -248,10 +260,11 @@ empty catalog is surfaced as INFO. Engine-backed e2e test
 (`test/integration/sbom_test.go`) verifies two SBOM referrers, correct
 subject, npm/dpkg/golang components, and deterministic output.
 
-Verified base-SBOM ingestion against `base_sbom_signers` is deferred to
-after instruction 5 (needs Fulcio/Rekor verification machinery). Base OS
-packages are still captured for catalogable bases because flattening includes
-the base layers and the cataloger reads their dpkg database directly.
+Verified base-SBOM ingestion against `base_sbom_signers` is landed (instruction
+2c). See the "2c spike" and "LANDED (instruction 2c)" entries above for the
+full arc. Base OS packages are still captured for catalogable bases because
+flattening includes the base layers and the cataloger reads their dpkg database
+directly.
 
 ### 2c spike: base-SBOM referrer shape (cosign attest)
 
