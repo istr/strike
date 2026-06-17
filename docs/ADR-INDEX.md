@@ -77,6 +77,7 @@ referenced here at all.
 | 041 | [The lane as verification policy](ADR-041-lane-as-verification-policy.md) | Accepted | Runtime is attested; Identity is asymmetric; Digest-pinned references; CUE first; Observation over declaration; Enforcement is structural; Code is liability |
 | 042 | [Field naming: camelCase, matching the attestation ecosystem](ADR-042-field-naming-camelcase.md) | Accepted | Runtime is attested; CUE first; Code is liability |
 | 043 | [Retire keyed image signing and Rekor v1](ADR-043-retire-keyed-image-signing-and-rekor-v1.md) | Accepted | Code is liability; Runtime is attested; Digest-pinned references; Enforcement is structural |
+| 044 | [Deterministic tier assignment for internal packages](ADR-044-tier-assignment-criterion.md) | Accepted | Enforcement is structural; Meaning is single-sourced; Code is liability |
 
 ## By principle
 
@@ -90,7 +91,8 @@ ADR-001, ADR-002, ADR-004, ADR-005, ADR-006, ADR-008, ADR-010,
 ADR-011, ADR-013, ADR-014, ADR-015, ADR-016, ADR-017, ADR-018,
 ADR-019, ADR-020, ADR-021, ADR-023, ADR-024, ADR-025, ADR-026, ADR-027,
 ADR-028, ADR-029, ADR-030, ADR-031, ADR-032, ADR-033, ADR-034, ADR-035,
-ADR-036, ADR-037, ADR-038, ADR-039, ADR-040, ADR-041, ADR-042, ADR-043.
+ADR-036, ADR-037, ADR-038, ADR-039, ADR-040, ADR-041, ADR-042, ADR-043,
+ADR-044.
 
 ### No shell
 
@@ -152,7 +154,12 @@ ADR-032, ADR-034.
 ### Enforcement is structural, not discretionary
 
 ADR-005, ADR-006, ADR-022, ADR-024, ADR-025, ADR-028, ADR-029,
-ADR-031, ADR-033, ADR-034, ADR-035, ADR-036, ADR-037, ADR-038, ADR-041, ADR-043.
+ADR-031, ADR-033, ADR-034, ADR-035, ADR-036, ADR-037, ADR-038, ADR-041, ADR-043,
+ADR-044.
+
+### Meaning is single-sourced
+
+ADR-044.
 
 ### Observation over declaration
 
