@@ -1,10 +1,12 @@
 # ADR-041 Implementation Roadmap
 
-## Status: SUBSTANTIALLY COMPLETE (verify arc landed; instructions 1--3 done)
+## Status: COMPLETE (verify arc landed; instructions 1--3 done)
 
-Genuine residual in this roadmap: trust-root auto-import from OCI referrers
-(currently fail-closed). Base-SBOM signature verification (ROADMAP-ADR-040 instruction 2c) has landed;
-the v1-verifier teardown is complete.
+No residual: the CLI trust-root override is a digest-pinned image ref
+(`--trust-root-ref`, `669eca89`), so the verify path reads no host-local file and
+the anchor is always lane bytes or a digest-pinned image. Base-SBOM signature
+verification (ROADMAP-ADR-040 instruction 2c) has landed; the v1-verifier
+teardown is complete.
 
 ADR-041 is Accepted: the decision record is at
 `docs/ADR-041-lane-as-verification-policy.md`, registered in
@@ -54,7 +56,7 @@ The `strike verify` subcommand is wired (UC1 and UC2), reading bundles via
 referrers, resolving the trust root, and running the keyless verify per bundle
 plus a subject-digest check. The lane-digest binding and per-layer predicate
 validation remain (D4 / instruction 3). It exposes the two use cases:
-- UC1: `strike verify --identity=<id> --issuer=<iss> --trust-root=<path> <digest>`
+- UC1: `strike verify --identity=<id> --issuer=<iss> --trust-root-ref=<root-image@digest> <digest>`
 - UC2: `strike verify --lane=<lane.yaml> <digest>` (identity, issuer, root from lane)
 
 ### D2 -- Lane truth source for policy
@@ -67,7 +69,7 @@ these directly from the lane file without re-typing.
 
 The trust-root is currently embedded in UC1 tests as a fixture. The lane
 will declare signature roots (digest-pinned by reference) and UC2 will
-consume them; UC1 will accept an explicit override (--trust-root flag). The
+consume them; UC1 accepts an explicit override (--trust-root-ref flag, a digest-pinned image). The
 TLS transport anchors (`#TLSTrust` on keyless endpoints) are producer
 concerns; the signature roots (Fulcio CA, Rekor keys, TSA cert) are
 consumer concerns, and they must be declared separately.
@@ -96,19 +98,19 @@ own instruction file under the established conventions.
   (`registry.FetchTrustRoot`) and digest-verified.
 - `trustRoot`: inline TrustedRoot replica (testing and emergency override).
 - Resolution order in `internal/verify.ResolveTrustedMaterial`: explicit
-  `--trust-root` path, else inline `trustRoot`, else `trustRootRef`, else
+  `--trust-root-ref` image, else inline `trustRoot`, else `trustRootRef`, else
   fail-closed `ErrNoTrustRoot`. The single-bundle model superseded the sketched
   per-endpoint override (fulcio_root / rekor_keys / tsa_root); that idea is not
   adopted.
 
-**1b. (LANDED, with one residual)** The keyless config carries the optional
-trust root (UC2 default; UC1 explicit override via `--trust-root`). Empty
-currently means fail-closed (`ErrNoTrustRoot`), not auto-import; deriving the
-trust root from the image's OCI referrers when none is declared is the one
-genuine residual (see Open items).
+**1b. (LANDED)** The keyless config carries the optional trust root (UC2 default;
+UC1 explicit override via `--trust-root-ref`, a digest-pinned image). Empty means
+fail-closed (`ErrNoTrustRoot`) -- the intended terminal, not a gap: the anchor is
+operator-chosen and never derived from the verified artifact (ADR-041
+Principles).
 
 **1c.** (LANDED) Expose `strike verify` subcommand in `cmd/strike`:
-- UC1: `strike verify --identity=<id> --issuer=<iss> --trust-root=<path> <image@digest>`
+- UC1: `strike verify --identity=<id> --issuer=<iss> --trust-root-ref=<root-image@digest> <image@digest>`
 - UC2: `strike verify --lane=<lane.yaml> <image@digest>`
 - Error if identity/issuer are provided with --lane (lane is the source)
 - Exit code 0 on success; 1 on verification failure (with layer sentinel in stderr)
@@ -170,15 +172,13 @@ Per the established handover pattern:
 
 ## Open items
 
-- **Trust-root import from OCI referrers (genuine residual).** Both
-  preconditions have landed -- referrer attachment (ADR-040 instruction 4) and
-  UC2 verification integration (instruction 2). Today verify is fail-closed when
-  no trust root is declared (`internal/verify.ErrNoTrustRoot`); deriving the
-  trust root from the image's referrers when none is declared is a future
-  enhancement. Exact mechanics (cert pinning in the referrer attachment, inline
-  vs by-reference) are decided when the feature is taken up. This is the one
-  item that keeps this roadmap open. Sequenced in Phase 2; see the execution
-  order in ROADMAP-STATUS.md.
+- **Trust-root import from OCI referrers -- resolved, not adopted.** Deriving the
+  trust root from the verified image's referrers was superseded: the anchor must
+  be operator-chosen, never sourced from the artifact (ADR-041 Principles).
+  Trust-root material is lane bytes (`trustRoot`), the lane's digest-pinned
+  `trustRootRef`, or the `--trust-root-ref` CLI override (`669eca89`); fail-closed
+  `ErrNoTrustRoot` is the intended terminal when none is declared, and the verify
+  path reads no host-local file. No further work.
 - **Per-endpoint trust-root override -- resolved by redesign.** The sketched
   per-endpoint overrides (fulcio_root / rekor_keys / tsa_root) were not adopted;
   the shipped model is a single TrustedRoot bundle, inline (`trustRoot`) or by

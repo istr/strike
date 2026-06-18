@@ -11,7 +11,7 @@ document provides a snapshot of the status of all active roadmaps.
 |---------|--------|-------|
 | [ROADMAP-ADR-038](ROADMAP-ADR-038.md) | PARTIAL (1--7 done; 8--9 remain) | Protocol-mediated SSH; control-plane front. Items 8 (DoT resolver + TLS mediator rehosting onto the front) and 9 (SSH-mediated per-connection records) remain. Remote-front exposure unblocked by ADR-040 keyless. |
 | [ROADMAP-ADR-040](ROADMAP-ADR-040.md) | SUBSTANTIALLY COMPLETE | Instructions 1--4 done (OIDC schema, SBOM, keyless signing, OCI referrers, control-plane push). Instruction 5a (verify core) done; 5b (CLI exposure) landed via ADR-041. Instruction 2c (base-SBOM signature verification) landed; live e2e against the harness remains. |
-| [ROADMAP-ADR-041](ROADMAP-ADR-041.md) | SUBSTANTIALLY COMPLETE | Foundation plus instructions 1--3 (CLI subcommand, lane-policy integration, predicate validation and V/E gating) landed. Genuine residual: trust-root auto-import from OCI referrers (currently fail-closed). |
+| [ROADMAP-ADR-041](ROADMAP-ADR-041.md) | COMPLETE | Foundation plus instructions 1--3 (CLI subcommand, lane-policy integration, predicate validation and V/E gating) landed; the CLI trust-root override is a digest-pinned image ref (`--trust-root-ref`, `669eca89`), so the verify path reads no host-local file. No residual. |
 | [ROADMAP-sigstore-test-harness](ROADMAP-sigstore-test-harness.md) | H1 DONE, H2 PENDING | Stack-up and trust-anchor export complete. WebAuthn/FIDO2 (H2) remains. |
 | ROADMAP-cue-spec-review (retired) | RETIRED | All review arcs landed (A, D-A, D-C, D-D, D-E, C-5, B-1, C-3, D-B+D-G, D-F B-1..B-9); the deferred backlog moved into the execution order below. History in git. |
 
@@ -75,7 +75,7 @@ and can proceed.
   signer / SBOM predicate type / base-digest subject binding). The live e2e
   against the harness is the only residual.
 
-### ADR-041: The lane as verification policy (SUBSTANTIALLY COMPLETE)
+### ADR-041: The lane as verification policy (COMPLETE)
 
 A new ADR that reframes verification around two use cases:
 - **UC1 (consumer):** "I have an image; is its signature valid?" Explicit
@@ -98,10 +98,13 @@ A new ADR that reframes verification around two use cases:
 - Instruction 3: Per-layer predicate validation and V/E trust-mode gating
   (`--no-engine-trust`), over the enriched goldens (instruction 3a).
 
-**Genuine residual (this roadmap):** trust-root auto-import from OCI referrers.
-When the lane declares no trust root and no `--trust-root` is passed, verify is
-fail-closed (`internal/verify.ErrNoTrustRoot`); deriving the trust root from the
-image's referrers is a future enhancement, not a regression.
+**No residual -- this roadmap is complete.** The trust root is sourced only from
+lane bytes (`keyless.trustRoot`) or a digest-pinned OCI image: the lane's
+`keyless.trustRootRef`, or the `--trust-root-ref` CLI override (`669eca89`). The
+verify path reads no host-local file. When the lane declares no trust root and no
+`--trust-root-ref` is passed, fail-closed (`internal/verify.ErrNoTrustRoot`) is
+the intended terminal, not a gap: the anchor must be operator-chosen, never
+derived from the verified artifact (ADR-041 Principles).
 
 **Tracked elsewhere (not this roadmap):** base-SBOM signature verification lives
 in ROADMAP-ADR-040 (instruction 2c); the engine-cert subject/issuer field-add
@@ -268,9 +271,13 @@ engine/transport cluster on the now-landed D-D foundation; the rest is parked.
    now imports it as a legal downward static edge (the seam --
    `VerifyBaseSBOMFunc`, the `Deployer` field, the cmd closure -- is gone). No
    owning roadmap beyond ADR-044 itself.
-5. Trust-root auto-import from OCI referrers -- lifts the current fail-closed
-   posture; security-sensitive, so it follows 3-4, when the path is exercised
-   and the cosign baseline can catch regressions. (ROADMAP-ADR-041)
+5. Trust-root override as a digest-pinned image ref (LANDED, `669eca89`) -- the
+   CLI override moved from a host-local file to a `--trust-root-ref` image,
+   resolved through `registry.FetchTrustRoot` like the lane's `trustRootRef`, so
+   the verify path reads no host-local file. Fail-closed `ErrNoTrustRoot` when no
+   anchor is declared is the intended terminal, not a residual. This completes
+   ADR-041; the earlier "auto-import from referrers" framing was superseded -- the
+   anchor is never sourced from the verified artifact. (ROADMAP-ADR-041)
 6. Artifact / secret map-key id normalization -- B-4 normalized step / output /
    capture ids, but `artifacts: { [Name=string]: ... }` and `secrets:` map keys
    are still plain `Name`. Retype as `[ID=#Identifier]`: a wire change (golden-
