@@ -4,6 +4,14 @@
 
 Accepted.
 
+> **Amended by [ADR-045](ADR-045-execute-only-by-pinned-digest.md):**
+> the "Tag scheme and digest references" section below records that tags
+> are lookup keys, not cryptographic anchors, and that inter-step DAG
+> references record the manifest digest. ADR-045 enforces this on the
+> execution path: a step executes a lane-generated base image only by its
+> CP-computed manifest digest, never by the engine-resolved tag. The tag
+> stays a cache-existence lookup key; it is never the execution anchor.
+
 ## Scope
 
 This ADR concerns the storage layer between steps in a strike
