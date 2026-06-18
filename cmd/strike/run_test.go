@@ -662,9 +662,6 @@ func TestResolveImageDigest_ImageFrom(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	producerSpecHash := lane.MustParseDigest("sha256:1111111111111111000000000000000000000000000000000000000000000000")
-	rc.state.specHashes["pack"] = producerSpecHash
-
 	step := rc.dag.Steps["run"]
 	imageBefore := step.Image
 	digest, err := rc.resolveImageDigest(context.Background(), step, "test")
@@ -678,10 +675,10 @@ func TestResolveImageDigest_ImageFrom(t *testing.T) {
 		t.Errorf("resolveImageDigest must not mutate step.Image; got %v, was %v",
 			step.Image, imageBefore)
 	}
-	got := rc.state.imageFromTags["run"]
-	want := registry.WrapTag("test-lane", "pack", producerSpecHash)
+	got := rc.state.imageFromRefs["run"]
+	want := registry.WrapDigestRef("test-lane", "pack", digest)
 	if got != want {
-		t.Errorf("imageFromTags[run] = %q, want %q", got, want)
+		t.Errorf("imageFromRefs[run] = %q, want %q", got, want)
 	}
 }
 

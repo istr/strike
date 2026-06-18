@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/istr/strike/internal/capsule"
 	"github.com/istr/strike/internal/container"
@@ -21,10 +22,12 @@ type Run struct {
 	// step with no workdir (no writable surface, no outputs). The caller
 	// owns the volume lifecycle (create before, remove after extraction).
 	VolumeName string
-	// ImageRef overrides Step.Image when non-empty. Set by the
-	// caller for image_from steps so that Step.Image remains the
-	// parsed YAML value and the executor sees the producer's
-	// local WrapTag. When empty, Step.Image is used unchanged.
+	// ImageRef overrides Step.Image when non-empty. Set by the caller
+	// for image_from steps so that Step.Image remains the parsed YAML
+	// value and the executor sees the producer's content-addressed
+	// digest reference (localhost/strike/<lane>/<step>@sha256:<D>).
+	// When empty, Step.Image is used unchanged. ADR-045: the base is
+	// always a digest-pinned reference.
 	ImageRef  string
 	CAVolume  string // lane-wide CA volume name; mounted r/o at /etc/ssl/certs; required when Capsule != nil
 	SSHVolume string // per-step SSH trust volume name; mounted r/o at /etc/ssh; empty when step has no SSH peers
@@ -66,6 +69,13 @@ func (r Run) Execute(ctx context.Context) (string, error) {
 	}
 	if r.ImageRef != "" {
 		opts.Image = r.ImageRef
+	}
+	// ADR-045: a step executes only a digest-pinned image. External bases
+	// are digest-pinned at the schema boundary (ADR-011); image_from bases
+	// arrive as a content-addressed local reference. Reject anything else
+	// structurally, so an execute-by-tag path cannot reappear.
+	if !strings.Contains(opts.Image, "@sha256:") {
+		return "", fmt.Errorf("executor: refusing to run non-digest-pinned image %q (ADR-045)", opts.Image)
 	}
 	opts.Cmd = r.Step.Args
 	opts.Env = env

@@ -30,18 +30,21 @@ import (
 // runState holds accumulated state across steps during a lane execution.
 type runState struct {
 	specHashes map[string]lane.Digest
-	// imageFromTags maps a consumer step name to the producer's
-	// local WrapTag, populated by resolveImageDigest when the
-	// consumer has an image_from edge. Consumed by
-	// executeContainerStep to override Step.Image in the executor
-	// invocation without mutating the parsed Lane.
-	imageFromTags map[string]string
+	// imageFromRefs maps a consumer step name to the producer's
+	// content-addressed local digest reference
+	// (localhost/strike/<lane>/<step>@sha256:<D>), populated by
+	// resolveImageDigest when the consumer has an image_from edge.
+	// Consumed by executeContainerStep to override Step.Image in the
+	// executor invocation without mutating the parsed Lane. The base is
+	// executed only by this digest reference, never by a mutable tag
+	// (ADR-045).
+	imageFromRefs map[string]string
 }
 
 func newRunState() *runState {
 	return &runState{
 		specHashes:    map[string]lane.Digest{},
-		imageFromTags: map[string]string{},
+		imageFromRefs: map[string]string{},
 	}
 }
 
@@ -198,13 +201,12 @@ func (rc *runContext) resolveImageDigest(ctx context.Context, step *lane.Step, s
 			return lane.Digest{}, fmt.Errorf("%s: image_from %s: %w",
 				safeName, ref, err)
 		}
-		fromSpecHash, hashOK := rc.state.specHashes[fromStep]
-		if !hashOK {
-			return lane.Digest{}, fmt.Errorf("%s: image_from %s: producer spec hash not recorded",
-				safeName, ref)
-		}
-		rc.state.imageFromTags[string(step.ID)] = registry.WrapTag(
-			rc.lane.ID, fromStep, fromSpecHash)
+		// ADR-045: execute the producer's image by its content-addressed
+		// digest, not the mutable WrapTag. libpod records this RepoDigest at
+		// ImageTag time, so it resolves the locally-loaded image with no
+		// registry pull. art.Digest is the CP-verified manifest digest.
+		rc.state.imageFromRefs[string(step.ID)] = registry.WrapDigestRef(
+			rc.lane.ID, fromStep, art.Digest)
 		return art.Digest, nil
 	}
 	digest, err := resolveDigest(ctx, rc.regClient, *step.Image)
@@ -413,7 +415,7 @@ func (rc *runContext) executeContainerStep(ctx context.Context, step *lane.Step,
 		ImageVolumes: inputMounts,
 		VolumeName:   volName,
 		Secrets:      secrets,
-		ImageRef:     rc.state.imageFromTags[stepID],
+		ImageRef:     rc.state.imageFromRefs[stepID],
 		Capsule:      caps,
 		CAVolume:     rc.trust.ca,
 		SSHVolume:    rc.trust.ssh[stepID],

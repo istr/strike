@@ -95,7 +95,7 @@ func TestExecute_WithSSHPeer(t *testing.T) {
 		Secrets:   nil,
 		Step: &lane.Step{
 			ID:    "test-step",
-			Image: lane.Ptr(lane.ImageRef("alpine:latest")),
+			Image: lane.Ptr(lane.ImageRef("alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000")),
 			Args:  []string{"true"},
 			Peers: []lane.Peer{
 				lane.SSHPeer{
@@ -157,7 +157,7 @@ func TestExecute_WithoutSSHPeer(t *testing.T) {
 		Secrets:  nil,
 		Step: &lane.Step{
 			ID:    "test-step",
-			Image: lane.Ptr(lane.ImageRef("alpine:latest")),
+			Image: lane.Ptr(lane.ImageRef("alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000")),
 			Args:  []string{"true"},
 			Peers: []lane.Peer{
 				lane.HTTPSPeer{
@@ -203,7 +203,7 @@ func TestRunExecute_Seeds_PassedThrough(t *testing.T) {
 		Secrets:  nil,
 		Step: &lane.Step{
 			ID:      "consumer",
-			Image:   lane.Ptr(lane.ImageRef("alpine:latest")),
+			Image:   lane.Ptr(lane.ImageRef("alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000")),
 			Args:    []string{"cat", "/work/binary"},
 			Workdir: lane.Ptr(lane.AbsPath("/work")),
 		},

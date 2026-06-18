@@ -64,10 +64,26 @@ func Tag(registry, stepID string, hash lane.Digest) string {
 	return fmt.Sprintf("%s:%s-%s", registry, stepID, short)
 }
 
+// wrapRepo is the repository portion of a wrapped image's local reference,
+// shared by WrapTag (tag form) and WrapDigestRef (digest form) so the RepoDigest
+// libpod records at ImageTag time matches the reference a consumer step is
+// executed against.
+func wrapRepo(laneID, stepID string) string {
+	return fmt.Sprintf("localhost/strike/%s/%s", laneID, stepID)
+}
+
 // WrapTag builds the local engine tag used by wrapOutputs and input extraction.
 // Format: localhost/strike/{laneID}/{stepID}:{specHashHex}.
 func WrapTag(laneID, stepID string, specHash lane.Digest) string {
-	return fmt.Sprintf("localhost/strike/%s/%s:%s", laneID, stepID, specHash.Hex)
+	return fmt.Sprintf("%s:%s", wrapRepo(laneID, stepID), specHash.Hex)
+}
+
+// WrapDigestRef builds the content-addressed local reference a step's base image
+// is executed against (ADR-045): localhost/strike/{laneID}/{stepID}@{D}. libpod
+// records this exact RepoDigest at ImageTag time (see WrapTag), so it resolves
+// the locally-loaded image with no registry pull.
+func WrapDigestRef(laneID, stepID string, digest lane.Digest) string {
+	return fmt.Sprintf("%s@%s", wrapRepo(laneID, stepID), digest.String())
 }
 
 // hashReader computes SHA256 of the data from r.
