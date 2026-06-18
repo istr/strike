@@ -23,15 +23,16 @@ rejected. Flags precede the positional.
 Two modes, auto-detected:
 
 - **UC1 (consumer).** `--identity` and `--issuer` are given explicitly, with
-  `--trust-root` pointing at a local `trusted_root.json`. No lane is read.
-  `strike verify --identity <id> --issuer <iss> --trust-root <path> <image@digest>`
+  `--trust-root-ref` naming a digest-pinned OCI image whose sole layer is a
+  `trusted_root.json`. No lane is read.
+  `strike verify --identity <id> --issuer <iss> --trust-root-ref <root-image@digest> <image@digest>`
 - **UC2 (operator).** `--lane <lane.yaml>` supplies identity, issuer, and trust
-  root from the lane. `--trust-root` may still override the lane's root.
+  root from the lane. `--trust-root-ref` may still override the lane's root.
   `strike verify --lane <lane.yaml> <image@digest>`
 
 `--identity`/`--issuer` together with `--lane` is an error: the lane is the
 single source. The trust root has no implicit default -- it comes from
-`--trust-root`, the lane's `keyless.trustRoot`, or `keyless.trustRootRef`, and
+`--trust-root-ref`, the lane's `keyless.trustRoot`, or `keyless.trustRootRef`, and
 absence of all three is an error.
 
 Output: each verified statement is written to stdout; a per-bundle `OK`/`FAIL`

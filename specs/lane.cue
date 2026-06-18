@@ -32,7 +32,7 @@ package lane
 	// v2, and the TSA, fail-closed. `trustRoot` (inline replica) XOR
 	// `trustRootRef` (OCI digest) supplies the verification anchor; at most
 	// one, and -- forward-constraint for verify -- absence here means the
-	// anchor MUST come from --trust-root, with NO implicit default.
+	// anchor MUST come from --trust-root-ref, with NO implicit default.
 	keyless: #Keyless @go(Keyless)
 	baseSbomSigners?: [...#SBOMSigner] @go(BaseSBOMSigners,optional=nillable)
 	defaults?: #LaneDefaults @go(Defaults,optional=nillable)

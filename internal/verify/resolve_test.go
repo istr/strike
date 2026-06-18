@@ -7,7 +7,6 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
-	"path/filepath"
 	"testing"
 
 	ggcrregistry "github.com/google/go-containerregistry/pkg/registry"
@@ -32,13 +31,40 @@ func readTrustRootGolden(t *testing.T) []byte {
 	return data
 }
 
-func TestResolveOverride(t *testing.T) {
-	golden := readTrustRootGolden(t)
-	path := filepath.Join(t.TempDir(), "trusted_root.json")
-	if err := os.WriteFile(path, golden, 0o600); err != nil {
-		t.Fatalf("write override: %v", err)
+// pushGoldenTrustRoot publishes the golden trusted_root.json as a single-layer
+// OCI image to a fresh in-memory registry and returns its digest-pinned
+// reference. Both the override and the lane-declared ref resolve such a ref via
+// registry.FetchTrustRoot, so no host-local file is involved.
+func pushGoldenTrustRoot(t *testing.T) string {
+	t.Helper()
+	srv := httptest.NewServer(ggcrregistry.New())
+	t.Cleanup(srv.Close)
+	u, err := url.Parse(srv.URL)
+	if err != nil {
+		t.Fatalf("parse server url: %v", err)
 	}
-	tm, err := verify.ResolveTrustedMaterial(context.Background(), path, lane.Keyless{})
+	host := "localhost:" + u.Port()
+	img := ggcrmutate.MediaType(empty.Image, types.OCIManifestSchema1)
+	img, err = ggcrmutate.AppendLayers(img, static.NewLayer(readTrustRootGolden(t), types.OCILayer))
+	if err != nil {
+		t.Fatalf("append layer: %v", err)
+	}
+	nameRef, err := name.ParseReference(host + "/trust:v1")
+	if err != nil {
+		t.Fatalf("parse ref: %v", err)
+	}
+	if writeErr := remote.Write(nameRef, img); writeErr != nil {
+		t.Fatalf("push trust root: %v", writeErr)
+	}
+	digest, err := img.Digest()
+	if err != nil {
+		t.Fatalf("digest: %v", err)
+	}
+	return host + "/trust@" + digest.String()
+}
+
+func TestResolveOverride(t *testing.T) {
+	tm, err := verify.ResolveTrustedMaterial(context.Background(), pushGoldenTrustRoot(t), lane.Keyless{})
 	if err != nil {
 		t.Fatalf("ResolveTrustedMaterial: %v", err)
 	}
@@ -62,34 +88,7 @@ func TestResolveInlineRoundTrip(t *testing.T) {
 }
 
 func TestResolveRef(t *testing.T) {
-	golden := readTrustRootGolden(t)
-	srv := httptest.NewServer(ggcrregistry.New())
-	t.Cleanup(srv.Close)
-	u, err := url.Parse(srv.URL)
-	if err != nil {
-		t.Fatalf("parse server url: %v", err)
-	}
-	host := "localhost:" + u.Port()
-	ref := host + "/trust:v1"
-
-	img := ggcrmutate.MediaType(empty.Image, types.OCIManifestSchema1)
-	img, err = ggcrmutate.AppendLayers(img, static.NewLayer(golden, types.OCILayer))
-	if err != nil {
-		t.Fatalf("append layer: %v", err)
-	}
-	nameRef, err := name.ParseReference(ref)
-	if err != nil {
-		t.Fatalf("parse ref: %v", err)
-	}
-	if writeErr := remote.Write(nameRef, img); writeErr != nil {
-		t.Fatalf("push trust root: %v", writeErr)
-	}
-	digest, err := img.Digest()
-	if err != nil {
-		t.Fatalf("digest: %v", err)
-	}
-
-	k := lane.Keyless{TrustRootRef: lane.ImageRef(host + "/trust@" + digest.String())}
+	k := lane.Keyless{TrustRootRef: lane.ImageRef(pushGoldenTrustRoot(t))}
 	tm, err := verify.ResolveTrustedMaterial(context.Background(), "", k)
 	if err != nil {
 		t.Fatalf("ResolveTrustedMaterial: %v", err)
@@ -107,15 +106,10 @@ func TestResolveNoDefault(t *testing.T) {
 }
 
 func TestResolvePrecedenceOverrideShortCircuits(t *testing.T) {
-	golden := readTrustRootGolden(t)
-	path := filepath.Join(t.TempDir(), "trusted_root.json")
-	if err := os.WriteFile(path, golden, 0o600); err != nil {
-		t.Fatalf("write override: %v", err)
-	}
 	// A deliberately invalid inline replica: if the override did not short-
 	// circuit, marshalling and parsing this would fail.
 	k := lane.Keyless{TrustRoot: &lane.TrustedRootReplica{}}
-	tm, err := verify.ResolveTrustedMaterial(context.Background(), path, k)
+	tm, err := verify.ResolveTrustedMaterial(context.Background(), pushGoldenTrustRoot(t), k)
 	if err != nil {
 		t.Fatalf("override should short-circuit invalid inline: %v", err)
 	}

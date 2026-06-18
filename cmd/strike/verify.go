@@ -22,7 +22,7 @@ type verifyOptions struct {
 	subjectRef    string
 	identity      string
 	issuer        string
-	trustRoot     string // --trust-root override path; "" if none
+	trustRootRef  string // --trust-root-ref override (digest-pinned OCI image); "" if none
 	laneFile      string // --lane (UC2); "" selects UC1
 	noEngineTrust bool   // --no-engine-trust: degrade the engine-context layer to informational
 }
@@ -35,7 +35,7 @@ func cmdVerify(args []string) {
 	var opts verifyOptions
 	fs.StringVar(&opts.identity, "identity", "", "expected signer identity (UC1)")
 	fs.StringVar(&opts.issuer, "issuer", "", "expected OIDC issuer (UC1)")
-	fs.StringVar(&opts.trustRoot, "trust-root", "", "path to a trusted_root.json (override)")
+	fs.StringVar(&opts.trustRootRef, "trust-root-ref", "", "digest-pinned OCI image whose sole layer is a trusted_root.json (override)")
 	fs.StringVar(&opts.laneFile, "lane", "", "lane file as verification policy (UC2)")
 	fs.BoolVar(&opts.noEngineTrust, "no-engine-trust", false, "do not gate on the engine-context layer (treat it as informational)")
 	if err := fs.Parse(args); err != nil {
@@ -43,7 +43,7 @@ func cmdVerify(args []string) {
 	}
 	rest := fs.Args()
 	if len(rest) != 1 {
-		log.Fatal("usage: strike verify [--lane file | --identity id --issuer iss] [--trust-root path] <image@digest>")
+		log.Fatal("usage: strike verify [--lane file | --identity id --issuer iss] [--trust-root-ref root-image@digest] <image@digest>")
 	}
 	opts.subjectRef = rest[0]
 	if err := runVerify(context.Background(), fatalWriter{os.Stdout}, opts); err != nil {
@@ -182,7 +182,7 @@ func runVerify(ctx context.Context, out io.Writer, opts verifyOptions) error {
 	if err != nil {
 		return err
 	}
-	tm, err := verify.ResolveTrustedMaterial(ctx, opts.trustRoot, pol.keyless)
+	tm, err := verify.ResolveTrustedMaterial(ctx, opts.trustRootRef, pol.keyless)
 	if err != nil {
 		return err
 	}

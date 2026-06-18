@@ -78,15 +78,30 @@ func goldenSubjectHex(t *testing.T, bundleJSON []byte) string {
 	return s.Subject[0].Digest["sha256"]
 }
 
-// goldenTrustRootFile copies the golden trusted_root.json into a temp file and
-// returns its path -- the --trust-root override lever, from an arbitrary path.
-func goldenTrustRootFile(t *testing.T) string {
+// goldenTrustRootRef publishes the golden trusted_root.json as a single-layer
+// OCI image to host and returns its digest-pinned reference -- the
+// --trust-root-ref override lever. The verify path reads no host-local file; the
+// override is fetched from the registry by digest, exactly like a lane-declared
+// trustRootRef.
+func goldenTrustRootRef(t *testing.T, host string) string {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "trusted_root.json")
-	if err := os.WriteFile(path, goldenFile(t, "trusted_root.json"), 0o600); err != nil {
-		t.Fatalf("write temp trust root: %v", err)
+	img := mutate.MediaType(empty.Image, types.OCIManifestSchema1)
+	img, err := mutate.AppendLayers(img, static.NewLayer(goldenFile(t, "trusted_root.json"), types.OCILayer))
+	if err != nil {
+		t.Fatalf("append trust-root layer: %v", err)
 	}
-	return path
+	nameRef, err := name.ParseReference(host + "/trust:v1")
+	if err != nil {
+		t.Fatalf("parse trust-root ref: %v", err)
+	}
+	if writeErr := remote.Write(nameRef, img); writeErr != nil {
+		t.Fatalf("push trust root: %v", writeErr)
+	}
+	digest, err := img.Digest()
+	if err != nil {
+		t.Fatalf("trust-root digest: %v", err)
+	}
+	return host + "/trust@" + digest.String()
 }
 
 // localRegistry starts an in-memory OCI registry with referrers support and
@@ -193,10 +208,10 @@ func TestRunVerifyHappyPathUC1(t *testing.T) {
 
 	var out bytes.Buffer
 	opts := verifyOptions{
-		subjectRef: host + "/app@sha256:" + subjectHex,
-		identity:   goldenIdentity,
-		issuer:     goldenIssuer,
-		trustRoot:  goldenTrustRootFile(t),
+		subjectRef:   host + "/app@sha256:" + subjectHex,
+		identity:     goldenIdentity,
+		issuer:       goldenIssuer,
+		trustRootRef: goldenTrustRootRef(t, host),
 	}
 	if err := runVerify(context.Background(), &out, opts); err != nil {
 		t.Fatalf("runVerify: %v", err)
@@ -251,10 +266,10 @@ func TestRunVerifySubjectMismatch(t *testing.T) {
 
 	var out bytes.Buffer
 	opts := verifyOptions{
-		subjectRef: host + "/app@sha256:" + other,
-		identity:   goldenIdentity,
-		issuer:     goldenIssuer,
-		trustRoot:  goldenTrustRootFile(t),
+		subjectRef:   host + "/app@sha256:" + other,
+		identity:     goldenIdentity,
+		issuer:       goldenIssuer,
+		trustRootRef: goldenTrustRootRef(t, host),
 	}
 	if err := runVerify(context.Background(), &out, opts); err == nil {
 		t.Fatal("runVerify accepted a bundle whose subject is not the requested artifact")
@@ -303,10 +318,10 @@ func TestRunVerifyNoBundles(t *testing.T) {
 	host := localRegistry(t)
 	subject := pushSubject(t, host+"/app:v1")
 	opts := verifyOptions{
-		subjectRef: host + "/app@" + subject.Digest.String(),
-		identity:   goldenIdentity,
-		issuer:     goldenIssuer,
-		trustRoot:  goldenTrustRootFile(t),
+		subjectRef:   host + "/app@" + subject.Digest.String(),
+		identity:     goldenIdentity,
+		issuer:       goldenIssuer,
+		trustRootRef: goldenTrustRootRef(t, host),
 	}
 	err := runVerify(context.Background(), io.Discard, opts)
 	if err == nil || !strings.Contains(err.Error(), "no attestation bundles") {
@@ -410,9 +425,9 @@ func TestRunVerifyUC2HappyPath(t *testing.T) {
 	attachGoldenLayers(t, host, subjectHex, "sealed", "engine-context", "informational")
 
 	opts := verifyOptions{
-		subjectRef: host + "/app@sha256:" + subjectHex,
-		laneFile:   filepath.Join("..", "..", "internal", "verify", "testdata", "golden", "lane.yaml"),
-		trustRoot:  goldenTrustRootFile(t),
+		subjectRef:   host + "/app@sha256:" + subjectHex,
+		laneFile:     filepath.Join("..", "..", "internal", "verify", "testdata", "golden", "lane.yaml"),
+		trustRootRef: goldenTrustRootRef(t, host),
 	}
 	if err := runVerify(context.Background(), io.Discard, opts); err != nil {
 		t.Fatalf("runVerify UC2: %v", err)
@@ -427,10 +442,10 @@ func TestRunVerifyMissingEngineContext(t *testing.T) {
 	attachGoldenLayers(t, host, subjectHex, "sealed", "informational")
 
 	base := verifyOptions{
-		subjectRef: host + "/app@sha256:" + subjectHex,
-		identity:   goldenIdentity,
-		issuer:     goldenIssuer,
-		trustRoot:  goldenTrustRootFile(t),
+		subjectRef:   host + "/app@sha256:" + subjectHex,
+		identity:     goldenIdentity,
+		issuer:       goldenIssuer,
+		trustRootRef: goldenTrustRootRef(t, host),
 	}
 	if err := runVerify(context.Background(), io.Discard, base); err == nil {
 		t.Fatal("want error: an absent engine-context must gate without --no-engine-trust")
@@ -456,10 +471,10 @@ func TestRunVerifyMissingInformational(t *testing.T) {
 
 	logBuf := captureLog(t)
 	opts := verifyOptions{
-		subjectRef: host + "/app@sha256:" + subjectHex,
-		identity:   goldenIdentity,
-		issuer:     goldenIssuer,
-		trustRoot:  goldenTrustRootFile(t),
+		subjectRef:   host + "/app@sha256:" + subjectHex,
+		identity:     goldenIdentity,
+		issuer:       goldenIssuer,
+		trustRootRef: goldenTrustRootRef(t, host),
 	}
 	if err := runVerify(context.Background(), io.Discard, opts); err != nil {
 		t.Fatalf("runVerify: %v", err)
