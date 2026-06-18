@@ -90,7 +90,7 @@ package deploy
 	laneDigest: #Digest | ""
 	target:     #DeployTarget
 	oidc:       #ProvenanceOIDC
-	peers: [Step=string]: [...#Peer]
+	peers: [ID=#Identifier]: [...#Peer]
 	observedPeers?: [Endpoint=string]: #ObservedPeer
 	resolver?: #ResolverRecord
 	engine?:   #EngineConnection
@@ -147,7 +147,7 @@ package deploy
 // (Fork C). The engine's self-report (engineMetadata) is NOT here either -- it
 // carries no trust claim and lives in the informational statement.
 #EngineContextPredicate: {
-	peerAttribution?: [Step=string]: [...string]
+	peerAttribution?: [ID=#Identifier]: [...string]
 }
 
 // ---------------------------------------------------------------------------

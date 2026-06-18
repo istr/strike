@@ -21,9 +21,14 @@ package lane
 	// Distinct from `name`, which is human-display.
 	id:       #Identifier                                                             @go(ID,type=string)
 	registry: string & =~"^[a-z0-9]([a-z0-9.-]*[a-z0-9])?(:[0-9]+)?(/[a-z0-9._-]+)*$" @go(Registry)
+	// NOTE: the exported JSON Schema for this map is open (patternProperties
+	// only), unlike artifacts (additionalProperties:false). strike validates
+	// CUE-natively in parse.go and rejects non-#Identifier keys in-process; an
+	// external verifier consuming only the exported schema would not. Accepted
+	// until the secrets contract is revisited separately (YAGNI).
 	secrets: {
-		[Name=string]: #SecretSource @go(Secrets)
-	}
+		[ID=#Identifier]: #SecretSource
+	} @go(Secrets,type=map[string]SecretSource)
 	steps: [#Step, ...#Step] @go(Steps)
 	resolver: #DNSResolver @go(Resolver,type="github.com/istr/strike/internal/transport".DNSResolver)
 	oidc:     #OIDCConfig  @go(OIDC)
@@ -367,8 +372,8 @@ package lane
 	@go(DeploySpec)
 	method: #DeployMethod @go(Method)
 	artifacts: {
-		[Name=string]: #ArtifactRef @go(Artifacts)
-	}
+		[ID=#Identifier]: #ArtifactRef
+	} @go(Artifacts,type=map[string]ArtifactRef)
 	target:    #DeployTarget   @go(Target)
 	recording: #StateRecording @go(Recording)
 	source?: {

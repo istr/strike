@@ -325,6 +325,26 @@ func TestParse_InvalidSchema(t *testing.T) {
 	}
 }
 
+func TestParse_InvalidArtifactKeyRejected(t *testing.T) {
+	_, _, err := lane.Parse(mustFilePath(t, "testdata/invalid_artifact_key.yaml"))
+	if err == nil {
+		t.Fatal("expected error for non-identifier artifact key")
+	}
+	if !strings.Contains(err.Error(), "validation") {
+		t.Errorf("error should mention validation: %v", err)
+	}
+}
+
+func TestParse_InvalidSecretKeyRejected(t *testing.T) {
+	_, _, err := lane.Parse(mustFilePath(t, "testdata/invalid_secret_key.yaml"))
+	if err == nil {
+		t.Fatal("expected error for non-identifier secret key")
+	}
+	if !strings.Contains(err.Error(), "validation") {
+		t.Errorf("error should mention validation: %v", err)
+	}
+}
+
 func TestParse_StepMultiImage(t *testing.T) {
 	_, _, err := lane.Parse(mustFilePath(t, "testdata/invalid_step_multi.yaml"))
 	if err == nil {

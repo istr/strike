@@ -278,11 +278,27 @@ engine/transport cluster on the now-landed D-D foundation; the rest is parked.
    anchor is declared is the intended terminal, not a residual. This completes
    ADR-041; the earlier "auto-import from referrers" framing was superseded -- the
    anchor is never sourced from the verified artifact. (ROADMAP-ADR-041)
-6. Artifact / secret map-key id normalization -- B-4 normalized step / output /
-   capture ids, but `artifacts: { [Name=string]: ... }` and `secrets:` map keys
-   are still plain `Name`. Retype as `[ID=#Identifier]`: a wire change (golden-
-   affecting, cold-harness regen), otherwise low risk. Independent of the engine
-   cluster. (migrated from cue-spec-review)
+6. Artifact / secret / step map-key id normalization (LANDED). Retyped the
+   four structured map keys -- `#Lane.secrets`, `#DeploySpec.artifacts`, and
+   the deploy `peers` / `peerAttribution` maps (attestation.cue, predicate.cue)
+   -- from `[Name=string]` / `[Step=string]` to `[ID=#Identifier]`. Measured
+   (closedness/neutrality spike): rejection is load-bearing, and the change is
+   wire-neutral at the Go-API level and golden-neutral -- the earlier "wire
+   change, golden-affecting, cold-harness regen" framing was wrong; no regen
+   was needed. The two gengotyped lane maps carry a
+   `@go(...,type=map[string]T)` outer-field override (a tightened key pattern
+   is not expressible as a Go map key, so gengotypes would otherwise emit
+   `struct{}`). `[Endpoint=string]` (host:port) and `[Path=string]`
+   (configFiles) stay free-form; stricter typing for those is planned
+   separately. Deferred: the deploy-package maps are not gengotyped today and
+   carry no `@go` override; when deploy gengotypes is unblocked, the same
+   override is required on `peers` (`map[string][]lane.Peer`,
+   full-import-path form), `peerAttribution` (`map[string][]string`), and
+   `artifacts` (`map[string]ArtifactRecord`) -- fold into that arc, do not add
+   speculatively. Note: `#Lane.secrets` exports an open JSON Schema
+   (patternProperties only) while `artifacts` exports closed; strike validates
+   CUE-natively so both reject bad keys in-process, and the secrets contract is
+   revisited separately. (migrated from cue-spec-review)
 7. `imageFromStep` rebuild -- `#Step.imageFrom` (`#ImageFrom {step, output}`)
    mis-models multi-stage base images. Correct model: a step's base image is
    `image` (digest-pinned external) XOR a previous step's produced image,

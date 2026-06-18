@@ -79,7 +79,7 @@ package deploy
 	// artifacts maps artifact names to their signed provenance records.
 	// Each artifact's digest is consumer-dereferenceable from the registry
 	// (C3 sealed boundary).
-	artifacts: [Name=string]: #ArtifactRecord
+	artifacts: [ID=#Identifier]: #ArtifactRecord
 
 	// resolver records the DoT resolver's observed TLS identity, matched
 	// against the declared anchor at the pre-flight handshake.
@@ -87,7 +87,7 @@ package deploy
 
 	// peers maps step name to the network peer declarations attached to
 	// that step. Declared, lane-anchored.
-	peers: [Step=string]: [...#Peer]
+	peers: [ID=#Identifier]: [...#Peer]
 
 	// engine carries the CP-observed connection facts about the engine.
 	// The engine's self-reports (version, rootless) live in
@@ -158,7 +158,7 @@ package deploy
 	// peerAttribution maps each step to the peer endpoints its mediated
 	// connections reached ("host:port" keys into sealed.observedPeers).
 	// Engine-asserted (Layer E).
-	peerAttribution?: [Step=string]: [...string]
+	peerAttribution?: [ID=#Identifier]: [...string]
 }
 
 // Informational -- recorded for audit and IoC purposes; no trust claim.
