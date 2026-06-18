@@ -11,7 +11,6 @@ document provides a snapshot of the status of all active roadmaps.
 |---------|--------|-------|
 | [ROADMAP-ADR-038](ROADMAP-ADR-038.md) | PARTIAL (1--7 done; 8--9 remain) | Protocol-mediated SSH; control-plane front. Items 8 (DoT resolver + TLS mediator rehosting onto the front) and 9 (SSH-mediated per-connection records) remain. Remote-front exposure unblocked by ADR-040 keyless. |
 | [ROADMAP-ADR-040](ROADMAP-ADR-040.md) | SUBSTANTIALLY COMPLETE | Instructions 1--4 done (OIDC schema, SBOM, keyless signing, OCI referrers, control-plane push). Instruction 5a (verify core) done; 5b (CLI exposure) landed via ADR-041. Instruction 2c (base-SBOM signature verification) landed; live e2e against the harness remains. |
-| [ROADMAP-ADR-041](ROADMAP-ADR-041.md) | COMPLETE | Foundation plus instructions 1--3 (CLI subcommand, lane-policy integration, predicate validation and V/E gating) landed; the CLI trust-root override is a digest-pinned image ref (`--trust-root-ref`, `669eca89`), so the verify path reads no host-local file. No residual. |
 | [ROADMAP-sigstore-test-harness](ROADMAP-sigstore-test-harness.md) | H1 DONE, H2 PENDING | Stack-up and trust-anchor export complete. WebAuthn/FIDO2 (H2) remains. |
 | ROADMAP-cue-spec-review (retired) | RETIRED | All review arcs landed (A, D-A, D-C, D-D, D-E, C-5, B-1, C-3, D-B+D-G, D-F B-1..B-9); the deferred backlog moved into the execution order below. History in git. |
 
@@ -74,42 +73,6 @@ and can proceed.
   by referrer-manifest digest with a fail-closed three-way contract (declared
   signer / SBOM predicate type / base-digest subject binding). The live e2e
   against the harness is the only residual.
-
-### ADR-041: The lane as verification policy (COMPLETE)
-
-A new ADR that reframes verification around two use cases:
-- **UC1 (consumer):** "I have an image; is its signature valid?" Explicit
-  parameters: trust root, identity, issuer.
-- **UC2 (operator):** "I have a lane.yaml; did the artifacts come from this
-  lane under the declared identity?" The lane is the policy source.
-
-**Foundation complete:**
-- Lane digest (raw sha256 over the lane file bytes) computed at parse time
-  and sealed in the attestation. Binds the lane to its artifacts version-sharp.
-- Identity enforcement: the producer checks that the ambient OIDC token
-  subject == lane-declared identity before Fulcio contact. Fail-closed.
-- Verify core (`internal/verify`) ready to wrap with CLI and lane integration.
-
-**Landed (instructions 1--3):**
-- Instruction 1: Lane schema extensions (`#TrustRoot`), `strike verify`
-  subcommand with UC1 and UC2 paths.
-- Instruction 2: Lane-policy integration (identity, issuer, trust root sourced
-  from the lane).
-- Instruction 3: Per-layer predicate validation and V/E trust-mode gating
-  (`--no-engine-trust`), over the enriched goldens (instruction 3a).
-
-**No residual -- this roadmap is complete.** The trust root is sourced only from
-lane bytes (`keyless.trustRoot`) or a digest-pinned OCI image: the lane's
-`keyless.trustRootRef`, or the `--trust-root-ref` CLI override (`669eca89`). The
-verify path reads no host-local file. When the lane declares no trust root and no
-`--trust-root-ref` is passed, fail-closed (`internal/verify.ErrNoTrustRoot`) is
-the intended terminal, not a gap: the anchor must be operator-chosen, never
-derived from the verified artifact (ADR-041 Principles).
-
-**Tracked elsewhere (not this roadmap):** base-SBOM signature verification lives
-in ROADMAP-ADR-040 (instruction 2c); the engine-cert subject/issuer field-add
-lives in ROADMAP-cue-spec-review (D-D field-add). The v1-verifier teardown is
-complete -- the keyed path is gone from non-test code.
 
 ### Sigstore-local test harness (H1 DONE)
 
@@ -222,83 +185,6 @@ engine/transport cluster on the now-landed D-D foundation; the rest is parked.
 
 **Active execution order (ratified).**
 
-1. ARCHITECTURE.md threat-row judgment (LANDED) -- "Signing key exfiltrated"
-   corrected for keyless model (ADR-043); no persistent key so key rotation
-   does not apply; Rekor CT logs every signature. (`560a60f`)
-2. `ArtifactRecord` rename (LANDED) -- post-keyless the old `SignedArtifact`
-   name was a digest+SBOM misnomer; a pure Go rename, wire-neutral, no golden.
-   (`148c1f5`)
-3. cosign independent-verify conformance, CT-gated (LANDED) -- validated the
-   "offline-verifiable without contacting strike" promise under independent
-   tooling (cosign), as the regression baseline for the verification work. The
-   feasibility spike (GO) found cosign enforces a >= 1 SCT threshold with no
-   non-insecure bypass, so the harness gained a CT log first. Landed in four
-   commits: 3a -- harness CT enablement (TesseraCT POSIX; Fulcio on fileca +
-   ct-log-url; no Trillian) (`41661d4`), TLS-fronted behind Caddy (`658fb3a`);
-   3b -- ctlogs entry in goldenTrustedRoot + golden regen against the CT-enabled
-   harness (`7546fca`); 3c -- the flag-clean `make conformance` target (no
-   --insecure-ignore-sct), gating exit on the V layer (`386dba2`).
-   (ROADMAP-sigstore-test-harness)
-   Deferred follow-ons (separate ratification), both sequenced after this arc,
-   detail in ROADMAP-sigstore-test-harness H3: (1) production verify-path --
-   strike's own verify ignores the embedded SCT; whether it should enforce it
-   for posture symmetry with cosign is its own item. (2) full cosign
-   compatibility -- liveTrustRoot does not yet carry the ctlogs entry (only the
-   golden generator does); pulling it in is the remaining live-path step.
-4. Base-SBOM signature verification (2c) (LANDED) -- cosign fixture and
-   strike-verify smoke gate (`e1721cf3`); `internal/registry`
-   `FetchBaseSBOMReferrers` artifactType-filter path, no config re-check
-   (2c-i, `0e4b9a8e`); `internal/lane` `PackBaseRefs` /
-   `validateBaseSBOMTrustAnchor` build guard (2c-ii-a, `c3b079ae`);
-   producer-side base-SBOM verification in `internal/deploy` calling
-   `internal/verify` directly, recording verified base SBOMs in
-   `resolvedDependencies` by referrer digest with a fail-closed three-way
-   contract (2c-ii-b, `bc35f1e8`; the cmd-wired injection seam it originally
-   shipped with was removed once `internal/verify` was placed at its
-   criterion-correct services tier -- see the ADR-044 arc below).
-   Deferred: live e2e against the harness (ROADMAP-ADR-040). (ROADMAP-ADR-040)
-4x. ADR-044 / `internal/bundle` / arch-lint arc (LANDED, mid-2c) --
-   deterministic tier-assignment criterion formalized in ADR-044 (`c214dae5`);
-   role-neutral DSSE/in-toto wire primitives (`PAEEncode` / `PayloadType` /
-   `MediaType`) extracted into the `internal/bundle` foundation package;
-   `verify -> deploy` import edge severed; `.go-arch-lint.yml` tightened
-   (foundation forbids any internal dependency; orchestration forbids intra-tier
-   edges); deploy/verify coupling initially expressed as the cmd-wired injection
-   seam above rather than a direct import (`ec2d4ed`). That seam was a
-   circumvention, not a resolution: ADR-044 was subsequently sharpened to forbid
-   satisfying a forbidden tier edge by composition-root injection, `internal/verify`
-   was reclassified to its criterion-correct services tier, and `internal/deploy`
-   now imports it as a legal downward static edge (the seam --
-   `VerifyBaseSBOMFunc`, the `Deployer` field, the cmd closure -- is gone). No
-   owning roadmap beyond ADR-044 itself.
-5. Trust-root override as a digest-pinned image ref (LANDED, `669eca89`) -- the
-   CLI override moved from a host-local file to a `--trust-root-ref` image,
-   resolved through `registry.FetchTrustRoot` like the lane's `trustRootRef`, so
-   the verify path reads no host-local file. Fail-closed `ErrNoTrustRoot` when no
-   anchor is declared is the intended terminal, not a residual. This completes
-   ADR-041; the earlier "auto-import from referrers" framing was superseded -- the
-   anchor is never sourced from the verified artifact. (ROADMAP-ADR-041)
-6. Artifact / secret / step map-key id normalization (LANDED). Retyped the
-   four structured map keys -- `#Lane.secrets`, `#DeploySpec.artifacts`, and
-   the deploy `peers` / `peerAttribution` maps (attestation.cue, predicate.cue)
-   -- from `[Name=string]` / `[Step=string]` to `[ID=#Identifier]`. Measured
-   (closedness/neutrality spike): rejection is load-bearing, and the change is
-   wire-neutral at the Go-API level and golden-neutral -- the earlier "wire
-   change, golden-affecting, cold-harness regen" framing was wrong; no regen
-   was needed. The two gengotyped lane maps carry a
-   `@go(...,type=map[string]T)` outer-field override (a tightened key pattern
-   is not expressible as a Go map key, so gengotypes would otherwise emit
-   `struct{}`). `[Endpoint=string]` (host:port) and `[Path=string]`
-   (configFiles) stay free-form; stricter typing for those is planned
-   separately. Deferred: the deploy-package maps are not gengotyped today and
-   carry no `@go` override; when deploy gengotypes is unblocked, the same
-   override is required on `peers` (`map[string][]lane.Peer`,
-   full-import-path form), `peerAttribution` (`map[string][]string`), and
-   `artifacts` (`map[string]ArtifactRecord`) -- fold into that arc, do not add
-   speculatively. Note: `#Lane.secrets` exports an open JSON Schema
-   (patternProperties only) while `artifacts` exports closed; strike validates
-   CUE-natively so both reject bad keys in-process, and the secrets contract is
-   revisited separately. (migrated from cue-spec-review)
 7. `imageFromStep` rebuild -- `#Step.imageFrom` (`#ImageFrom {step, output}`)
    mis-models multi-stage base images. Correct model: a step's base image is
    `image` (digest-pinned external) XOR a previous step's produced image,
@@ -347,9 +233,7 @@ engine/transport cluster on the now-landed D-D foundation; the rest is parked.
 
 ## References
 
-- [ADR-041 Decision Record](ADR-041-lane-as-verification-policy.md)
 - [ROADMAP-ADR-038](ROADMAP-ADR-038.md) -- PARTIAL (items 8-9 remain)
 - [ROADMAP-ADR-040](ROADMAP-ADR-040.md) -- Substantially complete
-- [ROADMAP-ADR-041](ROADMAP-ADR-041.md) -- Substantially complete
 - [ROADMAP-sigstore-test-harness](ROADMAP-sigstore-test-harness.md) -- H1 done, H2 pending
 - ROADMAP-cue-spec-review -- RETIRED (all arcs landed; deferred backlog migrated into the execution order; history in git)
