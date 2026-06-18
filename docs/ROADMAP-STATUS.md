@@ -102,7 +102,7 @@ the `trustRootRef` `@go` symmetry as wontfix). One arc remains: the D-D
 field-add (engine-cert subject/issuer into `#EngineConnection` at layer V). The
 B-5 follow-ons (the
 `...Name` -> `...ID` Go rename and the producer-ref runtime encoding) have
-landed; only the `imageFromStep` rebuild remains parked. The deferred set
+landed; the `imageFromStep` rebuild is the active arc (ADR-045 landed; execution-order items 7a and 7b below). The deferred set
 (base-SBOM signature verification, engine hardening, DNS centralization, full
 TLS demux, and the osv-scalibr PR) is carried in that roadmap.
 
@@ -185,15 +185,35 @@ engine/transport cluster on the now-landed D-D foundation; the rest is parked.
 
 **Active execution order (ratified).**
 
-7. `imageFromStep` rebuild -- `#Step.imageFrom` (`#ImageFrom {step, output}`)
-   mis-models multi-stage base images. Correct model: a step's base image is
-   `image` (digest-pinned external) XOR a previous step's produced image,
-   referenced by step id alone. Rebuild as `imageFromStep: #Identifier` (drop
-   `output`), keep the `image` / `imageFrom` / `pack` / `deploy` XOR (enforced
-   in `parse.go`), and have the resolver pull the step's canonical engine image
-   `localhost/strike/<lane-id>/<step-id>`. Independent; not golden-affecting
-   (the golden lane is single-stage). Settle the schema before the engine
-   cluster. (migrated from cue-spec-review)
+7a. imageFrom execution hardening (V) -- LANDS FIRST, ADR-045. On the current
+   `imageFrom {step, output}` schema, run every step's base image only by its
+   CP-verified content digest (`<locator>@sha256:<digest>`) and remove the
+   execute-by-tag path. The CP already verifies controller == engine manifest
+   digest at wrap time (`WrapImageArchiveAsImage`), so the digest to pin is in
+   hand; the transport mechanism -- run the local-store image by digest (alpha)
+   vs a CP content-addressed registry roundtrip (beta) -- is settled by a
+   measurement spike before byte-exact authoring. The canonical engine tag
+   `localhost/strike/<lane-id>/<step-id>:<spec_hash>` stays a cache-existence
+   lookup key, never the execution anchor. Reuses existing components; closes the
+   false layer-V assurance recorded in ADR-045. Live e2e against the harness.
+   Decision: D3.
+7b. `imageFromStep` schema rebuild -- on the hardened base from 7a, replace
+   `#Step.imageFrom` (`#ImageFrom {step, output}`) with `imageFromStep:
+   #Identifier` (drop `output`), keep the `image` / `imageFrom` / `pack` /
+   `deploy` XOR (enforced in `parse.go`), and resolve the base to the producing
+   step's single image output (D1, D2). Not golden-affecting (the golden lane is
+   single-stage). Settle the schema before the engine cluster. (migrated from
+   cue-spec-review)
+
+   Item-7 arc decisions (ratified):
+   - D1 -- `imageFromStep` runs on the producing step's declared,
+     CP-digest-pinned image artifact; not root-filesystem inheritance.
+   - D2 -- a step declares exactly one image output XOR any number of non-image
+     outputs, never both; the same-step-is-both-base-and-copy-source hybrid is
+     YAGNI, recorded as a re-open gate.
+   - D3 -- a step executes only a CP-digest-pinned image (lane-generated base
+     included); recorded as ADR-045.
+   - D4 -- sequencing: 7a (execution hardening) before 7b (schema rebuild).
 8. Observed-TLS identity consolidation -- ENGINE-CLUSTER LEAD. The observed TLS
    server identity appears in three diverging shapes: `#ObservedTLS` (peers;
    type + fingerprint), `#ResolverRecord` (resolver; fingerprint + tlsVersion /
