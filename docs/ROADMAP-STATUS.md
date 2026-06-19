@@ -12,6 +12,7 @@ document provides a snapshot of the status of all active roadmaps.
 | [ROADMAP-ADR-038](ROADMAP-ADR-038.md) | PARTIAL (1--7 done; 8--9 remain) | Protocol-mediated SSH; control-plane front. Items 8 (DoT resolver + TLS mediator rehosting onto the front) and 9 (SSH-mediated per-connection records) remain. Remote-front exposure unblocked by ADR-040 keyless. |
 | [ROADMAP-ADR-040](ROADMAP-ADR-040.md) | SUBSTANTIALLY COMPLETE | Instructions 1--4 done (OIDC schema, SBOM, keyless signing, OCI referrers, control-plane push). Instruction 5a (verify core) done; 5b (CLI exposure) landed via ADR-041. Instruction 2c (base-SBOM signature verification) landed; live e2e against the harness remains. |
 | [ROADMAP-sigstore-test-harness](ROADMAP-sigstore-test-harness.md) | H1 DONE, H2 PENDING | Stack-up and trust-anchor export complete. WebAuthn/FIDO2 (H2) remains. |
+| [ROADMAP-ADR-046](ROADMAP-ADR-046.md) | PLANNED | Output model (ADR-046): a step with output produces exactly one canonical digest-pinned image. Owns the former execution-order item 7b (imageFromStep rebuild + D1--D4) plus the producer one-image fix and consumer pull-by-digest. ADR-045/7a landed as the predecessor. |
 | ROADMAP-cue-spec-review (retired) | RETIRED | All review arcs landed (A, D-A, D-C, D-D, D-E, C-5, B-1, C-3, D-B+D-G, D-F B-1..B-9); the deferred backlog moved into the execution order below. History in git. |
 
 ## Narrative summary
@@ -102,7 +103,7 @@ the `trustRootRef` `@go` symmetry as wontfix). One arc remains: the D-D
 field-add (engine-cert subject/issuer into `#EngineConnection` at layer V). The
 B-5 follow-ons (the
 `...Name` -> `...ID` Go rename and the producer-ref runtime encoding) have
-landed; the `imageFromStep` rebuild is the active arc (ADR-045 landed; execution-order items 7a and 7b below). The deferred set
+landed; the output-model arc (the `imageFromStep` rebuild plus the producer one-image fix and consumer pull-by-digest) is now owned by [ROADMAP-ADR-046](ROADMAP-ADR-046.md) (ADR-046 ratified; ADR-045/7a landed as its predecessor). The deferred set
 (base-SBOM signature verification, engine hardening, DNS centralization, full
 TLS demux, and the osv-scalibr PR) is carried in that roadmap.
 
@@ -197,23 +198,10 @@ engine/transport cluster on the now-landed D-D foundation; the rest is parked.
    lookup key, never the execution anchor. Reuses existing components; closes the
    false layer-V assurance recorded in ADR-045. Live e2e against the harness.
    Decision: D3.
-7b. `imageFromStep` schema rebuild -- on the hardened base from 7a, replace
-   `#Step.imageFrom` (`#ImageFrom {step, output}`) with `imageFromStep:
-   #Identifier` (drop `output`), keep the `image` / `imageFrom` / `pack` /
-   `deploy` XOR (enforced in `parse.go`), and resolve the base to the producing
-   step's single image output (D1, D2). Not golden-affecting (the golden lane is
-   single-stage). Settle the schema before the engine cluster. (migrated from
-   cue-spec-review)
-
-   Item-7 arc decisions (ratified):
-   - D1 -- `imageFromStep` runs on the producing step's declared,
-     CP-digest-pinned image artifact; not root-filesystem inheritance.
-   - D2 -- a step declares exactly one image output XOR any number of non-image
-     outputs, never both; the same-step-is-both-base-and-copy-source hybrid is
-     YAGNI, recorded as a re-open gate.
-   - D3 -- a step executes only a CP-digest-pinned image (lane-generated base
-     included); recorded as ADR-045.
-   - D4 -- sequencing: 7a (execution hardening) before 7b (schema rebuild).
+7b. Output model (ADR-046) -- the `imageFromStep` rebuild, the producer
+   one-image fix, and the consumer pull-by-digest now live in
+   [ROADMAP-ADR-046](ROADMAP-ADR-046.md); decisions D1--D8 are recorded there.
+   Settle the schema before the engine cluster.
 8. Observed-TLS identity consolidation -- ENGINE-CLUSTER LEAD. The observed TLS
    server identity appears in three diverging shapes: `#ObservedTLS` (peers;
    type + fingerprint), `#ResolverRecord` (resolver; fingerprint + tlsVersion /

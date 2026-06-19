@@ -12,6 +12,12 @@ to admission, and rests on the read-only root of
 change and no new attestation field: the mount mechanism is not part of the
 attested step spec, and inputs remain referenced by their producer image tag.
 
+> **Amended by [ADR-046](ADR-046-one-canonical-digest-pinned-image.md):**
+> inputs are referenced by their producer image's manifest digest, not its tag.
+> The consumer resolves the producer step image's manifest digest and pulls or
+> mounts by `repo@sha256:<digest>`; the tag is a cache-existence key only. This
+> extends ADR-045's execute-by-digest rule to the input side.
+
 > Implementation status: both delivery paths have landed. The Consequences
 > below describe the seed path and the read-only image-mount path as
 > "separate, sequenced strands" and "implemented as separate strands" --

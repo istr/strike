@@ -15,6 +15,11 @@ artifact model ([ADR-008](ADR-008-cryptographic-primitives.md),
 [ADR-012](ADR-012-engine-identity-capture.md),
 [ADR-013](ADR-013-dsse-envelope-and-rekor.md)).
 
+> **Amended by [ADR-046](ADR-046-one-canonical-digest-pinned-image.md):**
+> the workdir-volume projections a step produces are assembled into exactly one
+> canonical step image, each output a named layer; that image's manifest digest is
+> the single integrity anchor, and every consumer pulls it by digest.
+
 ## Context
 
 The implementation materialized step outputs through a host scratch

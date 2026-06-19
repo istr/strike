@@ -12,6 +12,13 @@ Accepted.
 > CP-computed manifest digest, never by the engine-resolved tag. The tag
 > stays a cache-existence lookup key; it is never the execution anchor.
 
+> **Amended by [ADR-046](ADR-046-one-canonical-digest-pinned-image.md):**
+> a step with output produces exactly one canonical step image, and every use --
+> executing it or extracting named content from it -- pulls it by that manifest
+> digest, never by the tag. ADR-046 brings the producer into line with this
+> single-image storage model (one step image holding all outputs as named
+> layers) and extends the digest-only pull to the consumer/input side.
+
 ## Scope
 
 This ADR concerns the storage layer between steps in a strike
