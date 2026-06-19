@@ -506,21 +506,3 @@ package lane
 #Digest: =~"^sha256:[a-f0-9]{64}$" @go(-)
 
 #Duration: =~"^[0-9]+(s|m|h)$"
-
-// ---------------------------------------------------------------------------
-// Runtime artifact carrier
-// ---------------------------------------------------------------------------
-
-// Artifact is a content-addressed output from a step. This type flows
-// between executor, lane state, and deploy -- it is the internal
-// interface for artifact handover between pipeline phases.
-#Artifact: {
-	@go(Artifact)
-	type:         #ArtifactType @go(Type)
-	digest:       #Digest       @go(Digest,type=Digest)
-	size:         int & >=0     @go(Size)
-	contentType?: string        @go(ContentType,optional=nillable)
-	metadata?: {
-		[string]: string @go(Metadata)
-	}
-}
