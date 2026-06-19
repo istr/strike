@@ -186,7 +186,7 @@ engine/transport cluster on the now-landed D-D foundation; the rest is parked.
 
 **Active execution order (ratified).**
 
-7a. imageFrom execution hardening (V) -- LANDS FIRST, ADR-045. On the current
+7a. imageFrom execution hardening (V) -- LANDED (a66b9f8), ADR-045. On the current
    `imageFrom {step, output}` schema, run every step's base image only by its
    CP-verified content digest (`<locator>@sha256:<digest>`) and remove the
    execute-by-tag path. The CP already verifies controller == engine manifest
