@@ -17,7 +17,7 @@ func TestPackBaseRefs_CollectsSubtreeBases(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				ID: "compile", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{ID: "binary", Type: "file", Path: lane.Ptr(lane.RelPath("binary"))}},
+				Outputs: []lane.FileOutput{{ID: "binary", Type: "file", Path: lane.Ptr(lane.RelPath("binary"))}},
 			},
 			{
 				ID: "pack", Args: []string{}, Env: map[string]string{},
@@ -25,12 +25,12 @@ func TestPackBaseRefs_CollectsSubtreeBases(t *testing.T) {
 					Base:  base,
 					Files: []lane.PackFile{{From: lane.OutputRef{Step: "compile", Output: "binary"}, Dest: "/app", Mode: 0o755}},
 				},
-				Outputs: []lane.OutputSpec{{ID: "img", Type: "image", Path: lane.Ptr(lane.RelPath("img.tar"))}},
+				Output: &lane.ImageOutput{Path: lane.Ptr(lane.RelPath("img.tar"))},
 			},
 			{
 				ID: "deploy", Args: []string{}, Env: map[string]string{},
 				Deploy: &lane.DeploySpec{
-					Artifacts: map[string]lane.ArtifactRef{"image": {From: lane.OutputRef{Step: "pack", Output: "img"}}},
+					Artifacts: map[string]lane.ArtifactRef{"image": {From: lane.StepImageRef{Step: "pack"}}},
 				},
 			},
 		},
@@ -55,7 +55,7 @@ func TestValidateBaseSBOMTrustAnchor_RequiresTrustRoot(t *testing.T) {
 			Steps: []lane.Step{
 				{
 					ID: "run", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-					Outputs: []lane.OutputSpec{{ID: "out", Type: "file", Path: lane.Ptr(lane.RelPath("out"))}},
+					Outputs: []lane.FileOutput{{ID: "out", Type: "file", Path: lane.Ptr(lane.RelPath("out"))}},
 				},
 			},
 		}
@@ -80,7 +80,7 @@ func TestValidateBaseSBOMTrustAnchor_NoSignersNoConstraint(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				ID: "run", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{ID: "out", Type: "file", Path: lane.Ptr(lane.RelPath("out"))}},
+				Outputs: []lane.FileOutput{{ID: "out", Type: "file", Path: lane.Ptr(lane.RelPath("out"))}},
 			},
 		},
 	}

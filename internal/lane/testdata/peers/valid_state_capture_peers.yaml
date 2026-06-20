@@ -39,10 +39,8 @@ steps:
     env: {}
     inputs: []
     secrets: []
-    outputs:
-      - id: image
-        type: image
-        path: image
+    output:
+      path: image
   - id: deploy
     deploy:
       method:
@@ -52,7 +50,6 @@ steps:
         image:
           from:
             step: build
-            output: image
       target:
         id: prod-registry
         type: registry

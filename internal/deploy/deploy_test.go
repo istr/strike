@@ -323,7 +323,7 @@ func TestDeployerExecute(t *testing.T) {
 				Image: "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 			},
 			Artifacts: map[string]lane.ArtifactRef{
-				"image": {From: lane.OutputRef{Step: "build", Output: "image"}},
+				"image": {From: lane.StepImageRef{Step: "build"}},
 			},
 			Target: lane.DeployTarget{ID: "prod-1", Type: "registry", Description: "production"},
 			Recording: lane.StateRecording{
@@ -428,7 +428,7 @@ func TestDeployerExecuteRegistryAttachesReferrers(t *testing.T) {
 				Target: host + "/app:v1",
 			},
 			Artifacts: map[string]lane.ArtifactRef{
-				"image": {From: lane.OutputRef{Step: "build", Output: "image"}},
+				"image": {From: lane.StepImageRef{Step: "build"}},
 			},
 			Target: lane.DeployTarget{ID: "prod-1", Type: "registry", Description: "production"},
 			Recording: lane.StateRecording{
@@ -508,7 +508,7 @@ func TestDeployerExecute_MissingArtifact(t *testing.T) {
 		Deploy: &lane.DeploySpec{
 			Method: lane.DeployCustom{Type: "custom", Image: "img@sha256:0000000000000000000000000000000000000000000000000000000000000000"},
 			Artifacts: map[string]lane.ArtifactRef{
-				"image": {From: lane.OutputRef{Step: "build", Output: "image"}},
+				"image": {From: lane.StepImageRef{Step: "build"}},
 			},
 			Recording: lane.StateRecording{},
 		},
@@ -591,7 +591,7 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 				Image: "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 			},
 			Artifacts: map[string]lane.ArtifactRef{
-				"image": {From: lane.OutputRef{Step: "build", Output: "image"}},
+				"image": {From: lane.StepImageRef{Step: "build"}},
 			},
 			Target: lane.DeployTarget{ID: "prod-1", Type: "registry", Description: "production"},
 			Recording: lane.StateRecording{
@@ -692,7 +692,7 @@ func TestEngineRecord_NilEngineID(t *testing.T) {
 				Image: "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 			},
 			Artifacts: map[string]lane.ArtifactRef{
-				"image": {From: lane.OutputRef{Step: "build", Output: "image"}},
+				"image": {From: lane.StepImageRef{Step: "build"}},
 			},
 			Target:    lane.DeployTarget{ID: "test-1", Type: "registry", Description: "test"},
 			Recording: lane.StateRecording{},
@@ -753,7 +753,7 @@ func TestEngineRecord_WithRuntime(t *testing.T) {
 				Image: "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 			},
 			Artifacts: map[string]lane.ArtifactRef{
-				"image": {From: lane.OutputRef{Step: "build", Output: "image"}},
+				"image": {From: lane.StepImageRef{Step: "build"}},
 			},
 			Target:    lane.DeployTarget{ID: "test-1", Type: "registry", Description: "test"},
 			Recording: lane.StateRecording{},
@@ -828,7 +828,7 @@ func TestEngineRecord_WithoutRuntime(t *testing.T) {
 				Image: "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 			},
 			Artifacts: map[string]lane.ArtifactRef{
-				"image": {From: lane.OutputRef{Step: "build", Output: "image"}},
+				"image": {From: lane.StepImageRef{Step: "build"}},
 			},
 			Target:    lane.DeployTarget{ID: "test-1", Type: "registry", Description: "test"},
 			Recording: lane.StateRecording{},
@@ -890,7 +890,7 @@ func TestResolverRecord_NilResolverID(t *testing.T) {
 				Image: "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 			},
 			Artifacts: map[string]lane.ArtifactRef{
-				"image": {From: lane.OutputRef{Step: "build", Output: "image"}},
+				"image": {From: lane.StepImageRef{Step: "build"}},
 			},
 			Target:    lane.DeployTarget{ID: "test-1", Type: "registry", Description: "test"},
 			Recording: lane.StateRecording{},
@@ -945,7 +945,7 @@ func TestResolverRecord_Populated(t *testing.T) {
 				Image: "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 			},
 			Artifacts: map[string]lane.ArtifactRef{
-				"image": {From: lane.OutputRef{Step: "build", Output: "image"}},
+				"image": {From: lane.StepImageRef{Step: "build"}},
 			},
 			Target:    lane.DeployTarget{ID: "test-1", Type: "registry", Description: "test"},
 			Recording: lane.StateRecording{},
@@ -1189,7 +1189,7 @@ func deployStep() *lane.Step {
 				Image: "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 			},
 			Artifacts: map[string]lane.ArtifactRef{
-				"image": {From: lane.OutputRef{Step: "build", Output: "image"}},
+				"image": {From: lane.StepImageRef{Step: "build"}},
 			},
 			Target: lane.DeployTarget{ID: "prod-1", Type: "registry", Description: "production"},
 			Recording: lane.StateRecording{
@@ -1283,10 +1283,8 @@ func TestDeployerExecute_ObservedPeersPopulated(t *testing.T) {
 				Env:     map[string]string{},
 				Inputs:  []lane.InputRef{},
 				Secrets: []lane.SecretRef{},
-				Outputs: []lane.OutputSpec{
-					{ID: "image", Type: "image", Path: lane.Ptr(lane.RelPath("o"))},
-				},
-				Peers: []lane.Peer{buildPeer, buildSSHPeer},
+				Output:  &lane.ImageOutput{Path: lane.Ptr(lane.RelPath("o"))},
+				Peers:   []lane.Peer{buildPeer, buildSSHPeer},
 			},
 			{
 				ID: "deploy-prod",
@@ -1296,7 +1294,7 @@ func TestDeployerExecute_ObservedPeersPopulated(t *testing.T) {
 						Image: "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 					},
 					Artifacts: map[string]lane.ArtifactRef{
-						"image": {From: lane.OutputRef{Step: "build", Output: "image"}},
+						"image": {From: lane.StepImageRef{Step: "build"}},
 					},
 					Target:    lane.DeployTarget{ID: "prod-1", Type: "registry", Description: "production"},
 					Recording: lane.StateRecording{},
@@ -1441,7 +1439,7 @@ func TestDeployerExecute_ObservedPeersConflictAborts(t *testing.T) {
 				Env:     map[string]string{},
 				Inputs:  []lane.InputRef{},
 				Secrets: []lane.SecretRef{},
-				Outputs: []lane.OutputSpec{
+				Outputs: []lane.FileOutput{
 					{ID: "out", Type: "file", Path: lane.Ptr(lane.RelPath("a"))},
 				},
 				Peers: []lane.Peer{peerA},
@@ -1453,10 +1451,8 @@ func TestDeployerExecute_ObservedPeersConflictAborts(t *testing.T) {
 				Env:     map[string]string{},
 				Inputs:  []lane.InputRef{},
 				Secrets: []lane.SecretRef{},
-				Outputs: []lane.OutputSpec{
-					{ID: "out", Type: "image", Path: lane.Ptr(lane.RelPath("b"))},
-				},
-				Peers: []lane.Peer{peerB},
+				Output:  &lane.ImageOutput{Path: lane.Ptr(lane.RelPath("b"))},
+				Peers:   []lane.Peer{peerB},
 			},
 			{
 				ID: "deploy-conflict",
@@ -1466,7 +1462,7 @@ func TestDeployerExecute_ObservedPeersConflictAborts(t *testing.T) {
 						Image: "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 					},
 					Artifacts: map[string]lane.ArtifactRef{
-						"image": {From: lane.OutputRef{Step: "step-b", Output: "out"}},
+						"image": {From: lane.StepImageRef{Step: "step-b"}},
 					},
 					Target:    lane.DeployTarget{ID: "prod-1", Type: "registry", Description: "production"},
 					Recording: lane.StateRecording{},

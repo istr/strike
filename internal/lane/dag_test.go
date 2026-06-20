@@ -33,12 +33,12 @@ func TestBuild_LinearChain(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				ID: "a", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{"a"}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{ID: "out", Type: "file", Path: lane.Ptr(lane.RelPath("a"))}},
+				Outputs: []lane.FileOutput{{ID: "out", Type: "file", Path: lane.Ptr(lane.RelPath("a"))}},
 			},
 			{
 				ID: "b", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{"b"}, Env: map[string]string{},
 				Inputs:  []lane.InputRef{{From: lane.OutputRef{Step: "a", Output: "out"}, Mount: "/in"}},
-				Outputs: []lane.OutputSpec{{ID: "out", Type: "file", Path: lane.Ptr(lane.RelPath("b"))}},
+				Outputs: []lane.FileOutput{{ID: "out", Type: "file", Path: lane.Ptr(lane.RelPath("b"))}},
 			},
 			{
 				ID: "c", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{"c"}, Env: map[string]string{},
@@ -59,17 +59,17 @@ func TestBuild_Diamond(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				ID: "a", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{"a"}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{ID: "out", Type: "file", Path: lane.Ptr(lane.RelPath("a"))}},
+				Outputs: []lane.FileOutput{{ID: "out", Type: "file", Path: lane.Ptr(lane.RelPath("a"))}},
 			},
 			{
 				ID: "b", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{"b"}, Env: map[string]string{},
 				Inputs:  []lane.InputRef{{From: lane.OutputRef{Step: "a", Output: "out"}, Mount: "/in"}},
-				Outputs: []lane.OutputSpec{{ID: "out", Type: "file", Path: lane.Ptr(lane.RelPath("b"))}},
+				Outputs: []lane.FileOutput{{ID: "out", Type: "file", Path: lane.Ptr(lane.RelPath("b"))}},
 			},
 			{
 				ID: "c", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{"c"}, Env: map[string]string{},
 				Inputs:  []lane.InputRef{{From: lane.OutputRef{Step: "a", Output: "out"}, Mount: "/in"}},
-				Outputs: []lane.OutputSpec{{ID: "out", Type: "file", Path: lane.Ptr(lane.RelPath("c"))}},
+				Outputs: []lane.FileOutput{{ID: "out", Type: "file", Path: lane.Ptr(lane.RelPath("c"))}},
 			},
 			{
 				ID: "d", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{"d"}, Env: map[string]string{},
@@ -98,7 +98,7 @@ func TestBuild_FanOut(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				ID: "a", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{"a"}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{ID: "out", Type: "file", Path: lane.Ptr(lane.RelPath("a"))}},
+				Outputs: []lane.FileOutput{{ID: "out", Type: "file", Path: lane.Ptr(lane.RelPath("a"))}},
 			},
 			{
 				ID: "b", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{"b"}, Env: map[string]string{},
@@ -131,11 +131,11 @@ func TestBuild_ImageFromEdge(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				ID: "pack", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{"pack"}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{ID: "img", Type: "image", Path: lane.Ptr(lane.RelPath("img.tar"))}},
+				Output: &lane.ImageOutput{Path: lane.Ptr(lane.RelPath("img.tar"))},
 			},
 			{
 				ID: "run", Env: map[string]string{}, Args: []string{"run"},
-				ImageFrom: &lane.ImageFrom{Step: "pack", Output: "img"},
+				ImageFromStep: "pack",
 			},
 		},
 	}
@@ -151,7 +151,7 @@ func TestBuild_PackFileEdge(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				ID: "build", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{"build"}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{ID: "binary", Type: "file", Path: lane.Ptr(lane.RelPath("binary"))}},
+				Outputs: []lane.FileOutput{{ID: "binary", Type: "file", Path: lane.Ptr(lane.RelPath("binary"))}},
 			},
 			{
 				ID: "pack", Env: map[string]string{}, Args: []string{},
@@ -159,7 +159,7 @@ func TestBuild_PackFileEdge(t *testing.T) {
 					Base:  "scratch",
 					Files: []lane.PackFile{{From: lane.OutputRef{Step: "build", Output: "binary"}, Dest: "/app", Mode: 0o755}},
 				},
-				Outputs: []lane.OutputSpec{{ID: "img", Type: "image", Path: lane.Ptr(lane.RelPath("img.tar"))}},
+				Output: &lane.ImageOutput{Path: lane.Ptr(lane.RelPath("img.tar"))},
 			},
 		},
 	}
@@ -175,12 +175,12 @@ func TestBuild_DeployArtifactEdge(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				ID: "pack", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{ID: "img", Type: "image", Path: lane.Ptr(lane.RelPath("img.tar"))}},
+				Output: &lane.ImageOutput{Path: lane.Ptr(lane.RelPath("img.tar"))},
 			},
 			{
 				ID: "deploy", Env: map[string]string{}, Args: []string{},
 				Deploy: &lane.DeploySpec{
-					Artifacts: map[string]lane.ArtifactRef{"image": {From: lane.OutputRef{Step: "pack", Output: "img"}}},
+					Artifacts: map[string]lane.ArtifactRef{"image": {From: lane.StepImageRef{Step: "pack"}}},
 				},
 			},
 		},
@@ -212,7 +212,7 @@ func TestBuild_UnknownImageFromStep(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				ID: "run", Env: map[string]string{}, Args: []string{},
-				ImageFrom: &lane.ImageFrom{Step: "missing", Output: "img"},
+				ImageFromStep: "missing",
 			},
 		},
 	}
@@ -220,35 +220,18 @@ func TestBuild_UnknownImageFromStep(t *testing.T) {
 	assertErrContains(t, err, "unknown step")
 }
 
-func TestBuild_ImageFromWrongOutputType(t *testing.T) {
-	p := &lane.Lane{
-		Steps: []lane.Step{
-			{
-				ID: "build", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{ID: "bin", Type: "file", Path: lane.Ptr(lane.RelPath("bin"))}},
-			},
-			{
-				ID: "run", Env: map[string]string{}, Args: []string{},
-				ImageFrom: &lane.ImageFrom{Step: "build", Output: "bin"},
-			},
-		},
-	}
-	_, err := lane.Build(p)
-	assertErrContains(t, err, "not image")
-}
-
-func TestBuild_ImageFromMissingOutput(t *testing.T) {
+func TestBuild_ImageFromStepNoImageOutput(t *testing.T) {
 	p := &lane.Lane{
 		Steps: []lane.Step{
 			{ID: "build", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{}},
 			{
 				ID: "run", Env: map[string]string{}, Args: []string{},
-				ImageFrom: &lane.ImageFrom{Step: "build", Output: "missing"},
+				ImageFromStep: "build",
 			},
 		},
 	}
 	_, err := lane.Build(p)
-	assertErrContains(t, err, "not found")
+	assertErrContains(t, err, "declares no image output")
 }
 
 func TestBuild_UnknownInputStep(t *testing.T) {
@@ -285,7 +268,7 @@ func TestBuild_PackFileMissingOutput(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				ID: "build", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{ID: "other", Type: "file", Path: lane.Ptr(lane.RelPath("other"))}},
+				Outputs: []lane.FileOutput{{ID: "other", Type: "file", Path: lane.Ptr(lane.RelPath("other"))}},
 			},
 			{
 				ID: "pack", Env: map[string]string{}, Args: []string{},
@@ -321,12 +304,12 @@ func TestBuild_Cycle(t *testing.T) {
 			{
 				ID: "a", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
 				Inputs:  []lane.InputRef{{From: lane.OutputRef{Step: "b", Output: "out"}, Mount: "/in"}},
-				Outputs: []lane.OutputSpec{{ID: "out", Type: "file", Path: lane.Ptr(lane.RelPath("a"))}},
+				Outputs: []lane.FileOutput{{ID: "out", Type: "file", Path: lane.Ptr(lane.RelPath("a"))}},
 			},
 			{
 				ID: "b", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
 				Inputs:  []lane.InputRef{{From: lane.OutputRef{Step: "a", Output: "out"}, Mount: "/in"}},
-				Outputs: []lane.OutputSpec{{ID: "out", Type: "file", Path: lane.Ptr(lane.RelPath("b"))}},
+				Outputs: []lane.FileOutput{{ID: "out", Type: "file", Path: lane.Ptr(lane.RelPath("b"))}},
 			},
 		},
 	}
@@ -343,7 +326,7 @@ func TestTree(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				ID: "a", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{ID: "out", Type: "file", Path: lane.Ptr(lane.RelPath("a"))}},
+				Outputs: []lane.FileOutput{{ID: "out", Type: "file", Path: lane.Ptr(lane.RelPath("a"))}},
 			},
 			{
 				ID: "b", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
@@ -397,7 +380,7 @@ func TestBuild_ProvenancePathInOutput(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				ID: "src", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{ID: "tree", Type: "directory", Path: lane.Ptr(lane.RelPath("tree"))}},
+				Outputs: []lane.FileOutput{{ID: "tree", Type: "directory", Path: lane.Ptr(lane.RelPath("tree"))}},
 				Provenance: &lane.ProvenanceSpec{
 					Type: "git",
 					Path: "tree/provenance.json",
@@ -415,7 +398,7 @@ func TestBuild_ProvenancePathOutsideOutput(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				ID: "src", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{ID: "tree", Type: "directory", Path: lane.Ptr(lane.RelPath("tree"))}},
+				Outputs: []lane.FileOutput{{ID: "tree", Type: "directory", Path: lane.Ptr(lane.RelPath("tree"))}},
 				Provenance: &lane.ProvenanceSpec{
 					Type: "git",
 					Path: "../escape.json",
@@ -432,7 +415,7 @@ func TestBuild_ProvenancePathNotInOutput(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				ID: "src", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{ID: "tree", Type: "directory", Path: lane.Ptr(lane.RelPath("tree"))}},
+				Outputs: []lane.FileOutput{{ID: "tree", Type: "directory", Path: lane.Ptr(lane.RelPath("tree"))}},
 				Provenance: &lane.ProvenanceSpec{
 					Type: "git",
 					Path: "other/provenance.json",
@@ -460,17 +443,17 @@ func TestBuild_DeterministicOrder(t *testing.T) {
 			{
 				ID: "zebra", Image: lane.Ptr(lane.ImageRef("img")),
 				Args: []string{"z"}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{ID: "out", Type: "file", Path: lane.Ptr(lane.RelPath("z"))}},
+				Outputs: []lane.FileOutput{{ID: "out", Type: "file", Path: lane.Ptr(lane.RelPath("z"))}},
 			},
 			{
 				ID: "alpha", Image: lane.Ptr(lane.ImageRef("img")),
 				Args: []string{"a"}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{ID: "out", Type: "file", Path: lane.Ptr(lane.RelPath("a"))}},
+				Outputs: []lane.FileOutput{{ID: "out", Type: "file", Path: lane.Ptr(lane.RelPath("a"))}},
 			},
 			{
 				ID: "middle", Image: lane.Ptr(lane.ImageRef("img")),
 				Args: []string{"m"}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{ID: "out", Type: "file", Path: lane.Ptr(lane.RelPath("m"))}},
+				Outputs: []lane.FileOutput{{ID: "out", Type: "file", Path: lane.Ptr(lane.RelPath("m"))}},
 			},
 		},
 	}
@@ -498,19 +481,19 @@ func TestBuild_DeterministicOrder_Diamond(t *testing.T) {
 			{
 				ID: "root", Image: lane.Ptr(lane.ImageRef("img")),
 				Args: []string{"r"}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{ID: "out", Type: "file", Path: lane.Ptr(lane.RelPath("r"))}},
+				Outputs: []lane.FileOutput{{ID: "out", Type: "file", Path: lane.Ptr(lane.RelPath("r"))}},
 			},
 			{
 				ID: "right", Image: lane.Ptr(lane.ImageRef("img")),
 				Args: []string{"rt"}, Env: map[string]string{},
 				Inputs:  []lane.InputRef{{From: lane.OutputRef{Step: "root", Output: "out"}, Mount: "/in"}},
-				Outputs: []lane.OutputSpec{{ID: "out", Type: "file", Path: lane.Ptr(lane.RelPath("rt"))}},
+				Outputs: []lane.FileOutput{{ID: "out", Type: "file", Path: lane.Ptr(lane.RelPath("rt"))}},
 			},
 			{
 				ID: "left", Image: lane.Ptr(lane.ImageRef("img")),
 				Args: []string{"l"}, Env: map[string]string{},
 				Inputs:  []lane.InputRef{{From: lane.OutputRef{Step: "root", Output: "out"}, Mount: "/in"}},
-				Outputs: []lane.OutputSpec{{ID: "out", Type: "file", Path: lane.Ptr(lane.RelPath("l"))}},
+				Outputs: []lane.FileOutput{{ID: "out", Type: "file", Path: lane.Ptr(lane.RelPath("l"))}},
 			},
 			{
 				ID: "bottom", Image: lane.Ptr(lane.ImageRef("img")),
@@ -563,12 +546,12 @@ func TestBuild_DeterministicOrder_LexSmallestNotFIFO(t *testing.T) {
 			{
 				ID: "A", Image: lane.Ptr(lane.ImageRef("img")),
 				Args: []string{"a"}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{ID: "out", Type: "file", Path: lane.Ptr(lane.RelPath("a"))}},
+				Outputs: []lane.FileOutput{{ID: "out", Type: "file", Path: lane.Ptr(lane.RelPath("a"))}},
 			},
 			{
 				ID: "B", Image: lane.Ptr(lane.ImageRef("img")),
 				Args: []string{"b"}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{ID: "out", Type: "file", Path: lane.Ptr(lane.RelPath("b"))}},
+				Outputs: []lane.FileOutput{{ID: "out", Type: "file", Path: lane.Ptr(lane.RelPath("b"))}},
 			},
 			{
 				ID: "P", Image: lane.Ptr(lane.ImageRef("img")),
@@ -620,12 +603,12 @@ func TestBuild_PeerAnchorConflict(t *testing.T) {
 	// so that Build succeeds past edge resolution.
 	producerStep := lane.Step{
 		ID: "pack", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{"x"}, Env: map[string]string{},
-		Outputs: []lane.OutputSpec{{ID: "img", Type: "image", Path: lane.Ptr(lane.RelPath("img.tar"))}},
+		Output: &lane.ImageOutput{Path: lane.Ptr(lane.RelPath("img.tar"))},
 	}
 	deployStep := lane.Step{
 		ID: "deploy", Env: map[string]string{}, Args: []string{},
 		Deploy: &lane.DeploySpec{
-			Artifacts: map[string]lane.ArtifactRef{"image": {From: lane.OutputRef{Step: "pack", Output: "img"}}},
+			Artifacts: map[string]lane.ArtifactRef{"image": {From: lane.StepImageRef{Step: "pack"}}},
 		},
 	}
 
@@ -710,7 +693,7 @@ func TestTree_DeduplicatesRepeatedDependency(t *testing.T) {
 			{
 				ID: "producer", Image: lane.Ptr(lane.ImageRef("img")),
 				Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{ID: "out", Type: "directory", Path: lane.Ptr(lane.RelPath("o"))}},
+				Outputs: []lane.FileOutput{{ID: "out", Type: "directory", Path: lane.Ptr(lane.RelPath("o"))}},
 			},
 			{
 				ID: "consumer", Image: lane.Ptr(lane.ImageRef("img")),
@@ -746,7 +729,7 @@ func TestTree_DiamondRendersSharedNodeOnce(t *testing.T) {
 		return lane.Step{
 			ID: name, Image: lane.Ptr(lane.ImageRef("img")),
 			Args: []string{}, Env: map[string]string{}, Inputs: inputs,
-			Outputs: []lane.OutputSpec{{ID: "out", Type: "directory", Path: lane.Ptr(lane.RelPath("o"))}},
+			Outputs: []lane.FileOutput{{ID: "out", Type: "directory", Path: lane.Ptr(lane.RelPath("o"))}},
 		}
 	}
 	p := &lane.Lane{
@@ -800,12 +783,12 @@ func TestValidateLeavesAreDeploys_Valid(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				ID: "pack", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{ID: "img", Type: "image", Path: lane.Ptr(lane.RelPath("img.tar"))}},
+				Output: &lane.ImageOutput{Path: lane.Ptr(lane.RelPath("img.tar"))},
 			},
 			{
 				ID: "deploy", Env: map[string]string{}, Args: []string{},
 				Deploy: &lane.DeploySpec{
-					Artifacts: map[string]lane.ArtifactRef{"image": {From: lane.OutputRef{Step: "pack", Output: "img"}}},
+					Artifacts: map[string]lane.ArtifactRef{"image": {From: lane.StepImageRef{Step: "pack"}}},
 				},
 			},
 		},
@@ -848,17 +831,17 @@ func TestValidateLeavesAreDeploys_DanglingLeafRejected(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				ID: "pack", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{ID: "img", Type: "image", Path: lane.Ptr(lane.RelPath("img.tar"))}},
+				Output: &lane.ImageOutput{Path: lane.Ptr(lane.RelPath("img.tar"))},
 			},
 			{
 				ID: "deploy", Env: map[string]string{}, Args: []string{},
 				Deploy: &lane.DeploySpec{
-					Artifacts: map[string]lane.ArtifactRef{"image": {From: lane.OutputRef{Step: "pack", Output: "img"}}},
+					Artifacts: map[string]lane.ArtifactRef{"image": {From: lane.StepImageRef{Step: "pack"}}},
 				},
 			},
 			{
 				ID: "orphan", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{ID: "out", Type: "file", Path: lane.Ptr(lane.RelPath("out"))}},
+				Outputs: []lane.FileOutput{{ID: "out", Type: "file", Path: lane.Ptr(lane.RelPath("out"))}},
 			},
 		},
 	}

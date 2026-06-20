@@ -20,12 +20,12 @@ func TestBuild_RejectsNestedInputMounts(t *testing.T) {
 			{
 				ID: "src", Image: lane.Ptr(lane.ImageRef("img@sha256:" + strings.Repeat("a", 64))),
 				Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{ID: "tree", Type: "directory", Path: lane.Ptr(lane.RelPath("tree"))}},
+				Outputs: []lane.FileOutput{{ID: "tree", Type: "directory", Path: lane.Ptr(lane.RelPath("tree"))}},
 			},
 			{
 				ID: "deps", Image: lane.Ptr(lane.ImageRef("img@sha256:" + strings.Repeat("b", 64))),
 				Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{ID: "modules", Type: "directory", Path: lane.Ptr(lane.RelPath("modules"))}},
+				Outputs: []lane.FileOutput{{ID: "modules", Type: "directory", Path: lane.Ptr(lane.RelPath("modules"))}},
 			},
 			{
 				ID: "build", Image: lane.Ptr(lane.ImageRef("img@sha256:" + strings.Repeat("c", 64))),
@@ -52,7 +52,7 @@ func TestBuild_RejectsProvenancePathOutsideOutputs(t *testing.T) {
 			{
 				ID: "src", Image: lane.Ptr(lane.ImageRef("img@sha256:" + strings.Repeat("a", 64))),
 				Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{ID: "tree", Type: "directory", Path: lane.Ptr(lane.RelPath("tree"))}},
+				Outputs: []lane.FileOutput{{ID: "tree", Type: "directory", Path: lane.Ptr(lane.RelPath("tree"))}},
 				Provenance: &lane.ProvenanceSpec{
 					Type: "git",
 					Path: "../escape.json",

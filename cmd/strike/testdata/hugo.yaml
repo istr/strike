@@ -98,15 +98,11 @@ steps:
             step: npm-install
             output: node-modules
           dest: /work/node_modules
-    outputs:
-      - id: image
-        type: image
-        path: workspace.tar
+    output:
+      path: workspace.tar
 
   - id: build
-    imageFrom:
-      step: workspace
-      output: image
+    imageFromStep: workspace
     args: [hugo, --gc, --minify, -d, /work/public]
     workdir: /work
     env: {}
@@ -131,10 +127,8 @@ steps:
           dest: /usr/share/nginx/html
       config:
         entrypoint: [nginx, -g, "daemon off;"]
-    outputs:
-      - id: image
-        type: image
-        path: image.tar
+    output:
+      path: image.tar
 
   - id: deploy
     deploy:
@@ -145,7 +139,6 @@ steps:
         site:
           from:
             step: pack-site
-            output: image
       target:
         id: site-registry
         type: registry

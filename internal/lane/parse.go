@@ -91,7 +91,7 @@ func Parse(fp FilePath) (*Lane, Digest, error) {
 		if s.Image != nil {
 			count++
 		}
-		if s.ImageFrom != nil {
+		if s.ImageFromStep != "" {
 			count++
 		}
 		if s.Pack != nil {
@@ -102,7 +102,7 @@ func Parse(fp FilePath) (*Lane, Digest, error) {
 		}
 		if count != 1 {
 			return nil, Digest{}, fmt.Errorf(
-				"step %q: exactly one of image, image_from, pack, or deploy required", s.ID)
+				"step %q: exactly one of image, image_from_step, pack, or deploy required", s.ID)
 		}
 	}
 
@@ -142,12 +142,8 @@ func validateStepPaths(s Step) error {
 	if len(s.Outputs) > 0 && s.Workdir == nil && s.Pack == nil {
 		return fmt.Errorf("step %q: declares outputs but no workdir", s.ID)
 	}
-	for _, out := range s.Outputs {
-		if out.Path != nil {
-			if err := out.Path.Validate(); err != nil {
-				return fmt.Errorf("step %q: output path %q: %w", s.ID, *out.Path, err)
-			}
-		}
+	if err := validateOutputPaths(s); err != nil {
+		return err
 	}
 	if s.Pack != nil {
 		for _, f := range s.Pack.Files {
@@ -159,6 +155,24 @@ func validateStepPaths(s Step) error {
 	if s.Workdir != nil {
 		if err := s.Workdir.Validate(); err != nil {
 			return fmt.Errorf("step %q: workdir %q: %w", s.ID, *s.Workdir, err)
+		}
+	}
+	return nil
+}
+
+// validateOutputPaths validates the path of each file or directory output and
+// of the singular image output, when present.
+func validateOutputPaths(s Step) error {
+	for _, out := range s.Outputs {
+		if out.Path != nil {
+			if err := out.Path.Validate(); err != nil {
+				return fmt.Errorf("step %q: output path %q: %w", s.ID, *out.Path, err)
+			}
+		}
+	}
+	if s.Output != nil && s.Output.Path != nil {
+		if err := s.Output.Path.Validate(); err != nil {
+			return fmt.Errorf("step %q: image output path %q: %w", s.ID, *s.Output.Path, err)
 		}
 	}
 	return nil

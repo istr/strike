@@ -70,7 +70,7 @@ func TestBuildInputDelivery_Single(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				ID: "compile", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{ID: "bin", Type: "file", Path: lane.Ptr(lane.RelPath("binary"))}},
+				Outputs: []lane.FileOutput{{ID: "bin", Type: "file", Path: lane.Ptr(lane.RelPath("binary"))}},
 			},
 			{
 				ID: "test", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
@@ -117,11 +117,11 @@ func TestBuildInputDelivery_Multiple(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				ID: "s1", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{ID: "a", Type: "file", Path: lane.Ptr(lane.RelPath("a.tar"))}},
+				Outputs: []lane.FileOutput{{ID: "a", Type: "file", Path: lane.Ptr(lane.RelPath("a.tar"))}},
 			},
 			{
 				ID: "s2", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{ID: "b", Type: "file", Path: lane.Ptr(lane.RelPath("b.tar"))}},
+				Outputs: []lane.FileOutput{{ID: "b", Type: "file", Path: lane.Ptr(lane.RelPath("b.tar"))}},
 			},
 			{
 				ID: "consumer", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
@@ -176,7 +176,7 @@ func TestBuildInputDelivery_MissingSubpath(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				ID: "src", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{ID: "tree", Type: "directory", Path: lane.Ptr(lane.RelPath("tree"))}},
+				Outputs: []lane.FileOutput{{ID: "tree", Type: "directory", Path: lane.Ptr(lane.RelPath("tree"))}},
 			},
 			{
 				ID: "consumer", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
@@ -222,7 +222,7 @@ func TestBuildInputDelivery_OutsideWorkdir_DirectoryMount(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				ID: "src", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{ID: "tree", Type: "directory", Path: lane.Ptr(lane.RelPath("tree"))}},
+				Outputs: []lane.FileOutput{{ID: "tree", Type: "directory", Path: lane.Ptr(lane.RelPath("tree"))}},
 			},
 			{
 				ID: "consumer", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
@@ -282,7 +282,7 @@ func TestBuildInputDelivery_NoWorkdir_Mounts(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				ID: "src", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{ID: "tree", Type: "directory", Path: lane.Ptr(lane.RelPath("tree"))}},
+				Outputs: []lane.FileOutput{{ID: "tree", Type: "directory", Path: lane.Ptr(lane.RelPath("tree"))}},
 			},
 			{
 				ID: "consumer", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
@@ -328,7 +328,7 @@ func TestBuildInputDelivery_SingleFileOutside_Rejected(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				ID: "src", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{ID: "bin", Type: "file", Path: lane.Ptr(lane.RelPath("binary"))}},
+				Outputs: []lane.FileOutput{{ID: "bin", Type: "file", Path: lane.Ptr(lane.RelPath("binary"))}},
 			},
 			{
 				ID: "consumer", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
@@ -364,7 +364,7 @@ func TestBuildInputDelivery_ExportsProducerOnce(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				ID: "src", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{ID: "tree", Type: "directory", Path: lane.Ptr(lane.RelPath("tree"))}},
+				Outputs: []lane.FileOutput{{ID: "tree", Type: "directory", Path: lane.Ptr(lane.RelPath("tree"))}},
 			},
 			{
 				ID: "consumer", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
@@ -484,7 +484,7 @@ func TestCheckCache_Miss(t *testing.T) {
 	rc := newTestRC(t, eng)
 	step := &lane.Step{
 		ID:      "step1",
-		Outputs: []lane.OutputSpec{{ID: "bin", Type: "file", Path: lane.Ptr(lane.RelPath("bin"))}},
+		Outputs: []lane.FileOutput{{ID: "bin", Type: "file", Path: lane.Ptr(lane.RelPath("bin"))}},
 	}
 	rc.state.specHashes["step1"] = lane.MustParseDigest("sha256:abc0000000000000000000000000000000000000000000000000000000000000")
 
@@ -510,7 +510,7 @@ func TestCheckCache_Hit(t *testing.T) {
 	rc := newTestRC(t, eng)
 	step := &lane.Step{
 		ID:      "step1",
-		Outputs: []lane.OutputSpec{{ID: "bin", Type: "file", Path: lane.Ptr(lane.RelPath("bin"))}},
+		Outputs: []lane.FileOutput{{ID: "bin", Type: "file", Path: lane.Ptr(lane.RelPath("bin"))}},
 	}
 
 	hit, err := rc.checkCache(context.Background(), step, "step1", "step1", lane.MustParseDigest("sha256:abc0000000000000000000000000000000000000000000000000000000000000"))
@@ -647,17 +647,17 @@ func TestResolveImageDigest_ImageFrom(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				ID: "pack", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{ID: "img", Type: "image", Path: lane.Ptr(lane.RelPath("img.tar"))}},
+				Output: &lane.ImageOutput{Path: lane.Ptr(lane.RelPath("img.tar"))},
 			},
 			{
 				ID: "run", Env: map[string]string{}, Args: []string{"run"},
-				ImageFrom: &lane.ImageFrom{Step: "pack", Output: "img"},
+				ImageFromStep: "pack",
 			},
 		},
 	}
 	rc.lane = p
 	rc.dag = buildTestDAG(t, p)
-	if err := rc.laneState.Register("pack", "img", lane.Artifact{
+	if err := rc.laneState.Register("pack", "", lane.Artifact{
 		Type: "image", Digest: lane.MustParseDigest("sha256:abcdef1234567890000000000000000000000000000000000000000000000000"),
 	}); err != nil {
 		t.Fatal(err)
@@ -689,11 +689,11 @@ func TestResolveImageDigest_ImageFromMissing(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				ID: "pack", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{ID: "img", Type: "image", Path: lane.Ptr(lane.RelPath("img.tar"))}},
+				Output: &lane.ImageOutput{Path: lane.Ptr(lane.RelPath("img.tar"))},
 			},
 			{
 				ID: "run", Env: map[string]string{}, Args: []string{"run"},
-				ImageFrom: &lane.ImageFrom{Step: "pack", Output: "img"},
+				ImageFromStep: "pack",
 			},
 		},
 	}
@@ -721,7 +721,7 @@ func TestResolvePackInputPaths(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				ID: "compile", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{ID: "bin", Type: "file", Path: lane.Ptr(lane.RelPath("binary"))}},
+				Outputs: []lane.FileOutput{{ID: "bin", Type: "file", Path: lane.Ptr(lane.RelPath("binary"))}},
 			},
 			{
 				ID: "pack", Env: map[string]string{}, Args: []string{},
@@ -729,7 +729,7 @@ func TestResolvePackInputPaths(t *testing.T) {
 					Base:  "scratch",
 					Files: []lane.PackFile{{From: lane.OutputRef{Step: "compile", Output: "bin"}, Dest: "/app"}},
 				},
-				Outputs: []lane.OutputSpec{{ID: "img", Type: "image", Path: lane.Ptr(lane.RelPath("img.tar"))}},
+				Output: &lane.ImageOutput{Path: lane.Ptr(lane.RelPath("img.tar"))},
 			},
 		},
 	}
@@ -770,7 +770,7 @@ func TestResolvePackInputPaths(t *testing.T) {
 func TestPushAndReport_NoImage(t *testing.T) {
 	rc := newTestRC(t, &mockEngine{})
 	step := &lane.Step{
-		Outputs: []lane.OutputSpec{{ID: "bin", Type: "file", Path: lane.Ptr(lane.RelPath("bin"))}},
+		Outputs: []lane.FileOutput{{ID: "bin", Type: "file", Path: lane.Ptr(lane.RelPath("bin"))}},
 	}
 	if err := rc.pushAndReport(context.Background(), step, "test", "tag"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -781,7 +781,7 @@ func TestPushAndReport_ImagePushError(t *testing.T) {
 	eng := &mockEngine{pushErr: fmt.Errorf("network down")}
 	rc := newTestRC(t, eng)
 	step := &lane.Step{
-		Outputs: []lane.OutputSpec{{ID: "img", Type: "image", Path: lane.Ptr(lane.RelPath("img.tar"))}},
+		Output: &lane.ImageOutput{Path: lane.Ptr(lane.RelPath("img.tar"))},
 	}
 	err := rc.pushAndReport(context.Background(), step, "test", "tag")
 	if err == nil {
@@ -796,7 +796,7 @@ func TestPushAndReport_ImagePushOK(t *testing.T) {
 	eng := &mockEngine{}
 	rc := newTestRC(t, eng)
 	step := &lane.Step{
-		Outputs: []lane.OutputSpec{{ID: "img", Type: "image", Path: lane.Ptr(lane.RelPath("img.tar"))}},
+		Output: &lane.ImageOutput{Path: lane.Ptr(lane.RelPath("img.tar"))},
 	}
 	if err := rc.pushAndReport(context.Background(), step, "test", "tag"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -865,37 +865,37 @@ func TestArchiveReroot(t *testing.T) {
 	tests := []struct {
 		name                             string
 		workdir                          string
-		out                              lane.OutputSpec
+		out                              lane.FileOutput
 		wantArchive, wantStrip, wantDest string
 	}{
 		{
 			name:        "directory with path",
 			workdir:     "/out",
-			out:         lane.OutputSpec{ID: "tree", Type: "directory", Path: lane.Ptr(lane.RelPath("tree"))},
+			out:         lane.FileOutput{ID: "tree", Type: "directory", Path: lane.Ptr(lane.RelPath("tree"))},
 			wantArchive: "/out/tree", wantStrip: "tree", wantDest: "tree",
 		},
 		{
 			name:        "directory nested path",
 			workdir:     "/out",
-			out:         lane.OutputSpec{ID: "web", Type: "directory", Path: lane.Ptr(lane.RelPath("dist/web"))},
+			out:         lane.FileOutput{ID: "web", Type: "directory", Path: lane.Ptr(lane.RelPath("dist/web"))},
 			wantArchive: "/out/dist/web", wantStrip: "web", wantDest: "web",
 		},
 		{
 			name:        "directory whole workdir (no path)",
 			workdir:     "/out",
-			out:         lane.OutputSpec{ID: "site", Type: "directory"},
+			out:         lane.FileOutput{ID: "site", Type: "directory"},
 			wantArchive: "/out", wantStrip: "", wantDest: "site",
 		},
 		{
 			name:        "file with path",
 			workdir:     "/out",
-			out:         lane.OutputSpec{ID: "bin", Type: "file", Path: lane.Ptr(lane.RelPath("binary"))},
+			out:         lane.FileOutput{ID: "bin", Type: "file", Path: lane.Ptr(lane.RelPath("binary"))},
 			wantArchive: "/out/binary", wantStrip: "", wantDest: "",
 		},
 		{
 			name:        "file nested path",
 			workdir:     "/out",
-			out:         lane.OutputSpec{ID: "bin", Type: "file", Path: lane.Ptr(lane.RelPath("build/app.bin"))},
+			out:         lane.FileOutput{ID: "bin", Type: "file", Path: lane.Ptr(lane.RelPath("build/app.bin"))},
 			wantArchive: "/out/build/app.bin", wantStrip: "", wantDest: "",
 		},
 	}

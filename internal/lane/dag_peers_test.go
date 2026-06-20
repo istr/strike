@@ -31,7 +31,7 @@ func minStep(name string, peers []lane.Peer) lane.Step {
 		Env:     map[string]string{},
 		Inputs:  []lane.InputRef{},
 		Secrets: []lane.SecretRef{},
-		Outputs: []lane.OutputSpec{
+		Outputs: []lane.FileOutput{
 			{ID: "out", Type: "file", Path: lane.Ptr(lane.RelPath("o"))},
 		},
 		Peers: peers,

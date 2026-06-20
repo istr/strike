@@ -2,10 +2,10 @@
 // on lane.InputRef, lane.PackFile, or lane.ArtifactRef.
 // After lane.Build, resolved edges are the only valid consumer API.
 //
-// ImageFrom is deliberately not in forbiddenTypes: its fields are already
-// typed (Step, Output), not a string ref that needs parsing. Consumers
-// should still prefer dag.ImageFromEdges, but direct reads of
-// step.ImageFrom.Step are not unsafe the way inp.From was.
+// imageFromStep is deliberately not guarded: it is a bare step-id string that
+// names a producing step, not a {step, output} ref that needs parsing the way
+// inp.From did. Consumers should still prefer dag.ImageFromEdges, but a direct
+// read of step.ImageFromStep is not unsafe.
 package main
 
 import (
