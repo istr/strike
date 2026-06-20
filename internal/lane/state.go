@@ -9,15 +9,15 @@ import (
 	"github.com/istr/strike/internal/clock"
 )
 
-// Compile-time check: Artifact is now CUE-generated in cue_types_lane_gen.go.
-// If this line fails, the generated file is missing the Artifact definition.
-var _ Artifact
+// Compile-time check: OutputHandle is now CUE-generated in
+// cue_types_lane_gen.go.
+var _ OutputHandle
 
-// State tracks artifacts and step results across lane execution.
-// All artifact references use the producer's canonical output ref as the
+// State tracks outputs and step results across lane execution.
+// Output references use the producer's canonical output ref as the
 // key (OutputRef.Ref, "step_name.output_name").
 type State struct {
-	Artifacts  map[string]Artifact         `json:"artifacts"`
+	Outputs    map[string]OutputHandle     `json:"outputs"`
 	Steps      map[string]StepResult       `json:"steps"`
 	Provenance map[string]ProvenanceRecord `json:"provenance"`
 	mu         sync.RWMutex
@@ -37,7 +37,7 @@ type StepResult struct {
 // NewState creates an empty lane state.
 func NewState() *State {
 	return &State{
-		Artifacts:  make(map[string]Artifact),
+		Outputs:    make(map[string]OutputHandle),
 		Steps:      make(map[string]StepResult),
 		Provenance: make(map[string]ProvenanceRecord),
 	}
@@ -54,32 +54,33 @@ func (s *State) RecordProvenance(stepID string, rec ProvenanceRecord) error {
 	return nil
 }
 
-// Register adds an artifact to the state under the producer's canonical
-// output ref (OutputRef.Ref, "step_name.output_name").
-func (s *State) Register(stepID, outputID string, a Artifact) error {
+// Register stores the resolved output handle under the producer's canonical
+// output ref (OutputRef.Ref, "step_name.output_name"). The handle carries the
+// digest-pinned image reference produced by the normalize round-trip (ADR-046).
+func (s *State) Register(stepID, outputID string, h OutputHandle) error {
 	key := OutputRef{Step: stepID, Output: outputID}.Ref()
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, exists := s.Artifacts[key]; exists {
-		return fmt.Errorf("artifact %q already registered", key)
+	if _, exists := s.Outputs[key]; exists {
+		return fmt.Errorf("output %q already registered", key)
 	}
-	if a.Digest.IsZero() {
-		return fmt.Errorf("artifact %q: digest is required", key)
+	if h.ImageRef == "" {
+		return fmt.Errorf("output %q: imageRef is required", key)
 	}
-	s.Artifacts[key] = a
+	s.Outputs[key] = h
 	return nil
 }
 
-// Resolve looks up an artifact by its producer's canonical output ref
+// Resolve looks up an output handle by its producer's canonical output ref
 // (OutputRef.Ref, "step_name.output_name").
-func (s *State) Resolve(ref string) (Artifact, error) {
+func (s *State) Resolve(ref string) (OutputHandle, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	a, ok := s.Artifacts[ref]
+	h, ok := s.Outputs[ref]
 	if !ok {
-		return Artifact{}, fmt.Errorf("artifact %q not found; available: %v", ref, s.artifactKeys())
+		return OutputHandle{}, fmt.Errorf("output %q not found; available: %v", ref, s.outputKeys())
 	}
-	return a, nil
+	return h, nil
 }
 
 // CollectProvenance walks the DAG backwards from fromStep and returns
@@ -135,9 +136,9 @@ func (s *State) JSON() ([]byte, error) {
 	return json.MarshalIndent(s, "", "  ")
 }
 
-func (s *State) artifactKeys() []string {
-	keys := make([]string, 0, len(s.Artifacts))
-	for k := range s.Artifacts {
+func (s *State) outputKeys() []string {
+	keys := make([]string, 0, len(s.Outputs))
+	for k := range s.Outputs {
 		keys = append(keys, k)
 	}
 	return keys

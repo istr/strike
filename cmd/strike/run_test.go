@@ -82,8 +82,8 @@ func TestBuildInputDelivery_Single(t *testing.T) {
 	rc.dag = buildTestDAG(t, p)
 
 	compileDigest := lane.MustParseDigest("sha256:aabbccdd11223344000000000000000000000000000000000000000000000000")
-	if err := rc.laneState.Register("compile", "bin", lane.Artifact{
-		Type: "file", Digest: compileDigest,
+	if err := rc.laneState.Register("compile", "bin", lane.OutputHandle{
+		ImageRef: "localhost/test/compile@" + compileDigest.String(),
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -137,10 +137,10 @@ func TestBuildInputDelivery_Multiple(t *testing.T) {
 
 	d1 := lane.MustParseDigest("sha256:aaaa111122223333000000000000000000000000000000000000000000000000")
 	d2 := lane.MustParseDigest("sha256:bbbb444455556666000000000000000000000000000000000000000000000000")
-	if err := rc.laneState.Register("s1", "a", lane.Artifact{Type: "file", Digest: d1}); err != nil {
+	if err := rc.laneState.Register("s1", "a", lane.OutputHandle{ImageRef: "localhost/test/s1@" + d1.String()}); err != nil {
 		t.Fatal(err)
 	}
-	if err := rc.laneState.Register("s2", "b", lane.Artifact{Type: "file", Digest: d2}); err != nil {
+	if err := rc.laneState.Register("s2", "b", lane.OutputHandle{ImageRef: "localhost/test/s2@" + d2.String()}); err != nil {
 		t.Fatal(err)
 	}
 	rc.state.specHashes["s1"] = lane.MustParseDigest("sha256:2222222222222222000000000000000000000000000000000000000000000000")
@@ -190,8 +190,8 @@ func TestBuildInputDelivery_MissingSubpath(t *testing.T) {
 	rc.dag = buildTestDAG(t, p)
 
 	srcDigest := lane.MustParseDigest("sha256:aabbccdd11223344000000000000000000000000000000000000000000000000")
-	if err := rc.laneState.Register("src", "tree", lane.Artifact{
-		Type: "directory", Digest: srcDigest,
+	if err := rc.laneState.Register("src", "tree", lane.OutputHandle{
+		ImageRef: "localhost/test/src@" + srcDigest.String(),
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -233,8 +233,8 @@ func TestBuildInputDelivery_OutsideWorkdir_DirectoryMount(t *testing.T) {
 	}
 	rc.dag = buildTestDAG(t, p)
 
-	if err := rc.laneState.Register("src", "tree", lane.Artifact{
-		Type: "directory", Digest: lane.MustParseDigest("sha256:aabbccdd11223344000000000000000000000000000000000000000000000000"),
+	if err := rc.laneState.Register("src", "tree", lane.OutputHandle{
+		ImageRef: "localhost/test/src@sha256:aabbccdd11223344000000000000000000000000000000000000000000000000",
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -292,8 +292,8 @@ func TestBuildInputDelivery_NoWorkdir_Mounts(t *testing.T) {
 	}
 	rc.dag = buildTestDAG(t, p)
 
-	if err := rc.laneState.Register("src", "tree", lane.Artifact{
-		Type: "directory", Digest: lane.MustParseDigest("sha256:aabbccdd11223344000000000000000000000000000000000000000000000000"),
+	if err := rc.laneState.Register("src", "tree", lane.OutputHandle{
+		ImageRef: "localhost/test/src@sha256:aabbccdd11223344000000000000000000000000000000000000000000000000",
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -339,8 +339,8 @@ func TestBuildInputDelivery_SingleFileOutside_Rejected(t *testing.T) {
 	}
 	rc.dag = buildTestDAG(t, p)
 
-	if err := rc.laneState.Register("src", "bin", lane.Artifact{
-		Type: "file", Digest: lane.MustParseDigest("sha256:aabbccdd11223344000000000000000000000000000000000000000000000000"),
+	if err := rc.laneState.Register("src", "bin", lane.OutputHandle{
+		ImageRef: "localhost/test/src@sha256:aabbccdd11223344000000000000000000000000000000000000000000000000",
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -378,9 +378,8 @@ func TestBuildInputDelivery_ExportsProducerOnce(t *testing.T) {
 	}
 	rc.dag = buildTestDAG(t, p)
 
-	if err := rc.laneState.Register("src", "tree", lane.Artifact{
-		Type:   "directory",
-		Digest: lane.MustParseDigest("sha256:aabbccdd11223344000000000000000000000000000000000000000000000000"),
+	if err := rc.laneState.Register("src", "tree", lane.OutputHandle{
+		ImageRef: "localhost/test/src@sha256:aabbccdd11223344000000000000000000000000000000000000000000000000",
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -520,15 +519,16 @@ func TestCheckCache_Hit(t *testing.T) {
 	if !hit {
 		t.Error("expected cache hit")
 	}
-	art, err2 := rc.laneState.Resolve("step1.bin")
+	handle, err2 := rc.laneState.Resolve("step1.bin")
 	if err2 != nil {
-		t.Fatalf("artifact not registered: %v", err2)
+		t.Fatalf("output not registered: %v", err2)
 	}
-	if art.Size != 42 {
-		t.Errorf("size = %d, want 42", art.Size)
+	gotDigest, digestErr := handle.ManifestDigest()
+	if digestErr != nil {
+		t.Fatalf("manifest digest: %v", digestErr)
 	}
-	if art.Digest.String() != digest {
-		t.Errorf("digest = %q, want %q", art.Digest, digest)
+	if gotDigest.String() != digest {
+		t.Errorf("digest = %q, want %q", gotDigest, digest)
 	}
 }
 
@@ -647,7 +647,7 @@ func TestResolveImageDigest_ImageFrom(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				ID: "pack", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Output: &lane.ImageOutput{Path: lane.Ptr(lane.RelPath("img.tar"))},
+				Output: "image",
 			},
 			{
 				ID: "run", Env: map[string]string{}, Args: []string{"run"},
@@ -657,8 +657,9 @@ func TestResolveImageDigest_ImageFrom(t *testing.T) {
 	}
 	rc.lane = p
 	rc.dag = buildTestDAG(t, p)
-	if err := rc.laneState.Register("pack", "", lane.Artifact{
-		Type: "image", Digest: lane.MustParseDigest("sha256:abcdef1234567890000000000000000000000000000000000000000000000000"),
+	packDigest := lane.MustParseDigest("sha256:abcdef1234567890000000000000000000000000000000000000000000000000")
+	if err := rc.laneState.Register("pack", "", lane.OutputHandle{
+		ImageRef: registry.WrapDigestRef("test-lane", "pack", packDigest),
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -689,7 +690,7 @@ func TestResolveImageDigest_ImageFromMissing(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				ID: "pack", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Output: &lane.ImageOutput{Path: lane.Ptr(lane.RelPath("img.tar"))},
+				Output: "image",
 			},
 			{
 				ID: "run", Env: map[string]string{}, Args: []string{"run"},
@@ -729,15 +730,15 @@ func TestResolvePackInputPaths(t *testing.T) {
 					Base:  "scratch",
 					Files: []lane.PackFile{{From: lane.OutputRef{Step: "compile", Output: "bin"}, Dest: "/app"}},
 				},
-				Output: &lane.ImageOutput{Path: lane.Ptr(lane.RelPath("img.tar"))},
+				Output: "image",
 			},
 		},
 	}
 	rc.dag = buildTestDAG(t, p)
 
 	compileDigest := lane.MustParseDigest("sha256:aabbccdd11223344000000000000000000000000000000000000000000000000")
-	if err := rc.laneState.Register("compile", "bin", lane.Artifact{
-		Type: "file", Digest: compileDigest,
+	if err := rc.laneState.Register("compile", "bin", lane.OutputHandle{
+		ImageRef: "localhost/test/compile@" + compileDigest.String(),
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -781,7 +782,7 @@ func TestPushAndReport_ImagePushError(t *testing.T) {
 	eng := &mockEngine{pushErr: fmt.Errorf("network down")}
 	rc := newTestRC(t, eng)
 	step := &lane.Step{
-		Output: &lane.ImageOutput{Path: lane.Ptr(lane.RelPath("img.tar"))},
+		Output: "image",
 	}
 	err := rc.pushAndReport(context.Background(), step, "test", "tag")
 	if err == nil {
@@ -796,7 +797,7 @@ func TestPushAndReport_ImagePushOK(t *testing.T) {
 	eng := &mockEngine{}
 	rc := newTestRC(t, eng)
 	step := &lane.Step{
-		Output: &lane.ImageOutput{Path: lane.Ptr(lane.RelPath("img.tar"))},
+		Output: "image",
 	}
 	if err := rc.pushAndReport(context.Background(), step, "test", "tag"); err != nil {
 		t.Fatalf("unexpected error: %v", err)

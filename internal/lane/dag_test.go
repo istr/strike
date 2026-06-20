@@ -131,7 +131,7 @@ func TestBuild_ImageFromEdge(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				ID: "pack", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{"pack"}, Env: map[string]string{},
-				Output: &lane.ImageOutput{Path: lane.Ptr(lane.RelPath("img.tar"))},
+				Output: "image",
 			},
 			{
 				ID: "run", Env: map[string]string{}, Args: []string{"run"},
@@ -159,7 +159,7 @@ func TestBuild_PackFileEdge(t *testing.T) {
 					Base:  "scratch",
 					Files: []lane.PackFile{{From: lane.OutputRef{Step: "build", Output: "binary"}, Dest: "/app", Mode: 0o755}},
 				},
-				Output: &lane.ImageOutput{Path: lane.Ptr(lane.RelPath("img.tar"))},
+				Output: "image",
 			},
 		},
 	}
@@ -175,7 +175,7 @@ func TestBuild_DeployArtifactEdge(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				ID: "pack", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Output: &lane.ImageOutput{Path: lane.Ptr(lane.RelPath("img.tar"))},
+				Output: "image",
 			},
 			{
 				ID: "deploy", Env: map[string]string{}, Args: []string{},
@@ -603,7 +603,7 @@ func TestBuild_PeerAnchorConflict(t *testing.T) {
 	// so that Build succeeds past edge resolution.
 	producerStep := lane.Step{
 		ID: "pack", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{"x"}, Env: map[string]string{},
-		Output: &lane.ImageOutput{Path: lane.Ptr(lane.RelPath("img.tar"))},
+		Output: "image",
 	}
 	deployStep := lane.Step{
 		ID: "deploy", Env: map[string]string{}, Args: []string{},
@@ -783,7 +783,7 @@ func TestValidateLeavesAreDeploys_Valid(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				ID: "pack", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Output: &lane.ImageOutput{Path: lane.Ptr(lane.RelPath("img.tar"))},
+				Output: "image",
 			},
 			{
 				ID: "deploy", Env: map[string]string{}, Args: []string{},
@@ -831,7 +831,7 @@ func TestValidateLeavesAreDeploys_DanglingLeafRejected(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				ID: "pack", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Output: &lane.ImageOutput{Path: lane.Ptr(lane.RelPath("img.tar"))},
+				Output: "image",
 			},
 			{
 				ID: "deploy", Env: map[string]string{}, Args: []string{},

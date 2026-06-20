@@ -33,3 +33,13 @@ package lane
 		[string]: string @go(Metadata)
 	}
 }
+
+// OutputHandle is the resolved runtime reference to a step's output image
+// (ADR-046, layer 2). Populated during execution when the producer wraps or
+// commits the output; carried in State for consumer resolution. imageRef is
+// the digest-pinned local reference (repo@sha256:<manifestDigest>) produced
+// by the normalize round-trip through ggcr.
+#OutputHandle: {
+	@go(OutputHandle)
+	imageRef: string @go(ImageRef)
+}

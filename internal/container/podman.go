@@ -596,6 +596,37 @@ func (e *podmanEngine) ContainerArchive(ctx context.Context, id, path string) (i
 	return resp.Body, nil
 }
 
+func (e *podmanEngine) ContainerCommit(ctx context.Context, id string) (string, error) {
+	u := e.base + "/commit?container=" + url.QueryEscape(id) + "&pause=true"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, nil)
+	if err != nil {
+		return "", err
+	}
+	resp, err := e.client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("container commit %s: %w", id, err)
+	}
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			log.Printf("WARN close response body: %v", closeErr)
+		}
+	}()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("container commit %s: read response: %w", id, err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("container commit %s: status %d: %s", id, resp.StatusCode, body)
+	}
+	var result struct {
+		ID string `json:"Id"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return "", fmt.Errorf("container commit %s: unmarshal: %w", id, err)
+	}
+	return result.ID, nil
+}
+
 // containerArchivePut extracts a tar stream into dstPath inside a container.
 // It succeeds on a created-but-not-started container, which is how step
 // inputs are seeded into the writable workdir volume before start.

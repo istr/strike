@@ -39,8 +39,7 @@ steps:
     env: {}
     inputs: []
     secrets: []
-    output:
-      path: custom.tar
+    output: image
   - id: use-base
     imageFromStep: build-base
     args: [/app/run]

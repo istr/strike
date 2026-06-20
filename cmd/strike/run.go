@@ -203,18 +203,20 @@ func (rc *runContext) resolveImageDigest(ctx context.Context, step *lane.Step, s
 		// the empty-output key, collision-free because a step that declares an
 		// image output declares no other output (ADR-046).
 		ref := lane.OutputRef{Step: fromStep, Output: ""}.Ref()
-		art, err := rc.laneState.Resolve(ref)
+		handle, err := rc.laneState.Resolve(ref)
 		if err != nil {
 			return lane.Digest{}, fmt.Errorf("%s: image_from %s: %w",
 				safeName, ref, err)
 		}
+		digest, digestErr := handle.ManifestDigest()
+		if digestErr != nil {
+			return lane.Digest{}, fmt.Errorf("%s: image_from %s: %w",
+				safeName, ref, digestErr)
+		}
 		// ADR-045: execute the producer's image by its content-addressed
-		// digest, not the mutable WrapTag. libpod records this RepoDigest at
-		// ImageTag time, so it resolves the locally-loaded image with no
-		// registry pull. art.Digest is the CP-verified manifest digest.
-		rc.state.imageFromRefs[string(step.ID)] = registry.WrapDigestRef(
-			rc.lane.ID, fromStep, art.Digest)
-		return art.Digest, nil
+		// digest, not the mutable WrapTag (ADR-046).
+		rc.state.imageFromRefs[string(step.ID)] = handle.ImageRef
+		return digest, nil
 	}
 	digest, err := resolveDigest(ctx, rc.regClient, *step.Image)
 	if err != nil {
@@ -274,20 +276,18 @@ func (rc *runContext) checkCache(ctx context.Context, step *lane.Step, stepID, s
 
 	digest := lane.MustParseDigest(info.Digest)
 	for _, out := range step.Outputs {
-		if regErr := rc.laneState.Register(stepID, out.ID, lane.Artifact{
-			Type:   lane.ArtifactType(out.Type),
-			Digest: digest,
-			Size:   size,
-		}); regErr != nil {
+		handle := lane.OutputHandle{
+			ImageRef: registry.WrapDigestRef(rc.lane.ID, stepID, digest),
+		}
+		if regErr := rc.laneState.Register(stepID, out.ID, handle); regErr != nil {
 			return false, fmt.Errorf("cache hit register %s/%s: %w", stepID, out.ID, regErr)
 		}
 	}
-	if step.Output != nil {
-		if regErr := rc.laneState.Register(stepID, "", lane.Artifact{
-			Type:   artifactTypeImage,
-			Digest: digest,
-			Size:   size,
-		}); regErr != nil {
+	if step.Output != "" {
+		handle := lane.OutputHandle{
+			ImageRef: registry.WrapDigestRef(rc.lane.ID, stepID, digest),
+		}
+		if regErr := rc.laneState.Register(stepID, "", handle); regErr != nil {
 			return false, fmt.Errorf("cache hit register %s image: %w", stepID, regErr)
 		}
 	}
@@ -314,10 +314,10 @@ func (rc *runContext) executePack(ctx context.Context, step *lane.Step, stepID, 
 	}
 	defer closer.Warn(outRoot, "step output root")
 
-	if step.Output == nil || step.Output.Path == nil {
-		return fmt.Errorf("%s: pack output requires an image output with a path", safeName)
+	if step.Output == "" {
+		return fmt.Errorf("%s: pack output requires an image output", safeName)
 	}
-	outputID := filepath.Base(step.Output.Path.String())
+	outputID := stepID
 	result, err := executor.Pack(executor.PackOpts{
 		Spec:       step.Pack,
 		InputPaths: inputPaths,
@@ -328,10 +328,10 @@ func (rc *runContext) executePack(ctx context.Context, step *lane.Step, stepID, 
 		return fmt.Errorf("%s: pack failed: %w", safeName, err)
 	}
 
-	if regErr := rc.laneState.Register(stepID, "", lane.Artifact{
-		Type:   artifactTypeImage,
-		Digest: result.Digest,
-	}); regErr != nil {
+	handle := lane.OutputHandle{
+		ImageRef: registry.WrapDigestRef(rc.lane.ID, stepID, result.Digest),
+	}
+	if regErr := rc.laneState.Register(stepID, "", handle); regErr != nil {
 		return fmt.Errorf("%s: register artifact: %w", safeName, regErr)
 	}
 
@@ -366,14 +366,18 @@ func (rc *runContext) resolvePackInputPaths(ctx context.Context, step *lane.Step
 		fromStep := string(e.FromStep.ID)
 		fromOutput := e.FromOutput.ID
 
-		art, artErr := rc.laneState.Resolve(lane.OutputRef{Step: fromStep, Output: fromOutput}.Ref())
+		handle, artErr := rc.laneState.Resolve(lane.OutputRef{Step: fromStep, Output: fromOutput}.Ref())
 		if artErr != nil {
 			return nil, fmt.Errorf("%s: pack input %s.%s: %w", safeName, fromStep, fromOutput, artErr)
+		}
+		packDigest, digestErr := handle.ManifestDigest()
+		if digestErr != nil {
+			return nil, fmt.Errorf("%s: pack input %s.%s digest: %w", safeName, fromStep, fromOutput, digestErr)
 		}
 
 		tag := registry.WrapTag(rc.lane.ID, fromStep, rc.state.specHashes[fromStep])
 
-		dedupDir := art.Digest.Hex[:16]
+		dedupDir := packDigest.Hex[:16]
 		inputDir := filepath.Join(inputsRoot, dedupDir)
 		if mkErr := scratchRoot.Mkdir(filepath.Join("inputs", dedupDir), 0o750); mkErr == nil {
 			tarBytes, saveErr := registry.SaveImage(ctx, rc.engine, tag)
@@ -466,7 +470,7 @@ func (rc *runContext) wrapOutputs(ctx context.Context, step *lane.Step, stepID, 
 			return wrapErr
 		}
 	}
-	if step.Output != nil {
+	if step.Output != "" {
 		if wrapErr := rc.wrapImageOutput(ctx, step, stepID, safeName, containerID, specHash); wrapErr != nil {
 			return wrapErr
 		}
@@ -505,45 +509,42 @@ func (rc *runContext) wrapFileOutput(ctx context.Context, step *lane.Step, stepI
 		log.Printf("INFO   %s: output %q has no file content; if unintended, check the step workdir and output path", safeName, out.ID)
 	}
 
-	if regErr := rc.laneState.Register(stepID, out.ID, lane.Artifact{
-		Type:   lane.ArtifactType(out.Type),
-		Digest: digest,
-		Size:   size,
-	}); regErr != nil {
+	handle := lane.OutputHandle{
+		ImageRef: registry.WrapDigestRef(rc.lane.ID, stepID, digest),
+	}
+	if regErr := rc.laneState.Register(stepID, out.ID, handle); regErr != nil {
 		return fmt.Errorf("%s: register artifact: %w", safeName, regErr)
 	}
 	return nil
 }
 
-// wrapImageOutput archives the step's image output and registers it under the
-// step's empty-output key (the image is addressed by step, not by name;
-// ADR-046).
-func (rc *runContext) wrapImageOutput(ctx context.Context, step *lane.Step, stepID, safeName, containerID string, specHash lane.Digest) error {
-	workdir := step.Workdir.String()
+// wrapImageOutput commits the held container to a new image, normalizes it
+// through ggcr for reproducible digests (ADR-046), and registers the
+// digest-pinned OutputHandle.
+func (rc *runContext) wrapImageOutput(ctx context.Context, _ *lane.Step, stepID, safeName, containerID string, specHash lane.Digest) error {
 	tag := registry.WrapTag(rc.lane.ID, stepID, specHash)
 
-	archivePath := workdir
-	if step.Output.Path != nil {
-		archivePath = path.Join(workdir, step.Output.Path.String())
+	imageID, commitErr := rc.engine.ContainerCommit(ctx, containerID)
+	if commitErr != nil {
+		return fmt.Errorf("%s: commit image output: %w", safeName, commitErr)
 	}
 
-	stream, archErr := rc.engine.ContainerArchive(ctx, containerID, archivePath)
-	if archErr != nil {
-		return fmt.Errorf("%s: archive image output: %w", safeName, archErr)
+	stream, saveErr := rc.engine.ImageSave(ctx, imageID)
+	if saveErr != nil {
+		return fmt.Errorf("%s: save committed image: %w", safeName, saveErr)
 	}
-	defer closer.Warn(stream, "output archive stream")
+	defer closer.Warn(stream, "committed image save stream")
 
-	digest, size, err := rc.regClient.WrapImageArchiveAsImage(ctx, stream, tag)
+	digest, _, err := rc.regClient.WrapImageArchiveAsImage(ctx, stream, tag)
 	if err != nil {
-		return fmt.Errorf("%s: wrap image output: %w", safeName, err)
+		return fmt.Errorf("%s: normalize image output: %w", safeName, err)
 	}
 
-	if regErr := rc.laneState.Register(stepID, "", lane.Artifact{
-		Type:   artifactTypeImage,
-		Digest: digest,
-		Size:   size,
-	}); regErr != nil {
-		return fmt.Errorf("%s: register artifact: %w", safeName, regErr)
+	handle := lane.OutputHandle{
+		ImageRef: registry.WrapDigestRef(rc.lane.ID, stepID, digest),
+	}
+	if regErr := rc.laneState.Register(stepID, "", handle); regErr != nil {
+		return fmt.Errorf("%s: register output: %w", safeName, regErr)
 	}
 	return nil
 }
@@ -772,7 +773,7 @@ func relWithinWorkdir(workdir, mount string) (string, bool) {
 
 func (rc *runContext) pushAndReport(ctx context.Context, step *lane.Step, safeName, tag string) error {
 	pushed := false
-	if step.Output != nil {
+	if step.Output != "" {
 		if err := rc.regClient.PushArtifact(ctx, tag); err != nil {
 			return fmt.Errorf("%s: push failed: %w", safeName, err)
 		}

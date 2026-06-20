@@ -132,7 +132,7 @@ func (d *DAG) resolveImageFromEdges(p *Lane) error {
 		if !ok {
 			return fmt.Errorf("step %q: image_from_step references unknown step %q", name, from)
 		}
-		if fromStep.Output == nil {
+		if fromStep.Output == "" {
 			return fmt.Errorf("step %q: image_from_step %q declares no image output", name, from)
 		}
 		d.ImageFromEdges[name] = ImageFromEdge{FromStep: fromStep}
@@ -250,7 +250,7 @@ func (d *DAG) resolveDeployArtifact(name, artName string, src ArtifactSource) (D
 			return DeployArtifactEdge{}, "", fmt.Errorf(
 				"step %q: deploy artifact %q references unknown step %q", name, artName, ref.Step)
 		}
-		if fromStep.Output == nil {
+		if fromStep.Output == "" {
 			return DeployArtifactEdge{}, "", fmt.Errorf(
 				"step %q: deploy artifact %q: step %q declares no image output", name, artName, ref.Step)
 		}

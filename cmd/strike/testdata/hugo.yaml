@@ -98,8 +98,7 @@ steps:
             step: npm-install
             output: node-modules
           dest: /work/node_modules
-    output:
-      path: workspace.tar
+    output: image
 
   - id: build
     imageFromStep: workspace
@@ -127,8 +126,7 @@ steps:
           dest: /usr/share/nginx/html
       config:
         entrypoint: [nginx, -g, "daemon off;"]
-    output:
-      path: image.tar
+    output: image
 
   - id: deploy
     deploy:

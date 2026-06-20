@@ -60,8 +60,7 @@ steps:
     env: {}
     inputs: []
     secrets: []
-    output:
-      path: image.tar
+    output: image
 
   - id: deploy
     deploy:

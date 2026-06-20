@@ -160,19 +160,14 @@ func validateStepPaths(s Step) error {
 	return nil
 }
 
-// validateOutputPaths validates the path of each file or directory output and
-// of the singular image output, when present.
+// validateOutputPaths validates the path of each file or directory output,
+// when present.
 func validateOutputPaths(s Step) error {
 	for _, out := range s.Outputs {
 		if out.Path != nil {
 			if err := out.Path.Validate(); err != nil {
 				return fmt.Errorf("step %q: output path %q: %w", s.ID, *out.Path, err)
 			}
-		}
-	}
-	if s.Output != nil && s.Output.Path != nil {
-		if err := s.Output.Path.Validate(); err != nil {
-			return fmt.Errorf("step %q: image output path %q: %w", s.ID, *s.Output.Path, err)
 		}
 	}
 	return nil

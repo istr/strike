@@ -149,7 +149,7 @@ package lane
 		[string]: string @go(Env)
 	}
 	inputs: [...#InputRef] @go(Inputs)
-	output?: #ImageOutput @go(Output,type=*ImageOutput)
+	output?: "image" @go(Output,type=string)
 	outputs?: [...#FileOutput] @go(Outputs)
 	secrets: [...#SecretRef] @go(Secrets)
 	workdir?: #AbsPath @go(Workdir,optional=nillable)
@@ -241,24 +241,7 @@ package lane
 	// Absent means the whole workdir is the artifact; a value selects a
 	// subpath within it. An absolute path is a type error: outputs are
 	// projections of the workdir, never of the read-only base image.
-	path?:     #RelPath          @go(Path,optional=nillable)
-	expected?: #OutputValidation @go(Expected,optional=nillable)
-}
-
-// ImageOutput is the step's single image output (singular output). It has no
-// id: the image is addressed by step (imageFromStep, deploy), never by name
-// (ADR-046).
-#ImageOutput: {
-	@go(ImageOutput)
-	path?:     #RelPath          @go(Path,optional=nillable)
-	expected?: #OutputValidation @go(Expected,optional=nillable)
-}
-
-#OutputValidation: {
-	@go(OutputValidation)
-	contentType?: string @go(ContentType,optional=nillable)
-	minSize?:     int    @go(MinSize,optional=nillable)
-	maxSize?:     int    @go(MaxSize,optional=nillable)
+	path?: #RelPath @go(Path,optional=nillable)
 }
 
 // ---------------------------------------------------------------------------
