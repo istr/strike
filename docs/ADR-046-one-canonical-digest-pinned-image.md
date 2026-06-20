@@ -21,6 +21,13 @@ facts, verified against the tree, not assumed:
   that canonical image -- redundant, since the executable use references it by
   step, not by output name.
 
+  > **Refinement (ADR-046 wire arc).** Confirmed and sharpened. The wire image
+  > output is id-less and referenced purely by step -- not only by `imageFromStep`
+  > (execution) but also by the image arm of `deploy.artifacts.from` (deploy), a
+  > consumer the original "executable use" phrasing did not name. Both resolve at
+  > runtime to the internal `#OutputHandle{step, imageRef, layerRef?}` (layer 2),
+  > which carries the manifest digest the wire cannot.
+
 - **The current multi-output producer is defective.** Outputs are wrapped one at
   a time -- each becomes a fresh single-layer image and `ImageTag(id, <stepTag>)`
   moves the shared step tag onto it -- so after the loop the tag retains only the
@@ -83,6 +90,18 @@ property. Anchoring the contract rather than the disjunction leaves a later
 relaxation -- one step image serving both roles -- reachable without revisiting
 this decision. How outputs are declared, named, and typed in the schema is a
 downstream concern this ADR enables but does not cement here.
+
+> **Refinement (ADR-046 wire arc).** "Structural" here is the image-artifact /
+> runtime level: an executable image and a content image are the same kind of
+> content-addressed artifact, and the runtime manifest digest (image-ref) is a
+> layer-2 property that never appears in the wire. The wire format (layer 1, CUE
+> parse-time) does carry the image-vs-content policy as a structural XOR split --
+> a singular id-less `output` (image) versus plural named `outputs`
+> (file/directory). The two layers are formalized in separate files per ADR-004
+> (`specs/lane.cue` wire; `specs/artifact-api.cue` internal API, home of the
+> resolved `#OutputHandle`); the wire may inherit the internal API where they
+> coincide, never the reverse. The re-open gate (one step image, both roles) is
+> then a wire-policy relaxation, the implementation already being layer-uniform.
 
 ## Consequences
 
