@@ -520,7 +520,7 @@ func (d *DAG) addEdge(from, to string) {
 // names and the set of edges between them -- always produces
 // the same Order, regardless of YAML declaration order, Go
 // map-iteration randomness, runtime, machine, or
-// implementation language. See docs/DESIGN-PRINCIPLES.md
+// implementation language. See DESIGN-PRINCIPLES.md
 // "Reproducibility is enforced, not hoped for".
 //
 // Returns an error if the graph is cyclic.
@@ -619,7 +619,7 @@ func (d *DAG) CollectPeers(fromStep string) map[string][]Peer {
 // subtree is duplicated. Sinks and each node's dependencies are sorted,
 // so the output is deterministic for a given graph regardless of
 // map-iteration order in the resolvers (resolveDeployEdges iterates a
-// map). See docs/DESIGN-PRINCIPLES.md "Reproducibility is enforced, not
+// map). See DESIGN-PRINCIPLES.md "Reproducibility is enforced, not
 // hoped for".
 func (d *DAG) Tree() string {
 	var sb strings.Builder
