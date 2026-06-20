@@ -167,6 +167,8 @@ def load_all(root):
 
 def write_item(meta, body, path):
     validate_meta(meta)
+    if ".." in path:
+        raise ValueError("Invalid file path")
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", encoding="utf-8") as fh:
         fh.write(dump_item(meta, body))
