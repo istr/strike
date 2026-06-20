@@ -1,7 +1,8 @@
 /strike
 specs/*.json
 internal/lane/cue_types_lane_gen.go
-.claude
+/.claude
+!/.claude/skills
 .vscode
 cosign.*
 coverage.out
