@@ -62,7 +62,8 @@ func (r *Resolver) processQuery(_ context.Context, raw []byte) []byte {
 	// performs the real upstream resolution and dial. For an A query
 	// we answer synthAddr; for AAAA we answer NOERROR with no record
 	// (synthAddr is IPv4; the empty AAAA nudges the container to the
-	// A record under splice-only). See instruction 39.
+	// A record under splice-only). See
+	// docs/ADR-028-step-container-egress-mediation.md.
 	var answers []netip.Addr
 	if q.Type == dnsmessage.TypeA {
 		answers = []netip.Addr{r.synthAddr}

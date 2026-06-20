@@ -4,9 +4,10 @@
 // filter argument list. A NetworkCapsule represents one step's bundled
 // lifecycle.
 //
-// Architectural decisions: see docs/ROADMAP-ADR-028.md D25
-// (NetworkCapsule aggregate) and D28 (universal capsule; no
-// network-mode switch), and docs/ADR-033 for SSH peer egress.
+// Architectural decisions: see docs/ADR-028-step-container-egress-mediation.md,
+// "Decision" (NetworkCapsule aggregate) and "Universal mediation, no escape
+// hatches" (universal capsule; no network-mode switch), and docs/ADR-033 for
+// SSH peer egress.
 package capsule
 
 import (

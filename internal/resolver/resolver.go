@@ -6,15 +6,16 @@
 // resolve to the step's loopback address (where the mediator
 // listens); other names get NXDOMAIN; non-A/AAAA query types
 // return NOTIMP. The resolver contacts no upstream -- the
-// mediator performs real upstream resolution. See instruction 39
-// and ADR-030.
+// mediator performs real upstream resolution. See
+// docs/ADR-028-step-container-egress-mediation.md and ADR-030.
 //
 // The resolver captures one QueryRecord per processed query for
 // attestation; records are step-scoped because the resolver
 // knows its step from construction.
 //
-// Architectural decisions: see docs/ROADMAP-ADR-028.md D19
-// (per-step instance) and D20 (synthesizing server).
+// Architectural decisions: see docs/ADR-028-step-container-egress-mediation.md,
+// "Component 1: Controller-side DNS resolver" (per-step instance, synthesizing
+// server).
 package resolver
 
 import (
@@ -60,7 +61,8 @@ var ErrResolverClosed = errors.New("resolver: closed")
 // allowed names resolve to synthAddr (the step's loopback address,
 // where the mediator listens); other names get NXDOMAIN. The
 // resolver contacts no upstream -- the mediator performs real
-// upstream resolution. See instruction 39 / ADR-030.
+// upstream resolution. See
+// docs/ADR-028-step-container-egress-mediation.md / ADR-030.
 type Resolver struct {
 	synthAddr netip.Addr
 	allowlist map[string]struct{}

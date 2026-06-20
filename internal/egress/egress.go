@@ -8,9 +8,9 @@
 // path because pasta is run in splice-only mode (no tap
 // interface).
 //
-// Architectural decision: see docs/ROADMAP-ADR-028.md D24
-// (egress filter mechanism: splice-only + selective port
-// forwarding).
+// Architectural decision: see docs/ADR-028-step-container-egress-mediation.md,
+// "Component 3: Network-namespace egress filter" (egress filter mechanism:
+// splice-only + selective port forwarding).
 package egress
 
 import (

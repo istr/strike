@@ -16,10 +16,10 @@ but does not supersede [ADR-005](ADR-005-per-step-security-profile.md),
 > concrete egress mechanism is pasta `--splice-only` with per-unit port
 > forwards (ADR-031, ADR-033), not the DNAT-redirect model sketched
 > under Component 3, which was left "deferred to engineering" here.
-> ADR-033 also supersedes the interim "HTTPS-without-SSH only" dispatch
-> (ROADMAP-ADR-028.md D26): every step container runs under a capsule,
-> SSH peers are mediated by per-peer raw-TCP forwards, and the
-> `--network=none`/`--network=bridge` modes are removed.
+> ADR-033 also supersedes the interim "HTTPS-without-SSH only" dispatch:
+> every step container runs under a capsule, SSH peers are mediated by
+> per-peer raw-TCP forwards, and the `--network=none`/`--network=bridge`
+> modes are removed.
 
 ## Context
 

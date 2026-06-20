@@ -1,19 +1,18 @@
 // Internal artifact-handover API.
 //
-// This file carries layer-2 internal-API types -- the typed handoff between
-// strike's pipeline phases (executor, lane state, deploy) -- kept separate
-// from the layer-1 wire format in lane.cue. The two layers are distinct on
-// purpose: the wire format is what an operator authors and is validated
-// against CUE at parse time, while the internal API carries runtime
-// properties (content-addressed digests) that cannot exist at authoring time.
-// See ADR-004 (CUE as single source of truth) and ADR-046 (wire vs internal
-// API).
+// This file carries the internal-API types: the typed handoff between strike's
+// pipeline phases (executor, lane state, deploy), kept separate from the
+// operator-authored wire format in lane.cue. The two are distinct on purpose.
+// The wire format is what an operator authors and is validated against CUE at
+// parse time; the internal API carries runtime properties (content-addressed
+// digests) that cannot exist at authoring time. See
+// docs/ADR-046-one-canonical-digest-pinned-image.md (wire vs internal API) and
+// docs/ADR-004-cue-as-single-source-of-truth.md.
 //
 // Same `package lane` as lane.cue: CUE merges same-package files in a
 // directory automatically, and `cue exp gengotypes ./specs:lane` generates
 // these types into internal/lane alongside the wire types. The file boundary
-// is the separation; package promotion and machine-enforced direction can
-// follow later without moving content.
+// is the separation between the wire and internal types.
 
 package lane
 

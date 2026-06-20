@@ -84,8 +84,7 @@ package lane
 // disjunction to its base struct, so the mutual exclusion is enforced below
 // CUE, in unmarshalKeyless; `cue export` still carries both fields, so a
 // cross-language consumer keeps the XOR. Resolution of the source to a usable
-// trust root is late-bound at verify (instruction 2); this only carries the
-// parsed form.
+// trust root is late-bound at verify time; this only carries the parsed form.
 #Keyless: close({
 	endpoints:     #KeylessEndpoints   @go(Endpoints)
 	trustRoot?:    #TrustedRootReplica @go(TrustRoot,optional=nillable)

@@ -2,9 +2,8 @@
 
 ## Status
 
-Accepted. Supersedes in part ADR-008 (cryptographic primitives) and
-ROADMAP-ADR-028.md D12 (TLS 1.3 minimum), which mandated TLS 1.3 on
-every hop.
+Accepted. Supersedes in part ADR-008 (cryptographic primitives) and the
+earlier TLS-1.3-minimum requirement, which mandated TLS 1.3 on every hop.
 
 ## Context
 

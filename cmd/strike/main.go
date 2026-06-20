@@ -267,7 +267,8 @@ func cmdRun(ctx context.Context, path string, engine container.Engine) {
 // probeResolver runs the pre-flight resolver probe. lane.Parse is a pure
 // offline check; resolver reachability is an environmental property and
 // therefore lives here, at run start, not in Parse. See
-// docs/ROADMAP-ADR-028.md D16 for the rationale. The probe also captures
+// docs/ADR-028-step-container-egress-mediation.md, "Operational requirement:
+// a reachable DoT resolver", for the rationale. The probe also captures
 // the resolver's observed TLS identity, recorded in the deploy attestation
 // per ADR-030.
 func probeResolver(ctx context.Context, p *lane.Lane) transport.ConnectionIdentity {
@@ -297,8 +298,8 @@ func initLaneCA(p *lane.Lane) (*transport.EphemeralCA, func()) {
 
 // initFront starts the lane-run control-plane front (ADR-038 D2) on a host-
 // loopback listener. In this skeleton the front owns only its listener and
-// lifecycle; it does not yet terminate SSH or route by token (ADR-038 roadmap
-// items 3 and 5). The returned cleanup closes it.
+// lifecycle; it does not yet terminate SSH or route by token (ADR-038, the
+// terminating SSH server and token routing). The returned cleanup closes it.
 func initFront(ctx context.Context) (*front.Front, func()) {
 	ft, ftErr := front.New(ctx)
 	if ftErr != nil {

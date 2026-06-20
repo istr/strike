@@ -229,10 +229,13 @@ declared resolver trust anchor.
 ## Future direction
 
 Two enhancements are architecturally agreed but not yet
-implemented. Both are tracked as D-series decisions in
-`ROADMAP-ADR-028.md`.
+implemented. They originated as D-series decisions (D14, D15) in the
+since-retired ADR-028 roadmap and are now tracked as items in the
+`roadmap/` store (managed through the `roadmap-items` skill):
+`item-0017` (combined IP + hostname declaration) and `item-0018`
+(port-853 default).
 
-### D14: Combined IP + hostname declaration
+### item-0017 (D14): Combined IP + hostname declaration
 
 Today the lane declares only an IP literal. TLS trust is via
 fingerprint pin; the hostname in the certificate's SAN/CN is
@@ -264,7 +267,7 @@ DNS, systemd-resolved, OpenWrt all use IP plus hostname), and
 it makes the lane self-validating against the resolver's own
 DNS view.
 
-### D15: Port-853 default
+### item-0018 (D15): Port-853 default
 
 Today the lane must include the port in the host string
 (`1.1.1.1:853`). The schema does not enforce that the port is

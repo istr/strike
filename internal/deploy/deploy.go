@@ -913,15 +913,14 @@ func (d *Deployer) executeCustomDeploy(ctx context.Context, m lane.DeployCustom,
 
 // setupSSHEnv rejects deploy units that declare SSH peers. Deploy-path SSH
 // (scp/sftp/rsync over SSH) is not yet implemented and waits on the ADR-038
-// front landing those protocols. It no longer sets anything up: the container
-// ssh-agent socket it used to mount is gone (ADR-038 D6 -- the front
-// terminates SSH and the capsule drives the host agent, so no container needs
-// an agent socket). The name is now a misnomer; renaming is left to the
-// naming-consistency pass.
+// front landing those protocols. It sets nothing up: there is no container
+// ssh-agent socket to mount (ADR-038 D6 -- the front terminates SSH and the
+// capsule drives the host agent, so no container needs an agent socket). The
+// name is a misnomer for a reject-only guard.
 func setupSSHEnv(peers []lane.Peer) error {
 	for _, p := range peers {
 		if _, ok := p.(lane.SSHPeer); ok {
-			return fmt.Errorf("deploy SSH peers not yet implemented (ADR-038 roadmap)")
+			return fmt.Errorf("deploy SSH peers not yet implemented (ADR-038)")
 		}
 	}
 	return nil

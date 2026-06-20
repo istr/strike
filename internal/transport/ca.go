@@ -37,7 +37,8 @@ import (
 //
 // Replacement, not augmentation: the public cert is intended to
 // replace the step container's system CA bundle, not augment
-// it. See ROADMAP-ADR-028.md D18 for the architectural reasoning.
+// it. See docs/ADR-028-step-container-egress-mediation.md, "On the legitimacy
+// of TLS termination in this context", for the architectural reasoning.
 type EphemeralCA struct {
 	notBefore clock.Time
 	notAfter  clock.Time

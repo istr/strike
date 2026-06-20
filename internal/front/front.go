@@ -4,8 +4,8 @@
 // capsule contexts. It follows the bind-then-serve pattern: New binds the
 // host-loopback listener and exposes the address (so lane setup can build
 // state that depends on it), and Start launches the accept loop as the last
-// setup step. Until the terminating SSH server lands (ADR-038 roadmap item
-// 5) every accepted connection is refused (fail-closed). The front holds a
+// setup step. Until the terminating SSH server lands (ADR-038) every
+// accepted connection is refused (fail-closed). The front holds a
 // flat token -> capsule dispatch map (ADR-038 D5): Register records a
 // capsule's token, Lookup recovers the capsule. The map is built during the
 // single-threaded setup phase and frozen before Start launches the accept
@@ -75,8 +75,7 @@ func New(ctx context.Context) (*Front, error) {
 }
 
 // Addr returns the front's host-loopback listen address, fixed for the lane
-// run. Later tracks point declared SSH peers at this address (ADR-038 roadmap
-// items 3 and 4).
+// run. Later tracks point declared SSH peers at this address (ADR-038).
 func (f *Front) Addr() netip.AddrPort {
 	return f.addr
 }
@@ -124,8 +123,8 @@ func (f *Front) Lookup(token string) (*capsule.NetworkCapsule, bool) {
 	return c, ok
 }
 
-// HostKeyPublic returns the front's synthetic SSH host key's public half.
-// Used by the bridge test and by instruction 66 for the container known_hosts.
+// HostKeyPublic returns the front's synthetic SSH host key's public half,
+// which seeds the container's known_hosts entry for the front.
 func (f *Front) HostKeyPublic() ssh.PublicKey {
 	return f.hostKey.PublicKey()
 }

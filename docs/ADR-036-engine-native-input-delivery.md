@@ -21,8 +21,8 @@ attested step spec, and inputs remain referenced by their producer image tag.
 > Implementation status: both delivery paths have landed. The Consequences
 > below describe the seed path and the read-only image-mount path as
 > "separate, sequenced strands" and "implemented as separate strands" --
-> those strands are now complete (see docs/ADR-036-ROADMAP.md). The
-> decision text is unchanged; only this status note is added.
+> those strands are now complete. The decision text is unchanged; only this
+> status note is added.
 
 ## Context
 

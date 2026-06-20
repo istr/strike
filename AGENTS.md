@@ -464,6 +464,23 @@ content. Direct `time` imports are rejected by depguard in CI.
 - Every exported name must have a doc comment starting with the name.
 - Package-level documentation goes in `doc.go` or the primary file's header.
 - Comments are complete sentences with a period at the end.
+- **Comments must be self-contained.** A comment has to be fully
+  understandable from the checked-out tree alone, with no access to
+  `roadmap/`, instruction files, or any chat transcript. The following are
+  forbidden in code and CUE comments:
+  1. References to roadmap items (`item-0042`, "roadmap item 5", arc names).
+  2. Historical narrative ("formerly", "used to", "after the X rename", "we
+     moved this from Y") -- the comment states what *is*; git and ADRs hold
+     what *was*.
+  3. References to instruction items ("instruction 3b-ii", "the establish
+     step") -- instruction files are ephemeral.
+  4. Chat-only categories with no definition in the tree ("layer 1 / layer 2",
+     "Fork C"). Use a tree-defined term or define it in the source ADR.
+- **Architectural references go through ADRs only.** The single permitted way
+  to point at an architectural decision from a comment is `docs/ADR-NNN-...`
+  (or a bare `ADR-NNN`). If a *why* needs more than the code shows, it belongs
+  in an ADR the comment cites, not inline narrative. See
+  `docs/CODE-STYLE.md#self-contained-comments`.
 
 ### Context
 

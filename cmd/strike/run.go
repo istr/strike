@@ -867,7 +867,7 @@ func singleFileTar(name string, data []byte, mode int64) ([]byte, error) {
 // step that is neither a deploy nor a pack step -- exactly the steps
 // executeContainerStep runs), keyed by step name. Built during setup so the
 // capsules exist before the front starts and before the dispatch map is built
-// (ADR-038 roadmap). Deploy and state-capture capsules are not built here;
+// (ADR-038). Deploy and state-capture capsules are not built here;
 // the deploy path owns them.
 func (rc *runContext) buildCapsules(ctx context.Context) error {
 	for i := range rc.lane.Steps {

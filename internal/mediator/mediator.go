@@ -7,9 +7,9 @@
 // CA. The mediator captures one ConnectionRecord per attempted
 // connection for attestation.
 //
-// Architectural decisions: see docs/ROADMAP-ADR-028.md D21
-// (per-step mediator instance) and D22 (SNI-preserving
-// upstream dial / split TLS).
+// Architectural decisions: see docs/ADR-028-step-container-egress-mediation.md,
+// "Component 2: Controller-side mediation" (per-step mediator instance,
+// SNI-preserving upstream dial / split TLS).
 package mediator
 
 import (

@@ -854,6 +854,66 @@ rule to allow test-side dials. No production-code exceptions remain.
 
 ---
 
+## Comments are self-contained; cross-references are ADRs only `self-contained-comments`
+
+**Rule.** A comment must be fully understandable from the codebase alone, with
+no access to `roadmap/`, instruction files, or a chat transcript. The only
+permitted pointer to an architectural decision is an ADR reference of the form
+`docs/ADR-NNN-...` (or a bare `ADR-NNN`). The following are forbidden in code
+comments (including `doc.go` headers and CUE comments):
+
+1. **References to roadmap items** -- no `item-0042`, no "roadmap item 5", no
+   "the output-model arc". Planning state lives in `roadmap/` and is not part
+   of the code's meaning.
+2. **Historical narrative** -- no "this used to...", "formerly...", "after the
+   B-6 rename", "we moved this from X". The code describes what *is*; git
+   history and ADRs hold what *was*.
+3. **References to instruction items** -- no "instruction 3b-ii", no "per the
+   establish step". Instruction files are ephemeral and gone after they land.
+4. **Chat-only categories** -- terms coined in a discussion that have no
+   definition in the tree: "layer 1 / layer 2", "Fork C", "the alpha vs beta
+   path". If a distinction matters, name it with a tree-defined term or define
+   it in the ADR it comes from.
+
+**Bad.**
+
+```go
+// This file carries layer-2 internal-API types, kept separate from the
+// layer-1 wire format (see roadmap item-0016). Formerly lived in lane.cue
+// before the file-topology reorg; see instruction 3 for the split.
+```
+
+**Good.**
+
+```go
+// Internal artifact-handover API: the typed handoff between strike's pipeline
+// phases (executor, lane state, deploy), separate from the operator-authored
+// wire format in lane.cue. The wire format is CUE-validated at parse time; the
+// internal API carries runtime properties (content-addressed digests) that do
+// not exist at authoring time. See docs/ADR-046-... and docs/ADR-004-...
+```
+
+**Rationale.** A comment that depends on `roadmap/`, an instruction file, or a
+prior conversation breaks the moment that context is gone -- and for a reader
+checking out the tree, it is gone immediately. The same single-sourcing the
+project applies to meaning applies to comments: an architectural *why* has
+exactly one durable home, the ADR, and a comment points there rather than
+restating a transient label. Roadmap items, instructions, and chat categories
+are all transient by construction; binding code to them guarantees drift.
+
+**Discovery.**
+
+```
+grep -rn -E 'item-[0-9]{4}|instruction [0-9]|roadmap item|layer ?[12]\b|formerly|used to' \
+  --include='*.go' --include='*.cue'
+```
+
+A match that is a genuine cross-reference (not, e.g., the word "formerly" in a
+string literal) is a violation: replace the pointer with an `ADR-NNN` reference,
+or inline the now-missing context so the comment stands alone.
+
+---
+
 ## See also
 
 - `DESIGN-PRINCIPLES.md` -- the principles these patterns operationalize.

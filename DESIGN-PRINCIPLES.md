@@ -125,7 +125,8 @@ guaranteeing. Single-sourcing makes that class of drift structurally impossible
 rather than a matter of diligence. It applies to the trust-layer derivation (the
 layer is computed from provenance by one rule table, not asserted per field), to
 the schemas (one CUE definition, types generated from it), and to the project's
-own planning state (one roadmap, not a chat transcript). The cost it imposes --
+own planning state (one checked-in roadmap item store, not a chat transcript).
+The cost it imposes --
 a reference instead of a convenient restatement -- is the price of never having
 two sources of truth disagree.
 

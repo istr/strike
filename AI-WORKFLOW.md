@@ -124,38 +124,74 @@ choice. This is the same invariant `AGENTS.md` and `CONTRIBUTING.md`
 state for the codebase, applied to the authoring step: the decision is
 made by the operator, not discovered by the agent mid-edit.
 
-## Planning state lives in a roadmap, never in the chat
+## Planning state lives in the roadmap item store, never in the chat
 
-The analysis model tracks planning state through exactly one mechanism: a
-checked-in `docs/ROADMAP-*.md` file. There is no second place. The moment a
-planning effort needs structure -- a numbered sequence of arcs, a status
-table, a checklist of findings, a "landed vs open" ledger, or any other
-tracking scheme -- that structure is authored into an existing or a new
-`docs/ROADMAP-*.md`, not maintained in the conversation. Planning that lives
-only in the chat transcript, in a handover note, or in an upload is not
+The analysis model tracks planning state through exactly one mechanism: the
+checked-in `roadmap/` item store -- one markdown file per work item, managed
+through the `roadmap-items` skill. There is no second place. The prose
+`docs/ROADMAP-*.md` files this section once named have been retired; their open
+work was migrated into `roadmap/` items and the files removed with `git rm`.
+The moment a planning effort needs structure -- a sequence of arcs, a status
+flip, a checklist of findings, a "landed vs open" ledger, or a cross-arc
+execution order -- that structure is an item (or a re-rank, or a `_order.md`
+edit) in the store, not prose maintained in the conversation. Planning that
+lives only in the chat transcript, in a handover note, or in an upload is not
 tracked; it is in flight and one compaction away from loss.
 
-A roadmap is a working document with a lifecycle, not a permanent record. It
-is created when an arc of work is large enough to outlive a single session,
-updated in place as items land, and removed with `git rm` once every item it
-tracks has landed or moved to its own roadmap. This is the complement of the
-ADR convention's archival rule for completed roadmaps: the roadmap is not only
-where finished planning is retired, it is where planning is born -- nothing is
-tracked anywhere else first.
+The store holds only drift-invariant planning state: each item carries a
+`goal`, an `acceptance_intent`, and `links`, never byte-exact snippets, exact
+file-and-edit lists, or grep gates -- those are authored ephemerally at
+execution time against the then-current pin and discarded after they land. An
+item moves `proposed -> ratified -> done`; `proposed` is all the analysis model
+writes, the `proposed -> ratified` flip is the operator's call riding along
+with the ratifying commit, and a `done` item moves to `roadmap/completed/` so
+the active set stays small. This is the complement of the ADR convention's
+archival rule: the store is not only where finished planning is retired, it is
+where planning is born -- nothing is tracked anywhere else first.
 
-Handover notes and retrospectives may summarize a roadmap and point at it, but
-they do not own the tracking. When a handover or a chat starts enumerating open
-work under its own labels, that is the signal a roadmap is missing or stale, and
-the fix is to write it into the roadmap -- not to let the labels accrete in
-prose. This is the same single-sourcing the product applies to meaning: the
-roadmap is the one definition of what is planned, and every other document
-refers to it rather than restating it.
+The query path is the point. "What is open in arc X by rank", "what runs next",
+"landed vs open" are answered against the checked-out tree through the skill, not
+reconstructed from prose. Handover notes and retrospectives may summarize the
+backlog and point at items by id, but they do not own the tracking. When a
+handover or a chat starts enumerating open work under its own labels, that is the
+signal an item is missing or stale, and the fix is to write it into the store --
+not to let the labels accrete in prose. This is the same single-sourcing the
+product applies to meaning: the store is the one definition of what is planned,
+and every other document refers to it rather than restating it. ADRs and
+`D`-numbered decisions are the exception in the other direction: they are
+permanent, append-only, live outside the store, and are never edited through it.
 
 The cost of getting this wrong has already been paid: a context compaction that
 blurred an iterative arc sequence, leaving a handover to reconstruct
 landed-vs-open state from a transcript because it had never been committed to a
-roadmap. A roadmap is grounded, diffable, reviewable in a PR, and survives the
-session boundary; a chat-resident plan is none of these.
+roadmap. An item in the store is grounded, diffable, reviewable in a PR, and
+survives the session boundary; a chat-resident plan is none of these.
+
+## Code comments never leak the workflow's transient vocabulary
+
+The planning store, the instruction files, and the chat transcript are all
+*scaffolding*: they exist to produce a ratified change and then fall away. The
+code that lands is the durable artifact, and it must stand on its own. So a
+comment authored during this loop must not reach back into the scaffolding it
+came from. Forbidden in any code or CUE comment: a roadmap item id or arc name,
+an instruction-file reference, a historical note about how the code got here,
+and a category that only ever existed in the conversation -- the canonical
+example being "layer 1 / layer 2", which is precise in an ADR-046 discussion and
+meaningless to someone reading the file cold. The one durable cross-reference a
+comment may carry is an ADR (`docs/ADR-NNN-...`): architectural *why* has a
+single permanent home, and the comment points there instead of restating a label
+that will not survive the session.
+
+This is a direct consequence of the two-role split. The analysis model writes an
+instruction against a store item and a live transcript, where "item-0016" and
+"the layer-2 split" are unambiguous; the executor then bakes a comment from that
+same vocabulary, and it ships -- now permanently bound to context the reader
+will never have. The author who has the context is exactly the one who cannot
+tell the comment is unmoored. The discipline therefore lives in the
+instruction's acceptance criteria, not in the executor's judgement: a comment is
+written to be read from a clean checkout, and the operationally enforced form is
+`docs/CODE-STYLE.md#self-contained-comments` (which `AGENTS.md` makes an
+imperative for the coding agent).
 
 ## Anti-initiative is structural, not advisory
 

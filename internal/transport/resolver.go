@@ -95,7 +95,8 @@ func LookupHost(ctx context.Context, decl DNSResolver, name string) ([]netip.Add
 // DialVerified during this same handshake; the returned identity is
 // what that verified handshake observed.
 //
-// Probe placement: see docs/ROADMAP-ADR-028.md D16. The probe runs
+// Probe placement: see docs/ADR-028-step-container-egress-mediation.md,
+// "Operational requirement: a reachable DoT resolver". The probe runs
 // at strike run time, after lane.Parse, not in lane.Parse, because
 // probe outcome is an environmental property and lane.Parse must
 // stay an offline check of input properties.
