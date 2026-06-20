@@ -7,6 +7,7 @@ internal/lane/cue_types_lane_gen.go
 cosign.*
 coverage.out
 .build/
+*.patch
 # No private key material in repository
 *.pem
 *.key
