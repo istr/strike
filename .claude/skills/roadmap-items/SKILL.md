@@ -11,7 +11,9 @@ description: >-
   files: hand edits drift and break single-source. Stores planning state only,
   never byte-exact instruction contracts. Never touches ADRs or D-numbered
   decisions. Reach for it on any roadmap, backlog, arc, work-item, or
-  what-runs-next question.
+  what-runs-next question. The runnable script lives in this skill's own
+  scripts/ directory, not at repo-root scripts/; see Commands for the exact
+  per-environment invocation.
 ---
 
 # roadmap-items
@@ -116,19 +118,23 @@ late in global execution order, and that is fine.
 
 ## Commands
 
-All operations go through the bundled stdlib-only script. It lives next to this
-file, so invoke it by its skill-relative path and run with the repo root as the
-working directory so the default `--root roadmap` resolves:
+The script is bundled in THIS skill's own `scripts/` directory -- the folder
+that contains this SKILL.md -- NOT at the repo root. The repo root holds only
+the `roadmap/` store. Run from the repo root (so the default `--root roadmap`
+finds the store) and invoke the script by the literal path for your environment:
 
 ```
-python3 "${CLAUDE_SKILL_DIR}/scripts/roadmap.py" <command> [options]
+# Executor (Claude Code, working in the repo):
+python3 .claude/skills/roadmap-items/scripts/roadmap.py <command> [options]
+
+# Analysis sandbox:
+python3 /mnt/skills/user/roadmap-items/scripts/roadmap.py <command> [options]
 ```
 
-`${CLAUDE_SKILL_DIR}` is Claude Code's path to this skill's directory, so the
-script resolves no matter where the session started. On a surface that does not
-expand it, use the `scripts/roadmap.py` inside this skill folder instead, and
-either run from the repo root or pass `--root /abs/path/to/roadmap`. The examples
-below write `roadmap.py` as shorthand for that full invocation.
+`${CLAUDE_SKILL_DIR}` expands to the first path under Claude Code ONLY; it is
+EMPTY in the analysis sandbox, so never rely on it there. If your CWD is not the
+repo root, add `--root /abs/path/to/roadmap`. The examples below abbreviate the
+chosen invocation as `roadmap.py`.
 
 | Intent | Command |
 | --- | --- |
