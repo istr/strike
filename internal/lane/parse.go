@@ -102,7 +102,7 @@ func Parse(fp FilePath) (*Lane, Digest, error) {
 		}
 		if count != 1 {
 			return nil, Digest{}, fmt.Errorf(
-				"step %q: exactly one of image, image_from_step, pack, or deploy required", s.ID)
+				"step %q: exactly one of image, imageFromStep, pack, or deploy required", s.ID)
 		}
 	}
 

@@ -130,10 +130,10 @@ func (d *DAG) resolveImageFromEdges(p *Lane) error {
 		from := s.ImageFromStep
 		fromStep, ok := d.Steps[from]
 		if !ok {
-			return fmt.Errorf("step %q: image_from_step references unknown step %q", name, from)
+			return fmt.Errorf("step %q: imageFromStep references unknown step %q", name, from)
 		}
 		if fromStep.Output == "" {
-			return fmt.Errorf("step %q: image_from_step %q declares no image output", name, from)
+			return fmt.Errorf("step %q: imageFromStep %q declares no image output", name, from)
 		}
 		d.ImageFromEdges[name] = ImageFromEdge{FromStep: fromStep}
 		d.addEdge(name, from)

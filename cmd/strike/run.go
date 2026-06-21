@@ -205,12 +205,12 @@ func (rc *runContext) resolveImageDigest(ctx context.Context, step *lane.Step, s
 		ref := lane.OutputRef{Step: fromStep, Output: ""}.Ref()
 		handle, err := rc.laneState.Resolve(ref)
 		if err != nil {
-			return lane.Digest{}, fmt.Errorf("%s: image_from %s: %w",
+			return lane.Digest{}, fmt.Errorf("%s: imageFromStep %s: %w",
 				safeName, ref, err)
 		}
 		digest, digestErr := handle.ManifestDigest()
 		if digestErr != nil {
-			return lane.Digest{}, fmt.Errorf("%s: image_from %s: %w",
+			return lane.Digest{}, fmt.Errorf("%s: imageFromStep %s: %w",
 				safeName, ref, digestErr)
 		}
 		// ADR-045: execute the producer's image by its content-addressed

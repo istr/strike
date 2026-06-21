@@ -157,7 +157,7 @@ func (sc *Capture) UnmarshalJSON(data []byte) error {
 	for i, raw := range aux.Peers {
 		p, err := unmarshalPeer(raw)
 		if err != nil {
-			return fmt.Errorf("state_capture peers[%d]: %w", i, err)
+			return fmt.Errorf("capture peers[%d]: %w", i, err)
 		}
 		out[i] = p
 	}
