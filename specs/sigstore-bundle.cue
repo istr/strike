@@ -1,4 +1,4 @@
-package deploy
+package attest
 
 // Sigstore bundle (v0.3) -- the published verification material strike emits
 // per deploy statement and an independent verifier consumes. This is a typed

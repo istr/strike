@@ -11,7 +11,7 @@ build: generate
 specs: specs/lane.cue specs/sigstore-trustroot.cue specs/source-provenance.cue specs/attestation.cue specs/artifact.cue
 	cue export ./specs:lane -e '#Lane' \
 	    --out jsonschema --force -o specs/lane.schema.json
-	cue export ./specs:deploy -e '#Attestation' \
+	cue export ./specs:attest -e '#Attestation' \
 	    --out jsonschema --force -o specs/attestation.schema.json
 	cue export ./specs:trustlayers \
 	    --out json --force -o specs/trust-layers.json

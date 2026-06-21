@@ -6,7 +6,7 @@
 // defined by Go struct tags.
 //
 // Companion file: artifact.cue defines #ArtifactRecord and related
-// provenance types (same package deploy, merged automatically by CUE).
+// provenance types (same package attest, merged automatically by CUE).
 //
 // Validation flow:
 //   deploy.Execute() -> Attestation struct -> JSON -> CUE validate
@@ -20,15 +20,9 @@
 // for any secondary implementation (Rust verifier, policy engine,
 // external audit tool).
 
-package deploy
+package attest
 
-// ---------------------------------------------------------------------------
-// Shared types -- re-exported from lane via artifact.cue
-// ---------------------------------------------------------------------------
-
-// #Digest, #AbsPath, peer types, and #DeployTarget are re-exported
-// in artifact.cue (same package). They are available here without
-// import or duplication.
+import "github.com/istr/strike/specs:lane"
 
 #Timestamp: =~"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}"
 
@@ -67,19 +61,19 @@ package deploy
 // Sealed -- CP-bound claims, sound under both trust(E) and ~trust(E).
 #Sealed: {
 	// laneId is the stable identifier from the lane definition.
-	laneId: #Identifier
+	laneId: lane.#Identifier
 
 	// target describes what was deployed to. Declared, lane-anchored.
-	target: #DeployTarget
+	target: lane.#DeployTarget
 
 	// laneDigest is the raw sha256 over the lane definition file bytes,
 	// computed by CP at parse time (hash and parse read the same bytes).
-	laneDigest: #Digest | ""
+	laneDigest: lane.#Digest | ""
 
 	// artifacts maps artifact names to their signed provenance records.
 	// Each artifact's digest is consumer-dereferenceable from the registry
 	// (C3 sealed boundary).
-	artifacts: [ID=#Identifier]: #ArtifactRecord
+	artifacts: [ID=lane.#Identifier]: #ArtifactRecord
 
 	// resolver records the DoT resolver's observed TLS identity, matched
 	// against the declared anchor at the pre-flight handshake.
@@ -87,12 +81,12 @@ package deploy
 
 	// peers maps step name to the network peer declarations attached to
 	// that step. Declared, lane-anchored.
-	peers: [ID=#Identifier]: [...#Peer]
+	peers: [ID=lane.#Identifier]: [...lane.#Peer]
 
 	// engine carries the CP-observed connection facts about the engine.
 	// The engine's self-reports (version, rootless) live in
 	// informational.engineMetadata.
-	engine?: #EngineConnection
+	engine?: lane.#EngineConnection
 
 	// observedPeers records, per peer endpoint ("host:port"), the connection
 	// identity the control plane observed and validated against the declared
@@ -158,7 +152,7 @@ package deploy
 	// peerAttribution maps each step to the peer endpoints its mediated
 	// connections reached ("host:port" keys into sealed.observedPeers).
 	// Engine-asserted (Layer E).
-	peerAttribution?: [ID=#Identifier]: [...string]
+	peerAttribution?: [ID=lane.#Identifier]: [...string]
 }
 
 // Informational -- recorded for audit and IoC purposes; no trust claim.
@@ -179,16 +173,16 @@ package deploy
 	// state captures. The bytes were produced by the (untrusted) capture
 	// container and relayed by the engine; CP's hash transports them,
 	// it does not lift them out of the container-asserted class.
-	preStateDigest: #Digest
+	preStateDigest: lane.#Digest
 
 	// postStateDigest -- symmetric to preStateDigest.
-	postStateDigest: #Digest
+	postStateDigest: lane.#Digest
 
 	// provenance collects validated provenance records from transitive
 	// predecessor steps. Each record is container-written at step exit
 	// and engine-relayed; recorded for audit and IoC cross-check against
 	// future capsule-observed peer/command records.
-	provenance: [...#ProvenanceRecord]
+	provenance: [...lane.#ProvenanceRecord]
 }
 
 // ---------------------------------------------------------------------------
@@ -231,9 +225,3 @@ package deploy
 	// IP-literal resolver hosts (RFC 6066 forbids IP-literal SNI).
 	serverName?: string
 }
-
-// #DeployTarget is re-exported from lane via artifact.cue.
-
-// Peer types (#Peer, #HTTPSPeer, #SSHPeer, #TLSTrust,
-// #FingerprintTrust, #CABundleTrust, #KnownHostEntry) are re-exported
-// from lane via artifact.cue.

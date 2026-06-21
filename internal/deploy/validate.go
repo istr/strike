@@ -12,17 +12,18 @@ import (
 	"github.com/istr/strike/specs"
 )
 
-// deploySchema combines the attestation, artifact, and lane CUE schemas.
-// All three are compiled together via string concatenation so that types
-// like #ArtifactRecord are available when validating #Attestation.
+// deploySchema combines the attestation, artifact, predicate, and lane CUE
+// schemas. They are compiled together via string concatenation so that types
+// like #ArtifactRecord and the shared lane declarations are available when
+// validating #Attestation.
 //
-// artifact.cue uses `import "github.com/istr/strike/specs:lane"` for
-// the `cue export` toolchain, but ctx.CompileString cannot resolve module
-// imports. stripForConcat removes package declarations, import blocks,
-// and cross-package re-export lines so the files can be concatenated
-// into a single CUE source. lane.cue provides the shared base types
-// (e.g. #Digest, #ProvenanceRecord) directly.
-var deploySchema = specs.AttestationSchema + "\n" +
+// The attest-package files import the lane package and name shared
+// declarations qualified (lane.#X) for the `cue export` toolchain, but
+// ctx.CompileString cannot resolve module imports. stripForConcat removes
+// package declarations and import blocks and drops the lane qualifier so the
+// qualified references resolve by name against the concatenated lane
+// definitions. See docs/ADR-047-spec-package-layering.md.
+var deploySchema = stripForConcat(specs.AttestationSchema) + "\n" +
 	stripForConcat(specs.ArtifactSchema) + "\n" +
 	stripForConcat(specs.PredicateSchema) + "\n" +
 	stripForConcat(specs.LaneSchema) + "\n" +
@@ -30,10 +31,10 @@ var deploySchema = specs.AttestationSchema + "\n" +
 	stripForConcat(specs.ProvenanceSchema) + "\n" +
 	stripForConcat(specs.TransportSchema)
 
-// stripForConcat removes package declarations, import blocks, and
-// cross-package re-export lines (e.g. "#Foo: pkg.#Foo") from a CUE
-// source string so it can be concatenated with other CUE sources for
-// single-string compilation.
+// stripForConcat removes package declarations and import blocks and drops the
+// lane package qualifier (lane.#X -> #X) from a CUE source string so it can be
+// concatenated with other CUE sources for single-string compilation, where the
+// merged instance has no package qualifier.
 func stripForConcat(src string) string {
 	var lines []string
 	inImport := false
@@ -57,10 +58,10 @@ func stripForConcat(src string) string {
 			}
 			continue
 		}
-		// Re-export lines referencing another CUE package (e.g. lane.#Digest)
-		if strings.Contains(line, "lane.#") {
-			continue
-		}
+		// Qualified lane references resolve against the lane definitions
+		// concatenated into this single instance, which has no package
+		// qualifier. See docs/ADR-047-spec-package-layering.md.
+		line = strings.ReplaceAll(line, "lane.#", "#")
 		lines = append(lines, line)
 	}
 	return strings.Join(lines, "\n")

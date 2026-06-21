@@ -13,13 +13,14 @@
 // Rekor inclusion lives in the sigstore bundle, never in a predicate payload
 // (ADR-013 satisfied structurally): no predicate here carries a rekor field.
 //
-// Available here without import: #Timestamp, #ObservedPeer, #ResolverRecord,
-// #EngineConnection, and #EngineMetadata are defined in this package (deploy)
-// in attestation.cue; #Digest, #DeployTarget, #Peer, and #ProvenanceRecord are
-// defined in package lane and re-exported into deploy via artifact.cue
-// (#ProvenanceRecord lives in source-provenance.cue).
+// Shared types named here resolve two ways: #Timestamp, #ObservedPeer,
+// #ResolverRecord, #EngineMetadata, and #Subject are defined in this attest
+// package (attestation.cue and this file); the lane declarations are named
+// qualified through the lane import.
 
-package deploy
+package attest
+
+import "github.com/istr/strike/specs:lane"
 
 // ---------------------------------------------------------------------------
 // in-toto attestation framework primitives (in-toto Statement v1)
@@ -86,14 +87,14 @@ package deploy
 // identities the control plane observed and validated against the declared
 // anchors -- all control-plane-established, sound without engine trust.
 #StrikeExternalParameters: {
-	laneId:     #Identifier
-	laneDigest: #Digest | ""
-	target:     #DeployTarget
+	laneId:     lane.#Identifier
+	laneDigest: lane.#Digest | ""
+	target:     lane.#DeployTarget
 	oidc:       #ProvenanceOIDC
-	peers: [ID=#Identifier]: [...#Peer]
+	peers: [ID=lane.#Identifier]: [...lane.#Peer]
 	observedPeers?: [Endpoint=string]: #ObservedPeer
 	resolver?: #ResolverRecord
-	engine?:   #EngineConnection
+	engine?:   lane.#EngineConnection
 }
 
 // #ProvenanceOIDC is the declared signing identity carried into the sealed
@@ -147,7 +148,7 @@ package deploy
 // (Fork C). The engine's self-report (engineMetadata) is NOT here either -- it
 // carries no trust claim and lives in the informational statement.
 #EngineContextPredicate: {
-	peerAttribution?: [ID=#Identifier]: [...string]
+	peerAttribution?: [ID=lane.#Identifier]: [...string]
 }
 
 // ---------------------------------------------------------------------------
@@ -177,13 +178,13 @@ package deploy
 	// the pre/post-deploy state captures. The bytes were produced by the
 	// (untrusted) capture container and engine-relayed; CP's hash transports
 	// them, it does not lift them out of the container-asserted class.
-	preStateDigest:  #Digest
-	postStateDigest: #Digest
+	preStateDigest:  lane.#Digest
+	postStateDigest: lane.#Digest
 
 	// provenance collects validated provenance records from transitive
 	// predecessor steps; each is container-written at step exit and
 	// engine-relayed. Recorded for audit and IoC, never gating.
-	provenance: [...#ProvenanceRecord]
+	provenance: [...lane.#ProvenanceRecord]
 
 	// engineMetadata is the engine's self-report about itself (version, rootless
 	// mode). It carries no trust claim -- the engine asserting facts about
