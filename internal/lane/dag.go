@@ -84,6 +84,10 @@ func Build(p *Lane) (*DAG, error) {
 		d.Steps[string(s.ID)] = s
 	}
 
+	if err := validateOutputIDDisjointness(p); err != nil {
+		return nil, err
+	}
+
 	if err := d.resolveImageFromEdges(p); err != nil {
 		return nil, err
 	}
@@ -458,6 +462,25 @@ func (d *DAG) validateMountDisjointness(p *Lane) error {
 						s.ID, a, b)
 				}
 			}
+		}
+	}
+	return nil
+}
+
+// validateOutputIDDisjointness rejects a step whose outputs declare the same
+// id twice. The output id is the per-step addressing key for an output and its
+// layer: a duplicate would alias output resolution (findOutput returns the
+// first match) and overwrite the lane-state registration keyed by that id, so
+// one output would silently vanish. Distinct ids may still share a path
+// basename; only ids must be disjoint (ADR-046).
+func validateOutputIDDisjointness(p *Lane) error {
+	for _, s := range p.Steps {
+		seen := make(map[string]struct{}, len(s.Outputs))
+		for _, out := range s.Outputs {
+			if _, dup := seen[out.ID]; dup {
+				return fmt.Errorf("step %q: duplicate output id %q", s.ID, out.ID)
+			}
+			seen[out.ID] = struct{}{}
 		}
 	}
 	return nil

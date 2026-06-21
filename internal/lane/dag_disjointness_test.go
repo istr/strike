@@ -83,3 +83,42 @@ func TestBuild_PathPrefixNotComponentPrefix(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+func TestBuild_DuplicateOutputIDRejected(t *testing.T) {
+	p := &lane.Lane{
+		Steps: []lane.Step{
+			{
+				ID: "build", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
+				Outputs: []lane.FileOutput{
+					{ID: "bin", Type: "file", Path: lane.Ptr(lane.RelPath("one"))},
+					{ID: "bin", Type: "file", Path: lane.Ptr(lane.RelPath("two"))},
+				},
+			},
+		},
+	}
+	_, err := lane.Build(p)
+	if err == nil {
+		t.Fatal("expected error for duplicate output id")
+	}
+	if !strings.Contains(err.Error(), "duplicate output id") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestBuild_DistinctOutputIDsSharedBasenameAccepted(t *testing.T) {
+	// Distinct ids may share a path basename -- only ids must be disjoint.
+	p := &lane.Lane{
+		Steps: []lane.Step{
+			{
+				ID: "build", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
+				Outputs: []lane.FileOutput{
+					{ID: "first", Type: "file", Path: lane.Ptr(lane.RelPath("bin"))},
+					{ID: "second", Type: "file", Path: lane.Ptr(lane.RelPath("bin"))},
+				},
+			},
+		},
+	}
+	if _, err := lane.Build(p); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
