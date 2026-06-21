@@ -323,7 +323,7 @@ func TestExtractSingleLayer_PreservesContainedSymlink(t *testing.T) {
 	eng := &wrapEngine{}
 	client := &registry.Client{Engine: eng}
 	result, wrapErr := client.WrapOutputsAsImage(context.Background(), []registry.OutputArchive{
-		{Tar: &buf, StripPrefix: "", DestPrefix: "", LayerID: "layer"},
+		{Tar: &buf, StripPrefix: "", DestPrefix: "", OutputID: "layer"},
 	}, "localhost/strike/l/s:h")
 	if wrapErr != nil {
 		t.Fatalf("wrap: %v", wrapErr)

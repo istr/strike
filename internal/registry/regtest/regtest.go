@@ -114,11 +114,11 @@ func BuildMultiFileImageTar(files map[string][]byte) ([]byte, error) {
 }
 
 // BuildLayeredImageTar builds a deterministic OCI image layout tar with one
-// content layer carrying the given files, stamped with layerID under
+// content layer carrying the given files, stamped with outputID under
 // registry.OutputLayerAnnotation. It returns the layout tar and the layer's
 // uncompressed-content digest (diff_id) -- the stable engine-level selection
 // key (ADR-046), which the consumer passes to ExtractLayer/SeedTarFromImage.
-func BuildLayeredImageTar(layerID string, files map[string][]byte) ([]byte, string, error) {
+func BuildLayeredImageTar(outputID string, files map[string][]byte) ([]byte, string, error) {
 	var buf bytes.Buffer
 	tw := tar.NewWriter(&buf)
 	names := make([]string, 0, len(files))
@@ -161,7 +161,7 @@ func BuildLayeredImageTar(layerID string, files map[string][]byte) ([]byte, stri
 	)
 	img, err = mutate.Append(img, mutate.Addendum{
 		Layer:       layer,
-		Annotations: map[string]string{registry.OutputLayerAnnotation: layerID},
+		Annotations: map[string]string{registry.OutputLayerAnnotation: outputID},
 	})
 	if err != nil {
 		return nil, "", err

@@ -26,7 +26,7 @@ const ContentSizeAnnotation = "dev.strike.content-size"
 // the output id of a content layer. The producer stamps one layer per output
 // (ADR-046); a consumer selects the layer identified by the output id
 // in the handle.
-const OutputLayerAnnotation = "dev.strike.output.layer"
+const OutputLayerAnnotation = "dev.strike.output.id"
 
 // WrapImageOutputAsImage loads an existing OCI tar into the engine's local
 // store, tags it, and returns the manifest digest and the tar file size.
@@ -154,16 +154,16 @@ func (c *Client) finalizeImage(ctx context.Context, img v1.Image, tag string, si
 }
 
 // OutputArchive is one step output's engine container-archive stream plus its
-// re-rooting prefixes and the output id (LayerID) that identifies its layer.
+// re-rooting prefixes and the output id (OutputID) that identifies its layer.
 // Each becomes one canonical OCI layer in the assembled step image, stamped
-// with LayerID under OutputLayerAnnotation. The annotation aids OCI
+// with OutputID under OutputLayerAnnotation. The annotation aids OCI
 // introspection but is not the selection key: runtimes strip it on load, so
 // consumers select by the layer's diff_id (see WrapResult.LayerDiffIDs).
 type OutputArchive struct {
 	Tar         io.Reader
 	StripPrefix string
 	DestPrefix  string
-	LayerID     string
+	OutputID    string
 }
 
 // WrapResult is the outcome of assembling a step's outputs into one image.
@@ -194,16 +194,16 @@ func (c *Client) WrapOutputsAsImage(ctx context.Context, outs []OutputArchive, t
 	for _, out := range outs {
 		layer, size, err := canonicalLayerFromTar(out.Tar, out.StripPrefix, out.DestPrefix)
 		if err != nil {
-			return WrapResult{}, fmt.Errorf("canonicalize output %q: %w", out.LayerID, err)
+			return WrapResult{}, fmt.Errorf("canonicalize output %q: %w", out.OutputID, err)
 		}
 		diffID, err := layer.DiffID()
 		if err != nil {
-			return WrapResult{}, fmt.Errorf("diff id output %q: %w", out.LayerID, err)
+			return WrapResult{}, fmt.Errorf("diff id output %q: %w", out.OutputID, err)
 		}
-		diffIDs[out.LayerID] = diffID.String()
+		diffIDs[out.OutputID] = diffID.String()
 		adds = append(adds, mutate.Addendum{
 			Layer:       layer,
-			Annotations: map[string]string{OutputLayerAnnotation: out.LayerID},
+			Annotations: map[string]string{OutputLayerAnnotation: out.OutputID},
 		})
 		total += size
 	}

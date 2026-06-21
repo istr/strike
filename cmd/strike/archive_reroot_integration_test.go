@@ -106,7 +106,7 @@ func TestWholeWorkdirOutput_Integration(t *testing.T) {
 	tag := fmt.Sprintf("localhost/strike/workdir-itest:%d", clock.Wall().UnixNano())
 	regClient := &registry.Client{Engine: eng}
 	result, wrapErr := regClient.WrapOutputsAsImage(ctx, []registry.OutputArchive{
-		{Tar: stream, StripPrefix: strip, DestPrefix: dest, LayerID: out.ID},
+		{Tar: stream, StripPrefix: strip, DestPrefix: dest, OutputID: out.ID},
 	}, tag)
 	if wrapErr != nil {
 		t.Fatalf("wrap: %v", wrapErr)

@@ -27,7 +27,7 @@ func TestSanitizeForLog(t *testing.T) {
 		{"null", "a\x00b", "a_b"},
 		{"del", "a\x7fb", "a_b"},
 		{"mixed_control", "\x01\x1f\x7f", "___"},
-		{"unicode", "héllo世界", "héllo世界"},
+		{"unicode", "h\xc3\xa9llo\xe4\xb8\x96\xe7\x95\x8c", "h\xc3\xa9llo\xe4\xb8\x96\xe7\x95\x8c"},
 		{"space_kept", "a b", "a b"},
 	}
 	for _, tt := range tests {

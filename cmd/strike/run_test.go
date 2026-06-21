@@ -89,7 +89,7 @@ func TestBuildInputDelivery_Single(t *testing.T) {
 	}
 	if err := rc.laneState.Register("compile", "bin", lane.OutputHandle{
 		ImageRef:    compileRef,
-		LayerID:     "bin",
+		OutputID:    "bin",
 		LayerDiffID: diffID,
 	}); err != nil {
 		t.Fatal(err)
@@ -149,10 +149,10 @@ func TestBuildInputDelivery_Multiple(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildLayeredImageTar s2: %v", err)
 	}
-	if err := rc.laneState.Register("s1", "a", lane.OutputHandle{ImageRef: ref1, LayerID: "a", LayerDiffID: diff1}); err != nil {
+	if err := rc.laneState.Register("s1", "a", lane.OutputHandle{ImageRef: ref1, OutputID: "a", LayerDiffID: diff1}); err != nil {
 		t.Fatal(err)
 	}
-	if err := rc.laneState.Register("s2", "b", lane.OutputHandle{ImageRef: ref2, LayerID: "b", LayerDiffID: diff2}); err != nil {
+	if err := rc.laneState.Register("s2", "b", lane.OutputHandle{ImageRef: ref2, OutputID: "b", LayerDiffID: diff2}); err != nil {
 		t.Fatal(err)
 	}
 	rc.state.specHashes["s1"] = lane.MustParseDigest("sha256:2222222222222222000000000000000000000000000000000000000000000000")
@@ -199,7 +199,7 @@ func TestBuildInputDelivery_MissingSubpath(t *testing.T) {
 	}
 	if err := rc.laneState.Register("src", "tree", lane.OutputHandle{
 		ImageRef:    srcRef,
-		LayerID:     "tree",
+		OutputID:    "tree",
 		LayerDiffID: diffID,
 	}); err != nil {
 		t.Fatal(err)
@@ -247,7 +247,7 @@ func TestBuildInputDelivery_OutsideWorkdir_DirectoryMount(t *testing.T) {
 	}
 	if err := rc.laneState.Register("src", "tree", lane.OutputHandle{
 		ImageRef:    srcRef,
-		LayerID:     "tree",
+		OutputID:    "tree",
 		LayerDiffID: diffID,
 	}); err != nil {
 		t.Fatal(err)
@@ -309,7 +309,7 @@ func TestBuildInputDelivery_NoWorkdir_Mounts(t *testing.T) {
 	}
 	if err := rc.laneState.Register("src", "tree", lane.OutputHandle{
 		ImageRef:    srcRef,
-		LayerID:     "tree",
+		OutputID:    "tree",
 		LayerDiffID: diffID,
 	}); err != nil {
 		t.Fatal(err)
@@ -351,7 +351,7 @@ func TestBuildInputDelivery_SingleFileOutside_Rejected(t *testing.T) {
 
 	if err := rc.laneState.Register("src", "bin", lane.OutputHandle{
 		ImageRef: "localhost/test/src@sha256:aabbccdd11223344000000000000000000000000000000000000000000000000",
-		LayerID:  "bin",
+		OutputID: "bin",
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -400,7 +400,7 @@ func TestBuildInputDelivery_ExportsProducerOnce(t *testing.T) {
 	}
 	if err := rc.laneState.Register("src", "tree", lane.OutputHandle{
 		ImageRef:    srcRef,
-		LayerID:     "tree",
+		OutputID:    "tree",
 		LayerDiffID: diffID,
 	}); err != nil {
 		t.Fatal(err)
@@ -771,7 +771,7 @@ func TestResolvePackInputPaths(t *testing.T) {
 	}
 	if err := rc.laneState.Register("compile", "bin", lane.OutputHandle{
 		ImageRef:    compileRef,
-		LayerID:     "bin",
+		OutputID:    "bin",
 		LayerDiffID: diffID,
 	}); err != nil {
 		t.Fatal(err)

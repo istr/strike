@@ -243,7 +243,7 @@ func TestWrapArchiveAsImage_LeadingSlashEntriesAreKept(t *testing.T) {
 	eng := &wrapEngine{}
 	client := &registry.Client{Engine: eng}
 	result, err := client.WrapOutputsAsImage(context.Background(), []registry.OutputArchive{
-		{Tar: &buf, StripPrefix: "", DestPrefix: "layer", LayerID: "layer"},
+		{Tar: &buf, StripPrefix: "", DestPrefix: "layer", OutputID: "layer"},
 	}, "localhost/strike/l/s:h")
 	if err != nil {
 		t.Fatalf("wrap: %v", err)

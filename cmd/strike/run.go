@@ -307,7 +307,7 @@ func (rc *runContext) registerCachedOutputs(ctx context.Context, step *lane.Step
 		for i, out := range step.Outputs {
 			handle := lane.OutputHandle{
 				ImageRef:    imageRef,
-				LayerID:     out.ID,
+				OutputID:    out.ID,
 				LayerDiffID: diffIDs[i],
 			}
 			if regErr := rc.laneState.Register(stepID, out.ID, handle); regErr != nil {
@@ -414,7 +414,7 @@ func (rc *runContext) resolvePackInputPaths(ctx context.Context, step *lane.Step
 			return nil, fmt.Errorf("%s: pack input %s.%s digest: %w", safeName, fromStep, fromOutput, digestErr)
 		}
 
-		dedupDir := packDigest.Hex[:16] + "-" + handle.LayerID
+		dedupDir := packDigest.Hex[:16] + "-" + handle.OutputID
 		inputDir := filepath.Join(inputsRoot, dedupDir)
 		if mkErr := scratchRoot.Mkdir(filepath.Join("inputs", dedupDir), 0o750); mkErr == nil {
 			tarBytes, saveErr := registry.SaveImage(ctx, rc.engine, handle.ImageRef)
@@ -428,7 +428,7 @@ func (rc *runContext) resolvePackInputPaths(ctx context.Context, step *lane.Step
 			return nil, fmt.Errorf("%s: pack input mkdir: %w", safeName, mkErr)
 		}
 
-		inputPaths[e.Dest.String()] = filepath.Join(inputDir, lane.OutputLayerName(*e.FromOutput))
+		inputPaths[e.Dest.String()] = filepath.Join(inputDir, lane.OutputContentPrefix(*e.FromOutput))
 	}
 	return inputPaths, nil
 }
@@ -539,7 +539,7 @@ func (rc *runContext) wrapFileOutputs(ctx context.Context, step *lane.Step, step
 			Tar:         stream,
 			StripPrefix: stripPrefix,
 			DestPrefix:  destPrefix,
-			LayerID:     out.ID,
+			OutputID:    out.ID,
 		})
 	}
 
@@ -556,7 +556,7 @@ func (rc *runContext) wrapFileOutputs(ctx context.Context, step *lane.Step, step
 		}
 		handle := lane.OutputHandle{
 			ImageRef:    imageRef,
-			LayerID:     out.ID,
+			OutputID:    out.ID,
 			LayerDiffID: diffID,
 		}
 		if regErr := rc.laneState.Register(stepID, out.ID, handle); regErr != nil {
@@ -755,20 +755,20 @@ func singleFileOutsideErr(e lane.InputEdge) error {
 //     leading slash: "/", "/node_modules", "/package.json". NOT prefixed with
 //     the mountpoint basename.
 //
-// The layer must end rooted at OutputLayerName so the consumer
+// The layer must end rooted at OutputContentPrefix so the consumer
 // (buildInputDelivery) and pack (resolvePackInputPaths) find content at
-// <OutputLayerName>/... .
+// <OutputContentPrefix>/... .
 //
 //   - path-bearing directory: strip the subdir basename podman prepended, then
-//     re-root under OutputLayerName (basename == OutputLayerName, a no-op net
+//     re-root under OutputContentPrefix (basename == OutputContentPrefix, a no-op net
 //     of strip+add).
 //   - whole-workdir directory (no path): strip NOTHING. The mountpoint archive
 //     already roots at the volume root; relUnderPrefix("") keeps each cleaned
-//     name and path.Join(OutputLayerName, name) absorbs the leading slash, so
+//     name and path.Join(OutputContentPrefix, name) absorbs the leading slash, so
 //     the whole workdir lands under the output name. Stripping the mountpoint
 //     basename would match no entry (none carries it) and drop the layer.
 //   - file: the archive is a single bare entry already named
-//     basename(out.Path) == OutputLayerName; keep it (stripPrefix="",
+//     basename(out.Path) == OutputContentPrefix; keep it (stripPrefix="",
 //     destPrefix=""). Stripping its own name would drop the only entry.
 //
 // stripPrefix/destPrefix are unused for image outputs (wrapped via
@@ -782,20 +782,20 @@ func archiveReroot(workdir string, out lane.FileOutput) (archivePath, stripPrefi
 		return archivePath, "", ""
 	}
 	if out.Path == nil {
-		return archivePath, "", lane.OutputLayerName(out)
+		return archivePath, "", lane.OutputContentPrefix(out)
 	}
-	return archivePath, path.Base(archivePath), lane.OutputLayerName(out)
+	return archivePath, path.Base(archivePath), lane.OutputContentPrefix(out)
 }
 
 // inputContentPath returns the in-image path within the producer's single
 // content layer that the input selects: the optional subpath, offset by the
 // output-type layer convention. Image outputs are rooted at the layer root;
-// file/directory outputs sit under OutputLayerName. This is the caller-side
+// file/directory outputs sit under OutputContentPrefix. This is the caller-side
 // re-rooting the engine boundary must not know about (Record 4).
 func inputContentPath(e lane.InputEdge) string {
 	base := ""
 	if e.FromOutput.Type != artifactTypeImage {
-		base = lane.OutputLayerName(*e.FromOutput)
+		base = lane.OutputContentPrefix(*e.FromOutput)
 	}
 	if e.Subpath == nil {
 		return base

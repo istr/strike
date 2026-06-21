@@ -79,7 +79,7 @@ func TestWrapArchiveAsImage_RealSymlink(t *testing.T) {
 	// that stripPrefix affects the layer content.
 	client := &registry.Client{Engine: eng}
 	good, wrapErr := client.WrapOutputsAsImage(ctx, []registry.OutputArchive{
-		{Tar: rc, StripPrefix: "", DestPrefix: "site", LayerID: "site"},
+		{Tar: rc, StripPrefix: "", DestPrefix: "site", OutputID: "site"},
 	}, "localhost/strike/itest/arch:good")
 	if wrapErr != nil {
 		t.Fatalf("wrap archive: %v", wrapErr)
@@ -98,7 +98,7 @@ func TestWrapArchiveAsImage_RealSymlink(t *testing.T) {
 		}
 	}()
 	empty, wrapErr2 := client.WrapOutputsAsImage(ctx, []registry.OutputArchive{
-		{Tar: rc2, StripPrefix: "work", DestPrefix: "site", LayerID: "site"},
+		{Tar: rc2, StripPrefix: "work", DestPrefix: "site", OutputID: "site"},
 	}, "localhost/strike/itest/arch:basemiss")
 	if wrapErr2 != nil {
 		t.Fatalf("wrap archive (base prefix): %v", wrapErr2)
