@@ -26,7 +26,7 @@ func TestEngineVolumeArchiveRoundTrip(t *testing.T) {
 	eng := testutil.RequireEngine(t)
 	ctx := context.Background()
 
-	const img = "cgr.dev/chainguard/go@sha256:4ec098b553c8d74d9f01925578660b2bfcdee4ef45e5ab082250cf9675a0e28b"
+	const img = "cgr.dev/chainguard/go@sha256:7596cc2ec314f54001ca15753e5ac11e9e10106fde96cd24f6a886a2eb770dd8"
 	exists, existsErr := eng.ImageExists(ctx, img)
 	if existsErr != nil {
 		t.Fatalf("image exists: %v", existsErr)
@@ -116,7 +116,7 @@ func TestEngineSeedThenRun(t *testing.T) {
 	eng := testutil.RequireEngine(t)
 	ctx := context.Background()
 
-	const img = "cgr.dev/chainguard/go@sha256:4ec098b553c8d74d9f01925578660b2bfcdee4ef45e5ab082250cf9675a0e28b"
+	const img = "cgr.dev/chainguard/go@sha256:7596cc2ec314f54001ca15753e5ac11e9e10106fde96cd24f6a886a2eb770dd8"
 	exists, existsErr := eng.ImageExists(ctx, img)
 	if existsErr != nil {
 		t.Fatalf("image exists: %v", existsErr)

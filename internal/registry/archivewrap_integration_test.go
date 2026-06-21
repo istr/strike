@@ -16,7 +16,7 @@ func TestWrapArchiveAsImage_RealSymlink(t *testing.T) {
 	ctx := context.Background()
 
 	// A minimal image with ln, pinned by digest (same as paper-1 integration test).
-	const img = "cgr.dev/chainguard/go@sha256:4ec098b553c8d74d9f01925578660b2bfcdee4ef45e5ab082250cf9675a0e28b"
+	const img = "cgr.dev/chainguard/go@sha256:7596cc2ec314f54001ca15753e5ac11e9e10106fde96cd24f6a886a2eb770dd8"
 	exists, existsErr := eng.ImageExists(ctx, img)
 	if existsErr != nil {
 		t.Fatalf("image exists: %v", existsErr)
@@ -78,11 +78,13 @@ func TestWrapArchiveAsImage_RealSymlink(t *testing.T) {
 	// prefixes ("" vs "work") must produce different digests, confirming
 	// that stripPrefix affects the layer content.
 	client := &registry.Client{Engine: eng}
-	good, _, wrapErr := client.WrapArchiveAsImage(ctx, rc, "", "site", "localhost/strike/itest/arch:good")
+	good, wrapErr := client.WrapOutputsAsImage(ctx, []registry.OutputArchive{
+		{Tar: rc, StripPrefix: "", DestPrefix: "site", LayerID: "site"},
+	}, "localhost/strike/itest/arch:good")
 	if wrapErr != nil {
 		t.Fatalf("wrap archive: %v", wrapErr)
 	}
-	if good.IsZero() {
+	if good.Digest.IsZero() {
 		t.Fatal("expected non-zero digest")
 	}
 
@@ -95,11 +97,13 @@ func TestWrapArchiveAsImage_RealSymlink(t *testing.T) {
 			t.Logf("WARN archive close: %v", closeErr)
 		}
 	}()
-	empty, _, wrapErr2 := client.WrapArchiveAsImage(ctx, rc2, "work", "site", "localhost/strike/itest/arch:basemiss")
+	empty, wrapErr2 := client.WrapOutputsAsImage(ctx, []registry.OutputArchive{
+		{Tar: rc2, StripPrefix: "work", DestPrefix: "site", LayerID: "site"},
+	}, "localhost/strike/itest/arch:basemiss")
 	if wrapErr2 != nil {
 		t.Fatalf("wrap archive (base prefix): %v", wrapErr2)
 	}
-	if good == empty {
+	if good.Digest == empty.Digest {
 		t.Fatal("stripPrefix had no effect: entries dropped (engine prefix is not the workdir base name)")
 	}
 }

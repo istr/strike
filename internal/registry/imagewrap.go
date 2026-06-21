@@ -22,6 +22,12 @@ import (
 // read by the cache-hit path to restore Artifact.Size without re-extraction.
 const ContentSizeAnnotation = "dev.strike.content-size"
 
+// OutputLayerAnnotation is the OCI layer-descriptor annotation key that carries
+// the output id of a content layer. The producer stamps one layer per output
+// (ADR-046); a consumer selects the layer identified by the output id
+// in the handle.
+const OutputLayerAnnotation = "dev.strike.output.layer"
+
 // WrapImageOutputAsImage loads an existing OCI tar into the engine's local
 // store, tags it, and returns the manifest digest and the tar file size.
 // The controller-computed manifest digest is verified against the engine.
@@ -101,22 +107,12 @@ func (c *Client) wrapImageFromReader(ctx context.Context, r io.Reader, size int6
 	return engineDigest, size, nil
 }
 
-// loadTagVerify builds a single-layer OCI image from the given layer,
-// loads it into the engine, tags it, and returns the manifest digest.
-// The controller-computed manifest digest is verified against the engine.
-// size is the logical content size written as the dev.strike.content-size
-// annotation for cache-hit restoration.
-func (c *Client) loadTagVerify(ctx context.Context, layer v1.Layer, tag string, size int64) (lane.Digest, error) {
-	img := mutate.ConfigMediaType(
-		mutate.MediaType(empty.Image, types.OCIManifestSchema1),
-		types.OCIConfigJSON,
-	)
-
-	img, err := mutate.AppendLayers(img, layer)
-	if err != nil {
-		return lane.Digest{}, fmt.Errorf("append layer: %w", err)
-	}
-
+// finalizeImage stamps the reproducible-created and content-size annotations
+// on an assembled image, loads it into the engine, tags it, and verifies that
+// the controller-computed manifest digest matches the engine-stored digest.
+// The manifest digest commits to every layer (ADR-046), so no per-layer digest
+// is checked. size is the total logical content size across all layers.
+func (c *Client) finalizeImage(ctx context.Context, img v1.Image, tag string, size int64) (lane.Digest, error) {
 	annotated, ok := mutate.Annotations(img, map[string]string{
 		"org.opencontainers.image.created": "1970-01-01T00:00:00Z",
 		ContentSizeAnnotation:              strconv.FormatInt(size, 10),
@@ -155,6 +151,71 @@ func (c *Client) loadTagVerify(ctx context.Context, layer v1.Layer, tag string, 
 		return lane.Digest{}, fmt.Errorf("digest mismatch: controller=%s engine=%s", controllerDigest, engineDigest)
 	}
 	return engineDigest, nil
+}
+
+// OutputArchive is one step output's engine container-archive stream plus its
+// re-rooting prefixes and the output id (LayerID) that identifies its layer.
+// Each becomes one canonical OCI layer in the assembled step image, stamped
+// with LayerID under OutputLayerAnnotation. The annotation aids OCI
+// introspection but is not the selection key: runtimes strip it on load, so
+// consumers select by the layer's diff_id (see WrapResult.LayerDiffIDs).
+type OutputArchive struct {
+	Tar         io.Reader
+	StripPrefix string
+	DestPrefix  string
+	LayerID     string
+}
+
+// WrapResult is the outcome of assembling a step's outputs into one image.
+// Digest is the manifest digest (the single integrity anchor); Size is the
+// total logical content size across all layers; LayerDiffIDs maps each output
+// id to its layer's uncompressed-content digest (diff_id), the engine-level
+// key a consumer uses to select that layer after an engine round-trip.
+type WrapResult struct {
+	LayerDiffIDs map[string]string
+	Digest       lane.Digest
+	Size         int64
+}
+
+// WrapOutputsAsImage assembles every file and directory output of a step into
+// one canonical, digest-pinned image -- one layer per output (ADR-046) --
+// loads it, tags it, and returns the manifest digest, total content size, and
+// the per-output layer diff_ids. The manifest digest is the single integrity
+// anchor; it commits to every layer, so no per-layer digest is checked. Layer
+// order follows the input slice.
+func (c *Client) WrapOutputsAsImage(ctx context.Context, outs []OutputArchive, tag string) (WrapResult, error) {
+	base := mutate.ConfigMediaType(
+		mutate.MediaType(empty.Image, types.OCIManifestSchema1),
+		types.OCIConfigJSON,
+	)
+	adds := make([]mutate.Addendum, 0, len(outs))
+	diffIDs := make(map[string]string, len(outs))
+	var total int64
+	for _, out := range outs {
+		layer, size, err := canonicalLayerFromTar(out.Tar, out.StripPrefix, out.DestPrefix)
+		if err != nil {
+			return WrapResult{}, fmt.Errorf("canonicalize output %q: %w", out.LayerID, err)
+		}
+		diffID, err := layer.DiffID()
+		if err != nil {
+			return WrapResult{}, fmt.Errorf("diff id output %q: %w", out.LayerID, err)
+		}
+		diffIDs[out.LayerID] = diffID.String()
+		adds = append(adds, mutate.Addendum{
+			Layer:       layer,
+			Annotations: map[string]string{OutputLayerAnnotation: out.LayerID},
+		})
+		total += size
+	}
+	img, err := mutate.Append(base, adds...)
+	if err != nil {
+		return WrapResult{}, fmt.Errorf("assemble output layers: %w", err)
+	}
+	digest, err := c.finalizeImage(ctx, img, tag, total)
+	if err != nil {
+		return WrapResult{}, err
+	}
+	return WrapResult{Digest: digest, Size: total, LayerDiffIDs: diffIDs}, nil
 }
 
 // v1HashToDigest converts a go-containerregistry v1.Hash to a lane.Digest.

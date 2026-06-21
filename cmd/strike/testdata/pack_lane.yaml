@@ -60,10 +60,7 @@ steps:
     env: {}
     inputs: []
     secrets: []
-    outputs:
-      - id: image
-        type: image
-        path: image.tar
+    output: image
 
   - id: deploy
     deploy:
@@ -75,7 +72,6 @@ steps:
         image:
           from:
             step: pack
-            output: image
       target:
         id: d1-minimal-target
         type: registry

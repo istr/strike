@@ -8,7 +8,7 @@ import "path"
 // whole workdir (path absent). wrapOutputs uses it as the layer destination
 // prefix; input resolution uses it to find the content root in an extracted
 // producer artifact.
-func OutputLayerName(out OutputSpec) string {
+func OutputLayerName(out FileOutput) string {
 	if out.Path != nil {
 		return path.Base(out.Path.String())
 	}

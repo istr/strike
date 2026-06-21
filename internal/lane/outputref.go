@@ -1,5 +1,10 @@
 package lane
 
+import (
+	"fmt"
+	"strings"
+)
+
 // Ref returns the canonical "step.output" string form of an output
 // reference. This is the single definition of the dotted encoding strike
 // uses below the schema boundary: the key under which a producer's
@@ -16,4 +21,15 @@ package lane
 // must be revisited. TestOutputRef_RefRejectsDottedIdentifier pins it.
 func (r OutputRef) Ref() string {
 	return r.Step + "." + r.Output
+}
+
+// ManifestDigest extracts the manifest digest from an OutputHandle's imageRef.
+// imageRef has the form "repo@algorithm:hex"; the digest is everything after
+// the "@".
+func (h OutputHandle) ManifestDigest() (Digest, error) {
+	_, d, ok := strings.Cut(h.ImageRef, "@")
+	if !ok {
+		return Digest{}, fmt.Errorf("output handle: no digest in image ref %q", h.ImageRef)
+	}
+	return ParseDigest(d)
 }

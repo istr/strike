@@ -70,7 +70,7 @@ func TestBuildInputDelivery_Single(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				ID: "compile", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{ID: "bin", Type: "file", Path: lane.Ptr(lane.RelPath("binary"))}},
+				Outputs: []lane.FileOutput{{ID: "bin", Type: "file", Path: lane.Ptr(lane.RelPath("binary"))}},
 			},
 			{
 				ID: "test", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
@@ -82,19 +82,21 @@ func TestBuildInputDelivery_Single(t *testing.T) {
 	rc.dag = buildTestDAG(t, p)
 
 	compileDigest := lane.MustParseDigest("sha256:aabbccdd11223344000000000000000000000000000000000000000000000000")
-	if err := rc.laneState.Register("compile", "bin", lane.Artifact{
-		Type: "file", Digest: compileDigest,
+	compileRef := "localhost/test/compile@" + compileDigest.String()
+	tarBytes, diffID, err := regtest.BuildLayeredImageTar("bin", map[string][]byte{"binary": []byte("data")})
+	if err != nil {
+		t.Fatalf("BuildLayeredImageTar: %v", err)
+	}
+	if err := rc.laneState.Register("compile", "bin", lane.OutputHandle{
+		ImageRef:    compileRef,
+		LayerID:     "bin",
+		LayerDiffID: diffID,
 	}); err != nil {
 		t.Fatal(err)
 	}
 	rc.state.specHashes["compile"] = lane.MustParseDigest("sha256:1111111111111111000000000000000000000000000000000000000000000000")
 
-	tarBytes, _, err := regtest.BuildImageTar("binary", []byte("data"))
-	if err != nil {
-		t.Fatalf("BuildImageTar: %v", err)
-	}
-	tag := registry.WrapTag(rc.lane.ID, "compile", rc.state.specHashes["compile"])
-	eng.saveTars = map[string][]byte{tag: tarBytes}
+	eng.saveTars = map[string][]byte{compileRef: tarBytes}
 
 	seeds, _, seedErr := rc.buildInputDelivery(context.Background(), rc.dag.Steps["test"])
 	if seedErr != nil {
@@ -117,11 +119,11 @@ func TestBuildInputDelivery_Multiple(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				ID: "s1", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{ID: "a", Type: "file", Path: lane.Ptr(lane.RelPath("a.tar"))}},
+				Outputs: []lane.FileOutput{{ID: "a", Type: "file", Path: lane.Ptr(lane.RelPath("a.tar"))}},
 			},
 			{
 				ID: "s2", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{ID: "b", Type: "file", Path: lane.Ptr(lane.RelPath("b.tar"))}},
+				Outputs: []lane.FileOutput{{ID: "b", Type: "file", Path: lane.Ptr(lane.RelPath("b.tar"))}},
 			},
 			{
 				ID: "consumer", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
@@ -137,26 +139,26 @@ func TestBuildInputDelivery_Multiple(t *testing.T) {
 
 	d1 := lane.MustParseDigest("sha256:aaaa111122223333000000000000000000000000000000000000000000000000")
 	d2 := lane.MustParseDigest("sha256:bbbb444455556666000000000000000000000000000000000000000000000000")
-	if err := rc.laneState.Register("s1", "a", lane.Artifact{Type: "file", Digest: d1}); err != nil {
+	ref1 := "localhost/test/s1@" + d1.String()
+	ref2 := "localhost/test/s2@" + d2.String()
+	tar1, diff1, err := regtest.BuildLayeredImageTar("a", map[string][]byte{"a.tar": []byte("a")})
+	if err != nil {
+		t.Fatalf("BuildLayeredImageTar s1: %v", err)
+	}
+	tar2, diff2, err := regtest.BuildLayeredImageTar("b", map[string][]byte{"b.tar": []byte("b")})
+	if err != nil {
+		t.Fatalf("BuildLayeredImageTar s2: %v", err)
+	}
+	if err := rc.laneState.Register("s1", "a", lane.OutputHandle{ImageRef: ref1, LayerID: "a", LayerDiffID: diff1}); err != nil {
 		t.Fatal(err)
 	}
-	if err := rc.laneState.Register("s2", "b", lane.Artifact{Type: "file", Digest: d2}); err != nil {
+	if err := rc.laneState.Register("s2", "b", lane.OutputHandle{ImageRef: ref2, LayerID: "b", LayerDiffID: diff2}); err != nil {
 		t.Fatal(err)
 	}
 	rc.state.specHashes["s1"] = lane.MustParseDigest("sha256:2222222222222222000000000000000000000000000000000000000000000000")
 	rc.state.specHashes["s2"] = lane.MustParseDigest("sha256:3333333333333333000000000000000000000000000000000000000000000000")
 
-	tar1, _, err := regtest.BuildImageTar("a.tar", []byte("a"))
-	if err != nil {
-		t.Fatalf("BuildImageTar s1: %v", err)
-	}
-	tar2, _, err := regtest.BuildImageTar("b.tar", []byte("b"))
-	if err != nil {
-		t.Fatalf("BuildImageTar s2: %v", err)
-	}
-	tag1 := registry.WrapTag(rc.lane.ID, "s1", rc.state.specHashes["s1"])
-	tag2 := registry.WrapTag(rc.lane.ID, "s2", rc.state.specHashes["s2"])
-	eng.saveTars = map[string][]byte{tag1: tar1, tag2: tar2}
+	eng.saveTars = map[string][]byte{ref1: tar1, ref2: tar2}
 
 	seeds, _, seedErr := rc.buildInputDelivery(context.Background(), rc.dag.Steps["consumer"])
 	if seedErr != nil {
@@ -176,7 +178,7 @@ func TestBuildInputDelivery_MissingSubpath(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				ID: "src", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{ID: "tree", Type: "directory", Path: lane.Ptr(lane.RelPath("tree"))}},
+				Outputs: []lane.FileOutput{{ID: "tree", Type: "directory", Path: lane.Ptr(lane.RelPath("tree"))}},
 			},
 			{
 				ID: "consumer", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
@@ -190,19 +192,21 @@ func TestBuildInputDelivery_MissingSubpath(t *testing.T) {
 	rc.dag = buildTestDAG(t, p)
 
 	srcDigest := lane.MustParseDigest("sha256:aabbccdd11223344000000000000000000000000000000000000000000000000")
-	if err := rc.laneState.Register("src", "tree", lane.Artifact{
-		Type: "directory", Digest: srcDigest,
+	srcRef := "localhost/test/src@" + srcDigest.String()
+	tarBytes, diffID, err := regtest.BuildLayeredImageTar("tree", map[string][]byte{"tree/actual.json": []byte("{}")})
+	if err != nil {
+		t.Fatalf("BuildLayeredImageTar: %v", err)
+	}
+	if err := rc.laneState.Register("src", "tree", lane.OutputHandle{
+		ImageRef:    srcRef,
+		LayerID:     "tree",
+		LayerDiffID: diffID,
 	}); err != nil {
 		t.Fatal(err)
 	}
 	rc.state.specHashes["src"] = lane.MustParseDigest("sha256:1111111111111111000000000000000000000000000000000000000000000000")
 
-	tarBytes, _, err := regtest.BuildImageTar("tree/actual.json", []byte("{}"))
-	if err != nil {
-		t.Fatalf("BuildImageTar: %v", err)
-	}
-	tag := registry.WrapTag(rc.lane.ID, "src", rc.state.specHashes["src"])
-	eng.saveTars = map[string][]byte{tag: tarBytes}
+	eng.saveTars = map[string][]byte{srcRef: tarBytes}
 
 	_, _, seedErr := rc.buildInputDelivery(context.Background(), rc.dag.Steps["consumer"])
 	if seedErr == nil {
@@ -222,7 +226,7 @@ func TestBuildInputDelivery_OutsideWorkdir_DirectoryMount(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				ID: "src", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{ID: "tree", Type: "directory", Path: lane.Ptr(lane.RelPath("tree"))}},
+				Outputs: []lane.FileOutput{{ID: "tree", Type: "directory", Path: lane.Ptr(lane.RelPath("tree"))}},
 			},
 			{
 				ID: "consumer", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
@@ -233,21 +237,24 @@ func TestBuildInputDelivery_OutsideWorkdir_DirectoryMount(t *testing.T) {
 	}
 	rc.dag = buildTestDAG(t, p)
 
-	if err := rc.laneState.Register("src", "tree", lane.Artifact{
-		Type: "directory", Digest: lane.MustParseDigest("sha256:aabbccdd11223344000000000000000000000000000000000000000000000000"),
+	srcDigest := lane.MustParseDigest("sha256:aabbccdd11223344000000000000000000000000000000000000000000000000")
+	srcRef := "localhost/test/src@" + srcDigest.String()
+	tarBytes, diffID, err := regtest.BuildLayeredImageTar("tree", map[string][]byte{
+		"tree/a.txt": []byte("a"),
+	})
+	if err != nil {
+		t.Fatalf("BuildLayeredImageTar: %v", err)
+	}
+	if err := rc.laneState.Register("src", "tree", lane.OutputHandle{
+		ImageRef:    srcRef,
+		LayerID:     "tree",
+		LayerDiffID: diffID,
 	}); err != nil {
 		t.Fatal(err)
 	}
 	rc.state.specHashes["src"] = lane.MustParseDigest("sha256:1111111111111111000000000000000000000000000000000000000000000000")
 
-	tarBytes, err := regtest.BuildMultiFileImageTar(map[string][]byte{
-		"tree/a.txt": []byte("a"),
-	})
-	if err != nil {
-		t.Fatalf("BuildMultiFileImageTar: %v", err)
-	}
-	tag := registry.WrapTag(rc.lane.ID, "src", rc.state.specHashes["src"])
-	eng.saveTars = map[string][]byte{tag: tarBytes}
+	eng.saveTars = map[string][]byte{srcRef: tarBytes}
 
 	seeds, mounts, dErr := rc.buildInputDelivery(context.Background(), rc.dag.Steps["consumer"])
 	if dErr != nil {
@@ -259,8 +266,8 @@ func TestBuildInputDelivery_OutsideWorkdir_DirectoryMount(t *testing.T) {
 	if len(mounts) != 1 {
 		t.Fatalf("expected 1 mount, got %d", len(mounts))
 	}
-	if mounts[0].Source != tag {
-		t.Errorf("mount Source = %q, want %q", mounts[0].Source, tag)
+	if mounts[0].Source != srcRef {
+		t.Errorf("mount Source = %q, want %q", mounts[0].Source, srcRef)
 	}
 	if mounts[0].Destination != "/outside/tree" {
 		t.Errorf("mount Destination = %q, want /outside/tree", mounts[0].Destination)
@@ -282,7 +289,7 @@ func TestBuildInputDelivery_NoWorkdir_Mounts(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				ID: "src", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{ID: "tree", Type: "directory", Path: lane.Ptr(lane.RelPath("tree"))}},
+				Outputs: []lane.FileOutput{{ID: "tree", Type: "directory", Path: lane.Ptr(lane.RelPath("tree"))}},
 			},
 			{
 				ID: "consumer", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
@@ -292,21 +299,24 @@ func TestBuildInputDelivery_NoWorkdir_Mounts(t *testing.T) {
 	}
 	rc.dag = buildTestDAG(t, p)
 
-	if err := rc.laneState.Register("src", "tree", lane.Artifact{
-		Type: "directory", Digest: lane.MustParseDigest("sha256:aabbccdd11223344000000000000000000000000000000000000000000000000"),
+	srcDigest := lane.MustParseDigest("sha256:aabbccdd11223344000000000000000000000000000000000000000000000000")
+	srcRef := "localhost/test/src@" + srcDigest.String()
+	tarBytes, diffID, err := regtest.BuildLayeredImageTar("tree", map[string][]byte{
+		"tree/a.txt": []byte("a"),
+	})
+	if err != nil {
+		t.Fatalf("BuildLayeredImageTar: %v", err)
+	}
+	if err := rc.laneState.Register("src", "tree", lane.OutputHandle{
+		ImageRef:    srcRef,
+		LayerID:     "tree",
+		LayerDiffID: diffID,
 	}); err != nil {
 		t.Fatal(err)
 	}
 	rc.state.specHashes["src"] = lane.MustParseDigest("sha256:1111111111111111000000000000000000000000000000000000000000000000")
 
-	tarBytes, err := regtest.BuildMultiFileImageTar(map[string][]byte{
-		"tree/a.txt": []byte("a"),
-	})
-	if err != nil {
-		t.Fatalf("BuildMultiFileImageTar: %v", err)
-	}
-	tag := registry.WrapTag(rc.lane.ID, "src", rc.state.specHashes["src"])
-	eng.saveTars = map[string][]byte{tag: tarBytes}
+	eng.saveTars = map[string][]byte{srcRef: tarBytes}
 
 	seeds, mounts, dErr := rc.buildInputDelivery(context.Background(), rc.dag.Steps["consumer"])
 	if dErr != nil {
@@ -328,7 +338,7 @@ func TestBuildInputDelivery_SingleFileOutside_Rejected(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				ID: "src", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{ID: "bin", Type: "file", Path: lane.Ptr(lane.RelPath("binary"))}},
+				Outputs: []lane.FileOutput{{ID: "bin", Type: "file", Path: lane.Ptr(lane.RelPath("binary"))}},
 			},
 			{
 				ID: "consumer", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
@@ -339,8 +349,9 @@ func TestBuildInputDelivery_SingleFileOutside_Rejected(t *testing.T) {
 	}
 	rc.dag = buildTestDAG(t, p)
 
-	if err := rc.laneState.Register("src", "bin", lane.Artifact{
-		Type: "file", Digest: lane.MustParseDigest("sha256:aabbccdd11223344000000000000000000000000000000000000000000000000"),
+	if err := rc.laneState.Register("src", "bin", lane.OutputHandle{
+		ImageRef: "localhost/test/src@sha256:aabbccdd11223344000000000000000000000000000000000000000000000000",
+		LayerID:  "bin",
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -364,7 +375,7 @@ func TestBuildInputDelivery_ExportsProducerOnce(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				ID: "src", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{ID: "tree", Type: "directory", Path: lane.Ptr(lane.RelPath("tree"))}},
+				Outputs: []lane.FileOutput{{ID: "tree", Type: "directory", Path: lane.Ptr(lane.RelPath("tree"))}},
 			},
 			{
 				ID: "consumer", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
@@ -378,23 +389,25 @@ func TestBuildInputDelivery_ExportsProducerOnce(t *testing.T) {
 	}
 	rc.dag = buildTestDAG(t, p)
 
-	if err := rc.laneState.Register("src", "tree", lane.Artifact{
-		Type:   "directory",
-		Digest: lane.MustParseDigest("sha256:aabbccdd11223344000000000000000000000000000000000000000000000000"),
+	srcDigest := lane.MustParseDigest("sha256:aabbccdd11223344000000000000000000000000000000000000000000000000")
+	srcRef := "localhost/test/src@" + srcDigest.String()
+	tarBytes, diffID, err := regtest.BuildLayeredImageTar("tree", map[string][]byte{
+		"tree/a.txt": []byte("a"),
+		"tree/b.txt": []byte("b"),
+	})
+	if err != nil {
+		t.Fatalf("BuildLayeredImageTar: %v", err)
+	}
+	if err := rc.laneState.Register("src", "tree", lane.OutputHandle{
+		ImageRef:    srcRef,
+		LayerID:     "tree",
+		LayerDiffID: diffID,
 	}); err != nil {
 		t.Fatal(err)
 	}
 	rc.state.specHashes["src"] = lane.MustParseDigest("sha256:1111111111111111000000000000000000000000000000000000000000000000")
 
-	tarBytes, err := regtest.BuildMultiFileImageTar(map[string][]byte{
-		"tree/a.txt": []byte("a"),
-		"tree/b.txt": []byte("b"),
-	})
-	if err != nil {
-		t.Fatalf("BuildMultiFileImageTar: %v", err)
-	}
-	tag := registry.WrapTag(rc.lane.ID, "src", rc.state.specHashes["src"])
-	eng.saveTars = map[string][]byte{tag: tarBytes}
+	eng.saveTars = map[string][]byte{srcRef: tarBytes}
 
 	seeds, _, seedErr := rc.buildInputDelivery(context.Background(), rc.dag.Steps["consumer"])
 	if seedErr != nil {
@@ -403,8 +416,8 @@ func TestBuildInputDelivery_ExportsProducerOnce(t *testing.T) {
 	if len(seeds) != 2 {
 		t.Fatalf("expected 2 seeds, got %d", len(seeds))
 	}
-	if got := eng.saveCalls[tag]; got != 1 {
-		t.Errorf("SaveImage for %s called %d times, want 1 (one export per producer)", tag, got)
+	if got := eng.saveCalls[srcRef]; got != 1 {
+		t.Errorf("SaveImage for %s called %d times, want 1 (one export per producer)", srcRef, got)
 	}
 }
 
@@ -484,7 +497,7 @@ func TestCheckCache_Miss(t *testing.T) {
 	rc := newTestRC(t, eng)
 	step := &lane.Step{
 		ID:      "step1",
-		Outputs: []lane.OutputSpec{{ID: "bin", Type: "file", Path: lane.Ptr(lane.RelPath("bin"))}},
+		Outputs: []lane.FileOutput{{ID: "bin", Type: "file", Path: lane.Ptr(lane.RelPath("bin"))}},
 	}
 	rc.state.specHashes["step1"] = lane.MustParseDigest("sha256:abc0000000000000000000000000000000000000000000000000000000000000")
 
@@ -510,8 +523,18 @@ func TestCheckCache_Hit(t *testing.T) {
 	rc := newTestRC(t, eng)
 	step := &lane.Step{
 		ID:      "step1",
-		Outputs: []lane.OutputSpec{{ID: "bin", Type: "file", Path: lane.Ptr(lane.RelPath("bin"))}},
+		Outputs: []lane.FileOutput{{ID: "bin", Type: "file", Path: lane.Ptr(lane.RelPath("bin"))}},
 	}
+
+	// On a cache hit, checkCache exports the cached image and recovers each
+	// output's LayerDiffID from the config rootfs.diff_ids in canonical layer
+	// order. Provide a one-layer image keyed by the digest ref it pulls.
+	imageRef := registry.WrapDigestRef(rc.lane.ID, "step1", lane.MustParseDigest(digest))
+	tarBytes, diffID, buildErr := regtest.BuildLayeredImageTar("bin", map[string][]byte{"bin": []byte("data")})
+	if buildErr != nil {
+		t.Fatalf("BuildLayeredImageTar: %v", buildErr)
+	}
+	eng.saveTars = map[string][]byte{imageRef: tarBytes}
 
 	hit, err := rc.checkCache(context.Background(), step, "step1", "step1", lane.MustParseDigest("sha256:abc0000000000000000000000000000000000000000000000000000000000000"))
 	if err != nil {
@@ -520,15 +543,19 @@ func TestCheckCache_Hit(t *testing.T) {
 	if !hit {
 		t.Error("expected cache hit")
 	}
-	art, err2 := rc.laneState.Resolve("step1.bin")
+	handle, err2 := rc.laneState.Resolve("step1.bin")
 	if err2 != nil {
-		t.Fatalf("artifact not registered: %v", err2)
+		t.Fatalf("output not registered: %v", err2)
 	}
-	if art.Size != 42 {
-		t.Errorf("size = %d, want 42", art.Size)
+	gotDigest, digestErr := handle.ManifestDigest()
+	if digestErr != nil {
+		t.Fatalf("manifest digest: %v", digestErr)
 	}
-	if art.Digest.String() != digest {
-		t.Errorf("digest = %q, want %q", art.Digest, digest)
+	if gotDigest.String() != digest {
+		t.Errorf("digest = %q, want %q", gotDigest, digest)
+	}
+	if handle.LayerDiffID != diffID {
+		t.Errorf("LayerDiffID = %q, want %q (recovered from cached image)", handle.LayerDiffID, diffID)
 	}
 }
 
@@ -647,18 +674,19 @@ func TestResolveImageDigest_ImageFrom(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				ID: "pack", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{ID: "img", Type: "image", Path: lane.Ptr(lane.RelPath("img.tar"))}},
+				Output: "image",
 			},
 			{
 				ID: "run", Env: map[string]string{}, Args: []string{"run"},
-				ImageFrom: &lane.ImageFrom{Step: "pack", Output: "img"},
+				ImageFromStep: "pack",
 			},
 		},
 	}
 	rc.lane = p
 	rc.dag = buildTestDAG(t, p)
-	if err := rc.laneState.Register("pack", "img", lane.Artifact{
-		Type: "image", Digest: lane.MustParseDigest("sha256:abcdef1234567890000000000000000000000000000000000000000000000000"),
+	packDigest := lane.MustParseDigest("sha256:abcdef1234567890000000000000000000000000000000000000000000000000")
+	if err := rc.laneState.Register("pack", "", lane.OutputHandle{
+		ImageRef: registry.WrapDigestRef("test-lane", "pack", packDigest),
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -689,11 +717,11 @@ func TestResolveImageDigest_ImageFromMissing(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				ID: "pack", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{ID: "img", Type: "image", Path: lane.Ptr(lane.RelPath("img.tar"))}},
+				Output: "image",
 			},
 			{
 				ID: "run", Env: map[string]string{}, Args: []string{"run"},
-				ImageFrom: &lane.ImageFrom{Step: "pack", Output: "img"},
+				ImageFromStep: "pack",
 			},
 		},
 	}
@@ -721,7 +749,7 @@ func TestResolvePackInputPaths(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				ID: "compile", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.OutputSpec{{ID: "bin", Type: "file", Path: lane.Ptr(lane.RelPath("binary"))}},
+				Outputs: []lane.FileOutput{{ID: "bin", Type: "file", Path: lane.Ptr(lane.RelPath("binary"))}},
 			},
 			{
 				ID: "pack", Env: map[string]string{}, Args: []string{},
@@ -729,26 +757,28 @@ func TestResolvePackInputPaths(t *testing.T) {
 					Base:  "scratch",
 					Files: []lane.PackFile{{From: lane.OutputRef{Step: "compile", Output: "bin"}, Dest: "/app"}},
 				},
-				Outputs: []lane.OutputSpec{{ID: "img", Type: "image", Path: lane.Ptr(lane.RelPath("img.tar"))}},
+				Output: "image",
 			},
 		},
 	}
 	rc.dag = buildTestDAG(t, p)
 
 	compileDigest := lane.MustParseDigest("sha256:aabbccdd11223344000000000000000000000000000000000000000000000000")
-	if err := rc.laneState.Register("compile", "bin", lane.Artifact{
-		Type: "file", Digest: compileDigest,
+	compileRef := "localhost/test/compile@" + compileDigest.String()
+	tarBytes, diffID, err := regtest.BuildLayeredImageTar("bin", map[string][]byte{"binary": []byte("bin")})
+	if err != nil {
+		t.Fatalf("BuildLayeredImageTar: %v", err)
+	}
+	if err := rc.laneState.Register("compile", "bin", lane.OutputHandle{
+		ImageRef:    compileRef,
+		LayerID:     "bin",
+		LayerDiffID: diffID,
 	}); err != nil {
 		t.Fatal(err)
 	}
 	rc.state.specHashes["compile"] = lane.MustParseDigest("sha256:1111111111111111000000000000000000000000000000000000000000000000")
 
-	tarBytes, _, err := regtest.BuildImageTar("binary", []byte("bin"))
-	if err != nil {
-		t.Fatalf("BuildImageTar: %v", err)
-	}
-	tag := registry.WrapTag(rc.lane.ID, "compile", rc.state.specHashes["compile"])
-	eng.saveTars = map[string][]byte{tag: tarBytes}
+	eng.saveTars = map[string][]byte{compileRef: tarBytes}
 
 	scratchDir := t.TempDir()
 	paths, pathErr := rc.resolvePackInputPaths(context.Background(), rc.dag.Steps["pack"], scratchDir, "test")
@@ -770,7 +800,7 @@ func TestResolvePackInputPaths(t *testing.T) {
 func TestPushAndReport_NoImage(t *testing.T) {
 	rc := newTestRC(t, &mockEngine{})
 	step := &lane.Step{
-		Outputs: []lane.OutputSpec{{ID: "bin", Type: "file", Path: lane.Ptr(lane.RelPath("bin"))}},
+		Outputs: []lane.FileOutput{{ID: "bin", Type: "file", Path: lane.Ptr(lane.RelPath("bin"))}},
 	}
 	if err := rc.pushAndReport(context.Background(), step, "test", "tag"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -781,7 +811,7 @@ func TestPushAndReport_ImagePushError(t *testing.T) {
 	eng := &mockEngine{pushErr: fmt.Errorf("network down")}
 	rc := newTestRC(t, eng)
 	step := &lane.Step{
-		Outputs: []lane.OutputSpec{{ID: "img", Type: "image", Path: lane.Ptr(lane.RelPath("img.tar"))}},
+		Output: "image",
 	}
 	err := rc.pushAndReport(context.Background(), step, "test", "tag")
 	if err == nil {
@@ -796,7 +826,7 @@ func TestPushAndReport_ImagePushOK(t *testing.T) {
 	eng := &mockEngine{}
 	rc := newTestRC(t, eng)
 	step := &lane.Step{
-		Outputs: []lane.OutputSpec{{ID: "img", Type: "image", Path: lane.Ptr(lane.RelPath("img.tar"))}},
+		Output: "image",
 	}
 	if err := rc.pushAndReport(context.Background(), step, "test", "tag"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -865,37 +895,37 @@ func TestArchiveReroot(t *testing.T) {
 	tests := []struct {
 		name                             string
 		workdir                          string
-		out                              lane.OutputSpec
+		out                              lane.FileOutput
 		wantArchive, wantStrip, wantDest string
 	}{
 		{
 			name:        "directory with path",
 			workdir:     "/out",
-			out:         lane.OutputSpec{ID: "tree", Type: "directory", Path: lane.Ptr(lane.RelPath("tree"))},
+			out:         lane.FileOutput{ID: "tree", Type: "directory", Path: lane.Ptr(lane.RelPath("tree"))},
 			wantArchive: "/out/tree", wantStrip: "tree", wantDest: "tree",
 		},
 		{
 			name:        "directory nested path",
 			workdir:     "/out",
-			out:         lane.OutputSpec{ID: "web", Type: "directory", Path: lane.Ptr(lane.RelPath("dist/web"))},
+			out:         lane.FileOutput{ID: "web", Type: "directory", Path: lane.Ptr(lane.RelPath("dist/web"))},
 			wantArchive: "/out/dist/web", wantStrip: "web", wantDest: "web",
 		},
 		{
 			name:        "directory whole workdir (no path)",
 			workdir:     "/out",
-			out:         lane.OutputSpec{ID: "site", Type: "directory"},
+			out:         lane.FileOutput{ID: "site", Type: "directory"},
 			wantArchive: "/out", wantStrip: "", wantDest: "site",
 		},
 		{
 			name:        "file with path",
 			workdir:     "/out",
-			out:         lane.OutputSpec{ID: "bin", Type: "file", Path: lane.Ptr(lane.RelPath("binary"))},
+			out:         lane.FileOutput{ID: "bin", Type: "file", Path: lane.Ptr(lane.RelPath("binary"))},
 			wantArchive: "/out/binary", wantStrip: "", wantDest: "",
 		},
 		{
 			name:        "file nested path",
 			workdir:     "/out",
-			out:         lane.OutputSpec{ID: "bin", Type: "file", Path: lane.Ptr(lane.RelPath("build/app.bin"))},
+			out:         lane.FileOutput{ID: "bin", Type: "file", Path: lane.Ptr(lane.RelPath("build/app.bin"))},
 			wantArchive: "/out/build/app.bin", wantStrip: "", wantDest: "",
 		},
 	}

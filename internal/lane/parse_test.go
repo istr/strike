@@ -363,22 +363,22 @@ func TestValidatePaths(t *testing.T) {
 	}{
 		{
 			name:    "relative output path is valid",
-			lane:    &lane.Lane{Steps: []lane.Step{{ID: "s", Workdir: lane.Ptr(lane.AbsPath("/work")), Outputs: []lane.OutputSpec{{Path: lane.Ptr(lane.RelPath("node_modules"))}}}}},
+			lane:    &lane.Lane{Steps: []lane.Step{{ID: "s", Workdir: lane.Ptr(lane.AbsPath("/work")), Outputs: []lane.FileOutput{{Path: lane.Ptr(lane.RelPath("node_modules"))}}}}},
 			wantErr: "",
 		},
 		{
 			name:    "absolute output path rejected",
-			lane:    &lane.Lane{Steps: []lane.Step{{ID: "s", Workdir: lane.Ptr(lane.AbsPath("/work")), Outputs: []lane.OutputSpec{{Path: lane.Ptr(lane.RelPath("/out.txt"))}}}}},
+			lane:    &lane.Lane{Steps: []lane.Step{{ID: "s", Workdir: lane.Ptr(lane.AbsPath("/work")), Outputs: []lane.FileOutput{{Path: lane.Ptr(lane.RelPath("/out.txt"))}}}}},
 			wantErr: "must be relative",
 		},
 		{
 			name:    "non-canonical output path rejected",
-			lane:    &lane.Lane{Steps: []lane.Step{{ID: "s", Workdir: lane.Ptr(lane.AbsPath("/work")), Outputs: []lane.OutputSpec{{Path: lane.Ptr(lane.RelPath("src/../etc/passwd"))}}}}},
+			lane:    &lane.Lane{Steps: []lane.Step{{ID: "s", Workdir: lane.Ptr(lane.AbsPath("/work")), Outputs: []lane.FileOutput{{Path: lane.Ptr(lane.RelPath("src/../etc/passwd"))}}}}},
 			wantErr: "must be canonical",
 		},
 		{
 			name:    "outputs without workdir rejected",
-			lane:    &lane.Lane{Steps: []lane.Step{{ID: "s", Outputs: []lane.OutputSpec{{Path: lane.Ptr(lane.RelPath("out"))}}}}},
+			lane:    &lane.Lane{Steps: []lane.Step{{ID: "s", Outputs: []lane.FileOutput{{Path: lane.Ptr(lane.RelPath("out"))}}}}},
 			wantErr: "declares outputs but no workdir",
 		},
 		{

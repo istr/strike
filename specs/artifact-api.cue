@@ -33,3 +33,26 @@ package lane
 		[string]: string @go(Metadata)
 	}
 }
+
+// OutputHandle is the resolved runtime reference to a step's output image
+// (ADR-046, layer 2). Populated during execution when the producer wraps or
+// commits the output; carried in State for consumer resolution. imageRef is
+// the digest-pinned local reference (repo@sha256:<manifestDigest>) produced
+// by the normalize round-trip through ggcr.
+#OutputHandle: {
+	@go(OutputHandle)
+	imageRef: string @go(ImageRef)
+
+	// layerID identifies the content layer for this output at the lane level: it
+	// is the output id (ADR-046). It addresses the output across steps. Absent
+	// for the image output, whose whole rootfs is the artifact.
+	layerID?: #Identifier @go(LayerID,type=string,optional=nillable)
+
+	// layerDiffID is the OCI uncompressed-content digest (diff_id) of the layer
+	// identified by layerID. It is the engine-level selection key: container
+	// runtimes strip layer descriptor annotations and re-compress blobs across a
+	// load/save round-trip, so neither the annotation nor the compressed layer
+	// digest is stable; the diff_id is. Consumers select the layer by matching
+	// this against the image config rootfs.diff_ids. Absent for the image output.
+	layerDiffID?: string @go(LayerDiffID,type=string,optional=nillable)
+}

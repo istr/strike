@@ -18,25 +18,6 @@ import (
 	"github.com/istr/strike/internal/lane"
 )
 
-// WrapArchiveAsImage turns an engine container-archive tar stream into a
-// single-layer OCI image, loads it into the engine, tags it, and returns
-// the manifest digest and logical content size. stripPrefix is the leading
-// directory the engine prepends to archive entries (the base name of the
-// archived path); destPrefix is where the content is rooted inside the
-// layer. Symlinks are validated for containment against the archived
-// subtree (ADR-034) and stored verbatim.
-func (c *Client) WrapArchiveAsImage(ctx context.Context, r io.Reader, stripPrefix, destPrefix, tag string) (lane.Digest, int64, error) {
-	layer, size, err := canonicalLayerFromTar(r, stripPrefix, destPrefix)
-	if err != nil {
-		return lane.Digest{}, 0, fmt.Errorf("canonicalize archive: %w", err)
-	}
-	digest, err := c.loadTagVerify(ctx, layer, tag, size)
-	if err != nil {
-		return lane.Digest{}, 0, err
-	}
-	return digest, size, nil
-}
-
 // canonicalEntry is a collected tar entry, held until all entries are read
 // so they can be emitted in canonical (name-sorted) order. The engine
 // archive's entry order is not guaranteed, so sorting is required for a

@@ -59,10 +59,7 @@ steps:
     env: {}
     inputs: []
     secrets: []
-    outputs:
-      - id: image
-        type: image
-        path: image.tar
+    output: image
   - id: deploy
     deploy:
       method:
@@ -72,7 +69,6 @@ steps:
         img:
           from:
             step: pack
-            output: image
       target:
         id: deploy-registry
         type: registry

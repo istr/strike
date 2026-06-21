@@ -12,14 +12,14 @@ import (
 	"github.com/istr/strike/internal/testutil"
 )
 
-func TestExtractSingleLayer_Integration(t *testing.T) {
+func TestExtractLayer_Integration(t *testing.T) {
 	engine := testutil.RequireEngine(t)
 	ctx := context.Background()
 
 	content := []byte("extract integration test")
-	tarBytes, _, err := regtest.BuildImageTar("data.txt", content)
+	tarBytes, diffID, err := regtest.BuildLayeredImageTar("data.txt", map[string][]byte{"data.txt": content})
 	if err != nil {
-		t.Fatalf("BuildImageTar: %v", err)
+		t.Fatalf("BuildLayeredImageTar: %v", err)
 	}
 
 	tag := "localhost/strike/test-extract/step:" + randomHex(t)
@@ -40,8 +40,8 @@ func TestExtractSingleLayer_Integration(t *testing.T) {
 	}
 
 	destDir := t.TempDir()
-	if exErr := registry.ExtractSingleLayer(saved, destDir); exErr != nil {
-		t.Fatalf("ExtractSingleLayer: %v", exErr)
+	if exErr := registry.ExtractLayer(saved, diffID, destDir); exErr != nil {
+		t.Fatalf("ExtractLayer: %v", exErr)
 	}
 
 	root, err := os.OpenRoot(destDir)

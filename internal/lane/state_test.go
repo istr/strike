@@ -11,13 +11,10 @@ import (
 func TestRegisterAndResolve(t *testing.T) {
 	s := lane.NewState()
 
-	a := lane.Artifact{
-		Type:   "file",
-		Digest: lane.MustParseDigest("sha256:abc1230000000000000000000000000000000000000000000000000000000000"),
-		Size:   1024,
-	}
+	imageRef := "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000"
+	h := lane.OutputHandle{ImageRef: imageRef}
 
-	if err := s.Register("build", "binary", a); err != nil {
+	if err := s.Register("build", "binary", h); err != nil {
 		t.Fatalf("Register: %v", err)
 	}
 
@@ -25,32 +22,37 @@ func TestRegisterAndResolve(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
-	if got.Digest != a.Digest {
-		t.Errorf("digest = %q, want %q", got.Digest, a.Digest)
+	if got.ImageRef != imageRef {
+		t.Errorf("imageRef = %q, want %q", got.ImageRef, imageRef)
 	}
-	if got.Size != a.Size {
-		t.Errorf("size = %d, want %d", got.Size, a.Size)
+	digest, err := got.ManifestDigest()
+	if err != nil {
+		t.Fatalf("ManifestDigest: %v", err)
+	}
+	want := lane.MustParseDigest("sha256:abc1230000000000000000000000000000000000000000000000000000000000")
+	if digest != want {
+		t.Errorf("digest = %q, want %q", digest, want)
 	}
 }
 
 func TestRegisterDuplicate(t *testing.T) {
 	s := lane.NewState()
-	a := lane.Artifact{Digest: lane.MustParseDigest("sha256:abc1230000000000000000000000000000000000000000000000000000000000"), Type: "file"}
+	h := lane.OutputHandle{ImageRef: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000"}
 
-	if err := s.Register("build", "binary", a); err != nil {
+	if err := s.Register("build", "binary", h); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Register("build", "binary", a); err == nil {
+	if err := s.Register("build", "binary", h); err == nil {
 		t.Fatal("expected error on duplicate register")
 	}
 }
 
-func TestRegisterMissingDigest(t *testing.T) {
+func TestRegisterMissingImageRef(t *testing.T) {
 	s := lane.NewState()
-	a := lane.Artifact{Type: "file"}
+	h := lane.OutputHandle{}
 
-	if err := s.Register("build", "binary", a); err == nil {
-		t.Fatal("expected error on missing digest")
+	if err := s.Register("build", "binary", h); err == nil {
+		t.Fatal("expected error on missing image ref")
 	}
 }
 
@@ -86,10 +88,8 @@ func TestRecordStep(t *testing.T) {
 
 func TestStateJSON(t *testing.T) {
 	s := lane.NewState()
-	if err := s.Register("build", "binary", lane.Artifact{
-		Type:   "file",
-		Digest: lane.MustParseDigest("sha256:abc1230000000000000000000000000000000000000000000000000000000000"),
-		Size:   1024,
+	if err := s.Register("build", "binary", lane.OutputHandle{
+		ImageRef: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -108,8 +108,8 @@ func TestStateJSON(t *testing.T) {
 	if err := json.Unmarshal(data, &m); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if _, ok := m["artifacts"]; !ok {
-		t.Error("missing artifacts key in JSON")
+	if _, ok := m["outputs"]; !ok {
+		t.Error("missing outputs key in JSON")
 	}
 	if _, ok := m["steps"]; !ok {
 		t.Error("missing steps key in JSON")

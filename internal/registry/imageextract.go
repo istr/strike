@@ -33,12 +33,67 @@ func SaveImage(ctx context.Context, engine container.Engine, tag string) ([]byte
 	return data, nil
 }
 
-// ExtractSingleLayer extracts the content of a single-layer OCI image tar
-// into destDir. The image must contain exactly one layer. Non-regular,
-// non-directory entries (symlinks, devices, etc.) are rejected. Path
-// traversal attempts are rejected via os.Root (kernel-enforced) and
-// filepath.IsLocal (defensive pre-check).
-func ExtractSingleLayer(tarBytes []byte, destDir string) error {
+// LayerDiffIDs returns the image's layer uncompressed-content digests (the
+// config rootfs.diff_ids) in canonical layer order. tarBytes is an OCI-layout
+// archive from SaveImage. The diff_id is the per-layer key stable across an
+// engine load/save round-trip (ADR-046); a cache hit recovers each output's
+// LayerDiffID from this ordered list, bound to step.Outputs by the canonical
+// layer ordering the producer assembles.
+func LayerDiffIDs(tarBytes []byte) ([]string, error) {
+	dir, err := os.MkdirTemp("", "strike-diffids-")
+	if err != nil {
+		return nil, fmt.Errorf("diff ids: create temp dir: %w", err)
+	}
+	defer closer.Remove(dir, "diff ids layout")
+
+	root, rootErr := os.OpenRoot(dir)
+	if rootErr != nil {
+		return nil, fmt.Errorf("diff ids: open temp root: %w", rootErr)
+	}
+	defer closer.Warn(root, "diff ids layout root")
+
+	if exErr := extractTar(bytes.NewReader(tarBytes), root); exErr != nil {
+		return nil, fmt.Errorf("diff ids: unpack layout: %w", exErr)
+	}
+
+	lp, err := layout.FromPath(dir)
+	if err != nil {
+		return nil, fmt.Errorf("diff ids: open layout: %w", err)
+	}
+	idx, err := lp.ImageIndex()
+	if err != nil {
+		return nil, fmt.Errorf("diff ids: read index: %w", err)
+	}
+	im, err := idx.IndexManifest()
+	if err != nil {
+		return nil, fmt.Errorf("diff ids: read manifest: %w", err)
+	}
+	if len(im.Manifests) != 1 {
+		return nil, fmt.Errorf("diff ids: expected single image in layout, found %d", len(im.Manifests))
+	}
+	img, err := idx.Image(im.Manifests[0].Digest)
+	if err != nil {
+		return nil, fmt.Errorf("diff ids: open image: %w", err)
+	}
+	cfg, err := img.ConfigFile()
+	if err != nil {
+		return nil, fmt.Errorf("diff ids: read config: %w", err)
+	}
+	ids := make([]string, len(cfg.RootFS.DiffIDs))
+	for i, h := range cfg.RootFS.DiffIDs {
+		ids[i] = h.String()
+	}
+	return ids, nil
+}
+
+// ExtractLayer extracts the content of the identified layer from an OCI image
+// tar into destDir. layerDiffID is matched against the image config's
+// rootfs.diff_ids -- the uncompressed-content digest is the only per-layer key
+// stable across an engine load/save round-trip. Non-regular, non-directory
+// entries (symlinks, devices, etc.) are rejected. Path traversal attempts are
+// rejected via os.Root (kernel-enforced) and filepath.IsLocal (defensive
+// pre-check).
+func ExtractLayer(tarBytes []byte, layerDiffID, destDir string) error {
 	// Extract OCI layout tar to temp dir; must stay alive until layer read.
 	tmpDir, err := os.MkdirTemp(filepath.Dir(destDir), "strike-extract-")
 	if err != nil {
@@ -56,7 +111,7 @@ func ExtractSingleLayer(tarBytes []byte, destDir string) error {
 		return fmt.Errorf("extract: unpack layout: %w", extractErr)
 	}
 
-	layer, layerErr := openSingleLayer(tmpDir)
+	layer, layerErr := openLayer(tmpDir, layerDiffID)
 	if layerErr != nil {
 		return layerErr
 	}
@@ -74,8 +129,11 @@ func ExtractSingleLayer(tarBytes []byte, destDir string) error {
 	return extractLayer(layer, root)
 }
 
-// openSingleLayer reads an OCI layout directory and returns the single layer.
-func openSingleLayer(layoutDir string) (v1.Layer, error) {
+// openLayer reads an OCI layout directory and returns the layer whose
+// uncompressed-content digest (diff_id) equals layerDiffID. The diff_id is the
+// only per-layer key stable across an engine load/save round-trip, which
+// strips descriptor annotations and re-compresses blobs (ADR-046).
+func openLayer(layoutDir, layerDiffID string) (v1.Layer, error) {
 	lp, err := layout.FromPath(layoutDir)
 	if err != nil {
 		return nil, fmt.Errorf("extract: open layout: %w", err)
@@ -99,14 +157,15 @@ func openSingleLayer(layoutDir string) (v1.Layer, error) {
 		return nil, fmt.Errorf("extract: open image: %w", err)
 	}
 
-	layers, err := img.Layers()
+	diffID, err := v1.NewHash(layerDiffID)
 	if err != nil {
-		return nil, fmt.Errorf("extract: read layers: %w", err)
+		return nil, fmt.Errorf("extract: parse layer diff id %q: %w", layerDiffID, err)
 	}
-	if len(layers) != 1 {
-		return nil, fmt.Errorf("expected single-layer image, found %d layers", len(layers))
+	layer, err := img.LayerByDiffID(diffID)
+	if err != nil {
+		return nil, fmt.Errorf("extract: output layer %q not found in step image: %w", layerDiffID, err)
 	}
-	return layers[0], nil
+	return layer, nil
 }
 
 // extractLayer extracts an uncompressed OCI layer tar into root. Layer tars

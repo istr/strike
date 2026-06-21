@@ -141,15 +141,16 @@ package lane
 
 #Step: {
 	@go(Step)
-	id:         #Identifier @go(ID,type=string)
-	image?:     #ImageRef   @go(Image,optional=nillable)
-	imageFrom?: #ImageFrom  @go(ImageFrom,optional=nillable)
+	id:             #Identifier @go(ID,type=string)
+	image?:         #ImageRef   @go(Image,optional=nillable)
+	imageFromStep?: #Identifier @go(ImageFromStep,type=string,optional=nillable)
 	args: [...string] @go(Args)
 	env: {
 		[string]: string @go(Env)
 	}
 	inputs: [...#InputRef] @go(Inputs)
-	outputs: [...#OutputSpec] @go(Outputs)
+	output?: "image" @go(Output,type=string)
+	outputs?: [...#FileOutput] @go(Outputs)
 	secrets: [...#SecretRef] @go(Secrets)
 	workdir?: #AbsPath @go(Workdir,optional=nillable)
 	peers?: [...#Peer] @go(Peers)
@@ -175,6 +176,16 @@ package lane
 	// (validateDeployLeaves).
 	if deploy != _|_ {
 		outputs: []
+		output?: _|_
+	}
+
+	// A step declares the singular image output XOR file/directory outputs,
+	// never both (ADR-046). When output is present, outputs must be empty; CUE
+	// reports a conflict ("incompatible list lengths") otherwise. This is
+	// transparent to gengotypes -- the generated Outputs field is unchanged --
+	// and is the same idiom as the deploy-leaf constraint above (ADR-039).
+	if output != _|_ {
+		outputs: []
 	}
 }
 
@@ -184,10 +195,12 @@ package lane
 
 #ImageRef: =~"^.+@sha256:[a-f0-9]{64}$"
 
-#ImageFrom: {
-	@go(ImageFrom)
-	step:   string @go(Step)
-	output: string @go(Output)
+// StepImageRef references a step's image output by step alone: the image is
+// addressed by step, never by an output name (ADR-046). Used in the
+// deploy.artifacts.from disjunction.
+#StepImageRef: {
+	@go(StepImageRef)
+	step: #Identifier @go(Step,type=string)
 }
 
 // ---------------------------------------------------------------------------
@@ -216,23 +229,19 @@ package lane
 
 #ArtifactType: "file" | "directory" | "image"
 
-#OutputSpec: {
-	@go(OutputSpec)
-	id:   #Identifier   @go(ID,type=string)
-	type: #ArtifactType @go(Type)
+#FileArtifactType: "file" | "directory"
+
+// FileOutput is a named file or directory output (plural outputs), referenced
+// by inputs.from, pack.files.from, and deploy.artifacts.from as {step, output}.
+#FileOutput: {
+	@go(FileOutput)
+	id:   #Identifier       @go(ID,type=string)
+	type: #FileArtifactType @go(Type)
 	// path is relative to the step workdir (the single writable volume).
 	// Absent means the whole workdir is the artifact; a value selects a
 	// subpath within it. An absolute path is a type error: outputs are
 	// projections of the workdir, never of the read-only base image.
-	path?:     #RelPath          @go(Path,optional=nillable)
-	expected?: #OutputValidation @go(Expected,optional=nillable)
-}
-
-#OutputValidation: {
-	@go(OutputValidation)
-	contentType?: string @go(ContentType,optional=nillable)
-	minSize?:     int    @go(MinSize,optional=nillable)
-	maxSize?:     int    @go(MaxSize,optional=nillable)
+	path?: #RelPath @go(Path,optional=nillable)
 }
 
 // ---------------------------------------------------------------------------
@@ -416,9 +425,22 @@ package lane
 	entrypoint?: [...string] @go(Entrypoint)
 }
 
+// ArtifactSource is the deploy-artifact reference: a step's image (by step) or
+// a named file/directory output (by step+output). @go(-) -- the generator skips
+// the disjunction; artifact_source.go provides the Go discriminated union and
+// ArtifactRef.UnmarshalJSON, the same pattern as DeployMethod and Peer.
+//
+// The image arm carries no discriminator field, so a bare {step} unifies with
+// both arms; the default marker (*) resolves that ambiguity to StepImageRef
+// under the concrete-validation pass (parse.go validates with
+// cue.Concrete(true), which rejects an unresolved disjunction). When the output
+// field is present the OutputRef arm is the more specific match and is selected
+// over the default.
+#ArtifactSource: (*#StepImageRef | #OutputRef) @go(-)
+
 #ArtifactRef: {
 	@go(ArtifactRef)
-	from: #OutputRef @go(From)
+	from: #ArtifactSource @go(From)
 }
 
 #DeployTarget: {

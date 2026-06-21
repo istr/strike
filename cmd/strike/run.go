@@ -127,7 +127,11 @@ func (rc *runContext) executeDeploy(ctx context.Context, step *lane.Step, stepID
 
 	artifactRefs := make(map[string]string)
 	for _, e := range rc.dag.DeployEdges[stepID] {
-		artifactRefs[e.ArtifactName] = lane.OutputRef{Step: e.FromStep.ID, Output: e.FromOutput.ID}.Ref()
+		out := ""
+		if !e.Image {
+			out = e.FromOutput.ID
+		}
+		artifactRefs[e.ArtifactName] = lane.OutputRef{Step: e.FromStep.ID, Output: out}.Ref()
 	}
 
 	d := &deploy.Deployer{
@@ -195,19 +199,24 @@ func (rc *runContext) resolveImageDigest(ctx context.Context, step *lane.Step, s
 	}
 	if edge, ok := rc.dag.ImageFromEdges[string(step.ID)]; ok {
 		fromStep := string(edge.FromStep.ID)
-		ref := lane.OutputRef{Step: fromStep, Output: edge.FromOutput.ID}.Ref()
-		art, err := rc.laneState.Resolve(ref)
+		// The image output is id-less; it is registered and resolved by step via
+		// the empty-output key, collision-free because a step that declares an
+		// image output declares no other output (ADR-046).
+		ref := lane.OutputRef{Step: fromStep, Output: ""}.Ref()
+		handle, err := rc.laneState.Resolve(ref)
 		if err != nil {
 			return lane.Digest{}, fmt.Errorf("%s: image_from %s: %w",
 				safeName, ref, err)
 		}
+		digest, digestErr := handle.ManifestDigest()
+		if digestErr != nil {
+			return lane.Digest{}, fmt.Errorf("%s: image_from %s: %w",
+				safeName, ref, digestErr)
+		}
 		// ADR-045: execute the producer's image by its content-addressed
-		// digest, not the mutable WrapTag. libpod records this RepoDigest at
-		// ImageTag time, so it resolves the locally-loaded image with no
-		// registry pull. art.Digest is the CP-verified manifest digest.
-		rc.state.imageFromRefs[string(step.ID)] = registry.WrapDigestRef(
-			rc.lane.ID, fromStep, art.Digest)
-		return art.Digest, nil
+		// digest, not the mutable WrapTag (ADR-046).
+		rc.state.imageFromRefs[string(step.ID)] = handle.ImageRef
+		return digest, nil
 	}
 	digest, err := resolveDigest(ctx, rc.regClient, *step.Image)
 	if err != nil {
@@ -266,18 +275,53 @@ func (rc *runContext) checkCache(ctx context.Context, step *lane.Step, stepID, s
 	}
 
 	digest := lane.MustParseDigest(info.Digest)
-	for _, out := range step.Outputs {
-		if regErr := rc.laneState.Register(stepID, out.ID, lane.Artifact{
-			Type:   lane.ArtifactType(out.Type),
-			Digest: digest,
-			Size:   size,
-		}); regErr != nil {
-			return false, fmt.Errorf("cache hit register %s/%s: %w", stepID, out.ID, regErr)
-		}
+	imageRef := registry.WrapDigestRef(rc.lane.ID, stepID, digest)
+	if regErr := rc.registerCachedOutputs(ctx, step, stepID, safeName, imageRef); regErr != nil {
+		return false, regErr
 	}
 
 	log.Printf("CACHED %s (%s)", safeName, tag)
 	return true, nil
+}
+
+// registerCachedOutputs registers the digest-pinned handles for a cache hit.
+// For file/directory outputs it recovers each output's LayerDiffID from the
+// cached image: a cache hit means the outputs are byte-identical to a prior run
+// (deterministic, ADR-046), and the producer assembles one layer per output in
+// step.Outputs order (ADR-046 canonical ordering), so config rootfs.diff_ids[i]
+// is output i's layer. The image output (step.Output) has no layer.
+func (rc *runContext) registerCachedOutputs(ctx context.Context, step *lane.Step, stepID, safeName, imageRef string) error {
+	if len(step.Outputs) > 0 {
+		tarBytes, saveErr := registry.SaveImage(ctx, rc.engine, imageRef)
+		if saveErr != nil {
+			return fmt.Errorf("cache hit save %s: %w", safeName, saveErr)
+		}
+		diffIDs, diffErr := registry.LayerDiffIDs(tarBytes)
+		if diffErr != nil {
+			return fmt.Errorf("cache hit diff ids %s: %w", safeName, diffErr)
+		}
+		if len(diffIDs) != len(step.Outputs) {
+			return fmt.Errorf("cache hit %s: image has %d layers, step declares %d outputs",
+				safeName, len(diffIDs), len(step.Outputs))
+		}
+		for i, out := range step.Outputs {
+			handle := lane.OutputHandle{
+				ImageRef:    imageRef,
+				LayerID:     out.ID,
+				LayerDiffID: diffIDs[i],
+			}
+			if regErr := rc.laneState.Register(stepID, out.ID, handle); regErr != nil {
+				return fmt.Errorf("cache hit register %s/%s: %w", stepID, out.ID, regErr)
+			}
+		}
+	}
+	if step.Output != "" {
+		handle := lane.OutputHandle{ImageRef: imageRef}
+		if regErr := rc.laneState.Register(stepID, "", handle); regErr != nil {
+			return fmt.Errorf("cache hit register %s image: %w", stepID, regErr)
+		}
+	}
+	return nil
 }
 
 func (rc *runContext) executePack(ctx context.Context, step *lane.Step, stepID, safeName string) error {
@@ -298,10 +342,10 @@ func (rc *runContext) executePack(ctx context.Context, step *lane.Step, stepID, 
 	}
 	defer closer.Warn(outRoot, "step output root")
 
-	if step.Outputs[0].Path == nil {
-		return fmt.Errorf("%s: pack output requires a path", safeName)
+	if step.Output == "" {
+		return fmt.Errorf("%s: pack output requires an image output", safeName)
 	}
-	outputID := filepath.Base(step.Outputs[0].Path.String())
+	outputID := stepID
 	result, err := executor.Pack(executor.PackOpts{
 		Spec:       step.Pack,
 		InputPaths: inputPaths,
@@ -312,19 +356,30 @@ func (rc *runContext) executePack(ctx context.Context, step *lane.Step, stepID, 
 		return fmt.Errorf("%s: pack failed: %w", safeName, err)
 	}
 
-	if regErr := rc.laneState.Register(stepID, step.Outputs[0].ID, lane.Artifact{
-		Type:   artifactTypeImage,
-		Digest: result.Digest,
-	}); regErr != nil {
-		return fmt.Errorf("%s: register artifact: %w", safeName, regErr)
-	}
-
+	// WrapImageOutputAsImage re-annotates the assembled image (reproducible
+	// created stamp, content-size) before loading it, so the engine stores it
+	// under a manifest digest distinct from result.Digest. The handle must
+	// carry the engine-stored digest -- it is what a consumer (imageFromStep)
+	// pulls by; result.Digest is the pre-annotation cross-validation anchor.
 	specHash := rc.state.specHashes[stepID]
 	tag := registry.WrapTag(rc.lane.ID, stepID, specHash)
-	if _, _, wrapErr := rc.regClient.WrapImageOutputAsImage(ctx, outRoot, outputID, tag, nil); wrapErr != nil {
+	digest, _, wrapErr := rc.regClient.WrapImageOutputAsImage(ctx, outRoot, outputID, tag, nil)
+	if wrapErr != nil {
 		return fmt.Errorf("%s: wrap image: %w", safeName, wrapErr)
 	}
-	log.Printf("OK     %s -> %s", safeName, result.Digest)
+
+	if result.Digest != digest {
+		log.Printf("OK     %s -> %s (assembled %s)", safeName, digest, result.Digest)
+	} else {
+		log.Printf("OK     %s -> %s", safeName, digest)
+	}
+
+	handle := lane.OutputHandle{
+		ImageRef: registry.WrapDigestRef(rc.lane.ID, stepID, digest),
+	}
+	if regErr := rc.laneState.Register(stepID, "", handle); regErr != nil {
+		return fmt.Errorf("%s: register artifact: %w", safeName, regErr)
+	}
 	return nil
 }
 
@@ -350,21 +405,23 @@ func (rc *runContext) resolvePackInputPaths(ctx context.Context, step *lane.Step
 		fromStep := string(e.FromStep.ID)
 		fromOutput := e.FromOutput.ID
 
-		art, artErr := rc.laneState.Resolve(lane.OutputRef{Step: fromStep, Output: fromOutput}.Ref())
+		handle, artErr := rc.laneState.Resolve(lane.OutputRef{Step: fromStep, Output: fromOutput}.Ref())
 		if artErr != nil {
 			return nil, fmt.Errorf("%s: pack input %s.%s: %w", safeName, fromStep, fromOutput, artErr)
 		}
+		packDigest, digestErr := handle.ManifestDigest()
+		if digestErr != nil {
+			return nil, fmt.Errorf("%s: pack input %s.%s digest: %w", safeName, fromStep, fromOutput, digestErr)
+		}
 
-		tag := registry.WrapTag(rc.lane.ID, fromStep, rc.state.specHashes[fromStep])
-
-		dedupDir := art.Digest.Hex[:16]
+		dedupDir := packDigest.Hex[:16] + "-" + handle.LayerID
 		inputDir := filepath.Join(inputsRoot, dedupDir)
 		if mkErr := scratchRoot.Mkdir(filepath.Join("inputs", dedupDir), 0o750); mkErr == nil {
-			tarBytes, saveErr := registry.SaveImage(ctx, rc.engine, tag)
+			tarBytes, saveErr := registry.SaveImage(ctx, rc.engine, handle.ImageRef)
 			if saveErr != nil {
 				return nil, fmt.Errorf("%s: pack input %s save: %w", safeName, e.Dest, saveErr)
 			}
-			if extractErr := registry.ExtractSingleLayer(tarBytes, inputDir); extractErr != nil {
+			if extractErr := registry.ExtractLayer(tarBytes, handle.LayerDiffID, inputDir); extractErr != nil {
 				return nil, fmt.Errorf("%s: pack input %s extract: %w", safeName, e.Dest, extractErr)
 			}
 		} else if !errors.Is(mkErr, os.ErrExist) {
@@ -444,64 +501,98 @@ func (rc *runContext) executeContainerStep(ctx context.Context, step *lane.Step,
 }
 
 func (rc *runContext) wrapOutputs(ctx context.Context, step *lane.Step, stepID, safeName, containerID string) error {
-	specHash := rc.state.specHashes[stepID]
-	for _, out := range step.Outputs {
-		if wrapErr := rc.wrapArchivedOutput(ctx, step, stepID, safeName, containerID, out, specHash); wrapErr != nil {
+	if err := rc.wrapFileOutputs(ctx, step, stepID, safeName, containerID); err != nil {
+		return err
+	}
+	if step.Output != "" {
+		specHash := rc.state.specHashes[stepID]
+		if wrapErr := rc.wrapImageOutput(ctx, step, stepID, safeName, containerID, specHash); wrapErr != nil {
 			return wrapErr
 		}
 	}
 	return nil
 }
 
-// wrapArchivedOutput archives one output from the held container, wraps it
-// into a content-addressed image (a canonicalized layer for file/directory,
-// a loaded image for the image type), and registers the artifact.
-func (rc *runContext) wrapArchivedOutput(ctx context.Context, step *lane.Step, stepID, safeName, containerID string, out lane.OutputSpec, specHash lane.Digest) error {
+// wrapFileOutputs assembles every file and directory output of the held
+// container into one canonical, digest-pinned step image (ADR-046) -- one
+// annotated layer per output -- and registers a digest-pinned handle for each
+// output. The manifest digest is the single integrity anchor; every consumer
+// pulls the image by that digest and extracts the layer identified by the output id in
+// its handle.
+func (rc *runContext) wrapFileOutputs(ctx context.Context, step *lane.Step, stepID, safeName, containerID string) error {
+	if len(step.Outputs) == 0 {
+		return nil
+	}
 	workdir := step.Workdir.String()
+	specHash := rc.state.specHashes[stepID]
 	tag := registry.WrapTag(rc.lane.ID, stepID, specHash)
 
-	// archiveReroot computes the archive path and the strip/dest prefixes for
-	// re-rooting the archive stream into the output's OCI layer. See its doc
-	// comment for the podman entry-rooting rules.
-	archivePath, stripPrefix, destPrefix := archiveReroot(workdir, out)
-
-	stream, archErr := rc.engine.ContainerArchive(ctx, containerID, archivePath)
-	if archErr != nil {
-		return fmt.Errorf("%s: archive output %q: %w", safeName, out.ID, archErr)
+	outs := make([]registry.OutputArchive, 0, len(step.Outputs))
+	for _, out := range step.Outputs {
+		archivePath, stripPrefix, destPrefix := archiveReroot(workdir, out)
+		stream, archErr := rc.engine.ContainerArchive(ctx, containerID, archivePath)
+		if archErr != nil {
+			return fmt.Errorf("%s: archive output %q: %w", safeName, out.ID, archErr)
+		}
+		defer closer.Warn(stream, "output archive stream")
+		outs = append(outs, registry.OutputArchive{
+			Tar:         stream,
+			StripPrefix: stripPrefix,
+			DestPrefix:  destPrefix,
+			LayerID:     out.ID,
+		})
 	}
-	defer closer.Warn(stream, "output archive stream")
 
-	var (
-		digest lane.Digest
-		size   int64
-		err    error
-	)
-	switch out.Type {
-	case artifactTypeFile, "directory":
-		digest, size, err = rc.regClient.WrapArchiveAsImage(ctx, stream, stripPrefix, destPrefix, tag)
-	case artifactTypeImage:
-		digest, size, err = rc.regClient.WrapImageArchiveAsImage(ctx, stream, tag)
-	default:
-		return fmt.Errorf("%s: unknown output type %q", safeName, out.Type)
+	result, wrapErr := rc.regClient.WrapOutputsAsImage(ctx, outs, tag)
+	if wrapErr != nil {
+		return fmt.Errorf("%s: assemble output image: %w", safeName, wrapErr)
 	}
+
+	imageRef := registry.WrapDigestRef(rc.lane.ID, stepID, result.Digest)
+	for _, out := range step.Outputs {
+		diffID, ok := result.LayerDiffIDs[out.ID]
+		if !ok {
+			return fmt.Errorf("%s: output %q has no assembled layer", safeName, out.ID)
+		}
+		handle := lane.OutputHandle{
+			ImageRef:    imageRef,
+			LayerID:     out.ID,
+			LayerDiffID: diffID,
+		}
+		if regErr := rc.laneState.Register(stepID, out.ID, handle); regErr != nil {
+			return fmt.Errorf("%s: register output %q: %w", safeName, out.ID, regErr)
+		}
+	}
+	return nil
+}
+
+// wrapImageOutput commits the held container to a new image, normalizes it
+// through ggcr for reproducible digests (ADR-046), and registers the
+// digest-pinned OutputHandle.
+func (rc *runContext) wrapImageOutput(ctx context.Context, _ *lane.Step, stepID, safeName, containerID string, specHash lane.Digest) error {
+	tag := registry.WrapTag(rc.lane.ID, stepID, specHash)
+
+	imageID, commitErr := rc.engine.ContainerCommit(ctx, containerID)
+	if commitErr != nil {
+		return fmt.Errorf("%s: commit image output: %w", safeName, commitErr)
+	}
+
+	stream, saveErr := rc.engine.ImageSave(ctx, imageID)
+	if saveErr != nil {
+		return fmt.Errorf("%s: save committed image: %w", safeName, saveErr)
+	}
+	defer closer.Warn(stream, "committed image save stream")
+
+	digest, _, err := rc.regClient.WrapImageArchiveAsImage(ctx, stream, tag)
 	if err != nil {
-		return fmt.Errorf("%s: wrap output %q: %w", safeName, out.ID, err)
+		return fmt.Errorf("%s: normalize image output: %w", safeName, err)
 	}
 
-	// A directory output with no file content is legitimate (an intentionally
-	// empty tree) but is also the symptom of a misdeclared workdir or output
-	// path. Surface it as INFO so an unintended empty output points the
-	// operator at the right step, while an intended one can be ignored.
-	if out.Type == "directory" && size == 0 {
-		log.Printf("INFO   %s: output %q has no file content; if unintended, check the step workdir and output path", safeName, out.ID)
+	handle := lane.OutputHandle{
+		ImageRef: registry.WrapDigestRef(rc.lane.ID, stepID, digest),
 	}
-
-	if regErr := rc.laneState.Register(stepID, out.ID, lane.Artifact{
-		Type:   lane.ArtifactType(out.Type),
-		Digest: digest,
-		Size:   size,
-	}); regErr != nil {
-		return fmt.Errorf("%s: register artifact: %w", safeName, regErr)
+	if regErr := rc.laneState.Register(stepID, "", handle); regErr != nil {
+		return fmt.Errorf("%s: register output: %w", safeName, regErr)
 	}
 	return nil
 }
@@ -556,16 +647,15 @@ func (rc *runContext) buildInputDelivery(ctx context.Context, step *lane.Step) (
 	var (
 		seeds      []container.Seed
 		mounts     []container.ImageVolume
-		imageCache = make(map[string][]byte) // producer tag -> image tar, exported once
+		imageCache = make(map[string][]byte) // keyed by producer image ref (digest)
 	)
 	for _, e := range edges {
 		ref := lane.OutputRef{Step: e.FromStep.ID, Output: e.FromOutput.ID}.Ref()
-		if _, artErr := rc.laneState.Resolve(ref); artErr != nil {
+		art, artErr := rc.laneState.Resolve(ref)
+		if artErr != nil {
 			return nil, nil, fmt.Errorf("input at %q: source artifact %s not found: %w",
 				e.Mount, ref, artErr)
 		}
-		tag := registry.WrapTag(rc.lane.ID, string(e.FromStep.ID),
-			rc.state.specHashes[string(e.FromStep.ID)])
 
 		inside := false
 		var rel string
@@ -574,11 +664,11 @@ func (rc *runContext) buildInputDelivery(ctx context.Context, step *lane.Step) (
 		}
 
 		if inside {
-			tarBytes, cacheErr := producerTar(ctx, rc.engine, imageCache, tag, e)
+			tarBytes, cacheErr := producerTar(ctx, rc.engine, imageCache, art.ImageRef, e)
 			if cacheErr != nil {
 				return nil, nil, cacheErr
 			}
-			seedTar, buildErr := registry.SeedTarFromImage(tarBytes, inputContentPath(e), rel)
+			seedTar, buildErr := registry.SeedTarFromImage(tarBytes, art.LayerDiffID, inputContentPath(e), rel)
 			if buildErr != nil {
 				return nil, nil, fmt.Errorf("input at %q: %w", e.Mount, buildErr)
 			}
@@ -590,7 +680,7 @@ func (rc *runContext) buildInputDelivery(ctx context.Context, step *lane.Step) (
 		}
 
 		// Outside the workdir (or no workdir): read-only image-volume mount.
-		mount, mountErr := buildImageMount(ctx, rc.engine, imageCache, tag, e)
+		mount, mountErr := buildImageMount(ctx, rc.engine, imageCache, art, e)
 		if mountErr != nil {
 			return nil, nil, mountErr
 		}
@@ -602,16 +692,16 @@ func (rc *runContext) buildInputDelivery(ctx context.Context, step *lane.Step) (
 // buildImageMount validates and constructs a read-only image-volume mount for
 // an input delivered outside the workdir. A single-file selection is rejected
 // in lane terms, statically for a type:file output, by walk otherwise.
-func buildImageMount(ctx context.Context, engine container.Engine, cache map[string][]byte, tag string, e lane.InputEdge) (container.ImageVolume, error) {
+func buildImageMount(ctx context.Context, engine container.Engine, cache map[string][]byte, h lane.OutputHandle, e lane.InputEdge) (container.ImageVolume, error) {
 	if e.FromOutput.Type == artifactTypeFile && e.Subpath == nil {
 		return container.ImageVolume{}, singleFileOutsideErr(e)
 	}
-	tarBytes, cacheErr := producerTar(ctx, engine, cache, tag, e)
+	tarBytes, cacheErr := producerTar(ctx, engine, cache, h.ImageRef, e)
 	if cacheErr != nil {
 		return container.ImageVolume{}, cacheErr
 	}
 	subPath := inputContentPath(e)
-	kind, valErr := registry.ValidateImageMount(tarBytes, subPath)
+	kind, valErr := registry.ValidateImageMount(tarBytes, h.LayerDiffID, subPath)
 	if valErr != nil {
 		return container.ImageVolume{}, fmt.Errorf("input at %q: %w", e.Mount, valErr)
 	}
@@ -619,7 +709,7 @@ func buildImageMount(ctx context.Context, engine container.Engine, cache map[str
 		return container.ImageVolume{}, singleFileOutsideErr(e)
 	}
 	return container.ImageVolume{
-		Source:      tag,
+		Source:      h.ImageRef,
 		Destination: e.Mount.String(),
 		SubPath:     subPath,
 		ReadWrite:   false,
@@ -627,17 +717,17 @@ func buildImageMount(ctx context.Context, engine container.Engine, cache map[str
 }
 
 // producerTar returns the producer image's OCI-layout tar, exporting it
-// from the engine at most once per tag across all input edges of a step.
-func producerTar(ctx context.Context, engine container.Engine, cache map[string][]byte, tag string, e lane.InputEdge) ([]byte, error) {
-	if tarBytes, ok := cache[tag]; ok {
+// from the engine at most once per ref across all input edges of a step.
+func producerTar(ctx context.Context, engine container.Engine, cache map[string][]byte, ref string, e lane.InputEdge) ([]byte, error) {
+	if tarBytes, ok := cache[ref]; ok {
 		return tarBytes, nil
 	}
-	tarBytes, saveErr := registry.SaveImage(ctx, engine, tag)
+	tarBytes, saveErr := registry.SaveImage(ctx, engine, ref)
 	if saveErr != nil {
 		return nil, fmt.Errorf("input at %q: save %s.%s: %w",
 			e.Mount, e.FromStep.ID, e.FromOutput.ID, saveErr)
 	}
-	cache[tag] = tarBytes
+	cache[ref] = tarBytes
 	return tarBytes, nil
 }
 
@@ -683,7 +773,7 @@ func singleFileOutsideErr(e lane.InputEdge) error {
 //
 // stripPrefix/destPrefix are unused for image outputs (wrapped via
 // WrapImageArchiveAsImage); archivePath is used for all types.
-func archiveReroot(workdir string, out lane.OutputSpec) (archivePath, stripPrefix, destPrefix string) {
+func archiveReroot(workdir string, out lane.FileOutput) (archivePath, stripPrefix, destPrefix string) {
 	archivePath = workdir
 	if out.Path != nil {
 		archivePath = path.Join(workdir, out.Path.String())
@@ -730,14 +820,11 @@ func relWithinWorkdir(workdir, mount string) (string, bool) {
 
 func (rc *runContext) pushAndReport(ctx context.Context, step *lane.Step, safeName, tag string) error {
 	pushed := false
-	for _, out := range step.Outputs {
-		if out.Type == artifactTypeImage {
-			if err := rc.regClient.PushArtifact(ctx, tag); err != nil {
-				return fmt.Errorf("%s: push failed: %w", safeName, err)
-			}
-			pushed = true
-			break
+	if step.Output != "" {
+		if err := rc.regClient.PushArtifact(ctx, tag); err != nil {
+			return fmt.Errorf("%s: push failed: %w", safeName, err)
 		}
+		pushed = true
 	}
 	if pushed {
 		log.Printf("OK     %s -> %s", safeName, tag)

@@ -17,7 +17,7 @@ import (
 // Subpath is nil when the entire producer output is mounted.
 type InputEdge struct {
 	FromStep   *Step
-	FromOutput *OutputSpec
+	FromOutput *FileOutput
 	Subpath    *RelPath // == InputRef.Subpath; nil means whole output
 	Mount      AbsPath  // == InputRef.Mount
 }
@@ -25,21 +25,24 @@ type InputEdge struct {
 // PackFileEdge is a fully resolved step.pack.files[i] entry.
 type PackFileEdge struct {
 	FromStep   *Step
-	FromOutput *OutputSpec
+	FromOutput *FileOutput
 	Dest       AbsPath // == PackFile.Dest
 }
 
 // DeployArtifactEdge is a fully resolved step.deploy.artifacts[name] entry.
+// Image marks the step-image arm of the from disjunction (FromOutput is nil);
+// otherwise FromOutput names the file or directory output.
 type DeployArtifactEdge struct {
 	FromStep     *Step
-	FromOutput   *OutputSpec
+	FromOutput   *FileOutput
 	ArtifactName string
+	Image        bool
 }
 
-// ImageFromEdge is a fully resolved step.image_from.
+// ImageFromEdge is a fully resolved step.image_from_step. Resolved by step: the
+// producing step's single image output, addressed by step (no output name).
 type ImageFromEdge struct {
-	FromStep   *Step
-	FromOutput *OutputSpec
+	FromStep *Step
 }
 
 // DAG is the directed acyclic graph of step dependencies in a lane.
@@ -121,24 +124,18 @@ func Build(p *Lane) (*DAG, error) {
 func (d *DAG) resolveImageFromEdges(p *Lane) error {
 	for _, s := range p.Steps {
 		name := string(s.ID)
-		if s.ImageFrom == nil {
+		if s.ImageFromStep == "" {
 			continue
 		}
-		from := s.ImageFrom.Step
+		from := s.ImageFromStep
 		fromStep, ok := d.Steps[from]
 		if !ok {
-			return fmt.Errorf("step %q: image_from references unknown step %q", name, from)
+			return fmt.Errorf("step %q: image_from_step references unknown step %q", name, from)
 		}
-		out := findOutput(fromStep, s.ImageFrom.Output)
-		if out == nil {
-			return fmt.Errorf("step %q: image_from output %q not found in step %q",
-				name, s.ImageFrom.Output, from)
+		if fromStep.Output == "" {
+			return fmt.Errorf("step %q: image_from_step %q declares no image output", name, from)
 		}
-		if out.Type != "image" {
-			return fmt.Errorf("step %q: image_from output %q in step %q is %q, not image",
-				name, out.ID, from, out.Type)
-		}
-		d.ImageFromEdges[name] = ImageFromEdge{FromStep: fromStep, FromOutput: out}
+		d.ImageFromEdges[name] = ImageFromEdge{FromStep: fromStep}
 		d.addEdge(name, from)
 	}
 	return nil
@@ -212,10 +209,10 @@ func (d *DAG) resolvePackFileEdge(name string, f PackFile) error {
 	return nil
 }
 
-// findOutput returns a pointer to the OutputSpec with the given name,
+// findOutput returns a pointer to the FileOutput with the given name,
 // or nil if not found. The returned pointer aliases into s.Outputs,
 // so callers must not mutate s after Build returns.
-func findOutput(s *Step, name string) *OutputSpec {
+func findOutput(s *Step, name string) *FileOutput {
 	for i := range s.Outputs {
 		if s.Outputs[i].ID == name {
 			return &s.Outputs[i]
@@ -231,27 +228,50 @@ func (d *DAG) resolveDeployEdges(p *Lane) error {
 			continue
 		}
 		for artName, artRef := range s.Deploy.Artifacts {
-			stepID := artRef.From.Step
-			outputID := artRef.From.Output
-			fromStep, ok := d.Steps[stepID]
-			if !ok {
-				return fmt.Errorf("step %q: deploy artifact %q references unknown step %q",
-					name, artName, stepID)
+			edge, stepID, err := d.resolveDeployArtifact(name, artName, artRef.From)
+			if err != nil {
+				return err
 			}
-			out := findOutput(fromStep, outputID)
-			if out == nil {
-				return fmt.Errorf("step %q: deploy artifact %q: output %q not found in step %q",
-					name, artName, outputID, stepID)
-			}
-			d.DeployEdges[name] = append(d.DeployEdges[name], DeployArtifactEdge{
-				ArtifactName: artName,
-				FromStep:     fromStep,
-				FromOutput:   out,
-			})
+			d.DeployEdges[name] = append(d.DeployEdges[name], edge)
 			d.addEdge(name, stepID)
 		}
 	}
 	return nil
+}
+
+// resolveDeployArtifact resolves one deploy.artifacts[name].from disjunction:
+// a StepImageRef (the producing step's image, by step) or an OutputRef (a named
+// file or directory output, by step+output).
+func (d *DAG) resolveDeployArtifact(name, artName string, src ArtifactSource) (DeployArtifactEdge, string, error) {
+	switch ref := src.(type) {
+	case StepImageRef:
+		fromStep, ok := d.Steps[ref.Step]
+		if !ok {
+			return DeployArtifactEdge{}, "", fmt.Errorf(
+				"step %q: deploy artifact %q references unknown step %q", name, artName, ref.Step)
+		}
+		if fromStep.Output == "" {
+			return DeployArtifactEdge{}, "", fmt.Errorf(
+				"step %q: deploy artifact %q: step %q declares no image output", name, artName, ref.Step)
+		}
+		return DeployArtifactEdge{ArtifactName: artName, FromStep: fromStep, Image: true}, ref.Step, nil
+	case OutputRef:
+		fromStep, ok := d.Steps[ref.Step]
+		if !ok {
+			return DeployArtifactEdge{}, "", fmt.Errorf(
+				"step %q: deploy artifact %q references unknown step %q", name, artName, ref.Step)
+		}
+		out := findOutput(fromStep, ref.Output)
+		if out == nil {
+			return DeployArtifactEdge{}, "", fmt.Errorf(
+				"step %q: deploy artifact %q: output %q not found in step %q",
+				name, artName, ref.Output, ref.Step)
+		}
+		return DeployArtifactEdge{ArtifactName: artName, FromStep: fromStep, FromOutput: out}, ref.Step, nil
+	default:
+		return DeployArtifactEdge{}, "", fmt.Errorf(
+			"step %q: deploy artifact %q: unknown source kind %q", name, artName, src.SourceKind())
+	}
 }
 
 // validateProvenancePaths checks that each step's provenance.path

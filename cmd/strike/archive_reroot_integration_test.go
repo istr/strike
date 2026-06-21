@@ -30,7 +30,7 @@ func TestWholeWorkdirOutput_Integration(t *testing.T) {
 	eng := testutil.RequireEngine(t)
 	ctx := context.Background()
 
-	const img = "cgr.dev/chainguard/go@sha256:4ec098b553c8d74d9f01925578660b2bfcdee4ef45e5ab082250cf9675a0e28b"
+	const img = "cgr.dev/chainguard/go@sha256:7596cc2ec314f54001ca15753e5ac11e9e10106fde96cd24f6a886a2eb770dd8"
 	mountEnsureImage(t, eng, img)
 
 	vol := fmt.Sprintf("strike-workdir-itest-%d", clock.Wall().UnixNano())
@@ -95,7 +95,7 @@ func TestWholeWorkdirOutput_Integration(t *testing.T) {
 	}
 
 	// Path-less directory output: the whole workdir is the output.
-	out := lane.OutputSpec{ID: "node_modules", Type: "directory"}
+	out := lane.FileOutput{ID: "node-modules", Type: "directory"}
 	archivePath, strip, dest := archiveReroot("/out", out)
 
 	stream, archErr := eng.ContainerArchive(ctx, id, archivePath)
@@ -105,28 +105,30 @@ func TestWholeWorkdirOutput_Integration(t *testing.T) {
 
 	tag := fmt.Sprintf("localhost/strike/workdir-itest:%d", clock.Wall().UnixNano())
 	regClient := &registry.Client{Engine: eng}
-	digest, size, wrapErr := regClient.WrapArchiveAsImage(ctx, stream, strip, dest, tag)
+	result, wrapErr := regClient.WrapOutputsAsImage(ctx, []registry.OutputArchive{
+		{Tar: stream, StripPrefix: strip, DestPrefix: dest, LayerID: out.ID},
+	}, tag)
 	if wrapErr != nil {
 		t.Fatalf("wrap: %v", wrapErr)
 	}
-	if size == 0 {
+	if result.Size == 0 {
 		t.Fatal("layer size = 0: the whole-workdir output wrapped to an empty layer")
 	}
-	t.Logf("wrapped: digest=%s size=%d tag=%s", digest, size, tag)
+	t.Logf("wrapped: digest=%s size=%d tag=%s", result.Digest, result.Size, tag)
 
 	saved, saveErr := registry.SaveImage(ctx, eng, tag)
 	if saveErr != nil {
 		t.Fatalf("save image: %v", saveErr)
 	}
 	destDir := t.TempDir()
-	if extractErr := registry.ExtractSingleLayer(saved, destDir); extractErr != nil {
+	if extractErr := registry.ExtractLayer(saved, result.LayerDiffIDs[out.ID], destDir); extractErr != nil {
 		t.Fatalf("extract: %v", extractErr)
 	}
 
-	// The whole workdir must be re-rooted under the output name ("node_modules").
+	// The whole workdir must be re-rooted under the output name ("node-modules").
 	wantFiles := []string{
-		"node_modules/node_modules/pkg/index.js",
-		"node_modules/package.json",
+		"node-modules/node_modules/pkg/index.js",
+		"node-modules/package.json",
 	}
 	for _, want := range wantFiles {
 		full := filepath.Join(destDir, want)

@@ -39,14 +39,9 @@ steps:
     env: {}
     inputs: []
     secrets: []
-    outputs:
-      - id: custom-image
-        type: image
-        path: custom.tar
+    output: image
   - id: use-base
-    imageFrom:
-      step: build-base
-      output: custom-image
+    imageFromStep: build-base
     args: [/app/run]
     workdir: /out
     env: {}

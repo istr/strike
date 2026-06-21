@@ -14,6 +14,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/empty"
@@ -24,6 +25,7 @@ import (
 
 	"github.com/istr/strike/internal/closer"
 	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/registry"
 )
 
 // BuildImageTar builds a deterministic single-layer OCI image layout tar
@@ -109,6 +111,72 @@ func BuildMultiFileImageTar(files map[string][]byte) ([]byte, error) {
 		return nil, fmt.Errorf("annotate: unexpected image type")
 	}
 	return LayoutTar(annotated)
+}
+
+// BuildLayeredImageTar builds a deterministic OCI image layout tar with one
+// content layer carrying the given files, stamped with layerID under
+// registry.OutputLayerAnnotation. It returns the layout tar and the layer's
+// uncompressed-content digest (diff_id) -- the stable engine-level selection
+// key (ADR-046), which the consumer passes to ExtractLayer/SeedTarFromImage.
+func BuildLayeredImageTar(layerID string, files map[string][]byte) ([]byte, string, error) {
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+	names := make([]string, 0, len(files))
+	for name := range files {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		content := files[name]
+		if err := tw.WriteHeader(&tar.Header{
+			Typeflag: tar.TypeReg,
+			Name:     name,
+			Size:     int64(len(content)),
+			Mode:     0o644,
+		}); err != nil {
+			return nil, "", err
+		}
+		if _, err := tw.Write(content); err != nil {
+			return nil, "", err
+		}
+	}
+	if err := tw.Close(); err != nil {
+		return nil, "", err
+	}
+	opener := func() (io.ReadCloser, error) {
+		return io.NopCloser(bytes.NewReader(buf.Bytes())), nil
+	}
+	layer, err := tarball.LayerFromOpener(opener, tarball.WithMediaType(types.OCILayer))
+	if err != nil {
+		return nil, "", err
+	}
+	diffID, err := layer.DiffID()
+	if err != nil {
+		return nil, "", err
+	}
+
+	img := mutate.ConfigMediaType(
+		mutate.MediaType(empty.Image, types.OCIManifestSchema1),
+		types.OCIConfigJSON,
+	)
+	img, err = mutate.Append(img, mutate.Addendum{
+		Layer:       layer,
+		Annotations: map[string]string{registry.OutputLayerAnnotation: layerID},
+	})
+	if err != nil {
+		return nil, "", err
+	}
+	annotated, ok := mutate.Annotations(img, map[string]string{
+		"org.opencontainers.image.created": "1970-01-01T00:00:00Z",
+	}).(v1.Image)
+	if !ok {
+		return nil, "", fmt.Errorf("annotate: unexpected image type")
+	}
+	tarBytes, err := LayoutTar(annotated)
+	if err != nil {
+		return nil, "", err
+	}
+	return tarBytes, diffID.String(), nil
 }
 
 // singleFileLayer builds a deterministic OCI layer with one regular file.

@@ -20,12 +20,13 @@ import (
 // SeedTarFromImage selects a content subtree from a producer image and
 // returns a canonical tar ready to seed into a container volume (ADR-036
 // inside-workdir input delivery). tarBytes is the OCI-layout archive from
-// SaveImage; the image must have exactly one content layer. inImagePath is
-// the already-resolved path within that layer to select ("" or "." selects
-// the whole layer); the caller computes any output-type offset, so this
-// function knows nothing of output types. destPrefix is where the selected
-// content is rooted in the emitted tar (e.g. the input's path relative to
-// the workdir); "" or "." roots at the tar root.
+// SaveImage; layerDiffID identifies which content layer to read by its
+// uncompressed-content digest (diff_id). inImagePath is the already-resolved
+// path within that layer to select ("" or "." selects the whole layer); the
+// caller computes any output-type offset, so this function knows nothing of
+// output types. destPrefix is where the selected content is rooted in the
+// emitted tar (e.g. the input's path relative to the workdir); "" or "."
+// roots at the tar root.
 //
 // The selected subtree is walked to enforce ADR-034 lexical symlink
 // containment (lane.SymlinkContainmentError); links are enumerated, never
@@ -34,8 +35,8 @@ import (
 // engine mount failure. The emitted tar is deterministic: name-sorted
 // entries, zeroed mtime and ownership, preserved file modes, verbatim
 // (contained) symlinks.
-func SeedTarFromImage(tarBytes []byte, inImagePath, destPrefix string) ([]byte, error) {
-	layerBytes, err := singleLayerFromOCITar(tarBytes)
+func SeedTarFromImage(tarBytes []byte, layerDiffID, inImagePath, destPrefix string) ([]byte, error) {
+	layerBytes, err := layerFromOCITar(tarBytes, layerDiffID)
 	if err != nil {
 		return nil, err
 	}
@@ -55,8 +56,9 @@ func SeedTarFromImage(tarBytes []byte, inImagePath, destPrefix string) ([]byte, 
 
 // ValidateImageMount inspects a producer image's selected subtree for the
 // outside-workdir mount path (ADR-036), without emitting a tar. tarBytes is
-// the OCI-layout archive from SaveImage; inImagePath is the caller-resolved
-// path within the single content layer ("" or "." selects the whole layer).
+// the OCI-layout archive from SaveImage; layerDiffID identifies the content
+// layer by its uncompressed-content digest (diff_id); inImagePath is the
+// caller-resolved path within that layer ("" or "." selects the whole layer).
 //
 // It walks the same producer layer the seed path walks, enforcing ADR-034
 // containment, and returns the resolved kind of the subtree root:
@@ -69,8 +71,8 @@ func SeedTarFromImage(tarBytes []byte, inImagePath, destPrefix string) ([]byte, 
 //     surfaces strike's own diagnostic rather than an engine mount failure.
 //
 // The bytes are not copied; only headers and symlink targets are inspected.
-func ValidateImageMount(tarBytes []byte, inImagePath string) (MountKind, error) {
-	layerBytes, err := singleLayerFromOCITar(tarBytes)
+func ValidateImageMount(tarBytes []byte, layerDiffID, inImagePath string) (MountKind, error) {
+	layerBytes, err := layerFromOCITar(tarBytes, layerDiffID)
 	if err != nil {
 		return MountKindMissing, err
 	}
@@ -85,9 +87,53 @@ func ValidateImageMount(tarBytes []byte, inImagePath string) (MountKind, error) 
 	return kind, nil
 }
 
-// singleLayerFromOCITar reads an OCI-layout tar archive in memory and
-// returns the uncompressed content of the single layer. No temp dir is used.
-func singleLayerFromOCITar(tarBytes []byte) ([]byte, error) {
+// findLayer returns the descriptor of the layer whose uncompressed-content
+// digest (diff_id) equals layerDiffID, and whether it was found. The diff_id
+// is the only stable per-layer key across an engine load/save round-trip:
+// runtimes strip descriptor annotations and re-compress blobs, but never alter
+// uncompressed content. manifest.Layers[i] is positionally aligned with
+// diffIDs[i] (the image config rootfs.diff_ids), so the match on diffIDs[i]
+// selects manifest.Layers[i].
+func findLayer(layers []v1.Descriptor, diffIDs []v1.Hash, layerDiffID string) (v1.Descriptor, bool) {
+	for i, id := range diffIDs {
+		if i >= len(layers) {
+			break
+		}
+		if id.String() == layerDiffID {
+			return layers[i], true
+		}
+	}
+	return v1.Descriptor{}, false
+}
+
+func layerFromOCITar(tarBytes []byte, layerDiffID string) ([]byte, error) {
+	blobs, indexBytes, err := readOCITarBlobs(tarBytes)
+	if err != nil {
+		return nil, err
+	}
+
+	manifest, config, err := resolveImageManifest(blobs, indexBytes)
+	if err != nil {
+		return nil, err
+	}
+
+	desc, found := findLayer(manifest.Layers, config.RootFS.DiffIDs, layerDiffID)
+	if !found {
+		return nil, fmt.Errorf("output layer %q not found in step image", layerDiffID)
+	}
+
+	layerPath := fmt.Sprintf("blobs/%s/%s", desc.Digest.Algorithm, desc.Digest.Hex)
+	layerBlob, ok := blobs[layerPath]
+	if !ok {
+		return nil, fmt.Errorf("layer blob %q not found", layerPath)
+	}
+
+	return decompressIfGzip(layerBlob)
+}
+
+// readOCITarBlobs reads an OCI-layout tar and returns its blob contents keyed
+// by clean path, plus the raw index.json bytes.
+func readOCITarBlobs(tarBytes []byte) (map[string][]byte, []byte, error) {
 	blobs := make(map[string][]byte)
 	var indexBytes []byte
 
@@ -98,14 +144,14 @@ func singleLayerFromOCITar(tarBytes []byte) ([]byte, error) {
 			break
 		}
 		if err != nil {
-			return nil, fmt.Errorf("read OCI tar: %w", err)
+			return nil, nil, fmt.Errorf("read OCI tar: %w", err)
 		}
 		if hdr.Typeflag != tar.TypeReg {
 			continue
 		}
 		data, readErr := io.ReadAll(tr)
 		if readErr != nil {
-			return nil, fmt.Errorf("read %q: %w", hdr.Name, readErr)
+			return nil, nil, fmt.Errorf("read %q: %w", hdr.Name, readErr)
 		}
 		clean := path.Clean(hdr.Name)
 		if clean == "index.json" {
@@ -117,38 +163,43 @@ func singleLayerFromOCITar(tarBytes []byte) ([]byte, error) {
 	}
 
 	if indexBytes == nil {
-		return nil, fmt.Errorf("index.json not found in OCI tar")
+		return nil, nil, fmt.Errorf("index.json not found in OCI tar")
 	}
+	return blobs, indexBytes, nil
+}
 
+// resolveImageManifest selects the single image from the layout index and
+// returns its parsed manifest and config. The single-image-in-layout
+// invariant (ADR-046) is enforced here.
+func resolveImageManifest(blobs map[string][]byte, indexBytes []byte) (v1.Manifest, v1.ConfigFile, error) {
 	var idx v1.IndexManifest
 	if err := json.Unmarshal(indexBytes, &idx); err != nil {
-		return nil, fmt.Errorf("parse index.json: %w", err)
+		return v1.Manifest{}, v1.ConfigFile{}, fmt.Errorf("parse index.json: %w", err)
 	}
 	if len(idx.Manifests) != 1 {
-		return nil, fmt.Errorf("expected single image in layout, found %d", len(idx.Manifests))
+		return v1.Manifest{}, v1.ConfigFile{}, fmt.Errorf("expected single image in layout, found %d", len(idx.Manifests))
 	}
 
 	manifestPath := fmt.Sprintf("blobs/%s/%s", idx.Manifests[0].Digest.Algorithm, idx.Manifests[0].Digest.Hex)
 	manifestBytes, ok := blobs[manifestPath]
 	if !ok {
-		return nil, fmt.Errorf("manifest blob %q not found", manifestPath)
+		return v1.Manifest{}, v1.ConfigFile{}, fmt.Errorf("manifest blob %q not found", manifestPath)
 	}
-
 	var manifest v1.Manifest
 	if err := json.Unmarshal(manifestBytes, &manifest); err != nil {
-		return nil, fmt.Errorf("parse manifest: %w", err)
-	}
-	if len(manifest.Layers) != 1 {
-		return nil, fmt.Errorf("expected 1 content layer, got %d", len(manifest.Layers))
+		return v1.Manifest{}, v1.ConfigFile{}, fmt.Errorf("parse manifest: %w", err)
 	}
 
-	layerPath := fmt.Sprintf("blobs/%s/%s", manifest.Layers[0].Digest.Algorithm, manifest.Layers[0].Digest.Hex)
-	layerBlob, ok := blobs[layerPath]
+	configPath := fmt.Sprintf("blobs/%s/%s", manifest.Config.Digest.Algorithm, manifest.Config.Digest.Hex)
+	configBytes, ok := blobs[configPath]
 	if !ok {
-		return nil, fmt.Errorf("layer blob %q not found", layerPath)
+		return v1.Manifest{}, v1.ConfigFile{}, fmt.Errorf("config blob %q not found", configPath)
 	}
-
-	return decompressIfGzip(layerBlob)
+	var config v1.ConfigFile
+	if err := json.Unmarshal(configBytes, &config); err != nil {
+		return v1.Manifest{}, v1.ConfigFile{}, fmt.Errorf("parse config: %w", err)
+	}
+	return manifest, config, nil
 }
 
 // decompressIfGzip attempts gzip decompression; if the data is not gzipped,

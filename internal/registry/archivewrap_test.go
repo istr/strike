@@ -242,12 +242,14 @@ func TestWrapArchiveAsImage_LeadingSlashEntriesAreKept(t *testing.T) {
 
 	eng := &wrapEngine{}
 	client := &registry.Client{Engine: eng}
-	_, size, err := client.WrapArchiveAsImage(context.Background(), &buf, "", "layer", "localhost/strike/l/s:h")
+	result, err := client.WrapOutputsAsImage(context.Background(), []registry.OutputArchive{
+		{Tar: &buf, StripPrefix: "", DestPrefix: "layer", LayerID: "layer"},
+	}, "localhost/strike/l/s:h")
 	if err != nil {
 		t.Fatalf("wrap: %v", err)
 	}
-	if want := int64(len("alpha") + len("beta")); size != want {
-		t.Fatalf("size = %d, want %d (entries dropped?)", size, want)
+	if want := int64(len("alpha") + len("beta")); result.Size != want {
+		t.Fatalf("size = %d, want %d (entries dropped?)", result.Size, want)
 	}
 	if len(eng.loadBodies) == 0 {
 		t.Fatal("engine received no image load")
@@ -257,7 +259,7 @@ func TestWrapArchiveAsImage_LeadingSlashEntriesAreKept(t *testing.T) {
 	if mkErr := os.MkdirAll(dest, 0o750); mkErr != nil {
 		t.Fatalf("mkdir: %v", mkErr)
 	}
-	if extractErr := registry.ExtractSingleLayer(eng.loadBodies[0], dest); extractErr != nil {
+	if extractErr := registry.ExtractLayer(eng.loadBodies[0], result.LayerDiffIDs["layer"], dest); extractErr != nil {
 		t.Fatalf("extract: %v", extractErr)
 	}
 	for rel, want := range map[string]string{

@@ -59,6 +59,11 @@ type Engine interface {
 	// returned reader.
 	ContainerArchive(ctx context.Context, id, path string) (io.ReadCloser, error)
 
+	// ContainerCommit creates a new image from a stopped container's
+	// filesystem state. Returns the image ID. The caller owns tagging
+	// (ImageTag) and removal of the committed image.
+	ContainerCommit(ctx context.Context, id string) (string, error)
+
 	// ContainerRemove force-removes a container by id.
 	ContainerRemove(ctx context.Context, id string) error
 

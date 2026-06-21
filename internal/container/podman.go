@@ -451,11 +451,21 @@ func (e *podmanEngine) containerCreate(ctx context.Context, opts RunOpts) (strin
 			log.Printf("WARN close response body: %v", err)
 		}
 	}()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			return "", fmt.Errorf("container create: status %d: (body read failed)", resp.StatusCode)
+		}
+		return "", fmt.Errorf("container create: status %d: %s", resp.StatusCode, body)
+	}
 	var result struct {
 		ID string `json:"Id"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return "", err
+	}
+	if result.ID == "" {
+		return "", fmt.Errorf("container create: engine returned empty container id")
 	}
 	return result.ID, nil
 }
@@ -594,6 +604,37 @@ func (e *podmanEngine) ContainerArchive(ctx context.Context, id, path string) (i
 		return nil, fmt.Errorf("container archive %s: status %d: %s", path, resp.StatusCode, body)
 	}
 	return resp.Body, nil
+}
+
+func (e *podmanEngine) ContainerCommit(ctx context.Context, id string) (string, error) {
+	u := e.base + "/commit?container=" + url.QueryEscape(id) + "&pause=true"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, nil)
+	if err != nil {
+		return "", err
+	}
+	resp, err := e.client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("container commit %s: %w", id, err)
+	}
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			log.Printf("WARN close response body: %v", closeErr)
+		}
+	}()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("container commit %s: read response: %w", id, err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("container commit %s: status %d: %s", id, resp.StatusCode, body)
+	}
+	var result struct {
+		ID string `json:"Id"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return "", fmt.Errorf("container commit %s: unmarshal: %w", id, err)
+	}
+	return result.ID, nil
 }
 
 // containerArchivePut extracts a tar stream into dstPath inside a container.

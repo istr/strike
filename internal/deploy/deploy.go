@@ -659,12 +659,16 @@ func (d *Deployer) signStatements(ctx context.Context, att *Attestation, stepID 
 func resolveArtifactDigests(stepID string, refs map[string]string, state *lane.State) (map[string]ArtifactRecord, error) {
 	artifacts := make(map[string]ArtifactRecord)
 	for artName, ref := range refs {
-		a, resolveErr := state.Resolve(ref)
+		handle, resolveErr := state.Resolve(ref)
 		if resolveErr != nil {
 			return nil, fmt.Errorf("step %q: artifact %q: %w", stepID, artName, resolveErr)
 		}
+		digest, digestErr := handle.ManifestDigest()
+		if digestErr != nil {
+			return nil, fmt.Errorf("step %q: artifact %q: %w", stepID, artName, digestErr)
+		}
 		artifacts[artName] = ArtifactRecord{
-			Digest: a.Digest.String(),
+			Digest: digest.String(),
 		}
 	}
 	return artifacts, nil
@@ -679,15 +683,6 @@ func (d *Deployer) recordAttestation(att *Attestation, step *lane.Step, state *l
 	attHex := hex.EncodeToString(sha256Sum(attJSON))
 
 	attDigest := lane.Digest{Algorithm: "sha256", Hex: attHex}
-	if err := state.Register(step.ID, "attestation", lane.Artifact{
-		Type:        "file",
-		Digest:      attDigest,
-		Size:        int64(len(attJSON)),
-		ContentType: lane.Ptr("application/vnd.strike.attestation+json"),
-	}); err != nil {
-		return fmt.Errorf("register attestation: %w", err)
-	}
-
 	state.RecordStep(lane.StepResult{
 		Name:      step.ID,
 		StepType:  "deploy",

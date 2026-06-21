@@ -53,9 +53,9 @@ func TestSeedTarFromImage_WholeLayerDirectory(t *testing.T) {
 		"dir/a.txt": []byte("aaa"),
 		"dir/b.txt": []byte("bbb"),
 	})
-	imgTar := buildSingleLayerImageTar(t, layerTar)
+	imgTar, diffID := buildSingleLayerImageTar(t, layerTar)
 
-	got, err := registry.SeedTarFromImage(imgTar, "", "work")
+	got, err := registry.SeedTarFromImage(imgTar, diffID, "", "work")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,9 +82,9 @@ func TestSeedTarFromImage_SubpathDirectory(t *testing.T) {
 		"dir/b.txt":   []byte("bbb"),
 		"outside.txt": []byte("nope"),
 	})
-	imgTar := buildSingleLayerImageTar(t, layerTar)
+	imgTar, diffID := buildSingleLayerImageTar(t, layerTar)
 
-	got, err := registry.SeedTarFromImage(imgTar, "dir", "work/dir")
+	got, err := registry.SeedTarFromImage(imgTar, diffID, "dir", "work/dir")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,11 +106,11 @@ func TestSeedTarFromImage_SingleFile(t *testing.T) {
 	}, map[string][]byte{
 		"package.json": []byte(`{"name":"test"}`),
 	})
-	imgTar := buildSingleLayerImageTar(t, layerTar)
+	imgTar, diffID := buildSingleLayerImageTar(t, layerTar)
 
 	// destPrefix is the full destination name; a single-file selection
 	// emits exactly one entry named destPrefix.
-	got, err := registry.SeedTarFromImage(imgTar, "package.json", "work")
+	got, err := registry.SeedTarFromImage(imgTar, diffID, "package.json", "work")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -129,10 +129,10 @@ func TestSeedTarFromImage_SingleFile_FullPathDestPrefix(t *testing.T) {
 		{Typeflag: tar.TypeDir, Name: "tree/", Mode: 0o755},
 		{Typeflag: tar.TypeReg, Name: "tree/package.json", Mode: 0o644},
 	}, map[string][]byte{"tree/package.json": []byte(`{"name":"x"}`)})
-	imgTar := buildSingleLayerImageTar(t, layerTar)
+	imgTar, diffID := buildSingleLayerImageTar(t, layerTar)
 
 	// Caller passes destPrefix = the input's workdir-relative mount path.
-	seed, err := registry.SeedTarFromImage(imgTar, "tree/package.json", "package.json")
+	seed, err := registry.SeedTarFromImage(imgTar, diffID, "tree/package.json", "package.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -150,9 +150,9 @@ func TestSeedTarFromImage_SingleFile_BareDestPrefix(t *testing.T) {
 	layerTar := buildLayerTar(t, []tar.Header{
 		{Typeflag: tar.TypeReg, Name: "solo.txt", Mode: 0o644},
 	}, map[string][]byte{"solo.txt": []byte("x")})
-	imgTar := buildSingleLayerImageTar(t, layerTar)
+	imgTar, diffID := buildSingleLayerImageTar(t, layerTar)
 
-	seed, err := registry.SeedTarFromImage(imgTar, "solo.txt", "")
+	seed, err := registry.SeedTarFromImage(imgTar, diffID, "solo.txt", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -172,9 +172,9 @@ func TestSeedTarFromImage_Directory_NoDoubling(t *testing.T) {
 		{Typeflag: tar.TypeDir, Name: "tree/packages/", Mode: 0o755},
 		{Typeflag: tar.TypeReg, Name: "tree/packages/a.js", Mode: 0o644},
 	}, map[string][]byte{"tree/packages/a.js": []byte("a")})
-	imgTar := buildSingleLayerImageTar(t, layerTar)
+	imgTar, diffID := buildSingleLayerImageTar(t, layerTar)
 
-	seed, err := registry.SeedTarFromImage(imgTar, "tree/packages", "packages")
+	seed, err := registry.SeedTarFromImage(imgTar, diffID, "tree/packages", "packages")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -191,9 +191,9 @@ func TestSeedTarFromImage_SubpathNotFound(t *testing.T) {
 	layerTar := buildLayerTar(t, []tar.Header{
 		{Typeflag: tar.TypeReg, Name: "hello.txt", Mode: 0o644},
 	}, map[string][]byte{"hello.txt": []byte("hi")})
-	imgTar := buildSingleLayerImageTar(t, layerTar)
+	imgTar, diffID := buildSingleLayerImageTar(t, layerTar)
 
-	_, err := registry.SeedTarFromImage(imgTar, "missing", "work")
+	_, err := registry.SeedTarFromImage(imgTar, diffID, "missing", "work")
 	if err == nil {
 		t.Fatal("expected error for missing subpath")
 	}
@@ -206,9 +206,9 @@ func TestSeedTarFromImage_EscapingSymlinkRejected(t *testing.T) {
 	layerTar := buildLayerTar(t, []tar.Header{
 		{Typeflag: tar.TypeSymlink, Name: "link", Linkname: "../../etc/passwd", Mode: 0o777},
 	}, nil)
-	imgTar := buildSingleLayerImageTar(t, layerTar)
+	imgTar, diffID := buildSingleLayerImageTar(t, layerTar)
 
-	_, err := registry.SeedTarFromImage(imgTar, "", "work")
+	_, err := registry.SeedTarFromImage(imgTar, diffID, "", "work")
 	if err == nil {
 		t.Fatal("expected containment error")
 	}
@@ -219,9 +219,9 @@ func TestSeedTarFromImage_ContainedSymlinkPreserved(t *testing.T) {
 		{Typeflag: tar.TypeReg, Name: "sibling.txt", Mode: 0o644},
 		{Typeflag: tar.TypeSymlink, Name: "link", Linkname: "sibling.txt", Mode: 0o777},
 	}, map[string][]byte{"sibling.txt": []byte("content")})
-	imgTar := buildSingleLayerImageTar(t, layerTar)
+	imgTar, diffID := buildSingleLayerImageTar(t, layerTar)
 
-	got, err := registry.SeedTarFromImage(imgTar, "", "work")
+	got, err := registry.SeedTarFromImage(imgTar, diffID, "", "work")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -240,13 +240,13 @@ func TestSeedTarFromImage_Determinism(t *testing.T) {
 		"d/z.txt": []byte("z"),
 		"d/a.txt": []byte("a"),
 	})
-	imgTar := buildSingleLayerImageTar(t, layerTar)
+	imgTar, diffID := buildSingleLayerImageTar(t, layerTar)
 
-	a, err := registry.SeedTarFromImage(imgTar, "", "out")
+	a, err := registry.SeedTarFromImage(imgTar, diffID, "", "out")
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := registry.SeedTarFromImage(imgTar, "", "out")
+	b, err := registry.SeedTarFromImage(imgTar, diffID, "", "out")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -255,21 +255,40 @@ func TestSeedTarFromImage_Determinism(t *testing.T) {
 	}
 }
 
-func TestSeedTarFromImage_MultiLayerRejected(t *testing.T) {
-	layer1 := buildLayerTar(t, []tar.Header{
+func TestSeedTarFromImage_SelectsLayer(t *testing.T) {
+	layerA := buildLayerTar(t, []tar.Header{
 		{Typeflag: tar.TypeReg, Name: "a.txt", Mode: 0o644},
 	}, map[string][]byte{"a.txt": []byte("a")})
-	layer2 := buildLayerTar(t, []tar.Header{
+	layerB := buildLayerTar(t, []tar.Header{
 		{Typeflag: tar.TypeReg, Name: "b.txt", Mode: 0o644},
 	}, map[string][]byte{"b.txt": []byte("b")})
-	imgTar := buildOCIImageTar(t, layerFromTar(t, layer1), layerFromTar(t, layer2))
+	imgTar, diffIDs := buildLayeredImageTar(t, map[string][]byte{"alpha": layerA, "beta": layerB})
 
-	_, err := registry.SeedTarFromImage(imgTar, "", "work")
-	if err == nil {
-		t.Fatal("expected error for multi-layer image")
+	got, err := registry.SeedTarFromImage(imgTar, diffIDs["beta"], "b.txt", "work")
+	if err != nil {
+		t.Fatal(err)
 	}
-	if !strings.Contains(err.Error(), "1 content layer") {
-		t.Errorf("error %q should mention expected layer count", err)
+	files, _, _ := tarEntries(t, got)
+	if files["work"] != "b" {
+		t.Errorf("selected layer content = %v, want b.txt content at work", files)
+	}
+	if _, ok := files["a.txt"]; ok {
+		t.Error("a.txt from the non-selected layer must not appear")
+	}
+}
+
+func TestSeedTarFromImage_LayerNotFound(t *testing.T) {
+	layerTar := buildLayerTar(t, []tar.Header{
+		{Typeflag: tar.TypeReg, Name: "a.txt", Mode: 0o644},
+	}, map[string][]byte{"a.txt": []byte("a")})
+	imgTar, _ := buildLayeredImageTar(t, map[string][]byte{"alpha": layerTar})
+
+	_, err := registry.SeedTarFromImage(imgTar, "sha256:"+strings.Repeat("0", 64), "a.txt", "work")
+	if err == nil {
+		t.Fatal("expected error for missing layer id")
+	}
+	if !strings.Contains(err.Error(), "not found") {
+		t.Errorf("error %q should mention the layer was not found", err)
 	}
 }
 
@@ -278,9 +297,9 @@ func TestValidateImageMount_Directory(t *testing.T) {
 		{Typeflag: tar.TypeDir, Name: "packages/", Mode: 0o755},
 		{Typeflag: tar.TypeReg, Name: "packages/a.js", Mode: 0o644},
 	}, map[string][]byte{"packages/a.js": []byte("a")})
-	imgTar := buildSingleLayerImageTar(t, layerTar)
+	imgTar, diffID := buildSingleLayerImageTar(t, layerTar)
 
-	kind, err := registry.ValidateImageMount(imgTar, "packages")
+	kind, err := registry.ValidateImageMount(imgTar, diffID, "packages")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -293,9 +312,9 @@ func TestValidateImageMount_SingleFile(t *testing.T) {
 	layerTar := buildLayerTar(t, []tar.Header{
 		{Typeflag: tar.TypeReg, Name: "binary", Mode: 0o755},
 	}, map[string][]byte{"binary": []byte("bin")})
-	imgTar := buildSingleLayerImageTar(t, layerTar)
+	imgTar, diffID := buildSingleLayerImageTar(t, layerTar)
 
-	kind, err := registry.ValidateImageMount(imgTar, "binary")
+	kind, err := registry.ValidateImageMount(imgTar, diffID, "binary")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -310,9 +329,9 @@ func TestValidateImageMount_SubpathDirectory(t *testing.T) {
 		{Typeflag: tar.TypeDir, Name: "tree/sub/", Mode: 0o755},
 		{Typeflag: tar.TypeReg, Name: "tree/sub/f.txt", Mode: 0o644},
 	}, map[string][]byte{"tree/sub/f.txt": []byte("x")})
-	imgTar := buildSingleLayerImageTar(t, layerTar)
+	imgTar, diffID := buildSingleLayerImageTar(t, layerTar)
 
-	kind, err := registry.ValidateImageMount(imgTar, "tree/sub")
+	kind, err := registry.ValidateImageMount(imgTar, diffID, "tree/sub")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -326,9 +345,9 @@ func TestValidateImageMount_SubpathResolvesToFile(t *testing.T) {
 		{Typeflag: tar.TypeDir, Name: "tree/", Mode: 0o755},
 		{Typeflag: tar.TypeReg, Name: "tree/package.json", Mode: 0o644},
 	}, map[string][]byte{"tree/package.json": []byte("{}")})
-	imgTar := buildSingleLayerImageTar(t, layerTar)
+	imgTar, diffID := buildSingleLayerImageTar(t, layerTar)
 
-	kind, err := registry.ValidateImageMount(imgTar, "tree/package.json")
+	kind, err := registry.ValidateImageMount(imgTar, diffID, "tree/package.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -341,9 +360,9 @@ func TestValidateImageMount_Missing(t *testing.T) {
 	layerTar := buildLayerTar(t, []tar.Header{
 		{Typeflag: tar.TypeReg, Name: "hello.txt", Mode: 0o644},
 	}, map[string][]byte{"hello.txt": []byte("hi")})
-	imgTar := buildSingleLayerImageTar(t, layerTar)
+	imgTar, diffID := buildSingleLayerImageTar(t, layerTar)
 
-	_, err := registry.ValidateImageMount(imgTar, "missing")
+	_, err := registry.ValidateImageMount(imgTar, diffID, "missing")
 	if err == nil {
 		t.Fatal("expected missing-subpath error")
 	}
@@ -357,9 +376,9 @@ func TestValidateImageMount_EscapingSymlinkRejected(t *testing.T) {
 		{Typeflag: tar.TypeDir, Name: "d/", Mode: 0o755},
 		{Typeflag: tar.TypeSymlink, Name: "d/link", Linkname: "../../etc/passwd", Mode: 0o777},
 	}, nil)
-	imgTar := buildSingleLayerImageTar(t, layerTar)
+	imgTar, diffID := buildSingleLayerImageTar(t, layerTar)
 
-	_, err := registry.ValidateImageMount(imgTar, "d")
+	_, err := registry.ValidateImageMount(imgTar, diffID, "d")
 	if err == nil {
 		t.Fatal("expected containment error")
 	}
