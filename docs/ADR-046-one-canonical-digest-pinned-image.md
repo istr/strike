@@ -140,3 +140,50 @@ downstream concern this ADR enables but does not cement here.
 - **Enforcement is structural, not discretionary** -- the one-image contract and
   the digest pull are structural; the executable/content split is named as policy,
   not cemented into the schema.
+
+## Amendment -- output-key vocabulary (post-implementation)
+
+A retrospective on implementing this ADR found a single root cause behind
+repeated mis-specification: the output model ends with **three distinct keys**
+that both natural language and the code symbols collapsed onto one word
+("layer" / "name"). The Decision text above also seeded the confusion --
+"(a) ... **named layers** (one per content output at its `OutputLayerName`)"
+couples a layer's name to a path-derived value, while the implementation makes
+layer identity the output id and treats `OutputLayerName` as a separate,
+in-layer path concern. One overloaded word for three concepts was the cause.
+
+Equally, the original Decision specified the output **identity** (the output id)
+and the integrity anchor (the manifest digest) but did not name the
+engine-boundary **selection mechanism** -- how a consumer actually finds a
+layer inside a step image after a container-engine round-trip. That mechanism
+(the OCI `diff_id`) is recorded here.
+
+The three keys are distinct and are named for their level:
+
+- **identity** -- the output id (`out.ID`, an `#Identifier`); it addresses the
+  output, and thereby its layer, across steps. Carried as **`OutputID`**
+  (formerly `LayerID`).
+- **content root** -- the top-level path segment under which an output's content
+  is rooted inside its OCI layer; a producer/consumer re-rooting convention the
+  engine never sees. Carried as **`OutputContentPrefix`** (formerly
+  `OutputLayerName`).
+- **engine selection key** -- the OCI `rootfs.diff_ids` uncompressed-content
+  digest; the only per-layer key stable across a container-engine load/save
+  round-trip, and the key a consumer selects by (`LayerByDiffID`). Carried as
+  **`LayerDiffID`** (unchanged -- "Layer" is correct here; this is a genuine
+  OCI-layer property). Reserving "Layer" for this one real layer-level key
+  removes the overload.
+
+The layer-descriptor annotation key becomes **`dev.strike.output.id`** (its
+value is the output id). The annotation is advisory only: a container runtime
+strips descriptor annotations and re-compresses blobs on load, so the consumer
+selects the layer by its `diff_id`, never by the annotation.
+
+**Supersedes, in the Decision above:** the phrase "named layers (one per content
+output at its `OutputLayerName`)" is read as "one content layer per output, each
+rooted at its `OutputContentPrefix`"; a layer's identity is the output id, not
+its content root.
+
+This amendment changes vocabulary, not behavior. The implementation is scheduled
+as a separate roadmap item ahead of the spec-layering file reorg, so that reorg
+moves already-corrected names.
