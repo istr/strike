@@ -129,6 +129,24 @@ def validate_meta(meta):
         raise ValueError("id must look like item-NNNN")
 
 
+def _is_ascii(text):
+    """Return True if text contains only ASCII characters."""
+    try:
+        text.encode('ascii')
+        return True
+    except UnicodeEncodeError:
+        return False
+
+
+def validate_ascii(meta, body):
+    """Ensure meta and body contain only ASCII characters."""
+    for field in ["title", "goal", "acceptance_intent"]:
+        if field in meta and not _is_ascii(str(meta[field])):
+            raise ValueError("%s contains non-ASCII characters" % field)
+    if not _is_ascii(body):
+        raise ValueError("item body contains non-ASCII characters")
+
+
 # --------------------------------------------------------------------------
 # store helpers
 # --------------------------------------------------------------------------
@@ -167,6 +185,7 @@ def load_all(root):
 
 def write_item(meta, body, path):
     validate_meta(meta)
+    validate_ascii(meta, body)
     if ".." in path:
         raise ValueError("Invalid file path")
     os.makedirs(os.path.dirname(path), exist_ok=True)

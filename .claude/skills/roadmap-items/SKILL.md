@@ -61,6 +61,10 @@ the cheapest *correct* handover, so lean on it rather than inventing side channe
   store, and are **never** touched here. See "ADR boundary".
 - **Forge-agnostic**: the store is just git. GitHub today, gitea later -- nothing
   here depends on a specific forge.
+- **All item content must be ASCII-only**: title, goal, acceptance_intent, and
+  body text must contain only ASCII characters. Use plain prose without Unicode
+  arrows, special symbols, or non-ASCII diacritics. This ensures reliable diffs,
+  linting, and compatibility across tools and encodings.
 
 ## The store layout
 
