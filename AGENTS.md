@@ -735,3 +735,64 @@ functions must be reachable from `main` or wired through interface
 dispatch. Do not add dead code -- wire it in or do not write it.
 If you find existing dead code, first look if it could or should be
 wired. Then remove the rest. If in doubt, ask the operator.
+
+## When a gate fails: find the root cause, never assign blame
+
+A failing check -- one test, a whole suite, an integration test, a lint
+rule, a vuln finding, a broken build, anywhere -- is a signal to
+diagnose, not a verdict to defend against. General-purpose models carry
+an RLHF-trained reflex to first ask "was my change at fault?" and, on
+finding a plausible external cause, to stop there. That reflex is
+actively harmful here: it substitutes a blame verdict for a diagnosis and
+leaves the actual defect in the tree.
+
+1. **Blame is irrelevant; spend zero reasoning on it.** Do not ask, in
+   any form, "was this my change, or was it already broken?" The
+   attribution question consumes reasoning and produces nothing the fix
+   needs. Whether the cause is yours, a predecessor's, or no commit's at
+   all changes nothing about what happens next: the failure is part of the
+   working state you are responsible for, and it gets diagnosed.
+
+2. **Never locate the cause outside the work.** Three externalizations
+   are forbidden as stopping points, because each one ends the
+   investigation exactly where it should begin:
+   - the environment ("podman is not running", "the socket is missing").
+     Unit tests must not need podman at all, and on the development
+     machine the engine is always up and reachable through
+     `CONTAINER_HOST`; an environment excuse is almost always a misread
+     test, not a broken host.
+   - other commits ("this was pre-existing", "not introduced by me").
+     Pre-existing is not a resolution. It is a still-open defect that you
+     have now observed and therefore own.
+   - an unexpected in-tree file ("I did not account for this file"). A
+     file that is in the tree is part of the contract; meeting one you did
+     not expect means your model of the tree was incomplete, not that the
+     file is at fault.
+
+3. **Diagnose in a fixed order, every time.** When any check fails, walk
+   these three steps in sequence before proposing any fix:
+   1. Re-read the relevant documentation and understand it -- the spec,
+      the ADR, the schema doc, this file.
+   2. Re-read the existing code the failure touches and understand it.
+   3. Re-read your own change and understand it.
+   The order is the point: it grounds the diagnosis in the declared intent
+   and the existing contract before it reaches your edit, so the fix
+   targets the root cause rather than the first symptom that looks like
+   yours.
+
+4. **Never shrink the gate to make it pass.** The binding scope of a
+   quality gate is its full scope. Do not narrow it with a package
+   selector, a `-run` filter, a build tag, a `t.Skip`, a `-short` or
+   `-only` flag, a pipe to `true`, a redirected or swallowed exit code, or
+   any other modifier, decorator, or redirection that lets a passing
+   subset stand in for the whole. A gate that is green only because its
+   scope was cut has not passed; it has been disabled. If the full gate
+   cannot pass, that is the finding to report -- not a thing to route
+   around.
+
+5. **The verbatim gate is `make check`.** While the project builds with
+   Make, the one gate that must succeed before any commit is `make check`,
+   run exactly as written, with no restriction and no modification. A
+   green `make check` with zero warnings and zero findings is the only
+   acceptable pre-commit state; anything short of that is a
+   stop-and-report, never a commit.
