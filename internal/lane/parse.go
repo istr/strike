@@ -29,11 +29,19 @@ func ParseDuration(d *Duration, defaultVal clock.Duration) (clock.Duration, erro
 var schema = buildSchema()
 
 func buildSchema() string {
-	// transport.cue and sigstore-trustroot.cue share package lane; strip the
-	// duplicate package declarations so the files compile as one CUE source.
-	// lane.cue references #TrustedRootReplica from sigstore-trustroot.cue.
+	// The lane schema spans the base- and wire- layer files (all package lane)
+	// plus the transport and trust-root vocabularies they reference. Strip each
+	// file's package declaration so they compile as one CUE source; the wire
+	// lane references #TrustedRootReplica from sigstore-trustroot.cue.
 	var out []string
-	for _, src := range []string{specs.TransportSchema, specs.TrustRootSchema} {
+	for _, src := range []string{
+		specs.BaseScalarsSchema,
+		specs.BasePeerSchema,
+		specs.BaseTargetSchema,
+		specs.WireLaneSchema,
+		specs.TransportSchema,
+		specs.TrustRootSchema,
+	} {
 		for _, line := range strings.Split(src, "\n") {
 			if strings.HasPrefix(strings.TrimSpace(line), "package ") {
 				continue
@@ -41,7 +49,7 @@ func buildSchema() string {
 			out = append(out, line)
 		}
 	}
-	return specs.LaneSchema + "\n" + strings.Join(out, "\n")
+	return strings.Join(out, "\n")
 }
 
 // Parse reads a lane YAML file, validates it against the embedded CUE schema,

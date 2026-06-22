@@ -109,33 +109,6 @@ package lane
 }
 
 // ---------------------------------------------------------------------------
-// Path types -- canonical, composable hierarchy
-// ---------------------------------------------------------------------------
-
-// Path is the shared canonicalization base: no double slashes, no "." or
-// ".." segments, no trailing slash. Not used directly on fields; use
-// AbsPath or RelPath.
-#Path: string &
-	!~"//" &
-	!~"^\\.\\.($|/)" &
-	!~"/\\.\\.($|/)" &
-	!~"^\\.($|/)" &
-	!~"/\\.($|/)" &
-	!~".+/$"
-
-// AbsPath is a canonical absolute path (starts with "/").
-#AbsPath: #Path & =~"^/"
-
-// RelPath is a canonical relative path (no leading "/").
-#RelPath: #Path & =~"^[^/]"
-
-// #Identifier is a stable, cross-referenceable entity id. The grammar is the
-// RFC 1123 DNS label (lowercase alphanumeric and '-', start and end
-// alphanumeric, at most 63 chars) so an id is usable verbatim as a Kubernetes
-// resource name, an OCI tag component, and a DNS label.
-#Identifier: =~"^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$"
-
-// ---------------------------------------------------------------------------
 // Step -- the union type
 // ---------------------------------------------------------------------------
 
@@ -193,8 +166,6 @@ package lane
 // Image references
 // ---------------------------------------------------------------------------
 
-#ImageRef: =~"^.+@sha256:[a-f0-9]{64}$"
-
 // StepImageRef references a step's image output by step alone: the image is
 // addressed by step, never by an output name (ADR-046). Used in the
 // deploy.artifacts.from disjunction.
@@ -227,10 +198,6 @@ package lane
 // Output types
 // ---------------------------------------------------------------------------
 
-#ArtifactType: "file" | "directory" | "image"
-
-#FileArtifactType: "file" | "directory"
-
 // FileOutput is a named file or directory output (plural outputs), referenced
 // by inputs.from, pack.files.from, and deploy.artifacts.from as {step, output}.
 #FileOutput: {
@@ -242,65 +209,6 @@ package lane
 	// subpath within it. An absolute path is a type error: outputs are
 	// projections of the workdir, never of the read-only base image.
 	path?: #RelPath @go(Path,optional=nillable)
-}
-
-// ---------------------------------------------------------------------------
-// Network peers -- declared trust contracts (ADR-005, ADR-007)
-// ---------------------------------------------------------------------------
-
-// Peers are container-egress trust contracts: each declares a
-// destination the step container may reach during execution,
-// together with the trust anchor strike uses to verify that
-// destination's identity. Two protocols are supported:
-//   - HTTPS peers: mediated through strike's per-step TLS
-//     mediator (ADR-028); the container's egress is restricted to
-//     declared peers and their connections are attested.
-//   - SSH peers: known_hosts injection and ssh-agent-proxy
-//     forwarding (ADR-024, ADR-025), with egress restricted to
-//     declared peers via per-peer capsule forwards (ADR-033).
-//
-// There is no OCI peer type. A step's own image is pulled
-// controller-side and verified against its pinned digest
-// (#ImageRef); the digest is the integrity anchor, so no peer
-// declaration is needed for it. A container that itself performs
-// registry operations (DinD) reaches the registry over HTTPS and
-// declares it as an HTTPS peer. See ADR-029.
-//
-// Peer is a discriminated union over the supported protocols. A
-// non-empty peers list enumerates the destinations the step may
-// reach; an absent or empty list yields an empty-allowlist capsule
-// that permits no egress (ADR-033). Peers flow into the deploy
-// attestation.
-#Peer: (#HTTPSPeer | #SSHPeer) @go(-)
-
-// HTTPSPeer declares an HTTPS endpoint together with its server-trust anchor.
-#HTTPSPeer: {
-	@go(HTTPSPeer)
-	type:  "https"   @go(Type)
-	host:  #Host     @go(Host,type="github.com/istr/strike/internal/transport".Host)
-	trust: #TLSTrust @go(Trust,type="github.com/istr/strike/internal/transport".TLSTrust)
-}
-
-// SSHPeer declares an SSH endpoint with explicit known_hosts entries.
-// Strike creates and injects a global known_hosts entry in the
-// step container.
-// For client-side authentication, strike forwards an ssh-agent socket
-// if available.
-#SSHPeer: {
-	@go(SSHPeer)
-	type: "ssh" @go(Type)
-	host: #Host @go(Host,type="github.com/istr/strike/internal/transport".Host)
-	knownHosts: [...#KnownHostEntry] @go(KnownHosts)
-}
-
-// KnownHostEntry is one server key, an OpenSSH known_hosts line
-// decomposed into typed fields.
-#KnownHostEntry: {
-	@go(KnownHostEntry)
-	keyType: "ssh-ed25519" | "ecdsa-sha2-nistp256" |
-		"rsa-sha2-512" | "rsa-sha2-256" @go(KeyType)
-	// key is the base64-encoded public key body (no PEM armor).
-	key: =~"^[A-Za-z0-9+/]+={0,2}$" @go(Key)
 }
 
 // ---------------------------------------------------------------------------
@@ -443,19 +351,6 @@ package lane
 	from: #ArtifactSource @go(From)
 }
 
-#DeployTarget: {
-	@go(DeployTarget)
-
-	// Stable identifier assigned at authoring time. External verifiers use
-	// this to pair pre/post-state digests across consecutive deploys
-	// to the same target.
-	id:          #Identifier @go(ID,type=string)
-	type:        string      @go(Type)
-	description: string      @go(Description)
-	url?:        string      @go(URL,optional=nillable)
-	namespace?:  string      @go(Namespace,optional=nillable)
-}
-
 // ---------------------------------------------------------------------------
 // State recording: pre/post captures are the input to the recording
 // operation. The output carries two digests (pre_state_digest,
@@ -523,7 +418,3 @@ package lane
 	generate: *true | bool                    @go(Generate)
 	format:   *"spdx-json" | "cyclonedx-json" @go(Format)
 }
-
-#Digest: =~"^sha256:[a-f0-9]{64}$" @go(-)
-
-#Duration: =~"^[0-9]+(s|m|h)$"

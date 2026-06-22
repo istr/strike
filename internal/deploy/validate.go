@@ -26,7 +26,10 @@ import (
 var deploySchema = stripForConcat(specs.AttestationSchema) + "\n" +
 	stripForConcat(specs.ArtifactSchema) + "\n" +
 	stripForConcat(specs.PredicateSchema) + "\n" +
-	stripForConcat(specs.LaneSchema) + "\n" +
+	stripForConcat(specs.BaseScalarsSchema) + "\n" +
+	stripForConcat(specs.BasePeerSchema) + "\n" +
+	stripForConcat(specs.BaseTargetSchema) + "\n" +
+	stripForConcat(specs.WireLaneSchema) + "\n" +
 	stripForConcat(specs.TrustRootSchema) + "\n" +
 	stripForConcat(specs.ProvenanceSchema) + "\n" +
 	stripForConcat(specs.TransportSchema)

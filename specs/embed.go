@@ -5,10 +5,32 @@ package specs
 
 import _ "embed"
 
-// LaneSchema is the embedded CUE schema for lane definitions.
+// BaseScalarsSchema is the embedded base-scalars layer of the lane schema.
+// With BasePeerSchema, BaseTargetSchema, and WireLaneSchema it forms the CUE
+// lane schema, split across the base- and wire- layer files (ADR-047). All
+// four declare package lane and are compiled together; the runtime
+// concatenates them in internal/lane/parse.go and internal/deploy/validate.go.
 //
-//go:embed lane.cue
-var LaneSchema string
+//go:embed base-scalars.cue
+var BaseScalarsSchema string
+
+// BasePeerSchema is the embedded base-peer layer of the lane schema (ADR-047);
+// see BaseScalarsSchema.
+//
+//go:embed base-peer.cue
+var BasePeerSchema string
+
+// BaseTargetSchema is the embedded base-target layer of the lane schema
+// (ADR-047); see BaseScalarsSchema.
+//
+//go:embed base-target.cue
+var BaseTargetSchema string
+
+// WireLaneSchema is the embedded wire-lane layer of the lane schema (ADR-047);
+// see BaseScalarsSchema.
+//
+//go:embed wire-lane.cue
+var WireLaneSchema string
 
 // TrustRootSchema is the embedded CUE replica of the sigstore trusted root.
 // Same package lane as LaneSchema -- lane.cue references #TrustedRootReplica,
