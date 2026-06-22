@@ -27,7 +27,7 @@ The loop has three roles with a strict direction of authority:
   annotated, never silently rewritten.
 - **Analysis model.** Reads the codebase, produces architectural
   analysis, and authors instruction files. Proposes decisions; does not
-  ratify them.
+  ratify them. Grounds by reading, not by running (see below).
 - **Coding agent.** Executes instruction files. Does not infer scope,
   does not expand it, and stops and asks when an instruction does not
   match the tree.
@@ -35,6 +35,48 @@ The loop has three roles with a strict direction of authority:
 The direction matters: analysis flows up to the operator for
 ratification, instructions flow down to the coding agent for execution.
 Neither model decides scope on its own.
+
+## The analysis model grounds by reading, not by running
+
+The analysis model is deliberately tooling-minimal. It has git-native read access
+to the pinned tree, text search, and the planning script -- enough to read any
+file at a named hash, confirm a string's shape and count, and move a roadmap
+item. It does not have the build, test, or codegen toolchain, and that absence is
+a design choice, not a gap: the model that authors instructions stays in the
+read-reason-author lane, and the build-and-run lane belongs to the coding agent
+alone. Narrowing what the author can do narrows what an over-eager author can
+quietly get wrong.
+
+This splits grounding questions into two kinds. A *static* question is settled by
+reading the pinned source: whether a before-snippet appears exactly once, where a
+base/wire boundary actually falls in a file, whether a generated artifact is
+gitignored, what a function does to a given input. The analysis model answers
+these itself; they are the substance of grounding. A *dynamic* question needs the
+toolchain to run: whether a code generator reorders its output after a file move,
+whether a golden is byte-identical after a rename, whether `make check` passes.
+The analysis model does not run these, and does not present a guess about one as
+if it had measured it.
+
+A dynamic question that bears on an instruction's correctness is resolved one of
+two ways, chosen by a single test -- can a careful reader determine the outcome
+from the pinned source alone? When yes, the instruction predicts and gates: it
+states the expected outcome explicitly and makes the agent's own build/test gate
+the proof, so a deviation stops the run instead of shipping. When no -- the
+outcome is generator-internal or otherwise unreadable from source, and
+load-bearing -- the measurement is delegated: the agent runs the operation in a
+throwaway worktree and reports the result, and the byte-exact steps that depend
+on that result are authored only afterward. The measurement is scratch, never
+committed. The discriminator is whether the byte-exact content depends on the
+measured value (delegate as a separate step) or only the gating does (predict,
+and gate); confidence is not the test, since a guess dressed as a prediction
+still ships unverified.
+
+This was made explicit after a handover phrased a pre-authoring measurement as
+something the analysis model would run in a scratch clone -- which it cannot and,
+by design, should not. An instruction resting on a measurement its author could
+not take is either a fabrication or an unverified guess wearing a measurement's
+clothes; both are worse than a named hand-off. Stating the boundary turns "I
+can't run this" from an apology into a defined step in the loop.
 
 ## The instruction file is a contract
 
