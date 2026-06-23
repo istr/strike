@@ -5,6 +5,11 @@
 // Each vector file contains both inputs and expected outputs.
 //
 // This is a development-time specification, NOT embedded in the binary.
+//
+// The cross-implementation harness these vectors exist for is only
+// partial and still to come: the vectors are schema-validated and run
+// through the Go implementation, but no second implementation exists
+// yet, so the cross-implementation comparison is unbuilt.
 
 package crossval
 

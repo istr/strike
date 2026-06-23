@@ -90,7 +90,7 @@ func decodeBase64(t *testing.T, s string) []byte {
 }
 
 // cueSchemaPath is the path to the crossval CUE schema.
-const cueSchemaPath = "../../specs/crossval.cue"
+const cueSchemaPath = "../../specs/meta-crossval.cue"
 
 // boundaryToCUEType maps boundary names to their CUE definition paths.
 var boundaryToCUEType = map[string]string{
@@ -102,7 +102,7 @@ var boundaryToCUEType = map[string]string{
 }
 
 // TestCrossvalVectorsConformToSchema validates all vector files against
-// the CUE schema in specs/crossval.cue.
+// the CUE schema in specs/meta-crossval.cue.
 func TestCrossvalVectorsConformToSchema(t *testing.T) {
 	schemaData, err := os.ReadFile(cueSchemaPath)
 	if err != nil {

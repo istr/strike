@@ -11,9 +11,9 @@ import (
 	"github.com/istr/strike/specs"
 )
 
-// TestTrustLayerConformance asserts that specs/trust-layers.cue (the single
+// TestTrustLayerConformance asserts that specs/meta-trust-layers.cue (the single
 // source for the V / E / informational classification) agrees with where
-// attestation.cue (internal collect-model) and predicate.cue (published
+// attest-attestation.cue (internal collect-model) and attest-predicate.cue (published
 // statements) actually place each field. This is the machine-checkable form of
 // the soundness note's "no E-link recorded as a V-link": the schemas are
 // projections of the map and must not drift from it.
@@ -25,8 +25,8 @@ import (
 func TestTrustLayerConformance(t *testing.T) {
 	ctx := cuecontext.New()
 
-	layers := mustCompile(t, ctx, "trust-layers.cue", stripForConcat(specs.TrustLayersSchema))
-	// deploySchema is the existing concatenation of attestation.cue + predicate.cue
+	layers := mustCompile(t, ctx, "meta-trust-layers.cue", stripForConcat(specs.TrustLayersSchema))
+	// deploySchema is the existing concatenation of attest-attestation.cue + attest-predicate.cue
 	// + the types they reference; reusing it keeps the schema set single-sourced.
 	schema := mustCompile(t, ctx, "deploy schema", deploySchema)
 
@@ -81,7 +81,7 @@ func TestTrustLayerConformance(t *testing.T) {
 
 // TestLayerDecisionProcedure asserts that a field's trust layer is a pure
 // consequence of its provenance, per the decision procedure in
-// ATTESTATION-SOUNDNESS-AND-THE-TRUST-BOUNDARY.md. trust-layers.cue encodes the
+// ATTESTATION-SOUNDNESS-AND-THE-TRUST-BOUNDARY.md. meta-trust-layers.cue encodes the
 // rules once, as the data map layerOf; this test restates them independently and
 // fails if the two disagree -- so the procedure is checked against a spec, not
 // against itself. It also pins two structural invariants: a field's derived layer
@@ -89,7 +89,7 @@ func TestTrustLayerConformance(t *testing.T) {
 // declaration-hardened.
 func TestLayerDecisionProcedure(t *testing.T) {
 	ctx := cuecontext.New()
-	layers := mustCompile(t, ctx, "trust-layers.cue", stripForConcat(specs.TrustLayersSchema))
+	layers := mustCompile(t, ctx, "meta-trust-layers.cue", stripForConcat(specs.TrustLayersSchema))
 
 	// The rules, restated independently of the CUE: V is CP-sealed canonical bytes
 	// or a CP-verified external observation; E is an engine chain assertion;
@@ -205,7 +205,7 @@ func assertFieldSet(t *testing.T, root cue.Value, def string, want map[string]bo
 		got[iter.Selector().Unquoted()] = true
 	}
 	if !equalStringSets(got, want) {
-		t.Errorf("%s field set disagrees with trust-layers.cue:\n  got:  %v\n  want: %v",
+		t.Errorf("%s field set disagrees with meta-trust-layers.cue:\n  got:  %v\n  want: %v",
 			def, sortedKeys(got), sortedKeys(want))
 	}
 }

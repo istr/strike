@@ -4,8 +4,8 @@
 // classification of every attested field (the soundness note's three-way split).
 //
 // WHY THIS FILE EXISTS. The classification is one unit of meaning; per the
-// "Meaning is single-sourced" principle it has exactly one home. attestation.cue
-// (internal collect-model) and predicate.cue (published statements) are two
+// "Meaning is single-sourced" principle it has exactly one home. attest-attestation.cue
+// (internal collect-model) and attest-predicate.cue (published statements) are two
 // PROJECTIONS of this map. A conformance test asserts both agree with it. Do not
 // restate the classification in prose anywhere -- link to this file instead.
 //
@@ -22,6 +22,12 @@
 // EXPORT. `make specs` exports this to specs/trust-layers.json for external
 // verifiers and policy engines (now including the layerOf rule table). It is DATA,
 // not a JSON Schema.
+//
+// The enforcement harness for this map is only partial and still to
+// come: the conformance test machine-checks the engineDependent and
+// informational sections and their published predicates, but the sealed
+// (V) section and the SLSA-provenance externalParameters projection are
+// pinned here and not yet checked.
 
 package trustlayers
 
@@ -93,8 +99,8 @@ layerOf: {
 	// expected engine identity -- the engine-transport arc closes this), so its row
 	// is deliberately false and the gap is machine-visible.
 	hardenedByDeclaration: bool | *false
-	internal:              string       // path in attestation.cue's #Attestation, or "-" if not in the collect-model
-	published:             #PublishedIn // statement in predicate.cue that carries it
+	internal:              string       // path in attest-attestation.cue's #Attestation, or "-" if not in the collect-model
+	published:             #PublishedIn // statement in attest-predicate.cue that carries it
 	rationale:             string       // one-line soundness rationale (human context; not load-bearing)
 }
 

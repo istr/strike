@@ -41,19 +41,19 @@ var TrustRootSchema string
 
 // AttestationSchema is the embedded CUE schema for deploy attestations.
 //
-//go:embed attestation.cue
+//go:embed attest-attestation.cue
 var AttestationSchema string
 
 // ArtifactSchema is the embedded CUE schema for artifact provenance records.
 // Same package deploy as AttestationSchema -- must be compiled together.
 //
-//go:embed artifact.cue
+//go:embed attest-artifact-record.cue
 var ArtifactSchema string
 
 // PredicateSchema is the embedded CUE schema for the output attestation
 // predicates (ADR-040 D3). Same package deploy -- must be compiled together.
 //
-//go:embed predicate.cue
+//go:embed attest-predicate.cue
 var PredicateSchema string
 
 // ProvenanceSchema is the embedded CUE schema for source provenance records.
@@ -72,12 +72,12 @@ var TransportSchema string
 // (v0.3) -- the producer emission contract validated at sign time. Same
 // package deploy as AttestationSchema.
 //
-//go:embed sigstore-bundle.cue
+//go:embed attest-bundle.cue
 var BundleSchema string
 
 // TrustLayersSchema is the embedded single-source trust-layer map
-// (specs/trust-layers.cue). It is data, not a validation schema: the
-// conformance test asserts attestation.cue and predicate.cue agree with it.
+// (specs/meta-trust-layers.cue). It is data, not a validation schema: the
+// conformance test asserts attest-attestation.cue and attest-predicate.cue agree with it.
 //
-//go:embed trust-layers.cue
+//go:embed meta-trust-layers.cue
 var TrustLayersSchema string

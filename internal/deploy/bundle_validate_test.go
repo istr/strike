@@ -7,7 +7,7 @@ import (
 )
 
 // validBundleJSON is a minimal sigstore v0.3 bundle that conforms to
-// specs/sigstore-bundle.cue: one DSSE envelope, one leaf certificate, one Rekor
+// specs/attest-bundle.cue: one DSSE envelope, one leaf certificate, one Rekor
 // v2 transparency-log entry (no SET, no integratedTime), one RFC3161 timestamp.
 const validBundleJSON = `{
   "mediaType": "application/vnd.dev.sigstore.bundle.v0.3+json",

@@ -5,7 +5,7 @@
 // trust chain -- it must be formally specified, not just implicitly
 // defined by Go struct tags.
 //
-// Companion file: artifact.cue defines #ArtifactRecord and related
+// Companion file: attest-artifact-record.cue defines #ArtifactRecord and related
 // provenance types (same package attest, merged automatically by CUE).
 //
 // Validation flow:
