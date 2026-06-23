@@ -36,6 +36,21 @@ The direction matters: analysis flows up to the operator for
 ratification, instructions flow down to the coding agent for execution.
 Neither model decides scope on its own.
 
+Roadmap item creation is the analysis model's lane and happens in
+the read-reason-author session: it runs the roadmap-items skill
+to write the new proposed item and delivers it as a git am-capable patch
+alongside the instruction that motivates it.
+
+Every other roadmap store mutation -- the done retire, a rank, rescale,
+restructure, reorder, or an _order.md edit -- is the executor's lane,
+committed in the run that occasions it: a retire rides at the head of
+the next instruction, a reorder rides with the work that reorders it.
+
+This mirrors the read-reason-author versus build-and-run split.
+The analysis model originates planning state from its grounding,
+while the coding agent commits the mechanical maintenance of it.
+The operator performs the proposed to ratified flip between the two.
+
 ## The analysis model grounds by reading, not by running
 
 The analysis model is deliberately tooling-minimal. It has git-native read access
