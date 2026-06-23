@@ -32,7 +32,7 @@ func buildSchema() string {
 	// The lane schema spans the base- and wire- layer files (all package lane)
 	// plus the transport and trust-root vocabularies they reference. Strip each
 	// file's package declaration so they compile as one CUE source; the wire
-	// lane references #TrustedRootReplica from sigstore-trustroot.cue.
+	// lane references #TrustedRootReplica from wire-trustroot.cue.
 	var out []string
 	for _, src := range []string{
 		specs.BaseScalarsSchema,

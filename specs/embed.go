@@ -36,7 +36,7 @@ var WireLaneSchema string
 // Same package lane as LaneSchema -- lane.cue references #TrustedRootReplica,
 // so the two must be compiled together for runtime validation.
 //
-//go:embed sigstore-trustroot.cue
+//go:embed wire-trustroot.cue
 var TrustRootSchema string
 
 // AttestationSchema is the embedded CUE schema for deploy attestations.
@@ -59,13 +59,13 @@ var PredicateSchema string
 // ProvenanceSchema is the embedded CUE schema for source provenance records.
 // Same package lane as LaneSchema.
 //
-//go:embed source-provenance.cue
+//go:embed base-provenance.cue
 var ProvenanceSchema string
 
 // TransportSchema is the embedded CUE schema for transport-level types
 // (host constraint, TLS trust anchors). Same package lane as LaneSchema.
 //
-//go:embed transport.cue
+//go:embed base-transport.cue
 var TransportSchema string
 
 // BundleSchema is the embedded CUE schema for the published sigstore bundle

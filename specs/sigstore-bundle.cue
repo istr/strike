@@ -5,7 +5,7 @@ package attest
 // projection of the sigstore bundle media type
 // "application/vnd.dev.sigstore.bundle.v0.3+json"
 // (github.com/sigstore/protobuf-specs, proto3-JSON encoding), constrained to
-// the single emission profile strike produces. Like sigstore-trustroot.cue it
+// the single emission profile strike produces. Like wire-trustroot.cue it
 // projects an external standard so a cross-implementation verifier can check
 // the published material from the exported schemas; it is not a private fork of
 // a strike contract.

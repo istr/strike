@@ -7,7 +7,7 @@
 // Higher-level transport functionality (TLS dialing with
 // verified trust anchors, connection-identity capture) lives
 // in this package but is added in a follow-up PR. This file
-// contains only the types whose CUE source is specs/transport.cue.
+// contains only the types whose CUE source is specs/base-transport.cue.
 package transport
 
 import (
