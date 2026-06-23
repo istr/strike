@@ -3,72 +3,9 @@ package deploy
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 
-	"cuelang.org/go/cue"
-	"cuelang.org/go/cue/cuecontext"
-	cuejson "cuelang.org/go/encoding/json"
-	"github.com/istr/strike/internal/lane"
-	"github.com/istr/strike/specs"
+	"github.com/istr/strike/internal/schema"
 )
-
-// deploySchema combines the attestation, artifact, predicate, and lane CUE
-// schemas. They are compiled together via string concatenation so that types
-// like #ArtifactRecord and the shared lane declarations are available when
-// validating #Attestation.
-//
-// The attest-package files import the lane package and name shared
-// declarations qualified (lane.#X) for the `cue export` toolchain, but
-// ctx.CompileString cannot resolve module imports. stripForConcat removes
-// package declarations and import blocks and drops the lane qualifier so the
-// qualified references resolve by name against the concatenated lane
-// definitions. See docs/ADR-047-spec-package-layering.md.
-var deploySchema = stripForConcat(specs.AttestationSchema) + "\n" +
-	stripForConcat(specs.ArtifactSchema) + "\n" +
-	stripForConcat(specs.PredicateSchema) + "\n" +
-	stripForConcat(specs.BaseScalarsSchema) + "\n" +
-	stripForConcat(specs.BasePeerSchema) + "\n" +
-	stripForConcat(specs.BaseTargetSchema) + "\n" +
-	stripForConcat(specs.WireLaneSchema) + "\n" +
-	stripForConcat(specs.TrustRootSchema) + "\n" +
-	stripForConcat(specs.ProvenanceSchema) + "\n" +
-	stripForConcat(specs.TransportSchema)
-
-// stripForConcat removes package declarations and import blocks and drops the
-// lane package qualifier (lane.#X -> #X) from a CUE source string so it can be
-// concatenated with other CUE sources for single-string compilation, where the
-// merged instance has no package qualifier.
-func stripForConcat(src string) string {
-	var lines []string
-	inImport := false
-	for _, line := range strings.Split(src, "\n") {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "package ") {
-			continue
-		}
-		// Single-line import: import "..."
-		if strings.HasPrefix(trimmed, "import \"") {
-			continue
-		}
-		// Multi-line import block: import ( ... )
-		if trimmed == "import (" {
-			inImport = true
-			continue
-		}
-		if inImport {
-			if trimmed == ")" {
-				inImport = false
-			}
-			continue
-		}
-		// Qualified lane references resolve against the lane definitions
-		// concatenated into this single instance, which has no package
-		// qualifier. See docs/ADR-047-spec-package-layering.md.
-		line = strings.ReplaceAll(line, "lane.#", "#")
-		lines = append(lines, line)
-	}
-	return strings.Join(lines, "\n")
-}
 
 // ValidateAttestation checks a serialized attestation against the embedded
 // CUE schema. This ensures that the attestation output -- the document that
@@ -87,24 +24,10 @@ func ValidateAttestation(att *Attestation) error {
 }
 
 // ValidateAttestationJSON validates raw JSON bytes against the attestation
-// CUE schema. This is the cross-validation boundary: any implementation
-// can serialize an attestation to JSON and validate it against the same schema.
+// CUE schema. This is the cross-validation boundary: any implementation can
+// serialize an attestation to JSON and validate it against the same schema.
 func ValidateAttestationJSON(data []byte) error {
-	ctx := cuecontext.New()
-
-	compiled := ctx.CompileString(deploySchema).
-		LookupPath(cue.ParsePath("#Attestation"))
-
-	expr, err := cuejson.Extract("attestation.json", data)
-	if err != nil {
-		return fmt.Errorf("extract attestation JSON: %w", err)
-	}
-
-	unified := compiled.Unify(ctx.BuildExpr(expr))
-	if err := lane.FormatValidationError(unified.Validate(cue.Concrete(true))); err != nil {
-		return fmt.Errorf("attestation schema violation:\n%w", err)
-	}
-	return nil
+	return schema.ValidateAttestationJSON(data)
 }
 
 // ValidateBundleJSON validates a marshaled sigstore bundle against the embedded
@@ -114,19 +37,5 @@ func ValidateAttestationJSON(data []byte) error {
 // consumer side (internal/verify) is intentionally not narrowed to this schema:
 // it parses arbitrary sigstore bundles via sigstore-go.
 func ValidateBundleJSON(data []byte) error {
-	ctx := cuecontext.New()
-
-	compiled := ctx.CompileString(stripForConcat(specs.BundleSchema)).
-		LookupPath(cue.ParsePath("#Bundle"))
-
-	expr, err := cuejson.Extract("bundle.json", data)
-	if err != nil {
-		return fmt.Errorf("extract bundle JSON: %w", err)
-	}
-
-	unified := compiled.Unify(ctx.BuildExpr(expr))
-	if err := lane.FormatValidationError(unified.Validate(cue.Concrete(true))); err != nil {
-		return fmt.Errorf("bundle schema violation:\n%w", err)
-	}
-	return nil
+	return schema.ValidateBundleJSON(data)
 }

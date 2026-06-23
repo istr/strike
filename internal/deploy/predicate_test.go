@@ -4,25 +4,15 @@ import (
 	"encoding/json"
 	"testing"
 
-	"cuelang.org/go/cue"
-	"cuelang.org/go/cue/cuecontext"
-	cuejson "cuelang.org/go/encoding/json"
-
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/deploy"
 	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/schema"
 )
 
 func validateAgainstDef(t *testing.T, data []byte, def string) {
 	t.Helper()
-	ctx := cuecontext.New()
-	compiled := ctx.CompileString(deploy.DeploySchema).LookupPath(cue.ParsePath(def))
-	expr, err := cuejson.Extract("predicate.json", data)
-	if err != nil {
-		t.Fatalf("extract %s JSON: %v", def, err)
-	}
-	unified := compiled.Unify(ctx.BuildExpr(expr))
-	if err := lane.FormatValidationError(unified.Validate(cue.Concrete(true))); err != nil {
+	if err := schema.ValidateDef(schema.Deploy, def, data); err != nil {
 		t.Fatalf("%s schema violation:\n%v", def, err)
 	}
 }

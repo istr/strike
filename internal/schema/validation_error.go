@@ -1,4 +1,4 @@
-package lane
+package schema
 
 import (
 	"errors"

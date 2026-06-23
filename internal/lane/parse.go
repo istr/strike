@@ -6,14 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/netip"
-	"strings"
 
 	"github.com/istr/strike/internal/clock"
+	"github.com/istr/strike/internal/schema"
 
-	"cuelang.org/go/cue"
-	"cuelang.org/go/cue/cuecontext"
-	cuejson "cuelang.org/go/encoding/json"
-	"github.com/istr/strike/specs"
 	"gopkg.in/yaml.v3"
 )
 
@@ -24,32 +20,6 @@ func ParseDuration(d *Duration, defaultVal clock.Duration) (clock.Duration, erro
 		return defaultVal, nil
 	}
 	return clock.ParseDuration(string(*d))
-}
-
-var schema = buildSchema()
-
-func buildSchema() string {
-	// The lane schema spans the base- and wire- layer files (all package lane)
-	// plus the transport and trust-root vocabularies they reference. Strip each
-	// file's package declaration so they compile as one CUE source; the wire
-	// lane references #TrustedRootReplica from wire-trustroot.cue.
-	var out []string
-	for _, src := range []string{
-		specs.BaseScalarsSchema,
-		specs.BasePeerSchema,
-		specs.BaseTargetSchema,
-		specs.WireLaneSchema,
-		specs.TransportSchema,
-		specs.TrustRootSchema,
-	} {
-		for _, line := range strings.Split(src, "\n") {
-			if strings.HasPrefix(strings.TrimSpace(line), "package ") {
-				continue
-			}
-			out = append(out, line)
-		}
-	}
-	return strings.Join(out, "\n")
 }
 
 // Parse reads a lane YAML file, validates it against the embedded CUE schema,
@@ -82,7 +52,7 @@ func Parse(fp FilePath) (*Lane, Digest, error) {
 	}
 
 	// Validate against embedded CUE schema
-	if err := validate(asJSON); err != nil {
+	if err := schema.ValidateLaneJSON(asJSON); err != nil {
 		return nil, Digest{}, fmt.Errorf("validation:\n%w", err)
 	}
 
@@ -232,19 +202,4 @@ func validateResolver(p *Lane) error {
 		}
 	}
 	return nil
-}
-
-func validate(data []byte) error {
-	ctx := cuecontext.New()
-
-	compiledSchema := ctx.CompileString(schema).
-		LookupPath(cue.ParsePath("#Lane"))
-
-	expr, err := cuejson.Extract("lane.yaml", data)
-	if err != nil {
-		return err
-	}
-
-	unified := compiledSchema.Unify(ctx.BuildExpr(expr))
-	return FormatValidationError(unified.Validate(cue.Concrete(true)))
 }

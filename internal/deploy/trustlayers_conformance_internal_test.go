@@ -7,8 +7,7 @@ import (
 	"testing"
 
 	"cuelang.org/go/cue"
-	"cuelang.org/go/cue/cuecontext"
-	"github.com/istr/strike/specs"
+	"github.com/istr/strike/internal/schema"
 )
 
 // TestTrustLayerConformance asserts that specs/meta-trust-layers.cue (the single
@@ -23,12 +22,8 @@ import (
 // section and the SLSA-provenance externalParameters projection are pinned in
 // the map but not yet machine-checked (Stage-2).
 func TestTrustLayerConformance(t *testing.T) {
-	ctx := cuecontext.New()
-
-	layers := mustCompile(t, ctx, "meta-trust-layers.cue", stripForConcat(specs.TrustLayersSchema))
-	// deploySchema is the existing concatenation of attest-attestation.cue + attest-predicate.cue
-	// + the types they reference; reusing it keeps the schema set single-sourced.
-	schema := mustCompile(t, ctx, "deploy schema", deploySchema)
+	layers := schema.TrustLayers
+	attestRoot := schema.Deploy
 
 	// Expected field-name sets, derived from the single-source map. The map key
 	// is the logical field id, which equals the field label in both the
@@ -75,7 +70,7 @@ func TestTrustLayerConformance(t *testing.T) {
 		{wantPublished["informational"], "#InformationalPredicate"},
 	}
 	for _, c := range cases {
-		assertFieldSet(t, schema, c.def, c.want)
+		assertFieldSet(t, attestRoot, c.def, c.want)
 	}
 }
 
@@ -88,8 +83,7 @@ func TestTrustLayerConformance(t *testing.T) {
 // matches the section it lives in, and only a CP-observed fact may be
 // declaration-hardened.
 func TestLayerDecisionProcedure(t *testing.T) {
-	ctx := cuecontext.New()
-	layers := mustCompile(t, ctx, "meta-trust-layers.cue", stripForConcat(specs.TrustLayersSchema))
+	layers := schema.TrustLayers
 
 	// The rules, restated independently of the CUE: V is CP-sealed canonical bytes
 	// or a CP-verified external observation; E is an engine chain assertion;
@@ -180,15 +174,6 @@ func TestLayerDecisionProcedure(t *testing.T) {
 			t.Errorf("field %q: hardenedByDeclaration=true requires provenance cpObserved, got %q", key, prov)
 		}
 	}
-}
-
-func mustCompile(t *testing.T, ctx *cue.Context, name, src string) cue.Value {
-	t.Helper()
-	v := ctx.CompileString(src)
-	if err := v.Err(); err != nil {
-		t.Fatalf("compile %s: %v", name, err)
-	}
-	return v
 }
 
 // assertFieldSet checks that the CUE definition at def has exactly the field

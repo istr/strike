@@ -4,66 +4,17 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"cuelang.org/go/cue"
-	"cuelang.org/go/cue/cuecontext"
-
-	"github.com/istr/strike/specs"
+	"github.com/istr/strike/internal/schema"
 )
 
-var (
-	provenanceCtx     *cue.Context
-	provenanceSchemas map[string]cue.Value
-)
-
-func init() {
-	provenanceCtx = cuecontext.New()
-	schemaFile := provenanceCtx.CompileString(specs.ProvenanceSchema)
-	if schemaFile.Err() != nil {
-		panic(fmt.Sprintf("provenance schema does not compile: %v", schemaFile.Err()))
-	}
-	provenanceSchemas = map[string]cue.Value{
-		"git":     schemaFile.LookupPath(cue.ParsePath("#GitProvenanceRecord")),
-		"tarball": schemaFile.LookupPath(cue.ParsePath("#TarballProvenanceRecord")),
-		"oci":     schemaFile.LookupPath(cue.ParsePath("#OCIProvenanceRecord")),
-		"url":     schemaFile.LookupPath(cue.ParsePath("#URLProvenanceRecord")),
-	}
-	for name, v := range provenanceSchemas {
-		if !v.Exists() {
-			panic(fmt.Sprintf("provenance schema %q not found", name))
-		}
-	}
-}
-
-// ValidateProvenance parses raw JSON, validates it against the CUE schema
-// for the declared type, and returns the typed ProvenanceRecord.
+// ValidateProvenance validates raw JSON against the CUE schema for the
+// declared type and returns the typed ProvenanceRecord. The schema-side
+// checks run in internal/schema; the typed unmarshal stays here, where the
+// record types are defined.
 func ValidateProvenance(declaredType string, raw []byte) (ProvenanceRecord, error) {
-	schema, ok := provenanceSchemas[declaredType]
-	if !ok {
-		return nil, fmt.Errorf("unknown provenance type %q", declaredType)
+	if err := schema.ValidateProvenanceJSON(declaredType, raw); err != nil {
+		return nil, err
 	}
-
-	var probe map[string]any
-	if err := json.Unmarshal(raw, &probe); err != nil {
-		return nil, fmt.Errorf("not valid JSON: %w", err)
-	}
-
-	recordType, ok := probe["type"].(string)
-	if !ok {
-		return nil, fmt.Errorf("provenance record field \"type\" is not a string")
-	}
-	if recordType != declaredType {
-		return nil, fmt.Errorf("record type %q does not match declared type %q", recordType, declaredType)
-	}
-
-	rec := provenanceCtx.CompileBytes(raw)
-	if rec.Err() != nil {
-		return nil, fmt.Errorf("invalid record: %w", rec.Err())
-	}
-	unified := schema.Unify(rec)
-	if err := unified.Validate(cue.Concrete(true)); err != nil {
-		return nil, fmt.Errorf("schema validation: %w", err)
-	}
-
 	return unmarshalProvenanceRecord(declaredType, raw)
 }
 

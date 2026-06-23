@@ -1,8 +1,9 @@
 # .go-arch-lint.yml
 # Enforces the internal package layering of github.com/istr/strike.
 # Invariant: dependencies may not point upward across tiers; downward edges are
-# allowed. foundation depends on nothing internal; services may have intra-tier
-# edges, orchestration may not.
+# allowed. contract depends on nothing internal; foundation depends on nothing
+# internal except contract; services may have intra-tier edges, orchestration
+# may not.
 # Test files and non-product code (tools, fixtures) are out of scope.
 #
 #   entry          I=1.00      cmd/strike
@@ -10,7 +11,8 @@
 #   services       I~0.43-0.67 container, lane, copier, mediator, registry,
 #                              capsule, front, resolver, verify
 #   transport      I=0.22      transport                 (base infrastructure)
-#   foundation     I=0.00      bundle, clock, closer, egress, probe, specs  (sinks; no internal deps)
+#   foundation     I~0.00-0.33 bundle, clock, closer, egress, probe, schema  (no internal deps except contract)
+#   contract       I=0.00      specs                     (layer 0; embedded contract data, no internal deps)
 
 version: 3
 
@@ -29,6 +31,8 @@ exclude:
   - internal/registry/regtest # test double
 
 components:
+  contract:
+    in: specs
   foundation:
     in:
       - internal/bundle
@@ -36,7 +40,7 @@ components:
       - internal/closer
       - internal/egress
       - internal/probe
-      - specs
+      - internal/schema
   transport:
     in: internal/transport
   services:
@@ -58,23 +62,30 @@ components:
     in: cmd/strike
 
 deps:
-  # foundation has no mayDependOn: it depends on nothing internal (ADR-044).
+  # contract has no mayDependOn: it is layer 0, depends on nothing internal (ADR-044).
+  foundation:
+    mayDependOn:
+      - contract              # embedded schema data, the only internal edge foundation may make
   transport:
     mayDependOn:
       - foundation
+      - contract
   services:
     mayDependOn:
       - services              # allow intra-tier edges (capsule->mediator, etc.)
       - transport
       - foundation
+      - contract
   orchestration:
     mayDependOn:
       - services
       - transport
       - foundation
+      - contract
   entry:
     mayDependOn:
       - orchestration
       - services
       - transport
       - foundation
+      - contract

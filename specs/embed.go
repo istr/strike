@@ -1,83 +1,15 @@
 // Package specs embeds the CUE schema definitions for lane and attestation
 // validation. These are the single source of truth for both input (lane YAML)
-// and output (deploy attestation) contracts.
+// and output (deploy attestation) contracts. The schemas are loaded natively
+// as a CUE module by internal/schema; this package only provides the embedded
+// file set. See docs/ADR-047-spec-package-layering.md.
 package specs
 
-import _ "embed"
+import "embed"
 
-// BaseScalarsSchema is the embedded base-scalars layer of the lane schema.
-// With BasePeerSchema, BaseTargetSchema, and WireLaneSchema it forms the CUE
-// lane schema, split across the base- and wire- layer files (ADR-047). All
-// four declare package lane and are compiled together; the runtime
-// concatenates them in internal/lane/parse.go and internal/deploy/validate.go.
+// FS holds the embedded CUE spec files (the base-, api-, wire-, attest-, and
+// meta- layer files). internal/schema presents them as a CUE module tree and
+// loads each package natively via cue/load.
 //
-//go:embed base-scalars.cue
-var BaseScalarsSchema string
-
-// BasePeerSchema is the embedded base-peer layer of the lane schema (ADR-047);
-// see BaseScalarsSchema.
-//
-//go:embed base-peer.cue
-var BasePeerSchema string
-
-// BaseTargetSchema is the embedded base-target layer of the lane schema
-// (ADR-047); see BaseScalarsSchema.
-//
-//go:embed base-target.cue
-var BaseTargetSchema string
-
-// WireLaneSchema is the embedded wire-lane layer of the lane schema (ADR-047);
-// see BaseScalarsSchema.
-//
-//go:embed wire-lane.cue
-var WireLaneSchema string
-
-// TrustRootSchema is the embedded CUE replica of the sigstore trusted root.
-// Same package lane as LaneSchema -- lane.cue references #TrustedRootReplica,
-// so the two must be compiled together for runtime validation.
-//
-//go:embed wire-trustroot.cue
-var TrustRootSchema string
-
-// AttestationSchema is the embedded CUE schema for deploy attestations.
-//
-//go:embed attest-attestation.cue
-var AttestationSchema string
-
-// ArtifactSchema is the embedded CUE schema for artifact provenance records.
-// Same package deploy as AttestationSchema -- must be compiled together.
-//
-//go:embed attest-artifact-record.cue
-var ArtifactSchema string
-
-// PredicateSchema is the embedded CUE schema for the output attestation
-// predicates (ADR-040 D3). Same package deploy -- must be compiled together.
-//
-//go:embed attest-predicate.cue
-var PredicateSchema string
-
-// ProvenanceSchema is the embedded CUE schema for source provenance records.
-// Same package lane as LaneSchema.
-//
-//go:embed base-provenance.cue
-var ProvenanceSchema string
-
-// TransportSchema is the embedded CUE schema for transport-level types
-// (host constraint, TLS trust anchors). Same package lane as LaneSchema.
-//
-//go:embed base-transport.cue
-var TransportSchema string
-
-// BundleSchema is the embedded CUE schema for the published sigstore bundle
-// (v0.3) -- the producer emission contract validated at sign time. Same
-// package deploy as AttestationSchema.
-//
-//go:embed attest-bundle.cue
-var BundleSchema string
-
-// TrustLayersSchema is the embedded single-source trust-layer map
-// (specs/meta-trust-layers.cue). It is data, not a validation schema: the
-// conformance test asserts attest-attestation.cue and attest-predicate.cue agree with it.
-//
-//go:embed meta-trust-layers.cue
-var TrustLayersSchema string
+//go:embed *.cue
+var FS embed.FS

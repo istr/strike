@@ -9,11 +9,8 @@ import (
 	"testing"
 
 	"github.com/istr/strike/internal/closer"
+	"github.com/istr/strike/internal/schema"
 	"github.com/istr/strike/test/crossval"
-
-	"cuelang.org/go/cue"
-	"cuelang.org/go/cue/cuecontext"
-	cuejson "cuelang.org/go/encoding/json"
 )
 
 // crossvalDir is the on-disk path to cross-validation test vectors.
@@ -89,9 +86,6 @@ func decodeBase64(t *testing.T, s string) []byte {
 	return data
 }
 
-// cueSchemaPath is the path to the crossval CUE schema.
-const cueSchemaPath = "../../specs/meta-crossval.cue"
-
 // boundaryToCUEType maps boundary names to their CUE definition paths.
 var boundaryToCUEType = map[string]string{
 	"AssembleImage":       "#AssembleVector",
@@ -102,19 +96,8 @@ var boundaryToCUEType = map[string]string{
 }
 
 // TestCrossvalVectorsConformToSchema validates all vector files against
-// the CUE schema in specs/meta-crossval.cue.
+// the crossval CUE package loaded by internal/schema.
 func TestCrossvalVectorsConformToSchema(t *testing.T) {
-	schemaData, err := os.ReadFile(cueSchemaPath)
-	if err != nil {
-		t.Fatalf("read CUE schema: %v", err)
-	}
-
-	ctx := cuecontext.New()
-	compiled := ctx.CompileBytes(schemaData)
-	if compiled.Err() != nil {
-		t.Fatalf("compile CUE schema: %v", compiled.Err())
-	}
-
 	files, err := fs.Glob(crossval.FS, "*/*.json")
 	if err != nil {
 		t.Fatal(err)
@@ -125,14 +108,14 @@ func TestCrossvalVectorsConformToSchema(t *testing.T) {
 
 	for _, f := range files {
 		t.Run(f, func(t *testing.T) {
-			validateVectorAgainstCUE(t, ctx, compiled, f)
+			validateVectorAgainstCUE(t, f)
 		})
 	}
 }
 
-// validateVectorAgainstCUE validates a single vector file against the compiled CUE schema.
-// name is an embed-relative path like "spechash/foo.json".
-func validateVectorAgainstCUE(t *testing.T, ctx *cue.Context, compiled cue.Value, name string) {
+// validateVectorAgainstCUE validates a single vector file against the crossval
+// schema. name is an embed-relative path like "spechash/foo.json".
+func validateVectorAgainstCUE(t *testing.T, name string) {
 	t.Helper()
 
 	data, err := crossval.FS.ReadFile(name)
@@ -152,18 +135,7 @@ func validateVectorAgainstCUE(t *testing.T, ctx *cue.Context, compiled cue.Value
 		t.Fatalf("unknown boundary %q", envelope.Boundary)
 	}
 
-	schema := compiled.LookupPath(cue.ParsePath(cuePath))
-	if schema.Err() != nil {
-		t.Fatalf("lookup %s: %v", cuePath, schema.Err())
-	}
-
-	expr, err := cuejson.Extract(filepath.Base(name), data)
-	if err != nil {
-		t.Fatalf("extract JSON: %v", err)
-	}
-
-	unified := schema.Unify(ctx.BuildExpr(expr))
-	if err := unified.Validate(cue.Concrete(true)); err != nil {
+	if err := schema.ValidateDef(schema.Crossval, cuePath, data); err != nil {
 		t.Errorf("schema violation:\n%v", err)
 	}
 }

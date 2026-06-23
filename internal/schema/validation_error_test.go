@@ -1,4 +1,4 @@
-package lane_test
+package schema_test
 
 import (
 	"errors"
@@ -8,18 +8,18 @@ import (
 	"cuelang.org/go/cue"
 	"cuelang.org/go/cue/cuecontext"
 
-	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/schema"
 )
 
 func TestFormatValidationError_Nil(t *testing.T) {
-	if got := lane.FormatValidationError(nil); got != nil {
+	if got := schema.FormatValidationError(nil); got != nil {
 		t.Errorf("FormatValidationError(nil) = %v, want nil", got)
 	}
 }
 
 func TestFormatValidationError_PlainErrorPassthrough(t *testing.T) {
 	plain := errors.New("not a cue error")
-	got := lane.FormatValidationError(plain)
+	got := schema.FormatValidationError(plain)
 	if got == nil || got.Error() != "not a cue error" {
 		t.Errorf("FormatValidationError(plain) = %v, want passthrough", got)
 	}
@@ -32,16 +32,16 @@ func TestFormatValidationError_PlainErrorPassthrough(t *testing.T) {
 // concrete sub-errors and drop the marker line.
 func TestFormatValidationError_DropsDisjunctionMarker(t *testing.T) {
 	ctx := cuecontext.New()
-	schema := ctx.CompileString(`
+	def := ctx.CompileString(`
 		#Color: {kind: "rgb", r: int, g: int, b: int} |
 		        {kind: "named", name: string}
 	`).LookupPath(cue.ParsePath("#Color"))
-	if schema.Err() != nil {
-		t.Fatalf("compile schema: %v", schema.Err())
+	if def.Err() != nil {
+		t.Fatalf("compile schema: %v", def.Err())
 	}
 
 	bad := ctx.CompileString(`{kind: "wrong"}`)
-	unified := schema.Unify(bad)
+	unified := def.Unify(bad)
 	rawErr := unified.Validate(cue.Concrete(true))
 	if rawErr == nil {
 		t.Fatal("expected a validation error from the disjunction")
@@ -52,7 +52,7 @@ func TestFormatValidationError_DropsDisjunctionMarker(t *testing.T) {
 		t.Logf("raw error did not contain disjunction marker -- CUE may have changed its rendering: %v", rawErr)
 	}
 
-	formatted := lane.FormatValidationError(rawErr)
+	formatted := schema.FormatValidationError(rawErr)
 	if formatted == nil {
 		t.Fatal("FormatValidationError returned nil for a real error")
 	}
@@ -71,21 +71,21 @@ func TestFormatValidationError_DropsDisjunctionMarker(t *testing.T) {
 // duplicates.
 func TestFormatValidationError_Dedupe(t *testing.T) {
 	ctx := cuecontext.New()
-	schema := ctx.CompileString(`
+	def := ctx.CompileString(`
 		#Pair: {a: string, b: string}
 	`).LookupPath(cue.ParsePath("#Pair"))
-	if schema.Err() != nil {
-		t.Fatalf("compile schema: %v", schema.Err())
+	if def.Err() != nil {
+		t.Fatalf("compile schema: %v", def.Err())
 	}
 
 	bad := ctx.CompileString(`{a: 1, b: 2}`)
-	unified := schema.Unify(bad)
+	unified := def.Unify(bad)
 	rawErr := unified.Validate(cue.Concrete(true))
 	if rawErr == nil {
 		t.Fatal("expected validation error")
 	}
 
-	formatted := lane.FormatValidationError(rawErr)
+	formatted := schema.FormatValidationError(rawErr)
 	if formatted == nil {
 		t.Fatal("FormatValidationError returned nil")
 	}

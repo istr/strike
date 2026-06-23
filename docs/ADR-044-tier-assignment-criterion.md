@@ -114,3 +114,52 @@ a tier boundary to evade this rule.
   owned by one side or duplicated.
 - **Code is liability** -- a misplaced primitive that invites a cycle is treated
   as the defect it is; the criterion removes the class of error at its root.
+
+## Amendment 2026-06-24 -- the contract tier (layer 0)
+
+Status: Accepted (item-0031). Append-only: this block supersedes the original
+clauses it names below without editing them in place; every other clause of the
+original Decision, Consequences, and Principles stands unchanged.
+
+A sixth tier, **contract**, is added below foundation as layer 0. It supersedes
+two original clauses to the extent stated here: the Decision's foundation bullet
+("no internal dependencies ... not even another foundation package") and the
+Consequences bullet that forbids "any internal dependency in foundation."
+
+- **contract** -- layer 0. No internal dependencies, like foundation, but
+  distinguished from it by *kind*: a contract package is pure embedded data -- it
+  exports only `//go:embed` assets (the cross-implementation schema sources, e.g.
+  `specs`) and declares no executable logic. Because it imports nothing internal,
+  any tier above it -- including foundation -- may take a downward edge to it.
+- **foundation** (revised) -- no internal dependencies except a single downward
+  edge to the contract tier. A foundation package still imports no other
+  foundation package; its only permitted internal import is an embedded-data
+  package in contract.
+
+Contract sits beneath foundation, so transport, services, orchestration, and
+entry may each also depend on it -- it is below their existing floors. The
+no-upward invariant is otherwise unchanged.
+
+**Determinism at the contract/foundation boundary.** The original criterion is
+computable from the import graph alone. The contract/foundation split is the one
+place two packages may share a zero internal-dependency floor; it is settled by
+*kind*, itself mechanically checkable: a zero-internal-dependency package that
+declares no functions or methods and exports only embedded-asset variables is
+contract; one that carries executable behavior is foundation.
+
+**Why a tier rather than a relaxed foundation rule.** `specs` exports the CUE
+schema bytes; `internal/schema` (foundation) loads them into a CUE module at
+runtime and must import `specs`. They are different kinds -- data versus the code
+that reads it -- not different dependency floors. Without layer 0 the only way to
+legalize `internal/schema -> specs` would be to permit edges among all foundation
+packages, reopening the cycle and cluster loopholes the original foundation rule
+closed. Placing `specs` one level below, as pure data every tier may read, keeps
+the no-edges-among-foundation rule intact for code while giving the schema loader
+a legal downward import: a contract package imports nothing internal, so the
+foundation->contract edge can neither close a cycle nor grow a coupled cluster of
+code.
+
+**Enforcement.** `.go-arch-lint.yml` gains a `contract` component holding
+`specs`, removes `specs` from `foundation`, and grants every tier (foundation
+included) `mayDependOn: contract`. The header tier table gains the contract row
+and notes foundation's single permitted downward edge.
