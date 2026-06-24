@@ -34,25 +34,37 @@ package lane
 	}
 }
 
-// OutputHandle is the resolved runtime reference to a step's output image
-// (ADR-046, layer 2). Populated during execution when the producer wraps or
-// commits the output; carried in State for consumer resolution. imageRef is
-// the digest-pinned local reference (repo@sha256:<manifestDigest>) produced
-// by the normalize round-trip through ggcr.
-#OutputHandle: {
-	@go(OutputHandle)
-	imageRef: string @go(ImageRef)
+// OutputHandle is the resolved runtime reference to a step's output (ADR-046,
+// layer 2), discriminated by output kind. It is carried in State for consumer
+// resolution. imageRef (common to both variants) is the digest-pinned local
+// reference (repo@sha256:<manifestDigest>) produced by the normalize
+// round-trip through ggcr. @go(-): hand-modelled as a Go interface over the two
+// variant structs in internal/lane/output_handle.go, parallel to
+// #ArtifactSource. The variant structs below are generated; the union is not.
+#OutputHandle: #ImageOutputHandle | #FileOutputHandle @go(-)
+
+// #ImageOutputHandle is an image output: the whole rootfs is the artifact, so
+// there is no per-output layer.
+#ImageOutputHandle: {
+	@go(ImageOutputHandle)
+	imageRef: string @go(Ref)
+}
+
+// #FileOutputHandle is a file or directory output: a single layer of the
+// image, selected by its diff_id.
+#FileOutputHandle: {
+	@go(FileOutputHandle)
+	imageRef: string @go(Ref)
 
 	// outputID identifies the content layer for this output at the lane level: it
-	// is the output id (ADR-046). It addresses the output across steps. Absent
-	// for the image output, whose whole rootfs is the artifact.
-	outputID?: #Identifier @go(OutputID,type=string,optional=nillable)
+	// is the output id (ADR-046). It addresses the output across steps.
+	outputID: #Identifier @go(OutputID)
 
 	// layerDiffID is the OCI uncompressed-content digest (diff_id) of the layer
 	// identified by outputID. It is the engine-level selection key: container
 	// runtimes strip layer descriptor annotations and re-compress blobs across a
 	// load/save round-trip, so neither the annotation nor the compressed layer
 	// digest is stable; the diff_id is. Consumers select the layer by matching
-	// this against the image config rootfs.diff_ids. Absent for the image output.
-	layerDiffID?: string @go(LayerDiffID,type=string,optional=nillable)
+	// this against the image config rootfs.diff_ids.
+	layerDiffID: string @go(LayerDiffID)
 }

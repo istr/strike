@@ -48,10 +48,10 @@ package lane
 
 #OCIProvenanceRecord: {
 	@go(OCIProvenanceRecord)
-	type:       "oci"            @go(Type)
-	uri:        string           @go(URI)
-	digest:     string & #Digest @go(Digest,type=string)
-	fetchedAt?: string           @go(FetchedAt)
+	type:       "oci"   @go(Type)
+	uri:        string  @go(URI)
+	digest:     #Digest @go(Digest,type=string)
+	fetchedAt?: string  @go(FetchedAt)
 }
 
 // ---------------------------------------------------------------------------

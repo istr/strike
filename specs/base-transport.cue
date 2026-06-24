@@ -15,7 +15,7 @@ package lane
 // OCI registries use a separate constraint because their format
 // includes path segments.
 // ----------------------------------------------------------------
-#Host: string & =~"^[a-z0-9.-]+(:[0-9]+)?$" @go(-)
+#Host: =~"^[a-z0-9.-]+(:[0-9]+)?$" @go(-)
 
 // ----------------------------------------------------------------
 // Trust anchors for TLS-based peers.
@@ -86,7 +86,7 @@ package lane
 // ----------------------------------------------------------------
 #HTTPSEndpoint: {
 	@go(-)
-	url:   string & =~"^https://"
+	url:   =~"^https://"
 	trust: #TLSTrust
 }
 

@@ -663,7 +663,7 @@ func resolveArtifactDigests(stepID string, refs map[string]string, state *lane.S
 		if resolveErr != nil {
 			return nil, fmt.Errorf("step %q: artifact %q: %w", stepID, artName, resolveErr)
 		}
-		digest, digestErr := handle.ManifestDigest()
+		digest, digestErr := lane.ManifestDigest(handle)
 		if digestErr != nil {
 			return nil, fmt.Errorf("step %q: artifact %q: %w", stepID, artName, digestErr)
 		}

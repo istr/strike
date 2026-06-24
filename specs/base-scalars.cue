@@ -6,8 +6,7 @@ package lane
 // ".." segments, no trailing slash. Not used directly on fields; use
 // AbsPath or RelPath. @go(-): abstract CUE base with no named Go type; the
 // AbsPath/RelPath subtypes carry the Go types.
-#Path: string &
-	!~"//" &
+#Path: !~"//" &
 	!~"^\\.\\.($|/)" &
 	!~"/\\.\\.($|/)" &
 	!~"^\\.($|/)" &

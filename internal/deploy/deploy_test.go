@@ -308,8 +308,8 @@ func TestDeployerExecute(t *testing.T) {
 	eng := newTLSTestEngine(t, containerMock(t, "v1.2.3"))
 
 	state := lane.NewState()
-	if err := state.Register("build", "image", lane.OutputHandle{
-		ImageRef: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
+	if err := state.Register("build", "image", lane.ImageOutputHandle{
+		Ref: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -411,8 +411,8 @@ func TestDeployerExecuteRegistryAttachesReferrers(t *testing.T) {
 	}
 
 	state := lane.NewState()
-	if regErr := state.Register("build", "image", lane.OutputHandle{
-		ImageRef: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
+	if regErr := state.Register("build", "image", lane.ImageOutputHandle{
+		Ref: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
 	}); regErr != nil {
 		t.Fatal(regErr)
 	}
@@ -574,8 +574,8 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 	}
 
 	state := lane.NewState()
-	if err := state.Register("build", "image", lane.OutputHandle{
-		ImageRef: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
+	if err := state.Register("build", "image", lane.ImageOutputHandle{
+		Ref: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -674,8 +674,8 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 func TestEngineRecord_NilEngineID(t *testing.T) {
 	eng := newTLSTestEngine(t, containerMock(t, "v1.0"))
 	state := lane.NewState()
-	if err := state.Register("build", "image", lane.OutputHandle{
-		ImageRef: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
+	if err := state.Register("build", "image", lane.ImageOutputHandle{
+		Ref: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -734,8 +734,8 @@ func TestEngineRecord_WithRuntime(t *testing.T) {
 
 	eng := newTLSTestEngine(t, containerMock(t, "v1.0"))
 	state := lane.NewState()
-	if err := state.Register("build", "image", lane.OutputHandle{
-		ImageRef: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
+	if err := state.Register("build", "image", lane.ImageOutputHandle{
+		Ref: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -808,8 +808,8 @@ func TestEngineRecord_WithoutRuntime(t *testing.T) {
 
 	eng := newTLSTestEngine(t, containerMock(t, "v1.0"))
 	state := lane.NewState()
-	if err := state.Register("build", "image", lane.OutputHandle{
-		ImageRef: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
+	if err := state.Register("build", "image", lane.ImageOutputHandle{
+		Ref: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -869,8 +869,8 @@ func TestEngineRecord_WithoutRuntime(t *testing.T) {
 func TestResolverRecord_NilResolverID(t *testing.T) {
 	eng := newTLSTestEngine(t, containerMock(t, "v1.0"))
 	state := lane.NewState()
-	if err := state.Register("build", "image", lane.OutputHandle{
-		ImageRef: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
+	if err := state.Register("build", "image", lane.ImageOutputHandle{
+		Ref: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -923,8 +923,8 @@ func TestResolverRecord_Populated(t *testing.T) {
 
 	eng := newTLSTestEngine(t, containerMock(t, "v1.0"))
 	state := lane.NewState()
-	if err := state.Register("build", "image", lane.OutputHandle{
-		ImageRef: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
+	if err := state.Register("build", "image", lane.ImageOutputHandle{
+		Ref: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -1083,8 +1083,8 @@ func TestDeployerExecute_KeylessBundles(t *testing.T) {
 	eng := newTLSTestEngine(t, containerMock(t, "v1.2.3"))
 
 	state := lane.NewState()
-	if err := state.Register("build", "image", lane.OutputHandle{
-		ImageRef: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
+	if err := state.Register("build", "image", lane.ImageOutputHandle{
+		Ref: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -1135,8 +1135,8 @@ func TestDeployerExecute_KeylessFailureIsFatal(t *testing.T) {
 	eng := newTLSTestEngine(t, containerMock(t, "v1.2.3"))
 
 	state := lane.NewState()
-	if err := state.Register("build", "image", lane.OutputHandle{
-		ImageRef: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
+	if err := state.Register("build", "image", lane.ImageOutputHandle{
+		Ref: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -1298,8 +1298,8 @@ func TestDeployerExecute_ObservedPeersPopulated(t *testing.T) {
 	}
 
 	state := lane.NewState()
-	if regErr := state.Register("build", "image", lane.OutputHandle{
-		ImageRef: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
+	if regErr := state.Register("build", "image", lane.ImageOutputHandle{
+		Ref: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
 	}); regErr != nil {
 		t.Fatal(regErr)
 	}
@@ -1466,8 +1466,8 @@ func TestDeployerExecute_ObservedPeersConflictAborts(t *testing.T) {
 	}
 
 	state := lane.NewState()
-	if regErr := state.Register("step-b", "out", lane.OutputHandle{
-		ImageRef: "localhost/test/step-b@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
+	if regErr := state.Register("step-b", "out", lane.ImageOutputHandle{
+		Ref: "localhost/test/step-b@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
 	}); regErr != nil {
 		t.Fatal(regErr)
 	}

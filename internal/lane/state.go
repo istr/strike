@@ -9,10 +9,6 @@ import (
 	"github.com/istr/strike/internal/clock"
 )
 
-// Compile-time check: OutputHandle is now CUE-generated in
-// cue_types_lane_gen.go.
-var _ OutputHandle
-
 // State tracks outputs and step results across lane execution.
 // Output references use the producer's canonical output ref as the
 // key (OutputRef.Ref, "step_name.output_name").
@@ -64,7 +60,7 @@ func (s *State) Register(stepID, outputID string, h OutputHandle) error {
 	if _, exists := s.Outputs[key]; exists {
 		return fmt.Errorf("output %q already registered", key)
 	}
-	if h.ImageRef == "" {
+	if h.ImageRef() == "" {
 		return fmt.Errorf("output %q: imageRef is required", key)
 	}
 	s.Outputs[key] = h
@@ -78,7 +74,7 @@ func (s *State) Resolve(ref string) (OutputHandle, error) {
 	defer s.mu.RUnlock()
 	h, ok := s.Outputs[ref]
 	if !ok {
-		return OutputHandle{}, fmt.Errorf("output %q not found; available: %v", ref, s.outputKeys())
+		return nil, fmt.Errorf("output %q not found; available: %v", ref, s.outputKeys())
 	}
 	return h, nil
 }

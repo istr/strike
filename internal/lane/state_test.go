@@ -12,7 +12,7 @@ func TestRegisterAndResolve(t *testing.T) {
 	s := lane.NewState()
 
 	imageRef := "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000"
-	h := lane.OutputHandle{ImageRef: imageRef}
+	h := lane.ImageOutputHandle{Ref: imageRef}
 
 	if err := s.Register("build", "binary", h); err != nil {
 		t.Fatalf("Register: %v", err)
@@ -22,10 +22,10 @@ func TestRegisterAndResolve(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
-	if got.ImageRef != imageRef {
-		t.Errorf("imageRef = %q, want %q", got.ImageRef, imageRef)
+	if got.ImageRef() != imageRef {
+		t.Errorf("imageRef = %q, want %q", got.ImageRef(), imageRef)
 	}
-	digest, err := got.ManifestDigest()
+	digest, err := lane.ManifestDigest(got)
 	if err != nil {
 		t.Fatalf("ManifestDigest: %v", err)
 	}
@@ -37,7 +37,7 @@ func TestRegisterAndResolve(t *testing.T) {
 
 func TestRegisterDuplicate(t *testing.T) {
 	s := lane.NewState()
-	h := lane.OutputHandle{ImageRef: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000"}
+	h := lane.ImageOutputHandle{Ref: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000"}
 
 	if err := s.Register("build", "binary", h); err != nil {
 		t.Fatal(err)
@@ -49,7 +49,7 @@ func TestRegisterDuplicate(t *testing.T) {
 
 func TestRegisterMissingImageRef(t *testing.T) {
 	s := lane.NewState()
-	h := lane.OutputHandle{}
+	h := lane.ImageOutputHandle{}
 
 	if err := s.Register("build", "binary", h); err == nil {
 		t.Fatal("expected error on missing image ref")
@@ -88,8 +88,8 @@ func TestRecordStep(t *testing.T) {
 
 func TestStateJSON(t *testing.T) {
 	s := lane.NewState()
-	if err := s.Register("build", "binary", lane.OutputHandle{
-		ImageRef: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
+	if err := s.Register("build", "binary", lane.ImageOutputHandle{
+		Ref: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
 	}); err != nil {
 		t.Fatal(err)
 	}

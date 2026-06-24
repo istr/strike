@@ -19,8 +19,8 @@ package lane
 	// Stable identifier assigned at authoring time. Used by external
 	// verifiers to pair attestations against the same lane across runs.
 	// Distinct from `name`, which is human-display.
-	id:       #Identifier                                                             @go(ID)
-	registry: string & =~"^[a-z0-9]([a-z0-9.-]*[a-z0-9])?(:[0-9]+)?(/[a-z0-9._-]+)*$" @go(Registry)
+	id:       #Identifier                                                    @go(ID)
+	registry: =~"^[a-z0-9]([a-z0-9.-]*[a-z0-9])?(:[0-9]+)?(/[a-z0-9._-]+)*$" @go(Registry)
 	// NOTE: the exported JSON Schema for this map is open (patternProperties
 	// only), unlike artifacts (additionalProperties:false). strike validates
 	// CUE-natively in parse.go and rejects non-#Identifier keys in-process; an
