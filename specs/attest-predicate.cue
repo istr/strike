@@ -34,7 +34,7 @@ import "github.com/istr/strike/specs:lane"
 #DigestSet: {
 	sha256?:    =~"^[a-f0-9]{64}$"
 	sha512?:    =~"^[a-f0-9]{128}$"
-	gitCommit?: =~"^[a-f0-9]{40}$|^[a-f0-9]{64}$"
+	gitCommit?: lane.#GitCommit
 }
 
 // #ResourceDescriptor is the in-toto ResourceDescriptor. strike emits only the

@@ -23,11 +23,11 @@ package lane
 
 #GitProvenanceRecord: {
 	@go(GitProvenanceRecord)
-	type:       "git"                                      @go(Type)
-	uri:        string                                     @go(URI)
-	commit:     string & =~"^[a-f0-9]{40}$|^[a-f0-9]{64}$" @go(Commit)
-	ref?:       string                                     @go(Ref)
-	fetchedAt?: string                                     @go(FetchedAt)
+	type:       "git"               @go(Type)
+	uri:        string              @go(URI)
+	commit:     string & #GitCommit @go(Commit,type=string)
+	ref?:       string              @go(Ref)
+	fetchedAt?: string              @go(FetchedAt)
 }
 
 // ---------------------------------------------------------------------------

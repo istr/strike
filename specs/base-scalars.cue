@@ -29,6 +29,10 @@ package lane
 // the SSH public-key body wire form). @go(-): used inline, no named Go type.
 #Base64: =~"^[A-Za-z0-9+/]+={0,2}$" @go(-)
 
+// #GitCommit is a git object name: 40-hex SHA-1 or 64-hex SHA-256.
+// @go(-): used inline, no named Go type.
+#GitCommit: =~"^[a-f0-9]{40}$|^[a-f0-9]{64}$" @go(-)
+
 #ImageRef: =~"^.+@sha256:[a-f0-9]{64}$"
 
 #ArtifactType: "file" | "directory" | "image"
