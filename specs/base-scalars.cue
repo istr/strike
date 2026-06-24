@@ -25,6 +25,10 @@ package lane
 // resource name, an OCI tag component, and a DNS label.
 #Identifier: =~"^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$"
 
+// #Base64 is standard padded base64 (the proto3-JSON form of a bytes field and
+// the SSH public-key body wire form). @go(-): used inline, no named Go type.
+#Base64: =~"^[A-Za-z0-9+/]+={0,2}$" @go(-)
+
 #ImageRef: =~"^.+@sha256:[a-f0-9]{64}$"
 
 #ArtifactType: "file" | "directory" | "image"

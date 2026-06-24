@@ -1,5 +1,7 @@
 package attest
 
+import "github.com/istr/strike/specs:lane"
+
 // Sigstore bundle (v0.3) -- the published verification material strike emits
 // per deploy statement and an independent verifier consumes. This is a typed
 // projection of the sigstore bundle media type
@@ -30,10 +32,10 @@ package attest
 // #VerificationMaterial carries the Fulcio leaf certificate, exactly one Rekor
 // v2 transparency-log entry, and exactly one RFC3161 timestamp.
 #VerificationMaterial: {
-	certificate: {rawBytes: #Base64}
+	certificate: {rawBytes: lane.#Base64}
 	tlogEntries: [#TransparencyLogEntry]
 	timestampVerificationData: {
-		rfc3161Timestamps: [{signedTimestamp: #Base64}]
+		rfc3161Timestamps: [{signedTimestamp: lane.#Base64}]
 	}
 }
 
@@ -42,8 +44,8 @@ package attest
 // (keyless -- the signer identity is the Fulcio certificate, not a key id).
 #DSSEEnvelope: {
 	payloadType: "application/vnd.in-toto+json"
-	payload:     #Base64
-	signatures: [{sig: #Base64}]
+	payload:     lane.#Base64
+	signatures: [{sig: lane.#Base64}]
 }
 
 // #TransparencyLogEntry is the Rekor v2 inclusion record. integratedTime and
@@ -56,23 +58,20 @@ package attest
 	// single-leaf inclusion proof has no sibling hashes (omitted). treeSize is
 	// always >= 1 for a non-empty log, so it is never omitted.
 	logIndex?: #Int64String
-	logId: {keyId: #Base64}
+	logId: {keyId: lane.#Base64}
 	kindVersion: {
 		kind:    string
 		version: string
 	}
 	inclusionProof: {
 		logIndex?: #Int64String
-		rootHash:  #Base64
+		rootHash:  lane.#Base64
 		treeSize:  #Int64String
-		hashes?: [...#Base64]
+		hashes?: [...lane.#Base64]
 		checkpoint: {envelope: string}
 	}
-	canonicalizedBody: #Base64
+	canonicalizedBody: lane.#Base64
 }
-
-// #Base64 is standard padded base64 -- the proto3-JSON form of a bytes field.
-#Base64: =~"^[A-Za-z0-9+/]+={0,2}$"
 
 // #Int64String is a proto3-JSON int64 -- a non-negative decimal string.
 #Int64String: =~"^[0-9]+$"
