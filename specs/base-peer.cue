@@ -56,5 +56,5 @@ package lane
 	keyType: "ssh-ed25519" | "ecdsa-sha2-nistp256" |
 		"rsa-sha2-512" | "rsa-sha2-256" @go(KeyType)
 	// key is the base64-encoded public key body (no PEM armor).
-	key: #Base64 @go(Key,type=string)
+	key: #Base64 @go(Key)
 }

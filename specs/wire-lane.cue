@@ -19,7 +19,7 @@ package lane
 	// Stable identifier assigned at authoring time. Used by external
 	// verifiers to pair attestations against the same lane across runs.
 	// Distinct from `name`, which is human-display.
-	id:       #Identifier                                                             @go(ID,type=string)
+	id:       #Identifier                                                             @go(ID)
 	registry: string & =~"^[a-z0-9]([a-z0-9.-]*[a-z0-9])?(:[0-9]+)?(/[a-z0-9._-]+)*$" @go(Registry)
 	// NOTE: the exported JSON Schema for this map is open (patternProperties
 	// only), unlike artifacts (additionalProperties:false). strike validates
@@ -114,15 +114,15 @@ package lane
 
 #Step: {
 	@go(Step)
-	id:             #Identifier @go(ID,type=string)
+	id:             #Identifier @go(ID)
 	image?:         #ImageRef   @go(Image,optional=nillable)
-	imageFromStep?: #Identifier @go(ImageFromStep,type=string,optional=nillable)
+	imageFromStep?: #Identifier @go(ImageFromStep,optional=nillable)
 	args: [...string] @go(Args)
 	env: {
 		[string]: string @go(Env)
 	}
 	inputs: [...#InputRef] @go(Inputs)
-	output?: "image" @go(Output,type=string)
+	output?: "image" @go(Output)
 	outputs?: [...#FileOutput] @go(Outputs)
 	secrets: [...#SecretRef] @go(Secrets)
 	workdir?: #AbsPath @go(Workdir,optional=nillable)
@@ -171,7 +171,7 @@ package lane
 // deploy.artifacts.from disjunction.
 #StepImageRef: {
 	@go(StepImageRef)
-	step: #Identifier @go(Step,type=string)
+	step: #Identifier @go(Step)
 }
 
 // ---------------------------------------------------------------------------
@@ -181,8 +181,8 @@ package lane
 // A reference to a named output of a step earlier in this lane.
 #OutputRef: {
 	@go(OutputRef)
-	step:   #Identifier @go(Step,type=string)
-	output: #Identifier @go(Output,type=string)
+	step:   #Identifier @go(Step)
+	output: #Identifier @go(Output)
 }
 
 #InputRef: {
@@ -202,7 +202,7 @@ package lane
 // by inputs.from, pack.files.from, and deploy.artifacts.from as {step, output}.
 #FileOutput: {
 	@go(FileOutput)
-	id:   #Identifier       @go(ID,type=string)
+	id:   #Identifier       @go(ID)
 	type: #FileArtifactType @go(Type)
 	// path is relative to the step workdir (the single writable volume).
 	// Absent means the whole workdir is the artifact; a value selects a
@@ -375,7 +375,7 @@ package lane
 
 #Capture: {
 	@go(Capture)
-	id:    #Identifier @go(ID,type=string)
+	id:    #Identifier @go(ID)
 	image: #ImageRef   @go(Image)
 	command: [...string] @go(Command)
 	peers?: [...#Peer] @go(Peers)

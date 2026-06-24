@@ -23,11 +23,11 @@ package lane
 
 #GitProvenanceRecord: {
 	@go(GitProvenanceRecord)
-	type:       "git"               @go(Type)
-	uri:        string              @go(URI)
-	commit:     string & #GitCommit @go(Commit,type=string)
-	ref?:       string              @go(Ref)
-	fetchedAt?: string              @go(FetchedAt)
+	type:       "git"      @go(Type)
+	uri:        string     @go(URI)
+	commit:     #GitCommit @go(Commit)
+	ref?:       string     @go(Ref)
+	fetchedAt?: string     @go(FetchedAt)
 }
 
 // ---------------------------------------------------------------------------
@@ -36,10 +36,10 @@ package lane
 
 #TarballProvenanceRecord: {
 	@go(TarballProvenanceRecord)
-	type:       "tarball"        @go(Type)
-	uri:        string           @go(URI)
-	sha256:     string & #Sha256 @go(SHA256,type=string)
-	fetchedAt?: string           @go(FetchedAt)
+	type:       "tarball" @go(Type)
+	uri:        string    @go(URI)
+	sha256:     #Sha256   @go(SHA256)
+	fetchedAt?: string    @go(FetchedAt)
 }
 
 // ---------------------------------------------------------------------------
@@ -60,8 +60,8 @@ package lane
 
 #URLProvenanceRecord: {
 	@go(URLProvenanceRecord)
-	type:       "url"            @go(Type)
-	uri:        string           @go(URI)
-	sha256:     string & #Sha256 @go(SHA256,type=string)
-	fetchedAt?: string           @go(FetchedAt)
+	type:       "url"   @go(Type)
+	uri:        string  @go(URI)
+	sha256:     #Sha256 @go(SHA256)
+	fetchedAt?: string  @go(FetchedAt)
 }

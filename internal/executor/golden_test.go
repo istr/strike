@@ -36,7 +36,7 @@ func writeVectorFiles(t *testing.T, specFiles []lane.PackFile, vecFiles map[stri
 	t.Helper()
 	fromToDest := make(map[string]string, len(specFiles))
 	for _, pf := range specFiles {
-		fromToDest[pf.From.Step+"."+pf.From.Output] = pf.Dest.String()
+		fromToDest[string(pf.From.Step)+"."+string(pf.From.Output)] = pf.Dest.String()
 	}
 	tmp := t.TempDir()
 	inputPaths := make(map[string]string, len(vecFiles))

@@ -9,7 +9,7 @@ package lane
 	// Stable identifier assigned at authoring time. External verifiers use
 	// this to pair pre/post-state digests across consecutive deploys
 	// to the same target.
-	id:          #Identifier @go(ID,type=string)
+	id:          #Identifier @go(ID)
 	type:        string      @go(Type)
 	description: string      @go(Description)
 	url?:        string      @go(URL,optional=nillable)

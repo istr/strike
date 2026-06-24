@@ -12,5 +12,5 @@ func OutputContentPrefix(out FileOutput) string {
 	if out.Path != nil {
 		return path.Base(out.Path.String())
 	}
-	return out.ID
+	return string(out.ID)
 }

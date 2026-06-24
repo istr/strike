@@ -127,7 +127,7 @@ func (rc *runContext) executeDeploy(ctx context.Context, step *lane.Step, stepID
 
 	artifactRefs := make(map[string]string)
 	for _, e := range rc.dag.DeployEdges[stepID] {
-		out := ""
+		var out lane.Identifier
 		if !e.Image {
 			out = e.FromOutput.ID
 		}
@@ -143,7 +143,7 @@ func (rc *runContext) executeDeploy(ctx context.Context, step *lane.Step, stepID
 		Keyless:         rc.lane.Keyless,
 		BaseSBOMSigners: rc.lane.BaseSBOMSigners,
 		ArtifactRefs:    artifactRefs,
-		LaneID:          rc.lane.ID,
+		LaneID:          string(rc.lane.ID),
 		LaneDigest:      rc.laneDigest.String(),
 		CA:              rc.ca,
 		UpstreamLook:    rc.upstreamLook,
@@ -202,7 +202,7 @@ func (rc *runContext) resolveImageDigest(ctx context.Context, step *lane.Step, s
 		// The image output is id-less; it is registered and resolved by step via
 		// the empty-output key, collision-free because a step that declares an
 		// image output declares no other output (ADR-046).
-		ref := lane.OutputRef{Step: fromStep, Output: ""}.Ref()
+		ref := lane.OutputRef{Step: lane.Identifier(fromStep), Output: ""}.Ref()
 		handle, err := rc.laneState.Resolve(ref)
 		if err != nil {
 			return lane.Digest{}, fmt.Errorf("%s: imageFromStep %s: %w",
@@ -253,7 +253,7 @@ func (rc *runContext) checkCache(ctx context.Context, step *lane.Step, stepID, s
 		return false, nil
 	}
 
-	tag := registry.WrapTag(rc.lane.ID, stepID, specHash)
+	tag := registry.WrapTag(string(rc.lane.ID), stepID, specHash)
 	info, err := rc.engine.ImageInspect(ctx, tag)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
@@ -275,7 +275,7 @@ func (rc *runContext) checkCache(ctx context.Context, step *lane.Step, stepID, s
 	}
 
 	digest := lane.MustParseDigest(info.Digest)
-	imageRef := registry.WrapDigestRef(rc.lane.ID, stepID, digest)
+	imageRef := registry.WrapDigestRef(string(rc.lane.ID), stepID, digest)
 	if regErr := rc.registerCachedOutputs(ctx, step, stepID, safeName, imageRef); regErr != nil {
 		return false, regErr
 	}
@@ -307,10 +307,10 @@ func (rc *runContext) registerCachedOutputs(ctx context.Context, step *lane.Step
 		for i, out := range step.Outputs {
 			handle := lane.OutputHandle{
 				ImageRef:    imageRef,
-				OutputID:    out.ID,
+				OutputID:    string(out.ID),
 				LayerDiffID: diffIDs[i],
 			}
-			if regErr := rc.laneState.Register(stepID, out.ID, handle); regErr != nil {
+			if regErr := rc.laneState.Register(stepID, string(out.ID), handle); regErr != nil {
 				return fmt.Errorf("cache hit register %s/%s: %w", stepID, out.ID, regErr)
 			}
 		}
@@ -362,7 +362,7 @@ func (rc *runContext) executePack(ctx context.Context, step *lane.Step, stepID, 
 	// carry the engine-stored digest -- it is what a consumer (imageFromStep)
 	// pulls by; result.Digest is the pre-annotation cross-validation anchor.
 	specHash := rc.state.specHashes[stepID]
-	tag := registry.WrapTag(rc.lane.ID, stepID, specHash)
+	tag := registry.WrapTag(string(rc.lane.ID), stepID, specHash)
 	digest, _, wrapErr := rc.regClient.WrapImageOutputAsImage(ctx, outRoot, outputID, tag, nil)
 	if wrapErr != nil {
 		return fmt.Errorf("%s: wrap image: %w", safeName, wrapErr)
@@ -375,7 +375,7 @@ func (rc *runContext) executePack(ctx context.Context, step *lane.Step, stepID, 
 	}
 
 	handle := lane.OutputHandle{
-		ImageRef: registry.WrapDigestRef(rc.lane.ID, stepID, digest),
+		ImageRef: registry.WrapDigestRef(string(rc.lane.ID), stepID, digest),
 	}
 	if regErr := rc.laneState.Register(stepID, "", handle); regErr != nil {
 		return fmt.Errorf("%s: register artifact: %w", safeName, regErr)
@@ -405,7 +405,7 @@ func (rc *runContext) resolvePackInputPaths(ctx context.Context, step *lane.Step
 		fromStep := string(e.FromStep.ID)
 		fromOutput := e.FromOutput.ID
 
-		handle, artErr := rc.laneState.Resolve(lane.OutputRef{Step: fromStep, Output: fromOutput}.Ref())
+		handle, artErr := rc.laneState.Resolve(lane.OutputRef{Step: lane.Identifier(fromStep), Output: fromOutput}.Ref())
 		if artErr != nil {
 			return nil, fmt.Errorf("%s: pack input %s.%s: %w", safeName, fromStep, fromOutput, artErr)
 		}
@@ -525,7 +525,7 @@ func (rc *runContext) wrapFileOutputs(ctx context.Context, step *lane.Step, step
 	}
 	workdir := step.Workdir.String()
 	specHash := rc.state.specHashes[stepID]
-	tag := registry.WrapTag(rc.lane.ID, stepID, specHash)
+	tag := registry.WrapTag(string(rc.lane.ID), stepID, specHash)
 
 	outs := make([]registry.OutputArchive, 0, len(step.Outputs))
 	for _, out := range step.Outputs {
@@ -539,7 +539,7 @@ func (rc *runContext) wrapFileOutputs(ctx context.Context, step *lane.Step, step
 			Tar:         stream,
 			StripPrefix: stripPrefix,
 			DestPrefix:  destPrefix,
-			OutputID:    out.ID,
+			OutputID:    string(out.ID),
 		})
 	}
 
@@ -548,18 +548,18 @@ func (rc *runContext) wrapFileOutputs(ctx context.Context, step *lane.Step, step
 		return fmt.Errorf("%s: assemble output image: %w", safeName, wrapErr)
 	}
 
-	imageRef := registry.WrapDigestRef(rc.lane.ID, stepID, result.Digest)
+	imageRef := registry.WrapDigestRef(string(rc.lane.ID), stepID, result.Digest)
 	for _, out := range step.Outputs {
-		diffID, ok := result.LayerDiffIDs[out.ID]
+		diffID, ok := result.LayerDiffIDs[string(out.ID)]
 		if !ok {
 			return fmt.Errorf("%s: output %q has no assembled layer", safeName, out.ID)
 		}
 		handle := lane.OutputHandle{
 			ImageRef:    imageRef,
-			OutputID:    out.ID,
+			OutputID:    string(out.ID),
 			LayerDiffID: diffID,
 		}
-		if regErr := rc.laneState.Register(stepID, out.ID, handle); regErr != nil {
+		if regErr := rc.laneState.Register(stepID, string(out.ID), handle); regErr != nil {
 			return fmt.Errorf("%s: register output %q: %w", safeName, out.ID, regErr)
 		}
 	}
@@ -570,7 +570,7 @@ func (rc *runContext) wrapFileOutputs(ctx context.Context, step *lane.Step, step
 // through ggcr for reproducible digests (ADR-046), and registers the
 // digest-pinned OutputHandle.
 func (rc *runContext) wrapImageOutput(ctx context.Context, _ *lane.Step, stepID, safeName, containerID string, specHash lane.Digest) error {
-	tag := registry.WrapTag(rc.lane.ID, stepID, specHash)
+	tag := registry.WrapTag(string(rc.lane.ID), stepID, specHash)
 
 	imageID, commitErr := rc.engine.ContainerCommit(ctx, containerID)
 	if commitErr != nil {
@@ -589,7 +589,7 @@ func (rc *runContext) wrapImageOutput(ctx context.Context, _ *lane.Step, stepID,
 	}
 
 	handle := lane.OutputHandle{
-		ImageRef: registry.WrapDigestRef(rc.lane.ID, stepID, digest),
+		ImageRef: registry.WrapDigestRef(string(rc.lane.ID), stepID, digest),
 	}
 	if regErr := rc.laneState.Register(stepID, "", handle); regErr != nil {
 		return fmt.Errorf("%s: register output: %w", safeName, regErr)
@@ -1036,7 +1036,7 @@ func sshTargetsOf(peers []lane.Peer) []capsule.SSHTarget {
 		if sp, ok := p.(lane.SSHPeer); ok {
 			keys := make([]string, len(sp.KnownHosts))
 			for j, e := range sp.KnownHosts {
-				keys[j] = e.KeyType + " " + e.Key
+				keys[j] = e.KeyType + " " + string(e.Key)
 			}
 			out = append(out, capsule.SSHTarget{Host: string(sp.Host), HostKeys: keys})
 		}

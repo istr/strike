@@ -135,7 +135,7 @@ func TestBuild_ImageFromEdge(t *testing.T) {
 			},
 			{
 				ID: "run", Env: map[string]string{}, Args: []string{"run"},
-				ImageFromStep: "pack",
+				ImageFromStep: lane.Ptr(lane.Identifier("pack")),
 			},
 		},
 	}
@@ -212,7 +212,7 @@ func TestBuild_UnknownImageFromStep(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				ID: "run", Env: map[string]string{}, Args: []string{},
-				ImageFromStep: "missing",
+				ImageFromStep: lane.Ptr(lane.Identifier("missing")),
 			},
 		},
 	}
@@ -226,7 +226,7 @@ func TestBuild_ImageFromStepNoImageOutput(t *testing.T) {
 			{ID: "build", Image: lane.Ptr(lane.ImageRef("img")), Args: []string{}, Env: map[string]string{}},
 			{
 				ID: "run", Env: map[string]string{}, Args: []string{},
-				ImageFromStep: "build",
+				ImageFromStep: lane.Ptr(lane.Identifier("build")),
 			},
 		},
 	}
@@ -617,14 +617,14 @@ func TestBuild_PeerAnchorConflict(t *testing.T) {
 
 	httpsStep := func(name, host string, tr transport.TLSTrust) lane.Step {
 		return lane.Step{
-			ID: name, Image: lane.Ptr(lane.ImageRef("img@sha256:" + strings.Repeat("a", 64))),
+			ID: lane.Identifier(name), Image: lane.Ptr(lane.ImageRef("img@sha256:" + strings.Repeat("a", 64))),
 			Args: []string{"x"}, Env: map[string]string{},
 			Peers: []lane.Peer{lane.HTTPSPeer{Type: "https", Host: transport.Host(host), Trust: tr}},
 		}
 	}
 	sshStep := func(name, host string, kh []lane.KnownHostEntry) lane.Step {
 		return lane.Step{
-			ID: name, Image: lane.Ptr(lane.ImageRef("img@sha256:" + strings.Repeat("a", 64))),
+			ID: lane.Identifier(name), Image: lane.Ptr(lane.ImageRef("img@sha256:" + strings.Repeat("a", 64))),
 			Args: []string{"x"}, Env: map[string]string{},
 			Peers: []lane.Peer{lane.SSHPeer{Type: "ssh", Host: transport.Host(host), KnownHosts: kh}},
 		}
@@ -727,7 +727,7 @@ func TestTree_DeduplicatesRepeatedDependency(t *testing.T) {
 func TestTree_DiamondRendersSharedNodeOnce(t *testing.T) {
 	dir := func(name string, inputs ...lane.InputRef) lane.Step {
 		return lane.Step{
-			ID: name, Image: lane.Ptr(lane.ImageRef("img")),
+			ID: lane.Identifier(name), Image: lane.Ptr(lane.ImageRef("img")),
 			Args: []string{}, Env: map[string]string{}, Inputs: inputs,
 			Outputs: []lane.FileOutput{{ID: "out", Type: "directory", Path: lane.Ptr(lane.RelPath("o"))}},
 		}

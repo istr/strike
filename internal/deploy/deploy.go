@@ -260,7 +260,7 @@ func (d *Deployer) startUnitCapsule(ctx context.Context, name string, peers []la
 		if sp, ok := p.(lane.SSHPeer); ok {
 			keys := make([]string, len(sp.KnownHosts))
 			for j, e := range sp.KnownHosts {
-				keys[j] = e.KeyType + " " + e.Key
+				keys[j] = e.KeyType + " " + string(e.Key)
 			}
 			targets = append(targets, capsule.SSHTarget{Host: string(sp.Host), HostKeys: keys})
 		}
@@ -525,7 +525,7 @@ func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.Sta
 	preDigest := StateDigest(preCaptures)
 
 	// 2. Resolve artifact digests.
-	artifactDigests, err := resolveArtifactDigests(step.ID, d.ArtifactRefs, state)
+	artifactDigests, err := resolveArtifactDigests(string(step.ID), d.ArtifactRefs, state)
 	if err != nil {
 		return nil, err
 	}
@@ -563,7 +563,7 @@ func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.Sta
 
 	// 8. Project into the three output statements and produce one keyless
 	// sigstore bundle per statement (ADR-040 D2/D3), fail-closed.
-	if err := d.signStatements(ctx, att, step.ID); err != nil {
+	if err := d.signStatements(ctx, att, string(step.ID)); err != nil {
 		return nil, err
 	}
 
@@ -684,7 +684,7 @@ func (d *Deployer) recordAttestation(att *Attestation, step *lane.Step, state *l
 
 	attDigest := lane.Digest{Algorithm: "sha256", Hex: attHex}
 	state.RecordStep(lane.StepResult{
-		Name:      step.ID,
+		Name:      string(step.ID),
 		StepType:  "deploy",
 		StartedAt: started,
 		Duration:  clock.Since(started),
@@ -731,7 +731,7 @@ func (d *Deployer) captureOne(ctx context.Context, sc lane.Capture) (captureSnap
 		})
 	}
 
-	caps, err := d.startUnitCapsule(ctx, captureKey(d.StepID, sc.ID), sc.Peers)
+	caps, err := d.startUnitCapsule(ctx, captureKey(d.StepID, string(sc.ID)), sc.Peers)
 	if err != nil {
 		return captureSnap{}, err
 	}
@@ -764,7 +764,7 @@ func (d *Deployer) captureOne(ctx context.Context, sc lane.Capture) (captureSnap
 	}
 
 	return captureSnap{
-		name:   sc.ID,
+		name:   string(sc.ID),
 		image:  string(sc.Image),
 		output: stdout.Bytes(),
 	}, nil

@@ -69,7 +69,7 @@ func Parse(fp FilePath) (*Lane, Digest, error) {
 		if s.Image != nil {
 			count++
 		}
-		if s.ImageFromStep != "" {
+		if s.ImageFromStep != nil {
 			count++
 		}
 		if s.Pack != nil {

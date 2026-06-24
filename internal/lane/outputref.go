@@ -20,7 +20,7 @@ import (
 // '.', this encoding -- and the spec hashes and cache tags built on it --
 // must be revisited. TestOutputRef_RefRejectsDottedIdentifier pins it.
 func (r OutputRef) Ref() string {
-	return r.Step + "." + r.Output
+	return string(r.Step) + "." + string(r.Output)
 }
 
 // ManifestDigest extracts the manifest digest from an OutputHandle's imageRef.

@@ -329,10 +329,10 @@ func allocateMediatedPorts(p *lane.Lane) map[string]capsule.HostPorts {
 		case s.Deploy != nil:
 			reqs = append(reqs, capsule.StepPortReq{Name: string(s.ID)})
 			for _, sc := range s.Deploy.Recording.PreState.Captures {
-				reqs = append(reqs, capsule.StepPortReq{Name: captureKey(string(s.ID), sc.ID)})
+				reqs = append(reqs, capsule.StepPortReq{Name: captureKey(string(s.ID), string(sc.ID))})
 			}
 			for _, sc := range s.Deploy.Recording.PostState.Captures {
-				reqs = append(reqs, capsule.StepPortReq{Name: captureKey(string(s.ID), sc.ID)})
+				reqs = append(reqs, capsule.StepPortReq{Name: captureKey(string(s.ID), string(sc.ID))})
 			}
 		default:
 			reqs = append(reqs, capsule.StepPortReq{Name: string(s.ID)})

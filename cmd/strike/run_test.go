@@ -529,7 +529,7 @@ func TestCheckCache_Hit(t *testing.T) {
 	// On a cache hit, checkCache exports the cached image and recovers each
 	// output's LayerDiffID from the config rootfs.diff_ids in canonical layer
 	// order. Provide a one-layer image keyed by the digest ref it pulls.
-	imageRef := registry.WrapDigestRef(rc.lane.ID, "step1", lane.MustParseDigest(digest))
+	imageRef := registry.WrapDigestRef(string(rc.lane.ID), "step1", lane.MustParseDigest(digest))
 	tarBytes, diffID, buildErr := regtest.BuildLayeredImageTar("bin", map[string][]byte{"bin": []byte("data")})
 	if buildErr != nil {
 		t.Fatalf("BuildLayeredImageTar: %v", buildErr)
@@ -678,7 +678,7 @@ func TestResolveImageDigest_ImageFrom(t *testing.T) {
 			},
 			{
 				ID: "run", Env: map[string]string{}, Args: []string{"run"},
-				ImageFromStep: "pack",
+				ImageFromStep: lane.Ptr(lane.Identifier("pack")),
 			},
 		},
 	}
@@ -721,7 +721,7 @@ func TestResolveImageDigest_ImageFromMissing(t *testing.T) {
 			},
 			{
 				ID: "run", Env: map[string]string{}, Args: []string{"run"},
-				ImageFromStep: "pack",
+				ImageFromStep: lane.Ptr(lane.Identifier("pack")),
 			},
 		},
 	}

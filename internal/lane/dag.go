@@ -128,11 +128,11 @@ func Build(p *Lane) (*DAG, error) {
 func (d *DAG) resolveImageFromEdges(p *Lane) error {
 	for _, s := range p.Steps {
 		name := string(s.ID)
-		if s.ImageFromStep == "" {
+		if s.ImageFromStep == nil {
 			continue
 		}
-		from := s.ImageFromStep
-		fromStep, ok := d.Steps[from]
+		from := *s.ImageFromStep
+		fromStep, ok := d.Steps[string(from)]
 		if !ok {
 			return fmt.Errorf("step %q: imageFromStep references unknown step %q", name, from)
 		}
@@ -140,7 +140,7 @@ func (d *DAG) resolveImageFromEdges(p *Lane) error {
 			return fmt.Errorf("step %q: imageFromStep %q declares no image output", name, from)
 		}
 		d.ImageFromEdges[name] = ImageFromEdge{FromStep: fromStep}
-		d.addEdge(name, from)
+		d.addEdge(name, string(from))
 	}
 	return nil
 }
@@ -151,12 +151,12 @@ func (d *DAG) resolveInputEdges(p *Lane) error {
 		for _, inp := range s.Inputs {
 			refStep := inp.From.Step
 			refOutput := inp.From.Output
-			fromStep, ok := d.Steps[refStep]
+			fromStep, ok := d.Steps[string(refStep)]
 			if !ok {
 				return fmt.Errorf("step %q: input at %q references unknown step %q",
 					name, inp.Mount, refStep)
 			}
-			out := findOutput(fromStep, refOutput)
+			out := findOutput(fromStep, string(refOutput))
 			if out == nil {
 				return fmt.Errorf("step %q: input at %q: output %q not found in step %q",
 					name, inp.Mount, refOutput, refStep)
@@ -171,7 +171,7 @@ func (d *DAG) resolveInputEdges(p *Lane) error {
 				FromStep:   fromStep,
 				FromOutput: out,
 			})
-			d.addEdge(name, refStep)
+			d.addEdge(name, string(refStep))
 		}
 	}
 	return nil
@@ -195,11 +195,11 @@ func (d *DAG) resolvePackEdges(p *Lane) error {
 func (d *DAG) resolvePackFileEdge(name string, f PackFile) error {
 	stepID := f.From.Step
 	outputID := f.From.Output
-	fromStep, ok := d.Steps[stepID]
+	fromStep, ok := d.Steps[string(stepID)]
 	if !ok {
 		return fmt.Errorf("step %q: pack file references unknown step %q", name, stepID)
 	}
-	out := findOutput(fromStep, outputID)
+	out := findOutput(fromStep, string(outputID))
 	if out == nil {
 		return fmt.Errorf("step %q: pack file output %q not found in step %q",
 			name, outputID, stepID)
@@ -209,7 +209,7 @@ func (d *DAG) resolvePackFileEdge(name string, f PackFile) error {
 		FromStep:   fromStep,
 		FromOutput: out,
 	})
-	d.addEdge(name, stepID)
+	d.addEdge(name, string(stepID))
 	return nil
 }
 
@@ -218,7 +218,7 @@ func (d *DAG) resolvePackFileEdge(name string, f PackFile) error {
 // so callers must not mutate s after Build returns.
 func findOutput(s *Step, name string) *FileOutput {
 	for i := range s.Outputs {
-		if s.Outputs[i].ID == name {
+		if string(s.Outputs[i].ID) == name {
 			return &s.Outputs[i]
 		}
 	}
@@ -249,7 +249,7 @@ func (d *DAG) resolveDeployEdges(p *Lane) error {
 func (d *DAG) resolveDeployArtifact(name, artName string, src ArtifactSource) (DeployArtifactEdge, string, error) {
 	switch ref := src.(type) {
 	case StepImageRef:
-		fromStep, ok := d.Steps[ref.Step]
+		fromStep, ok := d.Steps[string(ref.Step)]
 		if !ok {
 			return DeployArtifactEdge{}, "", fmt.Errorf(
 				"step %q: deploy artifact %q references unknown step %q", name, artName, ref.Step)
@@ -258,20 +258,20 @@ func (d *DAG) resolveDeployArtifact(name, artName string, src ArtifactSource) (D
 			return DeployArtifactEdge{}, "", fmt.Errorf(
 				"step %q: deploy artifact %q: step %q declares no image output", name, artName, ref.Step)
 		}
-		return DeployArtifactEdge{ArtifactName: artName, FromStep: fromStep, Image: true}, ref.Step, nil
+		return DeployArtifactEdge{ArtifactName: artName, FromStep: fromStep, Image: true}, string(ref.Step), nil
 	case OutputRef:
-		fromStep, ok := d.Steps[ref.Step]
+		fromStep, ok := d.Steps[string(ref.Step)]
 		if !ok {
 			return DeployArtifactEdge{}, "", fmt.Errorf(
 				"step %q: deploy artifact %q references unknown step %q", name, artName, ref.Step)
 		}
-		out := findOutput(fromStep, ref.Output)
+		out := findOutput(fromStep, string(ref.Output))
 		if out == nil {
 			return DeployArtifactEdge{}, "", fmt.Errorf(
 				"step %q: deploy artifact %q: output %q not found in step %q",
 				name, artName, ref.Output, ref.Step)
 		}
-		return DeployArtifactEdge{ArtifactName: artName, FromStep: fromStep, FromOutput: out}, ref.Step, nil
+		return DeployArtifactEdge{ArtifactName: artName, FromStep: fromStep, FromOutput: out}, string(ref.Step), nil
 	default:
 		return DeployArtifactEdge{}, "", fmt.Errorf(
 			"step %q: deploy artifact %q: unknown source kind %q", name, artName, src.SourceKind())
@@ -428,7 +428,7 @@ func peerAnchor(peer Peer) string {
 	case SSHPeer:
 		entries := make([]string, len(x.KnownHosts))
 		for i, kh := range x.KnownHosts {
-			entries[i] = kh.KeyType + " " + kh.Key
+			entries[i] = kh.KeyType + " " + string(kh.Key)
 		}
 		sort.Strings(entries)
 		return "ssh/" + strings.Join(entries, "\n")
@@ -477,10 +477,10 @@ func validateOutputIDDisjointness(p *Lane) error {
 	for _, s := range p.Steps {
 		seen := make(map[string]struct{}, len(s.Outputs))
 		for _, out := range s.Outputs {
-			if _, dup := seen[out.ID]; dup {
+			if _, dup := seen[string(out.ID)]; dup {
 				return fmt.Errorf("step %q: duplicate output id %q", s.ID, out.ID)
 			}
-			seen[out.ID] = struct{}{}
+			seen[string(out.ID)] = struct{}{}
 		}
 	}
 	return nil

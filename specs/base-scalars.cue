@@ -4,14 +4,15 @@ package lane
 
 // Path is the shared canonicalization base: no double slashes, no "." or
 // ".." segments, no trailing slash. Not used directly on fields; use
-// AbsPath or RelPath.
+// AbsPath or RelPath. @go(-): abstract CUE base with no named Go type; the
+// AbsPath/RelPath subtypes carry the Go types.
 #Path: string &
 	!~"//" &
 	!~"^\\.\\.($|/)" &
 	!~"/\\.\\.($|/)" &
 	!~"^\\.($|/)" &
 	!~"/\\.($|/)" &
-	!~".+/$"
+	!~".+/$" @go(-)
 
 // AbsPath is a canonical absolute path (starts with "/").
 #AbsPath: #Path & =~"^/"
@@ -26,18 +27,21 @@ package lane
 #Identifier: =~"^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$"
 
 // #Base64 is standard padded base64 (the proto3-JSON form of a bytes field and
-// the SSH public-key body wire form). @go(-): used inline, no named Go type.
-#Base64: =~"^[A-Za-z0-9+/]+={0,2}$" @go(-)
+// the SSH public-key body wire form).
+#Base64: =~"^[A-Za-z0-9+/]+={0,2}$"
+
+// _sha256Hex is the shared 64-hex sha256 body, single-sourced and composed by
+// interpolation into the anchored hash patterns (ADR-047).
+_sha256Hex: "[a-f0-9]{64}"
 
 // #GitCommit is a git object name: 40-hex SHA-1 or 64-hex SHA-256.
-// @go(-): used inline, no named Go type.
-#GitCommit: =~"^[a-f0-9]{40}$|^[a-f0-9]{64}$" @go(-)
+#GitCommit: =~"^[a-f0-9]{40}$|^\(_sha256Hex)$"
 
 // #Sha256 is a bare lowercase 64-hex sha256 digest (no algorithm prefix).
-// For the prefixed "sha256:<hex>" form use #Digest. @go(-): used inline.
-#Sha256: =~"^[a-f0-9]{64}$" @go(-)
+// For the prefixed "sha256:<hex>" form use #Digest.
+#Sha256: =~"^\(_sha256Hex)$"
 
-#ImageRef: =~"^.+@sha256:[a-f0-9]{64}$"
+#ImageRef: =~"^.+@sha256:\(_sha256Hex)$"
 
 #ArtifactType: "file" | "directory" | "image"
 

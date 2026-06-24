@@ -208,7 +208,7 @@ func TestBuild_ImageFromEdgesPopulated(t *testing.T) {
 			},
 			{
 				ID: "run", Env: map[string]string{}, Args: []string{"run"},
-				ImageFromStep: "pack",
+				ImageFromStep: lane.Ptr(lane.Identifier("pack")),
 			},
 		},
 	}
