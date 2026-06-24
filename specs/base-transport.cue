@@ -33,7 +33,7 @@ package lane
 #FingerprintTrust: {
 	@go(-)
 	type:        "certFingerprint"
-	fingerprint: =~"^sha256:[a-f0-9]{64}$"
+	fingerprint: #Digest
 }
 
 #CABundleTrust: {

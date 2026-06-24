@@ -32,7 +32,7 @@ import "github.com/istr/strike/specs:lane"
 // carry sha256; git resolved-dependencies carry gitCommit (40-hex SHA-1 or
 // 64-hex SHA-256, matching the source-provenance commit width).
 #DigestSet: {
-	sha256?:    =~"^[a-f0-9]{64}$"
+	sha256?:    lane.#Sha256
 	sha512?:    =~"^[a-f0-9]{128}$"
 	gitCommit?: lane.#GitCommit
 }

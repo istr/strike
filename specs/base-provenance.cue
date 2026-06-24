@@ -36,10 +36,10 @@ package lane
 
 #TarballProvenanceRecord: {
 	@go(TarballProvenanceRecord)
-	type:       "tarball"                   @go(Type)
-	uri:        string                      @go(URI)
-	sha256:     string & =~"^[a-f0-9]{64}$" @go(SHA256)
-	fetchedAt?: string                      @go(FetchedAt)
+	type:       "tarball"        @go(Type)
+	uri:        string           @go(URI)
+	sha256:     string & #Sha256 @go(SHA256,type=string)
+	fetchedAt?: string           @go(FetchedAt)
 }
 
 // ---------------------------------------------------------------------------
@@ -48,10 +48,10 @@ package lane
 
 #OCIProvenanceRecord: {
 	@go(OCIProvenanceRecord)
-	type:       "oci"                              @go(Type)
-	uri:        string                             @go(URI)
-	digest:     string & =~"^sha256:[a-f0-9]{64}$" @go(Digest)
-	fetchedAt?: string                             @go(FetchedAt)
+	type:       "oci"            @go(Type)
+	uri:        string           @go(URI)
+	digest:     string & #Digest @go(Digest,type=string)
+	fetchedAt?: string           @go(FetchedAt)
 }
 
 // ---------------------------------------------------------------------------
@@ -60,8 +60,8 @@ package lane
 
 #URLProvenanceRecord: {
 	@go(URLProvenanceRecord)
-	type:       "url"                       @go(Type)
-	uri:        string                      @go(URI)
-	sha256:     string & =~"^[a-f0-9]{64}$" @go(SHA256)
-	fetchedAt?: string                      @go(FetchedAt)
+	type:       "url"            @go(Type)
+	uri:        string           @go(URI)
+	sha256:     string & #Sha256 @go(SHA256,type=string)
+	fetchedAt?: string           @go(FetchedAt)
 }

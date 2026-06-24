@@ -33,6 +33,10 @@ package lane
 // @go(-): used inline, no named Go type.
 #GitCommit: =~"^[a-f0-9]{40}$|^[a-f0-9]{64}$" @go(-)
 
+// #Sha256 is a bare lowercase 64-hex sha256 digest (no algorithm prefix).
+// For the prefixed "sha256:<hex>" form use #Digest. @go(-): used inline.
+#Sha256: =~"^[a-f0-9]{64}$" @go(-)
+
 #ImageRef: =~"^.+@sha256:[a-f0-9]{64}$"
 
 #ArtifactType: "file" | "directory" | "image"

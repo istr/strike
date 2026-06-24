@@ -13,6 +13,8 @@
 
 package crossval
 
+import "github.com/istr/strike/specs:lane"
+
 // Shared envelope for all cross-validation test vectors.
 #Vector: {
 	boundary:    "AssembleImage" | "SpecHash" | "ValidateAttestation" | "StateDigest" | "RenderKnownHosts"
@@ -35,8 +37,8 @@ package crossval
 		}
 	}
 	expected: {
-		manifest_digest: =~"^sha256:[a-f0-9]{64}$"
-		config_digest:   =~"^sha256:[a-f0-9]{64}$"
+		manifest_digest: lane.#Digest
+		config_digest:   lane.#Digest
 		layer_count:     int & >=0
 	}
 }
@@ -48,12 +50,12 @@ package crossval
 			args: [...string]
 			env: [string]: string
 		}
-		image_digest: =~"^sha256:[a-f0-9]{64}$"
-		input_hashes: [string]:  =~"^sha256:[a-f0-9]{64}$"
-		source_hashes: [string]: =~"^sha256:[a-f0-9]{64}$"
+		image_digest: lane.#Digest
+		input_hashes: [string]:  lane.#Digest
+		source_hashes: [string]: lane.#Digest
 	}
 	expected: {
-		hash: =~"^sha256:[a-f0-9]{64}$"
+		hash: lane.#Digest
 	}
 }
 
@@ -80,7 +82,7 @@ package crossval
 		}]
 	}
 	expected: {
-		digest: =~"^sha256:[a-f0-9]{64}$"
+		digest: lane.#Digest
 	}
 }
 
