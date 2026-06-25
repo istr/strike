@@ -5,7 +5,7 @@
 // trust chain -- it must be formally specified, not just implicitly
 // defined by Go struct tags.
 //
-// Companion file: attest-artifact-record.cue defines #ArtifactRecord and related
+// Companion file: artifact-record.cue defines #ArtifactRecord and related
 // provenance types (same package attest, merged automatically by CUE).
 //
 // Validation flow:
@@ -22,7 +22,7 @@
 
 package attest
 
-import "github.com/istr/strike/specs:lane"
+import "github.com/istr/strike/specs/lane"
 
 #Timestamp: =~"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}"
 

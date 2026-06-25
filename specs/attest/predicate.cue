@@ -1,7 +1,7 @@
 // strike output attestation predicates (ADR-040 D3).
 //
 // These are the standard-ecosystem attestations strike SIGNS and publishes,
-// distinct from the internal #Attestation collect-model in attest-attestation.cue
+// distinct from the internal #Attestation collect-model in attestation.cue
 // (ADR-039 produce-then-collect). The projection internal -> these shapes runs
 // at sign time (a later instruction); this file defines the output shapes only.
 //
@@ -15,12 +15,12 @@
 //
 // Shared types named here resolve two ways: #Timestamp, #ObservedPeer,
 // #ResolverRecord, #EngineMetadata, and #Subject are defined in this attest
-// package (attest-attestation.cue and this file); the lane declarations are named
+// package (attestation.cue and this file); the lane declarations are named
 // qualified through the lane import.
 
 package attest
 
-import "github.com/istr/strike/specs:lane"
+import "github.com/istr/strike/specs/lane"
 
 // ---------------------------------------------------------------------------
 // in-toto attestation framework primitives (in-toto Statement v1)

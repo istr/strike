@@ -1,13 +1,13 @@
 package attest
 
-import "github.com/istr/strike/specs:lane"
+import "github.com/istr/strike/specs/lane"
 
 // Sigstore bundle (v0.3) -- the published verification material strike emits
 // per deploy statement and an independent verifier consumes. This is a typed
 // projection of the sigstore bundle media type
 // "application/vnd.dev.sigstore.bundle.v0.3+json"
 // (github.com/sigstore/protobuf-specs, proto3-JSON encoding), constrained to
-// the single emission profile strike produces. Like wire-trustroot.cue it
+// the single emission profile strike produces. Like trustroot.cue it
 // projects an external standard so a cross-implementation verifier can check
 // the published material from the exported schemas; it is not a private fork of
 // a strike contract.

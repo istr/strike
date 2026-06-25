@@ -134,7 +134,7 @@ linters:
           - revive
         text: "time-naming"
       # Generated code: skip all linters
-      - path: cue_types_lane_gen\.go
+      - path: cue_types_gen\.go
         linters:
           - godot
           - revive

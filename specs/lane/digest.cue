@@ -3,7 +3,7 @@
 // DigestRef is the internal computed form of a content-addressed digest: an
 // algorithm and a bare hex body, built and read field-wise inside the pipeline.
 // It is distinct from the wire form #Digest (a "sha256:<hex>" string in
-// base-scalars.cue): the wire string crosses the serialization boundary,
+// scalars.cue): the wire string crosses the serialization boundary,
 // DigestRef is what internal code computes with. internal/lane/digest_type.go
 // bridges the two (ParseDigest, Wire). See
 // docs/ADR-046-one-canonical-digest-pinned-image.md (wire vs internal API) and
@@ -19,7 +19,7 @@ package lane
 // fields. The structured form lets internal code build and inspect a digest
 // without re-parsing the wire string, and ban or require specific hash functions
 // at the parse boundary. The hex body reuses #Sha256 so the 64-hex grammar is
-// single-sourced (base-scalars.cue).
+// single-sourced (scalars.cue).
 #DigestRef: {
 	@go(DigestRef)
 	algorithm: string  @go(Algorithm)

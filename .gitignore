@@ -1,6 +1,6 @@
 /strike
 specs/*.json
-internal/lane/cue_types_lane_gen.go
+internal/lane/cue_types_gen.go
 /.claude
 !/.claude/skills/**
 .vscode

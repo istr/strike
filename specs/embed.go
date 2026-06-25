@@ -7,9 +7,9 @@ package specs
 
 import "embed"
 
-// FS holds the embedded CUE spec files (the base-, api-, wire-, attest-, and
-// meta- layer files). internal/schema presents them as a CUE module tree and
-// loads each package natively via cue/load.
+// FS holds the embedded CUE spec files, one CUE package per subdirectory.
+// internal/schema presents them as a CUE module tree and loads each package
+// natively via cue/load.
 //
-//go:embed *.cue
+//go:embed lane attest crossval trustlayers
 var FS embed.FS

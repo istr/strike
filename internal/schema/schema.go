@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
+	"strings"
 
 	"cuelang.org/go/cue"
 	"cuelang.org/go/cue/cuecontext"
@@ -76,16 +77,22 @@ func buildModuleOverlay() map[string]load.Source {
 	overlay := map[string]load.Source{
 		moduleRoot + "/cue.mod/module.cue": load.FromString(moduleFile),
 	}
-	entries, err := fs.ReadDir(specs.FS, ".")
-	if err != nil {
-		panic(fmt.Sprintf("schema: read specs fs: %v", err))
-	}
-	for _, e := range entries {
-		data, rerr := fs.ReadFile(specs.FS, e.Name())
-		if rerr != nil {
-			panic(fmt.Sprintf("schema: read spec %q: %v", e.Name(), rerr))
+	walkErr := fs.WalkDir(specs.FS, ".", func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
 		}
-		overlay[moduleRoot+"/specs/"+e.Name()] = load.FromBytes(data)
+		if d.IsDir() || !strings.HasSuffix(p, ".cue") {
+			return nil
+		}
+		data, rerr := fs.ReadFile(specs.FS, p)
+		if rerr != nil {
+			return rerr
+		}
+		overlay[moduleRoot+"/specs/"+p] = load.FromBytes(data)
+		return nil
+	})
+	if walkErr != nil {
+		panic(fmt.Sprintf("schema: walk specs fs: %v", walkErr))
 	}
 	return overlay
 }
@@ -94,7 +101,7 @@ func buildModuleOverlay() map[string]load.Source {
 // failure: a specs module that does not load is a build-time defect, not a
 // runtime condition.
 func mustBuild(pkg string) cue.Value {
-	insts := load.Instances([]string{"./specs:" + pkg}, &load.Config{Dir: moduleRoot, Overlay: moduleOverlay})
+	insts := load.Instances([]string{"./specs/" + pkg}, &load.Config{Dir: moduleRoot, Overlay: moduleOverlay})
 	if len(insts) != 1 {
 		panic(fmt.Sprintf("schema: load %q: expected 1 instance, got %d", pkg, len(insts)))
 	}

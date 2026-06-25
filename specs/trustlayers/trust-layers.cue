@@ -1,11 +1,11 @@
-// specs/trust-layers.cue
+// specs/trustlayers/trust-layers.cue
 //
 // Trust-layer map -- the single source of truth for the V / E / informational
 // classification of every attested field (the soundness note's three-way split).
 //
 // WHY THIS FILE EXISTS. The classification is one unit of meaning; per the
-// "Meaning is single-sourced" principle it has exactly one home. attest-attestation.cue
-// (internal collect-model) and attest-predicate.cue (published statements) are two
+// "Meaning is single-sourced" principle it has exactly one home. attestation.cue
+// (internal collect-model) and predicate.cue (published statements) are two
 // PROJECTIONS of this map. A conformance test asserts both agree with it. Do not
 // restate the classification in prose anywhere -- link to this file instead.
 //
@@ -99,8 +99,8 @@ layerOf: {
 	// expected engine identity -- the engine-transport arc closes this), so its row
 	// is deliberately false and the gap is machine-visible.
 	hardenedByDeclaration: bool | *false
-	internal:              string       // path in attest-attestation.cue's #Attestation, or "-" if not in the collect-model
-	published:             #PublishedIn // statement in attest-predicate.cue that carries it
+	internal:              string       // path in attestation.cue's #Attestation, or "-" if not in the collect-model
+	published:             #PublishedIn // statement in predicate.cue that carries it
 	rationale:             string       // one-line soundness rationale (human context; not load-bearing)
 }
 

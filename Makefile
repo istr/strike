@@ -8,20 +8,20 @@ build: generate
 # Step 1: Export CUE specs to JSON Schema.
 # These JSON Schema files are the cross-implementation contract that
 # both the Go and (future) Rust validators build from.
-specs: specs/base-scalars.cue specs/base-peer.cue specs/base-target.cue specs/wire-lane.cue specs/wire-trustroot.cue specs/base-provenance.cue specs/attest-attestation.cue specs/attest-artifact-record.cue
-	cue export ./specs:lane -e '#Lane' \
+specs: specs/lane/scalars.cue specs/lane/peer.cue specs/lane/target.cue specs/lane/lane.cue specs/lane/trustroot.cue specs/lane/provenance.cue specs/attest/attestation.cue specs/attest/artifact-record.cue
+	cue export ./specs/lane -e '#Lane' \
 	    --out jsonschema --force -o specs/lane.schema.json
-	cue export ./specs:attest -e '#Attestation' \
+	cue export ./specs/attest -e '#Attestation' \
 	    --out jsonschema --force -o specs/attestation.schema.json
-	cue export ./specs:trustlayers \
+	cue export ./specs/trustlayers \
 	    --out json --force -o specs/trust-layers.json
 
 # Step 2: Generate Go types from the CUE lane schema.
 # Uses gengotypes for now; will move to JSON Schema input once
 # a JSON-Schema-to-Go generator is selected.
 generate: specs
-	cue exp gengotypes ./specs:lane
-	mv specs/cue_types_lane_gen.go internal/lane/cue_types_lane_gen.go
+	cue exp gengotypes ./specs/lane
+	mv specs/lane/cue_types*gen.go internal/lane/cue_types_gen.go
 
 # Update golden test fixtures (run after intentional changes to sign/pack/digest).
 golden:

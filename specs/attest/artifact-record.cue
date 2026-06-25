@@ -6,7 +6,7 @@
 
 package attest
 
-import "github.com/istr/strike/specs:lane"
+import "github.com/istr/strike/specs/lane"
 
 // ArtifactRecord is the provenance record for one artifact.
 #ArtifactRecord: {

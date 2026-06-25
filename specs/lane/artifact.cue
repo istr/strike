@@ -10,7 +10,7 @@
 // docs/ADR-004-cue-as-single-source-of-truth.md.
 //
 // Same `package lane` as lane.cue: CUE merges same-package files in a
-// directory automatically, and `cue exp gengotypes ./specs:lane` generates
+// directory automatically, and `cue exp gengotypes ./specs/lane` generates
 // these types into internal/lane alongside the wire types. The file boundary
 // is the separation between the wire and internal types.
 

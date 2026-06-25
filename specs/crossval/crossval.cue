@@ -13,7 +13,7 @@
 
 package crossval
 
-import "github.com/istr/strike/specs:lane"
+import "github.com/istr/strike/specs/lane"
 
 // Shared envelope for all cross-validation test vectors.
 #Vector: {
