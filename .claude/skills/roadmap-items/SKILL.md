@@ -154,6 +154,8 @@ chosen invocation as `roadmap.py`.
 | Change arc membership | `restructure ID --arcs a,b` / `--add-arc x` / `--remove-arc y` |
 | Place in execution order | `reorder ID [--before ID] [--after ID] [--to-position N] [--remove]` |
 | Retire a ratified item | `done ID --summary "..."` |
+| Emit a `git am` patch (new items) | `emit-patch ID [ID ...] [-m MSG] [-o FILE]` |
+| Emit a `git am` patch (edits/moves) | `emit-patch --baseline DIR [-m MSG] [-o FILE]` |
 
 ### Worked examples
 
@@ -193,17 +195,45 @@ roadmap.py next
 
 When you are in the web/analysis sandbox, edit the items with the script as
 usual, then hand the operator something they can apply locally. Do not push and
-do not expect credentials. Stage and emit a patch:
+do not expect credentials. **Do not hand-roll the patch and do not shell out to
+`git format-patch`** -- the `emit-patch` command builds a `git am`-consumable
+mbox directly (pure stdlib, no git invoked), so this step is one command, not a
+re-invented ritual.
+
+For a **new task** (a freshly created item -- the common case), pass its id.
+`new` only writes the item file, so the patch is a single additive new-file hunk:
 
 ```
-git add -A roadmap/
-git commit -m "roadmap: <what changed>"
-git format-patch -1 --stdout > roadmap.patch     # or: git bundle create roadmap.bundle HEAD
+roadmap.py new --title "..." --arcs a --goal "..." --acceptance "..."
+# -> created item-0042
+roadmap.py emit-patch item-0042 -m "roadmap: add item-0042" -o roadmap.patch
 ```
 
-Then give the operator the `roadmap.patch` (or bundle). They apply it locally
-(`git am roadmap.patch`) and it is their commit that ratifies. This asymmetry is
-intentional: the read path is ungated, the write path is operator-gated.
+For **edits, reordering, or a `done`-move** (anything that touches existing files
+like `_order.md` or moves an item into `completed/`), `emit-patch` needs the
+pre-image. Snapshot the store right after cloning, make your edits, then diff
+against the snapshot:
+
+```
+cp -r roadmap /tmp/roadmap-baseline       # snapshot at clone time, before editing
+roadmap.py reorder item-0042 --before item-0030
+roadmap.py done item-0017 --summary "..."
+roadmap.py emit-patch --baseline /tmp/roadmap-baseline -m "roadmap: retire 0017" -o roadmap.patch
+```
+
+The operator applies it with `git am roadmap.patch`, and **that apply is the
+commit that ratifies** -- which is why `emit-patch` writes the `From:`/`Subject:`
+envelope (author and message are preserved into their tree). The index lines
+carry real git blob SHAs, so `git am -3 roadmap.patch` can 3-way-recover if the
+operator tree has drifted; a clean tree ignores them. Defaults: author is
+`roadmap-bot <roadmap-bot@localhost>` (override with `--author "Name <email>"`),
+output goes to stdout unless `-o FILE` is given. This asymmetry is intentional:
+the read path is ungated, the write path is operator-gated.
+
+If you genuinely need full history transfer rather than a single logical change
+(multiple commits, binary content), fall back to `git bundle create
+roadmap.bundle HEAD` by hand -- `emit-patch` deliberately models the
+one-change-one-ratifying-apply path, not arbitrary history.
 
 ## ADR boundary (advisory redirect, not a hard wall)
 

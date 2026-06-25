@@ -4,9 +4,11 @@
 Stdlib only. No PyYAML, no third-party deps: the frontmatter is a tiny fixed
 shape and a hand-written parser keeps the supply chain empty, which is the whole
 point of a "code is liability" project. No subprocess either -- this script only
-reads and writes files in the working tree it is run from. Git operations
-(commit, format-patch, bundle) are deliberately left to the caller and the
-SKILL.md procedure so that what the script touches stays auditable and bounded.
+reads and writes files in the working tree it is run from, and the one git-shaped
+operation it offers (emit-patch) is *generated* as text, not shelled out: the
+mbox is built directly with difflib/hashlib so the "no subprocess, auditable and
+bounded" invariant holds. The actual apply stays with the operator (git am), so
+apply == ratify is preserved. Commit/bundle remain the caller's job.
 
 Data model (see references/schema.md for the full spec):
 
@@ -25,6 +27,9 @@ Data model (see references/schema.md for the full spec):
 """
 
 import argparse
+import difflib
+import email.utils
+import hashlib
 import os
 import re
 import sys
@@ -498,6 +503,172 @@ def cmd_done(args):
 
 
 # --------------------------------------------------------------------------
+# patch emission (git am-consumable mbox, generated as text -- no subprocess)
+# --------------------------------------------------------------------------
+#
+# The output is a one-message mbox in git's own patch shape. The operator applies
+# it with `git am`, and *that* apply is the ratifying commit -- so the From:/
+# Subject: envelope is load-bearing, not cosmetic. New files are pure additive
+# hunks; modified/deleted files use difflib for correct context. Blob SHAs are
+# the real git object ids (sha1("blob <len>\0<bytes>")) so `git am -3` can
+# 3-way-recover against a drifted tree; with a clean apply they are ignored.
+
+NULL_SHA = "0" * 40
+MBOX_POSTMARK = "From %s Mon Sep 17 00:00:00 2001\n" % NULL_SHA
+DEFAULT_AUTHOR = "roadmap-bot <roadmap-bot@localhost>"
+
+
+def blob_sha(data):
+    """git blob object id for the given bytes (stdlib, no git needed)."""
+    h = hashlib.sha1()
+    h.update(b"blob " + str(len(data)).encode("ascii") + b"\0" + data)
+    return h.hexdigest()
+
+
+def _read_bytes(path):
+    with open(path, "rb") as fh:
+        return fh.read()
+
+
+def _store_prefix(root):
+    # Patch paths must be repo-relative. The store dir is conventionally
+    # 'roadmap/'; basename works whether --root is relative or absolute.
+    return os.path.basename(os.path.normpath(root))
+
+
+def _walk_store(storedir):
+    """{path-relative-to-store: full-path} for every .md under the store."""
+    out = {}
+    for dirpath, _dirs, files in os.walk(storedir):
+        for name in files:
+            if name.endswith(".md"):
+                full = os.path.join(dirpath, name)
+                out[os.path.relpath(full, storedir)] = full
+    return out
+
+
+def _new_file_hunk(rel, new_bytes):
+    lines = new_bytes.decode("utf-8").splitlines(keepends=True)
+    out = [
+        "diff --git a/%s b/%s\n" % (rel, rel),
+        "new file mode 100644\n",
+        "index %s..%s\n" % (NULL_SHA, blob_sha(new_bytes)),
+        "--- /dev/null\n",
+        "+++ b/%s\n" % rel,
+        "@@ -0,0 +1,%d @@\n" % len(lines),
+    ]
+    out += ["+" + ln for ln in lines]
+    return out
+
+
+def _delete_file_hunk(rel, old_bytes):
+    lines = old_bytes.decode("utf-8").splitlines(keepends=True)
+    out = [
+        "diff --git a/%s b/%s\n" % (rel, rel),
+        "deleted file mode 100644\n",
+        "index %s..%s\n" % (blob_sha(old_bytes), NULL_SHA),
+        "--- a/%s\n" % rel,
+        "+++ /dev/null\n",
+        "@@ -1,%d +0,0 @@\n" % len(lines),
+    ]
+    out += ["-" + ln for ln in lines]
+    return out
+
+
+def _modify_hunk(rel, old_bytes, new_bytes):
+    old_lines = old_bytes.decode("utf-8").splitlines(keepends=True)
+    new_lines = new_bytes.decode("utf-8").splitlines(keepends=True)
+    body = list(difflib.unified_diff(
+        old_lines, new_lines,
+        fromfile="a/" + rel, tofile="b/" + rel, lineterm="\n"))
+    if not body:
+        return []
+    return [
+        "diff --git a/%s b/%s\n" % (rel, rel),
+        "index %s..%s 100644\n" % (blob_sha(old_bytes), blob_sha(new_bytes)),
+    ] + body
+
+
+def _file_hunk(rel, old_bytes, new_bytes):
+    if old_bytes is None and new_bytes is not None:
+        return _new_file_hunk(rel, new_bytes)
+    if old_bytes is not None and new_bytes is None:
+        return _delete_file_hunk(rel, old_bytes)
+    if old_bytes is not None and new_bytes is not None and old_bytes != new_bytes:
+        return _modify_hunk(rel, old_bytes, new_bytes)
+    return []
+
+
+def build_mbox(message, author, date_str, diff_lines):
+    """Assemble the one-message mbox. First message line is the subject."""
+    msg_lines = (message or "roadmap: update").splitlines() or ["roadmap: update"]
+    subject, body = msg_lines[0], msg_lines[1:]
+    parts = [
+        MBOX_POSTMARK,
+        "From: %s\n" % author,
+        "Date: %s\n" % date_str,
+        "Subject: [PATCH] %s\n" % subject,
+        "\n",
+    ]
+    if body:
+        parts += [b + "\n" for b in body]
+        parts.append("\n")
+    parts.append("---\n\n")
+    parts += diff_lines
+    return "".join(parts)
+
+
+def cmd_emit_patch(args):
+    root = args.root
+    prefix = _store_prefix(root)
+    diff_lines = []
+
+    if args.baseline:
+        # General mode: diff a pristine store dir against the current one. Catches
+        # modifies (_order.md, in-place edits) and the delete+create of a done-move.
+        cur = _walk_store(root)
+        base = _walk_store(args.baseline)
+        for rel in sorted(set(cur) | set(base)):
+            old = _read_bytes(base[rel]) if rel in base else None
+            new = _read_bytes(cur[rel]) if rel in cur else None
+            diff_lines += _file_hunk(os.path.join(prefix, rel), old, new)
+        default_msg = "roadmap: update"
+    else:
+        # Creation mode (the 'new task' path): given item IDs, emit pure additive
+        # new-file hunks. No baseline, no git -- the file content is the patch.
+        if not args.ids:
+            sys.exit("error: pass item IDs (creation mode) or --baseline DIR "
+                     "(general mode, for edits/_order/done-moves)")
+        for iid in args.ids:
+            if not ID_RE.match(iid):
+                sys.exit("error: %s is not an item id (expected item-NNNN)" % iid)
+            active, done = item_path(root, iid), item_path(root, iid, completed=True)
+            full = active if os.path.exists(active) else (
+                done if os.path.exists(done) else None)
+            if full is None:
+                sys.exit("error: %s not found on disk -- create it first" % iid)
+            rel = os.path.relpath(full, root)
+            diff_lines += _new_file_hunk(os.path.join(prefix, rel),
+                                         _read_bytes(full))
+        default_msg = "roadmap: add " + ", ".join(args.ids)
+
+    if not diff_lines:
+        sys.exit("error: nothing to emit (no changes detected)")
+
+    mbox = build_mbox(args.message or default_msg,
+                      args.author or DEFAULT_AUTHOR,
+                      email.utils.formatdate(localtime=True),
+                      diff_lines)
+    if args.output:
+        with open(args.output, "w", encoding="utf-8") as fh:
+            fh.write(mbox)
+        print("wrote %s" % args.output)
+        print("operator applies (this apply ratifies): git am %s" % args.output)
+    else:
+        sys.stdout.write(mbox)
+
+
+# --------------------------------------------------------------------------
 # CLI
 # --------------------------------------------------------------------------
 
@@ -584,6 +755,21 @@ def build_parser():
     dn.add_argument("--summary", required=True)
     dn.add_argument("--force", action="store_true")
     dn.set_defaults(func=cmd_done)
+
+    ep = sub.add_parser(
+        "emit-patch",
+        help="emit a git am-consumable mbox patch (stdlib, no git invoked)")
+    ep.add_argument("ids", nargs="*",
+                    help="item IDs to emit as new-file creations (the 'new task' path)")
+    ep.add_argument("--baseline",
+                    help="pristine store dir to diff against (general mode: "
+                         "edits, _order.md, done-moves)")
+    ep.add_argument("-m", "--message",
+                    help="commit message; first line becomes the subject")
+    ep.add_argument("-o", "--output", help="write patch to FILE (default: stdout)")
+    ep.add_argument("--author",
+                    help='author "Name <email>"; git am preserves it into the tree')
+    ep.set_defaults(func=cmd_emit_patch)
 
     return p
 
