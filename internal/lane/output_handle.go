@@ -39,10 +39,10 @@ func (FileOutputHandle) HandleKind() string { return "file" }
 // ManifestDigest extracts the manifest digest from a handle's imageRef.
 // imageRef has the form "repo@algorithm:hex"; the digest is everything after
 // the "@".
-func ManifestDigest(h OutputHandle) (Digest, error) {
+func ManifestDigest(h OutputHandle) (DigestRef, error) {
 	_, d, ok := strings.Cut(h.ImageRef(), "@")
 	if !ok {
-		return Digest{}, fmt.Errorf("output handle: no digest in image ref %q", h.ImageRef())
+		return DigestRef{}, fmt.Errorf("output handle: no digest in image ref %q", h.ImageRef())
 	}
 	return ParseDigest(d)
 }

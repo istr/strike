@@ -127,46 +127,46 @@ func packTestImage(t *testing.T, binPath string) (*executor.PackResult, *os.Root
 // container store and returns the manifest digest. Reimplemented here
 // using only exported registry functions so that production code does not
 // carry test-only helpers.
-func loadOCITar(ctx context.Context, c *registry.Client, root *os.Root, relPath string) (lane.Digest, error) {
+func loadOCITar(ctx context.Context, c *registry.Client, root *os.Root, relPath string) (lane.DigestRef, error) {
 	f, err := root.Open(relPath)
 	if err != nil {
-		return lane.Digest{}, err
+		return lane.DigestRef{}, err
 	}
 	data, err := io.ReadAll(f)
 	closer.Warn(f, "loadOCITar")
 	if err != nil {
-		return lane.Digest{}, err
+		return lane.DigestRef{}, err
 	}
 
 	tmpDir, err := os.MkdirTemp("", "strike-load-")
 	if err != nil {
-		return lane.Digest{}, err
+		return lane.DigestRef{}, err
 	}
 	defer closer.Remove(tmpDir, "loadOCITar")
 
 	tmpRoot, err := os.OpenRoot(tmpDir)
 	if err != nil {
-		return lane.Digest{}, err
+		return lane.DigestRef{}, err
 	}
 	defer closer.Warn(tmpRoot, "loadOCITar root")
 
 	if extractErr := regtest.ExtractTar(data, tmpRoot); extractErr != nil {
-		return lane.Digest{}, fmt.Errorf("extract layout: %w", extractErr)
+		return lane.DigestRef{}, fmt.Errorf("extract layout: %w", extractErr)
 	}
 
 	lp, err := layout.FromPath(tmpDir)
 	if err != nil {
-		return lane.Digest{}, fmt.Errorf("open layout: %w", err)
+		return lane.DigestRef{}, fmt.Errorf("open layout: %w", err)
 	}
 
 	idx, err := lp.ImageIndex()
 	if err != nil {
-		return lane.Digest{}, fmt.Errorf("read index: %w", err)
+		return lane.DigestRef{}, fmt.Errorf("read index: %w", err)
 	}
 
 	manifest, err := idx.IndexManifest()
 	if err != nil {
-		return lane.Digest{}, fmt.Errorf("read index manifest: %w", err)
+		return lane.DigestRef{}, fmt.Errorf("read index manifest: %w", err)
 	}
 
 	var img v1.Image
@@ -185,30 +185,30 @@ func loadOCITar(ctx context.Context, c *registry.Client, root *os.Root, relPath 
 		}
 	}
 	if err != nil {
-		return lane.Digest{}, err
+		return lane.DigestRef{}, err
 	}
 	if img == nil {
-		return lane.Digest{}, fmt.Errorf("no annotated main image in %d-manifest archive", len(manifest.Manifests))
+		return lane.DigestRef{}, fmt.Errorf("no annotated main image in %d-manifest archive", len(manifest.Manifests))
 	}
 
 	tarData, err := regtest.LayoutTar(img, descAnn)
 	if err != nil {
-		return lane.Digest{}, err
+		return lane.DigestRef{}, err
 	}
 
 	id, err := c.Engine.ImageLoad(ctx, bytes.NewReader(tarData))
 	if err != nil {
-		return lane.Digest{}, err
+		return lane.DigestRef{}, err
 	}
 
 	d, err := c.InspectDigest(ctx, id)
 	if err != nil {
-		return lane.Digest{}, err
+		return lane.DigestRef{}, err
 	}
 
-	localTag := "localhost/strike:" + d.Hex[:12]
+	localTag := "localhost/strike:" + string(d.Hex[:12])
 	if tagErr := c.Engine.ImageTag(ctx, id, localTag); tagErr != nil {
-		return lane.Digest{}, fmt.Errorf("image tag: %w", tagErr)
+		return lane.DigestRef{}, fmt.Errorf("image tag: %w", tagErr)
 	}
 
 	return d, nil

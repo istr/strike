@@ -191,7 +191,7 @@ package lane
 	from:     #OutputRef @go(From)
 	subpath?: #RelPath   @go(Subpath,optional=nillable) // path within producer output; nil mounts whole output
 	mount:    #AbsPath   @go(Mount)
-	digest?:  #Digest    @go(Digest,type=*Digest)
+	digest?:  #Digest    @go(Digest,optional=nillable)
 }
 
 // ---------------------------------------------------------------------------

@@ -18,10 +18,10 @@ import (
 // fully computable before execution.
 func SpecHash(
 	step *lane.Step,
-	imageDigest lane.Digest, // sha256 digest of the image
-	inputHashes map[string]lane.Digest, // step-name -> spec hash of producing step
-	sourceHashes map[string]lane.Digest, // mount-path -> sha256 of source file
-) lane.Digest {
+	imageDigest lane.DigestRef, // sha256 digest of the image
+	inputHashes map[string]lane.DigestRef, // step-name -> spec hash of producing step
+	sourceHashes map[string]lane.DigestRef, // mount-path -> sha256 of source file
+) lane.DigestRef {
 	h := sha256.New()
 
 	h.Write([]byte(imageDigest.String()))
@@ -49,14 +49,14 @@ func SpecHash(
 		h.Write([]byte(p + "=" + sourceHashes[p].String()))
 	}
 
-	return lane.Digest{Algorithm: "sha256", Hex: hex.EncodeToString(h.Sum(nil))}
+	return lane.DigestRef{Algorithm: "sha256", Hex: lane.Sha256(hex.EncodeToString(h.Sum(nil)))}
 }
 
 // Tag builds the registry tag from step name and spec hash.
 // The hash is truncated to 16 hex characters for OCI tag length constraints.
 // Format: registry:step-name-<first16hex>
 // Example: ghcr.io/istr/strike-cache:build-package-a3f9c2b1d4e7f801.
-func Tag(registry, stepID string, hash lane.Digest) string {
+func Tag(registry, stepID string, hash lane.DigestRef) string {
 	short := hash.Hex
 	if len(short) > 16 {
 		short = short[:16]
@@ -74,7 +74,7 @@ func wrapRepo(laneID, stepID string) string {
 
 // WrapTag builds the local engine tag used by wrapOutputs and input extraction.
 // Format: localhost/strike/{laneID}/{stepID}:{specHashHex}.
-func WrapTag(laneID, stepID string, specHash lane.Digest) string {
+func WrapTag(laneID, stepID string, specHash lane.DigestRef) string {
 	return fmt.Sprintf("%s:%s", wrapRepo(laneID, stepID), specHash.Hex)
 }
 
@@ -82,24 +82,24 @@ func WrapTag(laneID, stepID string, specHash lane.Digest) string {
 // is executed against (ADR-045): localhost/strike/{laneID}/{stepID}@{D}. libpod
 // records this exact RepoDigest at ImageTag time (see WrapTag), so it resolves
 // the locally-loaded image with no registry pull.
-func WrapDigestRef(laneID, stepID string, digest lane.Digest) string {
+func WrapDigestRef(laneID, stepID string, digest lane.DigestRef) string {
 	return fmt.Sprintf("%s@%s", wrapRepo(laneID, stepID), digest.String())
 }
 
 // hashReader computes SHA256 of the data from r.
-func hashReader(r io.Reader) (lane.Digest, error) {
+func hashReader(r io.Reader) (lane.DigestRef, error) {
 	h := sha256.New()
 	if _, err := io.Copy(h, r); err != nil {
-		return lane.Digest{}, err
+		return lane.DigestRef{}, err
 	}
-	return lane.Digest{Algorithm: "sha256", Hex: hex.EncodeToString(h.Sum(nil))}, nil
+	return lane.DigestRef{Algorithm: "sha256", Hex: lane.Sha256(hex.EncodeToString(h.Sum(nil)))}, nil
 }
 
 // HashFile computes SHA256 of a file within the given root scope.
-func HashFile(root *os.Root, path string) (hash lane.Digest, err error) {
+func HashFile(root *os.Root, path string) (hash lane.DigestRef, err error) {
 	f, err := root.Open(path)
 	if err != nil {
-		return lane.Digest{}, err
+		return lane.DigestRef{}, err
 	}
 	defer func() {
 		if cerr := f.Close(); cerr != nil && err == nil {
@@ -118,7 +118,7 @@ func sortedKeys(m map[string]string) []string {
 	return keys
 }
 
-func sortedDigestMapKeys(m map[string]lane.Digest) []string {
+func sortedDigestMapKeys(m map[string]lane.DigestRef) []string {
 	keys := make([]string, 0, len(m))
 	for k := range m {
 		keys = append(keys, k)

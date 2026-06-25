@@ -50,8 +50,8 @@ func TestInformationalStatement_Valid(t *testing.T) {
 		PredicateType: "https://istr.dev/strike/predicates/informational/v1",
 		Predicate: deploy.InformationalPredicate{
 			Timestamp:       clock.Reproducible(),
-			PreStateDigest:  lane.MustParseDigest("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
-			PostStateDigest: lane.MustParseDigest("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
+			PreStateDigest:  lane.MustParseDigest("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855").Wire(),
+			PostStateDigest: lane.MustParseDigest("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855").Wire(),
 			Provenance:      []lane.ProvenanceRecord{},
 		},
 	}

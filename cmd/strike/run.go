@@ -29,7 +29,7 @@ import (
 
 // runState holds accumulated state across steps during a lane execution.
 type runState struct {
-	specHashes map[string]lane.Digest
+	specHashes map[string]lane.DigestRef
 	// imageFromRefs maps a consumer step name to the producer's
 	// content-addressed local digest reference
 	// (localhost/strike/<lane>/<step>@sha256:<D>), populated by
@@ -43,7 +43,7 @@ type runState struct {
 
 func newRunState() *runState {
 	return &runState{
-		specHashes:    map[string]lane.Digest{},
+		specHashes:    map[string]lane.DigestRef{},
 		imageFromRefs: map[string]string{},
 	}
 }
@@ -60,7 +60,7 @@ type runContext struct {
 	front          *front.Front
 	upstreamLook   capsule.UpstreamLookupFunc
 	lane           *lane.Lane
-	laneDigest     lane.Digest
+	laneDigest     lane.DigestRef
 	dag            *lane.DAG
 	stepPorts      map[string]capsule.HostPorts       // mediated step name -> host ports
 	networkRecords map[string]capsule.Records         // step name -> records
@@ -189,11 +189,11 @@ func (rc *runContext) executeDeploy(ctx context.Context, step *lane.Step, stepID
 	return nil
 }
 
-func (rc *runContext) resolveImageDigest(ctx context.Context, step *lane.Step, safeName string) (lane.Digest, error) {
+func (rc *runContext) resolveImageDigest(ctx context.Context, step *lane.Step, safeName string) (lane.DigestRef, error) {
 	if step.Pack != nil {
 		digest, err := resolveDigest(ctx, rc.regClient, step.Pack.Base)
 		if err != nil {
-			return lane.Digest{}, fmt.Errorf("%s: pack base digest: %w", safeName, err)
+			return lane.DigestRef{}, fmt.Errorf("%s: pack base digest: %w", safeName, err)
 		}
 		return digest, nil
 	}
@@ -205,12 +205,12 @@ func (rc *runContext) resolveImageDigest(ctx context.Context, step *lane.Step, s
 		ref := lane.OutputRef{Step: lane.Identifier(fromStep), Output: ""}.Ref()
 		handle, err := rc.laneState.Resolve(ref)
 		if err != nil {
-			return lane.Digest{}, fmt.Errorf("%s: imageFromStep %s: %w",
+			return lane.DigestRef{}, fmt.Errorf("%s: imageFromStep %s: %w",
 				safeName, ref, err)
 		}
 		digest, digestErr := lane.ManifestDigest(handle)
 		if digestErr != nil {
-			return lane.Digest{}, fmt.Errorf("%s: imageFromStep %s: %w",
+			return lane.DigestRef{}, fmt.Errorf("%s: imageFromStep %s: %w",
 				safeName, ref, digestErr)
 		}
 		// ADR-045: execute the producer's image by its content-addressed
@@ -220,17 +220,17 @@ func (rc *runContext) resolveImageDigest(ctx context.Context, step *lane.Step, s
 	}
 	digest, err := resolveDigest(ctx, rc.regClient, *step.Image)
 	if err != nil {
-		return lane.Digest{}, fmt.Errorf("%s: image digest: %w", safeName, err)
+		return lane.DigestRef{}, fmt.Errorf("%s: image digest: %w", safeName, err)
 	}
 	return digest, nil
 }
 
-func (rc *runContext) computeSpecHash(step *lane.Step, stepID string, imageDigest lane.Digest) (lane.Digest, string, error) {
+func (rc *runContext) computeSpecHash(step *lane.Step, stepID string, imageDigest lane.DigestRef) (lane.DigestRef, string, error) {
 	// Per ADR-027, an input is identified in the spec hash by the
 	// canonical triple (from, mount, subpath); mount is unique per step
 	// by disjointness, and subpath is "" when the whole producer output
 	// is mounted. The hashed value remains the producer's spec hash.
-	inputHashes := map[string]lane.Digest{}
+	inputHashes := map[string]lane.DigestRef{}
 	for _, e := range rc.dag.InputEdges[string(step.ID)] {
 		from := lane.OutputRef{Step: e.FromStep.ID, Output: e.FromOutput.ID}.Ref()
 		subpath := ""
@@ -241,13 +241,13 @@ func (rc *runContext) computeSpecHash(step *lane.Step, stepID string, imageDiges
 		inputHashes[key] = rc.state.specHashes[string(e.FromStep.ID)]
 	}
 
-	key := registry.SpecHash(step, imageDigest, inputHashes, map[string]lane.Digest{})
+	key := registry.SpecHash(step, imageDigest, inputHashes, map[string]lane.DigestRef{})
 	tag := registry.Tag(rc.lane.Registry, stepID, key)
 	rc.state.specHashes[stepID] = key
 	return key, tag, nil
 }
 
-func (rc *runContext) checkCache(ctx context.Context, step *lane.Step, stepID, safeName string, specHash lane.Digest) (bool, error) {
+func (rc *runContext) checkCache(ctx context.Context, step *lane.Step, stepID, safeName string, specHash lane.DigestRef) (bool, error) {
 	if step.ForceRun {
 		log.Printf("FORCED %s", safeName)
 		return false, nil
@@ -414,7 +414,7 @@ func (rc *runContext) resolvePackInputPaths(ctx context.Context, step *lane.Step
 			return nil, fmt.Errorf("%s: pack input %s.%s digest: %w", safeName, fromStep, fromOutput, digestErr)
 		}
 
-		dedupDir := packDigest.Hex[:16] + "-" + string(fh.OutputID)
+		dedupDir := string(packDigest.Hex[:16]) + "-" + string(fh.OutputID)
 		inputDir := filepath.Join(inputsRoot, dedupDir)
 		if mkErr := scratchRoot.Mkdir(filepath.Join("inputs", dedupDir), 0o750); mkErr == nil {
 			tarBytes, saveErr := registry.SaveImage(ctx, rc.engine, fh.Ref)
@@ -569,7 +569,7 @@ func (rc *runContext) wrapFileOutputs(ctx context.Context, step *lane.Step, step
 // wrapImageOutput commits the held container to a new image, normalizes it
 // through ggcr for reproducible digests (ADR-046), and registers the
 // digest-pinned OutputHandle.
-func (rc *runContext) wrapImageOutput(ctx context.Context, _ *lane.Step, stepID, safeName, containerID string, specHash lane.Digest) error {
+func (rc *runContext) wrapImageOutput(ctx context.Context, _ *lane.Step, stepID, safeName, containerID string, specHash lane.DigestRef) error {
 	tag := registry.WrapTag(string(rc.lane.ID), stepID, specHash)
 
 	imageID, commitErr := rc.engine.ContainerCommit(ctx, containerID)

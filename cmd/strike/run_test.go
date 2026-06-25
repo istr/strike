@@ -461,7 +461,7 @@ func TestComputeSpecHash_ChangesWithImageDigest(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Reset specHashes to avoid accumulation from prior call.
-	rc.state.specHashes = map[string]lane.Digest{}
+	rc.state.specHashes = map[string]lane.DigestRef{}
 	h2, _, err := rc.computeSpecHash(step, "s", lane.MustParseDigest("sha256:bbb0000000000000000000000000000000000000000000000000000000000000"))
 	if err != nil {
 		t.Fatal(err)

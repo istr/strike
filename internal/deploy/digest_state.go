@@ -26,7 +26,7 @@ type captureSnap struct {
 // The empty-input case is well-defined: SHA-256 of the empty byte
 // sequence (e3b0c442...). The loop writes nothing and the hash of the
 // empty buffer is returned.
-func StateDigest(captures []captureSnap) lane.Digest {
+func StateDigest(captures []captureSnap) lane.DigestRef {
 	sorted := make([]captureSnap, len(captures))
 	copy(sorted, captures)
 	sort.Slice(sorted, func(i, j int) bool {
@@ -50,5 +50,5 @@ func StateDigest(captures []captureSnap) lane.Digest {
 	}
 
 	sum := sha256.Sum256(buf.Bytes())
-	return lane.Digest{Algorithm: "sha256", Hex: hex.EncodeToString(sum[:])}
+	return lane.DigestRef{Algorithm: "sha256", Hex: lane.Sha256(hex.EncodeToString(sum[:]))}
 }

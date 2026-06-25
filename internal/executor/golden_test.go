@@ -21,9 +21,9 @@ import (
 
 var update = flag.Bool("update", false, "update cross-validation vector expected fields")
 
-// toDigestMap converts a map[string]string (from JSON vectors) to map[string]lane.Digest.
-func toDigestMap(m map[string]string) map[string]lane.Digest {
-	out := make(map[string]lane.Digest, len(m))
+// toDigestMap converts a map[string]string (from JSON vectors) to map[string]lane.DigestRef.
+func toDigestMap(m map[string]string) map[string]lane.DigestRef {
+	out := make(map[string]lane.DigestRef, len(m))
 	for k, v := range m {
 		out[k] = lane.MustParseDigest(v)
 	}

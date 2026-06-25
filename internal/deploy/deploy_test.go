@@ -166,8 +166,8 @@ func TestAttestationJSON(t *testing.T) {
 			Artifacts: map[string]deploy.ArtifactRecord{"image": {Digest: "sha256:abc"}},
 		},
 		Informational: &deploy.Informational{
-			PreStateDigest:  lane.MustParseDigest("sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
-			PostStateDigest: lane.MustParseDigest("sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
+			PreStateDigest:  lane.MustParseDigest("sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa").Wire(),
+			PostStateDigest: lane.MustParseDigest("sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb").Wire(),
 			Provenance:      []lane.ProvenanceRecord{},
 		},
 	}
@@ -373,10 +373,10 @@ func TestDeployerExecute(t *testing.T) {
 	if att.Sealed.Artifacts["image"].Digest != "sha256:abc1230000000000000000000000000000000000000000000000000000000000" {
 		t.Errorf("artifact digest = %q, want sha256:abc1230000000000000000000000000000000000000000000000000000000000", att.Sealed.Artifacts["image"].Digest)
 	}
-	if att.Informational.PreStateDigest.IsZero() {
+	if att.Informational.PreStateDigest == "" {
 		t.Error("expected non-zero pre-state digest")
 	}
-	if att.Informational.PostStateDigest.IsZero() {
+	if att.Informational.PostStateDigest == "" {
 		t.Error("expected non-zero post-state digest")
 	}
 }
@@ -1215,8 +1215,8 @@ func TestValidateAttestation_InvalidLaneID(t *testing.T) {
 		},
 		Informational: &deploy.Informational{
 			Timestamp:       clock.Reproducible(),
-			PreStateDigest:  lane.MustParseDigest("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
-			PostStateDigest: lane.MustParseDigest("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
+			PreStateDigest:  lane.MustParseDigest("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855").Wire(),
+			PostStateDigest: lane.MustParseDigest("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855").Wire(),
 			Provenance:      []lane.ProvenanceRecord{},
 		},
 	}

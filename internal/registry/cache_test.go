@@ -20,8 +20,8 @@ func TestSpecHashDeterministic(t *testing.T) {
 		Args:  []string{"build", "-o", "/out/bin"},
 		Env:   map[string]string{"CGO_ENABLED": "0"},
 	}
-	inputHashes := map[string]lane.Digest{"src": lane.MustParseDigest("sha256:deadbeef00000000000000000000000000000000000000000000000000000000")}
-	sourceHashes := map[string]lane.Digest{"/src": lane.MustParseDigest("sha256:cafebabe00000000000000000000000000000000000000000000000000000000")}
+	inputHashes := map[string]lane.DigestRef{"src": lane.MustParseDigest("sha256:deadbeef00000000000000000000000000000000000000000000000000000000")}
+	sourceHashes := map[string]lane.DigestRef{"/src": lane.MustParseDigest("sha256:cafebabe00000000000000000000000000000000000000000000000000000000")}
 
 	h1 := registry.SpecHash(step, lane.MustParseDigest("sha256:0000000000000000000000000000000000000000000000000000000000000001"), inputHashes, sourceHashes)
 	h2 := registry.SpecHash(step, lane.MustParseDigest("sha256:0000000000000000000000000000000000000000000000000000000000000001"), inputHashes, sourceHashes)
@@ -41,8 +41,8 @@ func TestSpecHashChangesOnInput(t *testing.T) {
 		Env:   map[string]string{},
 	}
 
-	h1 := registry.SpecHash(step, lane.MustParseDigest("sha256:0000000000000000000000000000000000000000000000000000000000000011"), map[string]lane.Digest{}, map[string]lane.Digest{})
-	h2 := registry.SpecHash(step, lane.MustParseDigest("sha256:0000000000000000000000000000000000000000000000000000000000000022"), map[string]lane.Digest{}, map[string]lane.Digest{})
+	h1 := registry.SpecHash(step, lane.MustParseDigest("sha256:0000000000000000000000000000000000000000000000000000000000000011"), map[string]lane.DigestRef{}, map[string]lane.DigestRef{})
+	h2 := registry.SpecHash(step, lane.MustParseDigest("sha256:0000000000000000000000000000000000000000000000000000000000000022"), map[string]lane.DigestRef{}, map[string]lane.DigestRef{})
 	if h1 == h2 {
 		t.Fatal("different images should produce different hashes")
 	}
@@ -74,7 +74,7 @@ func TestTag(t *testing.T) {
 	tests := []struct {
 		registry string
 		step     string
-		hash     lane.Digest
+		hash     lane.DigestRef
 		want     string
 		name     string
 	}{

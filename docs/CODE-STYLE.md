@@ -63,6 +63,50 @@ Adding any other long-lived annotation requires an ADR.
 
 ---
 
+## CUE scalar types and the `@go` annotation `cue-scalar-types`
+
+**Rule.** A scalar value constraint in `specs/` is a CUE-driven named Go
+type. A regex or enum constraint definition (`#Sha256`, `#Identifier`,
+`#GitCommit`, `#Base64`, `#Digest`, and so on) carries no `@go` annotation
+and surfaces as a named Go type (`type Sha256 string`, ...). A struct field
+that references such a definition carries `@go(FieldName)` with no `type=`
+override and surfaces with the referenced named type (`Commit GitCommit`,
+`Hex Sha256`).
+
+**`@go(-)` is reserved for two structural cases only:**
+
+1. A disjunction (sum type) that is hand-modelled as a Go interface:
+   `#ProvenanceRecord`, `#OutputHandle`, `#TLSTrust`, `#EngineConnection`.
+   The generator cannot emit a Go sum type, so the union is suppressed and
+   the interface is hand-written.
+2. An abstract base constraint whose named Go type is unwanted or homed in
+   another package: `#Path` (the abstract base for `#AbsPath`/`#RelPath`) and
+   `#Host` (the Go type lives in `internal/transport`). A field then pins the
+   foreign type with `@go(Field,type="<import-path>".Type)`.
+
+A field-level `type=string` override on a regex scalar is none of these: it
+suppresses the named type the constraint exists to provide, and is not used.
+
+**Wire and internal contracts are separate types in separate layers.** A
+value that has both a serialized wire form and a computed internal form is
+two CUE definitions, not one type behind suppressed codegen. The digest
+concern is the worked example: `#Digest` (base-scalars) is the wire string
+`type Digest string`; `#DigestRef` (api-digest) is the internal
+`type DigestRef struct{...}`; `internal/lane/digest_type.go` bridges them with
+`ParseDigest` and `(DigestRef).Wire()`. The generated wire type is amended
+with methods in a hand-written sibling file -- gengotypes emits only type
+declarations and json tags, so the sibling adds behavior with no `@go(-)` --
+never hidden behind a suppressed-codegen struct.
+
+**Rationale.** `@go(-)` doing double duty, legitimately suppressing
+disjunctions and illegitimately hiding a hand-written struct, is how the wire
+and internal digest forms collapsed into one annotation-hidden type. Keeping
+the two uses separate keeps the codegen honest: every non-disjunction scalar
+is CUE-driven, and a reviewer reads `@go(-)` as "disjunction or cross-package
+base" with no exception.
+
+---
+
 ## File I/O is path-confined `path-confined-io`
 
 **Rule.** File I/O on a composed or external path goes through `*os.Root`.

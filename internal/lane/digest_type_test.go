@@ -122,10 +122,3 @@ func TestMustParseDigest_PanicsOnInvalid(t *testing.T) {
 	}()
 	_ = lane.MustParseDigest("sha256:abc")
 }
-
-func TestDigest_UnmarshalText_RejectsInvalid(t *testing.T) {
-	var d lane.Digest
-	if err := d.UnmarshalText([]byte("sha256:abc")); err == nil {
-		t.Fatal("UnmarshalText accepted short hex")
-	}
-}

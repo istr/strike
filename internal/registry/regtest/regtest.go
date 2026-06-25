@@ -31,10 +31,10 @@ import (
 // BuildImageTar builds a deterministic single-layer OCI image layout tar
 // containing exactly one file, and returns the tar bytes and the manifest
 // digest. Replaces the former registry.BuildTestImageTar.
-func BuildImageTar(fileName string, content []byte) ([]byte, lane.Digest, error) {
+func BuildImageTar(fileName string, content []byte) ([]byte, lane.DigestRef, error) {
 	layer, err := singleFileLayer(fileName, content)
 	if err != nil {
-		return nil, lane.Digest{}, err
+		return nil, lane.DigestRef{}, err
 	}
 
 	img := mutate.ConfigMediaType(
@@ -43,26 +43,26 @@ func BuildImageTar(fileName string, content []byte) ([]byte, lane.Digest, error)
 	)
 	img, err = mutate.AppendLayers(img, layer)
 	if err != nil {
-		return nil, lane.Digest{}, err
+		return nil, lane.DigestRef{}, err
 	}
 	annotated, ok := mutate.Annotations(img, map[string]string{
 		"org.opencontainers.image.created": "1970-01-01T00:00:00Z",
 	}).(v1.Image)
 	if !ok {
-		return nil, lane.Digest{}, fmt.Errorf("annotate: unexpected image type")
+		return nil, lane.DigestRef{}, fmt.Errorf("annotate: unexpected image type")
 	}
 	img = annotated
 
 	h, err := img.Digest()
 	if err != nil {
-		return nil, lane.Digest{}, err
+		return nil, lane.DigestRef{}, err
 	}
 
 	tarBytes, err := LayoutTar(img)
 	if err != nil {
-		return nil, lane.Digest{}, err
+		return nil, lane.DigestRef{}, err
 	}
-	return tarBytes, lane.Digest{Algorithm: h.Algorithm, Hex: h.Hex}, nil
+	return tarBytes, lane.DigestRef{Algorithm: h.Algorithm, Hex: lane.Sha256(h.Hex)}, nil
 }
 
 // BuildMultiFileImageTar builds a deterministic single-layer OCI image layout

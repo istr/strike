@@ -34,16 +34,16 @@ const OutputLayerAnnotation = "dev.strike.output.id"
 // root is the output directory; name is the relative tar path within it.
 // Optional extra annotations are merged into the manifest alongside the
 // standard created and content-size annotations.
-func (c *Client) WrapImageOutputAsImage(ctx context.Context, root *os.Root, name, tag string, extra ...map[string]string) (lane.Digest, int64, error) {
+func (c *Client) WrapImageOutputAsImage(ctx context.Context, root *os.Root, name, tag string, extra ...map[string]string) (lane.DigestRef, int64, error) {
 	info, err := root.Stat(name)
 	if err != nil {
-		return lane.Digest{}, 0, fmt.Errorf("wrap image stat: %w", err)
+		return lane.DigestRef{}, 0, fmt.Errorf("wrap image stat: %w", err)
 	}
 	size := info.Size()
 
 	f, err := root.Open(name)
 	if err != nil {
-		return lane.Digest{}, 0, fmt.Errorf("wrap image: %w", err)
+		return lane.DigestRef{}, 0, fmt.Errorf("wrap image: %w", err)
 	}
 	defer closer.Warn(f, "wrap image")
 
@@ -54,10 +54,10 @@ func (c *Client) WrapImageOutputAsImage(ctx context.Context, root *os.Root, name
 // it, loads it into the engine, tags it, and verifies the controller digest
 // against the engine. Shared by WrapImageOutputAsImage (host file) and
 // WrapImageArchiveAsImage (engine archive stream).
-func (c *Client) wrapImageFromReader(ctx context.Context, r io.Reader, size int64, tag string, extra ...map[string]string) (lane.Digest, int64, error) {
+func (c *Client) wrapImageFromReader(ctx context.Context, r io.Reader, size int64, tag string, extra ...map[string]string) (lane.DigestRef, int64, error) {
 	img, cleanup, err := extractMainImage(r)
 	if err != nil {
-		return lane.Digest{}, 0, fmt.Errorf("wrap image: %w", err)
+		return lane.DigestRef{}, 0, fmt.Errorf("wrap image: %w", err)
 	}
 	defer cleanup()
 
@@ -72,37 +72,37 @@ func (c *Client) wrapImageFromReader(ctx context.Context, r io.Reader, size int6
 	}
 	annotated, ok := mutate.Annotations(img, ann).(v1.Image)
 	if !ok {
-		return lane.Digest{}, 0, fmt.Errorf("wrap image: annotate: unexpected type")
+		return lane.DigestRef{}, 0, fmt.Errorf("wrap image: annotate: unexpected type")
 	}
 	img = annotated
 
 	expectedDigest, err := img.Digest()
 	if err != nil {
-		return lane.Digest{}, 0, fmt.Errorf("wrap image digest: %w", err)
+		return lane.DigestRef{}, 0, fmt.Errorf("wrap image digest: %w", err)
 	}
 
 	tarReader, err := singleImageTar(img, nil)
 	if err != nil {
-		return lane.Digest{}, 0, fmt.Errorf("wrap image tar: %w", err)
+		return lane.DigestRef{}, 0, fmt.Errorf("wrap image tar: %w", err)
 	}
 
 	id, err := c.Engine.ImageLoad(ctx, tarReader)
 	if err != nil {
-		return lane.Digest{}, 0, fmt.Errorf("wrap image load: %w", err)
+		return lane.DigestRef{}, 0, fmt.Errorf("wrap image load: %w", err)
 	}
 
 	if tagErr := c.Engine.ImageTag(ctx, id, tag); tagErr != nil {
-		return lane.Digest{}, 0, fmt.Errorf("wrap image tag: %w", tagErr)
+		return lane.DigestRef{}, 0, fmt.Errorf("wrap image tag: %w", tagErr)
 	}
 
 	engineDigest, err := c.InspectDigest(ctx, tag)
 	if err != nil {
-		return lane.Digest{}, 0, fmt.Errorf("wrap image inspect: %w", err)
+		return lane.DigestRef{}, 0, fmt.Errorf("wrap image inspect: %w", err)
 	}
 
 	controllerDigest := v1HashToDigest(expectedDigest)
 	if engineDigest != controllerDigest {
-		return lane.Digest{}, 0, fmt.Errorf("wrap image: digest mismatch: controller=%s engine=%s", controllerDigest, engineDigest)
+		return lane.DigestRef{}, 0, fmt.Errorf("wrap image: digest mismatch: controller=%s engine=%s", controllerDigest, engineDigest)
 	}
 	return engineDigest, size, nil
 }
@@ -112,43 +112,43 @@ func (c *Client) wrapImageFromReader(ctx context.Context, r io.Reader, size int6
 // the controller-computed manifest digest matches the engine-stored digest.
 // The manifest digest commits to every layer (ADR-046), so no per-layer digest
 // is checked. size is the total logical content size across all layers.
-func (c *Client) finalizeImage(ctx context.Context, img v1.Image, tag string, size int64) (lane.Digest, error) {
+func (c *Client) finalizeImage(ctx context.Context, img v1.Image, tag string, size int64) (lane.DigestRef, error) {
 	annotated, ok := mutate.Annotations(img, map[string]string{
 		"org.opencontainers.image.created": "1970-01-01T00:00:00Z",
 		ContentSizeAnnotation:              strconv.FormatInt(size, 10),
 	}).(v1.Image)
 	if !ok {
-		return lane.Digest{}, fmt.Errorf("annotate image: unexpected type")
+		return lane.DigestRef{}, fmt.Errorf("annotate image: unexpected type")
 	}
 	img = annotated
 
 	expectedHash, err := img.Digest()
 	if err != nil {
-		return lane.Digest{}, fmt.Errorf("compute digest: %w", err)
+		return lane.DigestRef{}, fmt.Errorf("compute digest: %w", err)
 	}
 
 	r, err := singleImageTar(img, nil)
 	if err != nil {
-		return lane.Digest{}, fmt.Errorf("write image tar: %w", err)
+		return lane.DigestRef{}, fmt.Errorf("write image tar: %w", err)
 	}
 
 	id, err := c.Engine.ImageLoad(ctx, r)
 	if err != nil {
-		return lane.Digest{}, fmt.Errorf("image load: %w", err)
+		return lane.DigestRef{}, fmt.Errorf("image load: %w", err)
 	}
 
 	if tagErr := c.Engine.ImageTag(ctx, id, tag); tagErr != nil {
-		return lane.Digest{}, fmt.Errorf("image tag: %w", tagErr)
+		return lane.DigestRef{}, fmt.Errorf("image tag: %w", tagErr)
 	}
 
 	engineDigest, err := c.InspectDigest(ctx, tag)
 	if err != nil {
-		return lane.Digest{}, fmt.Errorf("inspect digest: %w", err)
+		return lane.DigestRef{}, fmt.Errorf("inspect digest: %w", err)
 	}
 
 	controllerDigest := v1HashToDigest(expectedHash)
 	if engineDigest != controllerDigest {
-		return lane.Digest{}, fmt.Errorf("digest mismatch: controller=%s engine=%s", controllerDigest, engineDigest)
+		return lane.DigestRef{}, fmt.Errorf("digest mismatch: controller=%s engine=%s", controllerDigest, engineDigest)
 	}
 	return engineDigest, nil
 }
@@ -173,7 +173,7 @@ type OutputArchive struct {
 // key a consumer uses to select that layer after an engine round-trip.
 type WrapResult struct {
 	LayerDiffIDs map[string]string
-	Digest       lane.Digest
+	Digest       lane.DigestRef
 	Size         int64
 }
 
@@ -218,9 +218,9 @@ func (c *Client) WrapOutputsAsImage(ctx context.Context, outs []OutputArchive, t
 	return WrapResult{Digest: digest, Size: total, LayerDiffIDs: diffIDs}, nil
 }
 
-// v1HashToDigest converts a go-containerregistry v1.Hash to a lane.Digest.
-func v1HashToDigest(h v1.Hash) lane.Digest {
-	return lane.Digest{Algorithm: h.Algorithm, Hex: h.Hex}
+// v1HashToDigest converts a go-containerregistry v1.Hash to a lane.DigestRef.
+func v1HashToDigest(h v1.Hash) lane.DigestRef {
+	return lane.DigestRef{Algorithm: h.Algorithm, Hex: lane.Sha256(h.Hex)}
 }
 
 // extractMainImage reads an OCI layout tar from r and returns the first

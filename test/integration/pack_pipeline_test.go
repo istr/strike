@@ -41,7 +41,7 @@ func TestPackPipeline(t *testing.T) {
 	t.Logf("loaded as: %s", digest)
 
 	// 5. Inspect the loaded image via its local tag.
-	localTag := "localhost/strike:" + digest.Hex[:12]
+	localTag := "localhost/strike:" + string(digest.Hex[:12])
 	imgInfo, err := engine.ImageInspect(ctx, localTag)
 	if err != nil {
 		t.Fatalf("inspect: %v", err)

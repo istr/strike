@@ -30,8 +30,8 @@ func TestProjectStatements(t *testing.T) {
 		Informational: &deploy.Informational{
 			Timestamp:       clock.Reproducible(),
 			EngineMetadata:  &deploy.EngineMetadata{Rootless: &rootless, Version: "5.3.1"},
-			PreStateDigest:  lane.MustParseDigest("sha256:" + strings.Repeat("e", 64)),
-			PostStateDigest: lane.MustParseDigest("sha256:" + strings.Repeat("f", 64)),
+			PreStateDigest:  lane.MustParseDigest("sha256:" + strings.Repeat("e", 64)).Wire(),
+			PostStateDigest: lane.MustParseDigest("sha256:" + strings.Repeat("f", 64)).Wire(),
 			Provenance:      []lane.ProvenanceRecord{},
 		},
 	}
@@ -68,8 +68,8 @@ func TestProjectStatements(t *testing.T) {
 	if info.Predicate.EngineMetadata == nil || info.Predicate.EngineMetadata.Version != "5.3.1" {
 		t.Error("engine metadata not classified as informational")
 	}
-	if info.Predicate.PreStateDigest.Hex != strings.Repeat("e", 64) {
-		t.Errorf("pre-state digest = %q", info.Predicate.PreStateDigest.Hex)
+	if info.Predicate.PreStateDigest != lane.Digest("sha256:"+strings.Repeat("e", 64)) {
+		t.Errorf("pre-state digest = %q", info.Predicate.PreStateDigest)
 	}
 	if info.PredicateType != "https://istr.dev/strike/predicates/informational/v1" {
 		t.Errorf("informational predicateType = %q", info.PredicateType)

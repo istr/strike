@@ -473,7 +473,7 @@ func (d *Deployer) buildAttestation(
 	step *lane.Step, spec lane.DeploySpec,
 	artifactDigests map[string]ArtifactRecord,
 	provenance []lane.ProvenanceRecord,
-	started clock.Time, preDigest, postDigest lane.Digest,
+	started clock.Time, preDigest, postDigest lane.DigestRef,
 ) (*Attestation, error) {
 	engineConn, engineMeta := d.engineRecords()
 	declaredPeers := d.DAG.CollectPeers(string(step.ID))
@@ -498,8 +498,8 @@ func (d *Deployer) buildAttestation(
 		Informational: &Informational{
 			Timestamp:       started,
 			EngineMetadata:  engineMeta,
-			PreStateDigest:  preDigest,
-			PostStateDigest: postDigest,
+			PreStateDigest:  preDigest.Wire(),
+			PostStateDigest: postDigest.Wire(),
 			Provenance:      provenance,
 		},
 	}, nil
@@ -682,7 +682,7 @@ func (d *Deployer) recordAttestation(att *Attestation, step *lane.Step, state *l
 	}
 	attHex := hex.EncodeToString(sha256Sum(attJSON))
 
-	attDigest := lane.Digest{Algorithm: "sha256", Hex: attHex}
+	attDigest := lane.DigestRef{Algorithm: "sha256", Hex: lane.Sha256(attHex)}
 	state.RecordStep(lane.StepResult{
 		Name:      string(step.ID),
 		StepType:  "deploy",

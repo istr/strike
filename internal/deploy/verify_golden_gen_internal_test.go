@@ -133,8 +133,8 @@ func syntheticGoldenAttestation(laneDigest string) *Attestation {
 			PeerAttribution: map[string][]string{"deploy": {"registry.example:443"}},
 		},
 		Informational: &Informational{
-			PreStateDigest:  lane.Digest{Algorithm: "sha256", Hex: artifactDigest},
-			PostStateDigest: lane.Digest{Algorithm: "sha256", Hex: artifactDigest},
+			PreStateDigest:  lane.MustParseDigest("sha256:" + artifactDigest).Wire(),
+			PostStateDigest: lane.MustParseDigest("sha256:" + artifactDigest).Wire(),
 		},
 	}
 }

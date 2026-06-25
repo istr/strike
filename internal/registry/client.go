@@ -149,13 +149,13 @@ func tarDirEntries(tw *tar.Writer, root *os.Root, prefix string, entries []fs.Di
 }
 
 // InspectDigest returns the manifest digest of a local image.
-func (c *Client) InspectDigest(ctx context.Context, ref string) (lane.Digest, error) {
+func (c *Client) InspectDigest(ctx context.Context, ref string) (lane.DigestRef, error) {
 	info, err := c.Engine.ImageInspect(ctx, ref)
 	if err != nil {
-		return lane.Digest{}, err
+		return lane.DigestRef{}, err
 	}
 	if info.Digest == "" {
-		return lane.Digest{}, fmt.Errorf("no digest for %s", ref)
+		return lane.DigestRef{}, fmt.Errorf("no digest for %s", ref)
 	}
 	return lane.MustParseDigest(info.Digest), nil
 }

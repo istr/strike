@@ -46,6 +46,9 @@ _sha256Hex: "[a-f0-9]{64}"
 
 #FileArtifactType: "file" | "directory"
 
-#Digest: =~"^sha256:[a-f0-9]{64}$" @go(-)
+// #Digest is the wire form of a content-addressed digest: the prefixed
+// "sha256:<64-hex>" string that crosses strike's serialization boundary. For
+// the structured internal form use #DigestRef (api-digest.cue).
+#Digest: =~"^sha256:\(_sha256Hex)$"
 
 #Duration: =~"^[0-9]+(s|m|h)$"

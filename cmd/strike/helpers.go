@@ -66,7 +66,7 @@ func removeStrikeScratch(outDir string) {
 	}
 }
 
-func resolveDigest(ctx context.Context, client *registry.Client, imageRef lane.ImageRef) (lane.Digest, error) {
+func resolveDigest(ctx context.Context, client *registry.Client, imageRef lane.ImageRef) (lane.DigestRef, error) {
 	// Image ref already contains @sha256: - extract the digest.
 	s := string(imageRef)
 	for i, c := range s {

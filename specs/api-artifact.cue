@@ -26,7 +26,7 @@ package lane
 #Artifact: {
 	@go(Artifact)
 	type:         #ArtifactType @go(Type)
-	digest:       #Digest       @go(Digest,type=Digest)
+	digest:       #Digest       @go(Digest)
 	size:         int & >=0     @go(Size)
 	contentType?: string        @go(ContentType,optional=nillable)
 	metadata?: {
