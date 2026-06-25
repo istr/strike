@@ -64,7 +64,7 @@ func TestImageFromStep_RunsByDigestRef(t *testing.T) {
 	if inspErr != nil {
 		t.Fatalf("inspect producer tag %s: %v", tag, inspErr)
 	}
-	if tagInfo.Digest != digest.String() {
+	if tagInfo.Digest != digest.Wire() {
 		t.Fatalf("handle digest %s != engine-stored digest %s: the imageFromStep base would be unresolvable",
 			digest, tagInfo.Digest)
 	}

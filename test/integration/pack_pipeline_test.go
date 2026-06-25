@@ -49,7 +49,7 @@ func TestPackPipeline(t *testing.T) {
 	if imgInfo.Size == 0 {
 		t.Error("loaded image has zero size")
 	}
-	if imgInfo.Digest != digest.String() {
+	if imgInfo.Digest != digest.Wire() {
 		t.Errorf("digest mismatch: inspect=%s, load=%s", imgInfo.Digest, digest)
 	}
 

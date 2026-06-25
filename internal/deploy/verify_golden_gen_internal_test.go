@@ -74,7 +74,7 @@ func TestVerifyGoldenGenerate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse golden lane: %v", err)
 	}
-	att := syntheticGoldenAttestation(laneDigest.String())
+	att := syntheticGoldenAttestation(laneDigest.Wire())
 	sealed, engineCtx, info, err := projectStatements(att, goldenLane.OIDC, nil)
 	if err != nil {
 		t.Fatalf("projectStatements: %v", err)
@@ -113,7 +113,7 @@ func TestVerifyGoldenGenerate(t *testing.T) {
 // informational predicates are non-empty and exercise 3b's per-layer
 // validation. laneDigest is sealed verbatim so a UC2 verify against the golden
 // lane matches it.
-func syntheticGoldenAttestation(laneDigest string) *Attestation {
+func syntheticGoldenAttestation(laneDigest lane.Digest) *Attestation {
 	const artifactDigest = "1111111111111111111111111111111111111111111111111111111111111111"
 	return &Attestation{
 		Sealed: Sealed{

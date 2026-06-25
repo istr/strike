@@ -159,7 +159,8 @@ func Pack(opts PackOpts) (*PackResult, error) {
 		return nil, err
 	}
 
-	return &PackResult{Digest: lane.MustParseDigest(assembled.Digest.String())}, nil
+	manifestDigest := lane.Digest(assembled.Digest.String())
+	return &PackResult{Digest: lane.MustParseDigest(manifestDigest)}, nil
 }
 
 // addFileLayers appends a layer for each file entry, returning the updated

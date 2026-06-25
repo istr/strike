@@ -31,7 +31,8 @@ func TestParseDigest_Valid(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			d, err := lane.ParseDigest(tt.in)
+			wire := lane.Digest(tt.in)
+			d, err := lane.ParseDigest(wire)
 			if err != nil {
 				t.Fatalf("ParseDigest(%q) returned error: %v", tt.in, err)
 			}
@@ -102,7 +103,8 @@ func TestParseDigest_Invalid(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := lane.ParseDigest(tt.in)
+			wire := lane.Digest(tt.in)
+			_, err := lane.ParseDigest(wire)
 			if err == nil {
 				t.Fatalf("ParseDigest(%q) succeeded, want error containing %q",
 					tt.in, tt.wantErrPart)

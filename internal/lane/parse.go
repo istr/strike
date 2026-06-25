@@ -37,7 +37,8 @@ func Parse(fp FilePath) (*Lane, DigestRef, error) {
 	// Using the canonical constructor keeps digest validation in one place and
 	// holds Parse at the cyclomatic-complexity ceiling.
 	sum := sha256.Sum256(raw)
-	dg := MustParseDigest("sha256:" + hex.EncodeToString(sum[:]))
+	wire := Digest("sha256:" + hex.EncodeToString(sum[:]))
+	dg := MustParseDigest(wire)
 
 	// YAML to generic map (for CUE validation)
 	var asMap any

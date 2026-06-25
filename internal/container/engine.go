@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/probe"
 )
 
@@ -101,7 +102,7 @@ type Engine interface {
 type ImageInfo struct {
 	Annotations map[string]string
 	ID          string
-	Digest      string
+	Digest      lane.Digest
 	RepoDigests []string
 	Size        int64
 }

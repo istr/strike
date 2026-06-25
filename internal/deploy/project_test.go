@@ -12,14 +12,16 @@ import (
 
 func TestProjectStatements(t *testing.T) {
 	rootless := true
+	preState := lane.Digest("sha256:" + strings.Repeat("e", 64))
+	postState := lane.Digest("sha256:" + strings.Repeat("f", 64))
 	att := &deploy.Attestation{
 		Sealed: deploy.Sealed{
 			LaneID:     "demo",
 			LaneDigest: "",
 			Target:     lane.DeployTarget{ID: "prod-1", Type: "registry", Description: "production"},
 			Artifacts: map[string]deploy.ArtifactRecord{
-				"b-image": {Digest: "sha256:" + strings.Repeat("b", 64)},
-				"a-image": {Digest: "sha256:" + strings.Repeat("a", 64)},
+				"b-image": {Digest: lane.Digest("sha256:" + strings.Repeat("b", 64))},
+				"a-image": {Digest: lane.Digest("sha256:" + strings.Repeat("a", 64))},
 			},
 			Peers:  map[string][]lane.Peer{},
 			Engine: transport.EngineTLS{Type: "tls", CATrustType: "pinned", ServerCertFingerprint: "sha256:cc"},
@@ -30,8 +32,8 @@ func TestProjectStatements(t *testing.T) {
 		Informational: &deploy.Informational{
 			Timestamp:       clock.Reproducible(),
 			EngineMetadata:  &deploy.EngineMetadata{Rootless: &rootless, Version: "5.3.1"},
-			PreStateDigest:  lane.MustParseDigest("sha256:" + strings.Repeat("e", 64)).Wire(),
-			PostStateDigest: lane.MustParseDigest("sha256:" + strings.Repeat("f", 64)).Wire(),
+			PreStateDigest:  lane.MustParseDigest(preState).Wire(),
+			PostStateDigest: lane.MustParseDigest(postState).Wire(),
 			Provenance:      []lane.ProvenanceRecord{},
 		},
 	}
@@ -46,7 +48,7 @@ func TestProjectStatements(t *testing.T) {
 	if len(slsa.Subject) != 2 || slsa.Subject[0].Name != "a-image" || slsa.Subject[1].Name != "b-image" {
 		t.Fatalf("subject not sorted: %+v", slsa.Subject)
 	}
-	if slsa.Subject[0].Digest.SHA256 != strings.Repeat("a", 64) {
+	if slsa.Subject[0].Digest.SHA256 != lane.Sha256(strings.Repeat("a", 64)) {
 		t.Errorf("subject digest = %q", slsa.Subject[0].Digest.SHA256)
 	}
 
@@ -68,7 +70,7 @@ func TestProjectStatements(t *testing.T) {
 	if info.Predicate.EngineMetadata == nil || info.Predicate.EngineMetadata.Version != "5.3.1" {
 		t.Error("engine metadata not classified as informational")
 	}
-	if info.Predicate.PreStateDigest != lane.Digest("sha256:"+strings.Repeat("e", 64)) {
+	if info.Predicate.PreStateDigest != preState {
 		t.Errorf("pre-state digest = %q", info.Predicate.PreStateDigest)
 	}
 	if info.PredicateType != "https://istr.dev/strike/predicates/informational/v1" {

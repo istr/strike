@@ -71,7 +71,8 @@ func resolveDigest(ctx context.Context, client *registry.Client, imageRef lane.I
 	s := string(imageRef)
 	for i, c := range s {
 		if c == '@' {
-			return lane.ParseDigest(s[i+1:])
+			digest := lane.Digest(s[i+1:])
+			return lane.ParseDigest(digest)
 		}
 	}
 

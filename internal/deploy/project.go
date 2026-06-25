@@ -105,7 +105,7 @@ func projectSubject(artifacts map[string]ArtifactRecord) ([]Subject, error) {
 		if err != nil {
 			return nil, fmt.Errorf("subject %q: %w", name, err)
 		}
-		subjects = append(subjects, Subject{Name: name, Digest: DigestSet{SHA256: string(d.Hex)}})
+		subjects = append(subjects, Subject{Name: name, Digest: DigestSet{SHA256: d.Hex}})
 	}
 	sort.Slice(subjects, func(i, j int) bool { return subjects[i].Name < subjects[j].Name })
 	return subjects, nil

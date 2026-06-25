@@ -511,7 +511,7 @@ func TestCheckCache_Miss(t *testing.T) {
 }
 
 func TestCheckCache_Hit(t *testing.T) {
-	digest := testFullDigest
+	var digest lane.Digest = testFullDigest
 	eng := &mockEngine{
 		inspectRV: &container.ImageInfo{
 			Digest: digest,
@@ -555,7 +555,7 @@ func TestCheckCache_Hit(t *testing.T) {
 	if digestErr != nil {
 		t.Fatalf("manifest digest: %v", digestErr)
 	}
-	if gotDigest.String() != digest {
+	if gotDigest.Wire() != digest {
 		t.Errorf("digest = %q, want %q", gotDigest, digest)
 	}
 	if fh.LayerDiffID != diffID {

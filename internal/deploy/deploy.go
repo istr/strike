@@ -54,7 +54,7 @@ type Sealed struct {
 	ObservedPeers map[string]ObservedPeer    `json:"observedPeers,omitempty"`
 	Target        lane.DeployTarget          `json:"target"`
 	LaneID        string                     `json:"laneId"`
-	LaneDigest    string                     `json:"laneDigest"`
+	LaneDigest    lane.Digest                `json:"laneDigest"`
 }
 
 // ---------------------------------------------------------------------------
@@ -182,13 +182,13 @@ type Informational struct {
 // ArtifactRecord is the provenance record for one artifact.
 type ArtifactRecord struct {
 	SBOM   *SBOMRecord `json:"sbom,omitempty"`
-	Digest string      `json:"digest"`
+	Digest lane.Digest `json:"digest"`
 }
 
 // SBOMRecord holds SBOM metadata for an artifact.
 type SBOMRecord struct {
-	Format string `json:"format"`
-	Digest string `json:"digest"`
+	Format string      `json:"format"`
+	Digest lane.Digest `json:"digest"`
 }
 
 // EngineMetadata -- engine self-reports about itself. Lives under
@@ -306,7 +306,7 @@ type Deployer struct {
 	StepPorts       map[string]capsule.HostPorts // unit name -> host ports
 	NetworkRecords  map[string]capsule.Records   // run/build step records, keyed by step name (injected by cmd/strike)
 	LaneID          string
-	LaneDigest      string                                                                                      // raw sha256 over the lane file bytes; sealed as lane_digest
+	LaneDigest      lane.Digest                                                                                 // prefixed "sha256:<hex>" over the lane file bytes; sealed as lane_digest
 	StepID          string                                                                                      // deploy step name; method-container port key and capture-key prefix
 	CAVolume        string                                                                                      // lane-wide CA volume name; mounted r/o at /etc/ssl/certs
 	Keyless         lane.Keyless                                                                                // lane-declared keyless config (ADR-040 D2, ADR-041); .Endpoints dials Fulcio, Rekor v2, TSA; .TrustRoot/.TrustRootRef carry the verify anchor
@@ -668,7 +668,7 @@ func resolveArtifactDigests(stepID string, refs map[string]string, state *lane.S
 			return nil, fmt.Errorf("step %q: artifact %q: %w", stepID, artName, digestErr)
 		}
 		artifacts[artName] = ArtifactRecord{
-			Digest: digest.String(),
+			Digest: digest.Wire(),
 		}
 	}
 	return artifacts, nil

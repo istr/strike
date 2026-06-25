@@ -17,7 +17,8 @@ const (
 // ParseDigest parses a wire digest of the form "sha256:<64 lowercase hex>" into
 // the structured internal DigestRef. The empty string returns the zero
 // DigestRef{} without error, so optional digest fields round-trip absence.
-func ParseDigest(s string) (DigestRef, error) {
+func ParseDigest(d Digest) (DigestRef, error) {
+	s := string(d)
 	if s == "" {
 		return DigestRef{}, nil
 	}
@@ -49,12 +50,12 @@ func ParseDigest(s string) (DigestRef, error) {
 
 // MustParseDigest parses a wire digest, panicking on invalid input. Use only for
 // known-good values and test fixtures.
-func MustParseDigest(s string) DigestRef {
-	d, err := ParseDigest(s)
+func MustParseDigest(d Digest) DigestRef {
+	r, err := ParseDigest(d)
 	if err != nil {
 		panic(err)
 	}
-	return d
+	return r
 }
 
 // Wire returns the canonical "algorithm:hex" wire Digest for d. The zero

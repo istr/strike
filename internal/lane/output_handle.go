@@ -44,5 +44,6 @@ func ManifestDigest(h OutputHandle) (DigestRef, error) {
 	if !ok {
 		return DigestRef{}, fmt.Errorf("output handle: no digest in image ref %q", h.ImageRef())
 	}
-	return ParseDigest(d)
+	digest := Digest(d)
+	return ParseDigest(digest)
 }

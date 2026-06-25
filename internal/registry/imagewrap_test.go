@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/go-containerregistry/pkg/v1/layout"
 	"github.com/istr/strike/internal/container"
+	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/registry"
 	"github.com/istr/strike/internal/registry/regtest"
 )
@@ -52,7 +53,7 @@ func (e *wrapEngine) ImageInspect(_ context.Context, ref string) (*container.Ima
 	if digest == "" {
 		digest = "sha256:abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
 	}
-	return &container.ImageInfo{Digest: digest}, nil
+	return &container.ImageInfo{Digest: lane.Digest(digest)}, nil
 }
 
 // extractDigestFromTar extracts the manifest digest from an OCI layout tar.
