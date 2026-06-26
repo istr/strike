@@ -22,10 +22,12 @@ specs: contract/primitive/scalars.cue contract/lane/peer.cue contract/lane/targe
 generate: specs
 	cue exp gengotypes ./contract/lane
 	cue exp gengotypes ./contract/primitive
-	sed -i 's#github.com/istr/strike/contract/#github.com/istr/strike/internal/#g' contract/lane/cue_types*gen.go contract/primitive/cue_types*gen.go
-	mkdir -p internal/primitive
+	cue exp gengotypes ./contract/endpoint
+	sed -i 's#github.com/istr/strike/contract/#github.com/istr/strike/internal/#g' contract/lane/cue_types*gen.go contract/primitive/cue_types*gen.go contract/endpoint/cue_types*gen.go
+	mkdir -p internal/primitive internal/endpoint
 	mv contract/lane/cue_types*gen.go internal/lane/cue_types_gen.go
 	mv contract/primitive/cue_types*gen.go internal/primitive/cue_types_gen.go
+	mv contract/endpoint/cue_types*gen.go internal/endpoint/cue_types_gen.go
 
 # Update golden test fixtures (run after intentional changes to sign/pack/digest).
 golden:

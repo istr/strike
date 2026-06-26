@@ -26,6 +26,7 @@ import (
 	"github.com/istr/strike/internal/capsule"
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/closer"
+	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/mediator"
 	"github.com/istr/strike/internal/testutil"
 	"github.com/istr/strike/internal/transport"
@@ -342,7 +343,7 @@ func TestTwoCapsules_DistinctPorts(t *testing.T) {
 
 	peers := []mediator.PeerTrust{{
 		Host:  "example.com",
-		Trust: transport.FingerprintTrust{Type: "fingerprint", Fingerprint: "sha256:aaaa"},
+		Trust: endpoint.Fingerprint{Type: "fingerprint", Fingerprint: "sha256:aaaa"},
 	}}
 
 	c1, err := capsule.New("step-a", ports["step-a"], peers, nil, 0, ca, testUpstream())
@@ -542,7 +543,7 @@ func TestCapsule_ResolverSynthesizesStepAddr(t *testing.T) {
 
 	peers := []mediator.PeerTrust{{
 		Host:  transport.Host(sni),
-		Trust: transport.FingerprintTrust{Type: "certFingerprint", Fingerprint: "sha256:aaaa"},
+		Trust: endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:aaaa"},
 	}}
 
 	c, err := capsule.New("synth-step", hp, peers, nil, 0, ca, testUpstream())
@@ -644,7 +645,7 @@ func TestCapsule_DNSThenConnect_EndToEnd(t *testing.T) {
 
 	peers := []mediator.PeerTrust{{
 		Host: transport.Host(sni),
-		Trust: transport.FingerprintTrust{
+		Trust: endpoint.Fingerprint{
 			Type:        "certFingerprint",
 			Fingerprint: fp,
 		},
@@ -740,7 +741,7 @@ func TestCapsule_DeniedName_NXDOMAIN(t *testing.T) {
 
 	peers := []mediator.PeerTrust{{
 		Host:  "allowed.example",
-		Trust: transport.FingerprintTrust{Type: "certFingerprint", Fingerprint: "sha256:aaaa"},
+		Trust: endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:aaaa"},
 	}}
 
 	c, err := capsule.New("deny-step", hp, peers, nil, 0, ca, testUpstream())
@@ -777,7 +778,7 @@ func TestCapsule_AAAA_AllowedName_Empty(t *testing.T) {
 
 	peers := []mediator.PeerTrust{{
 		Host:  transport.Host(sni),
-		Trust: transport.FingerprintTrust{Type: "certFingerprint", Fingerprint: "sha256:aaaa"},
+		Trust: endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:aaaa"},
 	}}
 
 	c, err := capsule.New("aaaa-step", hp, peers, nil, 0, ca, testUpstream())

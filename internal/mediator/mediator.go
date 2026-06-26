@@ -28,12 +28,13 @@ import (
 
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/closer"
+	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/transport"
 )
 
 // PeerTrust ties a peer SNI to its TLS trust anchor.
 type PeerTrust struct {
-	Trust transport.TLSTrust
+	Trust endpoint.Trust
 	Host  transport.Host
 }
 
@@ -70,7 +71,7 @@ var ErrMediatorClosed = errors.New("mediator: closed")
 
 // Mediator is a per-step TLS proxy.
 type Mediator struct {
-	peers        map[string]transport.TLSTrust // canonical SNI -> trust
+	peers        map[string]endpoint.Trust // canonical SNI -> trust
 	ca           *transport.EphemeralCA
 	upstreamLook UpstreamLookupFunc
 	stepID       string
@@ -102,7 +103,7 @@ func New(stepID string, peers []PeerTrust, ca *transport.EphemeralCA, upstreamLo
 		return nil, errors.New("mediator: upstreamLook must not be nil")
 	}
 
-	peerMap := make(map[string]transport.TLSTrust, len(peers))
+	peerMap := make(map[string]endpoint.Trust, len(peers))
 	for _, p := range peers {
 		c, err := canonicalize(string(p.Host))
 		if err != nil {
@@ -275,7 +276,7 @@ func (m *Mediator) getCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate,
 	return m.ca.GetCertificate(hello)
 }
 
-func (m *Mediator) dialUpstream(ctx context.Context, sni string, trust transport.TLSTrust) (*tls.Conn, *transport.ConnectionIdentity, []netip.Addr, error) {
+func (m *Mediator) dialUpstream(ctx context.Context, sni string, trust endpoint.Trust) (*tls.Conn, *transport.ConnectionIdentity, []netip.Addr, error) {
 	addrs, err := m.upstreamLook(ctx, sni)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("upstream lookup %q: %w", sni, err)

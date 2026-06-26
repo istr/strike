@@ -199,3 +199,31 @@ one carrying infrastructure behavior is foundation.
 `mayDependOn: primitive` to services, orchestration, and entry (the tiers that
 import it). The header tier table gains the primitive row. primitive itself, like
 contract, declares no `mayDependOn`.
+
+## Amendment 2026-06-26 -- the concept tier (composed contract value types)
+
+Status: Accepted. Append-only: this block adds a tier without editing the
+clauses above; every prior clause and amendment stands unchanged. It realizes
+the concept tier ADR-048 specifies.
+
+A **concept** tier sits between primitive and transport. A concept package holds
+a value type composed from the contract's primitives -- a trust anchor, an
+endpoint address, a digest, a deploy target, a provenance record -- together with
+its representation-neutral methods (parse/render, discriminators). It is
+distinguished from its neighbours by *kind*, the same mechanically checkable test
+used elsewhere:
+
+- **concept** -- a composed contract value plus its transforms. Depends only on
+  the primitive value vocabulary.
+- **transport** (above it) -- network *carriage*: the code that dials, verifies,
+  and captures identity. Carriage consumes concept values; it is not one.
+
+`concept.mayDependOn` is `[primitive]`: concepts compose from leaves and from one
+another within the package, never from foundation utilities, transport carriage,
+or any service. Every tier above -- transport, services, orchestration, entry --
+may take a downward edge to it.
+
+**Enforcement.** `.go-arch-lint.yml` gains a `concept` component (initially
+`internal/endpoint`) with `mayDependOn: [primitive]`, grants `concept` to
+transport/services/orchestration/entry, and adds the concept row to the header
+tier table.

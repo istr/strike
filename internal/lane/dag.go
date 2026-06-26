@@ -9,8 +9,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/primitive"
-	"github.com/istr/strike/internal/transport"
 )
 
 // InputEdge is a fully resolved step.inputs[i] entry.
@@ -419,9 +419,9 @@ func peerAnchor(peer Peer) string {
 	switch x := peer.(type) {
 	case HTTPSPeer:
 		switch t := x.Trust.(type) {
-		case transport.FingerprintTrust:
+		case endpoint.Fingerprint:
 			return "https/certFingerprint/" + t.Fingerprint
-		case transport.CABundleTrust:
+		case endpoint.CABundle:
 			return "https/caBundle/" + t.Path
 		default:
 			return "https/unknown"

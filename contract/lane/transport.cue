@@ -1,13 +1,14 @@
-// Transport-level types: host constraint and TLS trust anchors.
+// Transport-level types: host constraint, resolver/endpoint addresses, and
+// engine connection identity. Trust anchors live in the endpoint package.
 //
 // These definitions share package lane so that lane.cue can reference
-// them directly (#Host, #TLSTrust). The @go(-) annotations suppress
+// them directly (#Host, #DNSResolver). The @go(-) annotations suppress
 // Go code generation via gengotypes; the Go types are hand-written in
 // internal/transport/transport.go so they live in a separate Go package.
 // Directional dependency: internal/lane imports internal/transport.
 package lane
 
-import "github.com/istr/strike/contract/primitive"
+import "github.com/istr/strike/contract/endpoint"
 
 // ----------------------------------------------------------------
 // Host constraint: hostname or IPv4 literal, optionally with port.
@@ -18,34 +19,6 @@ import "github.com/istr/strike/contract/primitive"
 // includes path segments.
 // ----------------------------------------------------------------
 #Host: =~"^[a-z0-9.-]+(:[0-9]+)?$" @go(-)
-
-// ----------------------------------------------------------------
-// Trust anchors for TLS-based peers.
-//
-// TLSTrust is a discriminated union over the two enforceable
-// server-side trust mechanisms strike supports. The system trust
-// store is explicitly not an option (deferred per ADR-021); all
-// trust is per-peer-declared.
-//
-// The discriminator is `type`. Cross-implementation readers can
-// dispatch on `type` without parsing the rest of the object.
-// ----------------------------------------------------------------
-#TLSTrust: (#FingerprintTrust | #CABundleTrust) @go(-)
-
-#FingerprintTrust: {
-	@go(-)
-	type:        "certFingerprint"
-	fingerprint: primitive.#Digest
-}
-
-#CABundleTrust: {
-	@go(-)
-	type: "caBundle"
-	// path is a container-internal path. The executor mounts the lane-
-	// relative bundle file there in Phase 2; in Phase 1 the field is
-	// declaratory only.
-	path: primitive.#AbsPath
-}
 
 // ----------------------------------------------------------------
 // DNS resolver declaration.
@@ -75,7 +48,7 @@ import "github.com/istr/strike/contract/primitive"
 #DNSResolver: {
 	@go(-)
 	host:  #Host
-	trust: #TLSTrust
+	trust: endpoint.#Trust
 }
 
 // ----------------------------------------------------------------
@@ -89,13 +62,13 @@ import "github.com/istr/strike/contract/primitive"
 #HTTPSEndpoint: {
 	@go(-)
 	url:   =~"^https://"
-	trust: #TLSTrust
+	trust: endpoint.#Trust
 }
 
 // ----------------------------------------------------------------
 // Engine connection: the control-plane-observed identity of the
 // engine transport, a discriminated union over the connection kind
-// (mirrors #Peer / #TLSTrust). Consumed by the deploy attestation at
+// (mirrors #Peer / endpoint.#Trust). Consumed by the deploy attestation at
 // sealed.engine via the artifact.cue bridge. Layer V (cpObserved):
 // the control plane reads these facts off the TLS handshake itself.
 //

@@ -10,6 +10,7 @@ import (
 
 	"github.com/istr/strike/internal/capsule"
 	"github.com/istr/strike/internal/container"
+	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/executor"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/primitive"
@@ -106,7 +107,7 @@ func TestExecute_WithSSHPeer(t *testing.T) {
 				lane.SSHPeer{
 					Type: "ssh",
 					Host: transport.Host("git.example.com"),
-					KnownHosts: []lane.KnownHostEntry{
+					KnownHosts: []endpoint.HostKey{
 						{KeyType: "ssh-ed25519", Key: "AAAAC3NzaC1lZDI1NTE5AAAAITestKey"},
 					},
 				},
@@ -168,7 +169,7 @@ func TestExecute_WithoutSSHPeer(t *testing.T) {
 				lane.HTTPSPeer{
 					Type: "https",
 					Host: transport.Host("api.example.com"),
-					Trust: transport.FingerprintTrust{
+					Trust: endpoint.Fingerprint{
 						Type:        "certFingerprint",
 						Fingerprint: "sha256:abc",
 					},

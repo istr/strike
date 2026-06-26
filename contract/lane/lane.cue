@@ -7,7 +7,10 @@
 
 package lane
 
-import "github.com/istr/strike/contract/primitive"
+import (
+	"github.com/istr/strike/contract/endpoint"
+	"github.com/istr/strike/contract/primitive"
+)
 
 @go(lane) // generated go package name
 
@@ -53,17 +56,17 @@ import "github.com/istr/strike/contract/primitive"
 // OIDCConfig declares the lane-wide keyless signing identity (ADR-040 D5).
 // Required: a lane that cannot be attested with a verifiable signature is
 // not a valid strike lane (mirrors ADR-039 D1 for the signing layer). The
-// IdP is a declared peer; trust pins its endpoints with the same #TLSTrust
+// IdP is a declared peer; trust pins its endpoints with the same endpoint.#Trust
 // anchor resolver.trust and #HTTPSPeer.trust use. validate/dag check
 // declaration only and never contact the IdP; the live keyless flow runs at
 // the sign step of run.
 #OIDCConfig: {
 	@go(OIDCConfig)
 
-	issuer:   string    @go(Issuer)   // iss / issuer-url; config only, no IdP contact at validate/dag
-	audience: string    @go(Audience) // aud
-	identity: string    @go(Identity) // expected SAN subject Fulcio writes into the cert
-	trust:    #TLSTrust @go(Trust,type="github.com/istr/strike/internal/transport".TLSTrust)
+	issuer:   string          @go(Issuer)   // iss / issuer-url; config only, no IdP contact at validate/dag
+	audience: string          @go(Audience) // aud
+	identity: string          @go(Identity) // expected SAN subject Fulcio writes into the cert
+	trust:    endpoint.#Trust @go(Trust,type="github.com/istr/strike/contract/endpoint".Trust)
 }
 
 // KeylessEndpoints declares the sigstore services the keyless chain dials

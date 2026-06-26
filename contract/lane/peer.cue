@@ -4,7 +4,7 @@
 
 package lane
 
-import "github.com/istr/strike/contract/primitive"
+import "github.com/istr/strike/contract/endpoint"
 
 // Peers are container-egress trust contracts: each declares a
 // destination the step container may reach during execution,
@@ -34,9 +34,9 @@ import "github.com/istr/strike/contract/primitive"
 // HTTPSPeer declares an HTTPS endpoint together with its server-trust anchor.
 #HTTPSPeer: {
 	@go(HTTPSPeer)
-	type:  "https"   @go(Type)
-	host:  #Host     @go(Host,type="github.com/istr/strike/internal/transport".Host)
-	trust: #TLSTrust @go(Trust,type="github.com/istr/strike/internal/transport".TLSTrust)
+	type:  "https"         @go(Type)
+	host:  #Host           @go(Host,type="github.com/istr/strike/internal/transport".Host)
+	trust: endpoint.#Trust @go(Trust,type="github.com/istr/strike/contract/endpoint".Trust)
 }
 
 // SSHPeer declares an SSH endpoint with explicit known_hosts entries.
@@ -48,15 +48,5 @@ import "github.com/istr/strike/contract/primitive"
 	@go(SSHPeer)
 	type: "ssh" @go(Type)
 	host: #Host @go(Host,type="github.com/istr/strike/internal/transport".Host)
-	knownHosts: [...#KnownHostEntry] @go(KnownHosts)
-}
-
-// KnownHostEntry is one server key, an OpenSSH known_hosts line
-// decomposed into typed fields.
-#KnownHostEntry: {
-	@go(KnownHostEntry)
-	keyType: "ssh-ed25519" | "ecdsa-sha2-nistp256" |
-		"rsa-sha2-512" | "rsa-sha2-256" @go(KeyType)
-	// key is the base64-encoded public key body (no PEM armor).
-	key: primitive.#Base64 @go(Key)
+	knownHosts: [...endpoint.#HostKey] @go(KnownHosts)
 }

@@ -9,6 +9,7 @@ import (
 
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/deploy"
+	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/transport"
 	"github.com/istr/strike/test/crossval"
@@ -243,7 +244,7 @@ func TestValidateAttestation_WithPeers(t *testing.T) {
 					lane.HTTPSPeer{
 						Type: "https",
 						Host: transport.Host("api.example.com"),
-						Trust: transport.FingerprintTrust{
+						Trust: endpoint.Fingerprint{
 							Type:        "certFingerprint",
 							Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000",
 						},
@@ -253,7 +254,7 @@ func TestValidateAttestation_WithPeers(t *testing.T) {
 					lane.SSHPeer{
 						Type: "ssh",
 						Host: transport.Host("git.example.com"),
-						KnownHosts: []lane.KnownHostEntry{
+						KnownHosts: []endpoint.HostKey{
 							{
 								KeyType: "ssh-ed25519",
 								Key:     "AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl",

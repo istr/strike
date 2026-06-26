@@ -20,6 +20,7 @@ import (
 	protobundle "github.com/sigstore/protobuf-specs/gen/pb-go/bundle/v1"
 	"google.golang.org/protobuf/encoding/protojson"
 
+	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/transport"
 )
@@ -49,7 +50,7 @@ func TestKeylessVerifySpike(t *testing.T) {
 		}
 	}
 
-	trust := transport.CABundleTrust{Type: "caBundle", Path: caddyRoot}
+	trust := endpoint.CABundle{Type: "caBundle", Path: caddyRoot}
 	eps := lane.KeylessEndpoints{
 		Fulcio: transport.HTTPSEndpoint{URL: "https://fulcio.127.0.0.1.sslip.io:5555", Trust: trust},
 		Rekor:  transport.HTTPSEndpoint{URL: "https://rekor.127.0.0.1.sslip.io:3003", Trust: trust},

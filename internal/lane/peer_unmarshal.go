@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/transport"
 )
@@ -49,7 +50,7 @@ func unmarshalPeer(data []byte) (Peer, error) {
 // unmarshalTLSTrust decodes a single trust JSON object into
 // the appropriate concrete branch type based on the "type"
 // discriminator.
-func unmarshalTLSTrust(data []byte) (transport.TLSTrust, error) {
+func unmarshalTLSTrust(data []byte) (endpoint.Trust, error) {
 	if len(data) == 0 || string(data) == jsonNull {
 		return nil, fmt.Errorf("trust entry missing")
 	}
@@ -63,13 +64,13 @@ func unmarshalTLSTrust(data []byte) (transport.TLSTrust, error) {
 
 	switch probe.Type {
 	case "certFingerprint":
-		var t transport.FingerprintTrust
+		var t endpoint.Fingerprint
 		if err := json.Unmarshal(data, &t); err != nil {
 			return nil, fmt.Errorf("decode certFingerprint trust: %w", err)
 		}
 		return t, nil
 	case "caBundle":
-		var t transport.CABundleTrust
+		var t endpoint.CABundle
 		if err := json.Unmarshal(data, &t); err != nil {
 			return nil, fmt.Errorf("decode caBundle trust: %w", err)
 		}
@@ -167,7 +168,7 @@ func (sc *Capture) UnmarshalJSON(data []byte) error {
 }
 
 // unmarshalOIDCConfig decodes an OIDC config JSON object into
-// OIDCConfig. The Trust field is an interface (TLSTrust) and
+// OIDCConfig. The Trust field is an interface (endpoint.Trust) and
 // requires discriminator dispatch via unmarshalTLSTrust.
 func unmarshalOIDCConfig(data []byte) (OIDCConfig, error) {
 	type alias struct {
@@ -237,7 +238,7 @@ func unmarshalKeyless(data []byte) (Keyless, error) {
 }
 
 // unmarshalKeylessEndpoints decodes the keyless endpoint set. Each
-// endpoint's Trust field is an interface (TLSTrust) and requires
+// endpoint's Trust field is an interface (endpoint.Trust) and requires
 // discriminator dispatch via unmarshalTLSTrust.
 func unmarshalKeylessEndpoints(data []byte) (KeylessEndpoints, error) {
 	type alias struct {
@@ -265,7 +266,7 @@ func unmarshalKeylessEndpoints(data []byte) (KeylessEndpoints, error) {
 }
 
 // unmarshalKeylessEndpoint decodes one keyless endpoint, dispatching the
-// TLSTrust discriminator. All three endpoints are mandatory inside a
+// endpoint.Trust discriminator. All three endpoints are mandatory inside a
 // declared keyless block, and trust is mandatory per endpoint.
 func unmarshalKeylessEndpoint(name string, data []byte) (transport.HTTPSEndpoint, error) {
 	if len(data) == 0 || string(data) == jsonNull {
@@ -291,7 +292,7 @@ func unmarshalKeylessEndpoint(name string, data []byte) (transport.HTTPSEndpoint
 
 // UnmarshalJSON implements json.Unmarshaler for Lane. It
 // decodes the resolver, oidc, and keyless fields through their respective
-// helpers, which dispatch the TLSTrust discriminator. All other
+// helpers, which dispatch the endpoint.Trust discriminator. All other
 // fields fall through to the default decoder via the alias trick.
 func (p *Lane) UnmarshalJSON(data []byte) error {
 	type alias Lane

@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/lane"
-	"github.com/istr/strike/internal/transport"
 )
 
 func TestUnmarshalPeer_Discriminator(t *testing.T) {
@@ -34,9 +34,9 @@ func TestUnmarshalPeer_Discriminator(t *testing.T) {
 				if h.Host != "example.com" {
 					t.Errorf("Host = %q, want example.com", h.Host)
 				}
-				ft, ok := h.Trust.(transport.FingerprintTrust)
+				ft, ok := h.Trust.(endpoint.Fingerprint)
 				if !ok {
-					t.Fatalf("Trust type = %T, want FingerprintTrust", h.Trust)
+					t.Fatalf("Trust type = %T, want endpoint.Fingerprint", h.Trust)
 				}
 				if ft.Type != "certFingerprint" {
 					t.Errorf("Trust.Type = %q, want certFingerprint", ft.Type)
@@ -58,9 +58,9 @@ func TestUnmarshalPeer_Discriminator(t *testing.T) {
 				if !ok {
 					t.Fatalf("type = %T, want HTTPSPeer", p)
 				}
-				cb, ok := h.Trust.(transport.CABundleTrust)
+				cb, ok := h.Trust.(endpoint.CABundle)
 				if !ok {
-					t.Fatalf("Trust type = %T, want CABundleTrust", h.Trust)
+					t.Fatalf("Trust type = %T, want endpoint.CABundle", h.Trust)
 				}
 				if cb.Path != "/etc/ssl/ca.pem" {
 					t.Errorf("Trust.Path = %q, want /etc/ssl/ca.pem", cb.Path)

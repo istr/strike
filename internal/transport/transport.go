@@ -1,6 +1,6 @@
-// Package transport defines the trust-anchor types and host
-// constraint used by every TLS-based peer kind in strike
-// (HTTPS peers, the DoT resolver, future TLS-trusted peers).
+// Package transport defines the host constraint, resolver/endpoint
+// address types, and engine connection identity used by strike's
+// TLS-based peers. Trust anchors live in internal/endpoint.
 // The package is positioned beneath lane in the directional
 // dependency graph: lane imports transport, never the reverse.
 //
@@ -13,48 +13,22 @@ package transport
 import (
 	"encoding/json"
 	"fmt"
+
+	"github.com/istr/strike/internal/endpoint"
 )
 
 // Host is a hostname or IPv4 literal, optionally with :port.
 // Lowercase ASCII; punycode required for internationalized domains.
 type Host string
 
-// TLSTrust is the interface implemented by TLS peer trust
-// anchors (FingerprintTrust, CABundleTrust). The CUE disjunction
-// (#FingerprintTrust | #CABundleTrust) is annotated @go(-) so
-// the generator skips it; this hand-written interface provides
-// the Go-side discriminated union.
-type TLSTrust interface {
-	// TrustType returns the discriminator ("certFingerprint", "caBundle").
-	TrustType() string
-}
-
-// FingerprintTrust pins a peer's server certificate by SHA-256 fingerprint.
-type FingerprintTrust struct {
-	Type        string `json:"type"`
-	Fingerprint string `json:"fingerprint"`
-}
-
-// TrustType implements TLSTrust.
-func (t FingerprintTrust) TrustType() string { return t.Type }
-
-// CABundleTrust validates a peer's server certificate against a CA bundle.
-type CABundleTrust struct {
-	Type string `json:"type"`
-	Path string `json:"path"`
-}
-
-// TrustType implements TLSTrust.
-func (t CABundleTrust) TrustType() string { return t.Type }
-
 // DNSResolver declares the DoT resolver strike uses for all
 // peer hostname resolution within a lane run. Mandatory per
 // ADR-028; every lane has exactly one. The trust anchor follows
-// the same TLSTrust vocabulary as HTTPS peers, so verification
+// the same endpoint.Trust vocabulary as HTTPS peers, so verification
 // mechanics are reused.
 type DNSResolver struct {
-	Trust TLSTrust `json:"trust"`
-	Host  Host     `json:"host"`
+	Trust endpoint.Trust `json:"trust"`
+	Host  Host           `json:"host"`
 }
 
 // HTTPSEndpoint is a TLS-only service base URL with a mandatory
@@ -63,15 +37,15 @@ type DNSResolver struct {
 // not a runtime rejection. Clients append fixed well-known API
 // paths to the base URL.
 type HTTPSEndpoint struct {
-	Trust TLSTrust `json:"trust"`
-	URL   string   `json:"url"`
+	Trust endpoint.Trust `json:"trust"`
+	URL   string         `json:"url"`
 }
 
 // EngineConnection is the control-plane-observed identity of the engine
 // transport, a discriminated union over the connection kind. The CUE
 // disjunction (#EngineUnix | #EngineTLS | #EngineMTLS) is annotated @go(-)
 // so the generator skips it; this hand-written interface provides the
-// Go-side union, mirroring TLSTrust. Layer V (cpObserved): the control
+// Go-side union, mirroring endpoint.Trust. Layer V (cpObserved): the control
 // plane reads these facts off the TLS handshake itself.
 type EngineConnection interface {
 	// ConnectionType returns the discriminator ("unix", "tls", "mtls").

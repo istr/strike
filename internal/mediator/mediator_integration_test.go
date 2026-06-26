@@ -12,6 +12,7 @@ import (
 
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/closer"
+	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/mediator"
 	"github.com/istr/strike/internal/transport"
 )
@@ -29,7 +30,7 @@ func TestMediator_CloudflareHTTPS_INTEGRATION(t *testing.T) {
 
 	dotDecl := transport.DNSResolver{
 		Host: "1.1.1.1:853",
-		Trust: transport.FingerprintTrust{
+		Trust: endpoint.Fingerprint{
 			Type:        "certFingerprint",
 			Fingerprint: dotFingerprint,
 		},
@@ -47,7 +48,7 @@ func TestMediator_CloudflareHTTPS_INTEGRATION(t *testing.T) {
 	peers := []mediator.PeerTrust{
 		{
 			Host: "one.one.one.one",
-			Trust: transport.FingerprintTrust{
+			Trust: endpoint.Fingerprint{
 				Type:        "certFingerprint",
 				Fingerprint: httpsFingerprint,
 			},

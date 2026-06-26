@@ -11,6 +11,7 @@
 #   services       I~0.43-0.67 container, lane, copier, mediator, registry,
 #                              capsule, front, resolver, verify
 #   transport      I=0.22      transport                 (base infrastructure)
+#   concept        I~0.00      endpoint                  (composed contract value types; depends only on primitive)
 #   foundation     I~0.00-0.33 bundle, clock, closer, egress, probe, schema  (no internal deps except contract)
 #   primitive      I=0.00      primitive                 (irreducible contract value vocabulary; no internal deps)
 #   contract       I=0.00      contract                  (layer 0; embedded contract data, no internal deps)
@@ -46,6 +47,8 @@ components:
     in: internal/primitive
   transport:
     in: internal/transport
+  concept:
+    in: internal/endpoint
   services:
     in:
       - internal/container
@@ -66,17 +69,22 @@ components:
 
 deps:
   # contract and primitive have no mayDependOn: they depend on nothing internal (ADR-044).
+  concept:
+    mayDependOn:
+      - primitive             # concept value types compose from the leaf vocabulary only
   foundation:
     mayDependOn:
       - contract              # embedded schema data, the only internal edge foundation may make
   transport:
     mayDependOn:
+      - concept
       - foundation
       - contract
   services:
     mayDependOn:
       - services              # allow intra-tier edges (capsule->mediator, etc.)
       - transport
+      - concept
       - foundation
       - primitive
       - contract
@@ -84,6 +92,7 @@ deps:
     mayDependOn:
       - services
       - transport
+      - concept
       - foundation
       - primitive
       - contract
@@ -92,6 +101,7 @@ deps:
       - orchestration
       - services
       - transport
+      - concept
       - foundation
       - primitive
       - contract

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/istr/strike/internal/clock"
+	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/transport"
 )
 
@@ -27,7 +28,7 @@ func TestProbeResolver_CloudflareDoT_INTEGRATION(t *testing.T) {
 	defer cancel()
 	decl := transport.DNSResolver{
 		Host: "1.1.1.1:853",
-		Trust: transport.FingerprintTrust{
+		Trust: endpoint.Fingerprint{
 			Type:        "certFingerprint",
 			Fingerprint: fingerprint,
 		},

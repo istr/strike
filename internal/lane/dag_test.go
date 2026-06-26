@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/transport"
@@ -613,17 +614,17 @@ func TestBuild_PeerAnchorConflict(t *testing.T) {
 		},
 	}
 
-	fpA := transport.FingerprintTrust{Type: "certFingerprint", Fingerprint: "sha256:" + strings.Repeat("a", 64)}
-	fpB := transport.FingerprintTrust{Type: "certFingerprint", Fingerprint: "sha256:" + strings.Repeat("b", 64)}
+	fpA := endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:" + strings.Repeat("a", 64)}
+	fpB := endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:" + strings.Repeat("b", 64)}
 
-	httpsStep := func(name, host string, tr transport.TLSTrust) lane.Step {
+	httpsStep := func(name, host string, tr endpoint.Trust) lane.Step {
 		return lane.Step{
 			ID: primitive.Identifier(name), Image: lane.Ptr(primitive.ImageRef("img@sha256:" + strings.Repeat("a", 64))),
 			Args: []string{"x"}, Env: map[string]string{},
 			Peers: []lane.Peer{lane.HTTPSPeer{Type: "https", Host: transport.Host(host), Trust: tr}},
 		}
 	}
-	sshStep := func(name, host string, kh []lane.KnownHostEntry) lane.Step {
+	sshStep := func(name, host string, kh []endpoint.HostKey) lane.Step {
 		return lane.Step{
 			ID: primitive.Identifier(name), Image: lane.Ptr(primitive.ImageRef("img@sha256:" + strings.Repeat("a", 64))),
 			Args: []string{"x"}, Env: map[string]string{},
@@ -631,11 +632,11 @@ func TestBuild_PeerAnchorConflict(t *testing.T) {
 		}
 	}
 
-	khAB := []lane.KnownHostEntry{
+	khAB := []endpoint.HostKey{
 		{KeyType: "ssh-ed25519", Key: "AAAA"},
 		{KeyType: "rsa-sha2-256", Key: "BBBB"},
 	}
-	khBA := []lane.KnownHostEntry{
+	khBA := []endpoint.HostKey{
 		{KeyType: "rsa-sha2-256", Key: "BBBB"},
 		{KeyType: "ssh-ed25519", Key: "AAAA"},
 	}

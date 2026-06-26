@@ -66,7 +66,7 @@ type Sealed struct {
 // spike confirmed gengotypes cannot produce them: (1) the :lane and :deploy CUE
 // packages co-locate in specs/ and the generator refuses two Go packages in one
 // directory; (2) the cross-package alias chain breaks at the lane -> transport
-// @go(-) boundary (it emits lane.TLSTrust et al., whose Go types live in
+// @go(-) boundary (it emits lane.Host et al., whose Go types live in
 // transport); (3) snake_case fields would need pervasive @go() annotations to
 // match the JSON contract. This is the same structural reason transport's and
 // the rest of the deploy predicate's Go types are hand-written.

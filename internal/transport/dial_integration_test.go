@@ -8,6 +8,7 @@ import (
 
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/closer"
+	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/transport"
 )
 
@@ -28,7 +29,7 @@ func TestDialVerified_CloudflareDoT_INTEGRATION(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*clock.Second)
 	defer cancel()
-	trust := transport.FingerprintTrust{
+	trust := endpoint.Fingerprint{
 		Type:        "certFingerprint",
 		Fingerprint: fingerprint,
 	}

@@ -5,6 +5,7 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/transport"
@@ -15,7 +16,7 @@ func httpsPeer(host string) lane.Peer {
 	return lane.HTTPSPeer{
 		Type: "https",
 		Host: transport.Host(host),
-		Trust: transport.FingerprintTrust{
+		Trust: endpoint.Fingerprint{
 			Type:        "certFingerprint",
 			Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000",
 		},

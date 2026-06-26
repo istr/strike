@@ -22,6 +22,7 @@ import (
 
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/closer"
+	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/testutil"
 	"github.com/istr/strike/internal/transport"
 )
@@ -178,7 +179,7 @@ func TestDialVerified_FingerprintMatch(t *testing.T) {
 	})
 	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
 	defer cancel()
-	trust := transport.FingerprintTrust{
+	trust := endpoint.Fingerprint{
 		Type:        "certFingerprint",
 		Fingerprint: fingerprint,
 	}
@@ -207,7 +208,7 @@ func TestDialVerified_FingerprintMismatch(t *testing.T) {
 	})
 	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
 	defer cancel()
-	trust := transport.FingerprintTrust{
+	trust := endpoint.Fingerprint{
 		Type:        "certFingerprint",
 		Fingerprint: "sha256:" + strings.Repeat("0", 64),
 	}
@@ -235,7 +236,7 @@ func TestDialVerified_CABundleValid(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
 	defer cancel()
-	trust := transport.CABundleTrust{
+	trust := endpoint.CABundle{
 		Type: "caBundle",
 		Path: caPath,
 	}
@@ -269,7 +270,7 @@ func TestDialVerified_CABundleWrongCA(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
 	defer cancel()
-	trust := transport.CABundleTrust{
+	trust := endpoint.CABundle{
 		Type: "caBundle",
 		Path: caPath,
 	}
@@ -291,7 +292,7 @@ func TestDialVerified_TLS12Accepted(t *testing.T) {
 	addr := startTLSServer(t, serverCfg)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
 	defer cancel()
-	trust := transport.FingerprintTrust{
+	trust := endpoint.Fingerprint{
 		Type:        "certFingerprint",
 		Fingerprint: fingerprint,
 	}
@@ -316,7 +317,7 @@ func TestDialVerified_TLS11Rejected(t *testing.T) {
 	addr := startTLSServer(t, serverCfg)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
 	defer cancel()
-	trust := transport.FingerprintTrust{
+	trust := endpoint.Fingerprint{
 		Type:        "certFingerprint",
 		Fingerprint: fingerprint,
 	}
@@ -384,7 +385,7 @@ func TestDialVerified_SNIForFQDN(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
 	defer cancel()
-	trust := transport.FingerprintTrust{
+	trust := endpoint.Fingerprint{
 		Type:        "certFingerprint",
 		Fingerprint: fingerprint,
 	}
@@ -419,7 +420,7 @@ func TestDialVerified_NoSNIForIPLiteral(t *testing.T) {
 	})
 	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
 	defer cancel()
-	trust := transport.FingerprintTrust{
+	trust := endpoint.Fingerprint{
 		Type:        "certFingerprint",
 		Fingerprint: fingerprint,
 	}

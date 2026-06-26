@@ -14,6 +14,7 @@ import (
 
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/closer"
+	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/transport"
 )
 
@@ -156,7 +157,7 @@ func TestLookupHost_HappyPath(t *testing.T) {
 	defer cancel()
 	decl := transport.DNSResolver{
 		Host: transport.Host(addr),
-		Trust: transport.FingerprintTrust{
+		Trust: endpoint.Fingerprint{
 			Type:        "certFingerprint",
 			Fingerprint: fingerprint,
 		},
@@ -180,7 +181,7 @@ func TestLookupHost_FingerprintMismatch(t *testing.T) {
 	defer cancel()
 	decl := transport.DNSResolver{
 		Host: transport.Host(addr),
-		Trust: transport.FingerprintTrust{
+		Trust: endpoint.Fingerprint{
 			Type:        "certFingerprint",
 			Fingerprint: "sha256:" + strings.Repeat("0", 64),
 		},
@@ -199,7 +200,7 @@ func TestLookupHost_ServerUnreachable(t *testing.T) {
 	defer cancel()
 	decl := transport.DNSResolver{
 		Host: "127.0.0.1:1",
-		Trust: transport.FingerprintTrust{
+		Trust: endpoint.Fingerprint{
 			Type:        "certFingerprint",
 			Fingerprint: "sha256:" + strings.Repeat("a", 64),
 		},
@@ -217,7 +218,7 @@ func TestProbeResolver_HappyPath(t *testing.T) {
 	defer cancel()
 	decl := transport.DNSResolver{
 		Host: transport.Host(addr),
-		Trust: transport.FingerprintTrust{
+		Trust: endpoint.Fingerprint{
 			Type:        "certFingerprint",
 			Fingerprint: fingerprint,
 		},
@@ -241,7 +242,7 @@ func TestProbeResolver_FingerprintMismatch(t *testing.T) {
 	defer cancel()
 	decl := transport.DNSResolver{
 		Host: transport.Host(addr),
-		Trust: transport.FingerprintTrust{
+		Trust: endpoint.Fingerprint{
 			Type:        "certFingerprint",
 			Fingerprint: "sha256:" + strings.Repeat("0", 64),
 		},
@@ -258,7 +259,7 @@ func TestProbeResolver_NoResponse(t *testing.T) {
 	defer cancel()
 	decl := transport.DNSResolver{
 		Host: transport.Host(addr),
-		Trust: transport.FingerprintTrust{
+		Trust: endpoint.Fingerprint{
 			Type:        "certFingerprint",
 			Fingerprint: fingerprint,
 		},
@@ -280,7 +281,7 @@ func TestProbeResolver_ErrorChainHasNoSystemResolverReference(t *testing.T) {
 	// no test-server setup, fast and deterministic failure.
 	decl := transport.DNSResolver{
 		Host: "127.0.0.1:1",
-		Trust: transport.FingerprintTrust{
+		Trust: endpoint.Fingerprint{
 			Type:        "certFingerprint",
 			Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000",
 		},

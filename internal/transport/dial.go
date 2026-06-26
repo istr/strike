@@ -15,6 +15,7 @@ import (
 	"syscall"
 
 	"github.com/istr/strike/internal/closer"
+	"github.com/istr/strike/internal/endpoint"
 )
 
 // bsiTLS12CipherSuites is the set of TLS 1.2 cipher suites strike
@@ -86,33 +87,33 @@ func (c *VerifiedConn) Identity() ConnectionIdentity {
 }
 
 // BuildTLSConfig produces a *tls.Config that verifies a peer
-// against the supplied TLSTrust. Minimum TLS 1.2 (external peers
+// against the supplied endpoint.Trust. Minimum TLS 1.2 (external peers
 // such as public registries are not always 1.3-capable; see the
 // peer-TLS-floor ADR), with the TLS 1.2 path restricted to the BSI
 // TR-02102-2 AEAD/PFS cipher suites; TLS 1.3 is preferred and used
 // whenever the peer supports it. No caller-facing options; the
 // returned config is wired for exactly the trust mode declared.
 //
-// For FingerprintTrust: standard chain verification is bypassed
+// For endpoint.Fingerprint: standard chain verification is bypassed
 // (InsecureSkipVerify=true) and replaced with a SHA-256
 // fingerprint match on the leaf certificate. This is the only
 // path in strike code that sets InsecureSkipVerify=true; the
 // VerifyPeerCertificate callback is what actually enforces
 // trust.
 //
-// For CABundleTrust: the bundle file is read from disk and
+// For endpoint.CABundle: the bundle file is read from disk and
 // installed as RootCAs. Standard chain verification applies.
-func BuildTLSConfig(trust TLSTrust) (*tls.Config, error) {
+func BuildTLSConfig(trust endpoint.Trust) (*tls.Config, error) {
 	config := &tls.Config{
 		MinVersion:   tls.VersionTLS12,
 		CipherSuites: bsiTLS12CipherSuites,
 	}
 	switch t := trust.(type) {
-	case FingerprintTrust:
+	case endpoint.Fingerprint:
 		config.InsecureSkipVerify = true
 		config.VerifyPeerCertificate = makeFingerprintVerifier(t.Fingerprint)
 		config.VerifyConnection = makeConnectionFingerprintVerifier(t.Fingerprint)
-	case CABundleTrust:
+	case endpoint.CABundle:
 		pool, err := loadCABundle(t.Path)
 		if err != nil {
 			return nil, err
@@ -138,7 +139,7 @@ func BuildTLSConfig(trust TLSTrust) (*tls.Config, error) {
 //
 // The context governs the dial timeout; pass a context with
 // deadline if a timeout is desired.
-func DialVerified(ctx context.Context, addr string, trust TLSTrust) (*VerifiedConn, error) {
+func DialVerified(ctx context.Context, addr string, trust endpoint.Trust) (*VerifiedConn, error) {
 	config, err := BuildTLSConfig(trust)
 	if err != nil {
 		return nil, err
