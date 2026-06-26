@@ -2,7 +2,10 @@
 
 ## Status
 
-Accepted. Relates to [ADR-004](ADR-004-cue-as-single-source-of-truth.md)
+Superseded by [ADR-048](ADR-048-contract-type-semantics.md), which recasts
+this layering on a semantic footing (naming by role, representation-neutral
+concepts, the primitive/concept tiering) rather than the file-prefix
+mechanism decided here. Relates to [ADR-004](ADR-004-cue-as-single-source-of-truth.md)
 (CUE as the single source of truth), which placed every cross-boundary and
 serialized contract in CUE without separating the kinds that have since
 diverged; [ADR-044](ADR-044-tier-assignment-criterion.md) (deterministic
