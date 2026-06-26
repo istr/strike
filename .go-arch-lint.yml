@@ -12,6 +12,7 @@
 #                              capsule, front, resolver, verify
 #   transport      I=0.22      transport                 (base infrastructure)
 #   foundation     I~0.00-0.33 bundle, clock, closer, egress, probe, schema  (no internal deps except contract)
+#   primitive      I=0.00      primitive                 (irreducible contract value vocabulary; no internal deps)
 #   contract       I=0.00      contract                  (layer 0; embedded contract data, no internal deps)
 
 version: 3
@@ -41,7 +42,8 @@ components:
       - internal/egress
       - internal/probe
       - internal/schema
-      - internal/primitive
+  primitive:
+    in: internal/primitive
   transport:
     in: internal/transport
   services:
@@ -63,7 +65,7 @@ components:
     in: cmd/strike
 
 deps:
-  # contract has no mayDependOn: it is layer 0, depends on nothing internal (ADR-044).
+  # contract and primitive have no mayDependOn: they depend on nothing internal (ADR-044).
   foundation:
     mayDependOn:
       - contract              # embedded schema data, the only internal edge foundation may make
@@ -76,12 +78,14 @@ deps:
       - services              # allow intra-tier edges (capsule->mediator, etc.)
       - transport
       - foundation
+      - primitive
       - contract
   orchestration:
     mayDependOn:
       - services
       - transport
       - foundation
+      - primitive
       - contract
   entry:
     mayDependOn:
@@ -89,4 +93,5 @@ deps:
       - services
       - transport
       - foundation
+      - primitive
       - contract

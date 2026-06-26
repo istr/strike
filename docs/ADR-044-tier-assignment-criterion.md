@@ -163,3 +163,39 @@ code.
 `specs`, removes `specs` from `foundation`, and grants every tier (foundation
 included) `mayDependOn: contract`. The header tier table gains the contract row
 and notes foundation's single permitted downward edge.
+
+## Amendment 2026-06-26 -- the primitive tier (irreducible contract vocabulary)
+
+Status: Accepted. Append-only: this block adds a tier without editing the
+clauses above; every clause of the original Decision, Consequences, Principles,
+and the contract-tier amendment stands unchanged.
+
+`internal/primitive` is carved out of foundation into its own component. Like
+contract and foundation it has a zero internal-dependency floor; it is
+distinguished from them by *kind*:
+
+- **primitive** -- the contract's irreducible value vocabulary: the leaf
+  constraint types every higher schema composes from (paths, identifier, base64,
+  git commit, sha256, image ref, artifact type, digest, duration, host, port). A
+  primitive package imports nothing internal -- not even contract -- and carries
+  only the value types and their representation-neutral methods. This separates
+  it from foundation (logic-free infrastructure utilities, which may read
+  contract) and from contract (pure embedded schema data with no executable
+  logic).
+
+Because primitive imports nothing internal, every tier above it may take a
+downward edge to it. Carving it out of foundation yields a tier that depends only
+on the value vocabulary, not on the foundation utilities -- the precise
+dependency target the concept tier (ADR-048) builds on.
+
+**Determinism at the primitive/foundation boundary.** This is the second place
+two components share a zero-or-near-zero internal-dependency floor (the first is
+contract/foundation). It is settled by the same mechanically checkable *kind*
+test: a package whose members are the contract's leaf value types is primitive;
+one carrying infrastructure behavior is foundation.
+
+**Enforcement.** `.go-arch-lint.yml` gains a `primitive` component holding
+`internal/primitive`, removes `internal/primitive` from `foundation`, and grants
+`mayDependOn: primitive` to services, orchestration, and entry (the tiers that
+import it). The header tier table gains the primitive row. primitive itself, like
+contract, declares no `mayDependOn`.

@@ -52,3 +52,10 @@ _sha256Hex: "[a-f0-9]{64}"
 #Digest: =~"^sha256:\(_sha256Hex)$"
 
 #Duration: =~"^[0-9]+(s|m|h)$"
+
+// #Host is a bare network hostname or IP literal, lowercase ASCII, without a
+// port. Punycode is required for internationalized domains.
+#Host: =~"^[a-z0-9.-]+$"
+
+// #Port is a TCP/UDP port number, 1-65535.
+#Port: int & >=1 & <=65535
