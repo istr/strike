@@ -1,4 +1,4 @@
-package lane
+package spec
 
 import (
 	"fmt"

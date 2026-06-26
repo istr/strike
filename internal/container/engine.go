@@ -12,8 +12,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/probe"
+	"github.com/istr/strike/internal/spec"
 )
 
 // Engine is the interface for container engine operations.
@@ -102,7 +102,7 @@ type Engine interface {
 type ImageInfo struct {
 	Annotations map[string]string
 	ID          string
-	Digest      lane.Digest
+	Digest      spec.Digest
 	RepoDigests []string
 	Size        int64
 }

@@ -16,6 +16,8 @@
 
 package lane
 
+import "github.com/istr/strike/specs/spec"
+
 // ---------------------------------------------------------------------------
 // Runtime artifact carrier
 // ---------------------------------------------------------------------------
@@ -25,10 +27,10 @@ package lane
 // interface for artifact handover between pipeline phases.
 #Artifact: {
 	@go(Artifact)
-	type:         #ArtifactType @go(Type)
-	digest:       #Digest       @go(Digest)
-	size:         int & >=0     @go(Size)
-	contentType?: string        @go(ContentType,optional=nillable)
+	type:         spec.#ArtifactType @go(Type)
+	digest:       spec.#Digest       @go(Digest)
+	size:         int & >=0          @go(Size)
+	contentType?: string             @go(ContentType,optional=nillable)
 	metadata?: {
 		[string]: string @go(Metadata)
 	}
@@ -58,7 +60,7 @@ package lane
 
 	// outputID identifies the content layer for this output at the lane level: it
 	// is the output id (ADR-046). It addresses the output across steps.
-	outputID: #Identifier @go(OutputID)
+	outputID: spec.#Identifier @go(OutputID)
 
 	// layerDiffID is the OCI uncompressed-content digest (diff_id) of the layer
 	// identified by outputID. It is the engine-level selection key: container

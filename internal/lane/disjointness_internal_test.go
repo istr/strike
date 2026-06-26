@@ -1,6 +1,10 @@
 package lane
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/istr/strike/internal/spec"
+)
 
 func TestMountsConflict(t *testing.T) {
 	tests := []struct {
@@ -18,7 +22,7 @@ func TestMountsConflict(t *testing.T) {
 		{"/a/", "/a", true}, // after Clean both are "/a"
 	}
 	for _, tt := range tests {
-		if got := mountsConflict(AbsPath(tt.a), AbsPath(tt.b)); got != tt.want {
+		if got := mountsConflict(spec.AbsPath(tt.a), spec.AbsPath(tt.b)); got != tt.want {
 			t.Errorf("mountsConflict(%q, %q) = %v, want %v", tt.a, tt.b, got, tt.want)
 		}
 	}

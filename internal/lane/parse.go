@@ -9,13 +9,14 @@ import (
 
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/schema"
+	"github.com/istr/strike/internal/spec"
 
 	"gopkg.in/yaml.v3"
 )
 
 // ParseDuration converts a lane duration pointer to clock.Duration.
 // Returns defaultVal if d is nil.
-func ParseDuration(d *Duration, defaultVal clock.Duration) (clock.Duration, error) {
+func ParseDuration(d *spec.Duration, defaultVal clock.Duration) (clock.Duration, error) {
 	if d == nil {
 		return defaultVal, nil
 	}
@@ -37,7 +38,7 @@ func Parse(fp FilePath) (*Lane, DigestRef, error) {
 	// Using the canonical constructor keeps digest validation in one place and
 	// holds Parse at the cyclomatic-complexity ceiling.
 	sum := sha256.Sum256(raw)
-	wire := Digest("sha256:" + hex.EncodeToString(sum[:]))
+	wire := spec.Digest("sha256:" + hex.EncodeToString(sum[:]))
 	dg := MustParseDigest(wire)
 
 	// YAML to generic map (for CUE validation)

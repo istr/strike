@@ -1,4 +1,8 @@
-package lane
+// Package spec defines the leaf scalar vocabulary -- the shared, composable
+// constraint types (paths, identifier, base64, git commit, sha256, image ref,
+// artifact type, digest, duration) that the lane and attestation schemas build
+// on. See docs/ADR-047-spec-package-layering.md.
+package spec
 
 import (
 	"fmt"

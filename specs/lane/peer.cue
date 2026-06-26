@@ -4,6 +4,8 @@
 
 package lane
 
+import "github.com/istr/strike/specs/spec"
+
 // Peers are container-egress trust contracts: each declares a
 // destination the step container may reach during execution,
 // together with the trust anchor strike uses to verify that
@@ -56,5 +58,5 @@ package lane
 	keyType: "ssh-ed25519" | "ecdsa-sha2-nistp256" |
 		"rsa-sha2-512" | "rsa-sha2-256" @go(KeyType)
 	// key is the base64-encoded public key body (no PEM armor).
-	key: #Base64 @go(Key)
+	key: spec.#Base64 @go(Key)
 }

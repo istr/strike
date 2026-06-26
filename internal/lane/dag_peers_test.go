@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/spec"
 	"github.com/istr/strike/internal/transport"
 )
 
@@ -25,14 +26,14 @@ func httpsPeer(host string) lane.Peer {
 // Caller fills in name and peers.
 func minStep(name string, peers []lane.Peer) lane.Step {
 	return lane.Step{
-		ID:      lane.Identifier(name),
-		Image:   lane.Ptr(lane.ImageRef("alpine:3.20")),
+		ID:      spec.Identifier(name),
+		Image:   lane.Ptr(spec.ImageRef("alpine:3.20")),
 		Args:    []string{"echo", "ok"},
 		Env:     map[string]string{},
 		Inputs:  []lane.InputRef{},
 		Secrets: []lane.SecretRef{},
 		Outputs: []lane.FileOutput{
-			{ID: "out", Type: "file", Path: lane.Ptr(lane.RelPath("o"))},
+			{ID: "out", Type: "file", Path: lane.Ptr(spec.RelPath("o"))},
 		},
 		Peers: peers,
 	}
@@ -225,8 +226,8 @@ func TestCollectPeers_StepsWithoutPeersOmitted(t *testing.T) {
 
 func withInput(s lane.Step, fromStep, fromOutput, mount string) lane.Step {
 	s.Inputs = append(s.Inputs, lane.InputRef{
-		From:  lane.OutputRef{Step: lane.Identifier(fromStep), Output: lane.Identifier(fromOutput)},
-		Mount: lane.AbsPath(mount),
+		From:  lane.OutputRef{Step: spec.Identifier(fromStep), Output: spec.Identifier(fromOutput)},
+		Mount: spec.AbsPath(mount),
 	})
 	return s
 }

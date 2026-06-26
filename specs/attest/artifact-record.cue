@@ -6,12 +6,12 @@
 
 package attest
 
-import "github.com/istr/strike/specs/lane"
+import "github.com/istr/strike/specs/spec"
 
 // ArtifactRecord is the provenance record for one artifact.
 #ArtifactRecord: {
 	// digest is the content-addressed manifest digest.
-	digest: lane.#Digest
+	digest: spec.#Digest
 
 	// sbom holds SBOM metadata when an SBOM was generated.
 	sbom?: #SBOMRecord
@@ -22,5 +22,5 @@ import "github.com/istr/strike/specs/lane"
 	format: "cyclonedx-json" | "spdx-json"
 
 	// digest is the content hash of the SBOM document.
-	digest: lane.#Digest
+	digest: spec.#Digest
 }

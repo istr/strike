@@ -9,6 +9,7 @@ import (
 
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/spec"
 )
 
 func mustFilePath(t *testing.T, path string) lane.FilePath {
@@ -22,17 +23,17 @@ func mustFilePath(t *testing.T, path string) lane.FilePath {
 
 func TestParseDuration(t *testing.T) {
 	tests := []struct {
-		input   *lane.Duration
+		input   *spec.Duration
 		name    string
 		def     clock.Duration
 		want    clock.Duration
 		wantErr bool
 	}{
-		{input: lane.Ptr(lane.Duration("30s")), name: "seconds", def: clock.Minute, want: 30 * clock.Second},
-		{input: lane.Ptr(lane.Duration("5m")), name: "minutes", def: clock.Minute, want: 5 * clock.Minute},
-		{input: lane.Ptr(lane.Duration("1h")), name: "hours", def: clock.Minute, want: clock.Hour},
+		{input: lane.Ptr(spec.Duration("30s")), name: "seconds", def: clock.Minute, want: 30 * clock.Second},
+		{input: lane.Ptr(spec.Duration("5m")), name: "minutes", def: clock.Minute, want: 5 * clock.Minute},
+		{input: lane.Ptr(spec.Duration("1h")), name: "hours", def: clock.Minute, want: clock.Hour},
 		{input: nil, name: "nil uses default", def: clock.Minute, want: clock.Minute},
-		{input: lane.Ptr(lane.Duration("invalid")), name: "invalid", def: clock.Minute, wantErr: true},
+		{input: lane.Ptr(spec.Duration("invalid")), name: "invalid", def: clock.Minute, wantErr: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -363,62 +364,62 @@ func TestValidatePaths(t *testing.T) {
 	}{
 		{
 			name:    "relative output path is valid",
-			lane:    &lane.Lane{Steps: []lane.Step{{ID: "s", Workdir: lane.Ptr(lane.AbsPath("/work")), Outputs: []lane.FileOutput{{Path: lane.Ptr(lane.RelPath("node_modules"))}}}}},
+			lane:    &lane.Lane{Steps: []lane.Step{{ID: "s", Workdir: lane.Ptr(spec.AbsPath("/work")), Outputs: []lane.FileOutput{{Path: lane.Ptr(spec.RelPath("node_modules"))}}}}},
 			wantErr: "",
 		},
 		{
 			name:    "absolute output path rejected",
-			lane:    &lane.Lane{Steps: []lane.Step{{ID: "s", Workdir: lane.Ptr(lane.AbsPath("/work")), Outputs: []lane.FileOutput{{Path: lane.Ptr(lane.RelPath("/out.txt"))}}}}},
+			lane:    &lane.Lane{Steps: []lane.Step{{ID: "s", Workdir: lane.Ptr(spec.AbsPath("/work")), Outputs: []lane.FileOutput{{Path: lane.Ptr(spec.RelPath("/out.txt"))}}}}},
 			wantErr: "must be relative",
 		},
 		{
 			name:    "non-canonical output path rejected",
-			lane:    &lane.Lane{Steps: []lane.Step{{ID: "s", Workdir: lane.Ptr(lane.AbsPath("/work")), Outputs: []lane.FileOutput{{Path: lane.Ptr(lane.RelPath("src/../etc/passwd"))}}}}},
+			lane:    &lane.Lane{Steps: []lane.Step{{ID: "s", Workdir: lane.Ptr(spec.AbsPath("/work")), Outputs: []lane.FileOutput{{Path: lane.Ptr(spec.RelPath("src/../etc/passwd"))}}}}},
 			wantErr: "must be canonical",
 		},
 		{
 			name:    "outputs without workdir rejected",
-			lane:    &lane.Lane{Steps: []lane.Step{{ID: "s", Outputs: []lane.FileOutput{{Path: lane.Ptr(lane.RelPath("out"))}}}}},
+			lane:    &lane.Lane{Steps: []lane.Step{{ID: "s", Outputs: []lane.FileOutput{{Path: lane.Ptr(spec.RelPath("out"))}}}}},
 			wantErr: "declares outputs but no workdir",
 		},
 		{
 			name:    "workdir absolute canonical",
-			lane:    &lane.Lane{Steps: []lane.Step{{ID: "s", Image: lane.Ptr(lane.ImageRef("img")), Workdir: lane.Ptr(lane.AbsPath("/src"))}}},
+			lane:    &lane.Lane{Steps: []lane.Step{{ID: "s", Image: lane.Ptr(spec.ImageRef("img")), Workdir: lane.Ptr(spec.AbsPath("/src"))}}},
 			wantErr: "",
 		},
 		{
 			name:    "workdir root",
-			lane:    &lane.Lane{Steps: []lane.Step{{ID: "s", Image: lane.Ptr(lane.ImageRef("img")), Workdir: lane.Ptr(lane.AbsPath("/"))}}},
+			lane:    &lane.Lane{Steps: []lane.Step{{ID: "s", Image: lane.Ptr(spec.ImageRef("img")), Workdir: lane.Ptr(spec.AbsPath("/"))}}},
 			wantErr: "",
 		},
 		{
 			name:    "workdir nested",
-			lane:    &lane.Lane{Steps: []lane.Step{{ID: "s", Image: lane.Ptr(lane.ImageRef("img")), Workdir: lane.Ptr(lane.AbsPath("/out/www"))}}},
+			lane:    &lane.Lane{Steps: []lane.Step{{ID: "s", Image: lane.Ptr(spec.ImageRef("img")), Workdir: lane.Ptr(spec.AbsPath("/out/www"))}}},
 			wantErr: "",
 		},
 		{
 			name:    "workdir relative rejected",
-			lane:    &lane.Lane{Steps: []lane.Step{{ID: "s", Image: lane.Ptr(lane.ImageRef("img")), Workdir: lane.Ptr(lane.AbsPath("src"))}}},
+			lane:    &lane.Lane{Steps: []lane.Step{{ID: "s", Image: lane.Ptr(spec.ImageRef("img")), Workdir: lane.Ptr(spec.AbsPath("src"))}}},
 			wantErr: "must be absolute",
 		},
 		{
 			name:    "workdir dot-dot rejected",
-			lane:    &lane.Lane{Steps: []lane.Step{{ID: "s", Image: lane.Ptr(lane.ImageRef("img")), Workdir: lane.Ptr(lane.AbsPath("/src/../etc"))}}},
+			lane:    &lane.Lane{Steps: []lane.Step{{ID: "s", Image: lane.Ptr(spec.ImageRef("img")), Workdir: lane.Ptr(spec.AbsPath("/src/../etc"))}}},
 			wantErr: "must be canonical",
 		},
 		{
 			name:    "workdir dot rejected",
-			lane:    &lane.Lane{Steps: []lane.Step{{ID: "s", Image: lane.Ptr(lane.ImageRef("img")), Workdir: lane.Ptr(lane.AbsPath("/src/./build"))}}},
+			lane:    &lane.Lane{Steps: []lane.Step{{ID: "s", Image: lane.Ptr(spec.ImageRef("img")), Workdir: lane.Ptr(spec.AbsPath("/src/./build"))}}},
 			wantErr: "must be canonical",
 		},
 		{
 			name:    "workdir double slash rejected",
-			lane:    &lane.Lane{Steps: []lane.Step{{ID: "s", Image: lane.Ptr(lane.ImageRef("img")), Workdir: lane.Ptr(lane.AbsPath("/src//out"))}}},
+			lane:    &lane.Lane{Steps: []lane.Step{{ID: "s", Image: lane.Ptr(spec.ImageRef("img")), Workdir: lane.Ptr(spec.AbsPath("/src//out"))}}},
 			wantErr: "must be canonical",
 		},
 		{
 			name:    "workdir trailing slash rejected",
-			lane:    &lane.Lane{Steps: []lane.Step{{ID: "s", Image: lane.Ptr(lane.ImageRef("img")), Workdir: lane.Ptr(lane.AbsPath("/src/"))}}},
+			lane:    &lane.Lane{Steps: []lane.Step{{ID: "s", Image: lane.Ptr(spec.ImageRef("img")), Workdir: lane.Ptr(spec.AbsPath("/src/"))}}},
 			wantErr: "must be canonical",
 		},
 	}

@@ -27,6 +27,7 @@ import (
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/registry"
+	"github.com/istr/strike/internal/spec"
 )
 
 // PackOpts is everything pack needs; callers in main.go assemble this.
@@ -159,7 +160,7 @@ func Pack(opts PackOpts) (*PackResult, error) {
 		return nil, err
 	}
 
-	manifestDigest := lane.Digest(assembled.Digest.String())
+	manifestDigest := spec.Digest(assembled.Digest.String())
 	return &PackResult{Digest: lane.MustParseDigest(manifestDigest)}, nil
 }
 

@@ -8,7 +8,7 @@ build: generate
 # Step 1: Export CUE specs to JSON Schema.
 # These JSON Schema files are the cross-implementation contract that
 # both the Go and (future) Rust validators build from.
-specs: specs/lane/scalars.cue specs/lane/peer.cue specs/lane/target.cue specs/lane/lane.cue specs/lane/trustroot.cue specs/lane/provenance.cue specs/attest/attestation.cue specs/attest/artifact-record.cue
+specs: specs/spec/scalars.cue specs/lane/peer.cue specs/lane/target.cue specs/lane/lane.cue specs/lane/trustroot.cue specs/lane/provenance.cue specs/attest/attestation.cue specs/attest/artifact-record.cue
 	cue export ./specs/lane -e '#Lane' \
 	    --out jsonschema --force -o specs/lane.schema.json
 	cue export ./specs/attest -e '#Attestation' \
@@ -21,7 +21,11 @@ specs: specs/lane/scalars.cue specs/lane/peer.cue specs/lane/target.cue specs/la
 # a JSON-Schema-to-Go generator is selected.
 generate: specs
 	cue exp gengotypes ./specs/lane
+	cue exp gengotypes ./specs/spec
+	sed -i 's#github.com/istr/strike/specs/#github.com/istr/strike/internal/#g' specs/lane/cue_types*gen.go specs/spec/cue_types*gen.go
+	mkdir -p internal/spec
 	mv specs/lane/cue_types*gen.go internal/lane/cue_types_gen.go
+	mv specs/spec/cue_types*gen.go internal/spec/cue_types_gen.go
 
 # Update golden test fixtures (run after intentional changes to sign/pack/digest).
 golden:

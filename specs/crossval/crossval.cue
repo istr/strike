@@ -13,7 +13,7 @@
 
 package crossval
 
-import "github.com/istr/strike/specs/lane"
+import "github.com/istr/strike/specs/spec"
 
 // Shared envelope for all cross-validation test vectors.
 #Vector: {
@@ -37,8 +37,8 @@ import "github.com/istr/strike/specs/lane"
 		}
 	}
 	expected: {
-		manifest_digest: lane.#Digest
-		config_digest:   lane.#Digest
+		manifest_digest: spec.#Digest
+		config_digest:   spec.#Digest
 		layer_count:     int & >=0
 	}
 }
@@ -50,12 +50,12 @@ import "github.com/istr/strike/specs/lane"
 			args: [...string]
 			env: [string]: string
 		}
-		image_digest: lane.#Digest
-		input_hashes: [string]:  lane.#Digest
-		source_hashes: [string]: lane.#Digest
+		image_digest: spec.#Digest
+		input_hashes: [string]:  spec.#Digest
+		source_hashes: [string]: spec.#Digest
 	}
 	expected: {
-		hash: lane.#Digest
+		hash: spec.#Digest
 	}
 }
 
@@ -82,7 +82,7 @@ import "github.com/istr/strike/specs/lane"
 		}]
 	}
 	expected: {
-		digest: lane.#Digest
+		digest: spec.#Digest
 	}
 }
 

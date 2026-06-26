@@ -9,6 +9,7 @@ import (
 
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/registry"
+	"github.com/istr/strike/internal/spec"
 )
 
 // sanitizeForLog replaces control characters to prevent log injection.
@@ -66,12 +67,12 @@ func removeStrikeScratch(outDir string) {
 	}
 }
 
-func resolveDigest(ctx context.Context, client *registry.Client, imageRef lane.ImageRef) (lane.DigestRef, error) {
+func resolveDigest(ctx context.Context, client *registry.Client, imageRef spec.ImageRef) (lane.DigestRef, error) {
 	// Image ref already contains @sha256: - extract the digest.
 	s := string(imageRef)
 	for i, c := range s {
 		if c == '@' {
-			digest := lane.Digest(s[i+1:])
+			digest := spec.Digest(s[i+1:])
 			return lane.ParseDigest(digest)
 		}
 	}

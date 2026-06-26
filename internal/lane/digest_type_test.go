@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/spec"
 )
 
 func TestParseDigest_Valid(t *testing.T) {
@@ -31,7 +32,7 @@ func TestParseDigest_Valid(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			wire := lane.Digest(tt.in)
+			wire := spec.Digest(tt.in)
 			d, err := lane.ParseDigest(wire)
 			if err != nil {
 				t.Fatalf("ParseDigest(%q) returned error: %v", tt.in, err)
@@ -103,7 +104,7 @@ func TestParseDigest_Invalid(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			wire := lane.Digest(tt.in)
+			wire := spec.Digest(tt.in)
 			_, err := lane.ParseDigest(wire)
 			if err == nil {
 				t.Fatalf("ParseDigest(%q) succeeded, want error containing %q",

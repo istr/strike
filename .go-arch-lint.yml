@@ -41,6 +41,7 @@ components:
       - internal/egress
       - internal/probe
       - internal/schema
+      - internal/spec
   transport:
     in: internal/transport
   services:

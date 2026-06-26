@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/spec"
 )
 
 // fakeIDToken builds an unsigned JWT whose payload carries the given email
@@ -37,7 +38,7 @@ func TestSignStatementsRejectsMismatchedTokenIdentity(t *testing.T) {
 			LaneDigest: "",
 			Target:     lane.DeployTarget{ID: "prod-1", Type: "registry", Description: "production"},
 			Artifacts: map[string]ArtifactRecord{
-				"b-image": {Digest: lane.Digest("sha256:" + strings.Repeat("b", 64))},
+				"b-image": {Digest: spec.Digest("sha256:" + strings.Repeat("b", 64))},
 			},
 			Peers: map[string][]lane.Peer{},
 		},

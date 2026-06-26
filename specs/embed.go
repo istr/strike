@@ -11,5 +11,5 @@ import "embed"
 // internal/schema presents them as a CUE module tree and loads each package
 // natively via cue/load.
 //
-//go:embed lane attest crossval trustlayers
+//go:embed lane attest crossval trustlayers spec
 var FS embed.FS

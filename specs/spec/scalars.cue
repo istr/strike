@@ -1,6 +1,6 @@
 // Base scalar types -- shared, composable leaf constraints (ADR-047).
 
-package lane
+package spec
 
 // Path is the shared canonicalization base: no double slashes, no "." or
 // ".." segments, no trailing slash. Not used directly on fields; use

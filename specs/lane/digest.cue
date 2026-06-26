@@ -15,6 +15,8 @@
 
 package lane
 
+import "github.com/istr/strike/specs/spec"
+
 // DigestRef is a content-addressed digest with explicit algorithm and hex
 // fields. The structured form lets internal code build and inspect a digest
 // without re-parsing the wire string, and ban or require specific hash functions
@@ -22,6 +24,6 @@ package lane
 // single-sourced (scalars.cue).
 #DigestRef: {
 	@go(DigestRef)
-	algorithm: string  @go(Algorithm)
-	hex:       #Sha256 @go(Hex)
+	algorithm: string       @go(Algorithm)
+	hex:       spec.#Sha256 @go(Hex)
 }

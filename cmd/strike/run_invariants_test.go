@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/spec"
 )
 
 // --------------------------------------------------------------------------.
@@ -18,17 +19,17 @@ func TestBuild_RejectsNestedInputMounts(t *testing.T) {
 		Registry: "localhost:5555/test",
 		Steps: []lane.Step{
 			{
-				ID: "src", Image: lane.Ptr(lane.ImageRef("img@sha256:" + strings.Repeat("a", 64))),
+				ID: "src", Image: lane.Ptr(spec.ImageRef("img@sha256:" + strings.Repeat("a", 64))),
 				Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.FileOutput{{ID: "tree", Type: "directory", Path: lane.Ptr(lane.RelPath("tree"))}},
+				Outputs: []lane.FileOutput{{ID: "tree", Type: "directory", Path: lane.Ptr(spec.RelPath("tree"))}},
 			},
 			{
-				ID: "deps", Image: lane.Ptr(lane.ImageRef("img@sha256:" + strings.Repeat("b", 64))),
+				ID: "deps", Image: lane.Ptr(spec.ImageRef("img@sha256:" + strings.Repeat("b", 64))),
 				Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.FileOutput{{ID: "modules", Type: "directory", Path: lane.Ptr(lane.RelPath("modules"))}},
+				Outputs: []lane.FileOutput{{ID: "modules", Type: "directory", Path: lane.Ptr(spec.RelPath("modules"))}},
 			},
 			{
-				ID: "build", Image: lane.Ptr(lane.ImageRef("img@sha256:" + strings.Repeat("c", 64))),
+				ID: "build", Image: lane.Ptr(spec.ImageRef("img@sha256:" + strings.Repeat("c", 64))),
 				Args: []string{}, Env: map[string]string{},
 				Inputs: []lane.InputRef{
 					{From: lane.OutputRef{Step: "src", Output: "tree"}, Mount: "/work"},
@@ -50,9 +51,9 @@ func TestBuild_RejectsProvenancePathOutsideOutputs(t *testing.T) {
 	p := &lane.Lane{
 		Steps: []lane.Step{
 			{
-				ID: "src", Image: lane.Ptr(lane.ImageRef("img@sha256:" + strings.Repeat("a", 64))),
+				ID: "src", Image: lane.Ptr(spec.ImageRef("img@sha256:" + strings.Repeat("a", 64))),
 				Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.FileOutput{{ID: "tree", Type: "directory", Path: lane.Ptr(lane.RelPath("tree"))}},
+				Outputs: []lane.FileOutput{{ID: "tree", Type: "directory", Path: lane.Ptr(spec.RelPath("tree"))}},
 				Provenance: &lane.ProvenanceSpec{
 					Type: "git",
 					Path: "../escape.json",

@@ -15,7 +15,7 @@ import (
 	"strings"
 
 	"github.com/istr/strike/internal/closer"
-	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/spec"
 )
 
 type podmanEngine struct {
@@ -318,7 +318,7 @@ func (e *podmanEngine) ImageInspect(ctx context.Context, ref string) (*ImageInfo
 	}
 	return &ImageInfo{
 		ID:          raw.ID,
-		Digest:      lane.Digest(raw.Digest),
+		Digest:      spec.Digest(raw.Digest),
 		RepoDigests: raw.RepoDigests,
 		Annotations: raw.Annotations,
 		Size:        raw.Size,

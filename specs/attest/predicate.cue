@@ -20,7 +20,10 @@
 
 package attest
 
-import "github.com/istr/strike/specs/lane"
+import (
+	"github.com/istr/strike/specs/lane"
+	"github.com/istr/strike/specs/spec"
+)
 
 // ---------------------------------------------------------------------------
 // in-toto attestation framework primitives (in-toto Statement v1)
@@ -32,9 +35,9 @@ import "github.com/istr/strike/specs/lane"
 // carry sha256; git resolved-dependencies carry gitCommit (40-hex SHA-1 or
 // 64-hex SHA-256, matching the source-provenance commit width).
 #DigestSet: {
-	sha256?:    lane.#Sha256
+	sha256?:    spec.#Sha256
 	sha512?:    =~"^[a-f0-9]{128}$"
-	gitCommit?: lane.#GitCommit
+	gitCommit?: spec.#GitCommit
 }
 
 // #ResourceDescriptor is the in-toto ResourceDescriptor. strike emits only the
@@ -87,11 +90,11 @@ import "github.com/istr/strike/specs/lane"
 // identities the control plane observed and validated against the declared
 // anchors -- all control-plane-established, sound without engine trust.
 #StrikeExternalParameters: {
-	laneId:     lane.#Identifier
-	laneDigest: lane.#Digest | ""
+	laneId:     spec.#Identifier
+	laneDigest: spec.#Digest | ""
 	target:     lane.#DeployTarget
 	oidc:       #ProvenanceOIDC
-	peers: [ID=lane.#Identifier]: [...lane.#Peer]
+	peers: [ID=spec.#Identifier]: [...lane.#Peer]
 	observedPeers?: [Endpoint=string]: #ObservedPeer
 	resolver?: #ResolverRecord
 	engine?:   lane.#EngineConnection
@@ -148,7 +151,7 @@ import "github.com/istr/strike/specs/lane"
 // (Fork C). The engine's self-report (engineMetadata) is NOT here either -- it
 // carries no trust claim and lives in the informational statement.
 #EngineContextPredicate: {
-	peerAttribution?: [ID=lane.#Identifier]: [...string]
+	peerAttribution?: [ID=spec.#Identifier]: [...string]
 }
 
 // ---------------------------------------------------------------------------
@@ -178,8 +181,8 @@ import "github.com/istr/strike/specs/lane"
 	// the pre/post-deploy state captures. The bytes were produced by the
 	// (untrusted) capture container and engine-relayed; CP's hash transports
 	// them, it does not lift them out of the container-asserted class.
-	preStateDigest:  lane.#Digest
-	postStateDigest: lane.#Digest
+	preStateDigest:  spec.#Digest
+	postStateDigest: spec.#Digest
 
 	// provenance collects validated provenance records from transitive
 	// predecessor steps; each is container-written at step exit and

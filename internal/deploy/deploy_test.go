@@ -38,6 +38,7 @@ import (
 	"github.com/istr/strike/internal/deploy"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/mediator"
+	"github.com/istr/strike/internal/spec"
 	"github.com/istr/strike/internal/testutil"
 	"github.com/istr/strike/internal/transport"
 )
@@ -1268,7 +1269,7 @@ func TestDeployerExecute_ObservedPeersPopulated(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				ID:      "build",
-				Image:   lane.Ptr(lane.ImageRef("alpine:3.20")),
+				Image:   lane.Ptr(spec.ImageRef("alpine:3.20")),
 				Args:    []string{"echo", "ok"},
 				Env:     map[string]string{},
 				Inputs:  []lane.InputRef{},
@@ -1423,19 +1424,19 @@ func TestDeployerExecute_ObservedPeersConflictAborts(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				ID:      "step-a",
-				Image:   lane.Ptr(lane.ImageRef("alpine:3.20")),
+				Image:   lane.Ptr(spec.ImageRef("alpine:3.20")),
 				Args:    []string{"echo", "ok"},
 				Env:     map[string]string{},
 				Inputs:  []lane.InputRef{},
 				Secrets: []lane.SecretRef{},
 				Outputs: []lane.FileOutput{
-					{ID: "out", Type: "file", Path: lane.Ptr(lane.RelPath("a"))},
+					{ID: "out", Type: "file", Path: lane.Ptr(spec.RelPath("a"))},
 				},
 				Peers: []lane.Peer{peerA},
 			},
 			{
 				ID:      "step-b",
-				Image:   lane.Ptr(lane.ImageRef("alpine:3.20")),
+				Image:   lane.Ptr(spec.ImageRef("alpine:3.20")),
 				Args:    []string{"echo", "ok"},
 				Env:     map[string]string{},
 				Inputs:  []lane.InputRef{},

@@ -7,6 +7,8 @@
 
 package lane
 
+import "github.com/istr/strike/specs/spec"
+
 @go(lane) // generated go package name
 
 // ---------------------------------------------------------------------------
@@ -19,7 +21,7 @@ package lane
 	// Stable identifier assigned at authoring time. Used by external
 	// verifiers to pair attestations against the same lane across runs.
 	// Distinct from `name`, which is human-display.
-	id:       #Identifier                                                    @go(ID)
+	id:       spec.#Identifier                                               @go(ID)
 	registry: =~"^[a-z0-9]([a-z0-9.-]*[a-z0-9])?(:[0-9]+)?(/[a-z0-9._-]+)*$" @go(Registry)
 	// NOTE: the exported JSON Schema for this map is open (patternProperties
 	// only), unlike artifacts (additionalProperties:false). strike validates
@@ -27,7 +29,7 @@ package lane
 	// external verifier consuming only the exported schema would not. Accepted
 	// until the secrets contract is revisited separately (YAGNI).
 	secrets: {
-		[ID=#Identifier]: #SecretSource
+		[ID=spec.#Identifier]: #SecretSource
 	} @go(Secrets,type=map[string]SecretSource)
 	steps: [#Step, ...#Step] @go(Steps)
 	resolver: #DNSResolver @go(Resolver,type="github.com/istr/strike/internal/transport".DNSResolver)
@@ -45,7 +47,7 @@ package lane
 
 #LaneDefaults: {
 	@go(LaneDefaults)
-	timeout: *"10m" | #Duration @go(Timeout)
+	timeout: *"10m" | spec.#Duration @go(Timeout)
 }
 
 // OIDCConfig declares the lane-wide keyless signing identity (ADR-040 D5).
@@ -88,7 +90,7 @@ package lane
 #Keyless: close({
 	endpoints:     #KeylessEndpoints   @go(Endpoints)
 	trustRoot?:    #TrustedRootReplica @go(TrustRoot,optional=nillable)
-	trustRootRef?: #ImageRef           @go(TrustRootRef)
+	trustRootRef?: spec.#ImageRef      @go(TrustRootRef)
 })
 
 // SBOMSigner is a trusted signer of a base-image SBOM (ADR-040 D1, option ii).
@@ -114,9 +116,9 @@ package lane
 
 #Step: {
 	@go(Step)
-	id:             #Identifier @go(ID)
-	image?:         #ImageRef   @go(Image,optional=nillable)
-	imageFromStep?: #Identifier @go(ImageFromStep,optional=nillable)
+	id:             spec.#Identifier @go(ID)
+	image?:         spec.#ImageRef   @go(Image,optional=nillable)
+	imageFromStep?: spec.#Identifier @go(ImageFromStep,optional=nillable)
 	args: [...string] @go(Args)
 	env: {
 		[string]: string @go(Env)
@@ -125,7 +127,7 @@ package lane
 	output?: "image" @go(Output)
 	outputs?: [...#FileOutput] @go(Outputs)
 	secrets: [...#SecretRef] @go(Secrets)
-	workdir?: #AbsPath @go(Workdir,optional=nillable)
+	workdir?: spec.#AbsPath @go(Workdir,optional=nillable)
 	peers?: [...#Peer] @go(Peers)
 	// forceRun: when true, strike bypasses the cache check
 	// and runs the step unconditionally. The explicit escape
@@ -134,7 +136,7 @@ package lane
 	// `latest` tag. Strike does not auto-detect
 	// non-determinism; lane authors declare it.
 	forceRun?:   *false | bool   @go(ForceRun)
-	timeout?:    #Duration       @go(Timeout,optional=nillable)
+	timeout?:    spec.#Duration  @go(Timeout,optional=nillable)
 	pack?:       #PackSpec       @go(Pack,optional=nillable)
 	deploy?:     #DeploySpec     @go(Deploy,optional=nillable)
 	provenance?: #ProvenanceSpec @go(Provenance,optional=nillable)
@@ -171,7 +173,7 @@ package lane
 // deploy.artifacts.from disjunction.
 #StepImageRef: {
 	@go(StepImageRef)
-	step: #Identifier @go(Step)
+	step: spec.#Identifier @go(Step)
 }
 
 // ---------------------------------------------------------------------------
@@ -181,17 +183,17 @@ package lane
 // A reference to a named output of a step earlier in this lane.
 #OutputRef: {
 	@go(OutputRef)
-	step:   #Identifier @go(Step)
-	output: #Identifier @go(Output)
+	step:   spec.#Identifier @go(Step)
+	output: spec.#Identifier @go(Output)
 }
 
 #InputRef: {
 	@go(InputRef)
 
-	from:     #OutputRef @go(From)
-	subpath?: #RelPath   @go(Subpath,optional=nillable) // path within producer output; nil mounts whole output
-	mount:    #AbsPath   @go(Mount)
-	digest?:  #Digest    @go(Digest,optional=nillable)
+	from:     #OutputRef    @go(From)
+	subpath?: spec.#RelPath @go(Subpath,optional=nillable) // path within producer output; nil mounts whole output
+	mount:    spec.#AbsPath @go(Mount)
+	digest?:  spec.#Digest  @go(Digest,optional=nillable)
 }
 
 // ---------------------------------------------------------------------------
@@ -202,13 +204,13 @@ package lane
 // by inputs.from, pack.files.from, and deploy.artifacts.from as {step, output}.
 #FileOutput: {
 	@go(FileOutput)
-	id:   #Identifier       @go(ID)
-	type: #FileArtifactType @go(Type)
+	id:   spec.#Identifier       @go(ID)
+	type: spec.#FileArtifactType @go(Type)
 	// path is relative to the step workdir (the single writable volume).
 	// Absent means the whole workdir is the artifact; a value selects a
 	// subpath within it. An absolute path is a type error: outputs are
 	// projections of the workdir, never of the read-only base image.
-	path?: #RelPath @go(Path,optional=nillable)
+	path?: spec.#RelPath @go(Path,optional=nillable)
 }
 
 // ---------------------------------------------------------------------------
@@ -229,7 +231,7 @@ package lane
 
 #PackSpec: {
 	@go(PackSpec)
-	base: #ImageRef @go(Base)
+	base: spec.#ImageRef @go(Base)
 	files: [...#PackFile] @go(Files)
 	packages?: [...#Package] @go(Packages)
 	configFiles?: {
@@ -245,11 +247,11 @@ package lane
 
 #PackFile: {
 	@go(PackFile)
-	from: #OutputRef   @go(From)
-	dest: #AbsPath     @go(Dest)
-	mode: *0o755 | int @go(Mode)
-	uid?: int          @go(UID,optional=nillable)
-	gid?: int          @go(GID,optional=nillable)
+	from: #OutputRef    @go(From)
+	dest: spec.#AbsPath @go(Dest)
+	mode: *0o755 | int  @go(Mode)
+	uid?: int           @go(UID,optional=nillable)
+	gid?: int           @go(GID,optional=nillable)
 }
 
 #Package: {
@@ -273,8 +275,8 @@ package lane
 	}
 	entrypoint?: [...string] @go(Entrypoint)
 	cmd?: [...string] @go(Cmd)
-	workdir?: #AbsPath @go(Workdir,optional=nillable)
-	user?:    string   @go(User,optional=nillable)
+	workdir?: spec.#AbsPath @go(Workdir,optional=nillable)
+	user?:    string        @go(User,optional=nillable)
 	labels?: {
 		[string]: string @go(Labels)
 	}
@@ -288,12 +290,12 @@ package lane
 	@go(DeploySpec)
 	method: #DeployMethod @go(Method)
 	artifacts: {
-		[ID=#Identifier]: #ArtifactRef
+		[ID=spec.#Identifier]: #ArtifactRef
 	} @go(Artifacts,type=map[string]ArtifactRef)
 	target:    #DeployTarget   @go(Target)
 	recording: #StateRecording @go(Recording)
 	source?: {
-		gitImage: #ImageRef
+		gitImage: spec.#ImageRef
 	} @go(Source,optional=nillable)
 }
 
@@ -302,7 +304,7 @@ package lane
 #DeployKubernetes: {
 	@go(DeployKubernetes)
 	type:      "kubernetes"                     @go(Type)
-	image:     #ImageRef                        @go(Image)
+	image:     spec.#ImageRef                   @go(Image)
 	namespace: string                           @go(Namespace)
 	strategy:  *"apply" | "replace" | "rollout" @go(Strategy)
 	// kubeconfig is a host-side path to a kubeconfig file, resolved by
@@ -324,8 +326,8 @@ package lane
 
 #DeployCustom: {
 	@go(DeployCustom)
-	type:  "custom"  @go(Type)
-	image: #ImageRef @go(Image)
+	type:  "custom"       @go(Type)
+	image: spec.#ImageRef @go(Image)
 	args: [...string] @go(Args)
 	env: {
 		[string]: string @go(Env)
@@ -375,8 +377,8 @@ package lane
 
 #Capture: {
 	@go(Capture)
-	id:    #Identifier @go(ID)
-	image: #ImageRef   @go(Image)
+	id:    spec.#Identifier @go(ID)
+	image: spec.#ImageRef   @go(Image)
 	command: [...string] @go(Command)
 	peers?: [...#Peer] @go(Peers)
 	mounts?: [...#CaptureMount] @go(Mounts)
@@ -388,8 +390,8 @@ package lane
 	// source is an engine mount source -- the produced image or named
 	// storage the engine resolves -- not a host path. target is the
 	// absolute mount point inside the capture container.
-	source: string   @go(Source)
-	target: #AbsPath @go(Target)
+	source: string        @go(Source)
+	target: spec.#AbsPath @go(Target)
 }
 
 // ---------------------------------------------------------------------------
@@ -406,7 +408,7 @@ package lane
 	@go(ProvenanceSpec)
 	type: "git" | "tarball" | "oci" | "url" @go(Type)
 	// path is the provenance file, relative to the step workdir.
-	path: #RelPath @go(Path)
+	path: spec.#RelPath @go(Path)
 }
 
 // ---------------------------------------------------------------------------

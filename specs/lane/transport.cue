@@ -7,6 +7,8 @@
 // Directional dependency: internal/lane imports internal/transport.
 package lane
 
+import "github.com/istr/strike/specs/spec"
+
 // ----------------------------------------------------------------
 // Host constraint: hostname or IPv4 literal, optionally with port.
 // Lowercase ASCII; punycode required for internationalized domains.
@@ -33,7 +35,7 @@ package lane
 #FingerprintTrust: {
 	@go(-)
 	type:        "certFingerprint"
-	fingerprint: #Digest
+	fingerprint: spec.#Digest
 }
 
 #CABundleTrust: {
@@ -42,7 +44,7 @@ package lane
 	// path is a container-internal path. The executor mounts the lane-
 	// relative bundle file there in Phase 2; in Phase 1 the field is
 	// declaratory only.
-	path: #AbsPath
+	path: spec.#AbsPath
 }
 
 // ----------------------------------------------------------------

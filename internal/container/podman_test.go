@@ -14,7 +14,7 @@ import (
 	"testing"
 
 	"github.com/istr/strike/internal/container"
-	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/spec"
 )
 
 func TestPing(t *testing.T) {
@@ -103,7 +103,7 @@ func TestImageInspect(t *testing.T) {
 	tests := []struct {
 		response   map[string]any
 		name       string
-		wantDigest lane.Digest
+		wantDigest spec.Digest
 		statusCode int
 		wantErr    bool
 	}{

@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/istr/strike/internal/clock"
+	"github.com/istr/strike/internal/spec"
 )
 
 // State tracks outputs and step results across lane execution.
@@ -54,7 +55,7 @@ func (s *State) RecordProvenance(stepID string, rec ProvenanceRecord) error {
 // output ref (OutputRef.Ref, "step_name.output_name"). The handle carries the
 // digest-pinned image reference produced by the normalize round-trip (ADR-046).
 func (s *State) Register(stepID, outputID string, h OutputHandle) error {
-	key := OutputRef{Step: Identifier(stepID), Output: Identifier(outputID)}.Ref()
+	key := OutputRef{Step: spec.Identifier(stepID), Output: spec.Identifier(outputID)}.Ref()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, exists := s.Outputs[key]; exists {
