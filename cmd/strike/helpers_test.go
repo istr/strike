@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/istr/strike/internal/container"
+	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/registry"
-	"github.com/istr/strike/internal/spec"
 	"github.com/istr/strike/internal/testutil"
 )
 
@@ -70,7 +70,7 @@ func TestWriteToOutputDir_BadDir(t *testing.T) {
 
 func TestResolveDigest_WithAtSign(t *testing.T) {
 	// When ref contains @, the digest is extracted directly.
-	digest, err := resolveDigest(context.Background(), nil, spec.ImageRef("docker.io/lib/img@sha256:abc1230000000000000000000000000000000000000000000000000000000000"))
+	digest, err := resolveDigest(context.Background(), nil, primitive.ImageRef("docker.io/lib/img@sha256:abc1230000000000000000000000000000000000000000000000000000000000"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +85,7 @@ func TestResolveDigest_ViaInspect(t *testing.T) {
 	}
 	client := &registry.Client{Engine: eng}
 
-	digest, err := resolveDigest(context.Background(), client, spec.ImageRef("myimage:latest"))
+	digest, err := resolveDigest(context.Background(), client, primitive.ImageRef("myimage:latest"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +100,7 @@ func TestResolveDigest_InspectError(t *testing.T) {
 	}
 	client := &registry.Client{Engine: eng}
 
-	_, err := resolveDigest(context.Background(), client, spec.ImageRef("myimage:latest"))
+	_, err := resolveDigest(context.Background(), client, primitive.ImageRef("myimage:latest"))
 	if err == nil {
 		t.Fatal("expected error when inspect returns no digest")
 	}

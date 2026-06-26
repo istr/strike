@@ -23,8 +23,8 @@ import (
 	"github.com/istr/strike/internal/front"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/mediator"
+	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/registry"
-	"github.com/istr/strike/internal/spec"
 	"github.com/istr/strike/internal/transport"
 )
 
@@ -77,12 +77,12 @@ func (rc *runContext) runStep(stepID string) error {
 	safeName := sanitizeForLog(stepID)
 
 	// Timeout resolution: explicit step value > lane-wide default > hard floor.
-	var rawTimeout *spec.Duration
+	var rawTimeout *primitive.Duration
 	switch {
 	case step.Timeout != nil:
 		rawTimeout = step.Timeout
 	case rc.lane.Defaults != nil:
-		d := spec.Duration(rc.lane.Defaults.Timeout)
+		d := primitive.Duration(rc.lane.Defaults.Timeout)
 		rawTimeout = &d
 	}
 	timeout, err := lane.ParseDuration(rawTimeout, 10*clock.Minute)
@@ -128,7 +128,7 @@ func (rc *runContext) executeDeploy(ctx context.Context, step *lane.Step, stepID
 
 	artifactRefs := make(map[string]string)
 	for _, e := range rc.dag.DeployEdges[stepID] {
-		var out spec.Identifier
+		var out primitive.Identifier
 		if !e.Image {
 			out = e.FromOutput.ID
 		}
@@ -203,7 +203,7 @@ func (rc *runContext) resolveImageDigest(ctx context.Context, step *lane.Step, s
 		// The image output is id-less; it is registered and resolved by step via
 		// the empty-output key, collision-free because a step that declares an
 		// image output declares no other output (ADR-046).
-		ref := lane.OutputRef{Step: spec.Identifier(fromStep), Output: ""}.Ref()
+		ref := lane.OutputRef{Step: primitive.Identifier(fromStep), Output: ""}.Ref()
 		handle, err := rc.laneState.Resolve(ref)
 		if err != nil {
 			return lane.DigestRef{}, fmt.Errorf("%s: imageFromStep %s: %w",
@@ -402,7 +402,7 @@ func (rc *runContext) resolvePackInputPaths(ctx context.Context, step *lane.Step
 		fromStep := string(e.FromStep.ID)
 		fromOutput := e.FromOutput.ID
 
-		handle, artErr := rc.laneState.Resolve(lane.OutputRef{Step: spec.Identifier(fromStep), Output: fromOutput}.Ref())
+		handle, artErr := rc.laneState.Resolve(lane.OutputRef{Step: primitive.Identifier(fromStep), Output: fromOutput}.Ref())
 		if artErr != nil {
 			return nil, fmt.Errorf("%s: pack input %s.%s: %w", safeName, fromStep, fromOutput, artErr)
 		}

@@ -8,8 +8,8 @@ import (
 	"testing"
 
 	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/registry"
-	"github.com/istr/strike/internal/spec"
 	"github.com/istr/strike/internal/verify"
 )
 
@@ -48,8 +48,8 @@ func loadBaseSBOMFixture(t *testing.T) (*verify.TrustedMaterial, baseSBOMMeta, [
 func TestVerifyOneBaseSBOM_HappyPath(t *testing.T) {
 	tm, m, bundle := loadBaseSBOMFixture(t)
 	d := &Deployer{BaseSBOMSigners: []lane.SBOMSigner{{Issuer: m.Issuer, Identity: m.Identity}}}
-	base := spec.ImageRef("localhost/strike-base@" + m.SubjectDigest)
-	baseHex := spec.Sha256(strings.TrimPrefix(m.SubjectDigest, "sha256:"))
+	base := primitive.ImageRef("localhost/strike-base@" + m.SubjectDigest)
+	baseHex := primitive.Sha256(strings.TrimPrefix(m.SubjectDigest, "sha256:"))
 	refDigest := "sha256:" + strings.Repeat("b", 64)
 
 	dep, recorded, err := d.verifyOneBaseSBOM(tm, base, baseHex, registry.BaseSBOMReferrer{
@@ -66,7 +66,7 @@ func TestVerifyOneBaseSBOM_HappyPath(t *testing.T) {
 	if dep.MediaType != m.CycloneDXPredicateType {
 		t.Errorf("MediaType = %q, want %q", dep.MediaType, m.CycloneDXPredicateType)
 	}
-	if dep.Digest == nil || dep.Digest.SHA256 != spec.Sha256(strings.TrimPrefix(refDigest, "sha256:")) {
+	if dep.Digest == nil || dep.Digest.SHA256 != primitive.Sha256(strings.TrimPrefix(refDigest, "sha256:")) {
 		t.Errorf("descriptor digest = %v, want referrer digest", dep.Digest)
 	}
 	if dep.URI != string(base) {
@@ -77,8 +77,8 @@ func TestVerifyOneBaseSBOM_HappyPath(t *testing.T) {
 func TestVerifyOneBaseSBOM_SubjectMismatchFails(t *testing.T) {
 	tm, m, bundle := loadBaseSBOMFixture(t)
 	d := &Deployer{BaseSBOMSigners: []lane.SBOMSigner{{Issuer: m.Issuer, Identity: m.Identity}}}
-	base := spec.ImageRef("localhost/strike-base@sha256:" + strings.Repeat("c", 64))
-	wrongHex := spec.Sha256(strings.Repeat("c", 64))
+	base := primitive.ImageRef("localhost/strike-base@sha256:" + strings.Repeat("c", 64))
+	wrongHex := primitive.Sha256(strings.Repeat("c", 64))
 
 	_, recorded, err := d.verifyOneBaseSBOM(tm, base, wrongHex, registry.BaseSBOMReferrer{
 		Digest:        "sha256:" + strings.Repeat("b", 64),
@@ -96,8 +96,8 @@ func TestVerifyOneBaseSBOM_SubjectMismatchFails(t *testing.T) {
 func TestVerifyOneBaseSBOM_WrongSignerFails(t *testing.T) {
 	tm, m, bundle := loadBaseSBOMFixture(t)
 	d := &Deployer{BaseSBOMSigners: []lane.SBOMSigner{{Issuer: "https://wrong.example", Identity: "wrong@example"}}}
-	base := spec.ImageRef("localhost/strike-base@" + m.SubjectDigest)
-	baseHex := spec.Sha256(strings.TrimPrefix(m.SubjectDigest, "sha256:"))
+	base := primitive.ImageRef("localhost/strike-base@" + m.SubjectDigest)
+	baseHex := primitive.Sha256(strings.TrimPrefix(m.SubjectDigest, "sha256:"))
 
 	_, recorded, err := d.verifyOneBaseSBOM(tm, base, baseHex, registry.BaseSBOMReferrer{
 		Digest:        "sha256:" + strings.Repeat("b", 64),

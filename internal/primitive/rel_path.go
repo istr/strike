@@ -1,4 +1,4 @@
-package spec
+package primitive
 
 import (
 	"fmt"

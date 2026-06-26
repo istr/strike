@@ -3,7 +3,7 @@
 
 package lane
 
-import "github.com/istr/strike/specs/spec"
+import "github.com/istr/strike/contract/primitive"
 
 #DeployTarget: {
 	@go(DeployTarget)
@@ -11,9 +11,9 @@ import "github.com/istr/strike/specs/spec"
 	// Stable identifier assigned at authoring time. External verifiers use
 	// this to pair pre/post-state digests across consecutive deploys
 	// to the same target.
-	id:          spec.#Identifier @go(ID)
-	type:        string           @go(Type)
-	description: string           @go(Description)
-	url?:        string           @go(URL,optional=nillable)
-	namespace?:  string           @go(Namespace,optional=nillable)
+	id:          primitive.#Identifier @go(ID)
+	type:        string                @go(Type)
+	description: string                @go(Description)
+	url?:        string                @go(URL,optional=nillable)
+	namespace?:  string                @go(Namespace,optional=nillable)
 }

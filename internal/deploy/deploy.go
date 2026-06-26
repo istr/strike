@@ -27,9 +27,9 @@ import (
 	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/mediator"
+	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/probe"
 	"github.com/istr/strike/internal/registry"
-	"github.com/istr/strike/internal/spec"
 	"github.com/istr/strike/internal/transport"
 )
 
@@ -55,7 +55,7 @@ type Sealed struct {
 	ObservedPeers map[string]ObservedPeer    `json:"observedPeers,omitempty"`
 	Target        lane.DeployTarget          `json:"target"`
 	LaneID        string                     `json:"laneId"`
-	LaneDigest    spec.Digest                `json:"laneDigest"`
+	LaneDigest    primitive.Digest           `json:"laneDigest"`
 }
 
 // ---------------------------------------------------------------------------
@@ -175,21 +175,21 @@ type EngineDependent struct {
 type Informational struct {
 	Timestamp       clock.Time              `json:"timestamp,omitempty"`
 	EngineMetadata  *EngineMetadata         `json:"engineMetadata,omitempty"`
-	PreStateDigest  spec.Digest             `json:"preStateDigest"`
-	PostStateDigest spec.Digest             `json:"postStateDigest"`
+	PreStateDigest  primitive.Digest        `json:"preStateDigest"`
+	PostStateDigest primitive.Digest        `json:"postStateDigest"`
 	Provenance      []lane.ProvenanceRecord `json:"provenance"`
 }
 
 // ArtifactRecord is the provenance record for one artifact.
 type ArtifactRecord struct {
-	SBOM   *SBOMRecord `json:"sbom,omitempty"`
-	Digest spec.Digest `json:"digest"`
+	SBOM   *SBOMRecord      `json:"sbom,omitempty"`
+	Digest primitive.Digest `json:"digest"`
 }
 
 // SBOMRecord holds SBOM metadata for an artifact.
 type SBOMRecord struct {
-	Format string      `json:"format"`
-	Digest spec.Digest `json:"digest"`
+	Format string           `json:"format"`
+	Digest primitive.Digest `json:"digest"`
 }
 
 // EngineMetadata -- engine self-reports about itself. Lives under
@@ -307,7 +307,7 @@ type Deployer struct {
 	StepPorts       map[string]capsule.HostPorts // unit name -> host ports
 	NetworkRecords  map[string]capsule.Records   // run/build step records, keyed by step name (injected by cmd/strike)
 	LaneID          string
-	LaneDigest      spec.Digest                                                                                 // prefixed "sha256:<hex>" over the lane file bytes; sealed as lane_digest
+	LaneDigest      primitive.Digest                                                                            // prefixed "sha256:<hex>" over the lane file bytes; sealed as lane_digest
 	StepID          string                                                                                      // deploy step name; method-container port key and capture-key prefix
 	CAVolume        string                                                                                      // lane-wide CA volume name; mounted r/o at /etc/ssl/certs
 	Keyless         lane.Keyless                                                                                // lane-declared keyless config (ADR-040 D2, ADR-041); .Endpoints dials Fulcio, Rekor v2, TSA; .TrustRoot/.TrustRootRef carry the verify anchor
@@ -683,7 +683,7 @@ func (d *Deployer) recordAttestation(att *Attestation, step *lane.Step, state *l
 	}
 	attHex := hex.EncodeToString(sha256Sum(attJSON))
 
-	attDigest := lane.DigestRef{Algorithm: "sha256", Hex: spec.Sha256(attHex)}
+	attDigest := lane.DigestRef{Algorithm: "sha256", Hex: primitive.Sha256(attHex)}
 	state.RecordStep(lane.StepResult{
 		Name:      string(step.ID),
 		StepType:  "deploy",

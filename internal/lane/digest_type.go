@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/istr/strike/internal/spec"
+	"github.com/istr/strike/internal/primitive"
 )
 
 // Digest invariants -- mirrored exactly by the CUE wire form (#Digest:
@@ -19,7 +19,7 @@ const (
 // ParseDigest parses a wire digest of the form "sha256:<64 lowercase hex>" into
 // the structured internal DigestRef. The empty string returns the zero
 // DigestRef{} without error, so optional digest fields round-trip absence.
-func ParseDigest(d spec.Digest) (DigestRef, error) {
+func ParseDigest(d primitive.Digest) (DigestRef, error) {
 	s := string(d)
 	if s == "" {
 		return DigestRef{}, nil
@@ -47,12 +47,12 @@ func ParseDigest(d spec.Digest) (DigestRef, error) {
 				s, j)
 		}
 	}
-	return DigestRef{Algorithm: algo, Hex: spec.Sha256(hex)}, nil
+	return DigestRef{Algorithm: algo, Hex: primitive.Sha256(hex)}, nil
 }
 
 // MustParseDigest parses a wire digest, panicking on invalid input. Use only for
 // known-good values and test fixtures.
-func MustParseDigest(d spec.Digest) DigestRef {
+func MustParseDigest(d primitive.Digest) DigestRef {
 	r, err := ParseDigest(d)
 	if err != nil {
 		panic(err)
@@ -63,11 +63,11 @@ func MustParseDigest(d spec.Digest) DigestRef {
 // Wire returns the canonical "algorithm:hex" wire Digest for d. The zero
 // DigestRef returns the empty Digest, so optional digest fields round-trip
 // absence.
-func (d DigestRef) Wire() spec.Digest {
+func (d DigestRef) Wire() primitive.Digest {
 	if d.Algorithm == "" {
 		return ""
 	}
-	return spec.Digest(d.Algorithm + ":" + string(d.Hex))
+	return primitive.Digest(d.Algorithm + ":" + string(d.Hex))
 }
 
 // String returns the canonical "algorithm:hex" representation of d.

@@ -13,7 +13,7 @@
 
 package crossval
 
-import "github.com/istr/strike/specs/spec"
+import "github.com/istr/strike/contract/primitive"
 
 // Shared envelope for all cross-validation test vectors.
 #Vector: {
@@ -37,8 +37,8 @@ import "github.com/istr/strike/specs/spec"
 		}
 	}
 	expected: {
-		manifest_digest: spec.#Digest
-		config_digest:   spec.#Digest
+		manifest_digest: primitive.#Digest
+		config_digest:   primitive.#Digest
 		layer_count:     int & >=0
 	}
 }
@@ -50,12 +50,12 @@ import "github.com/istr/strike/specs/spec"
 			args: [...string]
 			env: [string]: string
 		}
-		image_digest: spec.#Digest
-		input_hashes: [string]:  spec.#Digest
-		source_hashes: [string]: spec.#Digest
+		image_digest: primitive.#Digest
+		input_hashes: [string]:  primitive.#Digest
+		source_hashes: [string]: primitive.#Digest
 	}
 	expected: {
-		hash: spec.#Digest
+		hash: primitive.#Digest
 	}
 }
 
@@ -82,7 +82,7 @@ import "github.com/istr/strike/specs/spec"
 		}]
 	}
 	expected: {
-		digest: spec.#Digest
+		digest: primitive.#Digest
 	}
 }
 

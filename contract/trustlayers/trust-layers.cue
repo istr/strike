@@ -1,4 +1,4 @@
-// specs/trustlayers/trust-layers.cue
+// contract/trustlayers/trust-layers.cue
 //
 // Trust-layer map -- the single source of truth for the V / E / informational
 // classification of every attested field (the soundness note's three-way split).
@@ -19,7 +19,7 @@
 // observation but never confers a layer) are stated in
 // ATTESTATION-SOUNDNESS-AND-THE-TRUST-BOUNDARY.md "Decision procedure".
 //
-// EXPORT. `make specs` exports this to specs/trust-layers.json for external
+// EXPORT. `make specs` exports this to contract/trust-layers.json for external
 // verifiers and policy engines (now including the layerOf rule table). It is DATA,
 // not a JSON Schema.
 //

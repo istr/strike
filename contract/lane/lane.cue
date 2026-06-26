@@ -7,7 +7,7 @@
 
 package lane
 
-import "github.com/istr/strike/specs/spec"
+import "github.com/istr/strike/contract/primitive"
 
 @go(lane) // generated go package name
 
@@ -21,7 +21,7 @@ import "github.com/istr/strike/specs/spec"
 	// Stable identifier assigned at authoring time. Used by external
 	// verifiers to pair attestations against the same lane across runs.
 	// Distinct from `name`, which is human-display.
-	id:       spec.#Identifier                                               @go(ID)
+	id:       primitive.#Identifier                                          @go(ID)
 	registry: =~"^[a-z0-9]([a-z0-9.-]*[a-z0-9])?(:[0-9]+)?(/[a-z0-9._-]+)*$" @go(Registry)
 	// NOTE: the exported JSON Schema for this map is open (patternProperties
 	// only), unlike artifacts (additionalProperties:false). strike validates
@@ -29,7 +29,7 @@ import "github.com/istr/strike/specs/spec"
 	// external verifier consuming only the exported schema would not. Accepted
 	// until the secrets contract is revisited separately (YAGNI).
 	secrets: {
-		[ID=spec.#Identifier]: #SecretSource
+		[ID=primitive.#Identifier]: #SecretSource
 	} @go(Secrets,type=map[string]SecretSource)
 	steps: [#Step, ...#Step] @go(Steps)
 	resolver: #DNSResolver @go(Resolver,type="github.com/istr/strike/internal/transport".DNSResolver)
@@ -47,7 +47,7 @@ import "github.com/istr/strike/specs/spec"
 
 #LaneDefaults: {
 	@go(LaneDefaults)
-	timeout: *"10m" | spec.#Duration @go(Timeout)
+	timeout: *"10m" | primitive.#Duration @go(Timeout)
 }
 
 // OIDCConfig declares the lane-wide keyless signing identity (ADR-040 D5).
@@ -90,7 +90,7 @@ import "github.com/istr/strike/specs/spec"
 #Keyless: close({
 	endpoints:     #KeylessEndpoints   @go(Endpoints)
 	trustRoot?:    #TrustedRootReplica @go(TrustRoot,optional=nillable)
-	trustRootRef?: spec.#ImageRef      @go(TrustRootRef)
+	trustRootRef?: primitive.#ImageRef @go(TrustRootRef)
 })
 
 // SBOMSigner is a trusted signer of a base-image SBOM (ADR-040 D1, option ii).
@@ -116,9 +116,9 @@ import "github.com/istr/strike/specs/spec"
 
 #Step: {
 	@go(Step)
-	id:             spec.#Identifier @go(ID)
-	image?:         spec.#ImageRef   @go(Image,optional=nillable)
-	imageFromStep?: spec.#Identifier @go(ImageFromStep,optional=nillable)
+	id:             primitive.#Identifier @go(ID)
+	image?:         primitive.#ImageRef   @go(Image,optional=nillable)
+	imageFromStep?: primitive.#Identifier @go(ImageFromStep,optional=nillable)
 	args: [...string] @go(Args)
 	env: {
 		[string]: string @go(Env)
@@ -127,7 +127,7 @@ import "github.com/istr/strike/specs/spec"
 	output?: "image" @go(Output)
 	outputs?: [...#FileOutput] @go(Outputs)
 	secrets: [...#SecretRef] @go(Secrets)
-	workdir?: spec.#AbsPath @go(Workdir,optional=nillable)
+	workdir?: primitive.#AbsPath @go(Workdir,optional=nillable)
 	peers?: [...#Peer] @go(Peers)
 	// forceRun: when true, strike bypasses the cache check
 	// and runs the step unconditionally. The explicit escape
@@ -135,11 +135,11 @@ import "github.com/istr/strike/specs/spec"
 	// `git clone` from a moving branch or `npm install` of a
 	// `latest` tag. Strike does not auto-detect
 	// non-determinism; lane authors declare it.
-	forceRun?:   *false | bool   @go(ForceRun)
-	timeout?:    spec.#Duration  @go(Timeout,optional=nillable)
-	pack?:       #PackSpec       @go(Pack,optional=nillable)
-	deploy?:     #DeploySpec     @go(Deploy,optional=nillable)
-	provenance?: #ProvenanceSpec @go(Provenance,optional=nillable)
+	forceRun?:   *false | bool       @go(ForceRun)
+	timeout?:    primitive.#Duration @go(Timeout,optional=nillable)
+	pack?:       #PackSpec           @go(Pack,optional=nillable)
+	deploy?:     #DeploySpec         @go(Deploy,optional=nillable)
+	provenance?: #ProvenanceSpec     @go(Provenance,optional=nillable)
 	// constraint: exactly one of image, imageFrom, pack, or deploy -- validated in Go
 
 	// D2 (ADR-039): a deploy step is a DAG leaf and declares no output.
@@ -173,7 +173,7 @@ import "github.com/istr/strike/specs/spec"
 // deploy.artifacts.from disjunction.
 #StepImageRef: {
 	@go(StepImageRef)
-	step: spec.#Identifier @go(Step)
+	step: primitive.#Identifier @go(Step)
 }
 
 // ---------------------------------------------------------------------------
@@ -183,17 +183,17 @@ import "github.com/istr/strike/specs/spec"
 // A reference to a named output of a step earlier in this lane.
 #OutputRef: {
 	@go(OutputRef)
-	step:   spec.#Identifier @go(Step)
-	output: spec.#Identifier @go(Output)
+	step:   primitive.#Identifier @go(Step)
+	output: primitive.#Identifier @go(Output)
 }
 
 #InputRef: {
 	@go(InputRef)
 
-	from:     #OutputRef    @go(From)
-	subpath?: spec.#RelPath @go(Subpath,optional=nillable) // path within producer output; nil mounts whole output
-	mount:    spec.#AbsPath @go(Mount)
-	digest?:  spec.#Digest  @go(Digest,optional=nillable)
+	from:     #OutputRef         @go(From)
+	subpath?: primitive.#RelPath @go(Subpath,optional=nillable) // path within producer output; nil mounts whole output
+	mount:    primitive.#AbsPath @go(Mount)
+	digest?:  primitive.#Digest  @go(Digest,optional=nillable)
 }
 
 // ---------------------------------------------------------------------------
@@ -204,13 +204,13 @@ import "github.com/istr/strike/specs/spec"
 // by inputs.from, pack.files.from, and deploy.artifacts.from as {step, output}.
 #FileOutput: {
 	@go(FileOutput)
-	id:   spec.#Identifier       @go(ID)
-	type: spec.#FileArtifactType @go(Type)
+	id:   primitive.#Identifier       @go(ID)
+	type: primitive.#FileArtifactType @go(Type)
 	// path is relative to the step workdir (the single writable volume).
 	// Absent means the whole workdir is the artifact; a value selects a
 	// subpath within it. An absolute path is a type error: outputs are
 	// projections of the workdir, never of the read-only base image.
-	path?: spec.#RelPath @go(Path,optional=nillable)
+	path?: primitive.#RelPath @go(Path,optional=nillable)
 }
 
 // ---------------------------------------------------------------------------
@@ -231,7 +231,7 @@ import "github.com/istr/strike/specs/spec"
 
 #PackSpec: {
 	@go(PackSpec)
-	base: spec.#ImageRef @go(Base)
+	base: primitive.#ImageRef @go(Base)
 	files: [...#PackFile] @go(Files)
 	packages?: [...#Package] @go(Packages)
 	configFiles?: {
@@ -247,11 +247,11 @@ import "github.com/istr/strike/specs/spec"
 
 #PackFile: {
 	@go(PackFile)
-	from: #OutputRef    @go(From)
-	dest: spec.#AbsPath @go(Dest)
-	mode: *0o755 | int  @go(Mode)
-	uid?: int           @go(UID,optional=nillable)
-	gid?: int           @go(GID,optional=nillable)
+	from: #OutputRef         @go(From)
+	dest: primitive.#AbsPath @go(Dest)
+	mode: *0o755 | int       @go(Mode)
+	uid?: int                @go(UID,optional=nillable)
+	gid?: int                @go(GID,optional=nillable)
 }
 
 #Package: {
@@ -275,8 +275,8 @@ import "github.com/istr/strike/specs/spec"
 	}
 	entrypoint?: [...string] @go(Entrypoint)
 	cmd?: [...string] @go(Cmd)
-	workdir?: spec.#AbsPath @go(Workdir,optional=nillable)
-	user?:    string        @go(User,optional=nillable)
+	workdir?: primitive.#AbsPath @go(Workdir,optional=nillable)
+	user?:    string             @go(User,optional=nillable)
 	labels?: {
 		[string]: string @go(Labels)
 	}
@@ -290,12 +290,12 @@ import "github.com/istr/strike/specs/spec"
 	@go(DeploySpec)
 	method: #DeployMethod @go(Method)
 	artifacts: {
-		[ID=spec.#Identifier]: #ArtifactRef
+		[ID=primitive.#Identifier]: #ArtifactRef
 	} @go(Artifacts,type=map[string]ArtifactRef)
 	target:    #DeployTarget   @go(Target)
 	recording: #StateRecording @go(Recording)
 	source?: {
-		gitImage: spec.#ImageRef
+		gitImage: primitive.#ImageRef
 	} @go(Source,optional=nillable)
 }
 
@@ -304,7 +304,7 @@ import "github.com/istr/strike/specs/spec"
 #DeployKubernetes: {
 	@go(DeployKubernetes)
 	type:      "kubernetes"                     @go(Type)
-	image:     spec.#ImageRef                   @go(Image)
+	image:     primitive.#ImageRef              @go(Image)
 	namespace: string                           @go(Namespace)
 	strategy:  *"apply" | "replace" | "rollout" @go(Strategy)
 	// kubeconfig is a host-side path to a kubeconfig file, resolved by
@@ -326,8 +326,8 @@ import "github.com/istr/strike/specs/spec"
 
 #DeployCustom: {
 	@go(DeployCustom)
-	type:  "custom"       @go(Type)
-	image: spec.#ImageRef @go(Image)
+	type:  "custom"            @go(Type)
+	image: primitive.#ImageRef @go(Image)
 	args: [...string] @go(Args)
 	env: {
 		[string]: string @go(Env)
@@ -377,8 +377,8 @@ import "github.com/istr/strike/specs/spec"
 
 #Capture: {
 	@go(Capture)
-	id:    spec.#Identifier @go(ID)
-	image: spec.#ImageRef   @go(Image)
+	id:    primitive.#Identifier @go(ID)
+	image: primitive.#ImageRef   @go(Image)
 	command: [...string] @go(Command)
 	peers?: [...#Peer] @go(Peers)
 	mounts?: [...#CaptureMount] @go(Mounts)
@@ -390,8 +390,8 @@ import "github.com/istr/strike/specs/spec"
 	// source is an engine mount source -- the produced image or named
 	// storage the engine resolves -- not a host path. target is the
 	// absolute mount point inside the capture container.
-	source: string        @go(Source)
-	target: spec.#AbsPath @go(Target)
+	source: string             @go(Source)
+	target: primitive.#AbsPath @go(Target)
 }
 
 // ---------------------------------------------------------------------------
@@ -408,7 +408,7 @@ import "github.com/istr/strike/specs/spec"
 	@go(ProvenanceSpec)
 	type: "git" | "tarball" | "oci" | "url" @go(Type)
 	// path is the provenance file, relative to the step workdir.
-	path: spec.#RelPath @go(Path)
+	path: primitive.#RelPath @go(Path)
 }
 
 // ---------------------------------------------------------------------------

@@ -12,9 +12,9 @@ import (
 
 	"github.com/google/go-containerregistry/pkg/v1/layout"
 	"github.com/istr/strike/internal/container"
+	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/registry"
 	"github.com/istr/strike/internal/registry/regtest"
-	"github.com/istr/strike/internal/spec"
 )
 
 // wrapEngine captures ImageLoad request bodies and simulates tag/inspect.
@@ -53,7 +53,7 @@ func (e *wrapEngine) ImageInspect(_ context.Context, ref string) (*container.Ima
 	if digest == "" {
 		digest = "sha256:abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
 	}
-	return &container.ImageInfo{Digest: spec.Digest(digest)}, nil
+	return &container.ImageInfo{Digest: primitive.Digest(digest)}, nil
 }
 
 // extractDigestFromTar extracts the manifest digest from an OCI layout tar.

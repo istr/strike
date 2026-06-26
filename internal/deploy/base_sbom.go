@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/registry"
-	"github.com/istr/strike/internal/spec"
 	"github.com/istr/strike/internal/verify"
 )
 
@@ -58,7 +58,7 @@ func (d *Deployer) verifyBaseSBOMs(ctx context.Context, stepID string) ([]Resour
 // (else fail-closed). The returned descriptor references the referrer-manifest
 // digest, the stable handle for offline re-verification.
 func (d *Deployer) verifyOneBaseSBOM(
-	tm *verify.TrustedMaterial, base spec.ImageRef, baseDigest spec.Sha256, r registry.BaseSBOMReferrer,
+	tm *verify.TrustedMaterial, base primitive.ImageRef, baseDigest primitive.Sha256, r registry.BaseSBOMReferrer,
 ) (ResourceDescriptor, bool, error) {
 	var payload []byte
 	var lastErr error
@@ -80,7 +80,7 @@ func (d *Deployer) verifyOneBaseSBOM(
 		PredicateType string `json:"predicateType"`
 		Subject       []struct {
 			Digest struct {
-				SHA256 spec.Sha256 `json:"sha256"`
+				SHA256 primitive.Sha256 `json:"sha256"`
 			} `json:"digest"`
 		} `json:"subject"`
 	}
@@ -108,12 +108,12 @@ func (d *Deployer) verifyOneBaseSBOM(
 
 // sha256Hex returns the 64-char hex of a sha256 digest from "...@sha256:HEX" or
 // "sha256:HEX", false if absent or malformed.
-func sha256Hex(ref string) (spec.Sha256, bool) {
+func sha256Hex(ref string) (primitive.Sha256, bool) {
 	_, h, ok := strings.Cut(ref, "sha256:")
 	if !ok || len(h) != 64 {
 		return "", false
 	}
-	return spec.Sha256(h), true
+	return primitive.Sha256(h), true
 }
 
 // baseRepo returns the repository portion of a digest-pinned image reference.

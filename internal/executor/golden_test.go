@@ -14,8 +14,8 @@ import (
 
 	"github.com/istr/strike/internal/executor"
 	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/registry"
-	"github.com/istr/strike/internal/spec"
 	"github.com/istr/strike/internal/testutil"
 	"github.com/istr/strike/test/crossval"
 )
@@ -26,7 +26,7 @@ var update = flag.Bool("update", false, "update cross-validation vector expected
 func toDigestMap(m map[string]string) map[string]lane.DigestRef {
 	out := make(map[string]lane.DigestRef, len(m))
 	for k, v := range m {
-		wire := spec.Digest(v)
+		wire := primitive.Digest(v)
 		out[k] = lane.MustParseDigest(wire)
 	}
 	return out
@@ -155,7 +155,7 @@ func TestSpecHash_Golden(t *testing.T) {
 				Env:  vec.Inputs.Step.Env,
 			}
 
-			imageDigest := spec.Digest(vec.Inputs.ImageDigest)
+			imageDigest := primitive.Digest(vec.Inputs.ImageDigest)
 			got := registry.SpecHash(step,
 				lane.MustParseDigest(imageDigest),
 				toDigestMap(vec.Inputs.InputHashes),

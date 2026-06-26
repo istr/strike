@@ -7,7 +7,7 @@ import (
 
 	"github.com/istr/strike/internal/executor"
 	"github.com/istr/strike/internal/lane"
-	"github.com/istr/strike/internal/spec"
+	"github.com/istr/strike/internal/primitive"
 )
 
 // TestExecute_DigestGuard exercises the ADR-045 structural guard in
@@ -19,7 +19,7 @@ import (
 func TestExecute_DigestGuard(t *testing.T) {
 	const digest = "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000"
 	tests := []struct {
-		image       *spec.ImageRef
+		image       *primitive.ImageRef
 		name        string
 		imageRef    string
 		wantErr     string
@@ -27,7 +27,7 @@ func TestExecute_DigestGuard(t *testing.T) {
 	}{
 		{
 			name:    "mutable tag rejected",
-			image:   lane.Ptr(spec.ImageRef("alpine:latest")),
+			image:   lane.Ptr(primitive.ImageRef("alpine:latest")),
 			wantErr: "ADR-045",
 		},
 		{
@@ -36,13 +36,13 @@ func TestExecute_DigestGuard(t *testing.T) {
 		},
 		{
 			name:     "image_from tag override rejected",
-			image:    lane.Ptr(spec.ImageRef(digest)),
+			image:    lane.Ptr(primitive.ImageRef(digest)),
 			imageRef: "localhost/strike/lane/step:spechash",
 			wantErr:  "ADR-045",
 		},
 		{
 			name:        "digest reference passes guard",
-			image:       lane.Ptr(spec.ImageRef(digest)),
+			image:       lane.Ptr(primitive.ImageRef(digest)),
 			wantErr:     "capsule",
 			wantNoGuard: true,
 		},

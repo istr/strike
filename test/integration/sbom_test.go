@@ -13,8 +13,8 @@ import (
 	"github.com/istr/strike/internal/closer"
 	"github.com/istr/strike/internal/executor"
 	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/registry/regtest"
-	"github.com/istr/strike/internal/spec"
 	"github.com/istr/strike/internal/testutil"
 )
 
@@ -47,7 +47,7 @@ func TestPackSBOM(t *testing.T) {
 
 	result, err := executor.Pack(executor.PackOpts{
 		Spec: &lane.PackSpec{
-			Base: spec.ImageRef(staticBase),
+			Base: primitive.ImageRef(staticBase),
 			Files: []lane.PackFile{
 				{From: lane.OutputRef{Step: "build", Output: "app"}, Dest: "/app", Mode: 0o755},
 			},
@@ -202,7 +202,7 @@ func TestPackSBOM(t *testing.T) {
 
 		_, err := executor.Pack(executor.PackOpts{
 			Spec: &lane.PackSpec{
-				Base: spec.ImageRef(staticBase),
+				Base: primitive.ImageRef(staticBase),
 				Files: []lane.PackFile{
 					{From: lane.OutputRef{Step: "build", Output: "app"}, Dest: "/app", Mode: 0o755},
 				},

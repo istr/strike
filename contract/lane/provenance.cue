@@ -8,7 +8,7 @@
 
 package lane
 
-import "github.com/istr/strike/specs/spec"
+import "github.com/istr/strike/contract/primitive"
 
 // ---------------------------------------------------------------------------
 // Discriminated union of provenance record types
@@ -25,11 +25,11 @@ import "github.com/istr/strike/specs/spec"
 
 #GitProvenanceRecord: {
 	@go(GitProvenanceRecord)
-	type:       "git"           @go(Type)
-	uri:        string          @go(URI)
-	commit:     spec.#GitCommit @go(Commit)
-	ref?:       string          @go(Ref)
-	fetchedAt?: string          @go(FetchedAt)
+	type:       "git"                @go(Type)
+	uri:        string               @go(URI)
+	commit:     primitive.#GitCommit @go(Commit)
+	ref?:       string               @go(Ref)
+	fetchedAt?: string               @go(FetchedAt)
 }
 
 // ---------------------------------------------------------------------------
@@ -38,10 +38,10 @@ import "github.com/istr/strike/specs/spec"
 
 #TarballProvenanceRecord: {
 	@go(TarballProvenanceRecord)
-	type:       "tarball"    @go(Type)
-	uri:        string       @go(URI)
-	sha256:     spec.#Sha256 @go(SHA256)
-	fetchedAt?: string       @go(FetchedAt)
+	type:       "tarball"         @go(Type)
+	uri:        string            @go(URI)
+	sha256:     primitive.#Sha256 @go(SHA256)
+	fetchedAt?: string            @go(FetchedAt)
 }
 
 // ---------------------------------------------------------------------------
@@ -50,10 +50,10 @@ import "github.com/istr/strike/specs/spec"
 
 #OCIProvenanceRecord: {
 	@go(OCIProvenanceRecord)
-	type:       "oci"        @go(Type)
-	uri:        string       @go(URI)
-	digest:     spec.#Digest @go(Digest)
-	fetchedAt?: string       @go(FetchedAt)
+	type:       "oci"             @go(Type)
+	uri:        string            @go(URI)
+	digest:     primitive.#Digest @go(Digest)
+	fetchedAt?: string            @go(FetchedAt)
 }
 
 // ---------------------------------------------------------------------------
@@ -62,8 +62,8 @@ import "github.com/istr/strike/specs/spec"
 
 #URLProvenanceRecord: {
 	@go(URLProvenanceRecord)
-	type:       "url"        @go(Type)
-	uri:        string       @go(URI)
-	sha256:     spec.#Sha256 @go(SHA256)
-	fetchedAt?: string       @go(FetchedAt)
+	type:       "url"             @go(Type)
+	uri:        string            @go(URI)
+	sha256:     primitive.#Sha256 @go(SHA256)
+	fetchedAt?: string            @go(FetchedAt)
 }

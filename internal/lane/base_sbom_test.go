@@ -5,11 +5,11 @@ import (
 	"testing"
 
 	"github.com/istr/strike/internal/lane"
-	"github.com/istr/strike/internal/spec"
+	"github.com/istr/strike/internal/primitive"
 )
 
-func digestRef(tag string) spec.ImageRef {
-	return spec.ImageRef(tag + "@sha256:" + strings.Repeat("a", 64))
+func digestRef(tag string) primitive.ImageRef {
+	return primitive.ImageRef(tag + "@sha256:" + strings.Repeat("a", 64))
 }
 
 func TestPackBaseRefs_CollectsSubtreeBases(t *testing.T) {
@@ -17,8 +17,8 @@ func TestPackBaseRefs_CollectsSubtreeBases(t *testing.T) {
 	p := &lane.Lane{
 		Steps: []lane.Step{
 			{
-				ID: "compile", Image: lane.Ptr(spec.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.FileOutput{{ID: "binary", Type: "file", Path: lane.Ptr(spec.RelPath("binary"))}},
+				ID: "compile", Image: lane.Ptr(primitive.ImageRef("img")), Args: []string{}, Env: map[string]string{},
+				Outputs: []lane.FileOutput{{ID: "binary", Type: "file", Path: lane.Ptr(primitive.RelPath("binary"))}},
 			},
 			{
 				ID: "pack", Args: []string{}, Env: map[string]string{},
@@ -55,8 +55,8 @@ func TestValidateBaseSBOMTrustAnchor_RequiresTrustRoot(t *testing.T) {
 			BaseSBOMSigners: []lane.SBOMSigner{{Issuer: "https://issuer.example", Identity: "signer@example"}},
 			Steps: []lane.Step{
 				{
-					ID: "run", Image: lane.Ptr(spec.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-					Outputs: []lane.FileOutput{{ID: "out", Type: "file", Path: lane.Ptr(spec.RelPath("out"))}},
+					ID: "run", Image: lane.Ptr(primitive.ImageRef("img")), Args: []string{}, Env: map[string]string{},
+					Outputs: []lane.FileOutput{{ID: "out", Type: "file", Path: lane.Ptr(primitive.RelPath("out"))}},
 				},
 			},
 		}
@@ -80,8 +80,8 @@ func TestValidateBaseSBOMTrustAnchor_NoSignersNoConstraint(t *testing.T) {
 	p := &lane.Lane{
 		Steps: []lane.Step{
 			{
-				ID: "run", Image: lane.Ptr(spec.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.FileOutput{{ID: "out", Type: "file", Path: lane.Ptr(spec.RelPath("out"))}},
+				ID: "run", Image: lane.Ptr(primitive.ImageRef("img")), Args: []string{}, Env: map[string]string{},
+				Outputs: []lane.FileOutput{{ID: "out", Type: "file", Path: lane.Ptr(primitive.RelPath("out"))}},
 			},
 		},
 	}

@@ -8,24 +8,24 @@ build: generate
 # Step 1: Export CUE specs to JSON Schema.
 # These JSON Schema files are the cross-implementation contract that
 # both the Go and (future) Rust validators build from.
-specs: specs/spec/scalars.cue specs/lane/peer.cue specs/lane/target.cue specs/lane/lane.cue specs/lane/trustroot.cue specs/lane/provenance.cue specs/attest/attestation.cue specs/attest/artifact-record.cue
-	cue export ./specs/lane -e '#Lane' \
-	    --out jsonschema --force -o specs/lane.schema.json
-	cue export ./specs/attest -e '#Attestation' \
-	    --out jsonschema --force -o specs/attestation.schema.json
-	cue export ./specs/trustlayers \
-	    --out json --force -o specs/trust-layers.json
+specs: contract/primitive/scalars.cue contract/lane/peer.cue contract/lane/target.cue contract/lane/lane.cue contract/lane/trustroot.cue contract/lane/provenance.cue contract/attest/attestation.cue contract/attest/artifact-record.cue
+	cue export ./contract/lane -e '#Lane' \
+	    --out jsonschema --force -o contract/lane.schema.json
+	cue export ./contract/attest -e '#Attestation' \
+	    --out jsonschema --force -o contract/attestation.schema.json
+	cue export ./contract/trustlayers \
+	    --out json --force -o contract/trust-layers.json
 
 # Step 2: Generate Go types from the CUE lane schema.
 # Uses gengotypes for now; will move to JSON Schema input once
 # a JSON-Schema-to-Go generator is selected.
 generate: specs
-	cue exp gengotypes ./specs/lane
-	cue exp gengotypes ./specs/spec
-	sed -i 's#github.com/istr/strike/specs/#github.com/istr/strike/internal/#g' specs/lane/cue_types*gen.go specs/spec/cue_types*gen.go
-	mkdir -p internal/spec
-	mv specs/lane/cue_types*gen.go internal/lane/cue_types_gen.go
-	mv specs/spec/cue_types*gen.go internal/spec/cue_types_gen.go
+	cue exp gengotypes ./contract/lane
+	cue exp gengotypes ./contract/primitive
+	sed -i 's#github.com/istr/strike/contract/#github.com/istr/strike/internal/#g' contract/lane/cue_types*gen.go contract/primitive/cue_types*gen.go
+	mkdir -p internal/primitive
+	mv contract/lane/cue_types*gen.go internal/lane/cue_types_gen.go
+	mv contract/primitive/cue_types*gen.go internal/primitive/cue_types_gen.go
 
 # Update golden test fixtures (run after intentional changes to sign/pack/digest).
 golden:
@@ -60,7 +60,7 @@ lint-ci:
 	golangci-lint run ./...
 
 lint-cue-fmt:
-	cue fmt --check --files specs
+	cue fmt --check --files contract
 
 lint: lint-ci lint-from lint-arch lint-ascii lint-adr-index lint-cue-fmt
 

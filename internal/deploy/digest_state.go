@@ -8,7 +8,7 @@ import (
 	"sort"
 
 	"github.com/istr/strike/internal/lane"
-	"github.com/istr/strike/internal/spec"
+	"github.com/istr/strike/internal/primitive"
 )
 
 // captureSnap holds the fields needed by the canonical state digest
@@ -51,5 +51,5 @@ func StateDigest(captures []captureSnap) lane.DigestRef {
 	}
 
 	sum := sha256.Sum256(buf.Bytes())
-	return lane.DigestRef{Algorithm: "sha256", Hex: spec.Sha256(hex.EncodeToString(sum[:]))}
+	return lane.DigestRef{Algorithm: "sha256", Hex: primitive.Sha256(hex.EncodeToString(sum[:]))}
 }

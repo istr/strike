@@ -25,8 +25,8 @@ import (
 
 	"github.com/istr/strike/internal/closer"
 	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/registry"
-	"github.com/istr/strike/internal/spec"
 )
 
 // BuildImageTar builds a deterministic single-layer OCI image layout tar
@@ -63,7 +63,7 @@ func BuildImageTar(fileName string, content []byte) ([]byte, lane.DigestRef, err
 	if err != nil {
 		return nil, lane.DigestRef{}, err
 	}
-	return tarBytes, lane.DigestRef{Algorithm: h.Algorithm, Hex: spec.Sha256(h.Hex)}, nil
+	return tarBytes, lane.DigestRef{Algorithm: h.Algorithm, Hex: primitive.Sha256(h.Hex)}, nil
 }
 
 // BuildMultiFileImageTar builds a deterministic single-layer OCI image layout

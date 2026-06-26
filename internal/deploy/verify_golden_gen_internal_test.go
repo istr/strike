@@ -17,7 +17,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/istr/strike/internal/lane"
-	"github.com/istr/strike/internal/spec"
+	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/transport"
 )
 
@@ -114,7 +114,7 @@ func TestVerifyGoldenGenerate(t *testing.T) {
 // informational predicates are non-empty and exercise 3b's per-layer
 // validation. laneDigest is sealed verbatim so a UC2 verify against the golden
 // lane matches it.
-func syntheticGoldenAttestation(laneDigest spec.Digest) *Attestation {
+func syntheticGoldenAttestation(laneDigest primitive.Digest) *Attestation {
 	const artifactDigest = "1111111111111111111111111111111111111111111111111111111111111111"
 	return &Attestation{
 		Sealed: Sealed{

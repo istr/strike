@@ -10,13 +10,13 @@
 // docs/ADR-004-cue-as-single-source-of-truth.md.
 //
 // Same `package lane` as lane.cue: CUE merges same-package files in a
-// directory automatically, and `cue exp gengotypes ./specs/lane` generates
+// directory automatically, and `cue exp gengotypes ./contract/lane` generates
 // these types into internal/lane alongside the wire types. The file boundary
 // is the separation between the wire and internal types.
 
 package lane
 
-import "github.com/istr/strike/specs/spec"
+import "github.com/istr/strike/contract/primitive"
 
 // ---------------------------------------------------------------------------
 // Runtime artifact carrier
@@ -27,10 +27,10 @@ import "github.com/istr/strike/specs/spec"
 // interface for artifact handover between pipeline phases.
 #Artifact: {
 	@go(Artifact)
-	type:         spec.#ArtifactType @go(Type)
-	digest:       spec.#Digest       @go(Digest)
-	size:         int & >=0          @go(Size)
-	contentType?: string             @go(ContentType,optional=nillable)
+	type:         primitive.#ArtifactType @go(Type)
+	digest:       primitive.#Digest       @go(Digest)
+	size:         int & >=0               @go(Size)
+	contentType?: string                  @go(ContentType,optional=nillable)
 	metadata?: {
 		[string]: string @go(Metadata)
 	}
@@ -60,7 +60,7 @@ import "github.com/istr/strike/specs/spec"
 
 	// outputID identifies the content layer for this output at the lane level: it
 	// is the output id (ADR-046). It addresses the output across steps.
-	outputID: spec.#Identifier @go(OutputID)
+	outputID: primitive.#Identifier @go(OutputID)
 
 	// layerDiffID is the OCI uncompressed-content digest (diff_id) of the layer
 	// identified by outputID. It is the engine-level selection key: container

@@ -4,7 +4,7 @@
 
 package lane
 
-import "github.com/istr/strike/specs/spec"
+import "github.com/istr/strike/contract/primitive"
 
 // Peers are container-egress trust contracts: each declares a
 // destination the step container may reach during execution,
@@ -58,5 +58,5 @@ import "github.com/istr/strike/specs/spec"
 	keyType: "ssh-ed25519" | "ecdsa-sha2-nistp256" |
 		"rsa-sha2-512" | "rsa-sha2-256" @go(KeyType)
 	// key is the base64-encoded public key body (no PEM armor).
-	key: spec.#Base64 @go(Key)
+	key: primitive.#Base64 @go(Key)
 }

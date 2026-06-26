@@ -23,8 +23,8 @@
 package attest
 
 import (
-	"github.com/istr/strike/specs/lane"
-	"github.com/istr/strike/specs/spec"
+	"github.com/istr/strike/contract/lane"
+	"github.com/istr/strike/contract/primitive"
 )
 
 #Timestamp: =~"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}"
@@ -64,19 +64,19 @@ import (
 // Sealed -- CP-bound claims, sound under both trust(E) and ~trust(E).
 #Sealed: {
 	// laneId is the stable identifier from the lane definition.
-	laneId: spec.#Identifier
+	laneId: primitive.#Identifier
 
 	// target describes what was deployed to. Declared, lane-anchored.
 	target: lane.#DeployTarget
 
 	// laneDigest is the raw sha256 over the lane definition file bytes,
 	// computed by CP at parse time (hash and parse read the same bytes).
-	laneDigest: spec.#Digest | ""
+	laneDigest: primitive.#Digest | ""
 
 	// artifacts maps artifact names to their signed provenance records.
 	// Each artifact's digest is consumer-dereferenceable from the registry
 	// (C3 sealed boundary).
-	artifacts: [ID=spec.#Identifier]: #ArtifactRecord
+	artifacts: [ID=primitive.#Identifier]: #ArtifactRecord
 
 	// resolver records the DoT resolver's observed TLS identity, matched
 	// against the declared anchor at the pre-flight handshake.
@@ -84,7 +84,7 @@ import (
 
 	// peers maps step name to the network peer declarations attached to
 	// that step. Declared, lane-anchored.
-	peers: [ID=spec.#Identifier]: [...lane.#Peer]
+	peers: [ID=primitive.#Identifier]: [...lane.#Peer]
 
 	// engine carries the CP-observed connection facts about the engine.
 	// The engine's self-reports (version, rootless) live in
@@ -155,7 +155,7 @@ import (
 	// peerAttribution maps each step to the peer endpoints its mediated
 	// connections reached ("host:port" keys into sealed.observedPeers).
 	// Engine-asserted (Layer E).
-	peerAttribution?: [ID=spec.#Identifier]: [...string]
+	peerAttribution?: [ID=primitive.#Identifier]: [...string]
 }
 
 // Informational -- recorded for audit and IoC purposes; no trust claim.
@@ -176,10 +176,10 @@ import (
 	// state captures. The bytes were produced by the (untrusted) capture
 	// container and relayed by the engine; CP's hash transports them,
 	// it does not lift them out of the container-asserted class.
-	preStateDigest: spec.#Digest
+	preStateDigest: primitive.#Digest
 
 	// postStateDigest -- symmetric to preStateDigest.
-	postStateDigest: spec.#Digest
+	postStateDigest: primitive.#Digest
 
 	// provenance collects validated provenance records from transitive
 	// predecessor steps. Each record is container-written at step exit

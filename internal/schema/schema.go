@@ -1,11 +1,11 @@
 // Package schema is the single runtime home for CUE schema loading,
-// compilation, and validation. It loads the embedded specs module natively
+// compilation, and validation. It loads the embedded contract module natively
 // via cue/load over an in-memory module tree and exposes JSON validation
 // entry points plus the compiled package roots. Consumers hand it JSON bytes
 // and receive a formatted error; the *cue.Context never leaves this package,
 // because cue values are bound to the context that built them. This package
-// is foundation: it imports specs and cuelang only, never internal/lane or
-// internal/deploy. See docs/ADR-047-spec-package-layering.md.
+// is foundation: it imports contract and cuelang only, never internal/lane or
+// internal/deploy. See docs/ADR-048-contract-type-semantics.md.
 package schema
 
 import (
@@ -19,7 +19,7 @@ import (
 	"cuelang.org/go/cue/load"
 	cuejson "cuelang.org/go/encoding/json"
 
-	"github.com/istr/strike/specs"
+	"github.com/istr/strike/contract"
 )
 
 // moduleFile is the CUE module declaration, byte-for-byte identical to the
@@ -35,7 +35,7 @@ language: {
 var (
 	ctx = cuecontext.New()
 
-	// Built once from the embedded specs at package initialization.
+	// Built once from the embedded contract at package initialization.
 	deployRoot      = mustBuild("attest")
 	laneRoot        = mustBuild("lane")
 	crossvalRoot    = mustBuild("crossval")
@@ -66,9 +66,9 @@ var (
 // files -- and all their parent directories -- exist.
 const moduleRoot = "/strike"
 
-// moduleOverlay presents the embedded specs as a CUE module tree: the module
+// moduleOverlay presents the embedded contract as a CUE module tree: the module
 // file at <moduleRoot>/cue.mod/module.cue and the spec packages under
-// <moduleRoot>/specs/. Built once at package initialization from the embedded
+// <moduleRoot>/contract/. Built once at package initialization from the embedded
 // files; cue/load reads it through load.Config.Overlay, so no host filesystem
 // is touched.
 var moduleOverlay = buildModuleOverlay()
@@ -77,31 +77,31 @@ func buildModuleOverlay() map[string]load.Source {
 	overlay := map[string]load.Source{
 		moduleRoot + "/cue.mod/module.cue": load.FromString(moduleFile),
 	}
-	walkErr := fs.WalkDir(specs.FS, ".", func(p string, d fs.DirEntry, err error) error {
+	walkErr := fs.WalkDir(contract.FS, ".", func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 		if d.IsDir() || !strings.HasSuffix(p, ".cue") {
 			return nil
 		}
-		data, rerr := fs.ReadFile(specs.FS, p)
+		data, rerr := fs.ReadFile(contract.FS, p)
 		if rerr != nil {
 			return rerr
 		}
-		overlay[moduleRoot+"/specs/"+p] = load.FromBytes(data)
+		overlay[moduleRoot+"/contract/"+p] = load.FromBytes(data)
 		return nil
 	})
 	if walkErr != nil {
-		panic(fmt.Sprintf("schema: walk specs fs: %v", walkErr))
+		panic(fmt.Sprintf("schema: walk contract fs: %v", walkErr))
 	}
 	return overlay
 }
 
-// mustBuild loads and builds one specs package instance. It panics on
-// failure: a specs module that does not load is a build-time defect, not a
+// mustBuild loads and builds one contract package instance. It panics on
+// failure: a contract module that does not load is a build-time defect, not a
 // runtime condition.
 func mustBuild(pkg string) cue.Value {
-	insts := load.Instances([]string{"./specs/" + pkg}, &load.Config{Dir: moduleRoot, Overlay: moduleOverlay})
+	insts := load.Instances([]string{"./contract/" + pkg}, &load.Config{Dir: moduleRoot, Overlay: moduleOverlay})
 	if len(insts) != 1 {
 		panic(fmt.Sprintf("schema: load %q: expected 1 instance, got %d", pkg, len(insts)))
 	}

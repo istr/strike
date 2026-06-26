@@ -3,7 +3,7 @@ package deploy
 import (
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/lane"
-	"github.com/istr/strike/internal/spec"
+	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/transport"
 )
 
@@ -15,9 +15,9 @@ import (
 
 // DigestSet is an in-toto DigestSet, typed to the algorithms strike emits.
 type DigestSet struct {
-	SHA256    spec.Sha256    `json:"sha256,omitempty"`
-	SHA512    string         `json:"sha512,omitempty"`
-	GitCommit spec.GitCommit `json:"gitCommit,omitempty"`
+	SHA256    primitive.Sha256    `json:"sha256,omitempty"`
+	SHA512    string              `json:"sha512,omitempty"`
+	GitCommit primitive.GitCommit `json:"gitCommit,omitempty"`
 }
 
 // ResourceDescriptor is the in-toto ResourceDescriptor (fields strike emits).
@@ -68,7 +68,7 @@ type StrikeExternalParameters struct {
 	Engine        transport.EngineConnection `json:"engine,omitempty"`
 	OIDC          ProvenanceOIDC             `json:"oidc"`
 	LaneID        string                     `json:"laneId"`
-	LaneDigest    spec.Digest                `json:"laneDigest"`
+	LaneDigest    primitive.Digest           `json:"laneDigest"`
 }
 
 // ProvenanceOIDC is the declared signing identity carried into the sealed
@@ -133,7 +133,7 @@ type InformationalStatement struct {
 type InformationalPredicate struct {
 	Timestamp       clock.Time              `json:"timestamp,omitempty"`
 	EngineMetadata  *EngineMetadata         `json:"engineMetadata,omitempty"`
-	PreStateDigest  spec.Digest             `json:"preStateDigest"`
-	PostStateDigest spec.Digest             `json:"postStateDigest"`
+	PreStateDigest  primitive.Digest        `json:"preStateDigest"`
+	PostStateDigest primitive.Digest        `json:"postStateDigest"`
 	Provenance      []lane.ProvenanceRecord `json:"provenance"`
 }

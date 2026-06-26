@@ -12,7 +12,7 @@
 #                              capsule, front, resolver, verify
 #   transport      I=0.22      transport                 (base infrastructure)
 #   foundation     I~0.00-0.33 bundle, clock, closer, egress, probe, schema  (no internal deps except contract)
-#   contract       I=0.00      specs                     (layer 0; embedded contract data, no internal deps)
+#   contract       I=0.00      contract                  (layer 0; embedded contract data, no internal deps)
 
 version: 3
 
@@ -32,7 +32,7 @@ exclude:
 
 components:
   contract:
-    in: specs
+    in: contract
   foundation:
     in:
       - internal/bundle
@@ -41,7 +41,7 @@ components:
       - internal/egress
       - internal/probe
       - internal/schema
-      - internal/spec
+      - internal/primitive
   transport:
     in: internal/transport
   services:

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/istr/strike/internal/spec"
+	"github.com/istr/strike/internal/primitive"
 )
 
 // OutputHandle is the Go-side discriminated union for a resolved step output
@@ -46,6 +46,6 @@ func ManifestDigest(h OutputHandle) (DigestRef, error) {
 	if !ok {
 		return DigestRef{}, fmt.Errorf("output handle: no digest in image ref %q", h.ImageRef())
 	}
-	digest := spec.Digest(d)
+	digest := primitive.Digest(d)
 	return ParseDigest(digest)
 }

@@ -7,22 +7,22 @@ import (
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/deploy"
 	"github.com/istr/strike/internal/lane"
-	"github.com/istr/strike/internal/spec"
+	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/transport"
 )
 
 func TestProjectStatements(t *testing.T) {
 	rootless := true
-	preState := spec.Digest("sha256:" + strings.Repeat("e", 64))
-	postState := spec.Digest("sha256:" + strings.Repeat("f", 64))
+	preState := primitive.Digest("sha256:" + strings.Repeat("e", 64))
+	postState := primitive.Digest("sha256:" + strings.Repeat("f", 64))
 	att := &deploy.Attestation{
 		Sealed: deploy.Sealed{
 			LaneID:     "demo",
 			LaneDigest: "",
 			Target:     lane.DeployTarget{ID: "prod-1", Type: "registry", Description: "production"},
 			Artifacts: map[string]deploy.ArtifactRecord{
-				"b-image": {Digest: spec.Digest("sha256:" + strings.Repeat("b", 64))},
-				"a-image": {Digest: spec.Digest("sha256:" + strings.Repeat("a", 64))},
+				"b-image": {Digest: primitive.Digest("sha256:" + strings.Repeat("b", 64))},
+				"a-image": {Digest: primitive.Digest("sha256:" + strings.Repeat("a", 64))},
 			},
 			Peers:  map[string][]lane.Peer{},
 			Engine: transport.EngineTLS{Type: "tls", CATrustType: "pinned", ServerCertFingerprint: "sha256:cc"},
@@ -49,7 +49,7 @@ func TestProjectStatements(t *testing.T) {
 	if len(slsa.Subject) != 2 || slsa.Subject[0].Name != "a-image" || slsa.Subject[1].Name != "b-image" {
 		t.Fatalf("subject not sorted: %+v", slsa.Subject)
 	}
-	if slsa.Subject[0].Digest.SHA256 != spec.Sha256(strings.Repeat("a", 64)) {
+	if slsa.Subject[0].Digest.SHA256 != primitive.Sha256(strings.Repeat("a", 64)) {
 		t.Errorf("subject digest = %q", slsa.Subject[0].Digest.SHA256)
 	}
 

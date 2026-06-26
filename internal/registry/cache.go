@@ -11,7 +11,7 @@ import (
 	"sort"
 
 	"github.com/istr/strike/internal/lane"
-	"github.com/istr/strike/internal/spec"
+	"github.com/istr/strike/internal/primitive"
 )
 
 // SpecHash computes the spec hash of a step (Merkle tree over the DAG).
@@ -50,7 +50,7 @@ func SpecHash(
 		h.Write([]byte(p + "=" + sourceHashes[p].String()))
 	}
 
-	return lane.DigestRef{Algorithm: "sha256", Hex: spec.Sha256(hex.EncodeToString(h.Sum(nil)))}
+	return lane.DigestRef{Algorithm: "sha256", Hex: primitive.Sha256(hex.EncodeToString(h.Sum(nil)))}
 }
 
 // Tag builds the registry tag from step name and spec hash.
@@ -93,7 +93,7 @@ func hashReader(r io.Reader) (lane.DigestRef, error) {
 	if _, err := io.Copy(h, r); err != nil {
 		return lane.DigestRef{}, err
 	}
-	return lane.DigestRef{Algorithm: "sha256", Hex: spec.Sha256(hex.EncodeToString(h.Sum(nil)))}, nil
+	return lane.DigestRef{Algorithm: "sha256", Hex: primitive.Sha256(hex.EncodeToString(h.Sum(nil)))}, nil
 }
 
 // HashFile computes SHA256 of a file within the given root scope.

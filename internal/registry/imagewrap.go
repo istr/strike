@@ -15,7 +15,7 @@ import (
 
 	"github.com/istr/strike/internal/closer"
 	"github.com/istr/strike/internal/lane"
-	"github.com/istr/strike/internal/spec"
+	"github.com/istr/strike/internal/primitive"
 )
 
 // ContentSizeAnnotation is the OCI annotation key that stores the logical
@@ -221,7 +221,7 @@ func (c *Client) WrapOutputsAsImage(ctx context.Context, outs []OutputArchive, t
 
 // v1HashToDigest converts a go-containerregistry v1.Hash to a lane.DigestRef.
 func v1HashToDigest(h v1.Hash) lane.DigestRef {
-	return lane.DigestRef{Algorithm: h.Algorithm, Hex: spec.Sha256(h.Hex)}
+	return lane.DigestRef{Algorithm: h.Algorithm, Hex: primitive.Sha256(h.Hex)}
 }
 
 // extractMainImage reads an OCI layout tar from r and returns the first

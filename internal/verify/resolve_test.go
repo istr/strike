@@ -19,7 +19,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/types"
 
 	"github.com/istr/strike/internal/lane"
-	"github.com/istr/strike/internal/spec"
+	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/verify"
 )
 
@@ -89,7 +89,7 @@ func TestResolveInlineRoundTrip(t *testing.T) {
 }
 
 func TestResolveRef(t *testing.T) {
-	k := lane.Keyless{TrustRootRef: spec.ImageRef(pushGoldenTrustRoot(t))}
+	k := lane.Keyless{TrustRootRef: primitive.ImageRef(pushGoldenTrustRoot(t))}
 	tm, err := verify.ResolveTrustedMaterial(context.Background(), "", k)
 	if err != nil {
 		t.Fatalf("ResolveTrustedMaterial: %v", err)

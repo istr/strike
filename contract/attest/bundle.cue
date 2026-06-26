@@ -1,6 +1,6 @@
 package attest
 
-import "github.com/istr/strike/specs/spec"
+import "github.com/istr/strike/contract/primitive"
 
 // Sigstore bundle (v0.3) -- the published verification material strike emits
 // per deploy statement and an independent verifier consumes. This is a typed
@@ -32,10 +32,10 @@ import "github.com/istr/strike/specs/spec"
 // #VerificationMaterial carries the Fulcio leaf certificate, exactly one Rekor
 // v2 transparency-log entry, and exactly one RFC3161 timestamp.
 #VerificationMaterial: {
-	certificate: {rawBytes: spec.#Base64}
+	certificate: {rawBytes: primitive.#Base64}
 	tlogEntries: [#TransparencyLogEntry]
 	timestampVerificationData: {
-		rfc3161Timestamps: [{signedTimestamp: spec.#Base64}]
+		rfc3161Timestamps: [{signedTimestamp: primitive.#Base64}]
 	}
 }
 
@@ -44,8 +44,8 @@ import "github.com/istr/strike/specs/spec"
 // (keyless -- the signer identity is the Fulcio certificate, not a key id).
 #DSSEEnvelope: {
 	payloadType: "application/vnd.in-toto+json"
-	payload:     spec.#Base64
-	signatures: [{sig: spec.#Base64}]
+	payload:     primitive.#Base64
+	signatures: [{sig: primitive.#Base64}]
 }
 
 // #TransparencyLogEntry is the Rekor v2 inclusion record. integratedTime and
@@ -58,19 +58,19 @@ import "github.com/istr/strike/specs/spec"
 	// single-leaf inclusion proof has no sibling hashes (omitted). treeSize is
 	// always >= 1 for a non-empty log, so it is never omitted.
 	logIndex?: #Int64String
-	logId: {keyId: spec.#Base64}
+	logId: {keyId: primitive.#Base64}
 	kindVersion: {
 		kind:    string
 		version: string
 	}
 	inclusionProof: {
 		logIndex?: #Int64String
-		rootHash:  spec.#Base64
+		rootHash:  primitive.#Base64
 		treeSize:  #Int64String
-		hashes?: [...spec.#Base64]
+		hashes?: [...primitive.#Base64]
 		checkpoint: {envelope: string}
 	}
-	canonicalizedBody: spec.#Base64
+	canonicalizedBody: primitive.#Base64
 }
 
 // #Int64String is a proto3-JSON int64 -- a non-negative decimal string.

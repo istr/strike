@@ -16,9 +16,9 @@ import (
 	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/executor"
 	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/registry"
 	"github.com/istr/strike/internal/registry/regtest"
-	"github.com/istr/strike/internal/spec"
 )
 
 // Digest-pinned image references matching lane.yaml.
@@ -104,7 +104,7 @@ func packTestImage(t *testing.T, binPath string) (*executor.PackResult, *os.Root
 
 	result, packErr := executor.Pack(executor.PackOpts{
 		Spec: &lane.PackSpec{
-			Base: spec.ImageRef(staticBase),
+			Base: primitive.ImageRef(staticBase),
 			Files: []lane.PackFile{
 				{From: lane.OutputRef{Step: "build", Output: "app"}, Dest: "/app", Mode: 0o755},
 			},

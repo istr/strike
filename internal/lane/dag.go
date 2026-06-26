@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/istr/strike/internal/spec"
+	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/transport"
 )
 
@@ -19,15 +19,15 @@ import (
 type InputEdge struct {
 	FromStep   *Step
 	FromOutput *FileOutput
-	Subpath    *spec.RelPath // == InputRef.Subpath; nil means whole output
-	Mount      spec.AbsPath  // == InputRef.Mount
+	Subpath    *primitive.RelPath // == InputRef.Subpath; nil means whole output
+	Mount      primitive.AbsPath  // == InputRef.Mount
 }
 
 // PackFileEdge is a fully resolved step.pack.files[i] entry.
 type PackFileEdge struct {
 	FromStep   *Step
 	FromOutput *FileOutput
-	Dest       spec.AbsPath // == PackFile.Dest
+	Dest       primitive.AbsPath // == PackFile.Dest
 }
 
 // DeployArtifactEdge is a fully resolved step.deploy.artifacts[name] entry.
@@ -495,7 +495,7 @@ func validateOutputIDDisjointness(p *Lane) error {
 //	"/a/b"   and "/a"      -> conflict (a is prefix of b)
 //	"/a/b"   and "/a/c"    -> no conflict (siblings)
 //	"/a"     and "/abc"    -> no conflict (NOT a prefix in path terms)
-func mountsConflict(a, b spec.AbsPath) bool {
+func mountsConflict(a, b primitive.AbsPath) bool {
 	ca := path.Clean(string(a))
 	cb := path.Clean(string(b))
 	if ca == cb {
@@ -731,7 +731,7 @@ func (d *DAG) treeNode(sb *strings.Builder, node, prefix string, lastParent bool
 // over the dependency edges (excluding fromStep itself), reading PackSpec.Base
 // for each pack step reached. These are the base images whose signed SBOMs the
 // deploy step's producer-side verification considers.
-func (d *DAG) PackBaseRefs(fromStep string) []spec.ImageRef {
+func (d *DAG) PackBaseRefs(fromStep string) []primitive.ImageRef {
 	if d == nil {
 		return nil
 	}
@@ -749,8 +749,8 @@ func (d *DAG) PackBaseRefs(fromStep string) []spec.ImageRef {
 	walk(fromStep)
 	delete(visited, fromStep)
 
-	seen := map[spec.ImageRef]bool{}
-	var out []spec.ImageRef
+	seen := map[primitive.ImageRef]bool{}
+	var out []primitive.ImageRef
 	for name := range visited {
 		s := d.Steps[name]
 		if s == nil || s.Pack == nil {

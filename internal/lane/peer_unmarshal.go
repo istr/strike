@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/istr/strike/internal/spec"
+	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/transport"
 )
 
@@ -227,7 +227,7 @@ func unmarshalKeyless(data []byte) (Keyless, error) {
 		}
 		k.TrustRoot = &tr
 	case hasRef:
-		var ref spec.ImageRef
+		var ref primitive.ImageRef
 		if err := json.Unmarshal(aux.TrustRootRef, &ref); err != nil {
 			return Keyless{}, fmt.Errorf("decode trustRootRef: %w", err)
 		}
