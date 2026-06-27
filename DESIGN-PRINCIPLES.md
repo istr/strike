@@ -9,37 +9,28 @@ when it does not (see
 [SECURITY.md](SECURITY.md#attestation-soundness-best-effort-vs-end-to-end)) --
 and **systematic reduction of the supply-chain attack surface**.
 
-These principles are the axioms of the project. Schemas, APIs, and
-implementation details evolve. The principles are meant to be an invariant.
-When a new feature or abstraction is proposed, the relevant question is not
-whether it is useful but whether it is compatible with the principles.
+These principles are the axioms of the project: schemas, APIs, and
+implementation details evolve, but the principles are the invariant. The
+project is in pre-beta -- breaking changes at the schema and implementation
+layer are expected and deliberate; principle-level drift is not. When a feature
+or abstraction is proposed, the question is not whether it is useful but whether
+it is compatible with the principles.
 
-The project is in pre-beta. Breaking changes at the schema and
-implementation layer are expected and deliberate; principle-level drift
-is not.
+Principles are not designed up front; they crystallize. A pattern noticed
+across several decisions is recognized as invariant and captured here; the set
+is strictly curated. This document *defines* the principles, it does not
+enumerate which ADRs concretize them -- that mapping lives in each ADR's
+`## Principles` section, aggregated in `docs/ADR-INDEX.md`, so the relation runs
+one way (ADR to principle) and the documentation forms no cycle.
 
-Principles are not designed up front; they crystallize. A pattern is
-noticed across several decisions, and once it is recognized as invariant
-it is captured here. The set is strictly curated. This document *defines*
-the principles; it does not enumerate which ADRs concretize them. That
-mapping lives in each ADR's `## Principles` section and is aggregated in
-`docs/ADR-INDEX.md`, so the relation runs one way -- ADR to principle --
-and the documentation does not form a cycle.
-
-strike is built in an AI-heavy development workflow. Architectural
-decisions are made by an operator working with general-purpose
-language models; implementation is delegated to coding agents
-operating against these principles. The first principle below
-("code is liability") is positioned first deliberately: it is the
-principle most likely to be violated by AI-generated contributions
-and therefore the principle requiring the most active enforcement.
-The other principles assume it.
+strike is built in an AI-heavy workflow: an operator working with
+general-purpose language models makes architectural decisions, and coding
+agents implement against these principles. "Code is liability" is positioned
+first deliberately -- it is the principle most likely to be violated by
+AI-generated contributions, and the other principles assume it.
 
 
 ## Code is liability
-
-This is the first principle because every other principle in this
-document is degraded if it is not enforced.
 
 Every line of strike is attack surface, maintenance cost, and a
 candidate failure mode. The project rejects abstraction for its own
@@ -47,14 +38,11 @@ sake, rejects dependencies that duplicate standard-library
 functionality, and prefers a small targeted change to a framework
 hook. "A little copying is better than a little dependency."
 
-This principle is enforced strictly in the AI-assisted workflow
-strike is built in. General-purpose language models exhibit a
-documented bias toward producing more code rather than less:
-adding a helper instead of inlining, introducing a layer instead
-of a direct call, building a framework instead of a function. In
-a security tool, that bias is a supply-chain concern, not a style
-preference. Code that does not exist cannot be exploited, cannot
-contain a regression, cannot be the location of a future CVE.
+General-purpose language models exhibit a documented bias toward producing
+more code rather than less -- a helper instead of an inline, a layer instead of
+a direct call, a framework instead of a function. In a security tool that bias
+is a supply-chain concern, not a style preference: code that does not exist
+cannot be exploited, cannot regress, and cannot be the site of a future CVE.
 
 The operational form of this principle:
 
@@ -67,10 +55,6 @@ The operational form of this principle:
   hypothesis about future calls.
 - A new dependency must replace more lines than it adds, including
   its transitive surface.
-
-These are not aesthetic guidelines. They are the structural form
-through which every other principle in this document survives
-contact with everyday development.
 
 
 ## No shell
@@ -121,13 +105,12 @@ row, one principle -- and never restated in a second place that can drift from
 the first. When the same meaning is written twice, the copies diverge silently:
 a schema says one thing and its prose comment says another, a rationale string
 outlives the rule it explained, a doc asserts a property the code stopped
-guaranteeing. Single-sourcing makes that class of drift structurally impossible
-rather than a matter of diligence. It applies to the trust-layer derivation (the
-layer is computed from provenance by one rule table, not asserted per field), to
-the schemas (one CUE definition, types generated from it), and to the project's
-own planning state (one checked-in roadmap item store, not a chat transcript).
-The cost it imposes --
-a reference instead of a convenient restatement -- is the price of never having
+guaranteeing. Single-sourcing makes that class of drift structurally impossible rather than a
+matter of diligence. It applies to the trust-layer derivation (the layer is
+computed from provenance by one rule table, not asserted per field), to the
+schemas (one CUE definition, types generated from it), and to the project's own
+planning state (one roadmap item store, not a chat transcript). Its cost -- a
+reference instead of a convenient restatement -- is the price of never having
 two sources of truth disagree.
 
 
@@ -188,22 +171,17 @@ validation cannot be reproducibly attested.
 ## Reproducibility is enforced, not hoped for
 
 Output artifacts must be byte-identical for byte-identical inputs.
-Timestamps follow `SOURCE_DATE_EPOCH`, file enumeration is
-canonicalized, layer ordering is stable, and the lane's
-execution order is the **lexicographically smallest valid
-topological order** of the step graph -- computed by Kahn's
-algorithm with byte-wise string comparison (Go
-`sort.Strings`, equivalent to Rust's default `Ord` on
-`&str`), so the same step graph always produces the same
-`dag.Order` across runs, machines, languages, and
-implementations. All time access in strike
-is dispatched through the `internal/clock` package: `clock.Reproducible()`
-for values that end up in artifact content bytes, `clock.Wall()` for
-event receipts and telemetry. Direct imports of the standard-library
-`time` package are rejected in CI outside that one file. Without this
-property, the cross-implementation verification that the CUE-first
-principle exists to support cannot distinguish correctness from
-coincidence.
+Timestamps follow `SOURCE_DATE_EPOCH`, file enumeration is canonicalized, layer
+ordering is stable, and the lane's execution order is the lexicographically
+smallest valid topological order of the step graph -- Kahn's algorithm with
+byte-wise string comparison (Go `sort.Strings`, equivalent to Rust's default
+`Ord` on `&str`) -- so the same graph yields the same `dag.Order` across runs,
+machines, languages, and implementations. All time access is dispatched through
+`internal/clock`: `clock.Reproducible()` for values that end up in artifact
+content bytes, `clock.Wall()` for event receipts and telemetry. Direct imports
+of the standard-library `time` package are rejected in CI outside that one file.
+Without this property, the cross-implementation verification that the CUE-first
+principle exists to support cannot distinguish correctness from coincidence.
 
 
 ## Containers are the only storage
@@ -229,28 +207,20 @@ need, justified by a named reason, and -- where the reason has a horizon
 
 The pattern recurs throughout the architecture:
 
-- Network egress is denied by default. A step reaches the network only by
-  enumerating peers; a step with no declared peers runs under an
-  empty-allowlist capsule that permits no egress. The capsule still
-  exists for the peer-less step rather than falling back to a bare
-  `--network=none`, so a denied connection attempt becomes an observable,
-  attested refusal instead of an opaque kernel drop.
-- TLS is pinned to 1.3 on every controller-side connection (engine mTLS,
-  the DoT resolver). The floor is lowered to TLS 1.2 on exactly one path
-  -- the external-peer dial -- because real registries cap at 1.2; the
-  relaxation is bounded (only the version floor moves, the cipher set
-  stays GCM-only), standards-backed (BSI TR-02102-2), and carries a 2031
-  horizon.
-- The system CA store is never trusted implicitly; using it is an
-  explicit per-peer opt-in.
-- Mutable image references are a parse error, not a silently resolved
-  convenience.
+- Network egress is denied by default: a step reaches the network only by
+  enumerating peers, and a peer-less step runs under an empty-allowlist capsule.
+  The capsule still exists rather than falling back to a bare `--network=none`,
+  so a denied attempt is an observable, attested refusal, not an opaque kernel
+  drop.
+- TLS is pinned to 1.3 on every controller-side connection (engine mTLS, the
+  DoT resolver); the floor drops to 1.2 only on the external-peer dial, because
+  real registries cap there. The relaxation is bounded (version floor only,
+  cipher set stays GCM-only), standards-backed (BSI TR-02102-2), and carries a
+  2031 horizon.
 
-A relaxation without a named reason is a defect, not a feature. The
-discipline is the same one that makes attestations meaningful: a declared
-restriction the runtime does not actually impose is a false anchor, and a
-relaxation no one can point to a reason for is indistinguishable from an
-accident.
+A relaxation without a named reason is a defect, not a feature: a declared
+restriction the runtime does not impose is a false anchor, and a relaxation no
+one can name a reason for is indistinguishable from an accident.
 
 
 ## Enforcement is structural, not discretionary
@@ -273,22 +243,16 @@ The pattern recurs throughout the architecture:
 - The hardened container profile is not lane-configurable. Capability
   drops, the read-only root filesystem, and no-new-privileges are fixed by
   the controller; a lane cannot weaken them.
-- Secret non-leakage is a property of the type, not a rule the caller must
-  remember. The boundary holds by construction, so a forgetful caller
-  cannot cross it.
 - Peer trust has no per-peer opt-out. The declared peer list is the single
   source of truth for enforcement and attestation alike; there is no
   separate enforcement switch that could drift from it or be set to bypass
   it.
 
-This is the complement of "restricted by default, relaxed only with
-reason": that principle governs how tight a boundary's default is and on
-what terms its scope may be widened; this one governs the mechanism, which
-is never widened, disabled, or bypassed. A boundary a lane can configure
-away is not a boundary -- it is a suggestion, and a suggestion cannot be
-attested. Enforcement that lives in the controller, with no opt-out, is
-what lets an attestation record what the runtime actually imposed rather
-than what a configuration hoped it would.
+This is the complement of "restricted by default": that principle governs how
+tight a default is and on what terms scope may widen; this one governs the
+mechanism, which is never widened, disabled, or bypassed. A boundary a lane can
+configure away is a suggestion, not a boundary -- and a suggestion cannot be
+attested.
 
 
 ## Observation over declaration
@@ -310,9 +274,9 @@ The pattern recurs throughout the architecture:
   them.
 - The SBOM cataloger reads the compiled set from the binary's build info
   (`debug/buildinfo`, what `go version -m` reports), not the declared module
-  graph (`go.mod`/`go.sum`). A module that is required but contributes no
-  compiled code is not part of the artifact and is not cataloged; the
-  reachable surface is the real one, and the module graph overstates it.
+  graph (`go.mod`/`go.sum`): a required module that contributes no compiled code
+  is not in the artifact and is not cataloged. The reachable surface is the real
+  one; the module graph overstates it.
 - A mediator certifies only what passed through it. Exhaustiveness of
   mediation is a declaration no record can support, so the attestation
   states observed passage, never a claim of completeness.
@@ -320,47 +284,37 @@ The pattern recurs throughout the architecture:
   whether a fact was independently observed or merely declared by the
   engine is exactly what sets the trust layer it occupies.
 
-This is the epistemic floor under "runtime is attested": that principle
-says the runtime context is recorded; this one says the record is of the
-observed context, and that an observation always defeats a conflicting
-declaration. An attestation built on declarations would certify hopes;
-built on observations, it certifies facts.
+This is the epistemic floor under "runtime is attested": that principle says
+the runtime context is recorded; this one says the record is of the *observed*
+context, and an observation always defeats a conflicting declaration.
 
 
 ## How the principles interact
 
-The principles reinforce each other in ways worth naming explicitly:
-
-- **Attestation requires reproducibility.** A signed attestation of a
-  non-reproducible output is a signed claim that no one else can check.
-- **Reproducibility requires digest pinning.** A build whose upstream
-  inputs drift cannot produce byte-identical outputs across runs.
-- **Digest pinning requires peer declaration.** If a step can reach
-  arbitrary hosts, content addressing at the artifact level does not
-  constrain what the step actually does during execution.
-- **Peer declaration requires identity asymmetry.** Treating credential
-  authorities and trusted peers as one thing destroys the distinctions
-  the underlying protocols make.
-- **Typed secrets and CUE-first enforcement make the above
-  machine-checkable.** Without formal types, principles degrade into
-  conventions.
+The principles form a dependency chain. **Attestation requires
+reproducibility** -- a signed attestation of a non-reproducible output is a
+claim no one else can check. **Reproducibility requires digest pinning** -- a
+build whose inputs drift cannot be byte-identical across runs. **Digest pinning
+requires peer declaration** -- otherwise a step reaches arbitrary hosts and
+artifact-level content addressing constrains nothing at execution time. **Peer
+declaration requires identity asymmetry** -- conflating credential authorities
+with trusted peers destroys distinctions the underlying protocols make. **Typed
+secrets and CUE-first enforcement make the chain machine-checkable**; without
+formal types, principles degrade into conventions.
 
 The chain terminates at **no shell / no exec / no root**, which turn
-attack-surface reduction from aspiration into structure. None of
-these terminations holds if the volume of code defeats the audit;
-that is why **code is liability** is the first principle and not
-an afterthought.
+attack-surface reduction from aspiration into structure -- and none of it holds
+if code volume defeats the audit, which is why **code is liability** comes
+first.
 
 
 ## See also
 
-- [ARCHITECTURE.md](ARCHITECTURE.md) -- trust boundaries, SLSA Build
-  Level 3 mapping, and the controller-engine protocol.
-- [SECURITY.md](SECURITY.md) -- threat model and vulnerability
-  reporting.
+- [ARCHITECTURE.md](ARCHITECTURE.md) -- trust boundaries, SLSA Build L3
+  mapping, controller-engine protocol.
+- [SECURITY.md](SECURITY.md) -- threat model and vulnerability reporting.
 - [AGENTS.md](AGENTS.md) -- instructions for AI coding agents.
-- [AI-WORKFLOW.md](AI-WORKFLOW.md) -- the human-AI
-  collaboration model, neutral-checkpoint reviews, and retrospective
-  practice.
-- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) -- code quality, style,
-  and toolchain rules that implement these principles.
+- [AI-WORKFLOW.md](AI-WORKFLOW.md) -- the human-AI collaboration model and
+  authoring contract.
+- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) -- code quality, style, and
+  toolchain rules that implement these principles.
