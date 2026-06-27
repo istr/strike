@@ -11,7 +11,7 @@ import (
 	"github.com/istr/strike/internal/deploy"
 	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/lane"
-	"github.com/istr/strike/internal/transport"
+	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/test/crossval"
 )
 
@@ -243,7 +243,7 @@ func TestValidateAttestation_WithPeers(t *testing.T) {
 				"build": {
 					lane.HTTPSPeer{
 						Type: "https",
-						Host: transport.Host("api.example.com"),
+						Host: primitive.Host("api.example.com"),
 						Trust: endpoint.Fingerprint{
 							Type:        "certFingerprint",
 							Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000",
@@ -253,7 +253,7 @@ func TestValidateAttestation_WithPeers(t *testing.T) {
 				"clone": {
 					lane.SSHPeer{
 						Type: "ssh",
-						Host: transport.Host("git.example.com"),
+						Host: primitive.Host("git.example.com"),
 						KnownHosts: []endpoint.HostKey{
 							{
 								KeyType: "ssh-ed25519",
@@ -289,7 +289,7 @@ func TestValidateAttestation_InvalidPeer(t *testing.T) {
 				"build": {
 					lane.HTTPSPeer{
 						Type: "https",
-						Host: transport.Host("api.example.com"),
+						Host: primitive.Host("api.example.com"),
 						// Trust deliberately nil -- triggers schema reject.
 					},
 				},

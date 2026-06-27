@@ -28,6 +28,7 @@ import (
 	"github.com/istr/strike/internal/closer"
 	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/mediator"
+	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/testutil"
 	"github.com/istr/strike/internal/transport"
 )
@@ -542,7 +543,7 @@ func TestCapsule_ResolverSynthesizesStepAddr(t *testing.T) {
 	hp := capsule.HostPorts{Resolver: 15363, Mediator: 15364}
 
 	peers := []mediator.PeerTrust{{
-		Host:  transport.Host(sni),
+		Host:  primitive.Host(sni),
 		Trust: endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:aaaa"},
 	}}
 
@@ -644,7 +645,7 @@ func TestCapsule_DNSThenConnect_EndToEnd(t *testing.T) {
 	})
 
 	peers := []mediator.PeerTrust{{
-		Host: transport.Host(sni),
+		Host: primitive.Host(sni),
 		Trust: endpoint.Fingerprint{
 			Type:        "certFingerprint",
 			Fingerprint: fp,
@@ -777,7 +778,7 @@ func TestCapsule_AAAA_AllowedName_Empty(t *testing.T) {
 	hp := capsule.HostPorts{Resolver: 15369, Mediator: 15370}
 
 	peers := []mediator.PeerTrust{{
-		Host:  transport.Host(sni),
+		Host:  primitive.Host(sni),
 		Trust: endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:aaaa"},
 	}}
 

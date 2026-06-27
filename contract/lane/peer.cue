@@ -31,11 +31,17 @@ import "github.com/istr/strike/contract/endpoint"
 // attestation.
 #Peer: (#HTTPSPeer | #SSHPeer) @go(-)
 
+// The host @go redirects name the contract/ package, not internal/: `make
+// generate` rewrites contract/ -> internal/ across the generated files, so a
+// redirect to a package that also contributes a generated type to the same
+// file must use the pre-rewrite contract/ path. Both references then normalize
+// to one import; the literal internal/ path would emit a duplicate import.
+
 // HTTPSPeer declares an HTTPS endpoint together with its server-trust anchor.
 #HTTPSPeer: {
 	@go(HTTPSPeer)
 	type:  "https"         @go(Type)
-	host:  #Host           @go(Host,type="github.com/istr/strike/internal/transport".Host)
+	host:  #Host           @go(Host,type="github.com/istr/strike/contract/primitive".Host)
 	trust: endpoint.#Trust @go(Trust,type="github.com/istr/strike/contract/endpoint".Trust)
 }
 
@@ -47,6 +53,6 @@ import "github.com/istr/strike/contract/endpoint"
 #SSHPeer: {
 	@go(SSHPeer)
 	type: "ssh" @go(Type)
-	host: #Host @go(Host,type="github.com/istr/strike/internal/transport".Host)
+	host: #Host @go(Host,type="github.com/istr/strike/contract/primitive".Host)
 	knownHosts: [...endpoint.#HostKey] @go(KnownHosts)
 }

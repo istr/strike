@@ -23,6 +23,7 @@ import (
 	"github.com/istr/strike/internal/closer"
 	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/mediator"
+	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/transport"
 )
 
@@ -330,7 +331,7 @@ func TestServe_AllowedSNI_EndToEnd(t *testing.T) {
 	})
 
 	peers := []mediator.PeerTrust{
-		{Host: transport.Host(sni), Trust: endpoint.Fingerprint{
+		{Host: primitive.Host(sni), Trust: endpoint.Fingerprint{
 			Type:        "certFingerprint",
 			Fingerprint: fp,
 		}},
@@ -462,7 +463,7 @@ func TestServe_UpstreamLookupError(t *testing.T) {
 	sni := "lookup-err.example"
 
 	peers := []mediator.PeerTrust{
-		{Host: transport.Host(sni), Trust: endpoint.Fingerprint{
+		{Host: primitive.Host(sni), Trust: endpoint.Fingerprint{
 			Type: "certFingerprint", Fingerprint: "sha256:aaa",
 		}},
 	}
@@ -501,7 +502,7 @@ func TestServe_UpstreamNoAddresses(t *testing.T) {
 	sni := "no-addrs.example"
 
 	peers := []mediator.PeerTrust{
-		{Host: transport.Host(sni), Trust: endpoint.Fingerprint{
+		{Host: primitive.Host(sni), Trust: endpoint.Fingerprint{
 			Type: "certFingerprint", Fingerprint: "sha256:aaa",
 		}},
 	}
@@ -539,7 +540,7 @@ func TestServe_UpstreamDialFails(t *testing.T) {
 	// Lookup returns 127.0.0.1; mediator dials 127.0.0.1:443
 	// which should have no listener.
 	peers := []mediator.PeerTrust{
-		{Host: transport.Host(sni), Trust: endpoint.Fingerprint{
+		{Host: primitive.Host(sni), Trust: endpoint.Fingerprint{
 			Type: "certFingerprint", Fingerprint: "sha256:aaa",
 		}},
 	}
@@ -585,7 +586,7 @@ func TestServe_UpstreamHandshakeFails(t *testing.T) {
 	wrongFP := fp[:len(fp)-4] + "dead"
 
 	peers := []mediator.PeerTrust{
-		{Host: transport.Host(sni), Trust: endpoint.Fingerprint{
+		{Host: primitive.Host(sni), Trust: endpoint.Fingerprint{
 			Type:        "certFingerprint",
 			Fingerprint: wrongFP,
 		}},
@@ -624,7 +625,7 @@ func TestServe_ConcurrentConnections(t *testing.T) {
 	// All connections hit the error path (port 443 has no listener).
 	// Tests concurrency safety under -race.
 	peers := []mediator.PeerTrust{
-		{Host: transport.Host(sni), Trust: endpoint.Fingerprint{
+		{Host: primitive.Host(sni), Trust: endpoint.Fingerprint{
 			Type: "certFingerprint", Fingerprint: "sha256:aaa",
 		}},
 	}

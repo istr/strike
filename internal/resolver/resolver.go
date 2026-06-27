@@ -31,7 +31,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/istr/strike/internal/clock"
-	"github.com/istr/strike/internal/transport"
+	"github.com/istr/strike/internal/primitive"
 )
 
 // Decision is the resolver's policy outcome for a single query.
@@ -82,7 +82,7 @@ type Resolver struct {
 //   - synthAddr is the step's loopback address. Allowed names
 //     resolve to it (A record); the container then connects there,
 //     reaching the step's mediator. Must be IPv4.
-func New(stepID string, allowlist []transport.Host, synthAddr netip.Addr) (*Resolver, error) {
+func New(stepID string, allowlist []primitive.Host, synthAddr netip.Addr) (*Resolver, error) {
 	if stepID == "" {
 		return nil, errors.New("resolver: stepID must not be empty")
 	}

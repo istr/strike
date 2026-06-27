@@ -106,7 +106,7 @@ func TestExecute_WithSSHPeer(t *testing.T) {
 			Peers: []lane.Peer{
 				lane.SSHPeer{
 					Type: "ssh",
-					Host: transport.Host("git.example.com"),
+					Host: primitive.Host("git.example.com"),
 					KnownHosts: []endpoint.HostKey{
 						{KeyType: "ssh-ed25519", Key: "AAAAC3NzaC1lZDI1NTE5AAAAITestKey"},
 					},
@@ -168,7 +168,7 @@ func TestExecute_WithoutSSHPeer(t *testing.T) {
 			Peers: []lane.Peer{
 				lane.HTTPSPeer{
 					Type: "https",
-					Host: transport.Host("api.example.com"),
+					Host: primitive.Host("api.example.com"),
 					Trust: endpoint.Fingerprint{
 						Type:        "certFingerprint",
 						Fingerprint: "sha256:abc",

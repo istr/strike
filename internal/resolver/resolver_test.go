@@ -13,8 +13,8 @@ import (
 
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/closer"
+	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/resolver"
-	"github.com/istr/strike/internal/transport"
 )
 
 var testSynthAddr = netip.MustParseAddr("127.64.0.1")
@@ -23,7 +23,7 @@ var testSynthAddr = netip.MustParseAddr("127.64.0.1")
 // starts Serve in a goroutine. Returns the resolver, a
 // stdlib *net.Resolver wired to the test DNS server's TCP
 // listener, the UDP address, and a cancel function.
-func startResolver(t *testing.T, allowlist []transport.Host, synthAddr netip.Addr) (*resolver.Resolver, *net.Resolver, string, context.CancelFunc) {
+func startResolver(t *testing.T, allowlist []primitive.Host, synthAddr netip.Addr) (*resolver.Resolver, *net.Resolver, string, context.CancelFunc) {
 	t.Helper()
 	r, err := resolver.New("test-step", allowlist, synthAddr)
 	if err != nil {
@@ -165,7 +165,7 @@ func TestNew_EmptyAllowlistIsValid(t *testing.T) {
 func TestNew_NormalizesAllowlist(t *testing.T) {
 	// All three entries should normalize to the same key.
 	_, stdRes, _, cleanup := startResolver(t,
-		[]transport.Host{"Example.COM", "example.com.", " example.com "},
+		[]primitive.Host{"Example.COM", "example.com.", " example.com "},
 		testSynthAddr,
 	)
 	defer cleanup()
@@ -184,7 +184,7 @@ func TestNew_NormalizesAllowlist(t *testing.T) {
 
 func TestServe_AllowedNameA(t *testing.T) {
 	r, _, udpAddr, cleanup := startResolver(t,
-		[]transport.Host{"allowed.example.com"},
+		[]primitive.Host{"allowed.example.com"},
 		testSynthAddr,
 	)
 	defer cleanup()
@@ -222,7 +222,7 @@ func TestServe_AllowedNameA(t *testing.T) {
 
 func TestServe_AllowedNameAAAA_EmptyAnswer(t *testing.T) {
 	r, _, udpAddr, cleanup := startResolver(t,
-		[]transport.Host{"allowed.example.com"},
+		[]primitive.Host{"allowed.example.com"},
 		testSynthAddr,
 	)
 	defer cleanup()
@@ -251,7 +251,7 @@ func TestServe_AllowedNameAAAA_EmptyAnswer(t *testing.T) {
 
 func TestServe_DeniedName_NXDOMAIN(t *testing.T) {
 	r, _, udpAddr, cleanup := startResolver(t,
-		[]transport.Host{"allowed.example.com"},
+		[]primitive.Host{"allowed.example.com"},
 		testSynthAddr,
 	)
 	defer cleanup()
@@ -276,7 +276,7 @@ func TestServe_DeniedName_NXDOMAIN(t *testing.T) {
 
 func TestServe_NotImplementedType_MX(t *testing.T) {
 	r, _, udpAddr, cleanup := startResolver(t,
-		[]transport.Host{"allowed.example.com"},
+		[]primitive.Host{"allowed.example.com"},
 		testSynthAddr,
 	)
 	defer cleanup()
@@ -304,7 +304,7 @@ func TestServe_NotImplementedType_MX(t *testing.T) {
 
 func TestServe_RecordsCaptured(t *testing.T) {
 	r, _, udpAddr, cleanup := startResolver(t,
-		[]transport.Host{"allowed.example.com"},
+		[]primitive.Host{"allowed.example.com"},
 		testSynthAddr,
 	)
 	defer cleanup()
@@ -342,7 +342,7 @@ func TestServe_RecordsCaptured(t *testing.T) {
 
 func TestServe_ConcurrentQueries(t *testing.T) {
 	r, _, udpAddr, cleanup := startResolver(t,
-		[]transport.Host{"a.example.com", "b.example.com"},
+		[]primitive.Host{"a.example.com", "b.example.com"},
 		testSynthAddr,
 	)
 	defer cleanup()
@@ -457,7 +457,7 @@ func TestClose_BeforeServe_ServeReturnsError(t *testing.T) {
 
 func TestTCPQuery_LengthPrefixed(t *testing.T) {
 	r, err := resolver.New("test-step",
-		[]transport.Host{"tcp.example.com"},
+		[]primitive.Host{"tcp.example.com"},
 		testSynthAddr,
 	)
 	if err != nil {

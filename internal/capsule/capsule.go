@@ -37,6 +37,7 @@ import (
 	"github.com/istr/strike/internal/copier"
 	"github.com/istr/strike/internal/egress"
 	"github.com/istr/strike/internal/mediator"
+	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/resolver"
 	"github.com/istr/strike/internal/transport"
 )
@@ -140,12 +141,12 @@ func New(
 		return nil, err
 	}
 
-	allowlist := make([]transport.Host, 0, len(peers)+len(sshTargets))
+	allowlist := make([]primitive.Host, 0, len(peers)+len(sshTargets))
 	for _, p := range peers {
 		allowlist = append(allowlist, p.Host)
 	}
 	for _, t := range sshTargets {
-		allowlist = append(allowlist, transport.Host(t.Host))
+		allowlist = append(allowlist, primitive.Host(t.Host))
 	}
 
 	res, err := resolver.New(stepID, allowlist, loopbackV4)

@@ -15,6 +15,7 @@ import (
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/closer"
 	"github.com/istr/strike/internal/endpoint"
+	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/transport"
 )
 
@@ -156,7 +157,7 @@ func TestLookupHost_HappyPath(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
 	defer cancel()
 	decl := transport.DNSResolver{
-		Host: transport.Host(addr),
+		Host: primitive.Host(addr),
 		Trust: endpoint.Fingerprint{
 			Type:        "certFingerprint",
 			Fingerprint: fingerprint,
@@ -180,7 +181,7 @@ func TestLookupHost_FingerprintMismatch(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
 	defer cancel()
 	decl := transport.DNSResolver{
-		Host: transport.Host(addr),
+		Host: primitive.Host(addr),
 		Trust: endpoint.Fingerprint{
 			Type:        "certFingerprint",
 			Fingerprint: "sha256:" + strings.Repeat("0", 64),
@@ -217,7 +218,7 @@ func TestProbeResolver_HappyPath(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
 	defer cancel()
 	decl := transport.DNSResolver{
-		Host: transport.Host(addr),
+		Host: primitive.Host(addr),
 		Trust: endpoint.Fingerprint{
 			Type:        "certFingerprint",
 			Fingerprint: fingerprint,
@@ -241,7 +242,7 @@ func TestProbeResolver_FingerprintMismatch(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
 	defer cancel()
 	decl := transport.DNSResolver{
-		Host: transport.Host(addr),
+		Host: primitive.Host(addr),
 		Trust: endpoint.Fingerprint{
 			Type:        "certFingerprint",
 			Fingerprint: "sha256:" + strings.Repeat("0", 64),
@@ -258,7 +259,7 @@ func TestProbeResolver_NoResponse(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
 	defer cancel()
 	decl := transport.DNSResolver{
-		Host: transport.Host(addr),
+		Host: primitive.Host(addr),
 		Trust: endpoint.Fingerprint{
 			Type:        "certFingerprint",
 			Fingerprint: fingerprint,

@@ -1,6 +1,6 @@
-// Package transport defines the host constraint and the resolver/endpoint
-// address types used by strike's TLS-based peers. Trust anchors and engine
-// connection identity live in internal/endpoint.
+// Package transport defines the resolver/endpoint address types used by
+// strike's TLS-based peers. Trust anchors and engine connection identity live
+// in internal/endpoint.
 // The package is positioned beneath lane in the directional
 // dependency graph: lane imports transport, never the reverse.
 //
@@ -9,11 +9,10 @@
 // in this package but is added in a follow-up PR.
 package transport
 
-import "github.com/istr/strike/internal/endpoint"
-
-// Host is a hostname or IPv4 literal, optionally with :port.
-// Lowercase ASCII; punycode required for internationalized domains.
-type Host string
+import (
+	"github.com/istr/strike/internal/endpoint"
+	"github.com/istr/strike/internal/primitive"
+)
 
 // DNSResolver declares the DoT resolver strike uses for all
 // peer hostname resolution within a lane run. Mandatory per
@@ -22,7 +21,7 @@ type Host string
 // mechanics are reused.
 type DNSResolver struct {
 	Trust endpoint.Trust `json:"trust"`
-	Host  Host           `json:"host"`
+	Host  primitive.Host `json:"host"`
 }
 
 // HTTPSEndpoint is a TLS-only service base URL with a mandatory

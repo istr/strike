@@ -8,8 +8,8 @@ import (
 
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/closer"
+	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/resolver"
-	"github.com/istr/strike/internal/transport"
 )
 
 // TestResolver_Synthesis_INTEGRATION verifies that the resolver
@@ -19,7 +19,7 @@ import (
 // any upstream (the resolver is a pure allowlist gate).
 func TestResolver_Synthesis_INTEGRATION(t *testing.T) {
 	synthAddr := netip.MustParseAddr("127.64.0.1")
-	r, err := resolver.New("integration-test", []transport.Host{"one.one.one.one"}, synthAddr)
+	r, err := resolver.New("integration-test", []primitive.Host{"one.one.one.one"}, synthAddr)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}

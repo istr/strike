@@ -80,6 +80,7 @@ deps:
       - concept
       - foundation
       - contract
+      - primitive
   services:
     mayDependOn:
       - services              # allow intra-tier edges (capsule->mediator, etc.)

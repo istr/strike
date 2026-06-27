@@ -29,13 +29,14 @@ import (
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/closer"
 	"github.com/istr/strike/internal/endpoint"
+	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/transport"
 )
 
 // PeerTrust ties a peer SNI to its TLS trust anchor.
 type PeerTrust struct {
 	Trust endpoint.Trust
-	Host  transport.Host
+	Host  primitive.Host
 }
 
 // UpstreamLookupFunc resolves a name to addresses via the lane's
