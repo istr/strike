@@ -78,11 +78,11 @@ override and surfaces with the referenced named type (`Commit GitCommit`,
 1. A disjunction (sum type) that is hand-modelled as a Go interface:
    `#ProvenanceRecord`, `#OutputHandle`, `#TLSTrust`, `#EngineConnection`.
    The generator cannot emit a Go sum type, so the union is suppressed and
-   the interface is hand-written.
-2. An abstract base constraint whose named Go type is unwanted or homed in
-   another package: `#Path` (the abstract base for `#AbsPath`/`#RelPath`) and
-   `#Host` (the Go type lives in `internal/transport`). A field then pins the
-   foreign type with `@go(Field,type="<import-path>".Type)`.
+   the interface is hand-written. CUE needs a discriminator field for
+   disjunctions on structs. The name of this field is `type` and MAY also
+   be suppressed using the annotation if it is not needed in the implementation.
+2. An abstract base constraint whose named Go type is unwanted, for example
+   `#Path` (the abstract base for `#AbsPath`/`#RelPath`).
 
 A field-level `type=string` override on a regex scalar is none of these: it
 suppresses the named type the constraint exists to provide, and is not used.
