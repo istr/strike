@@ -22,3 +22,13 @@ import "github.com/istr/strike/contract/primitive"
 // validates, and redirects its Go type to Address so internal code holds the
 // representation-neutral value.
 #Authority: =~"^[a-z0-9.-]+(:[0-9]+)?$"
+
+// URL is the "https://host[:port][/path]" wire form a URL-bearing Address
+// serializes to at a boundary. Like #Authority it is a specify-register
+// constraint (ADR-048): a boundary field carries #URL as its CUE type so the
+// https-only wire string validates, and redirects its Go type to Address so
+// internal code holds the representation-neutral value. ParseURL and
+// Address.URL round-trip the string; the optional port and path are parsed in
+// Go, so the constraint pins only the https scheme that makes a plaintext base
+// a parse error rather than a runtime rejection.
+#URL: =~"^https://"

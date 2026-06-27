@@ -52,9 +52,9 @@ func TestKeylessVerifySpike(t *testing.T) {
 
 	trust := endpoint.CABundle{Type: "caBundle", Path: caddyRoot}
 	eps := lane.KeylessEndpoints{
-		Fulcio: transport.HTTPSEndpoint{URL: "https://fulcio.127.0.0.1.sslip.io:5555", Trust: trust},
-		Rekor:  transport.HTTPSEndpoint{URL: "https://rekor.127.0.0.1.sslip.io:3003", Trust: trust},
-		TSA:    transport.HTTPSEndpoint{URL: "https://tsa.127.0.0.1.sslip.io:3004", Trust: trust},
+		Fulcio: transport.HTTPSEndpoint{Address: endpoint.MustParseURL("https://fulcio.127.0.0.1.sslip.io:5555"), Trust: trust},
+		Rekor:  transport.HTTPSEndpoint{Address: endpoint.MustParseURL("https://rekor.127.0.0.1.sslip.io:3003"), Trust: trust},
+		TSA:    transport.HTTPSEndpoint{Address: endpoint.MustParseURL("https://tsa.127.0.0.1.sslip.io:3004"), Trust: trust},
 	}
 	token, err := ambientIDToken()
 	if err != nil {

@@ -59,8 +59,8 @@ func TestUnmarshalKeyless(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unmarshalKeyless: %v", err)
 			}
-			if got.Endpoints.Fulcio.URL != "https://fulcio.example:5555" {
-				t.Errorf("fulcio url = %q", got.Endpoints.Fulcio.URL)
+			if got.Endpoints.Fulcio.Address.URL() != "https://fulcio.example:5555" {
+				t.Errorf("fulcio url = %q", got.Endpoints.Fulcio.Address.URL())
 			}
 			if got.Endpoints.TSA.Trust == nil || got.Endpoints.TSA.Trust.TrustType() != "certFingerprint" {
 				t.Errorf("tsa trust not dispatched: %#v", got.Endpoints.TSA.Trust)

@@ -67,7 +67,8 @@ func postKeyless(ctx context.Context, ep transport.HTTPSEndpoint, path, contentT
 	if err != nil {
 		return nil, err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, ep.URL+path, bytes.NewReader(body))
+	base := ep.Address.URL()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, base+path, bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("keyless: build request: %w", err)
 	}
@@ -79,7 +80,7 @@ func postKeyless(ctx context.Context, ep transport.HTTPSEndpoint, path, contentT
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("keyless: %s%s: %w", ep.URL, path, err)
+		return nil, fmt.Errorf("keyless: %s%s: %w", base, path, err)
 	}
 	defer closeKeylessBody(resp)
 	respBody, err := io.ReadAll(io.LimitReader(resp.Body, keylessResponseLimit))
@@ -87,7 +88,7 @@ func postKeyless(ctx context.Context, ep transport.HTTPSEndpoint, path, contentT
 		return nil, fmt.Errorf("keyless: read response: %w", err)
 	}
 	if !slices.Contains(wantStatus, resp.StatusCode) {
-		return nil, fmt.Errorf("keyless: %s%s: status %d: %s", ep.URL, path, resp.StatusCode, respBody)
+		return nil, fmt.Errorf("keyless: %s%s: status %d: %s", base, path, resp.StatusCode, respBody)
 	}
 	return respBody, nil
 }

@@ -298,7 +298,11 @@ func unmarshalKeylessEndpoint(name string, data []byte) (transport.HTTPSEndpoint
 	if err != nil {
 		return transport.HTTPSEndpoint{}, fmt.Errorf("keyless %s: %w", name, err)
 	}
-	return transport.HTTPSEndpoint{URL: aux.URL, Trust: t}, nil
+	addr, err := endpoint.ParseURL(aux.URL)
+	if err != nil {
+		return transport.HTTPSEndpoint{}, fmt.Errorf("keyless %s: %w", name, err)
+	}
+	return transport.HTTPSEndpoint{Address: addr, Trust: t}, nil
 }
 
 // UnmarshalJSON implements json.Unmarshaler for Lane. It

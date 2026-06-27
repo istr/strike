@@ -77,9 +77,9 @@ func TestKeylessLive(t *testing.T) {
 
 	trust := endpoint.CABundle{Type: "caBundle", Path: caddyRoot}
 	eps := lane.KeylessEndpoints{
-		Fulcio: transport.HTTPSEndpoint{URL: "https://fulcio.127.0.0.1.sslip.io:5555", Trust: trust},
-		Rekor:  transport.HTTPSEndpoint{URL: "https://rekor.127.0.0.1.sslip.io:3003", Trust: trust},
-		TSA:    transport.HTTPSEndpoint{URL: "https://tsa.127.0.0.1.sslip.io:3004", Trust: trust},
+		Fulcio: transport.HTTPSEndpoint{Address: endpoint.MustParseURL("https://fulcio.127.0.0.1.sslip.io:5555"), Trust: trust},
+		Rekor:  transport.HTTPSEndpoint{Address: endpoint.MustParseURL("https://rekor.127.0.0.1.sslip.io:3003"), Trust: trust},
+		TSA:    transport.HTTPSEndpoint{Address: endpoint.MustParseURL("https://tsa.127.0.0.1.sslip.io:3004"), Trust: trust},
 	}
 
 	token, err := ambientIDToken()
@@ -152,7 +152,7 @@ func liveTrustRoot(ctx context.Context, t *testing.T, fulcioEp transport.HTTPSEn
 	if err != nil {
 		t.Fatalf("fulcio client: %v", err)
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fulcioEp.URL+"/api/v2/trustBundle", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fulcioEp.Address.URL()+"/api/v2/trustBundle", nil)
 	if err != nil {
 		t.Fatalf("trustBundle request: %v", err)
 	}
@@ -190,7 +190,7 @@ func liveTrustRoot(ctx context.Context, t *testing.T, fulcioEp transport.HTTPSEn
 		Intermediates:       chain[:len(chain)-1],
 		ValidityPeriodStart: fulcioRoot.NotBefore,
 		ValidityPeriodEnd:   fulcioRoot.NotAfter,
-		URI:                 fulcioEp.URL,
+		URI:                 fulcioEp.Address.URL(),
 	}
 
 	pubPEM, err := os.ReadFile(filepath.Clean(rekorPubPath))

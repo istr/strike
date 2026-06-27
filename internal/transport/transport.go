@@ -25,8 +25,11 @@ type DNSResolver struct {
 // declared trust anchor. The CUE schema (#HTTPSEndpoint) admits
 // only https:// URLs, so a plaintext endpoint is a parse error,
 // not a runtime rejection. Clients append fixed well-known API
-// paths to the base URL.
+// paths to the base that Address.URL renders. The base is carried
+// as the representation-neutral Address concept (ADR-048): the
+// https:// wire form is projected in by ParseURL at decode and out
+// by Address.URL at use.
 type HTTPSEndpoint struct {
-	Trust endpoint.Trust `json:"trust"`
-	URL   string         `json:"url"`
+	Trust   endpoint.Trust   `json:"trust"`
+	Address endpoint.Address `json:"url"`
 }

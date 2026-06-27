@@ -69,6 +69,16 @@ func ParseURL(s string) (Address, error) {
 	return a, nil
 }
 
+// MustParseURL parses an https base URL, panicking on invalid input. Use only
+// for known-good values and test fixtures.
+func MustParseURL(s string) Address {
+	a, err := ParseURL(s)
+	if err != nil {
+		panic(err)
+	}
+	return a
+}
+
 // Authority returns the packed "host" or "host:port" wire form. A path, if
 // present, is not included.
 func (a Address) Authority() string {

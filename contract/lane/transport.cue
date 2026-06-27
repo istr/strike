@@ -48,6 +48,6 @@ import "github.com/istr/strike/contract/endpoint"
 // discretionary").
 // ----------------------------------------------------------------
 #HTTPSEndpoint: {
-	url:   =~"^https://"
+	url:   endpoint.#URL
 	trust: endpoint.#Trust
 }
