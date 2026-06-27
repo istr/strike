@@ -1,28 +1,28 @@
-package transport_test
+package endpoint_test
 
 import (
 	"strings"
 	"testing"
 
-	"github.com/istr/strike/internal/transport"
+	"github.com/istr/strike/internal/endpoint"
 )
 
-// TestUnmarshalEngineConnection exercises the discriminator dispatch of the
+// TestUnmarshalEngine exercises the discriminator dispatch of the
 // hand-written engine-connection union: each concrete branch decodes to its
 // type, and the missing/empty/unknown discriminator cases surface an error.
 // Mirrors lane.UnmarshalPeer's table-driven dispatch test.
-func TestUnmarshalEngineConnection(t *testing.T) {
+func TestUnmarshalEngine(t *testing.T) {
 	tests := []struct {
 		name    string
 		input   string
-		check   func(t *testing.T, c transport.EngineConnection)
+		check   func(t *testing.T, c endpoint.Engine)
 		wantErr string
 	}{
 		{
 			name:  "unix",
 			input: `{"type": "unix"}`,
-			check: func(t *testing.T, c transport.EngineConnection) {
-				u, ok := c.(transport.EngineUnix)
+			check: func(t *testing.T, c endpoint.Engine) {
+				u, ok := c.(endpoint.EngineUnix)
 				if !ok {
 					t.Fatalf("type = %T, want EngineUnix", c)
 				}
@@ -40,8 +40,8 @@ func TestUnmarshalEngineConnection(t *testing.T) {
 				"serverCertSubject": "engine.example",
 				"serverCertIssuer": "Example CA"
 			}`,
-			check: func(t *testing.T, c transport.EngineConnection) {
-				tc, ok := c.(transport.EngineTLS)
+			check: func(t *testing.T, c endpoint.Engine) {
+				tc, ok := c.(endpoint.EngineTLS)
 				if !ok {
 					t.Fatalf("type = %T, want EngineTLS", c)
 				}
@@ -68,8 +68,8 @@ func TestUnmarshalEngineConnection(t *testing.T) {
 				"clientCertFingerprint": "sha256:cc",
 				"clientCertSubject": "controller.example"
 			}`,
-			check: func(t *testing.T, c transport.EngineConnection) {
-				m, ok := c.(transport.EngineMTLS)
+			check: func(t *testing.T, c endpoint.Engine) {
+				m, ok := c.(endpoint.EngineMTLS)
 				if !ok {
 					t.Fatalf("type = %T, want EngineMTLS", c)
 				}
@@ -123,7 +123,7 @@ func TestUnmarshalEngineConnection(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			c, err := transport.UnmarshalEngineConnection([]byte(tc.input))
+			c, err := endpoint.UnmarshalEngine([]byte(tc.input))
 			if tc.wantErr != "" {
 				if err == nil {
 					t.Fatalf("expected error containing %q, got nil", tc.wantErr)
@@ -134,7 +134,7 @@ func TestUnmarshalEngineConnection(t *testing.T) {
 				return
 			}
 			if err != nil {
-				t.Fatalf("UnmarshalEngineConnection: %v", err)
+				t.Fatalf("UnmarshalEngine: %v", err)
 			}
 			tc.check(t, c)
 		})

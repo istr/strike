@@ -2,9 +2,9 @@ package deploy
 
 import (
 	"github.com/istr/strike/internal/clock"
+	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/primitive"
-	"github.com/istr/strike/internal/transport"
 )
 
 // Output attestation predicate types (ADR-040 D3). These are the standard-
@@ -61,14 +61,14 @@ type SLSABuildDefinition struct {
 // strike's typed Layer-V facts (Fork C, Fork D). EngineConnection is Layer V
 // and lives here, not in the engine-context predicate.
 type StrikeExternalParameters struct {
-	Target        lane.DeployTarget          `json:"target"`
-	Peers         map[string][]lane.Peer     `json:"peers"`
-	ObservedPeers map[string]ObservedPeer    `json:"observedPeers,omitempty"`
-	Resolver      *ResolverRecord            `json:"resolver,omitempty"`
-	Engine        transport.EngineConnection `json:"engine,omitempty"`
-	OIDC          ProvenanceOIDC             `json:"oidc"`
-	LaneID        string                     `json:"laneId"`
-	LaneDigest    primitive.Digest           `json:"laneDigest"`
+	Target        lane.DeployTarget       `json:"target"`
+	Peers         map[string][]lane.Peer  `json:"peers"`
+	ObservedPeers map[string]ObservedPeer `json:"observedPeers,omitempty"`
+	Resolver      *ResolverRecord         `json:"resolver,omitempty"`
+	Engine        endpoint.Engine         `json:"engine,omitempty"`
+	OIDC          ProvenanceOIDC          `json:"oidc"`
+	LaneID        string                  `json:"laneId"`
+	LaneDigest    primitive.Digest        `json:"laneDigest"`
 }
 
 // ProvenanceOIDC is the declared signing identity carried into the sealed

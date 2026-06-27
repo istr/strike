@@ -639,9 +639,9 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 	if att.Sealed.Engine.ConnectionType() != connTypeTLS {
 		t.Errorf("Engine.ConnectionType = %q, want tls", att.Sealed.Engine.ConnectionType())
 	}
-	tlsConn, ok := att.Sealed.Engine.(transport.EngineTLS)
+	tlsConn, ok := att.Sealed.Engine.(endpoint.EngineTLS)
 	if !ok {
-		t.Fatalf("Engine type = %T, want transport.EngineTLS", att.Sealed.Engine)
+		t.Fatalf("Engine type = %T, want endpoint.EngineTLS", att.Sealed.Engine)
 	}
 	if !strings.HasPrefix(tlsConn.ServerCertFingerprint, "sha256:") {
 		t.Errorf("Engine.ServerCertFingerprint = %q, want sha256: prefix", tlsConn.ServerCertFingerprint)
@@ -780,9 +780,9 @@ func TestEngineRecord_WithRuntime(t *testing.T) {
 	if att.Sealed.Engine.ConnectionType() != connTypeMTLS {
 		t.Errorf("ConnectionType = %q, want mtls", att.Sealed.Engine.ConnectionType())
 	}
-	mtlsConn, ok := att.Sealed.Engine.(transport.EngineMTLS)
+	mtlsConn, ok := att.Sealed.Engine.(endpoint.EngineMTLS)
 	if !ok {
-		t.Fatalf("Engine type = %T, want transport.EngineMTLS", att.Sealed.Engine)
+		t.Fatalf("Engine type = %T, want endpoint.EngineMTLS", att.Sealed.Engine)
 	}
 	if mtlsConn.ServerCertFingerprint != "sha256:abc" {
 		t.Errorf("ServerCertFingerprint = %q, want sha256:abc", mtlsConn.ServerCertFingerprint)

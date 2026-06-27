@@ -1,8 +1,6 @@
 /strike
 contract/*.json
-internal/lane/cue_types_gen.go
-internal/primitive/cue_types_gen.go
-internal/endpoint/cue_types_gen.go
+internal/**/*.gen.go
 /.claude
 !/.claude/skills/**
 .vscode

@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/istr/strike/internal/deploy"
+	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/lane"
-	"github.com/istr/strike/internal/transport"
 )
 
 // TestSealed_UnmarshalEngine exercises the engine dispatch in
@@ -21,7 +21,7 @@ func TestSealed_UnmarshalEngine(t *testing.T) {
 		Target:     lane.DeployTarget{ID: "prod-1", Type: "registry", Description: "production"},
 		Artifacts:  map[string]deploy.ArtifactRecord{},
 		Peers:      map[string][]lane.Peer{},
-		Engine: transport.EngineMTLS{
+		Engine: endpoint.EngineMTLS{
 			Type:                  "mtls",
 			CATrustType:           "pinned",
 			ServerCertFingerprint: "sha256:aa",
@@ -36,9 +36,9 @@ func TestSealed_UnmarshalEngine(t *testing.T) {
 	if err := json.Unmarshal(data, &got); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	m, ok := got.Engine.(transport.EngineMTLS)
+	m, ok := got.Engine.(endpoint.EngineMTLS)
 	if !ok {
-		t.Fatalf("Engine type = %T, want transport.EngineMTLS", got.Engine)
+		t.Fatalf("Engine type = %T, want endpoint.EngineMTLS", got.Engine)
 	}
 	if m.ClientCertFingerprint != "sha256:bb" {
 		t.Errorf("ClientCertFingerprint = %q, want sha256:bb", m.ClientCertFingerprint)

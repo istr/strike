@@ -130,7 +130,7 @@ fields: {
 
 	// ---- V: CP-verified external observations (cpObserved) ----
 	resolver: {provenance: "cpObserved", hardenedByDeclaration: true, internal: "sealed.resolver", published: "slsa-provenance", rationale: "CP-observed resolver TLS identity at the pre-flight handshake (front-observed), pinned per the lane"}
-	engine: {provenance: "cpObserved", internal: "sealed.engine", published: "slsa-provenance", rationale: "CP-observed engine connection facts (#EngineConnection); NOT the self-report. Observed but not yet declaration-hardened"}
+	engine: {provenance: "cpObserved", internal: "sealed.engine", published: "slsa-provenance", rationale: "CP-observed engine connection facts (#Engine); NOT the self-report. Observed but not yet declaration-hardened"}
 	observedPeers: {provenance: "cpObserved", hardenedByDeclaration: true, internal: "sealed.observedPeers", published: "slsa-provenance", rationale: "CP-validated peer identity, dialed and verified per the lane spec (front-observed)"}
 
 	// ---- V: CP-sealed artifact outputs (cpSealed) ----

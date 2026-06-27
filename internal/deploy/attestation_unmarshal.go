@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/lane"
-	"github.com/istr/strike/internal/transport"
 )
 
 // UnmarshalJSON implements json.Unmarshaler for Sealed.
@@ -26,7 +26,7 @@ func (s *Sealed) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	if len(aux.Engine) != 0 && string(aux.Engine) != "null" {
-		conn, err := transport.UnmarshalEngineConnection(aux.Engine)
+		conn, err := endpoint.UnmarshalEngine(aux.Engine)
 		if err != nil {
 			return fmt.Errorf("attestation engine: %w", err)
 		}

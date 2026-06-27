@@ -21,6 +21,7 @@
 package attest
 
 import (
+	"github.com/istr/strike/contract/endpoint"
 	"github.com/istr/strike/contract/lane"
 	"github.com/istr/strike/contract/primitive"
 )
@@ -97,7 +98,7 @@ import (
 	peers: [ID=primitive.#Identifier]: [...lane.#Peer]
 	observedPeers?: [Endpoint=string]: #ObservedPeer
 	resolver?: #ResolverRecord
-	engine?:   lane.#EngineConnection
+	engine?:   endpoint.#Engine
 }
 
 // #ProvenanceOIDC is the declared signing identity carried into the sealed
@@ -146,7 +147,7 @@ import (
 
 // #EngineContextPredicate carries the Layer-E claim only: the engine-asserted
 // attribution of mediated connections to steps (peerAttribution). The
-// control-plane-observed engine connection (#EngineConnection) is NOT here --
+// control-plane-observed engine connection (#Engine) is NOT here --
 // it is Layer V and rides in the sealed provenance's externalParameters
 // (Fork C). The engine's self-report (engineMetadata) is NOT here either -- it
 // carries no trust claim and lives in the informational statement.

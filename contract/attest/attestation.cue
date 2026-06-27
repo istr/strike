@@ -23,6 +23,7 @@
 package attest
 
 import (
+	"github.com/istr/strike/contract/endpoint"
 	"github.com/istr/strike/contract/lane"
 	"github.com/istr/strike/contract/primitive"
 )
@@ -89,7 +90,7 @@ import (
 	// engine carries the CP-observed connection facts about the engine.
 	// The engine's self-reports (version, rootless) live in
 	// informational.engineMetadata.
-	engine?: lane.#EngineConnection
+	engine?: endpoint.#Engine
 
 	// observedPeers records, per peer endpoint ("host:port"), the connection
 	// identity the control plane observed and validated against the declared

@@ -25,6 +25,7 @@ import (
 	"github.com/istr/strike/internal/capsule"
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/container"
+	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/mediator"
 	"github.com/istr/strike/internal/primitive"
@@ -48,14 +49,14 @@ type Attestation struct {
 
 // Sealed -- CP-bound claims, sound to any verifier without engine trust.
 type Sealed struct {
-	Artifacts     map[string]ArtifactRecord  `json:"artifacts"`
-	Peers         map[string][]lane.Peer     `json:"peers"`
-	Resolver      *ResolverRecord            `json:"resolver,omitempty"`
-	Engine        transport.EngineConnection `json:"engine,omitempty"`
-	ObservedPeers map[string]ObservedPeer    `json:"observedPeers,omitempty"`
-	Target        lane.DeployTarget          `json:"target"`
-	LaneID        string                     `json:"laneId"`
-	LaneDigest    primitive.Digest           `json:"laneDigest"`
+	Artifacts     map[string]ArtifactRecord `json:"artifacts"`
+	Peers         map[string][]lane.Peer    `json:"peers"`
+	Resolver      *ResolverRecord           `json:"resolver,omitempty"`
+	Engine        endpoint.Engine           `json:"engine,omitempty"`
+	ObservedPeers map[string]ObservedPeer   `json:"observedPeers,omitempty"`
+	Target        lane.DeployTarget         `json:"target"`
+	LaneID        string                    `json:"laneId"`
+	LaneDigest    primitive.Digest          `json:"laneDigest"`
 }
 
 // ---------------------------------------------------------------------------
@@ -955,15 +956,15 @@ func ResolveKubeconfig(override string) (string, error) {
 
 // engineRecords returns the sealed engine connection facts (CP-observed)
 // and the informational engine metadata (engine self-reports).
-func (d *Deployer) engineRecords() (transport.EngineConnection, *EngineMetadata) {
+func (d *Deployer) engineRecords() (endpoint.Engine, *EngineMetadata) {
 	if d.EngineID == nil {
 		return nil, nil
 	}
 	c := d.EngineID.Connection
-	var conn transport.EngineConnection
+	var conn endpoint.Engine
 	switch c.Type {
 	case "mtls":
-		conn = transport.EngineMTLS{
+		conn = endpoint.EngineMTLS{
 			Type:                  c.Type,
 			CATrustType:           c.CATrustType,
 			ServerCertFingerprint: c.ServerCertFingerprint,
@@ -973,7 +974,7 @@ func (d *Deployer) engineRecords() (transport.EngineConnection, *EngineMetadata)
 			ClientCertSubject:     c.ClientCertSubject,
 		}
 	case "tls":
-		conn = transport.EngineTLS{
+		conn = endpoint.EngineTLS{
 			Type:                  c.Type,
 			CATrustType:           c.CATrustType,
 			ServerCertFingerprint: c.ServerCertFingerprint,
@@ -981,7 +982,7 @@ func (d *Deployer) engineRecords() (transport.EngineConnection, *EngineMetadata)
 			ServerCertIssuer:      c.ServerCertIssuer,
 		}
 	default: // "unix"
-		conn = transport.EngineUnix{Type: c.Type}
+		conn = endpoint.EngineUnix{Type: c.Type}
 	}
 	meta := &EngineMetadata{}
 	if d.EngineID.Runtime != nil {
