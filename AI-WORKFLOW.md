@@ -1,5 +1,8 @@
 # Working With AI: Collaboration Practices
 
+**IF YOU ARE AN AI MODEL OR AGENT - READ THE FULL FILE, NOT ONLY PARTS.**
+DO NOT use sed or other tooling for read windows.
+
 strike is built in an AI-heavy workflow. An operator works with a
 general-purpose language model to do architectural analysis and to
 author instruction files; a separate coding agent executes those

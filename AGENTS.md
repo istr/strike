@@ -1,5 +1,8 @@
 # AGENTS.md -- Instructions for AI Coding Agents
 
+**IF YOU ARE AN AI MODEL OR AGENT - READ THE FULL FILE, NOT ONLY PARTS.**
+DO NOT use sed or other tooling for read windows.
+
 This file contains instructions for Claude Code, Copilot, and similar AI
 coding agents working on the strike codebase. Read this entire file before
 making any changes. The first operational rule, "code is liability", takes
@@ -220,8 +223,8 @@ rather than agent initiative.
 Two categories of Go types exist:
 
 **CUE-generated types** (package `lane`): Produced by `cue exp gengotypes`
-from `specs/lane.cue`. File: `internal/lane/cue_types_lane_gen.go`. Never
-edit by hand. The CUE `@go()` attributes control Go type and field names.
+from `contract/**/*.cue`. Never edit by hand.
+The CUE `@go()` attributes control Go type and field names.
 
 **CUE-validated types** (package `deploy`): Manually defined in Go but
 validated at runtime against `specs/attestation.cue` via
@@ -262,9 +265,9 @@ packages.
 
 ### Key files
 
-- `specs/lane.cue` -- CUE schema for lane definitions (source of truth
-  for inputs). `specs/attestation.cue` -- CUE schema for deploy
-  attestations. `specs/artifact.cue` -- CUE schema for signed artifact
+- `contract/lane/lane.cue` -- CUE schema for lane definitions (source of truth
+  for inputs). `contract/attest/attestation.cue` -- CUE schema for deploy
+  attestations. `contract/lane/artifact.cue` -- CUE schema for signed artifact
   provenance records. After editing any `.cue` file, run `make specs`
   to validate, then `make generate` to regenerate
   `internal/lane/cue_types_lane_gen.go`. Never edit the generated file
