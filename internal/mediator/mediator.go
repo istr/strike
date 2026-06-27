@@ -343,12 +343,6 @@ func canonicalize(name string) (string, error) {
 	if n == "" {
 		return "", errors.New("empty name")
 	}
-	if i := strings.LastIndex(n, ":"); i >= 0 {
-		n = n[:i]
-	}
-	if n == "" {
-		return "", errors.New("empty name after port strip")
-	}
 	return n, nil
 }
 

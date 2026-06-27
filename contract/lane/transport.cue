@@ -2,10 +2,7 @@
 // Trust anchors and engine connection identity live in the endpoint package.
 //
 // These definitions share package lane so that lane.cue can reference
-// them directly (#Host, #DNSResolver). The @go(-) annotations suppress
-// Go code generation via gengotypes; the Go types are hand-written in
-// internal/transport/transport.go so they live in a separate Go package.
-// Directional dependency: internal/lane imports internal/transport.
+// them directly (#Host, #DNSResolver).
 package lane
 
 import "github.com/istr/strike/contract/endpoint"
@@ -18,7 +15,7 @@ import "github.com/istr/strike/contract/endpoint"
 // OCI registries use a separate constraint because their format
 // includes path segments.
 // ----------------------------------------------------------------
-#Host: =~"^[a-z0-9.-]+(:[0-9]+)?$" @go(-)
+#Host: =~"^[a-z0-9.-]+(:[0-9]+)?$"
 
 // ----------------------------------------------------------------
 // DNS resolver declaration.
@@ -46,7 +43,6 @@ import "github.com/istr/strike/contract/endpoint"
 // this comment is the schema-level intent record.
 // ----------------------------------------------------------------
 #DNSResolver: {
-	@go(-)
 	host:  #Host
 	trust: endpoint.#Trust
 }
@@ -60,7 +56,6 @@ import "github.com/istr/strike/contract/endpoint"
 // discretionary").
 // ----------------------------------------------------------------
 #HTTPSEndpoint: {
-	@go(-)
 	url:   =~"^https://"
 	trust: endpoint.#Trust
 }

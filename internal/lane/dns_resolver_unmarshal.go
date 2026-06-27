@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/istr/strike/internal/primitive"
+	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/transport"
 )
 
@@ -18,7 +18,7 @@ import (
 // reverse.
 func unmarshalDNSResolver(data []byte) (transport.DNSResolver, error) {
 	type alias struct {
-		Host  primitive.Host  `json:"host"`
+		Host  string          `json:"host"`
 		Trust json.RawMessage `json:"trust"`
 	}
 	var aux alias
@@ -32,5 +32,9 @@ func unmarshalDNSResolver(data []byte) (transport.DNSResolver, error) {
 	if err != nil {
 		return transport.DNSResolver{}, fmt.Errorf("resolver: %w", err)
 	}
-	return transport.DNSResolver{Host: aux.Host, Trust: t}, nil
+	addr, err := endpoint.ParseAuthority(aux.Host)
+	if err != nil {
+		return transport.DNSResolver{}, fmt.Errorf("resolver host: %w", err)
+	}
+	return transport.DNSResolver{Host: addr, Trust: t}, nil
 }

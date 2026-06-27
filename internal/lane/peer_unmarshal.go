@@ -86,12 +86,10 @@ func unmarshalTLSTrust(data []byte) (endpoint.Trust, error) {
 // decodes the trust field through the discriminator helper.
 // HTTPSPeer.Trust is required; missing trust is an error.
 func (p *HTTPSPeer) UnmarshalJSON(data []byte) error {
-	type alias HTTPSPeer
-	aux := struct {
-		*alias
+	var aux struct {
+		Type  string          `json:"type"`
+		Host  string          `json:"host"`
 		Trust json.RawMessage `json:"trust"`
-	}{
-		alias: (*alias)(p),
 	}
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return err
@@ -103,8 +101,55 @@ func (p *HTTPSPeer) UnmarshalJSON(data []byte) error {
 	if err != nil {
 		return fmt.Errorf("https peer: %w", err)
 	}
+	addr, err := endpoint.ParseAuthority(aux.Host)
+	if err != nil {
+		return fmt.Errorf("https peer: %w", err)
+	}
+	p.Type = aux.Type
+	p.Host = addr
 	p.Trust = t
 	return nil
+}
+
+// MarshalJSON implements json.Marshaler for HTTPSPeer. The host is projected
+// to its packed authority wire form.
+func (p HTTPSPeer) MarshalJSON() ([]byte, error) {
+	return json.Marshal(struct {
+		Trust endpoint.Trust `json:"trust"`
+		Type  string         `json:"type"`
+		Host  string         `json:"host"`
+	}{Type: p.Type, Host: p.Host.Authority(), Trust: p.Trust})
+}
+
+// UnmarshalJSON implements json.Unmarshaler for SSHPeer. The host is parsed
+// from its packed authority wire form.
+func (p *SSHPeer) UnmarshalJSON(data []byte) error {
+	var aux struct {
+		Type       string             `json:"type"`
+		Host       string             `json:"host"`
+		KnownHosts []endpoint.HostKey `json:"knownHosts"`
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	addr, err := endpoint.ParseAuthority(aux.Host)
+	if err != nil {
+		return fmt.Errorf("ssh peer: %w", err)
+	}
+	p.Type = aux.Type
+	p.Host = addr
+	p.KnownHosts = aux.KnownHosts
+	return nil
+}
+
+// MarshalJSON implements json.Marshaler for SSHPeer. The host is projected to
+// its packed authority wire form.
+func (p SSHPeer) MarshalJSON() ([]byte, error) {
+	return json.Marshal(struct {
+		Type       string             `json:"type"`
+		Host       string             `json:"host"`
+		KnownHosts []endpoint.HostKey `json:"knownHosts"`
+	}{Type: p.Type, Host: p.Host.Authority(), KnownHosts: p.KnownHosts})
 }
 
 // UnmarshalJSON implements json.Unmarshaler for Step. It

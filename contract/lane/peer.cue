@@ -41,7 +41,7 @@ import "github.com/istr/strike/contract/endpoint"
 #HTTPSPeer: {
 	@go(HTTPSPeer)
 	type:  "https"         @go(Type)
-	host:  #Host           @go(Host,type="github.com/istr/strike/contract/primitive".Host)
+	host:  #Host           @go(Host,type="github.com/istr/strike/contract/endpoint".Address)
 	trust: endpoint.#Trust @go(Trust,type="github.com/istr/strike/contract/endpoint".Trust)
 }
 
@@ -53,6 +53,6 @@ import "github.com/istr/strike/contract/endpoint"
 #SSHPeer: {
 	@go(SSHPeer)
 	type: "ssh" @go(Type)
-	host: #Host @go(Host,type="github.com/istr/strike/contract/primitive".Host)
+	host: #Host @go(Host,type="github.com/istr/strike/contract/endpoint".Address)
 	knownHosts: [...endpoint.#HostKey] @go(KnownHosts)
 }

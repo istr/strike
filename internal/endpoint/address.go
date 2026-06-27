@@ -35,6 +35,16 @@ func ParseAuthority(s string) (Address, error) {
 	return Address{Host: primitive.Host(host), Port: port}, nil
 }
 
+// MustParseAuthority parses a packed authority, panicking on invalid input.
+// Use only for known-good values and test fixtures.
+func MustParseAuthority(s string) Address {
+	a, err := ParseAuthority(s)
+	if err != nil {
+		panic(err)
+	}
+	return a
+}
+
 // ParseURL parses an "https://host[:port][/path]" base URL into an Address.
 // Only the https scheme is accepted; host is required; port and path are
 // optional. The path is preserved verbatim so URL() round-trips the input.

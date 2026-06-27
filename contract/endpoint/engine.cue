@@ -5,25 +5,21 @@
 //
 // The discriminator is `type`. A Unix socket carries no certificate identity;
 // tls adds the observed server-cert identity and how it was trusted; mtls adds
-// the controller's own client-cert identity. The Go types are hand-written in
-// internal/endpoint (annotated @go(-)).
+// the controller's own client-cert identity.
 package endpoint
 
 #Engine: (#EngineUnix | #EngineTLS | #EngineMTLS) @go(-)
 
 #EngineUnix: {
-	@go(-)
 	type: "unix"
 }
 
 // EngineServerTLS is the observed engine server-cert identity shared by the tls
 // and mtls variants. Not a connection on its own (no discriminator).
 #EngineServerTLS: {
-	@go(-)
-
 	// caTrustType is how the engine's server certificate was trusted:
 	// "pinned" (explicit CA) or "system" (OS trust store).
-	caTrustType: "pinned" | "system"
+	caTrustType: "pinned" | "system" @go(CATrustType)
 	// serverCertFingerprint is sha256:<hex> of the engine's leaf cert,
 	// observed by CP during the TLS handshake.
 	serverCertFingerprint: string
@@ -35,13 +31,11 @@ package endpoint
 
 #EngineTLS: {
 	#EngineServerTLS
-	@go(-)
 	type: "tls"
 }
 
 #EngineMTLS: {
 	#EngineServerTLS
-	@go(-)
 	type: "mtls"
 	// clientCertFingerprint is sha256:<hex> of the controller's own cert;
 	// clientCertSubject is its Subject CN.

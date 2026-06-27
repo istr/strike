@@ -15,7 +15,6 @@ import (
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/closer"
 	"github.com/istr/strike/internal/endpoint"
-	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/transport"
 )
 
@@ -157,7 +156,7 @@ func TestLookupHost_HappyPath(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
 	defer cancel()
 	decl := transport.DNSResolver{
-		Host: primitive.Host(addr),
+		Host: endpoint.MustParseAuthority(addr),
 		Trust: endpoint.Fingerprint{
 			Type:        "certFingerprint",
 			Fingerprint: fingerprint,
@@ -181,7 +180,7 @@ func TestLookupHost_FingerprintMismatch(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
 	defer cancel()
 	decl := transport.DNSResolver{
-		Host: primitive.Host(addr),
+		Host: endpoint.MustParseAuthority(addr),
 		Trust: endpoint.Fingerprint{
 			Type:        "certFingerprint",
 			Fingerprint: "sha256:" + strings.Repeat("0", 64),
@@ -200,7 +199,7 @@ func TestLookupHost_ServerUnreachable(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*clock.Second)
 	defer cancel()
 	decl := transport.DNSResolver{
-		Host: "127.0.0.1:1",
+		Host: endpoint.MustParseAuthority("127.0.0.1:1"),
 		Trust: endpoint.Fingerprint{
 			Type:        "certFingerprint",
 			Fingerprint: "sha256:" + strings.Repeat("a", 64),
@@ -218,7 +217,7 @@ func TestProbeResolver_HappyPath(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
 	defer cancel()
 	decl := transport.DNSResolver{
-		Host: primitive.Host(addr),
+		Host: endpoint.MustParseAuthority(addr),
 		Trust: endpoint.Fingerprint{
 			Type:        "certFingerprint",
 			Fingerprint: fingerprint,
@@ -231,8 +230,8 @@ func TestProbeResolver_HappyPath(t *testing.T) {
 	if id.LeafFingerprint == "" {
 		t.Error("expected non-empty leaf fingerprint from probe handshake")
 	}
-	if id.PeerAddress != string(decl.Host) {
-		t.Errorf("PeerAddress = %q, want %q", id.PeerAddress, string(decl.Host))
+	if id.PeerAddress != decl.Host.Authority() {
+		t.Errorf("PeerAddress = %q, want %q", id.PeerAddress, decl.Host.Authority())
 	}
 }
 
@@ -242,7 +241,7 @@ func TestProbeResolver_FingerprintMismatch(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
 	defer cancel()
 	decl := transport.DNSResolver{
-		Host: primitive.Host(addr),
+		Host: endpoint.MustParseAuthority(addr),
 		Trust: endpoint.Fingerprint{
 			Type:        "certFingerprint",
 			Fingerprint: "sha256:" + strings.Repeat("0", 64),
@@ -259,7 +258,7 @@ func TestProbeResolver_NoResponse(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
 	defer cancel()
 	decl := transport.DNSResolver{
-		Host: primitive.Host(addr),
+		Host: endpoint.MustParseAuthority(addr),
 		Trust: endpoint.Fingerprint{
 			Type:        "certFingerprint",
 			Fingerprint: fingerprint,
@@ -281,7 +280,7 @@ func TestProbeResolver_ErrorChainHasNoSystemResolverReference(t *testing.T) {
 	// localhost port is the most reliable: no network access,
 	// no test-server setup, fast and deterministic failure.
 	decl := transport.DNSResolver{
-		Host: "127.0.0.1:1",
+		Host: endpoint.MustParseAuthority("127.0.0.1:1"),
 		Trust: endpoint.Fingerprint{
 			Type:        "certFingerprint",
 			Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000",

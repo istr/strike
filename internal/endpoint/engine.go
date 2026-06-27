@@ -16,39 +16,11 @@ type Engine interface {
 	ConnectionType() string
 }
 
-// EngineUnix is a Unix-socket engine connection: no certificate identity.
-type EngineUnix struct {
-	Type string `json:"type"`
-}
-
 // ConnectionType implements Engine.
 func (c EngineUnix) ConnectionType() string { return c.Type }
 
-// EngineTLS is a one-way-TLS engine connection. CATrustType records how the
-// engine's server certificate was trusted ("pinned" explicit CA, or
-// "system" OS trust store).
-type EngineTLS struct {
-	Type                  string `json:"type"`
-	CATrustType           string `json:"caTrustType"`
-	ServerCertFingerprint string `json:"serverCertFingerprint"`
-	ServerCertSubject     string `json:"serverCertSubject,omitempty"`
-	ServerCertIssuer      string `json:"serverCertIssuer,omitempty"`
-}
-
 // ConnectionType implements Engine.
 func (c EngineTLS) ConnectionType() string { return c.Type }
-
-// EngineMTLS is a mutual-TLS engine connection: the EngineTLS server identity
-// plus the controller's own client-certificate identity.
-type EngineMTLS struct {
-	Type                  string `json:"type"`
-	CATrustType           string `json:"caTrustType"`
-	ServerCertFingerprint string `json:"serverCertFingerprint"`
-	ServerCertSubject     string `json:"serverCertSubject,omitempty"`
-	ServerCertIssuer      string `json:"serverCertIssuer,omitempty"`
-	ClientCertFingerprint string `json:"clientCertFingerprint"`
-	ClientCertSubject     string `json:"clientCertSubject,omitempty"`
-}
 
 // ConnectionType implements Engine.
 func (c EngineMTLS) ConnectionType() string { return c.Type }

@@ -1025,7 +1025,8 @@ func TestCloseOutbound_ForceClosesTrackedClient(t *testing.T) {
 	ca := testCA(t)
 	hostKeyLine := strings.TrimSpace(string(ssh.MarshalAuthorizedKey(hostSigner.PublicKey())))
 	hp := capsule.HostPorts{Resolver: 15500, Mediator: 15501}
-	targets := []capsule.SSHTarget{{Host: srvLn.Addr().String(), HostKeys: []string{hostKeyLine}}}
+	srvAddr := netip.MustParseAddrPort(srvLn.Addr().String())
+	targets := []capsule.SSHTarget{{Host: srvAddr.Addr().String(), HostKeys: []string{hostKeyLine}, Port: srvAddr.Port()}}
 	caps, capsErr := capsule.New("close-step", hp, nil, targets, 40000, ca, testUpstream())
 	if capsErr != nil {
 		t.Fatal(capsErr)

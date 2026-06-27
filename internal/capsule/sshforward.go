@@ -4,8 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"net/netip"
-	"strconv"
-	"strings"
 	"sync"
 
 	"golang.org/x/crypto/ssh"
@@ -29,6 +27,7 @@ const defaultSSHPort uint16 = 22
 type SSHTarget struct {
 	Host     string
 	HostKeys []string
+	Port     uint16 // upstream SSH port; 0 means use defaultSSHPort
 }
 
 // SSHConnectionRecord captures one SSH forward attempt for attestation.
@@ -46,22 +45,6 @@ type SSHConnectionRecord struct {
 	Decision           mediator.Decision
 	Resolved           []netip.Addr // upstream IPs from the DoT lookup; dialed addr is Resolved[0]
 	Port               uint16
-}
-
-// SplitSSHHostPort splits an SSH peer host into its host part and the
-// upstream port to dial. A bare host yields defaultSSHPort. An invalid
-// port suffix is treated as no port (host kept verbatim, defaultSSHPort).
-func SplitSSHHostPort(h string) (string, uint16) {
-	idx := strings.LastIndex(h, ":")
-	if idx < 0 {
-		return h, defaultSSHPort
-	}
-	host := h[:idx]
-	p, err := strconv.ParseUint(h[idx+1:], 10, 16)
-	if err != nil || p == 0 {
-		return h, defaultSSHPort
-	}
-	return host, uint16(p)
 }
 
 // sshForwarder holds the per-SSH-peer state the capsule needs to dial that
@@ -85,13 +68,16 @@ func newSSHForwarder(stepID string, t SSHTarget, upstreamLook UpstreamLookupFunc
 	if upstreamLook == nil {
 		return nil, errors.New("capsule: sshforward upstreamLook must not be nil")
 	}
-	host, port := SplitSSHHostPort(t.Host)
-	if host == "" {
+	if t.Host == "" {
 		return nil, fmt.Errorf("capsule: sshforward empty host in %q", t.Host)
+	}
+	port := t.Port
+	if port == 0 {
+		port = defaultSSHPort
 	}
 	return &sshForwarder{
 		stepID:       stepID,
-		host:         host,
+		host:         t.Host,
 		port:         port,
 		upstreamLook: upstreamLook,
 	}, nil

@@ -339,9 +339,7 @@ import (
 }
 
 // ArtifactSource is the deploy-artifact reference: a step's image (by step) or
-// a named file/directory output (by step+output). @go(-) -- the generator skips
-// the disjunction; artifact_source.go provides the Go discriminated union and
-// ArtifactRef.UnmarshalJSON, the same pattern as DeployMethod and Peer.
+// a named file/directory output (by step+output).
 //
 // The image arm carries no discriminator field, so a bare {step} unifies with
 // both arms; the default marker (*) resolves that ambiguity to StepImageRef

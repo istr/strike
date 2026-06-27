@@ -14,7 +14,7 @@ import (
 func httpsPeer(host string) lane.Peer {
 	return lane.HTTPSPeer{
 		Type: "https",
-		Host: primitive.Host(host),
+		Host: endpoint.MustParseAuthority(host),
 		Trust: endpoint.Fingerprint{
 			Type:        "certFingerprint",
 			Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000",

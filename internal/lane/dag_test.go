@@ -620,14 +620,14 @@ func TestBuild_PeerAnchorConflict(t *testing.T) {
 		return lane.Step{
 			ID: primitive.Identifier(name), Image: lane.Ptr(primitive.ImageRef("img@sha256:" + strings.Repeat("a", 64))),
 			Args: []string{"x"}, Env: map[string]string{},
-			Peers: []lane.Peer{lane.HTTPSPeer{Type: "https", Host: primitive.Host(host), Trust: tr}},
+			Peers: []lane.Peer{lane.HTTPSPeer{Type: "https", Host: endpoint.MustParseAuthority(host), Trust: tr}},
 		}
 	}
 	sshStep := func(name, host string, kh []endpoint.HostKey) lane.Step {
 		return lane.Step{
 			ID: primitive.Identifier(name), Image: lane.Ptr(primitive.ImageRef("img@sha256:" + strings.Repeat("a", 64))),
 			Args: []string{"x"}, Env: map[string]string{},
-			Peers: []lane.Peer{lane.SSHPeer{Type: "ssh", Host: primitive.Host(host), KnownHosts: kh}},
+			Peers: []lane.Peer{lane.SSHPeer{Type: "ssh", Host: endpoint.MustParseAuthority(host), KnownHosts: kh}},
 		}
 	}
 

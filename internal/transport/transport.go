@@ -9,10 +9,7 @@
 // in this package but is added in a follow-up PR.
 package transport
 
-import (
-	"github.com/istr/strike/internal/endpoint"
-	"github.com/istr/strike/internal/primitive"
-)
+import "github.com/istr/strike/internal/endpoint"
 
 // DNSResolver declares the DoT resolver strike uses for all
 // peer hostname resolution within a lane run. Mandatory per
@@ -20,8 +17,8 @@ import (
 // the same endpoint.Trust vocabulary as HTTPS peers, so verification
 // mechanics are reused.
 type DNSResolver struct {
-	Trust endpoint.Trust `json:"trust"`
-	Host  primitive.Host `json:"host"`
+	Trust endpoint.Trust   `json:"trust"`
+	Host  endpoint.Address `json:"host"`
 }
 
 // HTTPSEndpoint is a TLS-only service base URL with a mandatory

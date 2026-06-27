@@ -383,7 +383,7 @@ func (d *DAG) validatePeerAnchors(p *Lane) error {
 	seen := map[string]string{} // host:port -> canonical anchor
 	for _, s := range p.Steps {
 		for _, peer := range s.Peers {
-			endpoint := peerEndpoint(peer)
+			endpoint := peer.Addr().Authority()
 			anchor := peerAnchor(peer)
 			if prev, ok := seen[endpoint]; ok {
 				if prev != anchor {
@@ -396,19 +396,6 @@ func (d *DAG) validatePeerAnchors(p *Lane) error {
 		}
 	}
 	return nil
-}
-
-// peerEndpoint returns the host:port key a peer is keyed on. peer.Host already
-// includes the optional :port from the schema, so it is the key as-is.
-func peerEndpoint(peer Peer) string {
-	switch x := peer.(type) {
-	case HTTPSPeer:
-		return string(x.Host)
-	case SSHPeer:
-		return string(x.Host)
-	default:
-		return ""
-	}
 }
 
 // peerAnchor returns a canonical string for a peer's trust anchor. Two peers on

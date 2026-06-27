@@ -257,13 +257,5 @@ func canonicalize(name string) (string, error) {
 	if n == "" {
 		return "", errors.New("empty name")
 	}
-	// Strip any port suffix (Host is a typed string that may
-	// include :port; allowlist matching is on hostname only).
-	if i := strings.LastIndex(n, ":"); i >= 0 {
-		n = n[:i]
-	}
-	if n == "" {
-		return "", errors.New("empty name after port strip")
-	}
 	return n, nil
 }

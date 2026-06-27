@@ -40,9 +40,7 @@ import "github.com/istr/strike/contract/primitive"
 // layer 2), discriminated by output kind. It is carried in State for consumer
 // resolution. imageRef (common to both variants) is the digest-pinned local
 // reference (repo@sha256:<manifestDigest>) produced by the normalize
-// round-trip through ggcr. @go(-): hand-modelled as a Go interface over the two
-// variant structs in internal/lane/output_handle.go, parallel to
-// #ArtifactSource. The variant structs below are generated; the union is not.
+// round-trip through ggcr.
 #OutputHandle: #ImageOutputHandle | #FileOutputHandle @go(-)
 
 // #ImageOutputHandle is an image output: the whole rootfs is the artifact, so

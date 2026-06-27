@@ -4,7 +4,7 @@ package primitive
 
 // Path is the shared canonicalization base: no double slashes, no "." or
 // ".." segments, no trailing slash. Not used directly on fields; use
-// AbsPath or RelPath. @go(-): abstract CUE base with no named Go type; the
+// AbsPath or RelPath. Abstract CUE base with no named Go type; the
 // AbsPath/RelPath subtypes carry the Go types.
 #Path: !~"//" &
 	!~"^\\.\\.($|/)" &

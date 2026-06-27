@@ -333,7 +333,7 @@ func TestDeployerExecute(t *testing.T) {
 						ID:      "version",
 						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 						Command: []string{"cat", "/version"},
-						Peers:   []lane.Peer{lane.HTTPSPeer{Type: "https", Host: "localhost:5555", Trust: endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}},
+						Peers:   []lane.Peer{lane.HTTPSPeer{Type: "https", Host: endpoint.MustParseAuthority("localhost:5555"), Trust: endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}},
 					}},
 				},
 				PostState: lane.CaptureSet{
@@ -341,7 +341,7 @@ func TestDeployerExecute(t *testing.T) {
 						ID:      "version",
 						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 						Command: []string{"cat", "/version"},
-						Peers:   []lane.Peer{lane.HTTPSPeer{Type: "https", Host: "localhost:5555", Trust: endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}},
+						Peers:   []lane.Peer{lane.HTTPSPeer{Type: "https", Host: endpoint.MustParseAuthority("localhost:5555"), Trust: endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}},
 					}},
 				},
 			},
@@ -599,7 +599,7 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 						ID:      "version",
 						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 						Command: []string{"cat", "/version"},
-						Peers:   []lane.Peer{lane.HTTPSPeer{Type: "https", Host: "localhost:5555", Trust: endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}},
+						Peers:   []lane.Peer{lane.HTTPSPeer{Type: "https", Host: endpoint.MustParseAuthority("localhost:5555"), Trust: endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}},
 					}},
 				},
 				PostState: lane.CaptureSet{
@@ -607,7 +607,7 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 						ID:      "version",
 						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 						Command: []string{"cat", "/version"},
-						Peers:   []lane.Peer{lane.HTTPSPeer{Type: "https", Host: "localhost:5555", Trust: endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}},
+						Peers:   []lane.Peer{lane.HTTPSPeer{Type: "https", Host: endpoint.MustParseAuthority("localhost:5555"), Trust: endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}},
 					}},
 				},
 			},
@@ -1190,7 +1190,7 @@ func deployStep() *lane.Step {
 						ID:      "version",
 						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 						Command: []string{"cat", "/version"},
-						Peers:   []lane.Peer{lane.HTTPSPeer{Type: "https", Host: "localhost:5555", Trust: endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}},
+						Peers:   []lane.Peer{lane.HTTPSPeer{Type: "https", Host: endpoint.MustParseAuthority("localhost:5555"), Trust: endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}},
 					}},
 				},
 				PostState: lane.CaptureSet{
@@ -1198,7 +1198,7 @@ func deployStep() *lane.Step {
 						ID:      "version",
 						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 						Command: []string{"cat", "/version"},
-						Peers:   []lane.Peer{lane.HTTPSPeer{Type: "https", Host: "localhost:5555", Trust: endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}},
+						Peers:   []lane.Peer{lane.HTTPSPeer{Type: "https", Host: endpoint.MustParseAuthority("localhost:5555"), Trust: endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}},
 					}},
 				},
 			},
@@ -1249,7 +1249,7 @@ func TestDeployerExecute_ObservedPeersPopulated(t *testing.T) {
 	// Build a lane with a "build" predecessor that has peers, and a deploy step.
 	buildPeer := lane.HTTPSPeer{
 		Type: "https",
-		Host: "api.example.com:443",
+		Host: endpoint.MustParseAuthority("api.example.com:443"),
 		Trust: endpoint.Fingerprint{
 			Type:        "certFingerprint",
 			Fingerprint: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -1257,7 +1257,7 @@ func TestDeployerExecute_ObservedPeersPopulated(t *testing.T) {
 	}
 	buildSSHPeer := lane.SSHPeer{
 		Type: "ssh",
-		Host: "git.example.com",
+		Host: endpoint.MustParseAuthority("git.example.com"),
 		KnownHosts: []endpoint.HostKey{{
 			KeyType: "ssh-ed25519",
 			Key:     "AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl",
@@ -1404,7 +1404,7 @@ func TestDeployerExecute_ObservedPeersConflictAborts(t *testing.T) {
 	// different TLS fingerprints.
 	peerA := lane.HTTPSPeer{
 		Type: "https",
-		Host: "api.example.com:443",
+		Host: endpoint.MustParseAuthority("api.example.com:443"),
 		Trust: endpoint.Fingerprint{
 			Type:        "certFingerprint",
 			Fingerprint: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -1412,7 +1412,7 @@ func TestDeployerExecute_ObservedPeersConflictAborts(t *testing.T) {
 	}
 	peerB := lane.HTTPSPeer{
 		Type: "https",
-		Host: "api.example.com:443",
+		Host: endpoint.MustParseAuthority("api.example.com:443"),
 		Trust: endpoint.Fingerprint{
 			Type:        "certFingerprint",
 			Fingerprint: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",

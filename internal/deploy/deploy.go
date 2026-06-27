@@ -254,7 +254,7 @@ func (d *Deployer) startUnitCapsule(ctx context.Context, name string, peers []la
 	var trusts []mediator.PeerTrust
 	for _, p := range peers {
 		if hp, ok := p.(lane.HTTPSPeer); ok {
-			trusts = append(trusts, mediator.PeerTrust{Host: hp.Host, Trust: hp.Trust})
+			trusts = append(trusts, mediator.PeerTrust{Host: hp.Host.Host, Trust: hp.Trust})
 		}
 	}
 	var targets []capsule.SSHTarget
@@ -264,7 +264,7 @@ func (d *Deployer) startUnitCapsule(ctx context.Context, name string, peers []la
 			for j, e := range sp.KnownHosts {
 				keys[j] = e.KeyType + " " + string(e.Key)
 			}
-			targets = append(targets, capsule.SSHTarget{Host: string(sp.Host), HostKeys: keys})
+			targets = append(targets, sshTarget(sp, keys))
 		}
 	}
 	caps, err := capsule.New(name, ports, trusts, targets, 0, d.CA, d.UpstreamLook)
@@ -275,6 +275,14 @@ func (d *Deployer) startUnitCapsule(ctx context.Context, name string, peers []la
 		return nil, fmt.Errorf("deploy %q: start capsule: %w", name, err)
 	}
 	return caps, nil
+}
+
+func sshTarget(sp lane.SSHPeer, keys []string) capsule.SSHTarget {
+	t := capsule.SSHTarget{Host: string(sp.Host.Host), HostKeys: keys}
+	if p := sp.Host.Port; p != nil && *p >= 0 && *p <= 65535 {
+		t.Port = uint16(*p)
+	}
+	return t
 }
 
 // applyCapsule sets the pasta network options and appends the CA

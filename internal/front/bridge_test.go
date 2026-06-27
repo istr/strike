@@ -157,7 +157,11 @@ func testReply(req *ssh.Request, ok bool) {
 }
 
 func (s *testUpstreamSSH) addr() string {
-	return s.listener.Addr().String()
+	return netip.MustParseAddrPort(s.listener.Addr().String()).Addr().String()
+}
+
+func (s *testUpstreamSSH) port() uint16 {
+	return netip.MustParseAddrPort(s.listener.Addr().String()).Port()
 }
 
 func (s *testUpstreamSSH) hostKeyLine() string {
@@ -326,6 +330,7 @@ func TestBridge_EndToEnd(t *testing.T) {
 	targets := []capsule.SSHTarget{{
 		Host:     upstream.addr(),
 		HostKeys: []string{upstream.hostKeyLine()},
+		Port:     upstream.port(),
 	}}
 
 	caps, capsErr := capsule.New("bridge-step", hp, nil, targets, 40000, ca, loopbackLookup)
@@ -402,6 +407,7 @@ func TestBridge_WrongToken_Refused(t *testing.T) {
 	targets := []capsule.SSHTarget{{
 		Host:     upstream.addr(),
 		HostKeys: []string{upstream.hostKeyLine()},
+		Port:     upstream.port(),
 	}}
 	caps, capsErr := capsule.New("wrong-tok", hp, nil, targets, 40000, ca, loopbackLookup)
 	if capsErr != nil {
@@ -479,6 +485,7 @@ func TestBridge_InboundCloseUnblocksHandler(t *testing.T) {
 	targets := []capsule.SSHTarget{{
 		Host:     upstream.addr(),
 		HostKeys: []string{upstream.hostKeyLine()},
+		Port:     upstream.port(),
 	}}
 	caps, capsErr := capsule.New("inbound-close", hp, nil, targets, 40000, ca, loopbackLookup)
 	if capsErr != nil {
@@ -572,6 +579,7 @@ func TestBridge_DisallowedCommand_Refused(t *testing.T) {
 	targets := []capsule.SSHTarget{{
 		Host:     upstream.addr(),
 		HostKeys: []string{upstream.hostKeyLine()},
+		Port:     upstream.port(),
 	}}
 	caps, capsErr := capsule.New("bad-cmd", hp, nil, targets, 40000, ca, loopbackLookup)
 	if capsErr != nil {
