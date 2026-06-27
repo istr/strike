@@ -29,22 +29,58 @@ func unmarshalPeer(data []byte) (Peer, error) {
 
 	switch probe.Type {
 	case "https":
-		var p HTTPSPeer
-		if err := json.Unmarshal(data, &p); err != nil {
-			return nil, fmt.Errorf("decode https peer: %w", err)
-		}
-		return p, nil
+		return unmarshalHTTPSPeer(data)
 	case "ssh":
-		var p SSHPeer
-		if err := json.Unmarshal(data, &p); err != nil {
-			return nil, fmt.Errorf("decode ssh peer: %w", err)
-		}
-		return p, nil
+		return unmarshalSSHPeer(data)
 	case "":
 		return nil, fmt.Errorf("peer missing type discriminator")
 	default:
 		return nil, fmt.Errorf("unknown peer type %q", probe.Type)
 	}
+}
+
+// unmarshalHTTPSPeer decodes an https peer into an endpoint.TLS,
+// dispatching the trust discriminator and parsing the packed authority host.
+// Trust is required; missing trust is an error.
+func unmarshalHTTPSPeer(data []byte) (Peer, error) {
+	var aux struct {
+		Type  string          `json:"type"`
+		Host  string          `json:"host"`
+		Trust json.RawMessage `json:"trust"`
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return nil, fmt.Errorf("decode https peer: %w", err)
+	}
+	if len(aux.Trust) == 0 {
+		return nil, fmt.Errorf("https peer: trust required")
+	}
+	t, err := unmarshalTLSTrust(aux.Trust)
+	if err != nil {
+		return nil, fmt.Errorf("https peer: %w", err)
+	}
+	addr, err := endpoint.ParseAuthority(aux.Host)
+	if err != nil {
+		return nil, fmt.Errorf("https peer: %w", err)
+	}
+	return endpoint.TLS{Type: aux.Type, Host: addr, Trust: t}, nil
+}
+
+// unmarshalSSHPeer decodes an ssh peer into an endpoint.SSH, parsing the
+// packed authority host and carrying the known-hosts set verbatim.
+func unmarshalSSHPeer(data []byte) (Peer, error) {
+	var aux struct {
+		Type       string             `json:"type"`
+		Host       string             `json:"host"`
+		KnownHosts []endpoint.HostKey `json:"knownHosts"`
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return nil, fmt.Errorf("decode ssh peer: %w", err)
+	}
+	addr, err := endpoint.ParseAuthority(aux.Host)
+	if err != nil {
+		return nil, fmt.Errorf("ssh peer: %w", err)
+	}
+	return endpoint.SSH{Type: aux.Type, Host: addr, KnownHosts: aux.KnownHosts}, nil
 }
 
 // unmarshalTLSTrust decodes a single trust JSON object into
@@ -80,76 +116,6 @@ func unmarshalTLSTrust(data []byte) (endpoint.Trust, error) {
 	default:
 		return nil, fmt.Errorf("unknown trust type %q", probe.Type)
 	}
-}
-
-// UnmarshalJSON implements json.Unmarshaler for HTTPSPeer. It
-// decodes the trust field through the discriminator helper.
-// HTTPSPeer.Trust is required; missing trust is an error.
-func (p *HTTPSPeer) UnmarshalJSON(data []byte) error {
-	var aux struct {
-		Type  string          `json:"type"`
-		Host  string          `json:"host"`
-		Trust json.RawMessage `json:"trust"`
-	}
-	if err := json.Unmarshal(data, &aux); err != nil {
-		return err
-	}
-	if len(aux.Trust) == 0 {
-		return fmt.Errorf("https peer: trust required")
-	}
-	t, err := unmarshalTLSTrust(aux.Trust)
-	if err != nil {
-		return fmt.Errorf("https peer: %w", err)
-	}
-	addr, err := endpoint.ParseAuthority(aux.Host)
-	if err != nil {
-		return fmt.Errorf("https peer: %w", err)
-	}
-	p.Type = aux.Type
-	p.Host = addr
-	p.Trust = t
-	return nil
-}
-
-// MarshalJSON implements json.Marshaler for HTTPSPeer. The host is projected
-// to its packed authority wire form.
-func (p HTTPSPeer) MarshalJSON() ([]byte, error) {
-	return json.Marshal(struct {
-		Trust endpoint.Trust `json:"trust"`
-		Type  string         `json:"type"`
-		Host  string         `json:"host"`
-	}{Type: p.Type, Host: p.Host.Authority(), Trust: p.Trust})
-}
-
-// UnmarshalJSON implements json.Unmarshaler for SSHPeer. The host is parsed
-// from its packed authority wire form.
-func (p *SSHPeer) UnmarshalJSON(data []byte) error {
-	var aux struct {
-		Type       string             `json:"type"`
-		Host       string             `json:"host"`
-		KnownHosts []endpoint.HostKey `json:"knownHosts"`
-	}
-	if err := json.Unmarshal(data, &aux); err != nil {
-		return err
-	}
-	addr, err := endpoint.ParseAuthority(aux.Host)
-	if err != nil {
-		return fmt.Errorf("ssh peer: %w", err)
-	}
-	p.Type = aux.Type
-	p.Host = addr
-	p.KnownHosts = aux.KnownHosts
-	return nil
-}
-
-// MarshalJSON implements json.Marshaler for SSHPeer. The host is projected to
-// its packed authority wire form.
-func (p SSHPeer) MarshalJSON() ([]byte, error) {
-	return json.Marshal(struct {
-		Type       string             `json:"type"`
-		Host       string             `json:"host"`
-		KnownHosts []endpoint.HostKey `json:"knownHosts"`
-	}{Type: p.Type, Host: p.Host.Authority(), KnownHosts: p.KnownHosts})
 }
 
 // UnmarshalJSON implements json.Unmarshaler for Step. It

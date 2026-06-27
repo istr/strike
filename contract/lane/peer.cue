@@ -29,30 +29,4 @@ import "github.com/istr/strike/contract/endpoint"
 // reach; an absent or empty list yields an empty-allowlist capsule
 // that permits no egress (ADR-033). Peers flow into the deploy
 // attestation.
-#Peer: (#HTTPSPeer | #SSHPeer) @go(-)
-
-// The host @go redirects name the contract/ package, not internal/: `make
-// generate` rewrites contract/ -> internal/ across the generated files, so a
-// redirect to a package that also contributes a generated type to the same
-// file must use the pre-rewrite contract/ path. Both references then normalize
-// to one import; the literal internal/ path would emit a duplicate import.
-
-// HTTPSPeer declares an HTTPS endpoint together with its server-trust anchor.
-#HTTPSPeer: {
-	@go(HTTPSPeer)
-	type:  "https"         @go(Type)
-	host:  #Host           @go(Host,type="github.com/istr/strike/contract/endpoint".Address)
-	trust: endpoint.#Trust @go(Trust,type="github.com/istr/strike/contract/endpoint".Trust)
-}
-
-// SSHPeer declares an SSH endpoint with explicit known_hosts entries.
-// Strike creates and injects a global known_hosts entry in the
-// step container.
-// For client-side authentication, strike forwards an ssh-agent socket
-// if available.
-#SSHPeer: {
-	@go(SSHPeer)
-	type: "ssh" @go(Type)
-	host: #Host @go(Host,type="github.com/istr/strike/contract/endpoint".Address)
-	knownHosts: [...endpoint.#HostKey] @go(KnownHosts)
-}
+#Peer: (endpoint.#TLS | endpoint.#SSH) @go(-)

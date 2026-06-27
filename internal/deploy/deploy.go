@@ -67,7 +67,7 @@ type Sealed struct {
 // spike confirmed gengotypes cannot produce them: (1) the :lane and :deploy CUE
 // packages co-locate in specs/ and the generator refuses two Go packages in one
 // directory; (2) the cross-package alias chain breaks at the lane -> transport
-// @go(-) boundary (it emits lane.Host et al., whose Go types live in
+// @go(-) boundary (it emits lane.DNSResolver et al., whose Go types live in
 // transport); (3) snake_case fields would need pervasive @go() annotations to
 // match the JSON contract. This is the same structural reason transport's and
 // the rest of the deploy predicate's Go types are hand-written.
@@ -253,13 +253,13 @@ func (d *Deployer) startUnitCapsule(ctx context.Context, name string, peers []la
 	}
 	var trusts []mediator.PeerTrust
 	for _, p := range peers {
-		if hp, ok := p.(lane.HTTPSPeer); ok {
+		if hp, ok := p.(endpoint.TLS); ok {
 			trusts = append(trusts, mediator.PeerTrust{Host: hp.Host.Host, Trust: hp.Trust})
 		}
 	}
 	var targets []capsule.SSHTarget
 	for _, p := range peers {
-		if sp, ok := p.(lane.SSHPeer); ok {
+		if sp, ok := p.(endpoint.SSH); ok {
 			keys := make([]string, len(sp.KnownHosts))
 			for j, e := range sp.KnownHosts {
 				keys[j] = e.KeyType + " " + string(e.Key)
@@ -277,7 +277,7 @@ func (d *Deployer) startUnitCapsule(ctx context.Context, name string, peers []la
 	return caps, nil
 }
 
-func sshTarget(sp lane.SSHPeer, keys []string) capsule.SSHTarget {
+func sshTarget(sp endpoint.SSH, keys []string) capsule.SSHTarget {
 	t := capsule.SSHTarget{Host: string(sp.Host.Host), HostKeys: keys}
 	if p := sp.Host.Port; p != nil && *p >= 0 && *p <= 65535 {
 		t.Port = uint16(*p)
@@ -924,7 +924,7 @@ func (d *Deployer) executeCustomDeploy(ctx context.Context, m lane.DeployCustom,
 // name is a misnomer for a reject-only guard.
 func setupSSHEnv(peers []lane.Peer) error {
 	for _, p := range peers {
-		if _, ok := p.(lane.SSHPeer); ok {
+		if _, ok := p.(endpoint.SSH); ok {
 			return fmt.Errorf("deploy SSH peers not yet implemented (ADR-038)")
 		}
 	}

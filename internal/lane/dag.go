@@ -404,7 +404,7 @@ func (d *DAG) validatePeerAnchors(p *Lane) error {
 // on one endpoint never compare equal (C-1).
 func peerAnchor(peer Peer) string {
 	switch x := peer.(type) {
-	case HTTPSPeer:
+	case endpoint.TLS:
 		switch t := x.Trust.(type) {
 		case endpoint.Fingerprint:
 			return "https/certFingerprint/" + t.Fingerprint
@@ -413,7 +413,7 @@ func peerAnchor(peer Peer) string {
 		default:
 			return "https/unknown"
 		}
-	case SSHPeer:
+	case endpoint.SSH:
 		entries := make([]string, len(x.KnownHosts))
 		for i, kh := range x.KnownHosts {
 			entries[i] = kh.KeyType + " " + string(kh.Key)

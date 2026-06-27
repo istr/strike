@@ -14,3 +14,11 @@ import "github.com/istr/strike/contract/primitive"
 	port?: primitive.#Port    @go(Port,optional=nillable)
 	path?: primitive.#AbsPath @go(Path,optional=nillable)
 }
+
+// Authority is the packed "host[:port]" wire form an Address serializes to at a
+// boundary. It is a specify-register constraint (ADR-048), single-sourcing the
+// host:port grammar that ParseAuthority and Address.Authority round-trip: a
+// boundary field carries #Authority as its CUE type so the wire string
+// validates, and redirects its Go type to Address so internal code holds the
+// representation-neutral value.
+#Authority: =~"^[a-z0-9.-]+(:[0-9]+)?$"

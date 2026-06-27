@@ -24,7 +24,7 @@ import (
 func RenderKnownHosts(peers []lane.Peer, frontKey ssh.PublicKey) []byte {
 	var hosts []string
 	for _, p := range peers {
-		if sp, ok := p.(lane.SSHPeer); ok {
+		if sp, ok := p.(endpoint.SSH); ok {
 			hosts = append(hosts, formatHost(sp.Host))
 		}
 	}

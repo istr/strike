@@ -27,9 +27,9 @@ func TestUnmarshalPeer_Discriminator(t *testing.T) {
 				}
 			}`,
 			check: func(t *testing.T, p lane.Peer) {
-				h, ok := p.(lane.HTTPSPeer)
+				h, ok := p.(endpoint.TLS)
 				if !ok {
-					t.Fatalf("type = %T, want HTTPSPeer", p)
+					t.Fatalf("type = %T, want endpoint.TLS", p)
 				}
 				if h.Host.Authority() != "example.com" {
 					t.Errorf("Host = %q, want example.com", h.Host.Authority())
@@ -54,9 +54,9 @@ func TestUnmarshalPeer_Discriminator(t *testing.T) {
 				}
 			}`,
 			check: func(t *testing.T, p lane.Peer) {
-				h, ok := p.(lane.HTTPSPeer)
+				h, ok := p.(endpoint.TLS)
 				if !ok {
-					t.Fatalf("type = %T, want HTTPSPeer", p)
+					t.Fatalf("type = %T, want endpoint.TLS", p)
 				}
 				cb, ok := h.Trust.(endpoint.CABundle)
 				if !ok {
@@ -77,9 +77,9 @@ func TestUnmarshalPeer_Discriminator(t *testing.T) {
 				]
 			}`,
 			check: func(t *testing.T, p lane.Peer) {
-				s, ok := p.(lane.SSHPeer)
+				s, ok := p.(endpoint.SSH)
 				if !ok {
-					t.Fatalf("type = %T, want SSHPeer", p)
+					t.Fatalf("type = %T, want endpoint.SSH", p)
 				}
 				if len(s.KnownHosts) != 1 {
 					t.Errorf("KnownHosts len = %d, want 1", len(s.KnownHosts))
@@ -173,11 +173,11 @@ func TestStep_UnmarshalJSON_Peers(t *testing.T) {
 	if len(s.Peers) != 2 {
 		t.Fatalf("Peers len = %d, want 2", len(s.Peers))
 	}
-	if _, ok := s.Peers[0].(lane.HTTPSPeer); !ok {
-		t.Errorf("Peers[0] type = %T, want HTTPSPeer", s.Peers[0])
+	if _, ok := s.Peers[0].(endpoint.TLS); !ok {
+		t.Errorf("Peers[0] type = %T, want endpoint.TLS", s.Peers[0])
 	}
-	if _, ok := s.Peers[1].(lane.SSHPeer); !ok {
-		t.Errorf("Peers[1] type = %T, want SSHPeer", s.Peers[1])
+	if _, ok := s.Peers[1].(endpoint.SSH); !ok {
+		t.Errorf("Peers[1] type = %T, want endpoint.SSH", s.Peers[1])
 	}
 }
 
@@ -215,8 +215,8 @@ func TestStep_RoundTrip(t *testing.T) {
 	if len(s2.Peers) != 1 {
 		t.Fatalf("round-tripped Peers len = %d, want 1", len(s2.Peers))
 	}
-	if _, ok := s2.Peers[0].(lane.HTTPSPeer); !ok {
-		t.Errorf("round-tripped Peers[0] type = %T, want HTTPSPeer", s2.Peers[0])
+	if _, ok := s2.Peers[0].(endpoint.TLS); !ok {
+		t.Errorf("round-tripped Peers[0] type = %T, want endpoint.TLS", s2.Peers[0])
 	}
 }
 

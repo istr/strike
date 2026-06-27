@@ -54,7 +54,7 @@ func TestRenderKnownHosts_empty_peers(t *testing.T) {
 
 func TestRenderKnownHosts_non_ssh_only(t *testing.T) {
 	peers := []lane.Peer{
-		lane.HTTPSPeer{Type: "https", Host: endpoint.MustParseAuthority("example.com"), Trust: endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:abc"}},
+		endpoint.TLS{Type: "https", Host: endpoint.MustParseAuthority("example.com"), Trust: endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:abc"}},
 	}
 	if got := executor.RenderKnownHosts(peers, testFrontKey(t)); got != nil {
 		t.Fatalf("got %q, want nil", got)
@@ -64,7 +64,7 @@ func TestRenderKnownHosts_non_ssh_only(t *testing.T) {
 func TestRenderKnownHosts_single_peer(t *testing.T) {
 	fk := testFrontKey(t)
 	peers := []lane.Peer{
-		lane.SSHPeer{
+		endpoint.SSH{
 			Type: "ssh",
 			Host: endpoint.MustParseAuthority("git.example.com"),
 			KnownHosts: []endpoint.HostKey{
@@ -87,15 +87,15 @@ func TestRenderKnownHosts_single_peer(t *testing.T) {
 func TestRenderKnownHosts_multiple_peers_sorted(t *testing.T) {
 	fk := testFrontKey(t)
 	peers := []lane.Peer{
-		lane.SSHPeer{
+		endpoint.SSH{
 			Type: "ssh", Host: endpoint.MustParseAuthority("zeta.example"),
 			KnownHosts: []endpoint.HostKey{{KeyType: "ssh-ed25519", Key: "ZetaKey"}},
 		},
-		lane.SSHPeer{
+		endpoint.SSH{
 			Type: "ssh", Host: endpoint.MustParseAuthority("alpha.example"),
 			KnownHosts: []endpoint.HostKey{{KeyType: "ssh-ed25519", Key: "AlphaKey"}},
 		},
-		lane.SSHPeer{
+		endpoint.SSH{
 			Type: "ssh", Host: endpoint.MustParseAuthority("mu.example"),
 			KnownHosts: []endpoint.HostKey{{KeyType: "ssh-ed25519", Key: "MuKey"}},
 		},
@@ -113,7 +113,7 @@ func TestRenderKnownHosts_multiple_peers_sorted(t *testing.T) {
 func TestRenderKnownHosts_host_with_port(t *testing.T) {
 	fk := testFrontKey(t)
 	peers := []lane.Peer{
-		lane.SSHPeer{
+		endpoint.SSH{
 			Type: "ssh",
 			Host: endpoint.MustParseAuthority("git.example.com:2222"),
 			KnownHosts: []endpoint.HostKey{
@@ -132,8 +132,8 @@ func TestRenderKnownHosts_host_with_port(t *testing.T) {
 func TestRenderKnownHosts_mixed_peer_list(t *testing.T) {
 	fk := testFrontKey(t)
 	peers := []lane.Peer{
-		lane.HTTPSPeer{Type: "https", Host: endpoint.MustParseAuthority("api.example.com"), Trust: endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:abc"}},
-		lane.SSHPeer{
+		endpoint.TLS{Type: "https", Host: endpoint.MustParseAuthority("api.example.com"), Trust: endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:abc"}},
+		endpoint.SSH{
 			Type: "ssh", Host: endpoint.MustParseAuthority("git.example.com"),
 			KnownHosts: []endpoint.HostKey{{KeyType: "ssh-ed25519", Key: "MixedKey"}},
 		},
@@ -148,15 +148,15 @@ func TestRenderKnownHosts_mixed_peer_list(t *testing.T) {
 
 func TestRenderKnownHosts_order_independence(t *testing.T) {
 	fk := testFrontKey(t)
-	a := lane.SSHPeer{
+	a := endpoint.SSH{
 		Type: "ssh", Host: endpoint.MustParseAuthority("alpha.example"),
 		KnownHosts: []endpoint.HostKey{{KeyType: "ssh-ed25519", Key: "AlphaKey"}},
 	}
-	b := lane.SSHPeer{
+	b := endpoint.SSH{
 		Type: "ssh", Host: endpoint.MustParseAuthority("beta.example"),
 		KnownHosts: []endpoint.HostKey{{KeyType: "ssh-ed25519", Key: "BetaKey"}},
 	}
-	c := lane.SSHPeer{
+	c := endpoint.SSH{
 		Type: "ssh", Host: endpoint.MustParseAuthority("gamma.example"),
 		KnownHosts: []endpoint.HostKey{{KeyType: "ssh-ed25519", Key: "GammaKey"}},
 	}
@@ -171,7 +171,7 @@ func TestRenderKnownHosts_order_independence(t *testing.T) {
 
 func TestSSHTrustContent_no_ssh_peers(t *testing.T) {
 	kh, cfg := executor.SSHTrustContent([]lane.Peer{
-		lane.HTTPSPeer{Type: "https", Host: endpoint.MustParseAuthority("example.com"), Trust: endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:abc"}},
+		endpoint.TLS{Type: "https", Host: endpoint.MustParseAuthority("example.com"), Trust: endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:abc"}},
 	}, nil, testFrontKey(t))
 	if kh != nil {
 		t.Errorf("knownHosts = %q, want nil", kh)
@@ -200,7 +200,7 @@ func TestSSHTrustContent_with_ssh_peers(t *testing.T) {
 	_, _, authLine := testSSHHostKey(t)
 	fk := testFrontKey(t)
 	peers := []lane.Peer{
-		lane.SSHPeer{
+		endpoint.SSH{
 			Type: "ssh", Host: endpoint.MustParseAuthority("git.example.com"),
 			KnownHosts: []endpoint.HostKey{
 				{KeyType: "ssh-ed25519", Key: "AAAAC3NzaC1lZDI1NTE5AAAAITestKey"},
@@ -367,7 +367,7 @@ func TestRenderKnownHosts_Golden(t *testing.T) {
 					t.Fatalf("unmarshal peer[%d]: %v", i, pErr)
 				}
 				peers[i] = p
-				if _, ok := p.(lane.SSHPeer); ok {
+				if _, ok := p.(endpoint.SSH); ok {
 					sshCount++
 				}
 			}

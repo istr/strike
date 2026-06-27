@@ -10,9 +10,9 @@ import (
 	"github.com/istr/strike/internal/primitive"
 )
 
-// httpsPeer returns a minimal valid HTTPSPeer for CollectPeers tests.
+// httpsPeer returns a minimal valid endpoint.TLS for CollectPeers tests.
 func httpsPeer(host string) lane.Peer {
-	return lane.HTTPSPeer{
+	return endpoint.TLS{
 		Type: "https",
 		Host: endpoint.MustParseAuthority(host),
 		Trust: endpoint.Fingerprint{

@@ -1,21 +1,13 @@
-// Transport-level types: host constraint and resolver/endpoint addresses.
-// Trust anchors and engine connection identity live in the endpoint package.
+// Transport-level types: the DoT resolver and HTTPS service endpoint
+// declarations. A host is carried at the boundary as the endpoint.#Authority
+// wire grammar and projected to the endpoint.Address concept; trust anchors and
+// engine connection identity live in the endpoint package.
 //
 // These definitions share package lane so that lane.cue can reference
-// them directly (#Host, #DNSResolver).
+// them directly (#DNSResolver, #HTTPSEndpoint).
 package lane
 
 import "github.com/istr/strike/contract/endpoint"
-
-// ----------------------------------------------------------------
-// Host constraint: hostname or IPv4 literal, optionally with port.
-// Lowercase ASCII; punycode required for internationalized domains.
-// Used by every peer kind that addresses a network endpoint by
-// name (HTTPS, SSH, DoT resolver, future TLS-trusted peers).
-// OCI registries use a separate constraint because their format
-// includes path segments.
-// ----------------------------------------------------------------
-#Host: =~"^[a-z0-9.-]+(:[0-9]+)?$"
 
 // ----------------------------------------------------------------
 // DNS resolver declaration.
@@ -43,7 +35,7 @@ import "github.com/istr/strike/contract/endpoint"
 // this comment is the schema-level intent record.
 // ----------------------------------------------------------------
 #DNSResolver: {
-	host:  #Host
+	host:  endpoint.#Authority
 	trust: endpoint.#Trust
 }
 

@@ -57,7 +57,7 @@ import (
 // Required: a lane that cannot be attested with a verifiable signature is
 // not a valid strike lane (mirrors ADR-039 D1 for the signing layer). The
 // IdP is a declared peer; trust pins its endpoints with the same endpoint.#Trust
-// anchor resolver.trust and #HTTPSPeer.trust use. validate/dag check
+// anchor resolver.trust and endpoint.#TLS.trust use. validate/dag check
 // declaration only and never contact the IdP; the live keyless flow runs at
 // the sign step of run.
 #OIDCConfig: {

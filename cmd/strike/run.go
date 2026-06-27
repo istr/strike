@@ -19,6 +19,7 @@ import (
 	"github.com/istr/strike/internal/closer"
 	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/deploy"
+	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/executor"
 	"github.com/istr/strike/internal/front"
 	"github.com/istr/strike/internal/lane"
@@ -1023,10 +1024,10 @@ func (rc *runContext) startCapsule(ctx context.Context, name, safeName string, p
 }
 
 // httpsPeersOf returns the HTTPS peers from a step's peer list.
-func httpsPeersOf(peers []lane.Peer) []lane.HTTPSPeer {
-	var out []lane.HTTPSPeer
+func httpsPeersOf(peers []lane.Peer) []endpoint.TLS {
+	var out []endpoint.TLS
 	for _, p := range peers {
-		if h, ok := p.(lane.HTTPSPeer); ok {
+		if h, ok := p.(endpoint.TLS); ok {
 			out = append(out, h)
 		}
 	}
@@ -1038,7 +1039,7 @@ func httpsPeersOf(peers []lane.Peer) []lane.HTTPSPeer {
 func sshTargetsOf(peers []lane.Peer) []capsule.SSHTarget {
 	var out []capsule.SSHTarget
 	for _, p := range peers {
-		if sp, ok := p.(lane.SSHPeer); ok {
+		if sp, ok := p.(endpoint.SSH); ok {
 			keys := make([]string, len(sp.KnownHosts))
 			for j, e := range sp.KnownHosts {
 				keys[j] = e.KeyType + " " + string(e.Key)
@@ -1049,7 +1050,7 @@ func sshTargetsOf(peers []lane.Peer) []capsule.SSHTarget {
 	return out
 }
 
-func sshTarget(sp lane.SSHPeer, keys []string) capsule.SSHTarget {
+func sshTarget(sp endpoint.SSH, keys []string) capsule.SSHTarget {
 	t := capsule.SSHTarget{Host: string(sp.Host.Host), HostKeys: keys}
 	if p := sp.Host.Port; p != nil && *p >= 0 && *p <= 65535 {
 		t.Port = uint16(*p)

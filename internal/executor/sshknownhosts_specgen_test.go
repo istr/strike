@@ -104,7 +104,7 @@ func TestExecute_WithSSHPeer(t *testing.T) {
 			Image: lane.Ptr(primitive.ImageRef("alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000")),
 			Args:  []string{"true"},
 			Peers: []lane.Peer{
-				lane.SSHPeer{
+				endpoint.SSH{
 					Type: "ssh",
 					Host: endpoint.MustParseAuthority("git.example.com"),
 					KnownHosts: []endpoint.HostKey{
@@ -166,7 +166,7 @@ func TestExecute_WithoutSSHPeer(t *testing.T) {
 			Image: lane.Ptr(primitive.ImageRef("alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000")),
 			Args:  []string{"true"},
 			Peers: []lane.Peer{
-				lane.HTTPSPeer{
+				endpoint.TLS{
 					Type: "https",
 					Host: endpoint.MustParseAuthority("api.example.com"),
 					Trust: endpoint.Fingerprint{
