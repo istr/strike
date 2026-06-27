@@ -52,7 +52,7 @@ func dotResolver(decl DNSResolver) *net.Resolver {
 	return &net.Resolver{
 		PreferGo: true,
 		Dial: func(ctx context.Context, _, _ string) (net.Conn, error) {
-			return DialVerified(ctx, decl.Host.Authority(), decl.Trust)
+			return DialVerified(ctx, decl.Address.Authority(), decl.Trust)
 		},
 	}
 }
@@ -69,7 +69,7 @@ func LookupHost(ctx context.Context, decl DNSResolver, name string) ([]netip.Add
 	addrs, err := dotResolver(decl).LookupNetIP(ctx, "ip", name)
 	if err != nil {
 		clearMisleadingServerField(err)
-		return nil, fmt.Errorf("transport: lookup %q via %s: %w", name, decl.Host.Authority(), err)
+		return nil, fmt.Errorf("transport: lookup %q via %s: %w", name, decl.Address.Authority(), err)
 	}
 	return addrs, nil
 }
@@ -105,7 +105,7 @@ func ProbeResolver(ctx context.Context, decl DNSResolver) (ConnectionIdentity, e
 	r := &net.Resolver{
 		PreferGo: true,
 		Dial: func(ctx context.Context, _, _ string) (net.Conn, error) {
-			conn, err := DialVerified(ctx, decl.Host.Authority(), decl.Trust)
+			conn, err := DialVerified(ctx, decl.Address.Authority(), decl.Trust)
 			if err != nil {
 				return nil, err
 			}
@@ -115,11 +115,11 @@ func ProbeResolver(ctx context.Context, decl DNSResolver) (ConnectionIdentity, e
 	}
 	if _, err := r.LookupNS(ctx, "."); err != nil {
 		clearMisleadingServerField(err)
-		return ConnectionIdentity{}, fmt.Errorf("transport: resolver probe via %s: %w", decl.Host.Authority(), err)
+		return ConnectionIdentity{}, fmt.Errorf("transport: resolver probe via %s: %w", decl.Address.Authority(), err)
 	}
 	id, ok := ic.get()
 	if !ok {
-		return ConnectionIdentity{}, fmt.Errorf("transport: resolver probe via %s: no TLS identity captured", decl.Host.Authority())
+		return ConnectionIdentity{}, fmt.Errorf("transport: resolver probe via %s: no TLS identity captured", decl.Address.Authority())
 	}
 	return id, nil
 }

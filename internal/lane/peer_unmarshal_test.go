@@ -31,8 +31,8 @@ func TestUnmarshalPeer_Discriminator(t *testing.T) {
 				if !ok {
 					t.Fatalf("type = %T, want endpoint.TLS", p)
 				}
-				if h.Host.Authority() != "example.com" {
-					t.Errorf("Host = %q, want example.com", h.Host.Authority())
+				if h.Address.Authority() != "example.com" {
+					t.Errorf("Host = %q, want example.com", h.Address.Authority())
 				}
 				ft, ok := h.Trust.(endpoint.Fingerprint)
 				if !ok {

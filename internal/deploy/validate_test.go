@@ -241,8 +241,8 @@ func TestValidateAttestation_WithPeers(t *testing.T) {
 			Peers: map[string][]lane.Peer{
 				"build": {
 					endpoint.TLS{
-						Type: "https",
-						Host: endpoint.MustParseAuthority("api.example.com"),
+						Type:    "https",
+						Address: endpoint.MustParseAuthority("api.example.com"),
 						Trust: endpoint.Fingerprint{
 							Type:        "certFingerprint",
 							Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000",
@@ -251,8 +251,8 @@ func TestValidateAttestation_WithPeers(t *testing.T) {
 				},
 				"clone": {
 					endpoint.SSH{
-						Type: "ssh",
-						Host: endpoint.MustParseAuthority("git.example.com"),
+						Type:    "ssh",
+						Address: endpoint.MustParseAuthority("git.example.com"),
 						KnownHosts: []endpoint.HostKey{
 							{
 								KeyType: "ssh-ed25519",
@@ -287,8 +287,8 @@ func TestValidateAttestation_InvalidPeer(t *testing.T) {
 			Peers: map[string][]lane.Peer{
 				"build": {
 					endpoint.TLS{
-						Type: "https",
-						Host: endpoint.MustParseAuthority("api.example.com"),
+						Type:    "https",
+						Address: endpoint.MustParseAuthority("api.example.com"),
 						// Trust deliberately nil -- triggers schema reject.
 					},
 				},

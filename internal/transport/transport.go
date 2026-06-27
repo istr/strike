@@ -17,8 +17,8 @@ import "github.com/istr/strike/internal/endpoint"
 // the same endpoint.Trust vocabulary as HTTPS peers, so verification
 // mechanics are reused.
 type DNSResolver struct {
-	Trust endpoint.Trust   `json:"trust"`
-	Host  endpoint.Address `json:"host"`
+	Trust   endpoint.Trust   `json:"trust"`
+	Address endpoint.Address `json:"host"`
 }
 
 // HTTPSEndpoint is a TLS-only service base URL with a mandatory

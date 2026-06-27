@@ -333,7 +333,7 @@ func TestDeployerExecute(t *testing.T) {
 						ID:      "version",
 						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 						Command: []string{"cat", "/version"},
-						Peers:   []lane.Peer{endpoint.TLS{Type: "https", Host: endpoint.MustParseAuthority("localhost:5555"), Trust: endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}},
+						Peers:   []lane.Peer{endpoint.TLS{Type: "https", Address: endpoint.MustParseAuthority("localhost:5555"), Trust: endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}},
 					}},
 				},
 				PostState: lane.CaptureSet{
@@ -341,7 +341,7 @@ func TestDeployerExecute(t *testing.T) {
 						ID:      "version",
 						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 						Command: []string{"cat", "/version"},
-						Peers:   []lane.Peer{endpoint.TLS{Type: "https", Host: endpoint.MustParseAuthority("localhost:5555"), Trust: endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}},
+						Peers:   []lane.Peer{endpoint.TLS{Type: "https", Address: endpoint.MustParseAuthority("localhost:5555"), Trust: endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}},
 					}},
 				},
 			},
@@ -599,7 +599,7 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 						ID:      "version",
 						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 						Command: []string{"cat", "/version"},
-						Peers:   []lane.Peer{endpoint.TLS{Type: "https", Host: endpoint.MustParseAuthority("localhost:5555"), Trust: endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}},
+						Peers:   []lane.Peer{endpoint.TLS{Type: "https", Address: endpoint.MustParseAuthority("localhost:5555"), Trust: endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}},
 					}},
 				},
 				PostState: lane.CaptureSet{
@@ -607,7 +607,7 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 						ID:      "version",
 						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 						Command: []string{"cat", "/version"},
-						Peers:   []lane.Peer{endpoint.TLS{Type: "https", Host: endpoint.MustParseAuthority("localhost:5555"), Trust: endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}},
+						Peers:   []lane.Peer{endpoint.TLS{Type: "https", Address: endpoint.MustParseAuthority("localhost:5555"), Trust: endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}},
 					}},
 				},
 			},
@@ -1190,7 +1190,7 @@ func deployStep() *lane.Step {
 						ID:      "version",
 						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 						Command: []string{"cat", "/version"},
-						Peers:   []lane.Peer{endpoint.TLS{Type: "https", Host: endpoint.MustParseAuthority("localhost:5555"), Trust: endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}},
+						Peers:   []lane.Peer{endpoint.TLS{Type: "https", Address: endpoint.MustParseAuthority("localhost:5555"), Trust: endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}},
 					}},
 				},
 				PostState: lane.CaptureSet{
@@ -1198,7 +1198,7 @@ func deployStep() *lane.Step {
 						ID:      "version",
 						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 						Command: []string{"cat", "/version"},
-						Peers:   []lane.Peer{endpoint.TLS{Type: "https", Host: endpoint.MustParseAuthority("localhost:5555"), Trust: endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}},
+						Peers:   []lane.Peer{endpoint.TLS{Type: "https", Address: endpoint.MustParseAuthority("localhost:5555"), Trust: endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}},
 					}},
 				},
 			},
@@ -1248,16 +1248,16 @@ func TestDeployerExecute_ObservedPeersPopulated(t *testing.T) {
 
 	// Build a lane with a "build" predecessor that has peers, and a deploy step.
 	buildPeer := endpoint.TLS{
-		Type: "https",
-		Host: endpoint.MustParseAuthority("api.example.com:443"),
+		Type:    "https",
+		Address: endpoint.MustParseAuthority("api.example.com:443"),
 		Trust: endpoint.Fingerprint{
 			Type:        "certFingerprint",
 			Fingerprint: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		},
 	}
 	buildSSHPeer := endpoint.SSH{
-		Type: "ssh",
-		Host: endpoint.MustParseAuthority("git.example.com"),
+		Type:    "ssh",
+		Address: endpoint.MustParseAuthority("git.example.com"),
 		KnownHosts: []endpoint.HostKey{{
 			KeyType: "ssh-ed25519",
 			Key:     "AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl",
@@ -1403,16 +1403,16 @@ func TestDeployerExecute_ObservedPeersConflictAborts(t *testing.T) {
 	// Two predecessor steps whose records report the same host:port with
 	// different TLS fingerprints.
 	peerA := endpoint.TLS{
-		Type: "https",
-		Host: endpoint.MustParseAuthority("api.example.com:443"),
+		Type:    "https",
+		Address: endpoint.MustParseAuthority("api.example.com:443"),
 		Trust: endpoint.Fingerprint{
 			Type:        "certFingerprint",
 			Fingerprint: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		},
 	}
 	peerB := endpoint.TLS{
-		Type: "https",
-		Host: endpoint.MustParseAuthority("api.example.com:443"),
+		Type:    "https",
+		Address: endpoint.MustParseAuthority("api.example.com:443"),
 		Trust: endpoint.Fingerprint{
 			Type:        "certFingerprint",
 			Fingerprint: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",

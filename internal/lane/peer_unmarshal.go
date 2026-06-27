@@ -62,7 +62,7 @@ func unmarshalHTTPSPeer(data []byte) (Peer, error) {
 	if err != nil {
 		return nil, fmt.Errorf("https peer: %w", err)
 	}
-	return endpoint.TLS{Type: aux.Type, Host: addr, Trust: t}, nil
+	return endpoint.TLS{Type: aux.Type, Address: addr, Trust: t}, nil
 }
 
 // unmarshalSSHPeer decodes an ssh peer into an endpoint.SSH, parsing the
@@ -80,7 +80,7 @@ func unmarshalSSHPeer(data []byte) (Peer, error) {
 	if err != nil {
 		return nil, fmt.Errorf("ssh peer: %w", err)
 	}
-	return endpoint.SSH{Type: aux.Type, Host: addr, KnownHosts: aux.KnownHosts}, nil
+	return endpoint.SSH{Type: aux.Type, Address: addr, KnownHosts: aux.KnownHosts}, nil
 }
 
 // unmarshalTLSTrust decodes a single trust JSON object into

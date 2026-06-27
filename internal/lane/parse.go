@@ -185,7 +185,7 @@ func validateDeployPresence(p *Lane) error {
 // parse time (early), so `strike validate` and `strike run`
 // fail identically on the same invalid input.
 func validateResolver(p *Lane) error {
-	host := p.Resolver.Host.Authority()
+	host := p.Resolver.Address.Authority()
 	if host == "" {
 		return fmt.Errorf("resolver: host required")
 	}

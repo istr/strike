@@ -29,7 +29,7 @@ func TestMediator_CloudflareHTTPS_INTEGRATION(t *testing.T) {
 	}
 
 	dotDecl := transport.DNSResolver{
-		Host: endpoint.MustParseAuthority("1.1.1.1:853"),
+		Address: endpoint.MustParseAuthority("1.1.1.1:853"),
 		Trust: endpoint.Fingerprint{
 			Type:        "certFingerprint",
 			Fingerprint: dotFingerprint,

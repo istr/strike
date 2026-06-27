@@ -36,5 +36,5 @@ func unmarshalDNSResolver(data []byte) (transport.DNSResolver, error) {
 	if err != nil {
 		return transport.DNSResolver{}, fmt.Errorf("resolver host: %w", err)
 	}
-	return transport.DNSResolver{Host: addr, Trust: t}, nil
+	return transport.DNSResolver{Address: addr, Trust: t}, nil
 }

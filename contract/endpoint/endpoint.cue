@@ -12,10 +12,12 @@ package endpoint
 #TLS: {
 	@go(TLS)
 	type: "https" @go(Type)
-	// host is the packed-authority wire grammar; the Go type is the Address
-	// concept via the redirect (Address is same-package, so the override names
-	// the bare type and emits no import).
-	host: #Authority @go(Host,type=Address)
+	// host (left of @go) is the packed-authority wire grammar; the Go side
+	// (inside @go) is the Address concept in both name and type, since the wire
+	// diverges from the concept and a diverging field maps fully, not half.
+	// Address is same-package, so the override names the bare type and emits no
+	// import. ParseAuthority and Address.Authority project across the boundary.
+	host: #Authority @go(Address,type=Address)
 	// trust resolves to the hand-written Trust interface in this same package;
 	// #Trust is @go(-), so the override names the bare same-package type and
 	// emits no import (a contract/endpoint path would self-import after the
@@ -28,8 +30,8 @@ package endpoint
 #SSH: {
 	@go(SSH)
 	type: "ssh" @go(Type)
-	// host is the packed-authority wire grammar redirected to the Address
-	// concept; see #TLS.host.
-	host: #Authority @go(Host,type=Address)
+	// host (left of @go) is the packed-authority wire grammar; the Go side is
+	// the Address concept in name and type; see #TLS.host.
+	host: #Authority @go(Address,type=Address)
 	knownHosts: [...#HostKey] @go(KnownHosts)
 }

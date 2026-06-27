@@ -1008,7 +1008,7 @@ func (rc *runContext) startCapsule(ctx context.Context, name, safeName string, p
 	httpsPeers := httpsPeersOf(peers)
 	peerTrusts := make([]mediator.PeerTrust, len(httpsPeers))
 	for i, p := range httpsPeers {
-		peerTrusts[i] = mediator.PeerTrust{Host: p.Host.Host, Trust: p.Trust}
+		peerTrusts[i] = mediator.PeerTrust{Host: p.Address.Host, Trust: p.Trust}
 	}
 	sshTargets := sshTargetsOf(peers)
 
@@ -1051,8 +1051,8 @@ func sshTargetsOf(peers []lane.Peer) []capsule.SSHTarget {
 }
 
 func sshTarget(sp endpoint.SSH, keys []string) capsule.SSHTarget {
-	t := capsule.SSHTarget{Host: string(sp.Host.Host), HostKeys: keys}
-	if p := sp.Host.Port; p != nil && *p >= 0 && *p <= 65535 {
+	t := capsule.SSHTarget{Host: string(sp.Address.Host), HostKeys: keys}
+	if p := sp.Address.Port; p != nil && *p >= 0 && *p <= 65535 {
 		t.Port = uint16(*p)
 	}
 	return t

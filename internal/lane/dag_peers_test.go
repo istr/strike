@@ -13,8 +13,8 @@ import (
 // httpsPeer returns a minimal valid endpoint.TLS for CollectPeers tests.
 func httpsPeer(host string) lane.Peer {
 	return endpoint.TLS{
-		Type: "https",
-		Host: endpoint.MustParseAuthority(host),
+		Type:    "https",
+		Address: endpoint.MustParseAuthority(host),
 		Trust: endpoint.Fingerprint{
 			Type:        "certFingerprint",
 			Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000",

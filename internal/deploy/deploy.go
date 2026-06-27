@@ -254,7 +254,7 @@ func (d *Deployer) startUnitCapsule(ctx context.Context, name string, peers []la
 	var trusts []mediator.PeerTrust
 	for _, p := range peers {
 		if hp, ok := p.(endpoint.TLS); ok {
-			trusts = append(trusts, mediator.PeerTrust{Host: hp.Host.Host, Trust: hp.Trust})
+			trusts = append(trusts, mediator.PeerTrust{Host: hp.Address.Host, Trust: hp.Trust})
 		}
 	}
 	var targets []capsule.SSHTarget
@@ -278,8 +278,8 @@ func (d *Deployer) startUnitCapsule(ctx context.Context, name string, peers []la
 }
 
 func sshTarget(sp endpoint.SSH, keys []string) capsule.SSHTarget {
-	t := capsule.SSHTarget{Host: string(sp.Host.Host), HostKeys: keys}
-	if p := sp.Host.Port; p != nil && *p >= 0 && *p <= 65535 {
+	t := capsule.SSHTarget{Host: string(sp.Address.Host), HostKeys: keys}
+	if p := sp.Address.Port; p != nil && *p >= 0 && *p <= 65535 {
 		t.Port = uint16(*p)
 	}
 	return t
