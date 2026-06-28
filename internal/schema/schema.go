@@ -38,6 +38,7 @@ var (
 	// Built once from the embedded contract at package initialization.
 	deployRoot      = mustBuild("attest")
 	laneRoot        = mustBuild("lane")
+	provenanceRoot  = mustBuild("provenance")
 	crossvalRoot    = mustBuild("crossval")
 	trustLayersRoot = mustBuild("trustlayers")
 
@@ -54,10 +55,10 @@ var (
 	attestationDef = deployRoot.LookupPath(cue.ParsePath("#Attestation"))
 	bundleDef      = deployRoot.LookupPath(cue.ParsePath("#Bundle"))
 	provenanceDefs = map[string]cue.Value{
-		"git":     laneRoot.LookupPath(cue.ParsePath("#GitProvenanceRecord")),
-		"tarball": laneRoot.LookupPath(cue.ParsePath("#TarballProvenanceRecord")),
-		"oci":     laneRoot.LookupPath(cue.ParsePath("#OCIProvenanceRecord")),
-		"url":     laneRoot.LookupPath(cue.ParsePath("#URLProvenanceRecord")),
+		"git":     provenanceRoot.LookupPath(cue.ParsePath("#Git")),
+		"tarball": provenanceRoot.LookupPath(cue.ParsePath("#Tarball")),
+		"oci":     provenanceRoot.LookupPath(cue.ParsePath("#OCI")),
+		"url":     provenanceRoot.LookupPath(cue.ParsePath("#URL")),
 	}
 )
 

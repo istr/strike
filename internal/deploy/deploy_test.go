@@ -39,7 +39,10 @@ import (
 	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/mediator"
+	"github.com/istr/strike/internal/output"
 	"github.com/istr/strike/internal/primitive"
+	"github.com/istr/strike/internal/provenance"
+	"github.com/istr/strike/internal/target"
 	"github.com/istr/strike/internal/testutil"
 	"github.com/istr/strike/internal/transport"
 )
@@ -164,13 +167,13 @@ func TestAttestationJSON(t *testing.T) {
 	att := &deploy.Attestation{
 		Sealed: deploy.Sealed{
 			LaneID:    "test-lane",
-			Target:    lane.DeployTarget{ID: "prod-1", Type: "registry", Description: "test"},
+			Target:    target.Deploy{ID: "prod-1", Type: "registry", Description: "test"},
 			Artifacts: map[string]deploy.ArtifactRecord{"image": {Digest: "sha256:abc"}},
 		},
 		Informational: &deploy.Informational{
 			PreStateDigest:  primitive.DigestFromHex("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
 			PostStateDigest: primitive.DigestFromHex("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
-			Provenance:      []lane.ProvenanceRecord{},
+			Provenance:      []provenance.Record{},
 		},
 	}
 
@@ -310,7 +313,7 @@ func TestDeployerExecute(t *testing.T) {
 	eng := newTLSTestEngine(t, containerMock(t, "v1.2.3"))
 
 	state := lane.NewState()
-	if err := state.Register("build", "image", lane.ImageOutputHandle{
+	if err := state.Register("build", "image", output.ImageHandle{
 		Ref: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
 	}); err != nil {
 		t.Fatal(err)
@@ -326,7 +329,7 @@ func TestDeployerExecute(t *testing.T) {
 			Artifacts: map[string]lane.ArtifactRef{
 				"image": {From: lane.StepImageRef{Step: "build"}},
 			},
-			Target: lane.DeployTarget{ID: "prod-1", Type: "registry", Description: "production"},
+			Target: target.Deploy{ID: "prod-1", Type: "registry", Description: "production"},
 			Recording: lane.StateRecording{
 				PreState: lane.CaptureSet{
 					Captures: []lane.Capture{{
@@ -413,7 +416,7 @@ func TestDeployerExecuteRegistryAttachesReferrers(t *testing.T) {
 	}
 
 	state := lane.NewState()
-	if regErr := state.Register("build", "image", lane.ImageOutputHandle{
+	if regErr := state.Register("build", "image", output.ImageHandle{
 		Ref: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
 	}); regErr != nil {
 		t.Fatal(regErr)
@@ -430,7 +433,7 @@ func TestDeployerExecuteRegistryAttachesReferrers(t *testing.T) {
 			Artifacts: map[string]lane.ArtifactRef{
 				"image": {From: lane.StepImageRef{Step: "build"}},
 			},
-			Target: lane.DeployTarget{ID: "prod-1", Type: "registry", Description: "production"},
+			Target: target.Deploy{ID: "prod-1", Type: "registry", Description: "production"},
 			Recording: lane.StateRecording{
 				PreState:  lane.CaptureSet{Captures: []lane.Capture{}},
 				PostState: lane.CaptureSet{Captures: []lane.Capture{}},
@@ -576,7 +579,7 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 	}
 
 	state := lane.NewState()
-	if err := state.Register("build", "image", lane.ImageOutputHandle{
+	if err := state.Register("build", "image", output.ImageHandle{
 		Ref: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
 	}); err != nil {
 		t.Fatal(err)
@@ -592,7 +595,7 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 			Artifacts: map[string]lane.ArtifactRef{
 				"image": {From: lane.StepImageRef{Step: "build"}},
 			},
-			Target: lane.DeployTarget{ID: "prod-1", Type: "registry", Description: "production"},
+			Target: target.Deploy{ID: "prod-1", Type: "registry", Description: "production"},
 			Recording: lane.StateRecording{
 				PreState: lane.CaptureSet{
 					Captures: []lane.Capture{{
@@ -676,7 +679,7 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 func TestEngineRecord_NilEngineID(t *testing.T) {
 	eng := newTLSTestEngine(t, containerMock(t, "v1.0"))
 	state := lane.NewState()
-	if err := state.Register("build", "image", lane.ImageOutputHandle{
+	if err := state.Register("build", "image", output.ImageHandle{
 		Ref: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
 	}); err != nil {
 		t.Fatal(err)
@@ -692,7 +695,7 @@ func TestEngineRecord_NilEngineID(t *testing.T) {
 			Artifacts: map[string]lane.ArtifactRef{
 				"image": {From: lane.StepImageRef{Step: "build"}},
 			},
-			Target:    lane.DeployTarget{ID: "test-1", Type: "registry", Description: "test"},
+			Target:    target.Deploy{ID: "test-1", Type: "registry", Description: "test"},
 			Recording: lane.StateRecording{},
 		},
 	}
@@ -736,7 +739,7 @@ func TestEngineRecord_WithRuntime(t *testing.T) {
 
 	eng := newTLSTestEngine(t, containerMock(t, "v1.0"))
 	state := lane.NewState()
-	if err := state.Register("build", "image", lane.ImageOutputHandle{
+	if err := state.Register("build", "image", output.ImageHandle{
 		Ref: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
 	}); err != nil {
 		t.Fatal(err)
@@ -752,7 +755,7 @@ func TestEngineRecord_WithRuntime(t *testing.T) {
 			Artifacts: map[string]lane.ArtifactRef{
 				"image": {From: lane.StepImageRef{Step: "build"}},
 			},
-			Target:    lane.DeployTarget{ID: "test-1", Type: "registry", Description: "test"},
+			Target:    target.Deploy{ID: "test-1", Type: "registry", Description: "test"},
 			Recording: lane.StateRecording{},
 		},
 	}
@@ -810,7 +813,7 @@ func TestEngineRecord_WithoutRuntime(t *testing.T) {
 
 	eng := newTLSTestEngine(t, containerMock(t, "v1.0"))
 	state := lane.NewState()
-	if err := state.Register("build", "image", lane.ImageOutputHandle{
+	if err := state.Register("build", "image", output.ImageHandle{
 		Ref: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
 	}); err != nil {
 		t.Fatal(err)
@@ -826,7 +829,7 @@ func TestEngineRecord_WithoutRuntime(t *testing.T) {
 			Artifacts: map[string]lane.ArtifactRef{
 				"image": {From: lane.StepImageRef{Step: "build"}},
 			},
-			Target:    lane.DeployTarget{ID: "test-1", Type: "registry", Description: "test"},
+			Target:    target.Deploy{ID: "test-1", Type: "registry", Description: "test"},
 			Recording: lane.StateRecording{},
 		},
 	}
@@ -879,7 +882,7 @@ func TestResolverRecord_Populated(t *testing.T) {
 
 	eng := newTLSTestEngine(t, containerMock(t, "v1.0"))
 	state := lane.NewState()
-	if err := state.Register("build", "image", lane.ImageOutputHandle{
+	if err := state.Register("build", "image", output.ImageHandle{
 		Ref: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
 	}); err != nil {
 		t.Fatal(err)
@@ -895,7 +898,7 @@ func TestResolverRecord_Populated(t *testing.T) {
 			Artifacts: map[string]lane.ArtifactRef{
 				"image": {From: lane.StepImageRef{Step: "build"}},
 			},
-			Target:    lane.DeployTarget{ID: "test-1", Type: "registry", Description: "test"},
+			Target:    target.Deploy{ID: "test-1", Type: "registry", Description: "test"},
 			Recording: lane.StateRecording{},
 		},
 	}
@@ -983,7 +986,7 @@ func TestDeployerExecute_RequiredPreStateFails(t *testing.T) {
 				Image: "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 			},
 			Artifacts: map[string]lane.ArtifactRef{},
-			Target:    lane.DeployTarget{ID: "test-1", Type: "registry", Description: "test"},
+			Target:    target.Deploy{ID: "test-1", Type: "registry", Description: "test"},
 			Recording: lane.StateRecording{
 				PreState: lane.CaptureSet{
 					Required: true,
@@ -1040,7 +1043,7 @@ func TestDeployerExecute_KeylessBundles(t *testing.T) {
 	eng := newTLSTestEngine(t, containerMock(t, "v1.2.3"))
 
 	state := lane.NewState()
-	if err := state.Register("build", "image", lane.ImageOutputHandle{
+	if err := state.Register("build", "image", output.ImageHandle{
 		Ref: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
 	}); err != nil {
 		t.Fatal(err)
@@ -1092,7 +1095,7 @@ func TestDeployerExecute_KeylessFailureIsFatal(t *testing.T) {
 	eng := newTLSTestEngine(t, containerMock(t, "v1.2.3"))
 
 	state := lane.NewState()
-	if err := state.Register("build", "image", lane.ImageOutputHandle{
+	if err := state.Register("build", "image", output.ImageHandle{
 		Ref: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
 	}); err != nil {
 		t.Fatal(err)
@@ -1138,7 +1141,7 @@ func deployStep() *lane.Step {
 			Artifacts: map[string]lane.ArtifactRef{
 				"image": {From: lane.StepImageRef{Step: "build"}},
 			},
-			Target: lane.DeployTarget{ID: "prod-1", Type: "registry", Description: "production"},
+			Target: target.Deploy{ID: "prod-1", Type: "registry", Description: "production"},
 			Recording: lane.StateRecording{
 				PreState: lane.CaptureSet{
 					Captures: []lane.Capture{{
@@ -1166,7 +1169,7 @@ func TestValidateAttestation_InvalidLaneID(t *testing.T) {
 	att := &deploy.Attestation{
 		Sealed: deploy.Sealed{
 			LaneID:    "INVALID_LANE_ID",
-			Target:    lane.DeployTarget{ID: "prod-1", Type: "registry", Description: "test"},
+			Target:    target.Deploy{ID: "prod-1", Type: "registry", Description: "test"},
 			Artifacts: map[string]deploy.ArtifactRecord{},
 			Peers:     map[string][]lane.Peer{},
 		},
@@ -1174,7 +1177,7 @@ func TestValidateAttestation_InvalidLaneID(t *testing.T) {
 			Timestamp:       clock.Reproducible(),
 			PreStateDigest:  primitive.DigestFromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
 			PostStateDigest: primitive.DigestFromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
-			Provenance:      []lane.ProvenanceRecord{},
+			Provenance:      []provenance.Record{},
 		},
 	}
 
@@ -1243,7 +1246,7 @@ func TestDeployerExecute_ObservedPeersPopulated(t *testing.T) {
 					Artifacts: map[string]lane.ArtifactRef{
 						"image": {From: lane.StepImageRef{Step: "build"}},
 					},
-					Target:    lane.DeployTarget{ID: "prod-1", Type: "registry", Description: "production"},
+					Target:    target.Deploy{ID: "prod-1", Type: "registry", Description: "production"},
 					Recording: lane.StateRecording{},
 				},
 			},
@@ -1255,7 +1258,7 @@ func TestDeployerExecute_ObservedPeersPopulated(t *testing.T) {
 	}
 
 	state := lane.NewState()
-	if regErr := state.Register("build", "image", lane.ImageOutputHandle{
+	if regErr := state.Register("build", "image", output.ImageHandle{
 		Ref: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
 	}); regErr != nil {
 		t.Fatal(regErr)
@@ -1410,7 +1413,7 @@ func TestDeployerExecute_ObservedPeersConflictAborts(t *testing.T) {
 					Artifacts: map[string]lane.ArtifactRef{
 						"image": {From: lane.StepImageRef{Step: "step-b"}},
 					},
-					Target:    lane.DeployTarget{ID: "prod-1", Type: "registry", Description: "production"},
+					Target:    target.Deploy{ID: "prod-1", Type: "registry", Description: "production"},
 					Recording: lane.StateRecording{},
 				},
 				Inputs: []lane.InputRef{{From: lane.OutputRef{Step: "step-a", Output: "out"}, Mount: "/in/a"}},
@@ -1423,7 +1426,7 @@ func TestDeployerExecute_ObservedPeersConflictAborts(t *testing.T) {
 	}
 
 	state := lane.NewState()
-	if regErr := state.Register("step-b", "out", lane.ImageOutputHandle{
+	if regErr := state.Register("step-b", "out", output.ImageHandle{
 		Ref: "localhost/test/step-b@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
 	}); regErr != nil {
 		t.Fatal(regErr)

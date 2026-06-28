@@ -12,6 +12,8 @@ import (
 	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/primitive"
+	"github.com/istr/strike/internal/provenance"
+	"github.com/istr/strike/internal/target"
 	"github.com/istr/strike/test/crossval"
 )
 
@@ -19,7 +21,7 @@ func TestValidateAttestation_Valid(t *testing.T) {
 	att := &deploy.Attestation{
 		Sealed: deploy.Sealed{
 			LaneID: "test-lane",
-			Target: lane.DeployTarget{ID: "prod-1", Type: "registry", Description: "production"},
+			Target: target.Deploy{ID: "prod-1", Type: "registry", Description: "production"},
 			Artifacts: map[string]deploy.ArtifactRecord{
 				"image": {Digest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
 			},
@@ -29,7 +31,7 @@ func TestValidateAttestation_Valid(t *testing.T) {
 			Timestamp:       clock.Reproducible(),
 			PreStateDigest:  primitive.DigestFromHex("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
 			PostStateDigest: primitive.DigestFromHex("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
-			Provenance:      []lane.ProvenanceRecord{},
+			Provenance:      []provenance.Record{},
 		},
 	}
 
@@ -43,7 +45,7 @@ func TestValidateAttestation_WithEngine(t *testing.T) {
 	att := &deploy.Attestation{
 		Sealed: deploy.Sealed{
 			LaneID: "test-lane",
-			Target: lane.DeployTarget{ID: "staging-1", Type: "kubernetes", Description: "staging"},
+			Target: target.Deploy{ID: "staging-1", Type: "kubernetes", Description: "staging"},
 			Artifacts: map[string]deploy.ArtifactRecord{
 				"app": {Digest: "sha256:1111111111111111111111111111111111111111111111111111111111111111"},
 			},
@@ -62,7 +64,7 @@ func TestValidateAttestation_WithEngine(t *testing.T) {
 				Rootless: &rootless,
 				Version:  "5.3.1",
 			},
-			Provenance: []lane.ProvenanceRecord{},
+			Provenance: []provenance.Record{},
 		},
 	}
 
@@ -75,7 +77,7 @@ func TestValidateAttestation_InvalidEngineConnectionType(t *testing.T) {
 	att := &deploy.Attestation{
 		Sealed: deploy.Sealed{
 			LaneID:    "test-lane",
-			Target:    lane.DeployTarget{ID: "test-1", Type: "registry", Description: "test"},
+			Target:    target.Deploy{ID: "test-1", Type: "registry", Description: "test"},
 			Artifacts: map[string]deploy.ArtifactRecord{},
 			Engine: endpoint.EngineTLS{
 				Type: "plaintext", // not in enum
@@ -86,7 +88,7 @@ func TestValidateAttestation_InvalidEngineConnectionType(t *testing.T) {
 			Timestamp:       clock.Reproducible(),
 			PreStateDigest:  primitive.DigestFromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
 			PostStateDigest: primitive.DigestFromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
-			Provenance:      []lane.ProvenanceRecord{},
+			Provenance:      []provenance.Record{},
 		},
 	}
 
@@ -125,7 +127,7 @@ func TestValidateAttestation_EmptyDigestsAllowed(t *testing.T) {
 	att := &deploy.Attestation{
 		Sealed: deploy.Sealed{
 			LaneID:    "test-lane",
-			Target:    lane.DeployTarget{ID: "test-1", Type: "registry", Description: "first deploy"},
+			Target:    target.Deploy{ID: "test-1", Type: "registry", Description: "first deploy"},
 			Artifacts: map[string]deploy.ArtifactRecord{},
 			Peers:     map[string][]lane.Peer{},
 		},
@@ -133,7 +135,7 @@ func TestValidateAttestation_EmptyDigestsAllowed(t *testing.T) {
 			Timestamp:       clock.Reproducible(),
 			PreStateDigest:  primitive.DigestFromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
 			PostStateDigest: primitive.DigestFromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
-			Provenance:      []lane.ProvenanceRecord{},
+			Provenance:      []provenance.Record{},
 		},
 	}
 
@@ -208,7 +210,7 @@ func TestValidateAttestation_WithResolverRecord(t *testing.T) {
 	att := &deploy.Attestation{
 		Sealed: deploy.Sealed{
 			LaneID:    "test-lane",
-			Target:    lane.DeployTarget{ID: "staging-1", Type: "kubernetes", Description: "staging"},
+			Target:    target.Deploy{ID: "staging-1", Type: "kubernetes", Description: "staging"},
 			Artifacts: map[string]deploy.ArtifactRecord{},
 			Resolver: deploy.ResolverRecord{
 				Host:                  "1.1.1.1:853",
@@ -222,7 +224,7 @@ func TestValidateAttestation_WithResolverRecord(t *testing.T) {
 			Timestamp:       clock.Reproducible(),
 			PreStateDigest:  primitive.DigestFromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
 			PostStateDigest: primitive.DigestFromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
-			Provenance:      []lane.ProvenanceRecord{},
+			Provenance:      []provenance.Record{},
 		},
 	}
 
@@ -235,7 +237,7 @@ func TestValidateAttestation_WithPeers(t *testing.T) {
 	att := &deploy.Attestation{
 		Sealed: deploy.Sealed{
 			LaneID: "test-lane",
-			Target: lane.DeployTarget{ID: "prod-1", Type: "registry", Description: "production"},
+			Target: target.Deploy{ID: "prod-1", Type: "registry", Description: "production"},
 			Artifacts: map[string]deploy.ArtifactRecord{
 				"image": {Digest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
 			},
@@ -268,7 +270,7 @@ func TestValidateAttestation_WithPeers(t *testing.T) {
 			Timestamp:       clock.Reproducible(),
 			PreStateDigest:  primitive.DigestFromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
 			PostStateDigest: primitive.DigestFromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
-			Provenance:      []lane.ProvenanceRecord{},
+			Provenance:      []provenance.Record{},
 		},
 	}
 
@@ -281,7 +283,7 @@ func TestValidateAttestation_InvalidPeer(t *testing.T) {
 	att := &deploy.Attestation{
 		Sealed: deploy.Sealed{
 			LaneID: "test-lane",
-			Target: lane.DeployTarget{ID: "prod-1", Type: "registry", Description: "production"},
+			Target: target.Deploy{ID: "prod-1", Type: "registry", Description: "production"},
 			Artifacts: map[string]deploy.ArtifactRecord{
 				"image": {Digest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
 			},
@@ -299,7 +301,7 @@ func TestValidateAttestation_InvalidPeer(t *testing.T) {
 			Timestamp:       clock.Reproducible(),
 			PreStateDigest:  primitive.DigestFromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
 			PostStateDigest: primitive.DigestFromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
-			Provenance:      []lane.ProvenanceRecord{},
+			Provenance:      []provenance.Record{},
 		},
 	}
 

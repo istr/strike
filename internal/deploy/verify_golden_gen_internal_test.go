@@ -19,6 +19,7 @@ import (
 	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/primitive"
+	"github.com/istr/strike/internal/target"
 )
 
 // TestVerifyGoldenGenerate is the env-gated generator for the keyless
@@ -121,7 +122,7 @@ func syntheticGoldenAttestation(laneDigest primitive.Digest) *Attestation {
 			Artifacts: map[string]ArtifactRecord{
 				"app": {Digest: "sha256:" + artifactDigest},
 			},
-			Target: lane.DeployTarget{
+			Target: target.Deploy{
 				ID:          "golden-target",
 				Type:        "registry",
 				Description: "golden fixture deploy target",

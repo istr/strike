@@ -7,16 +7,18 @@ import (
 	"sync"
 
 	"github.com/istr/strike/internal/clock"
+	"github.com/istr/strike/internal/output"
 	"github.com/istr/strike/internal/primitive"
+	"github.com/istr/strike/internal/provenance"
 )
 
 // State tracks outputs and step results across lane execution.
 // Output references use the producer's canonical output ref as the
 // key (OutputRef.Ref, "step_name.output_name").
 type State struct {
-	Outputs    map[string]OutputHandle     `json:"outputs"`
-	Steps      map[string]StepResult       `json:"steps"`
-	Provenance map[string]ProvenanceRecord `json:"provenance"`
+	Outputs    map[string]output.Handle     `json:"outputs"`
+	Steps      map[string]StepResult        `json:"steps"`
+	Provenance map[string]provenance.Record `json:"provenance"`
 	mu         sync.RWMutex
 }
 
@@ -34,14 +36,14 @@ type StepResult struct {
 // NewState creates an empty lane state.
 func NewState() *State {
 	return &State{
-		Outputs:    make(map[string]OutputHandle),
+		Outputs:    make(map[string]output.Handle),
 		Steps:      make(map[string]StepResult),
-		Provenance: make(map[string]ProvenanceRecord),
+		Provenance: make(map[string]provenance.Record),
 	}
 }
 
 // RecordProvenance stores a validated provenance record for a step.
-func (s *State) RecordProvenance(stepID string, rec ProvenanceRecord) error {
+func (s *State) RecordProvenance(stepID string, rec provenance.Record) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, exists := s.Provenance[stepID]; exists {
@@ -54,7 +56,7 @@ func (s *State) RecordProvenance(stepID string, rec ProvenanceRecord) error {
 // Register stores the resolved output handle under the producer's canonical
 // output ref (OutputRef.Ref, "step_name.output_name"). The handle carries the
 // digest-pinned image reference produced by the normalize round-trip (ADR-046).
-func (s *State) Register(stepID, outputID string, h OutputHandle) error {
+func (s *State) Register(stepID, outputID string, h output.Handle) error {
 	key := OutputRef{Step: primitive.Identifier(stepID), Output: primitive.Identifier(outputID)}.Ref()
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -70,7 +72,7 @@ func (s *State) Register(stepID, outputID string, h OutputHandle) error {
 
 // Resolve looks up an output handle by its producer's canonical output ref
 // (OutputRef.Ref, "step_name.output_name").
-func (s *State) Resolve(ref string) (OutputHandle, error) {
+func (s *State) Resolve(ref string) (output.Handle, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	h, ok := s.Outputs[ref]
@@ -83,9 +85,9 @@ func (s *State) Resolve(ref string) (OutputHandle, error) {
 // CollectProvenance walks the DAG backwards from fromStep and returns
 // all provenance records of transitive predecessors, sorted by step name
 // for deterministic attestation output.
-func (s *State) CollectProvenance(dag *DAG, fromStep string) []ProvenanceRecord {
+func (s *State) CollectProvenance(dag *DAG, fromStep string) []provenance.Record {
 	if dag == nil {
-		return []ProvenanceRecord{}
+		return []provenance.Record{}
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -112,7 +114,7 @@ func (s *State) CollectProvenance(dag *DAG, fromStep string) []ProvenanceRecord 
 	}
 	sort.Strings(names)
 
-	out := make([]ProvenanceRecord, 0, len(names))
+	out := make([]provenance.Record, 0, len(names))
 	for _, n := range names {
 		out = append(out, s.Provenance[n])
 	}

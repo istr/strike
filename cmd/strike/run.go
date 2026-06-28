@@ -24,6 +24,7 @@ import (
 	"github.com/istr/strike/internal/front"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/mediator"
+	"github.com/istr/strike/internal/output"
 	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/registry"
 	"github.com/istr/strike/internal/transport"
@@ -210,7 +211,7 @@ func (rc *runContext) resolveImageDigest(ctx context.Context, step *lane.Step, s
 			return "", fmt.Errorf("%s: imageFromStep %s: %w",
 				safeName, ref, err)
 		}
-		digest, digestErr := lane.ManifestDigest(handle)
+		digest, digestErr := output.ManifestDigest(handle)
 		if digestErr != nil {
 			return "", fmt.Errorf("%s: imageFromStep %s: %w",
 				safeName, ref, digestErr)
@@ -310,7 +311,7 @@ func (rc *runContext) registerCachedOutputs(ctx context.Context, step *lane.Step
 				safeName, len(diffIDs), len(step.Outputs))
 		}
 		for i, out := range step.Outputs {
-			handle := lane.FileOutputHandle{
+			handle := output.FileHandle{
 				Ref:         imageRef,
 				OutputID:    out.ID,
 				LayerDiffID: diffIDs[i],
@@ -321,7 +322,7 @@ func (rc *runContext) registerCachedOutputs(ctx context.Context, step *lane.Step
 		}
 	}
 	if step.Output != "" {
-		handle := lane.ImageOutputHandle{Ref: imageRef}
+		handle := output.ImageHandle{Ref: imageRef}
 		if regErr := rc.laneState.Register(stepID, "", handle); regErr != nil {
 			return fmt.Errorf("cache hit register %s image: %w", stepID, regErr)
 		}
@@ -379,7 +380,7 @@ func (rc *runContext) executePack(ctx context.Context, step *lane.Step, stepID, 
 		log.Printf("OK     %s -> %s", safeName, digest)
 	}
 
-	handle := lane.ImageOutputHandle{
+	handle := output.ImageHandle{
 		Ref: registry.WrapDigest(string(rc.lane.ID), stepID, digest),
 	}
 	if regErr := rc.laneState.Register(stepID, "", handle); regErr != nil {
@@ -410,11 +411,11 @@ func (rc *runContext) resolvePackInputPaths(ctx context.Context, step *lane.Step
 		if artErr != nil {
 			return nil, fmt.Errorf("%s: pack input %s.%s: %w", safeName, fromStep, fromOutput, artErr)
 		}
-		fh, ok := handle.(lane.FileOutputHandle)
+		fh, ok := handle.(output.FileHandle)
 		if !ok {
 			return nil, fmt.Errorf("%s: pack input %s.%s: not a file output", safeName, fromStep, fromOutput)
 		}
-		packDigest, digestErr := lane.ManifestDigest(fh)
+		packDigest, digestErr := output.ManifestDigest(fh)
 		if digestErr != nil {
 			return nil, fmt.Errorf("%s: pack input %s.%s digest: %w", safeName, fromStep, fromOutput, digestErr)
 		}
@@ -559,7 +560,7 @@ func (rc *runContext) wrapFileOutputs(ctx context.Context, step *lane.Step, step
 		if !ok {
 			return fmt.Errorf("%s: output %q has no assembled layer", safeName, out.ID)
 		}
-		handle := lane.FileOutputHandle{
+		handle := output.FileHandle{
 			Ref:         imageRef,
 			OutputID:    out.ID,
 			LayerDiffID: diffID,
@@ -573,7 +574,7 @@ func (rc *runContext) wrapFileOutputs(ctx context.Context, step *lane.Step, step
 
 // wrapImageOutput commits the held container to a new image, normalizes it
 // through ggcr for reproducible digests (ADR-046), and registers the
-// digest-pinned OutputHandle.
+// digest-pinned output handle.
 func (rc *runContext) wrapImageOutput(ctx context.Context, _ *lane.Step, stepID, safeName, containerID string, specHash primitive.Digest) error {
 	tag := registry.WrapTag(string(rc.lane.ID), stepID, specHash)
 
@@ -593,7 +594,7 @@ func (rc *runContext) wrapImageOutput(ctx context.Context, _ *lane.Step, stepID,
 		return fmt.Errorf("%s: normalize image output: %w", safeName, err)
 	}
 
-	handle := lane.ImageOutputHandle{
+	handle := output.ImageHandle{
 		Ref: registry.WrapDigest(string(rc.lane.ID), stepID, digest),
 	}
 	if regErr := rc.laneState.Register(stepID, "", handle); regErr != nil {
@@ -661,7 +662,7 @@ func (rc *runContext) buildInputDelivery(ctx context.Context, step *lane.Step) (
 			return nil, nil, fmt.Errorf("input at %q: source artifact %s not found: %w",
 				e.Mount, ref, artErr)
 		}
-		fh, ok := art.(lane.FileOutputHandle)
+		fh, ok := art.(output.FileHandle)
 		if !ok {
 			return nil, nil, fmt.Errorf("input at %q: source artifact %s is not a file output", e.Mount, ref)
 		}
@@ -701,7 +702,7 @@ func (rc *runContext) buildInputDelivery(ctx context.Context, step *lane.Step) (
 // buildImageMount validates and constructs a read-only image-volume mount for
 // an input delivered outside the workdir. A single-file selection is rejected
 // in lane terms, statically for a type:file output, by walk otherwise.
-func buildImageMount(ctx context.Context, engine container.Engine, cache map[string][]byte, h lane.FileOutputHandle, e lane.InputEdge) (container.ImageVolume, error) {
+func buildImageMount(ctx context.Context, engine container.Engine, cache map[string][]byte, h output.FileHandle, e lane.InputEdge) (container.ImageVolume, error) {
 	if e.FromOutput.Type == artifactTypeFile && e.Subpath == nil {
 		return container.ImageVolume{}, singleFileOutsideErr(e)
 	}

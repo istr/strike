@@ -244,7 +244,7 @@ func TestProbeResolver_HappyPath(t *testing.T) {
 // TestProbeResolver_FingerprintMismatch pins the V-property gate: the run-start
 // probe rejects a resolver whose observed leaf diverges from the declared
 // certFingerprint anchor, which cmd/strike turns into a fatal abort before any
-// attestation is sealed (item-0046).
+// attestation is sealed.
 func TestProbeResolver_FingerprintMismatch(t *testing.T) {
 	cert, _ := testCertPair(t, "127.0.0.1")
 	addr := startDNSTLSServer(t, cert, nsRootHandler())
@@ -265,7 +265,7 @@ func TestProbeResolver_FingerprintMismatch(t *testing.T) {
 
 // TestProbeResolver_CABundleMismatch is the caBundle arm of the same V-property
 // gate: a resolver whose leaf is not certified by the declared CA bundle is
-// rejected at the probe before any attestation is sealed (item-0046).
+// rejected at the probe before any attestation is sealed.
 func TestProbeResolver_CABundleMismatch(t *testing.T) {
 	serverCert, _ := testCAAndServerCert(t, "127.0.0.1")
 	addr := startDNSTLSServer(t, serverCert, nsRootHandler())

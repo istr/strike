@@ -28,9 +28,12 @@ import (
 	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/mediator"
+	"github.com/istr/strike/internal/output"
 	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/probe"
+	"github.com/istr/strike/internal/provenance"
 	"github.com/istr/strike/internal/registry"
+	"github.com/istr/strike/internal/target"
 	"github.com/istr/strike/internal/transport"
 )
 
@@ -54,7 +57,7 @@ type Sealed struct {
 	Resolver      ResolverRecord            `json:"resolver"`
 	Engine        endpoint.Engine           `json:"engine,omitempty"`
 	ObservedPeers map[string]ObservedPeer   `json:"observedPeers,omitempty"`
-	Target        lane.DeployTarget         `json:"target"`
+	Target        target.Deploy             `json:"target"`
 	LaneID        string                    `json:"laneId"`
 	LaneDigest    primitive.Digest          `json:"laneDigest"`
 }
@@ -174,11 +177,11 @@ type EngineDependent struct {
 
 // Informational -- recorded for audit and IoC; no trust claim.
 type Informational struct {
-	Timestamp       clock.Time              `json:"timestamp,omitempty"`
-	EngineMetadata  *EngineMetadata         `json:"engineMetadata,omitempty"`
-	PreStateDigest  primitive.Digest        `json:"preStateDigest"`
-	PostStateDigest primitive.Digest        `json:"postStateDigest"`
-	Provenance      []lane.ProvenanceRecord `json:"provenance"`
+	Timestamp       clock.Time          `json:"timestamp,omitempty"`
+	EngineMetadata  *EngineMetadata     `json:"engineMetadata,omitempty"`
+	PreStateDigest  primitive.Digest    `json:"preStateDigest"`
+	PostStateDigest primitive.Digest    `json:"postStateDigest"`
+	Provenance      []provenance.Record `json:"provenance"`
 }
 
 // ArtifactRecord is the provenance record for one artifact.
@@ -207,7 +210,7 @@ type EngineMetadata struct {
 // identity observed when the pre-flight probe dialed and verified it. The two
 // are paired at the attestation producer's boundary so the declared->dialed->
 // observed trust match is expressed in the internal API contract, not only
-// enforced imperatively at probe time (item-0046). The declared anchor is
+// enforced imperatively at probe time. The declared anchor is
 // sealed via laneDigest, not duplicated into the sealed record; this pairing is
 // the producer-side linkage and the sealed ResolverRecord carries the observed
 // identity only.
@@ -335,7 +338,7 @@ type Deployer struct {
 	CAVolume        string            // lane-wide CA volume name; mounted r/o at /etc/ssl/certs
 	BaseSBOMSigners []lane.SBOMSigner // ADR-040 2c: declared base-SBOM signers; lane build requires a Keyless trust root when non-empty
 	ownRecords      []capsule.Records // method + capture container records, accumulated during Execute
-	Resolver        ResolverProbe     // declared resolver endpoint + the identity the pre-flight probe observed and verified (item-0046)
+	Resolver        ResolverProbe     // declared resolver endpoint + the identity the pre-flight probe observed and verified
 }
 
 // collectObservedPeers builds the Layer-V observed_peers map and the Layer-E
@@ -495,7 +498,7 @@ func appendUniqueString(s []string, v string) []string {
 func (d *Deployer) buildAttestation(
 	step *lane.Step, spec lane.DeploySpec,
 	artifactDigests map[string]ArtifactRecord,
-	provenance []lane.ProvenanceRecord,
+	provenance []provenance.Record,
 	started clock.Time, preDigest, postDigest primitive.Digest,
 ) (*Attestation, error) {
 	engineConn, engineMeta := d.engineRecords()
@@ -686,7 +689,7 @@ func resolveArtifactDigests(stepID string, refs map[string]string, state *lane.S
 		if resolveErr != nil {
 			return nil, fmt.Errorf("step %q: artifact %q: %w", stepID, artName, resolveErr)
 		}
-		digest, digestErr := lane.ManifestDigest(handle)
+		digest, digestErr := output.ManifestDigest(handle)
 		if digestErr != nil {
 			return nil, fmt.Errorf("step %q: artifact %q: %w", stepID, artName, digestErr)
 		}
@@ -1014,7 +1017,7 @@ func (d *Deployer) engineRecords() (endpoint.Engine, *EngineMetadata) {
 }
 
 // resolverRecord builds the ResolverRecord from the resolver identity the
-// pre-flight probe observed. The resolver is mandatory (item-0046): the probe
+// pre-flight probe observed. The resolver is mandatory: the probe
 // is an unconditional run-start gate that aborts on a declared-vs-observed
 // trust mismatch before any attestation is written, so a sealed run always
 // carries a verified observation. Parallel to engineRecord.

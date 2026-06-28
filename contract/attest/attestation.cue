@@ -26,6 +26,8 @@ import (
 	"github.com/istr/strike/contract/endpoint"
 	"github.com/istr/strike/contract/lane"
 	"github.com/istr/strike/contract/primitive"
+	provenancepkg "github.com/istr/strike/contract/provenance"
+	deploytarget "github.com/istr/strike/contract/target"
 )
 
 #Timestamp: =~"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}"
@@ -68,7 +70,7 @@ import (
 	laneId: primitive.#Identifier
 
 	// target describes what was deployed to. Declared, lane-anchored.
-	target: lane.#DeployTarget
+	target: deploytarget.#Deploy
 
 	// laneDigest is the raw sha256 over the lane definition file bytes,
 	// computed by CP at parse time (hash and parse read the same bytes).
@@ -186,7 +188,7 @@ import (
 	// predecessor steps. Each record is container-written at step exit
 	// and engine-relayed; recorded for audit and IoC cross-check against
 	// future capsule-observed peer/command records.
-	provenance: [...lane.#ProvenanceRecord]
+	provenance: [...provenancepkg.#Record]
 }
 
 // ---------------------------------------------------------------------------

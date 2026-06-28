@@ -5,6 +5,8 @@ import (
 	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/primitive"
+	"github.com/istr/strike/internal/provenance"
+	"github.com/istr/strike/internal/target"
 )
 
 // Output attestation predicate types (ADR-040 D3). These are the standard-
@@ -61,7 +63,7 @@ type SLSABuildDefinition struct {
 // strike's typed Layer-V facts (Fork C, Fork D). EngineConnection is Layer V
 // and lives here, not in the engine-context predicate.
 type StrikeExternalParameters struct {
-	Target        lane.DeployTarget       `json:"target"`
+	Target        target.Deploy           `json:"target"`
 	Peers         map[string][]lane.Peer  `json:"peers"`
 	ObservedPeers map[string]ObservedPeer `json:"observedPeers,omitempty"`
 	Resolver      ResolverRecord          `json:"resolver"`
@@ -131,9 +133,9 @@ type InformationalStatement struct {
 // that carries a wall-clock; the sealed provenance is reproducible and omits
 // it.
 type InformationalPredicate struct {
-	Timestamp       clock.Time              `json:"timestamp,omitempty"`
-	EngineMetadata  *EngineMetadata         `json:"engineMetadata,omitempty"`
-	PreStateDigest  primitive.Digest        `json:"preStateDigest"`
-	PostStateDigest primitive.Digest        `json:"postStateDigest"`
-	Provenance      []lane.ProvenanceRecord `json:"provenance"`
+	Timestamp       clock.Time          `json:"timestamp,omitempty"`
+	EngineMetadata  *EngineMetadata     `json:"engineMetadata,omitempty"`
+	PreStateDigest  primitive.Digest    `json:"preStateDigest"`
+	PostStateDigest primitive.Digest    `json:"postStateDigest"`
+	Provenance      []provenance.Record `json:"provenance"`
 }

@@ -24,6 +24,8 @@ import (
 	"github.com/istr/strike/contract/endpoint"
 	"github.com/istr/strike/contract/lane"
 	"github.com/istr/strike/contract/primitive"
+	provenancepkg "github.com/istr/strike/contract/provenance"
+	deploytarget "github.com/istr/strike/contract/target"
 )
 
 // ---------------------------------------------------------------------------
@@ -93,7 +95,7 @@ import (
 #StrikeExternalParameters: {
 	laneId:     primitive.#Identifier
 	laneDigest: primitive.#Digest | ""
-	target:     lane.#DeployTarget
+	target:     deploytarget.#Deploy
 	oidc:       #ProvenanceOIDC
 	peers: [ID=primitive.#Identifier]: [...lane.#Peer]
 	observedPeers?: [Endpoint=string]: #ObservedPeer
@@ -188,7 +190,7 @@ import (
 	// provenance collects validated provenance records from transitive
 	// predecessor steps; each is container-written at step exit and
 	// engine-relayed. Recorded for audit and IoC, never gating.
-	provenance: [...lane.#ProvenanceRecord]
+	provenance: [...provenancepkg.#Record]
 
 	// engineMetadata is the engine's self-report about itself (version, rootless
 	// mode). It carries no trust claim -- the engine asserting facts about

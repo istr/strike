@@ -8,6 +8,7 @@ import (
 	"github.com/istr/strike/internal/deploy"
 	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/target"
 )
 
 // TestSealed_UnmarshalEngine exercises the engine dispatch in
@@ -18,7 +19,7 @@ func TestSealed_UnmarshalEngine(t *testing.T) {
 	orig := deploy.Sealed{
 		LaneID:     "demo",
 		LaneDigest: "",
-		Target:     lane.DeployTarget{ID: "prod-1", Type: "registry", Description: "production"},
+		Target:     target.Deploy{ID: "prod-1", Type: "registry", Description: "production"},
 		Artifacts:  map[string]deploy.ArtifactRecord{},
 		Peers:      map[string][]lane.Peer{},
 		Engine: endpoint.EngineMTLS{

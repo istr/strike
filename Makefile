@@ -8,7 +8,7 @@ build: generate
 # Step 1: Export CUE specs to JSON Schema.
 # These JSON Schema files are the cross-implementation contract that
 # both the Go and (future) Rust validators build from.
-specs: contract/primitive/scalars.cue contract/lane/peer.cue contract/lane/target.cue contract/lane/lane.cue contract/lane/trustroot.cue contract/lane/provenance.cue contract/attest/attestation.cue contract/attest/artifact-record.cue
+specs: contract/primitive/scalars.cue contract/lane/peer.cue contract/target/target.cue contract/lane/lane.cue contract/lane/trustroot.cue contract/provenance/provenance.cue contract/attest/attestation.cue contract/attest/artifact-record.cue
 	cue export ./contract/lane -e '#Lane' \
 	    --out jsonschema --force -o contract/lane.schema.json
 	cue export ./contract/attest -e '#Attestation' \
@@ -23,11 +23,17 @@ generate: specs
 	cue exp gengotypes ./contract/lane
 	cue exp gengotypes ./contract/primitive
 	cue exp gengotypes ./contract/endpoint
-	sed -i 's#github.com/istr/strike/contract/#github.com/istr/strike/internal/#g' contract/lane/cue_types_gen.go contract/primitive/cue_types_gen.go contract/endpoint/cue_types_gen.go
-	mkdir -p internal/primitive internal/endpoint
+	cue exp gengotypes ./contract/output
+	cue exp gengotypes ./contract/provenance
+	cue exp gengotypes ./contract/target
+	sed -i 's#github.com/istr/strike/contract/#github.com/istr/strike/internal/#g' contract/lane/cue_types_gen.go contract/primitive/cue_types_gen.go contract/endpoint/cue_types_gen.go contract/output/cue_types_gen.go contract/provenance/cue_types_gen.go contract/target/cue_types_gen.go
+	mkdir -p internal/primitive internal/endpoint internal/output internal/provenance internal/target
 	mv contract/lane/cue_types_gen.go internal/lane/lane.gen.go
 	mv contract/primitive/cue_types_gen.go internal/primitive/primitive.gen.go
 	mv contract/endpoint/cue_types_gen.go internal/endpoint/endpoint.gen.go
+	mv contract/output/cue_types_gen.go internal/output/output.gen.go
+	mv contract/provenance/cue_types_gen.go internal/provenance/provenance.gen.go
+	mv contract/target/cue_types_gen.go internal/target/target.gen.go
 
 # Update golden test fixtures (run after intentional changes to sign/pack/digest).
 golden:

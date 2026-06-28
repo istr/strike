@@ -8,7 +8,9 @@ import (
 	"github.com/istr/strike/internal/deploy"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/primitive"
+	"github.com/istr/strike/internal/provenance"
 	"github.com/istr/strike/internal/schema"
+	"github.com/istr/strike/internal/target"
 )
 
 func validateAgainstDef(t *testing.T, data []byte, def string) {
@@ -29,7 +31,7 @@ func TestSLSAProvenanceStatement_Valid(t *testing.T) {
 				ExternalParameters: deploy.StrikeExternalParameters{
 					LaneID:     "demo",
 					LaneDigest: "",
-					Target:     lane.DeployTarget{ID: "prod-1", Type: "registry", Description: "production"},
+					Target:     target.Deploy{ID: "prod-1", Type: "registry", Description: "production"},
 					OIDC:       deploy.ProvenanceOIDC{Issuer: "https://idp.example.com", Identity: "strike@example.com"},
 					Peers:      map[string][]lane.Peer{},
 				},
@@ -53,7 +55,7 @@ func TestInformationalStatement_Valid(t *testing.T) {
 			Timestamp:       clock.Reproducible(),
 			PreStateDigest:  primitive.DigestFromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
 			PostStateDigest: primitive.DigestFromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
-			Provenance:      []lane.ProvenanceRecord{},
+			Provenance:      []provenance.Record{},
 		},
 	}
 	data, err := json.Marshal(stmt)

@@ -10,6 +10,7 @@ import (
 	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/front"
 	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/output"
 	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/registry"
 	"github.com/istr/strike/internal/registry/regtest"
@@ -86,7 +87,7 @@ func TestBuildInputDelivery_Single(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildLayeredImageTar: %v", err)
 	}
-	if err := rc.laneState.Register("compile", "bin", lane.FileOutputHandle{
+	if err := rc.laneState.Register("compile", "bin", output.FileHandle{
 		Ref:         compileRef,
 		OutputID:    "bin",
 		LayerDiffID: diffID,
@@ -148,10 +149,10 @@ func TestBuildInputDelivery_Multiple(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildLayeredImageTar s2: %v", err)
 	}
-	if err := rc.laneState.Register("s1", "a", lane.FileOutputHandle{Ref: ref1, OutputID: "a", LayerDiffID: diff1}); err != nil {
+	if err := rc.laneState.Register("s1", "a", output.FileHandle{Ref: ref1, OutputID: "a", LayerDiffID: diff1}); err != nil {
 		t.Fatal(err)
 	}
-	if err := rc.laneState.Register("s2", "b", lane.FileOutputHandle{Ref: ref2, OutputID: "b", LayerDiffID: diff2}); err != nil {
+	if err := rc.laneState.Register("s2", "b", output.FileHandle{Ref: ref2, OutputID: "b", LayerDiffID: diff2}); err != nil {
 		t.Fatal(err)
 	}
 	rc.state.specHashes["s1"] = primitive.DigestFromHex("2222222222222222000000000000000000000000000000000000000000000000")
@@ -196,7 +197,7 @@ func TestBuildInputDelivery_MissingSubpath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildLayeredImageTar: %v", err)
 	}
-	if err := rc.laneState.Register("src", "tree", lane.FileOutputHandle{
+	if err := rc.laneState.Register("src", "tree", output.FileHandle{
 		Ref:         srcRef,
 		OutputID:    "tree",
 		LayerDiffID: diffID,
@@ -244,7 +245,7 @@ func TestBuildInputDelivery_OutsideWorkdir_DirectoryMount(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildLayeredImageTar: %v", err)
 	}
-	if err := rc.laneState.Register("src", "tree", lane.FileOutputHandle{
+	if err := rc.laneState.Register("src", "tree", output.FileHandle{
 		Ref:         srcRef,
 		OutputID:    "tree",
 		LayerDiffID: diffID,
@@ -306,7 +307,7 @@ func TestBuildInputDelivery_NoWorkdir_Mounts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildLayeredImageTar: %v", err)
 	}
-	if err := rc.laneState.Register("src", "tree", lane.FileOutputHandle{
+	if err := rc.laneState.Register("src", "tree", output.FileHandle{
 		Ref:         srcRef,
 		OutputID:    "tree",
 		LayerDiffID: diffID,
@@ -348,7 +349,7 @@ func TestBuildInputDelivery_SingleFileOutside_Rejected(t *testing.T) {
 	}
 	rc.dag = buildTestDAG(t, p)
 
-	if err := rc.laneState.Register("src", "bin", lane.FileOutputHandle{
+	if err := rc.laneState.Register("src", "bin", output.FileHandle{
 		Ref:      "localhost/test/src@sha256:aabbccdd11223344000000000000000000000000000000000000000000000000",
 		OutputID: "bin",
 	}); err != nil {
@@ -397,7 +398,7 @@ func TestBuildInputDelivery_ExportsProducerOnce(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildLayeredImageTar: %v", err)
 	}
-	if err := rc.laneState.Register("src", "tree", lane.FileOutputHandle{
+	if err := rc.laneState.Register("src", "tree", output.FileHandle{
 		Ref:         srcRef,
 		OutputID:    "tree",
 		LayerDiffID: diffID,
@@ -546,11 +547,11 @@ func TestCheckCache_Hit(t *testing.T) {
 	if err2 != nil {
 		t.Fatalf("output not registered: %v", err2)
 	}
-	fh, ok := handle.(lane.FileOutputHandle)
+	fh, ok := handle.(output.FileHandle)
 	if !ok {
 		t.Fatalf("expected file output handle, got %T", handle)
 	}
-	gotDigest, digestErr := lane.ManifestDigest(fh)
+	gotDigest, digestErr := output.ManifestDigest(fh)
 	if digestErr != nil {
 		t.Fatalf("manifest digest: %v", digestErr)
 	}
@@ -688,7 +689,7 @@ func TestResolveImageDigest_ImageFrom(t *testing.T) {
 	rc.lane = p
 	rc.dag = buildTestDAG(t, p)
 	packDigest := primitive.DigestFromHex("abcdef1234567890000000000000000000000000000000000000000000000000")
-	if err := rc.laneState.Register("pack", "", lane.ImageOutputHandle{
+	if err := rc.laneState.Register("pack", "", output.ImageHandle{
 		Ref: registry.WrapDigest("test-lane", "pack", packDigest),
 	}); err != nil {
 		t.Fatal(err)
@@ -772,7 +773,7 @@ func TestResolvePackInputPaths(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildLayeredImageTar: %v", err)
 	}
-	if err := rc.laneState.Register("compile", "bin", lane.FileOutputHandle{
+	if err := rc.laneState.Register("compile", "bin", output.FileHandle{
 		Ref:         compileRef,
 		OutputID:    "bin",
 		LayerDiffID: diffID,

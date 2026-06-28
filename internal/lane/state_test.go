@@ -6,6 +6,7 @@ import (
 
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/output"
 	"github.com/istr/strike/internal/primitive"
 )
 
@@ -13,7 +14,7 @@ func TestRegisterAndResolve(t *testing.T) {
 	s := lane.NewState()
 
 	imageRef := "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000"
-	h := lane.ImageOutputHandle{Ref: imageRef}
+	h := output.ImageHandle{Ref: imageRef}
 
 	if err := s.Register("build", "binary", h); err != nil {
 		t.Fatalf("Register: %v", err)
@@ -26,7 +27,7 @@ func TestRegisterAndResolve(t *testing.T) {
 	if got.ImageRef() != imageRef {
 		t.Errorf("imageRef = %q, want %q", got.ImageRef(), imageRef)
 	}
-	digest, err := lane.ManifestDigest(got)
+	digest, err := output.ManifestDigest(got)
 	if err != nil {
 		t.Fatalf("ManifestDigest: %v", err)
 	}
@@ -38,7 +39,7 @@ func TestRegisterAndResolve(t *testing.T) {
 
 func TestRegisterDuplicate(t *testing.T) {
 	s := lane.NewState()
-	h := lane.ImageOutputHandle{Ref: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000"}
+	h := output.ImageHandle{Ref: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000"}
 
 	if err := s.Register("build", "binary", h); err != nil {
 		t.Fatal(err)
@@ -50,7 +51,7 @@ func TestRegisterDuplicate(t *testing.T) {
 
 func TestRegisterMissingImageRef(t *testing.T) {
 	s := lane.NewState()
-	h := lane.ImageOutputHandle{}
+	h := output.ImageHandle{}
 
 	if err := s.Register("build", "binary", h); err == nil {
 		t.Fatal("expected error on missing image ref")
@@ -89,7 +90,7 @@ func TestRecordStep(t *testing.T) {
 
 func TestStateJSON(t *testing.T) {
 	s := lane.NewState()
-	if err := s.Register("build", "binary", lane.ImageOutputHandle{
+	if err := s.Register("build", "binary", output.ImageHandle{
 		Ref: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
 	}); err != nil {
 		t.Fatal(err)

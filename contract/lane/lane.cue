@@ -10,6 +10,7 @@ package lane
 import (
 	"github.com/istr/strike/contract/endpoint"
 	"github.com/istr/strike/contract/primitive"
+	deploytarget "github.com/istr/strike/contract/target"
 )
 
 @go(lane) // generated go package name
@@ -295,8 +296,8 @@ import (
 	artifacts: {
 		[ID=primitive.#Identifier]: #ArtifactRef
 	} @go(Artifacts,type=map[string]ArtifactRef)
-	target:    #DeployTarget   @go(Target)
-	recording: #StateRecording @go(Recording)
+	target:    deploytarget.#Deploy @go(Target)
+	recording: #StateRecording      @go(Recording)
 	source?: {
 		gitImage: primitive.#ImageRef
 	} @go(Source,optional=nillable)

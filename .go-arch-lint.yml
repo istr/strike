@@ -48,7 +48,11 @@ components:
   transport:
     in: internal/transport
   concept:
-    in: internal/endpoint
+    in:
+      - internal/endpoint
+      - internal/output
+      - internal/provenance
+      - internal/target
   services:
     in:
       - internal/container
