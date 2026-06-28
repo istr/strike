@@ -276,7 +276,7 @@ are load-bearing:
    The converse does not hold: declaring a fact CP did not observe attests nothing.
 
 **This procedure is machine-enforced.** The rule table lives once, as data, in
-`specs/trust-layers.cue` (`layerOf`); each field states only its provenance and
+`contract/trustlayers/trust-layers.cue` (`layerOf`); each field states only its provenance and
 derives its layer. The conformance test in
 `internal/deploy/trustlayers_conformance_internal_test.go` restates the rules
 independently and fails if the table drifts from them, checks that every field's
@@ -301,7 +301,7 @@ visible in the data rather than buried in prose.
 3. **No code change claims an E-link is a V-link.** Any implementation recording
    an E-dependent value in a V position is unsound. This is no longer only a
    review obligation: the decision procedure above derives each field's layer from
-   its provenance in `specs/trust-layers.cue`, and the conformance test fails if a
+   its provenance in `contract/trustlayers/trust-layers.cue`, and the conformance test fails if a
    schema places a field off its derived layer -- the stage-2 bug class, hunted
    structurally.
 

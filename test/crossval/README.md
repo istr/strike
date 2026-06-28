@@ -11,7 +11,7 @@ Go tests and the future Rust verifier.
 ## Format
 
 Each JSON file is a test vector with `boundary`, `inputs`, and
-`expected` fields. The CUE schema is in `specs/crossval.cue`.
+`expected` fields. The CUE schema is in `contract/crossval/crossval.cue`.
 
 ## Boundaries
 

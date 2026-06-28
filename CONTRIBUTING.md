@@ -40,7 +40,7 @@ strike takes a different approach:
   timestamps, not build IDs, not mutable tags.
 
 - **Schema-driven data model.** Every data structure that crosses a package
-  boundary is defined in CUE under `specs/`. CUE schemas are the single
+  boundary is defined in CUE under `contract/`. CUE schemas are the single
   source of truth -- Go types are either generated from CUE or validated
   against CUE at runtime. This ensures every implementation (Go, Rust
   verifier, external policy engines) works against the same contract.
@@ -161,7 +161,7 @@ Format: `<type>(<optional scope>): <description>`
 2. Create a branch from `main`.
 3. **If your change introduces or modifies data structures that cross
    package boundaries, start with the CUE schema.** Add or update types
-   in `specs/*.cue`, run `make specs` to validate, then open an issue or
+   in `contract/**/*.cue`, run `make specs` to validate, then open an issue or
    draft MR to discuss the schema before writing Go code. Schema changes
    are architectural decisions and will be reviewed carefully.
 4. Make your changes. Keep diffs small and focused.
@@ -243,7 +243,7 @@ essential rules:
   prefix validation.
 - Secrets must never appear in error messages, logs, or process arguments.
 - Data structures crossing package boundaries must be defined in CUE schemas
-  under `specs/` before Go implementation. No `map[string]string` for
+  under `contract/` before Go implementation. No `map[string]string` for
   structured inter-package data.
 
 ## What a good MR description includes
@@ -265,7 +265,7 @@ MR description states:
 
 Changes touching these areas require extra scrutiny:
 
-- `specs/*.cue` -- CUE schema changes affect the cross-implementation
+- `contract/**/*.cue` -- CUE schema changes affect the cross-implementation
   contract and every existing attestation in every registry
 - `internal/executor/` -- container security profile, signing, SBOM generation
 - `internal/registry/` -- OCI registry interaction, cache integrity

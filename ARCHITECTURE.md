@@ -203,7 +203,7 @@ The full non-repudiation chain for a strike-produced artifact:
    by the controller via `go-containerregistry`) and, when one was
    generated, the SBOM record (format + digest). The signature, certificate,
    and Rekor entry live in the keyless DSSE bundle, not in this record.
-   Schema: `specs/artifact.cue`.
+   Schema: `contract/record/record.cue`.
 5. **SBOM** -- generated in-process by cataloging the assembled image's
    flattened filesystem (npm lockfiles, dpkg status, Go buildinfo). Both
    CycloneDX and SPDX 2.3 are emitted as OCI referrers bound to the

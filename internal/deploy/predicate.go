@@ -12,7 +12,7 @@ import (
 // Output attestation predicate types (ADR-040 D3). These are the standard-
 // ecosystem shapes strike signs and publishes. The projection from the
 // internal Attestation collect-model into these shapes is a later instruction;
-// this file is the type definitions only. Mirrors specs/attest-predicate.cue and is
+// this file is the type definitions only. Mirrors contract/attest/predicate.cue and is
 // validated against it (predicate_test.go).
 
 // DigestSet is an in-toto DigestSet, typed to the algorithms strike emits.

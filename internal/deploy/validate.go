@@ -31,7 +31,7 @@ func ValidateAttestationJSON(data []byte) error {
 }
 
 // ValidateBundleJSON validates a marshaled sigstore bundle against the embedded
-// #Bundle schema (specs/attest-bundle.cue). It is the producer emission
+// #Bundle schema (contract/attest/bundle.cue). It is the producer emission
 // guard: assembleKeylessBundle calls it before returning, so a bundle that does
 // not conform to strike's published wire contract is never emitted. The
 // consumer side (internal/verify) is intentionally not narrowed to this schema:

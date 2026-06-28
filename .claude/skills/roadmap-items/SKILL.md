@@ -89,7 +89,7 @@ rank: "0030"                  # numeric-sparse, zero-padded; orders WITHIN an ar
 title: "..."                  # one line
 goal: "..."                   # one-line end state, drift-invariant
 acceptance_intent: "..."      # the INTENT of acceptance, never byte-exact greps
-links: [ADR-046, specs/lane.cue]   # pointers, never copies
+links: [ADR-046]   # pointers, never copies
 execution_profile: { class: smallest, reasoning: none }   # optional, advisory
 ---
 Short drift-invariant notes: rationale, open questions. No byte-exact snippets.
@@ -167,7 +167,7 @@ roadmap.py new \
   --arcs output-model,image-from-step \
   --goal "deploy.artifacts.from is a step|step+output disjunction" \
   --acceptance "CUE validates both ref shapes; goldens regenerate" \
-  --links ADR-046,specs/lane.cue --class smallest --reasoning none
+  --links ADR-046 --class smallest --reasoning none
 
 roadmap.py list --arc output-model --sort rank
 ```

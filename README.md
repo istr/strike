@@ -184,8 +184,8 @@ Secrets are passed as environment variables, never written to process arguments.
 
 ```
 cmd/strike/main.go               CLI entry point (run, validate, dag, compare)
-specs/
-  lane.cue                        CUE schema (source of truth)
+contract/
+  lane/lane.cue                   CUE schema (source of truth)
 internal/
   container/
     engine.go                     Engine interface, types, socket detection

@@ -1,4 +1,4 @@
-# specs/ -- Cross-Implementation Specification Contract
+# contract/ -- Cross-Implementation Specification Contract
 
 This directory holds the machine-readable specifications that define
 strike's data formats. Any implementation (Go primary, Rust verifier,
@@ -11,15 +11,15 @@ for both input and output formats:
 
 | Schema                | Location                       | Validates                     |
 |-----------------------|--------------------------------|-------------------------------|
-| Lane definition       | `specs/lane.cue`               | YAML input (lane.yaml)        |
-| Deploy attestation (internal) | `specs/attestation.cue`        | Internal collect-model, validated at runtime |
-| Artifact provenance   | `specs/artifact.cue`           | Artifact signing records      |
-| Source provenance     | `specs/source-provenance.cue`  | Git provenance records        |
-| Cross-val vectors     | `specs/crossval.cue`           | Cross-validation test vectors |
-| Published predicates  | `specs/predicate.cue`          | Signed in-toto / SLSA statements (the published output) |
-| Transport & trust     | `specs/transport.cue`          | Shared host, TLS-trust, DoT-resolver, and HTTPS-endpoint types |
-| Sigstore trust root   | `specs/sigstore-trustroot.cue` | TrustedRoot replica (keyless verification anchor) |
-| Sigstore bundle       | `specs/sigstore-bundle.cue`    | Published bundle (v0.3) emission contract, validated at sign time |
+| Lane definition       | `contract/lane/lane.cue`             | YAML input (lane.yaml)        |
+| Deploy attestation (internal) | `contract/attest/attestation.cue` | Internal collect-model, validated at runtime |
+| Artifact provenance   | `contract/record/record.cue`         | Artifact signing records      |
+| Source provenance     | `contract/provenance/provenance.cue` | Git provenance records        |
+| Cross-val vectors     | `contract/crossval/crossval.cue`     | Cross-validation test vectors |
+| Published predicates  | `contract/attest/predicate.cue`      | Signed in-toto / SLSA statements (the published output) |
+| Transport & trust     | `contract/endpoint/`                 | Shared host, TLS-trust, DoT-resolver, and HTTPS-endpoint types |
+| Sigstore trust root   | `contract/lane/trustroot.cue`        | TrustedRoot replica (keyless verification anchor) |
+| Sigstore bundle       | `contract/attest/bundle.cue`         | Published bundle (v0.3) emission contract, validated at sign time |
 
 CUE schemas are embedded in the Go binary via `//go:embed` and validated
 at runtime -- lane input before execution, attestation output before
@@ -39,13 +39,13 @@ In short: `attestation.cue` is what strike builds and validates internally; `pre
 For consumers that don't have a CUE runtime, schemas can be exported:
 
 ```bash
-make specs    # exports JSON Schema to specs/
+make specs    # exports JSON Schema to contract/
 ```
 
 This produces:
 
-- `specs/lane.schema.json` -- JSON Schema for lane.yaml (after YAML -> JSON)
-- `specs/attestation.schema.json` -- JSON Schema for deploy attestations
+- `contract/lane.schema.json` -- JSON Schema for lane.yaml (after YAML -> JSON)
+- `contract/attestation.schema.json` -- JSON Schema for deploy attestations
 
 ## Golden test fixtures
 
@@ -71,8 +71,8 @@ Fixtures include:
 
 A Rust verification implementation would:
 
-1. Parse `specs/lane.schema.json` with the `jsonschema` crate
-2. Parse `specs/attestation.schema.json` for attestation validation
+1. Parse `contract/lane.schema.json` with the `jsonschema` crate
+2. Parse `contract/attestation.schema.json` for attestation validation
 3. Load golden fixtures from `testdata/golden/`
 4. Implement signing, assembly, and digest computation
 5. Assert identical outputs for identical inputs

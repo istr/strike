@@ -8,7 +8,7 @@ package lane
 // Every producer and consumer that needs the string form derives it here
 // instead of re-spelling step + "." + output.
 //
-// The encoding is unambiguous only because #Identifier (specs/lane.cue)
+// The encoding is unambiguous only because #Identifier (contract/primitive/scalars.cue)
 // excludes '.', so a Ref string carries exactly one '.' that always splits
 // step from output and no two distinct (step, output) pairs collide. That
 // grammar property is load-bearing: if #Identifier is ever widened to admit

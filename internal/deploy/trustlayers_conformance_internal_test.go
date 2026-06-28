@@ -10,10 +10,11 @@ import (
 	"github.com/istr/strike/internal/schema"
 )
 
-// TestTrustLayerConformance asserts that specs/meta-trust-layers.cue (the single
-// source for the V / E / informational classification) agrees with where
-// attest-attestation.cue (internal collect-model) and attest-predicate.cue (published
-// statements) actually place each field. This is the machine-checkable form of
+// TestTrustLayerConformance asserts that contract/trustlayers/trust-layers.cue (the
+// single source for the V / E / informational classification) agrees with where
+// contract/attest/attestation.cue (internal collect-model) and
+// contract/attest/predicate.cue (published statements) actually place each field.
+// This is the machine-checkable form of
 // the soundness note's "no E-link recorded as a V-link": the schemas are
 // projections of the map and must not drift from it.
 //

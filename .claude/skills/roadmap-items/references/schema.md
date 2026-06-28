@@ -29,7 +29,7 @@ rank: "0030"
 title: "Add OutputRef disjunction to deploy.artifacts.from"
 goal: "deploy.artifacts.from is a step|step+output disjunction"
 acceptance_intent: "CUE validates both ref shapes; goldens regenerate"
-links: [ADR-046, specs/lane.cue]
+links: [ADR-046]
 execution_profile: { class: smallest, reasoning: none }
 ---
 Short, drift-invariant notes: rationale, open questions. No byte-exact snippets.

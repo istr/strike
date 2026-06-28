@@ -65,7 +65,7 @@ Adding any other long-lived annotation requires an ADR.
 
 ## CUE scalar types and the `@go` annotation `cue-scalar-types`
 
-**Rule.** A scalar value constraint in `specs/` is a CUE-driven named Go
+**Rule.** A scalar value constraint in `contract/primitive/` is a CUE-driven named Go
 type. A regex or enum constraint definition (`#Sha256`, `#Identifier`,
 `#GitCommit`, `#Base64`, `#Digest`, and so on) carries no `@go` annotation
 and surfaces as a named Go type (`type Sha256 string`, ...). A struct field
@@ -157,7 +157,7 @@ grep -rn -E 'os\.(Open|ReadFile|WriteFile|OpenFile|Create)\(' --include='*.go' \
 Any match outside `internal/lane/path.go` and `cmd/strike/helpers.go` is a
 candidate for migration.
 
-**Exception.** Pure constants (`os.ReadFile("specs/lane.cue")`) are fine
+**Exception.** Pure constants (`os.ReadFile("contract/lane/lane.cue")`) are fine
 when the path is a compile-time string literal; gosec does not flag them.
 Use `embed.FS` in preference even there when feasible (see
 `embedded-test-fixtures`).
