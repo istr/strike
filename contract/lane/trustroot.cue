@@ -1,5 +1,7 @@
 package lane
 
+import "github.com/istr/strike/contract/primitive"
+
 // Typed CUE replica of the sigstore TrustedRoot, in the protojson camelCase
 // wire shape. This MIRRORS an external spec:
 //
@@ -21,11 +23,11 @@ package lane
 		baseUrl?:       string @go(BaseURL)
 		hashAlgorithm?: string @go(HashAlgorithm)
 		publicKey: {
-			rawBytes:    string @go(RawBytes) // base64 DER
-			keyDetails?: string @go(KeyDetails)
+			rawBytes:    primitive.#Base64 @go(RawBytes)
+			keyDetails?: string            @go(KeyDetails)
 			validFor?: {start?: string @go(Start)} @go(ValidFor)
 		} @go(PublicKey)
-		logId: {keyId: string @go(KeyID)} @go(LogID) // base64
+		logId: {keyId: primitive.#Base64 @go(KeyID)}
 	}] @go(Tlogs)
 	certificateAuthorities: [...#CertAuthorityReplica] @go(CertificateAuthorities)
 	timestampAuthorities: [...#CertAuthorityReplica] @go(TimestampAuthorities)
@@ -34,6 +36,6 @@ package lane
 #CertAuthorityReplica: {
 	@go(CertAuthorityReplica)
 	uri?: string @go(URI)
-	certChain: {certificates: [...{rawBytes: string @go(RawBytes)}] @go(Certificates)} @go(CertChain)
+	certChain: {certificates: [...{rawBytes: primitive.#Base64 @go(RawBytes)}] @go(Certificates)} @go(CertChain)
 	validFor?: {start?: string @go(Start), end?: string @go(End)} @go(ValidFor)
 }
