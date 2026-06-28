@@ -24,7 +24,6 @@ import (
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/lane"
-	"github.com/istr/strike/internal/transport"
 )
 
 const (
@@ -77,9 +76,9 @@ func TestKeylessLive(t *testing.T) {
 
 	trust := endpoint.CABundle{Type: "caBundle", Path: caddyRoot}
 	eps := lane.KeylessEndpoints{
-		Fulcio: transport.HTTPSEndpoint{Address: endpoint.MustParseURL("https://fulcio.127.0.0.1.sslip.io:5555"), Trust: trust},
-		Rekor:  transport.HTTPSEndpoint{Address: endpoint.MustParseURL("https://rekor.127.0.0.1.sslip.io:3003"), Trust: trust},
-		TSA:    transport.HTTPSEndpoint{Address: endpoint.MustParseURL("https://tsa.127.0.0.1.sslip.io:3004"), Trust: trust},
+		Fulcio: endpoint.HTTPS{Address: endpoint.MustParseURL("https://fulcio.127.0.0.1.sslip.io:5555"), Trust: trust},
+		Rekor:  endpoint.HTTPS{Address: endpoint.MustParseURL("https://rekor.127.0.0.1.sslip.io:3003"), Trust: trust},
+		TSA:    endpoint.HTTPS{Address: endpoint.MustParseURL("https://tsa.127.0.0.1.sslip.io:3004"), Trust: trust},
 	}
 
 	token, err := ambientIDToken()
@@ -145,7 +144,7 @@ func TestKeylessLive(t *testing.T) {
 // prehash); the log ID is the non-truncated C2SP signed-note key ID,
 // sha256(origin + "\n" + 0x01 + raw ed25519 pubkey) -- NOT the sha256 of the
 // PKIX DER (confirmed by the R3 spike, prefix 1e050d3e).
-func liveTrustRoot(ctx context.Context, t *testing.T, fulcioEp transport.HTTPSEndpoint, rekorPubPath, tsaChainPath string) *root.TrustedRoot {
+func liveTrustRoot(ctx context.Context, t *testing.T, fulcioEp endpoint.HTTPS, rekorPubPath, tsaChainPath string) *root.TrustedRoot {
 	t.Helper()
 
 	client, err := httpClientFor(fulcioEp)

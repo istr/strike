@@ -7,6 +7,8 @@ import (
 	"net"
 	"net/netip"
 	"sync"
+
+	"github.com/istr/strike/internal/endpoint"
 )
 
 // identityCapture collects the ConnectionIdentity observed by a
@@ -48,7 +50,7 @@ func (c *identityCapture) get() (ConnectionIdentity, bool) {
 // (RFC 7858); the TLS connection satisfies both network types
 // from the resolver's perspective because the wire format (DNS
 // length-prefixed messages) is the same.
-func dotResolver(decl DNSResolver) *net.Resolver {
+func dotResolver(decl endpoint.TLS) *net.Resolver {
 	return &net.Resolver{
 		PreferGo: true,
 		Dial: func(ctx context.Context, _, _ string) (net.Conn, error) {
@@ -65,7 +67,7 @@ func dotResolver(decl DNSResolver) *net.Resolver {
 // PR-17 introduces this function as the building block for the
 // pre-flight ProbeResolver; PR-19 will consume it from the
 // allowlist resolver for every authorized per-step DNS query.
-func LookupHost(ctx context.Context, decl DNSResolver, name string) ([]netip.Addr, error) {
+func LookupHost(ctx context.Context, decl endpoint.TLS, name string) ([]netip.Addr, error) {
 	addrs, err := dotResolver(decl).LookupNetIP(ctx, "ip", name)
 	if err != nil {
 		clearMisleadingServerField(err)
@@ -100,7 +102,7 @@ func LookupHost(ctx context.Context, decl DNSResolver, name string) ([]netip.Add
 // at strike run time, after lane.Parse, not in lane.Parse, because
 // probe outcome is an environmental property and lane.Parse must
 // stay an offline check of input properties.
-func ProbeResolver(ctx context.Context, decl DNSResolver) (ConnectionIdentity, error) {
+func ProbeResolver(ctx context.Context, decl endpoint.TLS) (ConnectionIdentity, error) {
 	var ic identityCapture
 	r := &net.Resolver{
 		PreferGo: true,

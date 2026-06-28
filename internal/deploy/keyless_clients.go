@@ -25,6 +25,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/istr/strike/internal/clock"
+	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/transport"
 )
 
@@ -40,7 +41,7 @@ const keylessResponseLimit = 1 << 20
 // endpoint's declared trust anchor. The #KeylessEndpoints schema admits only
 // https:// URLs, so every keyless connection is TLS with declared trust;
 // there is no plaintext branch.
-func httpClientFor(ep transport.HTTPSEndpoint) (*http.Client, error) {
+func httpClientFor(ep endpoint.HTTPS) (*http.Client, error) {
 	cfg, err := transport.BuildTLSConfig(ep.Trust)
 	if err != nil {
 		return nil, fmt.Errorf("keyless: %w", err)
@@ -62,7 +63,7 @@ func closeKeylessBody(resp *http.Response) {
 // postKeyless performs one POST against a keyless endpoint and returns the
 // response body. Any status not in wantStatus is an error carrying the
 // (truncated) response body.
-func postKeyless(ctx context.Context, ep transport.HTTPSEndpoint, path, contentType string, body []byte, header http.Header, wantStatus ...int) ([]byte, error) {
+func postKeyless(ctx context.Context, ep endpoint.HTTPS, path, contentType string, body []byte, header http.Header, wantStatus ...int) ([]byte, error) {
 	client, err := httpClientFor(ep)
 	if err != nil {
 		return nil, err
@@ -98,7 +99,7 @@ func postKeyless(ctx context.Context, ep transport.HTTPSEndpoint, path, contentT
 // The proof of possession is an ASN.1 DER ECDSA signature over the SHA-256
 // digest of the token subject (Fulcio API v2; mirrors sigstore-go's
 // certificate request). Returns the DER-encoded leaf certificate.
-func fulcioCertificate(ctx context.Context, ep transport.HTTPSEndpoint, idToken string, key *ecdsa.PrivateKey) ([]byte, error) {
+func fulcioCertificate(ctx context.Context, ep endpoint.HTTPS, idToken string, key *ecdsa.PrivateKey) ([]byte, error) {
 	subject, err := subjectFromIDToken(idToken)
 	if err != nil {
 		return nil, err
@@ -164,7 +165,7 @@ func fulcioCertificate(ctx context.Context, ep transport.HTTPSEndpoint, idToken 
 // returned bytes are the full timestamp response DER, which is what the
 // sigstore bundle carries in Rfc3161Timestamps (mirrors sigstore-go's
 // signer). The response is parsed once to fail fast on a malformed token.
-func tsaTimestamp(ctx context.Context, ep transport.HTTPSEndpoint, signature []byte) ([]byte, error) {
+func tsaTimestamp(ctx context.Context, ep endpoint.HTTPS, signature []byte) ([]byte, error) {
 	sigDigest := sha256.Sum256(signature)
 	req := &timestamp.Request{
 		HashAlgorithm: crypto.SHA256,
@@ -190,7 +191,7 @@ func tsaTimestamp(ctx context.Context, ep transport.HTTPSEndpoint, signature []b
 // proof and signed checkpoint. Hand-rolled HTTP POST per ratified R2: only
 // the generated proto types are imported, so rekor-tiles' pkg/client (and
 // its docker/otel dependency cluster) stays out of the compile graph.
-func rekorSubmitKeyless(ctx context.Context, ep transport.HTTPSEndpoint, paeDigest, sig, leafCertDER []byte) (*protorekor.TransparencyLogEntry, error) {
+func rekorSubmitKeyless(ctx context.Context, ep endpoint.HTTPS, paeDigest, sig, leafCertDER []byte) (*protorekor.TransparencyLogEntry, error) {
 	req := &rekortilespb.CreateEntryRequest{
 		Spec: &rekortilespb.CreateEntryRequest_HashedRekordRequestV002{
 			HashedRekordRequestV002: &rekortilespb.HashedRekordRequestV002{

@@ -19,7 +19,6 @@ import (
 	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/primitive"
-	"github.com/istr/strike/internal/transport"
 )
 
 // TestVerifyGoldenGenerate is the env-gated generator for the keyless
@@ -51,9 +50,9 @@ func TestVerifyGoldenGenerate(t *testing.T) {
 
 	trust := endpoint.CABundle{Type: "caBundle", Path: caddyRoot}
 	eps := lane.KeylessEndpoints{
-		Fulcio: transport.HTTPSEndpoint{Address: endpoint.MustParseURL("https://fulcio.127.0.0.1.sslip.io:5555"), Trust: trust},
-		Rekor:  transport.HTTPSEndpoint{Address: endpoint.MustParseURL("https://rekor.127.0.0.1.sslip.io:3003"), Trust: trust},
-		TSA:    transport.HTTPSEndpoint{Address: endpoint.MustParseURL("https://tsa.127.0.0.1.sslip.io:3004"), Trust: trust},
+		Fulcio: endpoint.HTTPS{Address: endpoint.MustParseURL("https://fulcio.127.0.0.1.sslip.io:5555"), Trust: trust},
+		Rekor:  endpoint.HTTPS{Address: endpoint.MustParseURL("https://rekor.127.0.0.1.sslip.io:3003"), Trust: trust},
+		TSA:    endpoint.HTTPS{Address: endpoint.MustParseURL("https://tsa.127.0.0.1.sslip.io:3004"), Trust: trust},
 	}
 	token, err := ambientIDToken()
 	if err != nil {
@@ -147,7 +146,7 @@ func syntheticGoldenAttestation(laneDigest primitive.Digest) *Attestation {
 // public key, and the fetched TSA certificate chain -- but serialized as a
 // protojson trustrootpb.TrustedRoot instead of sigstore-go's root.TrustedRoot.
 // The last certificate of each chain is the trust anchor.
-func goldenTrustedRoot(ctx context.Context, t *testing.T, fulcioEp transport.HTTPSEndpoint, rekorPubPath, tsaChainPath, ctfePubPath string) []byte {
+func goldenTrustedRoot(ctx context.Context, t *testing.T, fulcioEp endpoint.HTTPS, rekorPubPath, tsaChainPath, ctfePubPath string) []byte {
 	t.Helper()
 
 	fulcioCerts := fetchFulcioChain(ctx, t, fulcioEp)
@@ -261,7 +260,7 @@ func goldenTrustedRoot(ctx context.Context, t *testing.T, fulcioEp transport.HTT
 // fetchFulcioChain fetches and parses the Fulcio certificate chain via
 // GET /api/v2/trustBundle, mirroring liveTrustRoot's fetch step. The
 // returned order is the served order (leaf-most first, trust anchor last).
-func fetchFulcioChain(ctx context.Context, t *testing.T, fulcioEp transport.HTTPSEndpoint) []*x509.Certificate {
+func fetchFulcioChain(ctx context.Context, t *testing.T, fulcioEp endpoint.HTTPS) []*x509.Certificate {
 	t.Helper()
 	client, err := httpClientFor(fulcioEp)
 	if err != nil {

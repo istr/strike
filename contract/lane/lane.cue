@@ -35,8 +35,8 @@ import (
 		[ID=primitive.#Identifier]: #SecretSource
 	} @go(Secrets,type=map[string]SecretSource)
 	steps: [#Step, ...#Step] @go(Steps)
-	resolver: #DNSResolver @go(Resolver,type="github.com/istr/strike/internal/transport".DNSResolver)
-	oidc:     #OIDCConfig  @go(OIDC)
+	resolver: endpoint.#TLS @go(Resolver)
+	oidc:     #OIDCConfig   @go(OIDC)
 	// Keyless signing+verification config (ADR-040 3b, ADR-041). `endpoints`
 	// is required: every deploy attestation is produced through Fulcio, Rekor
 	// v2, and the TSA, fail-closed. `trustRoot` (inline replica) XOR
@@ -73,14 +73,14 @@ import (
 // (ADR-040 D2/3b): Fulcio (CA), Rekor v2 (transparency log), and an RFC3161
 // TSA (Rekor v2 has no integrated timestamp; trusted time is the RFC3161
 // token). Every endpoint is HTTPS-only with a mandatory declared trust
-// anchor (#HTTPSEndpoint). URLs are bases; the clients append the fixed
+// anchor (endpoint.#HTTPS). URLs are bases; the clients append the fixed
 // well-known API paths.
 #KeylessEndpoints: {
 	@go(KeylessEndpoints)
 
-	fulcio: #HTTPSEndpoint @go(Fulcio,type="github.com/istr/strike/internal/transport".HTTPSEndpoint)
-	rekor:  #HTTPSEndpoint @go(Rekor,type="github.com/istr/strike/internal/transport".HTTPSEndpoint)
-	tsa:    #HTTPSEndpoint @go(TSA,type="github.com/istr/strike/internal/transport".HTTPSEndpoint)
+	fulcio: endpoint.#HTTPS @go(Fulcio)
+	rekor:  endpoint.#HTTPS @go(Rekor)
+	tsa:    endpoint.#HTTPS @go(TSA)
 }
 
 // Keyless wraps the endpoint set with at most one trust-root source.

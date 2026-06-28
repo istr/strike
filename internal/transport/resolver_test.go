@@ -155,7 +155,8 @@ func TestLookupHost_HappyPath(t *testing.T) {
 	addr := startDNSTLSServer(t, cert, aRecordHandler("example.com.", [4]byte{93, 184, 216, 34}))
 	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
 	defer cancel()
-	decl := transport.DNSResolver{
+	decl := endpoint.TLS{
+		Type:    "https",
 		Address: endpoint.MustParseAuthority(addr),
 		Trust: endpoint.Fingerprint{
 			Type:        "certFingerprint",
@@ -179,7 +180,8 @@ func TestLookupHost_FingerprintMismatch(t *testing.T) {
 	addr := startDNSTLSServer(t, cert, aRecordHandler("example.com.", [4]byte{93, 184, 216, 34}))
 	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
 	defer cancel()
-	decl := transport.DNSResolver{
+	decl := endpoint.TLS{
+		Type:    "https",
 		Address: endpoint.MustParseAuthority(addr),
 		Trust: endpoint.Fingerprint{
 			Type:        "certFingerprint",
@@ -198,7 +200,8 @@ func TestLookupHost_FingerprintMismatch(t *testing.T) {
 func TestLookupHost_ServerUnreachable(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*clock.Second)
 	defer cancel()
-	decl := transport.DNSResolver{
+	decl := endpoint.TLS{
+		Type:    "https",
 		Address: endpoint.MustParseAuthority("127.0.0.1:1"),
 		Trust: endpoint.Fingerprint{
 			Type:        "certFingerprint",
@@ -216,7 +219,8 @@ func TestProbeResolver_HappyPath(t *testing.T) {
 	addr := startDNSTLSServer(t, cert, nsRootHandler())
 	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
 	defer cancel()
-	decl := transport.DNSResolver{
+	decl := endpoint.TLS{
+		Type:    "https",
 		Address: endpoint.MustParseAuthority(addr),
 		Trust: endpoint.Fingerprint{
 			Type:        "certFingerprint",
@@ -240,7 +244,8 @@ func TestProbeResolver_FingerprintMismatch(t *testing.T) {
 	addr := startDNSTLSServer(t, cert, nsRootHandler())
 	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
 	defer cancel()
-	decl := transport.DNSResolver{
+	decl := endpoint.TLS{
+		Type:    "https",
 		Address: endpoint.MustParseAuthority(addr),
 		Trust: endpoint.Fingerprint{
 			Type:        "certFingerprint",
@@ -257,7 +262,8 @@ func TestProbeResolver_NoResponse(t *testing.T) {
 	addr := startDNSTLSServer(t, cert, servfailHandler())
 	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
 	defer cancel()
-	decl := transport.DNSResolver{
+	decl := endpoint.TLS{
+		Type:    "https",
 		Address: endpoint.MustParseAuthority(addr),
 		Trust: endpoint.Fingerprint{
 			Type:        "certFingerprint",
@@ -279,7 +285,8 @@ func TestProbeResolver_ErrorChainHasNoSystemResolverReference(t *testing.T) {
 	// Use any guaranteed-failing dial target. A non-listening
 	// localhost port is the most reliable: no network access,
 	// no test-server setup, fast and deterministic failure.
-	decl := transport.DNSResolver{
+	decl := endpoint.TLS{
+		Type:    "https",
 		Address: endpoint.MustParseAuthority("127.0.0.1:1"),
 		Trust: endpoint.Fingerprint{
 			Type:        "certFingerprint",

@@ -6,7 +6,6 @@ import (
 
 	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/primitive"
-	"github.com/istr/strike/internal/transport"
 )
 
 const jsonNull = "null"
@@ -279,9 +278,9 @@ func unmarshalKeylessEndpoints(data []byte) (KeylessEndpoints, error) {
 // unmarshalKeylessEndpoint decodes one keyless endpoint, dispatching the
 // endpoint.Trust discriminator. All three endpoints are mandatory inside a
 // declared keyless block, and trust is mandatory per endpoint.
-func unmarshalKeylessEndpoint(name string, data []byte) (transport.HTTPSEndpoint, error) {
+func unmarshalKeylessEndpoint(name string, data []byte) (endpoint.HTTPS, error) {
 	if len(data) == 0 || string(data) == jsonNull {
-		return transport.HTTPSEndpoint{}, fmt.Errorf("keyless: %s required", name)
+		return endpoint.HTTPS{}, fmt.Errorf("keyless: %s required", name)
 	}
 	type alias struct {
 		URL   string          `json:"url"`
@@ -289,20 +288,20 @@ func unmarshalKeylessEndpoint(name string, data []byte) (transport.HTTPSEndpoint
 	}
 	var aux alias
 	if err := json.Unmarshal(data, &aux); err != nil {
-		return transport.HTTPSEndpoint{}, fmt.Errorf("decode keyless %s: %w", name, err)
+		return endpoint.HTTPS{}, fmt.Errorf("decode keyless %s: %w", name, err)
 	}
 	if len(aux.Trust) == 0 {
-		return transport.HTTPSEndpoint{}, fmt.Errorf("keyless %s: trust required", name)
+		return endpoint.HTTPS{}, fmt.Errorf("keyless %s: trust required", name)
 	}
 	t, err := unmarshalTLSTrust(aux.Trust)
 	if err != nil {
-		return transport.HTTPSEndpoint{}, fmt.Errorf("keyless %s: %w", name, err)
+		return endpoint.HTTPS{}, fmt.Errorf("keyless %s: %w", name, err)
 	}
 	addr, err := endpoint.ParseURL(aux.URL)
 	if err != nil {
-		return transport.HTTPSEndpoint{}, fmt.Errorf("keyless %s: %w", name, err)
+		return endpoint.HTTPS{}, fmt.Errorf("keyless %s: %w", name, err)
 	}
-	return transport.HTTPSEndpoint{Address: addr, Trust: t}, nil
+	return endpoint.HTTPS{Address: addr, Trust: t}, nil
 }
 
 // UnmarshalJSON implements json.Unmarshaler for Lane. It

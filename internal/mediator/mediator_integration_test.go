@@ -28,7 +28,8 @@ func TestMediator_CloudflareHTTPS_INTEGRATION(t *testing.T) {
 		t.Skip("STRIKE_CLOUDFLARE_DOT_FINGERPRINT or STRIKE_CLOUDFLARE_HTTPS_FINGERPRINT not set; skipping")
 	}
 
-	dotDecl := transport.DNSResolver{
+	dotDecl := endpoint.TLS{
+		Type:    "https",
 		Address: endpoint.MustParseAuthority("1.1.1.1:853"),
 		Trust: endpoint.Fingerprint{
 			Type:        "certFingerprint",

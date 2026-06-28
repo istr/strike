@@ -26,7 +26,8 @@ func TestProbeResolver_CloudflareDoT_INTEGRATION(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*clock.Second)
 	defer cancel()
-	decl := transport.DNSResolver{
+	decl := endpoint.TLS{
+		Type:    "https",
 		Address: endpoint.MustParseAuthority("1.1.1.1:853"),
 		Trust: endpoint.Fingerprint{
 			Type:        "certFingerprint",
