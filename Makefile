@@ -16,9 +16,7 @@ specs: contract/primitive/scalars.cue contract/lane/peer.cue contract/target/tar
 	cue export ./contract/trustlayers \
 	    --out json --force -o contract/trust-layers.json
 
-# Step 2: Generate Go types from the CUE lane schema.
-# Uses gengotypes for now; will move to JSON Schema input once
-# a JSON-Schema-to-Go generator is selected.
+# Step 2: Generate Go types from the CUE schemas via gengotypes.
 generate: specs
 	cue exp gengotypes ./contract/lane
 	cue exp gengotypes ./contract/primitive

@@ -11,7 +11,7 @@ import (
 
 // Output attestation predicate types (ADR-040 D3). These are the standard-
 // ecosystem shapes strike signs and publishes. The projection from the
-// internal Attestation collect-model into these shapes is a later instruction;
+// internal Attestation collect-model into these shapes lives in project.go;
 // this file is the type definitions only. Mirrors contract/attest/predicate.cue and is
 // validated against it (predicate_test.go).
 

@@ -3,7 +3,7 @@
 // These are the standard-ecosystem attestations strike SIGNS and publishes,
 // distinct from the internal #Attestation collect-model in attestation.cue
 // (ADR-039 produce-then-collect). The projection internal -> these shapes runs
-// at sign time (a later instruction); this file defines the output shapes only.
+// at sign time; this file defines the output shapes only.
 //
 // The layer boundary is physical (ADR-037, ADR-040 D3): the sealed (V) layer
 // is a standard SLSA Provenance v1 statement; the engineDependent (E) layer

@@ -107,7 +107,7 @@ Example with a CA-bundle-issued certificate (internal CA):
 
 The `caBundle` path is a container-internal path; the executor
 mounts the lane-relative bundle file there. See ADR-028 for
-the mount mechanics (Phase 2).
+the mount mechanics.
 
 ## Obtaining a certificate fingerprint
 
@@ -212,7 +212,7 @@ It is an operational pre-flight check: did the resolver answer
 at startup? The per-step DNS resolutions that DO feed deploy
 attestation -- FQDN-to-IP records, the resolver's captured TLS
 identity at the moment of resolution -- are produced by the
-Phase-2 allowlist resolver and are separate from the pre-flight
+allowlist resolver and are separate from the pre-flight
 probe.
 
 ### Probe identity capture
@@ -225,66 +225,3 @@ content-addressable, so the resolver's channel identity is part of
 the trust chain; the attestation records what the verified
 handshake observed, for a verifier to compare against the lane's
 declared resolver trust anchor.
-
-## Future direction
-
-Two enhancements are architecturally agreed but not yet
-implemented. They originated as D-series decisions (D14, D15) in the
-since-retired ADR-028 roadmap and are now tracked as items in the
-`roadmap/` store (managed through the `roadmap-items` skill):
-`item-0017` (combined IP + hostname declaration) and `item-0018`
-(port-853 default).
-
-### item-0017 (D14): Combined IP + hostname declaration
-
-Today the lane declares only an IP literal. TLS trust is via
-fingerprint pin; the hostname in the certificate's SAN/CN is
-not verified.
-
-The planned enhancement:
-
-- The lane declares both an IP (connection endpoint) and a
-  hostname (verification anchor) for the resolver.
-- Strike connects to the declared IP.
-- During the TLS handshake, strike sends SNI for the declared
-  hostname and verifies the certificate's SAN/CN against it.
-  Verification is *in addition to* the existing fingerprint or
-  CA-bundle check, not instead of it.
-- Once the resolver is reachable, strike performs a one-shot
-  cross-check: resolve the declared hostname through the
-  resolver itself and confirm that the result includes the
-  declared IP. If not, abort the lane.
-
-Why deferred: basic functionality works without this. The
-cross-check is a hardening property that closes a subtle
-failure mode (operator declares the wrong IP for the right
-hostname, or vice versa), but fingerprint pinning already
-rejects the wrong-IP-different-cert case.
-
-Why planned: it brings the resolver declaration in line with
-how DoT is typically configured elsewhere (Android Private
-DNS, systemd-resolved, OpenWrt all use IP plus hostname), and
-it makes the lane self-validating against the resolver's own
-DNS view.
-
-### item-0018 (D15): Port-853 default
-
-Today the lane must include the port in the host string
-(`1.1.1.1:853`). The schema does not enforce that the port is
-853 specifically; any port that resolves the IP-with-port
-parse is accepted.
-
-The planned enhancement: omit the port and default to 853
-(RFC 7858). `host: "1.1.1.1"` would be equivalent to
-`host: "1.1.1.1:853"`.
-
-Why deferred: explicit-port-in-host is consistent with how
-`:443` is not defaulted elsewhere in the lane (HTTPS peers
-declare the port if non-standard, but for the rare
-nonstandard case the explicit form is preferable). The
-default is convenience; the present form works.
-
-Why planned: 99% of DoT deployments use port 853. Requiring
-`:853` in every lane is boilerplate. A default with the
-explicit form still accepted (and overriding for nonstandard
-ports) is the natural next step.

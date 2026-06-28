@@ -21,7 +21,7 @@ import (
 // If the write step fails with a permission error, that is the workdir
 // writability question from ADR-035 surfacing at the engine layer (is a
 // named volume at the workdir writable by the keep-id user?), not a defect
-// in the primitives -- report it as input for the Phase 1 flow paper.
+// in the primitives.
 func TestEngineVolumeArchiveRoundTrip(t *testing.T) {
 	eng := testutil.RequireEngine(t)
 	ctx := context.Background()

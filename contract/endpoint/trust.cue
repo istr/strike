@@ -21,9 +21,8 @@ import "github.com/istr/strike/contract/primitive"
 #CABundle: {
 	@go(-)
 	type: "caBundle"
-	// path is a container-internal path. The executor mounts the lane-
-	// relative bundle file there in Phase 2; in Phase 1 the field is
-	// declaratory only.
+	// path is a container-internal path for the lane-relative CA bundle the
+	// resolver trusts.
 	path: primitive.#AbsPath
 }
 

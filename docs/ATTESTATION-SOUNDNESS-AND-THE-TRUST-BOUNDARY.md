@@ -299,7 +299,7 @@ visible in the data rather than buried in prose.
    three-section split *is* that self-description; it is what makes "best effort"
    honest rather than misleading.
 3. **No code change claims an E-link is a V-link.** Any implementation recording
-   an E-dependent value in a V position is unsound. This is no longer only a
+   an E-dependent value in a V position is unsound. This is not merely a
    review obligation: the decision procedure above derives each field's layer from
    its provenance in `contract/trustlayers/trust-layers.cue`, and the conformance test fails if a
    schema places a field off its derived layer -- the stage-2 bug class, hunted

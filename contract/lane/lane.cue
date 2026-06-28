@@ -103,8 +103,8 @@ import (
 // certificate's OIDC issuer equals issuer and its SAN equals identity.
 // Declaring a provider once covers every base SBOM that provider signs -- no
 // per-SBOM digest pinning. The list is optional: a lane whose bases are fully
-// catalogable in-process needs none. Fail-closed (enforced at pack time, a
-// later instruction): a base SBOM matching no declared signer is rejected,
+// catalogable in-process needs none. Fail-closed: a base SBOM matching no
+// declared signer is rejected,
 // never silently included. The sigstore trust root (Fulcio / Rekor / CT) is a
 // verification-time parameter, not declared here.
 #SBOMSigner: {

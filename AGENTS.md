@@ -188,10 +188,14 @@ CLI entry and orchestration is `cmd/strike/main.go` -- long, procedural,
 auditable; do not refactor it into a framework.
 
 CUE contracts (single source of truth) live under `contract/`, one CUE
-package per directory: `primitive` (scalar constraints), `lane`, `attest`,
-`endpoint`, `trustlayers`, `crossval`; runtime embed in `contract/embed.go`.
-Generated Go types land in `internal/{lane,primitive,endpoint}/*.gen.go`
-(gitignored; never hand-edit). See `docs/CUE-WORKFLOW.md`.
+package per directory: `primitive` (scalar vocabulary); the concept tier
+`endpoint`/`output`/`provenance`/`target`/`record` (composed value types
+depending only on `primitive`); `lane` (input wire); `attest` (deploy
+attestation); `trustlayers`; and `crossval`. Runtime embed in
+`contract/embed.go`. Generated Go types land in
+`internal/{lane,primitive,endpoint,output,provenance,target,record}/*.gen.go`
+(gitignored; never hand-edit). See `docs/CUE-WORKFLOW.md` and
+`docs/SPEC-PACKAGE-LAYERING.md`.
 
 Go packages under `internal/`: bundle, capsule, clock, closer, container,
 copier, deploy, egress, endpoint, executor, front, lane, mediator, primitive,

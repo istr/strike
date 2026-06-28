@@ -48,8 +48,8 @@ import (
 //                      itself dereferences.
 //   engineDependent  - sound only to a verifier who trusts the engine.
 //                      Engine-action claims (step run, egress confinement,
-//                      connection routing). Empty in Phase 1; populated by
-//                      capsule-observed attribution in Phase 2.
+//                      connection routing), recorded from the engine's
+//                      capsule-observed attribution.
 //   informational    - recorded for audit and IoC purposes; the attestation
 //                      puts forward no trust claim. Includes container-
 //                      asserted content (containers are untrusted by threat
@@ -153,8 +153,8 @@ import (
 // these records -- folding it in would be a category error. Hence there is, and
 // can be, no completeness flag.
 //
-// Phase 1 leaves peerAttribution empty; Phase-2 wiring (a separate
-// instruction) populates it from capsule-observed routing. Do not pre-populate.
+// peerAttribution is recorded per step from capsule-observed routing (Layer E);
+// steps with no mediated connections, such as registry deploys, contribute none.
 #EngineDependent: {
 	// peerAttribution maps each step to the peer endpoints its mediated
 	// connections reached ("host:port" keys into sealed.observedPeers).
