@@ -139,7 +139,7 @@ func (rc *runContext) executeDeploy(ctx context.Context, step *lane.Step, stepID
 	d := &deploy.Deployer{
 		Engine:          rc.engine,
 		EngineID:        rc.engineID,
-		ResolverID:      &rc.resolverID,
+		Resolver:        deploy.ResolverProbe{Declared: rc.lane.Resolver, Observed: rc.resolverID},
 		DAG:             rc.dag,
 		OIDC:            rc.lane.OIDC,
 		Keyless:         rc.lane.Keyless,

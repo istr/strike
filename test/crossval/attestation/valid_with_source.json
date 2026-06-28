@@ -16,6 +16,12 @@
           }
         },
         "laneDigest": "",
+        "resolver": {
+          "host": "1.1.1.1:853",
+          "serverCertFingerprint": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "tlsVersion": "TLS 1.3",
+          "cipherSuite": "TLS_AES_128_GCM_SHA256"
+        },
         "peers": {}
       },
       "engineDependent": {},

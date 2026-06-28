@@ -51,7 +51,7 @@ type Attestation struct {
 type Sealed struct {
 	Artifacts     map[string]ArtifactRecord `json:"artifacts"`
 	Peers         map[string][]lane.Peer    `json:"peers"`
-	Resolver      *ResolverRecord           `json:"resolver,omitempty"`
+	Resolver      ResolverRecord            `json:"resolver"`
 	Engine        endpoint.Engine           `json:"engine,omitempty"`
 	ObservedPeers map[string]ObservedPeer   `json:"observedPeers,omitempty"`
 	Target        lane.DeployTarget         `json:"target"`
@@ -203,6 +203,19 @@ type EngineMetadata struct {
 	Version string `json:"version,omitempty"`
 }
 
+// ResolverProbe binds the declared DoT resolver endpoint to the connection
+// identity observed when the pre-flight probe dialed and verified it. The two
+// are paired at the attestation producer's boundary so the declared->dialed->
+// observed trust match is expressed in the internal API contract, not only
+// enforced imperatively at probe time (item-0046). The declared anchor is
+// sealed via laneDigest, not duplicated into the sealed record; this pairing is
+// the producer-side linkage and the sealed ResolverRecord carries the observed
+// identity only.
+type ResolverProbe struct {
+	Declared endpoint.TLS
+	Observed transport.ConnectionIdentity
+}
+
 // ResolverRecord captures the DoT resolver's observed TLS identity,
 // recorded once per lane run from the pre-flight handshake. Per
 // ADR-030, the DoT resolver is the one controller-side connection
@@ -305,24 +318,24 @@ func captureKey(stepID, captureID string) string {
 
 // Deployer executes deploy steps and produces attestations.
 type Deployer struct {
-	Engine          container.Engine
-	ArtifactRefs    map[string]string // pre-resolved: artifact name -> "step.output" state ref
-	EngineID        *container.EngineIdentity
-	ResolverID      *transport.ConnectionIdentity // DoT resolver identity from the pre-flight probe; nil if unavailable
-	DAG             *lane.DAG
 	OIDC            lane.OIDCConfig // lane-declared signing identity (ADR-040 D5); carried into the sealed provenance externalParameters
-	CA              *transport.EphemeralCA
-	UpstreamLook    capsule.UpstreamLookupFunc
+	Engine          container.Engine
 	StepPorts       map[string]capsule.HostPorts // unit name -> host ports
 	NetworkRecords  map[string]capsule.Records   // run/build step records, keyed by step name (injected by cmd/strike)
-	LaneID          string
-	LaneDigest      primitive.Digest                                                                            // prefixed "sha256:<hex>" over the lane file bytes; sealed as lane_digest
-	StepID          string                                                                                      // deploy step name; method-container port key and capture-key prefix
-	CAVolume        string                                                                                      // lane-wide CA volume name; mounted r/o at /etc/ssl/certs
-	Keyless         lane.Keyless                                                                                // lane-declared keyless config (ADR-040 D2, ADR-041); .Endpoints dials Fulcio, Rekor v2, TSA; .TrustRoot/.TrustRootRef carry the verify anchor
-	BaseSBOMSigners []lane.SBOMSigner                                                                           // ADR-040 2c: declared base-SBOM signers; lane build requires a Keyless trust root when non-empty
+	DAG             *lane.DAG
+	EngineID        *container.EngineIdentity
+	CA              *transport.EphemeralCA
+	UpstreamLook    capsule.UpstreamLookupFunc
+	ArtifactRefs    map[string]string                                                                           // pre-resolved: artifact name -> "step.output" state ref
 	produceBundles  func(ctx context.Context, eps lane.KeylessEndpoints, statements [][]byte) ([][]byte, error) // test seam; nil selects the real keyless chain
-	ownRecords      []capsule.Records                                                                           // method + capture container records, accumulated during Execute
+	Keyless         lane.Keyless                                                                                // lane-declared keyless config (ADR-040 D2, ADR-041); .Endpoints dials Fulcio, Rekor v2, TSA; .TrustRoot/.TrustRootRef carry the verify anchor
+	LaneID          string
+	LaneDigest      primitive.Digest  // prefixed "sha256:<hex>" over the lane file bytes; sealed as lane_digest
+	StepID          string            // deploy step name; method-container port key and capture-key prefix
+	CAVolume        string            // lane-wide CA volume name; mounted r/o at /etc/ssl/certs
+	BaseSBOMSigners []lane.SBOMSigner // ADR-040 2c: declared base-SBOM signers; lane build requires a Keyless trust root when non-empty
+	ownRecords      []capsule.Records // method + capture container records, accumulated during Execute
+	Resolver        ResolverProbe     // declared resolver endpoint + the identity the pre-flight probe observed and verified (item-0046)
 }
 
 // collectObservedPeers builds the Layer-V observed_peers map and the Layer-E
@@ -1000,15 +1013,14 @@ func (d *Deployer) engineRecords() (endpoint.Engine, *EngineMetadata) {
 	return conn, meta
 }
 
-// resolverRecord builds the ResolverRecord from the captured DoT
-// resolver identity. Returns nil when no resolver identity was
-// captured (e.g. ResolverID is nil). Parallel to engineRecord.
-func (d *Deployer) resolverRecord() *ResolverRecord {
-	if d.ResolverID == nil {
-		return nil
-	}
-	id := d.ResolverID
-	return &ResolverRecord{
+// resolverRecord builds the ResolverRecord from the resolver identity the
+// pre-flight probe observed. The resolver is mandatory (item-0046): the probe
+// is an unconditional run-start gate that aborts on a declared-vs-observed
+// trust mismatch before any attestation is written, so a sealed run always
+// carries a verified observation. Parallel to engineRecord.
+func (d *Deployer) resolverRecord() ResolverRecord {
+	id := d.Resolver.Observed
+	return ResolverRecord{
 		Host:                  id.PeerAddress,
 		ServerCertFingerprint: id.LeafFingerprint,
 		TLSVersion:            tls.VersionName(id.TLSVersion),

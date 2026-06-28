@@ -97,8 +97,8 @@ import (
 	oidc:       #ProvenanceOIDC
 	peers: [ID=primitive.#Identifier]: [...lane.#Peer]
 	observedPeers?: [Endpoint=string]: #ObservedPeer
-	resolver?: #ResolverRecord
-	engine?:   endpoint.#Engine
+	resolver: #ResolverRecord
+	engine?:  endpoint.#Engine
 }
 
 // #ProvenanceOIDC is the declared signing identity carried into the sealed

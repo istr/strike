@@ -16,6 +16,12 @@
           }
         },
         "laneDigest": "sha256:def456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0",
+        "resolver": {
+          "host": "1.1.1.1:853",
+          "serverCertFingerprint": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "tlsVersion": "TLS 1.3",
+          "cipherSuite": "TLS_AES_128_GCM_SHA256"
+        },
         "peers": {
           "build": [
             {

@@ -81,7 +81,7 @@ import (
 
 	// resolver records the DoT resolver's observed TLS identity, matched
 	// against the declared anchor at the pre-flight handshake.
-	resolver?: #ResolverRecord
+	resolver: #ResolverRecord
 
 	// peers maps step name to the network peer declarations attached to
 	// that step. Declared, lane-anchored.

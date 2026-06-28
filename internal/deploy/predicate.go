@@ -64,7 +64,7 @@ type StrikeExternalParameters struct {
 	Target        lane.DeployTarget       `json:"target"`
 	Peers         map[string][]lane.Peer  `json:"peers"`
 	ObservedPeers map[string]ObservedPeer `json:"observedPeers,omitempty"`
-	Resolver      *ResolverRecord         `json:"resolver,omitempty"`
+	Resolver      ResolverRecord          `json:"resolver"`
 	Engine        endpoint.Engine         `json:"engine,omitempty"`
 	OIDC          ProvenanceOIDC          `json:"oidc"`
 	LaneID        string                  `json:"laneId"`

@@ -7,6 +7,8 @@ import (
 	"errors"
 	"io"
 	"net"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -239,6 +241,10 @@ func TestProbeResolver_HappyPath(t *testing.T) {
 	}
 }
 
+// TestProbeResolver_FingerprintMismatch pins the V-property gate: the run-start
+// probe rejects a resolver whose observed leaf diverges from the declared
+// certFingerprint anchor, which cmd/strike turns into a fatal abort before any
+// attestation is sealed (item-0046).
 func TestProbeResolver_FingerprintMismatch(t *testing.T) {
 	cert, _ := testCertPair(t, "127.0.0.1")
 	addr := startDNSTLSServer(t, cert, nsRootHandler())
@@ -254,6 +260,34 @@ func TestProbeResolver_FingerprintMismatch(t *testing.T) {
 	}
 	if _, err := transport.ProbeResolver(ctx, decl); err == nil {
 		t.Fatal("expected error for fingerprint mismatch, got nil")
+	}
+}
+
+// TestProbeResolver_CABundleMismatch is the caBundle arm of the same V-property
+// gate: a resolver whose leaf is not certified by the declared CA bundle is
+// rejected at the probe before any attestation is sealed (item-0046).
+func TestProbeResolver_CABundleMismatch(t *testing.T) {
+	serverCert, _ := testCAAndServerCert(t, "127.0.0.1")
+	addr := startDNSTLSServer(t, serverCert, nsRootHandler())
+
+	_, wrongCAPEM := testCAAndServerCert(t, "127.0.0.1")
+	caPath := filepath.Join(t.TempDir(), "wrong-ca.pem")
+	if err := os.WriteFile(caPath, wrongCAPEM, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
+	defer cancel()
+	decl := endpoint.TLS{
+		Type:    "https",
+		Address: endpoint.MustParseAuthority(addr),
+		Trust: endpoint.CABundle{
+			Type: "caBundle",
+			Path: caPath,
+		},
+	}
+	if _, err := transport.ProbeResolver(ctx, decl); err == nil {
+		t.Fatal("expected error for CA bundle mismatch, got nil")
 	}
 }
 

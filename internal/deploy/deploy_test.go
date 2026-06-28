@@ -868,54 +868,8 @@ func TestEngineRecord_WithoutRuntime(t *testing.T) {
 // resolverRecord tests.
 // --------------------------------------------------------------------------.
 
-func TestResolverRecord_NilResolverID(t *testing.T) {
-	eng := newTLSTestEngine(t, containerMock(t, "v1.0"))
-	state := lane.NewState()
-	if err := state.Register("build", "image", lane.ImageOutputHandle{
-		Ref: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
-	}); err != nil {
-		t.Fatal(err)
-	}
-
-	step := &lane.Step{
-		ID: "deploy-nil-resolver",
-		Deploy: &lane.DeploySpec{
-			Method: lane.DeployCustom{
-				Type:  "custom",
-				Image: "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
-			},
-			Artifacts: map[string]lane.ArtifactRef{
-				"image": {From: lane.StepImageRef{Step: "build"}},
-			},
-			Target:    lane.DeployTarget{ID: "test-1", Type: "registry", Description: "test"},
-			Recording: lane.StateRecording{},
-		},
-	}
-
-	ca, look, caPath, ports := deployCapsuleFields(t, "deploy-nil-resolver")
-
-	d := &deploy.Deployer{
-		Engine: eng, ResolverID: nil,
-		ArtifactRefs: map[string]string{"image": "build.image"},
-		LaneID:       "test-lane",
-		CA:           ca,
-		UpstreamLook: look,
-		CAVolume:     caPath,
-		StepID:       "deploy-nil-resolver",
-		StepPorts:    ports,
-	}
-	deploy.SetProduceBundles(d, stubProduceBundles())
-	att, err := d.Execute(context.Background(), step, state)
-	if err != nil {
-		t.Fatalf("Execute: %v", err)
-	}
-	if att.Sealed.Resolver != nil {
-		t.Error("expected nil Resolver record when ResolverID is nil")
-	}
-}
-
 func TestResolverRecord_Populated(t *testing.T) {
-	rid := &transport.ConnectionIdentity{
+	rid := transport.ConnectionIdentity{
 		LeafFingerprint: "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
 		TLSVersion:      0x0304, // TLS 1.3
 		CipherSuite:     0x1301, // TLS_AES_128_GCM_SHA256
@@ -949,7 +903,11 @@ func TestResolverRecord_Populated(t *testing.T) {
 	ca, look, caPath, ports := deployCapsuleFields(t, "deploy-resolver")
 
 	d := &deploy.Deployer{
-		Engine: eng, ResolverID: rid,
+		Engine: eng,
+		Resolver: deploy.ResolverProbe{
+			Declared: endpoint.TLS{Type: "https", Address: endpoint.MustParseAuthority("1.1.1.1:853"), Trust: endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}},
+			Observed: rid,
+		},
 		ArtifactRefs: map[string]string{"image": "build.image"},
 		LaneID:       "test-lane",
 		CA:           ca,
@@ -962,9 +920,6 @@ func TestResolverRecord_Populated(t *testing.T) {
 	att, err := d.Execute(context.Background(), step, state)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
-	}
-	if att.Sealed.Resolver == nil {
-		t.Fatal("expected non-nil Resolver record")
 	}
 	if att.Sealed.Resolver.Host != "1.1.1.1:853" {
 		t.Errorf("Host = %q, want 1.1.1.1:853", att.Sealed.Resolver.Host)

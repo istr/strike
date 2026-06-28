@@ -209,7 +209,7 @@ func TestValidateAttestation_WithResolverRecord(t *testing.T) {
 			LaneID:    "test-lane",
 			Target:    lane.DeployTarget{ID: "staging-1", Type: "kubernetes", Description: "staging"},
 			Artifacts: map[string]deploy.ArtifactRecord{},
-			Resolver: &deploy.ResolverRecord{
+			Resolver: deploy.ResolverRecord{
 				Host:                  "1.1.1.1:853",
 				ServerCertFingerprint: "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
 				TLSVersion:            "TLS 1.3",
