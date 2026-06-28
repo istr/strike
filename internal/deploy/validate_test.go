@@ -11,6 +11,7 @@ import (
 	"github.com/istr/strike/internal/deploy"
 	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/test/crossval"
 )
 
@@ -26,8 +27,8 @@ func TestValidateAttestation_Valid(t *testing.T) {
 		},
 		Informational: &deploy.Informational{
 			Timestamp:       clock.Reproducible(),
-			PreStateDigest:  lane.MustParseDigest("sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa").Wire(),
-			PostStateDigest: lane.MustParseDigest("sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb").Wire(),
+			PreStateDigest:  primitive.DigestFromHex("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+			PostStateDigest: primitive.DigestFromHex("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
 			Provenance:      []lane.ProvenanceRecord{},
 		},
 	}
@@ -55,8 +56,8 @@ func TestValidateAttestation_WithEngine(t *testing.T) {
 		},
 		Informational: &deploy.Informational{
 			Timestamp:       clock.Reproducible(),
-			PreStateDigest:  lane.MustParseDigest("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855").Wire(),
-			PostStateDigest: lane.MustParseDigest("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855").Wire(),
+			PreStateDigest:  primitive.DigestFromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
+			PostStateDigest: primitive.DigestFromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
 			EngineMetadata: &deploy.EngineMetadata{
 				Rootless: &rootless,
 				Version:  "5.3.1",
@@ -83,8 +84,8 @@ func TestValidateAttestation_InvalidEngineConnectionType(t *testing.T) {
 		},
 		Informational: &deploy.Informational{
 			Timestamp:       clock.Reproducible(),
-			PreStateDigest:  lane.MustParseDigest("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855").Wire(),
-			PostStateDigest: lane.MustParseDigest("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855").Wire(),
+			PreStateDigest:  primitive.DigestFromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
+			PostStateDigest: primitive.DigestFromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
 			Provenance:      []lane.ProvenanceRecord{},
 		},
 	}
@@ -130,8 +131,8 @@ func TestValidateAttestation_EmptyDigestsAllowed(t *testing.T) {
 		},
 		Informational: &deploy.Informational{
 			Timestamp:       clock.Reproducible(),
-			PreStateDigest:  lane.MustParseDigest("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855").Wire(),
-			PostStateDigest: lane.MustParseDigest("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855").Wire(),
+			PreStateDigest:  primitive.DigestFromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
+			PostStateDigest: primitive.DigestFromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
 			Provenance:      []lane.ProvenanceRecord{},
 		},
 	}
@@ -219,8 +220,8 @@ func TestValidateAttestation_WithResolverRecord(t *testing.T) {
 		},
 		Informational: &deploy.Informational{
 			Timestamp:       clock.Reproducible(),
-			PreStateDigest:  lane.MustParseDigest("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855").Wire(),
-			PostStateDigest: lane.MustParseDigest("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855").Wire(),
+			PreStateDigest:  primitive.DigestFromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
+			PostStateDigest: primitive.DigestFromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
 			Provenance:      []lane.ProvenanceRecord{},
 		},
 	}
@@ -265,8 +266,8 @@ func TestValidateAttestation_WithPeers(t *testing.T) {
 		},
 		Informational: &deploy.Informational{
 			Timestamp:       clock.Reproducible(),
-			PreStateDigest:  lane.MustParseDigest("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855").Wire(),
-			PostStateDigest: lane.MustParseDigest("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855").Wire(),
+			PreStateDigest:  primitive.DigestFromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
+			PostStateDigest: primitive.DigestFromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
 			Provenance:      []lane.ProvenanceRecord{},
 		},
 	}
@@ -296,8 +297,8 @@ func TestValidateAttestation_InvalidPeer(t *testing.T) {
 		},
 		Informational: &deploy.Informational{
 			Timestamp:       clock.Reproducible(),
-			PreStateDigest:  lane.MustParseDigest("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855").Wire(),
-			PostStateDigest: lane.MustParseDigest("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855").Wire(),
+			PreStateDigest:  primitive.DigestFromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
+			PostStateDigest: primitive.DigestFromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
 			Provenance:      []lane.ProvenanceRecord{},
 		},
 	}

@@ -187,3 +187,18 @@ its content root.
 This amendment changes vocabulary, not behavior. The implementation is scheduled
 as a separate roadmap item ahead of the spec-layering file reorg, so that reorg
 moves already-corrected names.
+
+## Amendment -- digest collapse (item-0039)
+
+The internal structured `DigestRef` and the wire/internal bridge it required are
+removed in favor of the single representation-neutral `primitive.Digest` wire
+value. The algorithm is fixed to sha256 (ADR-008): every digest strike produces
+or consumes -- ggcr image and manifest digests, podman inspect output, in-toto
+subjects -- is sha256, and the OCI ecosystem treats sha256 as canonical (sha512
+is an optional MAY, sha384 is unregistered), so the structured {algorithm, hex}
+pair carried no information the wire string did not already imply. Validation
+survives as the slim boundary helper `primitive.ParseDigest`; the bare-hex
+projection survives as `primitive.Digest.Hex()`, with `primitive.DigestFromHex`
+as its inverse constructor -- the one chokepoint that prepends the `sha256:`
+prefix to a freshly computed hex body. This changes representation, not behavior:
+the wire form is byte-identical, so the golden fixtures are unchanged.

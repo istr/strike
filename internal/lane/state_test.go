@@ -6,6 +6,7 @@ import (
 
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/primitive"
 )
 
 func TestRegisterAndResolve(t *testing.T) {
@@ -29,7 +30,7 @@ func TestRegisterAndResolve(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ManifestDigest: %v", err)
 	}
-	want := lane.MustParseDigest("sha256:abc1230000000000000000000000000000000000000000000000000000000000")
+	want := primitive.DigestFromHex("abc1230000000000000000000000000000000000000000000000000000000000")
 	if digest != want {
 		t.Errorf("digest = %q, want %q", digest, want)
 	}

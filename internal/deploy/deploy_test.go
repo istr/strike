@@ -168,8 +168,8 @@ func TestAttestationJSON(t *testing.T) {
 			Artifacts: map[string]deploy.ArtifactRecord{"image": {Digest: "sha256:abc"}},
 		},
 		Informational: &deploy.Informational{
-			PreStateDigest:  lane.MustParseDigest("sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa").Wire(),
-			PostStateDigest: lane.MustParseDigest("sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb").Wire(),
+			PreStateDigest:  primitive.DigestFromHex("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+			PostStateDigest: primitive.DigestFromHex("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
 			Provenance:      []lane.ProvenanceRecord{},
 		},
 	}
@@ -1172,8 +1172,8 @@ func TestValidateAttestation_InvalidLaneID(t *testing.T) {
 		},
 		Informational: &deploy.Informational{
 			Timestamp:       clock.Reproducible(),
-			PreStateDigest:  lane.MustParseDigest("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855").Wire(),
-			PostStateDigest: lane.MustParseDigest("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855").Wire(),
+			PreStateDigest:  primitive.DigestFromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
+			PostStateDigest: primitive.DigestFromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
 			Provenance:      []lane.ProvenanceRecord{},
 		},
 	}

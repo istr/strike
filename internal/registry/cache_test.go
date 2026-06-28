@@ -3,6 +3,7 @@ package registry_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/istr/strike/internal/testutil"
@@ -12,8 +13,6 @@ import (
 	"github.com/istr/strike/internal/registry"
 )
 
-const testAlgoSHA256 = "sha256"
-
 func TestSpecHashDeterministic(t *testing.T) {
 	step := &lane.Step{
 		ID:    "build",
@@ -21,16 +20,16 @@ func TestSpecHashDeterministic(t *testing.T) {
 		Args:  []string{"build", "-o", "/out/bin"},
 		Env:   map[string]string{"CGO_ENABLED": "0"},
 	}
-	inputHashes := map[string]lane.DigestRef{"src": lane.MustParseDigest("sha256:deadbeef00000000000000000000000000000000000000000000000000000000")}
-	sourceHashes := map[string]lane.DigestRef{"/src": lane.MustParseDigest("sha256:cafebabe00000000000000000000000000000000000000000000000000000000")}
+	inputHashes := map[string]primitive.Digest{"src": primitive.DigestFromHex("deadbeef00000000000000000000000000000000000000000000000000000000")}
+	sourceHashes := map[string]primitive.Digest{"/src": primitive.DigestFromHex("cafebabe00000000000000000000000000000000000000000000000000000000")}
 
-	h1 := registry.SpecHash(step, lane.MustParseDigest("sha256:0000000000000000000000000000000000000000000000000000000000000001"), inputHashes, sourceHashes)
-	h2 := registry.SpecHash(step, lane.MustParseDigest("sha256:0000000000000000000000000000000000000000000000000000000000000001"), inputHashes, sourceHashes)
+	h1 := registry.SpecHash(step, primitive.DigestFromHex("0000000000000000000000000000000000000000000000000000000000000001"), inputHashes, sourceHashes)
+	h2 := registry.SpecHash(step, primitive.DigestFromHex("0000000000000000000000000000000000000000000000000000000000000001"), inputHashes, sourceHashes)
 	if h1 != h2 {
 		t.Fatalf("not deterministic: %q vs %q", h1, h2)
 	}
-	if h1.Algorithm != testAlgoSHA256 {
-		t.Fatalf("expected sha256 algorithm, got %q", h1.Algorithm)
+	if !strings.HasPrefix(h1.String(), "sha256:") {
+		t.Fatalf("expected sha256 digest, got %q", h1)
 	}
 }
 
@@ -42,8 +41,8 @@ func TestSpecHashChangesOnInput(t *testing.T) {
 		Env:   map[string]string{},
 	}
 
-	h1 := registry.SpecHash(step, lane.MustParseDigest("sha256:0000000000000000000000000000000000000000000000000000000000000011"), map[string]lane.DigestRef{}, map[string]lane.DigestRef{})
-	h2 := registry.SpecHash(step, lane.MustParseDigest("sha256:0000000000000000000000000000000000000000000000000000000000000022"), map[string]lane.DigestRef{}, map[string]lane.DigestRef{})
+	h1 := registry.SpecHash(step, primitive.DigestFromHex("0000000000000000000000000000000000000000000000000000000000000011"), map[string]primitive.Digest{}, map[string]primitive.Digest{})
+	h2 := registry.SpecHash(step, primitive.DigestFromHex("0000000000000000000000000000000000000000000000000000000000000022"), map[string]primitive.Digest{}, map[string]primitive.Digest{})
 	if h1 == h2 {
 		t.Fatal("different images should produce different hashes")
 	}
@@ -60,8 +59,8 @@ func TestSpecHashPreservesArgOrder(t *testing.T) {
 		Args: []string{"-o", "/out", "build"},
 		Env:  map[string]string{},
 	}
-	h1 := registry.SpecHash(step1, lane.MustParseDigest("sha256:0000000000000000000000000000000000000000000000000000000000000001"), nil, nil)
-	h2 := registry.SpecHash(step2, lane.MustParseDigest("sha256:0000000000000000000000000000000000000000000000000000000000000001"), nil, nil)
+	h1 := registry.SpecHash(step1, primitive.DigestFromHex("0000000000000000000000000000000000000000000000000000000000000001"), nil, nil)
+	h2 := registry.SpecHash(step2, primitive.DigestFromHex("0000000000000000000000000000000000000000000000000000000000000001"), nil, nil)
 	if h1 == h2 {
 		t.Fatal("different arg order must produce different spec hashes")
 	}
@@ -75,12 +74,12 @@ func TestTag(t *testing.T) {
 	tests := []struct {
 		registry string
 		step     string
-		hash     lane.DigestRef
+		hash     primitive.Digest
 		want     string
 		name     string
 	}{
-		{"ghcr.io/cache", "build", lane.MustParseDigest("sha256:abcdef0123456789abcdef012345678900000000000000000000000000000000"), "ghcr.io/cache:build-abcdef0123456789", "full hash"},
-		{"r.io/c", "pack", lane.MustParseDigest("sha256:0123000000000000000000000000000000000000000000000000000000000000"), "r.io/c:pack-0123000000000000", "padded hash"},
+		{"ghcr.io/cache", "build", primitive.DigestFromHex("abcdef0123456789abcdef012345678900000000000000000000000000000000"), "ghcr.io/cache:build-abcdef0123456789", "full hash"},
+		{"r.io/c", "pack", primitive.DigestFromHex("0123000000000000000000000000000000000000000000000000000000000000"), "r.io/c:pack-0123000000000000", "padded hash"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -112,8 +111,8 @@ func TestHashFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("HashFile: %v", err)
 	}
-	if h.Algorithm != testAlgoSHA256 {
-		t.Fatalf("expected sha256 algorithm, got %q", h.Algorithm)
+	if !strings.HasPrefix(h.String(), "sha256:") {
+		t.Fatalf("expected sha256 digest, got %q", h)
 	}
 
 	// Same content should produce same hash.
@@ -139,8 +138,8 @@ func TestHashFile_Deterministic(t *testing.T) {
 	if err != nil {
 		t.Fatalf("HashFile (1): %v", err)
 	}
-	if h1.Algorithm != testAlgoSHA256 {
-		t.Fatalf("expected sha256 algorithm, got %q", h1.Algorithm)
+	if !strings.HasPrefix(h1.String(), "sha256:") {
+		t.Fatalf("expected sha256 digest, got %q", h1)
 	}
 
 	// Re-open root for second hash -- same result.
@@ -164,8 +163,8 @@ func TestHashFileOutputUnchanged(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if h.Algorithm != testAlgoSHA256 {
-		t.Fatalf("HashFile algorithm = %q", h.Algorithm)
+	if !strings.HasPrefix(h.String(), "sha256:") {
+		t.Fatalf("HashFile digest = %q", h)
 	}
 }
 

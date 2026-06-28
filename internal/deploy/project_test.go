@@ -13,16 +13,16 @@ import (
 
 func TestProjectStatements(t *testing.T) {
 	rootless := true
-	preState := primitive.Digest("sha256:" + strings.Repeat("e", 64))
-	postState := primitive.Digest("sha256:" + strings.Repeat("f", 64))
+	preState := primitive.DigestFromHex(strings.Repeat("e", 64))
+	postState := primitive.DigestFromHex(strings.Repeat("f", 64))
 	att := &deploy.Attestation{
 		Sealed: deploy.Sealed{
 			LaneID:     "demo",
 			LaneDigest: "",
 			Target:     lane.DeployTarget{ID: "prod-1", Type: "registry", Description: "production"},
 			Artifacts: map[string]deploy.ArtifactRecord{
-				"b-image": {Digest: primitive.Digest("sha256:" + strings.Repeat("b", 64))},
-				"a-image": {Digest: primitive.Digest("sha256:" + strings.Repeat("a", 64))},
+				"b-image": {Digest: primitive.DigestFromHex(strings.Repeat("b", 64))},
+				"a-image": {Digest: primitive.DigestFromHex(strings.Repeat("a", 64))},
 			},
 			Peers:  map[string][]lane.Peer{},
 			Engine: endpoint.EngineTLS{Type: "tls", CATrustType: "pinned", ServerCertFingerprint: "sha256:cc"},
@@ -33,8 +33,8 @@ func TestProjectStatements(t *testing.T) {
 		Informational: &deploy.Informational{
 			Timestamp:       clock.Reproducible(),
 			EngineMetadata:  &deploy.EngineMetadata{Rootless: &rootless, Version: "5.3.1"},
-			PreStateDigest:  lane.MustParseDigest(preState).Wire(),
-			PostStateDigest: lane.MustParseDigest(postState).Wire(),
+			PreStateDigest:  preState,
+			PostStateDigest: postState,
 			Provenance:      []lane.ProvenanceRecord{},
 		},
 	}

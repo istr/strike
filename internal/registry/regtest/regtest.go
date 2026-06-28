@@ -24,7 +24,6 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/types"
 
 	"github.com/istr/strike/internal/closer"
-	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/registry"
 )
@@ -32,10 +31,10 @@ import (
 // BuildImageTar builds a deterministic single-layer OCI image layout tar
 // containing exactly one file, and returns the tar bytes and the manifest
 // digest. Replaces the former registry.BuildTestImageTar.
-func BuildImageTar(fileName string, content []byte) ([]byte, lane.DigestRef, error) {
+func BuildImageTar(fileName string, content []byte) ([]byte, primitive.Digest, error) {
 	layer, err := singleFileLayer(fileName, content)
 	if err != nil {
-		return nil, lane.DigestRef{}, err
+		return nil, "", err
 	}
 
 	img := mutate.ConfigMediaType(
@@ -44,26 +43,26 @@ func BuildImageTar(fileName string, content []byte) ([]byte, lane.DigestRef, err
 	)
 	img, err = mutate.AppendLayers(img, layer)
 	if err != nil {
-		return nil, lane.DigestRef{}, err
+		return nil, "", err
 	}
 	annotated, ok := mutate.Annotations(img, map[string]string{
 		"org.opencontainers.image.created": "1970-01-01T00:00:00Z",
 	}).(v1.Image)
 	if !ok {
-		return nil, lane.DigestRef{}, fmt.Errorf("annotate: unexpected image type")
+		return nil, "", fmt.Errorf("annotate: unexpected image type")
 	}
 	img = annotated
 
 	h, err := img.Digest()
 	if err != nil {
-		return nil, lane.DigestRef{}, err
+		return nil, "", err
 	}
 
 	tarBytes, err := LayoutTar(img)
 	if err != nil {
-		return nil, lane.DigestRef{}, err
+		return nil, "", err
 	}
-	return tarBytes, lane.DigestRef{Algorithm: h.Algorithm, Hex: primitive.Sha256(h.Hex)}, nil
+	return tarBytes, primitive.Digest(h.String()), nil
 }
 
 // BuildMultiFileImageTar builds a deterministic single-layer OCI image layout

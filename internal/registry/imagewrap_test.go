@@ -142,7 +142,7 @@ func TestWrapImageOutputAsImage_LoadsExistingTar(t *testing.T) {
 	if err != nil {
 		t.Fatalf("WrapImageOutputAsImage: %v", err)
 	}
-	if digest.IsZero() {
+	if digest == "" {
 		t.Fatal("expected non-zero digest")
 	}
 	if size <= 0 {

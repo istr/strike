@@ -16,6 +16,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/types"
 
 	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/primitive"
 )
 
 // canonicalEntry is a collected tar entry, held until all entries are read
@@ -163,10 +164,10 @@ func FirstRegularFile(r io.Reader) (io.Reader, int64, error) {
 // engine container-archive stream and loads it as an image (the image
 // output type under the engine flow). It reuses the image-load core shared
 // with WrapImageOutputAsImage.
-func (c *Client) WrapImageArchiveAsImage(ctx context.Context, r io.Reader, tag string, extra ...map[string]string) (lane.DigestRef, int64, error) {
+func (c *Client) WrapImageArchiveAsImage(ctx context.Context, r io.Reader, tag string, extra ...map[string]string) (primitive.Digest, int64, error) {
 	inner, size, err := FirstRegularFile(r)
 	if err != nil {
-		return lane.DigestRef{}, 0, fmt.Errorf("image output: %w", err)
+		return "", 0, fmt.Errorf("image output: %w", err)
 	}
 	return c.wrapImageFromReader(ctx, inner, size, tag, extra...)
 }

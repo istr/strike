@@ -84,7 +84,7 @@ func TestWrapArchiveAsImage_RealSymlink(t *testing.T) {
 	if wrapErr != nil {
 		t.Fatalf("wrap archive: %v", wrapErr)
 	}
-	if good.Digest.IsZero() {
+	if good.Digest == "" {
 		t.Fatal("expected non-zero digest")
 	}
 

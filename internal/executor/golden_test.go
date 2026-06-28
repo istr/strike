@@ -22,12 +22,11 @@ import (
 
 var update = flag.Bool("update", false, "update cross-validation vector expected fields")
 
-// toDigestMap converts a map[string]string (from JSON vectors) to map[string]lane.DigestRef.
-func toDigestMap(m map[string]string) map[string]lane.DigestRef {
-	out := make(map[string]lane.DigestRef, len(m))
+// toDigestMap converts a map[string]string (from JSON vectors) to map[string]primitive.Digest.
+func toDigestMap(m map[string]string) map[string]primitive.Digest {
+	out := make(map[string]primitive.Digest, len(m))
 	for k, v := range m {
-		wire := primitive.Digest(v)
-		out[k] = lane.MustParseDigest(wire)
+		out[k] = primitive.Digest(v)
 	}
 	return out
 }
@@ -157,7 +156,7 @@ func TestSpecHash_Golden(t *testing.T) {
 
 			imageDigest := primitive.Digest(vec.Inputs.ImageDigest)
 			got := registry.SpecHash(step,
-				lane.MustParseDigest(imageDigest),
+				imageDigest,
 				toDigestMap(vec.Inputs.InputHashes),
 				toDigestMap(vec.Inputs.SourceHashes),
 			)

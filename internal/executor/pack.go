@@ -41,7 +41,7 @@ type PackOpts struct {
 
 // PackResult holds the outputs of a successful pack operation.
 type PackResult struct {
-	Digest lane.DigestRef // "sha256:..." manifest digest of the main image
+	Digest primitive.Digest // "sha256:..." manifest digest of the main image
 }
 
 // AssembleResult holds the outputs of the pure image assembly step.
@@ -161,7 +161,7 @@ func Pack(opts PackOpts) (*PackResult, error) {
 	}
 
 	manifestDigest := primitive.Digest(assembled.Digest.String())
-	return &PackResult{Digest: lane.MustParseDigest(manifestDigest)}, nil
+	return &PackResult{Digest: manifestDigest}, nil
 }
 
 // addFileLayers appends a layer for each file entry, returning the updated

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io/fs"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/istr/strike/internal/deploy"
@@ -23,11 +24,11 @@ func TestStateDigest_Deterministic(t *testing.T) {
 	if d1 != d2 {
 		t.Fatalf("same input produced different digests: %s vs %s", d1, d2)
 	}
-	if d1.Algorithm != "sha256" {
-		t.Errorf("Algorithm = %q, want sha256", d1.Algorithm)
+	if !strings.HasPrefix(d1.String(), "sha256:") {
+		t.Errorf("digest = %q, want sha256: prefix", d1)
 	}
-	if len(d1.Hex) != 64 {
-		t.Errorf("Hex length = %d, want 64", len(d1.Hex))
+	if len(d1.Hex()) != 64 {
+		t.Errorf("Hex length = %d, want 64", len(d1.Hex()))
 	}
 }
 
@@ -90,13 +91,13 @@ func TestStateDigest_ContentSensitive(t *testing.T) {
 func TestStateDigest_Empty(t *testing.T) {
 	d := deploy.StateDigest(nil)
 
-	if d.Algorithm != "sha256" {
-		t.Fatalf("Algorithm = %q, want sha256", d.Algorithm)
+	if !strings.HasPrefix(d.String(), "sha256:") {
+		t.Fatalf("digest = %q, want sha256: prefix", d)
 	}
 	// SHA-256 of the empty byte sequence.
 	const emptyHash = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-	if d.Hex != emptyHash {
-		t.Fatalf("Hex = %q, want %q", d.Hex, emptyHash)
+	if d.Hex() != emptyHash {
+		t.Fatalf("Hex = %q, want %q", d.Hex(), emptyHash)
 	}
 }
 

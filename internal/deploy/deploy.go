@@ -496,7 +496,7 @@ func (d *Deployer) buildAttestation(
 	step *lane.Step, spec lane.DeploySpec,
 	artifactDigests map[string]ArtifactRecord,
 	provenance []lane.ProvenanceRecord,
-	started clock.Time, preDigest, postDigest lane.DigestRef,
+	started clock.Time, preDigest, postDigest primitive.Digest,
 ) (*Attestation, error) {
 	engineConn, engineMeta := d.engineRecords()
 	declaredPeers := d.DAG.CollectPeers(string(step.ID))
@@ -521,8 +521,8 @@ func (d *Deployer) buildAttestation(
 		Informational: &Informational{
 			Timestamp:       started,
 			EngineMetadata:  engineMeta,
-			PreStateDigest:  preDigest.Wire(),
-			PostStateDigest: postDigest.Wire(),
+			PreStateDigest:  preDigest,
+			PostStateDigest: postDigest,
 			Provenance:      provenance,
 		},
 	}, nil
@@ -691,7 +691,7 @@ func resolveArtifactDigests(stepID string, refs map[string]string, state *lane.S
 			return nil, fmt.Errorf("step %q: artifact %q: %w", stepID, artName, digestErr)
 		}
 		artifacts[artName] = ArtifactRecord{
-			Digest: digest.Wire(),
+			Digest: digest,
 		}
 	}
 	return artifacts, nil
@@ -705,7 +705,7 @@ func (d *Deployer) recordAttestation(att *Attestation, step *lane.Step, state *l
 	}
 	attHex := hex.EncodeToString(sha256Sum(attJSON))
 
-	attDigest := lane.DigestRef{Algorithm: "sha256", Hex: primitive.Sha256(attHex)}
+	attDigest := primitive.DigestFromHex(attHex)
 	state.RecordStep(lane.StepResult{
 		Name:      string(step.ID),
 		StepType:  "deploy",

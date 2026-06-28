@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/istr/strike/internal/container"
-	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/registry"
 	"github.com/istr/strike/internal/testutil"
 )
@@ -15,7 +15,7 @@ import (
 // producer wraps it via WrapImageOutputAsImage (which re-annotates and so
 // stores it under a manifest digest distinct from the assembled digest), and a
 // downstream step runs a container whose base is that producer image addressed
-// by registry.WrapDigestRef -- exactly what resolveImageDigest hands the
+// by registry.WrapDigest -- exactly what resolveImageDigest hands the
 // executor for an imageFromStep edge.
 //
 // This is the coverage gap behind the "container start: status 405" failure:
@@ -39,8 +39,8 @@ func TestImageFromStep_RunsByDigestRef(t *testing.T) {
 	const laneID = "imagefrom-itest"
 	const producerStep = "workspace"
 	regClient := &registry.Client{Engine: engine}
-	tag := registry.WrapTag(laneID, producerStep, lane.MustParseDigest(
-		"sha256:0000000000000000000000000000000000000000000000000000000000000001"))
+	tag := registry.WrapTag(laneID, producerStep, primitive.DigestFromHex(
+		"0000000000000000000000000000000000000000000000000000000000000001"))
 
 	digest, _, wrapErr := regClient.WrapImageOutputAsImage(ctx, outRoot, "image.tar", tag, nil)
 	if wrapErr != nil {
@@ -48,9 +48,9 @@ func TestImageFromStep_RunsByDigestRef(t *testing.T) {
 	}
 
 	// 2. Address the producer image exactly as resolveImageDigest does for an
-	//    imageFromStep edge: the WrapDigestRef built from the engine-stored
+	//    imageFromStep edge: the WrapDigest built from the engine-stored
 	//    manifest digest, never the mutable tag (ADR-045/046).
-	imageRef := registry.WrapDigestRef(laneID, producerStep, digest)
+	imageRef := registry.WrapDigest(laneID, producerStep, digest)
 	t.Logf("imageFromStep base: %s", imageRef)
 
 	// Deterministic invariant: the digest the handle carries must equal the
@@ -64,7 +64,7 @@ func TestImageFromStep_RunsByDigestRef(t *testing.T) {
 	if inspErr != nil {
 		t.Fatalf("inspect producer tag %s: %v", tag, inspErr)
 	}
-	if tagInfo.Digest != digest.Wire() {
+	if tagInfo.Digest != digest {
 		t.Fatalf("handle digest %s != engine-stored digest %s: the imageFromStep base would be unresolvable",
 			digest, tagInfo.Digest)
 	}

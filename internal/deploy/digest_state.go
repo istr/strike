@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"sort"
 
-	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/primitive"
 )
 
@@ -27,7 +26,7 @@ type captureSnap struct {
 // The empty-input case is well-defined: SHA-256 of the empty byte
 // sequence (e3b0c442...). The loop writes nothing and the hash of the
 // empty buffer is returned.
-func StateDigest(captures []captureSnap) lane.DigestRef {
+func StateDigest(captures []captureSnap) primitive.Digest {
 	sorted := make([]captureSnap, len(captures))
 	copy(sorted, captures)
 	sort.Slice(sorted, func(i, j int) bool {
@@ -51,5 +50,5 @@ func StateDigest(captures []captureSnap) lane.DigestRef {
 	}
 
 	sum := sha256.Sum256(buf.Bytes())
-	return lane.DigestRef{Algorithm: "sha256", Hex: primitive.Sha256(hex.EncodeToString(sum[:]))}
+	return primitive.DigestFromHex(hex.EncodeToString(sum[:]))
 }

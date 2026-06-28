@@ -28,41 +28,39 @@ func ParseDuration(d *primitive.Duration, defaultVal clock.Duration) (clock.Dura
 // the file bytes. Hash and parse consume the same single read, so the digest
 // is bound to exactly the bytes the Lane was built from; it is carried into
 // the sealed attestation as lane_digest.
-func Parse(fp FilePath) (*Lane, DigestRef, error) {
+func Parse(fp FilePath) (*Lane, primitive.Digest, error) {
 	raw, err := fp.Read()
 	if err != nil {
-		return nil, DigestRef{}, fmt.Errorf("read: %w", err)
+		return nil, "", fmt.Errorf("read: %w", err)
 	}
-	// The input is "sha256:" followed by 64 lowercase hex by construction, so
-	// it always satisfies #Digest and MustParseDigest's panic is unreachable.
-	// Using the canonical constructor keeps digest validation in one place and
-	// holds Parse at the cyclomatic-complexity ceiling.
+	// The input is "sha256:" followed by 64 lowercase hex by construction, so it
+	// satisfies #Digest directly; it is bound to exactly the bytes the Lane was
+	// built from and carried into the sealed attestation as lane_digest.
 	sum := sha256.Sum256(raw)
-	wire := primitive.Digest("sha256:" + hex.EncodeToString(sum[:]))
-	dg := MustParseDigest(wire)
+	dg := primitive.DigestFromHex(hex.EncodeToString(sum[:]))
 
 	// YAML to generic map (for CUE validation)
 	var asMap any
 	if yamlErr := yaml.Unmarshal(raw, &asMap); yamlErr != nil {
-		return nil, DigestRef{}, fmt.Errorf("yaml parse: %w", yamlErr)
+		return nil, "", fmt.Errorf("yaml parse: %w", yamlErr)
 	}
 
 	// Convert to JSON (CUE is a superset of JSON)
 	asJSON, err := json.Marshal(asMap)
 	if err != nil {
-		return nil, DigestRef{}, fmt.Errorf("json marshal: %w", err)
+		return nil, "", fmt.Errorf("json marshal: %w", err)
 	}
 
 	// Validate against embedded CUE schema
 	if err := schema.ValidateLaneJSON(asJSON); err != nil {
-		return nil, DigestRef{}, fmt.Errorf("validation:\n%w", err)
+		return nil, "", fmt.Errorf("validation:\n%w", err)
 	}
 
 	// Deserialize from JSON into typed Lane struct.
 	// Using JSON (not YAML) because gengotypes only emits json struct tags.
 	var p Lane
 	if err := json.Unmarshal(asJSON, &p); err != nil {
-		return nil, DigestRef{}, fmt.Errorf("deserialize: %w", err)
+		return nil, "", fmt.Errorf("deserialize: %w", err)
 	}
 
 	// Validate: exactly one of image, image_from, pack, or deploy per step
@@ -81,21 +79,21 @@ func Parse(fp FilePath) (*Lane, DigestRef, error) {
 			count++
 		}
 		if count != 1 {
-			return nil, DigestRef{}, fmt.Errorf(
+			return nil, "", fmt.Errorf(
 				"step %q: exactly one of image, imageFromStep, pack, or deploy required", s.ID)
 		}
 	}
 
 	if err := validateDeployPresence(&p); err != nil {
-		return nil, DigestRef{}, err
+		return nil, "", err
 	}
 
 	if err := validateResolver(&p); err != nil {
-		return nil, DigestRef{}, err
+		return nil, "", err
 	}
 
 	if err := ValidatePaths(&p); err != nil {
-		return nil, DigestRef{}, err
+		return nil, "", err
 	}
 
 	return &p, dg, nil

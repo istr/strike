@@ -75,7 +75,7 @@ func TestVerifyGoldenGenerate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse golden lane: %v", err)
 	}
-	att := syntheticGoldenAttestation(laneDigest.Wire())
+	att := syntheticGoldenAttestation(laneDigest)
 	sealed, engineCtx, info, err := projectStatements(att, goldenLane.OIDC, nil)
 	if err != nil {
 		t.Fatalf("projectStatements: %v", err)
@@ -134,8 +134,8 @@ func syntheticGoldenAttestation(laneDigest primitive.Digest) *Attestation {
 			PeerAttribution: map[string][]string{"deploy": {"registry.example:443"}},
 		},
 		Informational: &Informational{
-			PreStateDigest:  lane.MustParseDigest("sha256:" + artifactDigest).Wire(),
-			PostStateDigest: lane.MustParseDigest("sha256:" + artifactDigest).Wire(),
+			PreStateDigest:  primitive.DigestFromHex(artifactDigest),
+			PostStateDigest: primitive.DigestFromHex(artifactDigest),
 		},
 	}
 }

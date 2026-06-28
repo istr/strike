@@ -7,6 +7,7 @@ import (
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/deploy"
 	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/schema"
 )
 
@@ -50,8 +51,8 @@ func TestInformationalStatement_Valid(t *testing.T) {
 		PredicateType: "https://istr.dev/strike/predicates/informational/v1",
 		Predicate: deploy.InformationalPredicate{
 			Timestamp:       clock.Reproducible(),
-			PreStateDigest:  lane.MustParseDigest("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855").Wire(),
-			PostStateDigest: lane.MustParseDigest("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855").Wire(),
+			PreStateDigest:  primitive.DigestFromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
+			PostStateDigest: primitive.DigestFromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
 			Provenance:      []lane.ProvenanceRecord{},
 		},
 	}

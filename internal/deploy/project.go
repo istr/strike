@@ -5,6 +5,7 @@ import (
 	"sort"
 
 	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/primitive"
 )
 
 // Output-statement constants (ADR-040 D3). The projected statements are
@@ -101,11 +102,11 @@ func projectStatements(att *Attestation, oidc lane.OIDCConfig, resolvedDeps []Re
 func projectSubject(artifacts map[string]ArtifactRecord) ([]Subject, error) {
 	subjects := make([]Subject, 0, len(artifacts))
 	for name, art := range artifacts {
-		d, err := lane.ParseDigest(art.Digest)
+		d, err := primitive.ParseDigest(art.Digest)
 		if err != nil {
 			return nil, fmt.Errorf("subject %q: %w", name, err)
 		}
-		subjects = append(subjects, Subject{Name: name, Digest: DigestSet{SHA256: d.Hex}})
+		subjects = append(subjects, Subject{Name: name, Digest: DigestSet{SHA256: d.Hex()}})
 	}
 	sort.Slice(subjects, func(i, j int) bool { return subjects[i].Name < subjects[j].Name })
 	return subjects, nil

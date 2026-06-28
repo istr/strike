@@ -20,7 +20,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 
 	"github.com/istr/strike/internal/container"
-	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/primitive"
 )
 
 // Client wraps container engine operations for registry interaction.
@@ -149,13 +149,13 @@ func tarDirEntries(tw *tar.Writer, root *os.Root, prefix string, entries []fs.Di
 }
 
 // InspectDigest returns the manifest digest of a local image.
-func (c *Client) InspectDigest(ctx context.Context, ref string) (lane.DigestRef, error) {
+func (c *Client) InspectDigest(ctx context.Context, ref string) (primitive.Digest, error) {
 	info, err := c.Engine.ImageInspect(ctx, ref)
 	if err != nil {
-		return lane.DigestRef{}, err
+		return "", err
 	}
 	if info.Digest == "" {
-		return lane.DigestRef{}, fmt.Errorf("no digest for %s", ref)
+		return "", fmt.Errorf("no digest for %s", ref)
 	}
-	return lane.MustParseDigest(info.Digest), nil
+	return primitive.ParseDigest(info.Digest)
 }

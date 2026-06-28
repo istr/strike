@@ -15,6 +15,7 @@ import (
 	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/front"
 	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/registry"
 	"github.com/istr/strike/internal/transport"
 )
@@ -136,7 +137,7 @@ func initEngine(ctx context.Context) container.Engine {
 // DAG dump or a half-started run. The checks are fully offline: file
 // resolution, parse, DAG construction, and the leaf-is-deploy policy
 // (ADR-039 D5). It returns the resolved file path, parsed lane, and DAG.
-func validateLane(path string) (fp lane.FilePath, p *lane.Lane, dg lane.DigestRef, dag *lane.DAG, err error) {
+func validateLane(path string) (fp lane.FilePath, p *lane.Lane, dg primitive.Digest, dag *lane.DAG, err error) {
 	fp, err = lane.NewFilePath(path)
 	if err != nil {
 		return fp, p, dg, dag, err

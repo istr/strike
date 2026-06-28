@@ -15,8 +15,6 @@ import (
 	"github.com/istr/strike/internal/registry/regtest"
 )
 
-const testAlgoSHA256 = "sha256"
-
 const (
 	testFullDigestHex = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
 	testFullDigest    = "sha256:" + testFullDigestHex
@@ -82,7 +80,7 @@ func TestBuildInputDelivery_Single(t *testing.T) {
 	}
 	rc.dag = buildTestDAG(t, p)
 
-	compileDigest := lane.MustParseDigest("sha256:aabbccdd11223344000000000000000000000000000000000000000000000000")
+	compileDigest := primitive.DigestFromHex("aabbccdd11223344000000000000000000000000000000000000000000000000")
 	compileRef := "localhost/test/compile@" + compileDigest.String()
 	tarBytes, diffID, err := regtest.BuildLayeredImageTar("bin", map[string][]byte{"binary": []byte("data")})
 	if err != nil {
@@ -95,7 +93,7 @@ func TestBuildInputDelivery_Single(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	rc.state.specHashes["compile"] = lane.MustParseDigest("sha256:1111111111111111000000000000000000000000000000000000000000000000")
+	rc.state.specHashes["compile"] = primitive.DigestFromHex("1111111111111111000000000000000000000000000000000000000000000000")
 
 	eng.saveTars = map[string][]byte{compileRef: tarBytes}
 
@@ -138,8 +136,8 @@ func TestBuildInputDelivery_Multiple(t *testing.T) {
 	}
 	rc.dag = buildTestDAG(t, p)
 
-	d1 := lane.MustParseDigest("sha256:aaaa111122223333000000000000000000000000000000000000000000000000")
-	d2 := lane.MustParseDigest("sha256:bbbb444455556666000000000000000000000000000000000000000000000000")
+	d1 := primitive.DigestFromHex("aaaa111122223333000000000000000000000000000000000000000000000000")
+	d2 := primitive.DigestFromHex("bbbb444455556666000000000000000000000000000000000000000000000000")
 	ref1 := "localhost/test/s1@" + d1.String()
 	ref2 := "localhost/test/s2@" + d2.String()
 	tar1, diff1, err := regtest.BuildLayeredImageTar("a", map[string][]byte{"a.tar": []byte("a")})
@@ -156,8 +154,8 @@ func TestBuildInputDelivery_Multiple(t *testing.T) {
 	if err := rc.laneState.Register("s2", "b", lane.FileOutputHandle{Ref: ref2, OutputID: "b", LayerDiffID: diff2}); err != nil {
 		t.Fatal(err)
 	}
-	rc.state.specHashes["s1"] = lane.MustParseDigest("sha256:2222222222222222000000000000000000000000000000000000000000000000")
-	rc.state.specHashes["s2"] = lane.MustParseDigest("sha256:3333333333333333000000000000000000000000000000000000000000000000")
+	rc.state.specHashes["s1"] = primitive.DigestFromHex("2222222222222222000000000000000000000000000000000000000000000000")
+	rc.state.specHashes["s2"] = primitive.DigestFromHex("3333333333333333000000000000000000000000000000000000000000000000")
 
 	eng.saveTars = map[string][]byte{ref1: tar1, ref2: tar2}
 
@@ -192,7 +190,7 @@ func TestBuildInputDelivery_MissingSubpath(t *testing.T) {
 	}
 	rc.dag = buildTestDAG(t, p)
 
-	srcDigest := lane.MustParseDigest("sha256:aabbccdd11223344000000000000000000000000000000000000000000000000")
+	srcDigest := primitive.DigestFromHex("aabbccdd11223344000000000000000000000000000000000000000000000000")
 	srcRef := "localhost/test/src@" + srcDigest.String()
 	tarBytes, diffID, err := regtest.BuildLayeredImageTar("tree", map[string][]byte{"tree/actual.json": []byte("{}")})
 	if err != nil {
@@ -205,7 +203,7 @@ func TestBuildInputDelivery_MissingSubpath(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	rc.state.specHashes["src"] = lane.MustParseDigest("sha256:1111111111111111000000000000000000000000000000000000000000000000")
+	rc.state.specHashes["src"] = primitive.DigestFromHex("1111111111111111000000000000000000000000000000000000000000000000")
 
 	eng.saveTars = map[string][]byte{srcRef: tarBytes}
 
@@ -238,7 +236,7 @@ func TestBuildInputDelivery_OutsideWorkdir_DirectoryMount(t *testing.T) {
 	}
 	rc.dag = buildTestDAG(t, p)
 
-	srcDigest := lane.MustParseDigest("sha256:aabbccdd11223344000000000000000000000000000000000000000000000000")
+	srcDigest := primitive.DigestFromHex("aabbccdd11223344000000000000000000000000000000000000000000000000")
 	srcRef := "localhost/test/src@" + srcDigest.String()
 	tarBytes, diffID, err := regtest.BuildLayeredImageTar("tree", map[string][]byte{
 		"tree/a.txt": []byte("a"),
@@ -253,7 +251,7 @@ func TestBuildInputDelivery_OutsideWorkdir_DirectoryMount(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	rc.state.specHashes["src"] = lane.MustParseDigest("sha256:1111111111111111000000000000000000000000000000000000000000000000")
+	rc.state.specHashes["src"] = primitive.DigestFromHex("1111111111111111000000000000000000000000000000000000000000000000")
 
 	eng.saveTars = map[string][]byte{srcRef: tarBytes}
 
@@ -300,7 +298,7 @@ func TestBuildInputDelivery_NoWorkdir_Mounts(t *testing.T) {
 	}
 	rc.dag = buildTestDAG(t, p)
 
-	srcDigest := lane.MustParseDigest("sha256:aabbccdd11223344000000000000000000000000000000000000000000000000")
+	srcDigest := primitive.DigestFromHex("aabbccdd11223344000000000000000000000000000000000000000000000000")
 	srcRef := "localhost/test/src@" + srcDigest.String()
 	tarBytes, diffID, err := regtest.BuildLayeredImageTar("tree", map[string][]byte{
 		"tree/a.txt": []byte("a"),
@@ -315,7 +313,7 @@ func TestBuildInputDelivery_NoWorkdir_Mounts(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	rc.state.specHashes["src"] = lane.MustParseDigest("sha256:1111111111111111000000000000000000000000000000000000000000000000")
+	rc.state.specHashes["src"] = primitive.DigestFromHex("1111111111111111000000000000000000000000000000000000000000000000")
 
 	eng.saveTars = map[string][]byte{srcRef: tarBytes}
 
@@ -356,7 +354,7 @@ func TestBuildInputDelivery_SingleFileOutside_Rejected(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	rc.state.specHashes["src"] = lane.MustParseDigest("sha256:1111111111111111000000000000000000000000000000000000000000000000")
+	rc.state.specHashes["src"] = primitive.DigestFromHex("1111111111111111000000000000000000000000000000000000000000000000")
 
 	_, _, err := rc.buildInputDelivery(context.Background(), rc.dag.Steps["consumer"])
 	if err == nil {
@@ -390,7 +388,7 @@ func TestBuildInputDelivery_ExportsProducerOnce(t *testing.T) {
 	}
 	rc.dag = buildTestDAG(t, p)
 
-	srcDigest := lane.MustParseDigest("sha256:aabbccdd11223344000000000000000000000000000000000000000000000000")
+	srcDigest := primitive.DigestFromHex("aabbccdd11223344000000000000000000000000000000000000000000000000")
 	srcRef := "localhost/test/src@" + srcDigest.String()
 	tarBytes, diffID, err := regtest.BuildLayeredImageTar("tree", map[string][]byte{
 		"tree/a.txt": []byte("a"),
@@ -406,7 +404,7 @@ func TestBuildInputDelivery_ExportsProducerOnce(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	rc.state.specHashes["src"] = lane.MustParseDigest("sha256:1111111111111111000000000000000000000000000000000000000000000000")
+	rc.state.specHashes["src"] = primitive.DigestFromHex("1111111111111111000000000000000000000000000000000000000000000000")
 
 	eng.saveTars = map[string][]byte{srcRef: tarBytes}
 
@@ -434,11 +432,11 @@ func TestComputeSpecHash_Deterministic(t *testing.T) {
 		Env:  map[string]string{"K": "V"},
 	}
 
-	h1, tag1, err := rc.computeSpecHash(step, "step1", lane.MustParseDigest("sha256:abc0000000000000000000000000000000000000000000000000000000000000"))
+	h1, tag1, err := rc.computeSpecHash(step, "step1", primitive.DigestFromHex("abc0000000000000000000000000000000000000000000000000000000000000"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	h2, tag2, err := rc.computeSpecHash(step, "step1", lane.MustParseDigest("sha256:abc0000000000000000000000000000000000000000000000000000000000000"))
+	h2, tag2, err := rc.computeSpecHash(step, "step1", primitive.DigestFromHex("abc0000000000000000000000000000000000000000000000000000000000000"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -448,8 +446,8 @@ func TestComputeSpecHash_Deterministic(t *testing.T) {
 	if tag1 != tag2 {
 		t.Errorf("tags differ: %s vs %s", tag1, tag2)
 	}
-	if h1.Algorithm != testAlgoSHA256 {
-		t.Errorf("hash should have sha256 algorithm, got %q", h1.Algorithm)
+	if !strings.HasPrefix(h1.String(), "sha256:") {
+		t.Errorf("hash should be a sha256 digest, got %q", h1)
 	}
 }
 
@@ -457,13 +455,13 @@ func TestComputeSpecHash_ChangesWithImageDigest(t *testing.T) {
 	rc := newTestRC(t, &mockEngine{})
 	step := &lane.Step{Args: []string{"build"}, Env: map[string]string{}}
 
-	h1, _, err := rc.computeSpecHash(step, "s", lane.MustParseDigest("sha256:aaa0000000000000000000000000000000000000000000000000000000000000"))
+	h1, _, err := rc.computeSpecHash(step, "s", primitive.DigestFromHex("aaa0000000000000000000000000000000000000000000000000000000000000"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Reset specHashes to avoid accumulation from prior call.
-	rc.state.specHashes = map[string]lane.DigestRef{}
-	h2, _, err := rc.computeSpecHash(step, "s", lane.MustParseDigest("sha256:bbb0000000000000000000000000000000000000000000000000000000000000"))
+	rc.state.specHashes = map[string]primitive.Digest{}
+	h2, _, err := rc.computeSpecHash(step, "s", primitive.DigestFromHex("bbb0000000000000000000000000000000000000000000000000000000000000"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -480,12 +478,12 @@ func TestComputeSpecHash_NoSources(t *testing.T) {
 		Env:  map[string]string{},
 	}
 
-	h, _, err := rc.computeSpecHash(step, "build", lane.MustParseDigest("sha256:0000000000000000000000000000000000000000000000000000000000000001"))
+	h, _, err := rc.computeSpecHash(step, "build", primitive.DigestFromHex("0000000000000000000000000000000000000000000000000000000000000001"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if h.Algorithm != testAlgoSHA256 {
-		t.Errorf("hash should have sha256 algorithm, got %q", h.Algorithm)
+	if !strings.HasPrefix(h.String(), "sha256:") {
+		t.Errorf("hash should be a sha256 digest, got %q", h)
 	}
 }
 
@@ -500,9 +498,9 @@ func TestCheckCache_Miss(t *testing.T) {
 		ID:      "step1",
 		Outputs: []lane.FileOutput{{ID: "bin", Type: "file", Path: lane.Ptr(primitive.RelPath("bin"))}},
 	}
-	rc.state.specHashes["step1"] = lane.MustParseDigest("sha256:abc0000000000000000000000000000000000000000000000000000000000000")
+	rc.state.specHashes["step1"] = primitive.DigestFromHex("abc0000000000000000000000000000000000000000000000000000000000000")
 
-	hit, err := rc.checkCache(context.Background(), step, "step1", "step1", lane.MustParseDigest("sha256:abc0000000000000000000000000000000000000000000000000000000000000"))
+	hit, err := rc.checkCache(context.Background(), step, "step1", "step1", primitive.DigestFromHex("abc0000000000000000000000000000000000000000000000000000000000000"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -530,14 +528,14 @@ func TestCheckCache_Hit(t *testing.T) {
 	// On a cache hit, checkCache exports the cached image and recovers each
 	// output's LayerDiffID from the config rootfs.diff_ids in canonical layer
 	// order. Provide a one-layer image keyed by the digest ref it pulls.
-	imageRef := registry.WrapDigestRef(string(rc.lane.ID), "step1", lane.MustParseDigest(digest))
+	imageRef := registry.WrapDigest(string(rc.lane.ID), "step1", digest)
 	tarBytes, diffID, buildErr := regtest.BuildLayeredImageTar("bin", map[string][]byte{"bin": []byte("data")})
 	if buildErr != nil {
 		t.Fatalf("BuildLayeredImageTar: %v", buildErr)
 	}
 	eng.saveTars = map[string][]byte{imageRef: tarBytes}
 
-	hit, err := rc.checkCache(context.Background(), step, "step1", "step1", lane.MustParseDigest("sha256:abc0000000000000000000000000000000000000000000000000000000000000"))
+	hit, err := rc.checkCache(context.Background(), step, "step1", "step1", primitive.DigestFromHex("abc0000000000000000000000000000000000000000000000000000000000000"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -556,7 +554,7 @@ func TestCheckCache_Hit(t *testing.T) {
 	if digestErr != nil {
 		t.Fatalf("manifest digest: %v", digestErr)
 	}
-	if gotDigest.Wire() != digest {
+	if gotDigest != digest {
 		t.Errorf("digest = %q, want %q", gotDigest, digest)
 	}
 	if fh.LayerDiffID != diffID {
@@ -574,7 +572,7 @@ func TestCheckCache_HitMissingSizeAnnotation(t *testing.T) {
 	rc := newTestRC(t, eng)
 	step := &lane.Step{ID: "step1"}
 
-	hit, err := rc.checkCache(context.Background(), step, "step1", "step1", lane.MustParseDigest("sha256:abc0000000000000000000000000000000000000000000000000000000000000"))
+	hit, err := rc.checkCache(context.Background(), step, "step1", "step1", primitive.DigestFromHex("abc0000000000000000000000000000000000000000000000000000000000000"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -595,7 +593,7 @@ func TestCheckCache_HitBadSizeAnnotation(t *testing.T) {
 	rc := newTestRC(t, eng)
 	step := &lane.Step{ID: "step1"}
 
-	hit, err := rc.checkCache(context.Background(), step, "step1", "step1", lane.MustParseDigest("sha256:abc0000000000000000000000000000000000000000000000000000000000000"))
+	hit, err := rc.checkCache(context.Background(), step, "step1", "step1", primitive.DigestFromHex("abc0000000000000000000000000000000000000000000000000000000000000"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -616,7 +614,7 @@ func TestCheckCache_ForceRunBypass(t *testing.T) {
 	rc := newTestRC(t, eng)
 	step := &lane.Step{ID: "step1", ForceRun: true}
 
-	hit, err := rc.checkCache(context.Background(), step, "step1", "step1", lane.MustParseDigest("sha256:abc0000000000000000000000000000000000000000000000000000000000000"))
+	hit, err := rc.checkCache(context.Background(), step, "step1", "step1", primitive.DigestFromHex("abc0000000000000000000000000000000000000000000000000000000000000"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -630,7 +628,7 @@ func TestCheckCache_EngineError(t *testing.T) {
 	rc := newTestRC(t, eng)
 	step := &lane.Step{ID: "step1"}
 
-	_, err := rc.checkCache(context.Background(), step, "step1", "step1", lane.MustParseDigest("sha256:abc0000000000000000000000000000000000000000000000000000000000000"))
+	_, err := rc.checkCache(context.Background(), step, "step1", "step1", primitive.DigestFromHex("abc0000000000000000000000000000000000000000000000000000000000000"))
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -666,8 +664,8 @@ func TestResolveImageDigest_FromInspect(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if digest.Algorithm != testAlgoSHA256 {
-		t.Errorf("expected sha256 algorithm, got %q", digest.Algorithm)
+	if !strings.HasPrefix(digest.String(), "sha256:") {
+		t.Errorf("expected sha256 digest, got %q", digest)
 	}
 }
 
@@ -689,9 +687,9 @@ func TestResolveImageDigest_ImageFrom(t *testing.T) {
 	}
 	rc.lane = p
 	rc.dag = buildTestDAG(t, p)
-	packDigest := lane.MustParseDigest("sha256:abcdef1234567890000000000000000000000000000000000000000000000000")
+	packDigest := primitive.DigestFromHex("abcdef1234567890000000000000000000000000000000000000000000000000")
 	if err := rc.laneState.Register("pack", "", lane.ImageOutputHandle{
-		Ref: registry.WrapDigestRef("test-lane", "pack", packDigest),
+		Ref: registry.WrapDigest("test-lane", "pack", packDigest),
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -709,7 +707,7 @@ func TestResolveImageDigest_ImageFrom(t *testing.T) {
 			step.Image, imageBefore)
 	}
 	got := rc.state.imageFromRefs["run"]
-	want := registry.WrapDigestRef("test-lane", "pack", digest)
+	want := registry.WrapDigest("test-lane", "pack", digest)
 	if got != want {
 		t.Errorf("imageFromRefs[run] = %q, want %q", got, want)
 	}
@@ -768,7 +766,7 @@ func TestResolvePackInputPaths(t *testing.T) {
 	}
 	rc.dag = buildTestDAG(t, p)
 
-	compileDigest := lane.MustParseDigest("sha256:aabbccdd11223344000000000000000000000000000000000000000000000000")
+	compileDigest := primitive.DigestFromHex("aabbccdd11223344000000000000000000000000000000000000000000000000")
 	compileRef := "localhost/test/compile@" + compileDigest.String()
 	tarBytes, diffID, err := regtest.BuildLayeredImageTar("bin", map[string][]byte{"binary": []byte("bin")})
 	if err != nil {
@@ -781,7 +779,7 @@ func TestResolvePackInputPaths(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	rc.state.specHashes["compile"] = lane.MustParseDigest("sha256:1111111111111111000000000000000000000000000000000000000000000000")
+	rc.state.specHashes["compile"] = primitive.DigestFromHex("1111111111111111000000000000000000000000000000000000000000000000")
 
 	eng.saveTars = map[string][]byte{compileRef: tarBytes}
 

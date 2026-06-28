@@ -1,10 +1,9 @@
-package lane_test
+package primitive_test
 
 import (
 	"strings"
 	"testing"
 
-	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/primitive"
 )
 
@@ -14,7 +13,7 @@ func TestParseDigest_Valid(t *testing.T) {
 		in   string
 	}{
 		{
-			name: "empty returns zero digest",
+			name: "empty returns empty digest",
 			in:   "",
 		},
 		{
@@ -32,16 +31,9 @@ func TestParseDigest_Valid(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			wire := primitive.Digest(tt.in)
-			d, err := lane.ParseDigest(wire)
+			d, err := primitive.ParseDigest(primitive.Digest(tt.in))
 			if err != nil {
 				t.Fatalf("ParseDigest(%q) returned error: %v", tt.in, err)
-			}
-			if tt.in == "" {
-				if !d.IsZero() {
-					t.Errorf("empty input should yield zero digest, got %+v", d)
-				}
-				return
 			}
 			if d.String() != tt.in {
 				t.Errorf("round-trip: got %q, want %q", d.String(), tt.in)
@@ -57,24 +49,19 @@ func TestParseDigest_Invalid(t *testing.T) {
 		wantErrPart string
 	}{
 		{
-			name:        "no colon",
+			name:        "no prefix",
 			in:          "sha256",
-			wantErrPart: "expected algorithm:hex",
-		},
-		{
-			name:        "colon at start",
-			in:          ":abcdef",
-			wantErrPart: "expected algorithm:hex",
+			wantErrPart: "must start with",
 		},
 		{
 			name:        "wrong algorithm md5",
 			in:          "md5:" + strings.Repeat("0", 32),
-			wantErrPart: "algorithm must be",
+			wantErrPart: "must start with",
 		},
 		{
 			name:        "wrong algorithm sha512",
 			in:          "sha512:" + strings.Repeat("0", 64),
-			wantErrPart: "algorithm must be",
+			wantErrPart: "must start with",
 		},
 		{
 			name:        "empty hex",
@@ -104,8 +91,7 @@ func TestParseDigest_Invalid(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			wire := primitive.Digest(tt.in)
-			_, err := lane.ParseDigest(wire)
+			_, err := primitive.ParseDigest(primitive.Digest(tt.in))
 			if err == nil {
 				t.Fatalf("ParseDigest(%q) succeeded, want error containing %q",
 					tt.in, tt.wantErrPart)
@@ -117,11 +103,42 @@ func TestParseDigest_Invalid(t *testing.T) {
 	}
 }
 
-func TestMustParseDigest_PanicsOnInvalid(t *testing.T) {
-	defer func() {
-		if r := recover(); r == nil {
-			t.Fatal("expected panic")
-		}
-	}()
-	_ = lane.MustParseDigest("sha256:abc")
+func TestDigestHex(t *testing.T) {
+	const hex = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+	if got := primitive.Digest("sha256:" + hex).Hex(); got != primitive.Sha256(hex) {
+		t.Errorf("Hex() = %q, want %q", got, hex)
+	}
+	if got := primitive.Digest("").Hex(); got != "" {
+		t.Errorf("Hex() of empty digest = %q, want empty", got)
+	}
+}
+
+// TestDigestFromHex is symmetric to TestDigestHex: DigestFromHex prepends the
+// fixed "sha256:" prefix and performs no validation (an empty body yields the
+// bare prefix, not the empty digest).
+func TestDigestFromHex(t *testing.T) {
+	const hex = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+	if got := primitive.DigestFromHex(hex); got != primitive.Digest("sha256:"+hex) {
+		t.Errorf("DigestFromHex(%q) = %q, want sha256:%s", hex, got, hex)
+	}
+	if got := primitive.DigestFromHex(""); got != "sha256:" {
+		t.Errorf("DigestFromHex(\"\") = %q, want \"sha256:\"", got)
+	}
+}
+
+// TestDigestHexFromHexRoundTrip pins DigestFromHex and Hex as inverses on a
+// canonical digest: Hex strips exactly the prefix DigestFromHex adds.
+func TestDigestHexFromHexRoundTrip(t *testing.T) {
+	const hex = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+
+	// Hex(DigestFromHex(x)) == x.
+	if got := primitive.DigestFromHex(hex).Hex(); got != primitive.Sha256(hex) {
+		t.Errorf("Hex(DigestFromHex(%q)) = %q, want %q", hex, got, hex)
+	}
+
+	// DigestFromHex(Hex(d)) == d.
+	d := primitive.Digest("sha256:" + hex)
+	if got := primitive.DigestFromHex(string(d.Hex())); got != d {
+		t.Errorf("DigestFromHex(Hex(%q)) = %q, want %q", d, got, d)
+	}
 }
