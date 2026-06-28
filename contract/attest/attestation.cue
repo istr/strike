@@ -5,8 +5,8 @@
 // trust chain -- it must be formally specified, not just implicitly
 // defined by Go struct tags.
 //
-// Companion file: artifact-record.cue defines #ArtifactRecord and related
-// provenance types (same package attest, merged automatically by CUE).
+// The artifact record (record.#Artifact) and its SBOM record live in the record
+// package; this file references them across packages.
 //
 // Validation flow:
 //   deploy.Execute() -> Attestation struct -> JSON -> CUE validate
@@ -26,6 +26,7 @@ import (
 	"github.com/istr/strike/contract/endpoint"
 	"github.com/istr/strike/contract/lane"
 	"github.com/istr/strike/contract/primitive"
+	"github.com/istr/strike/contract/record"
 	provenancepkg "github.com/istr/strike/contract/provenance"
 	deploytarget "github.com/istr/strike/contract/target"
 )
@@ -79,7 +80,7 @@ import (
 	// artifacts maps artifact names to their signed provenance records.
 	// Each artifact's digest is consumer-dereferenceable from the registry
 	// (C3 sealed boundary).
-	artifacts: [ID=primitive.#Identifier]: #ArtifactRecord
+	artifacts: [ID=primitive.#Identifier]: record.#Artifact
 
 	// resolver records the DoT resolver's observed TLS identity, matched
 	// against the declared anchor at the pre-flight handshake.

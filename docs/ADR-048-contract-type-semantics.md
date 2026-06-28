@@ -240,3 +240,23 @@ into a meta-named grab-bag, because `digest.Digest` reads at the call site where
   coupling, and keeping mortar out of the named type areas, deletes surface rather
   than adding it; the added concept packages buy clarity that a grab-bag would
   cost back at every call site.
+
+## Amendment -- the artifact cluster as concept-tier siblings
+
+The artifact-centric contract vocabulary is consolidated into four concept-tier
+sibling packages, each depending only on primitive: `output` (the resolved
+runtime output handles), `provenance` (the source-fetch provenance records),
+`target` (the deploy destination), and `record` (the artifact and SBOM
+provenance records). The names are destuttered against their package -- the
+handle union is `output.#Handle`, the deploy destination is `target.#Deploy`,
+the provenance arms are `provenance.#Git`/`#Tarball`/`#OCI`/`#URL`, and the
+records are `record.#Artifact`/`#SBOM` -- so the qualified call site reads
+without repetition.
+
+Two cleanups rode the consolidation. The runtime artifact carrier formerly in
+the lane internal-API file had no consumer and was removed. The artifact and
+SBOM records, previously duplicated as validation-only CUE plus hand-written Go
+structs, are now single-sourced: the CUE in the record package carries `@go`
+redirects and generates the Go types, and the hand-written structs are deleted.
+The wire form is unchanged across all of this, so the exported JSON Schema and
+the golden attestation fixtures are byte-identical.

@@ -6,6 +6,7 @@ import (
 
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/primitive"
+	"github.com/istr/strike/internal/record"
 )
 
 // Output-statement constants (ADR-040 D3). The projected statements are
@@ -99,7 +100,7 @@ func projectStatements(att *Attestation, oidc lane.OIDCConfig, resolvedDeps []Re
 // subject. The list is sorted by name: the sealed statement must be
 // reproducible (byte-identical inputs -> byte-identical output), and Go map
 // iteration order is not stable.
-func projectSubject(artifacts map[string]ArtifactRecord) ([]Subject, error) {
+func projectSubject(artifacts map[string]record.Artifact) ([]Subject, error) {
 	subjects := make([]Subject, 0, len(artifacts))
 	for name, art := range artifacts {
 		d, err := primitive.ParseDigest(art.Digest)

@@ -42,6 +42,7 @@ import (
 	"github.com/istr/strike/internal/output"
 	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/provenance"
+	"github.com/istr/strike/internal/record"
 	"github.com/istr/strike/internal/target"
 	"github.com/istr/strike/internal/testutil"
 	"github.com/istr/strike/internal/transport"
@@ -168,7 +169,7 @@ func TestAttestationJSON(t *testing.T) {
 		Sealed: deploy.Sealed{
 			LaneID:    "test-lane",
 			Target:    target.Deploy{ID: "prod-1", Type: "registry", Description: "test"},
-			Artifacts: map[string]deploy.ArtifactRecord{"image": {Digest: "sha256:abc"}},
+			Artifacts: map[string]record.Artifact{"image": {Digest: "sha256:abc"}},
 		},
 		Informational: &deploy.Informational{
 			PreStateDigest:  primitive.DigestFromHex("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
@@ -1170,7 +1171,7 @@ func TestValidateAttestation_InvalidLaneID(t *testing.T) {
 		Sealed: deploy.Sealed{
 			LaneID:    "INVALID_LANE_ID",
 			Target:    target.Deploy{ID: "prod-1", Type: "registry", Description: "test"},
-			Artifacts: map[string]deploy.ArtifactRecord{},
+			Artifacts: map[string]record.Artifact{},
 			Peers:     map[string][]lane.Peer{},
 		},
 		Informational: &deploy.Informational{

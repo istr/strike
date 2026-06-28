@@ -13,6 +13,7 @@ import (
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/provenance"
+	"github.com/istr/strike/internal/record"
 	"github.com/istr/strike/internal/target"
 	"github.com/istr/strike/test/crossval"
 )
@@ -22,7 +23,7 @@ func TestValidateAttestation_Valid(t *testing.T) {
 		Sealed: deploy.Sealed{
 			LaneID: "test-lane",
 			Target: target.Deploy{ID: "prod-1", Type: "registry", Description: "production"},
-			Artifacts: map[string]deploy.ArtifactRecord{
+			Artifacts: map[string]record.Artifact{
 				"image": {Digest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
 			},
 			Peers: map[string][]lane.Peer{},
@@ -46,7 +47,7 @@ func TestValidateAttestation_WithEngine(t *testing.T) {
 		Sealed: deploy.Sealed{
 			LaneID: "test-lane",
 			Target: target.Deploy{ID: "staging-1", Type: "kubernetes", Description: "staging"},
-			Artifacts: map[string]deploy.ArtifactRecord{
+			Artifacts: map[string]record.Artifact{
 				"app": {Digest: "sha256:1111111111111111111111111111111111111111111111111111111111111111"},
 			},
 			Engine: endpoint.EngineTLS{
@@ -78,7 +79,7 @@ func TestValidateAttestation_InvalidEngineConnectionType(t *testing.T) {
 		Sealed: deploy.Sealed{
 			LaneID:    "test-lane",
 			Target:    target.Deploy{ID: "test-1", Type: "registry", Description: "test"},
-			Artifacts: map[string]deploy.ArtifactRecord{},
+			Artifacts: map[string]record.Artifact{},
 			Engine: endpoint.EngineTLS{
 				Type: "plaintext", // not in enum
 			},
@@ -128,7 +129,7 @@ func TestValidateAttestation_EmptyDigestsAllowed(t *testing.T) {
 		Sealed: deploy.Sealed{
 			LaneID:    "test-lane",
 			Target:    target.Deploy{ID: "test-1", Type: "registry", Description: "first deploy"},
-			Artifacts: map[string]deploy.ArtifactRecord{},
+			Artifacts: map[string]record.Artifact{},
 			Peers:     map[string][]lane.Peer{},
 		},
 		Informational: &deploy.Informational{
@@ -211,7 +212,7 @@ func TestValidateAttestation_WithResolverRecord(t *testing.T) {
 		Sealed: deploy.Sealed{
 			LaneID:    "test-lane",
 			Target:    target.Deploy{ID: "staging-1", Type: "kubernetes", Description: "staging"},
-			Artifacts: map[string]deploy.ArtifactRecord{},
+			Artifacts: map[string]record.Artifact{},
 			Resolver: deploy.ResolverRecord{
 				Host:                  "1.1.1.1:853",
 				ServerCertFingerprint: "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
@@ -238,7 +239,7 @@ func TestValidateAttestation_WithPeers(t *testing.T) {
 		Sealed: deploy.Sealed{
 			LaneID: "test-lane",
 			Target: target.Deploy{ID: "prod-1", Type: "registry", Description: "production"},
-			Artifacts: map[string]deploy.ArtifactRecord{
+			Artifacts: map[string]record.Artifact{
 				"image": {Digest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
 			},
 			Peers: map[string][]lane.Peer{
@@ -284,7 +285,7 @@ func TestValidateAttestation_InvalidPeer(t *testing.T) {
 		Sealed: deploy.Sealed{
 			LaneID: "test-lane",
 			Target: target.Deploy{ID: "prod-1", Type: "registry", Description: "production"},
-			Artifacts: map[string]deploy.ArtifactRecord{
+			Artifacts: map[string]record.Artifact{
 				"image": {Digest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
 			},
 			Peers: map[string][]lane.Peer{

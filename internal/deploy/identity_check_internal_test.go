@@ -8,6 +8,7 @@ import (
 
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/primitive"
+	"github.com/istr/strike/internal/record"
 	"github.com/istr/strike/internal/target"
 )
 
@@ -38,7 +39,7 @@ func TestSignStatementsRejectsMismatchedTokenIdentity(t *testing.T) {
 			LaneID:     "demo",
 			LaneDigest: "",
 			Target:     target.Deploy{ID: "prod-1", Type: "registry", Description: "production"},
-			Artifacts: map[string]ArtifactRecord{
+			Artifacts: map[string]record.Artifact{
 				"b-image": {Digest: primitive.DigestFromHex(strings.Repeat("b", 64))},
 			},
 			Peers: map[string][]lane.Peer{},

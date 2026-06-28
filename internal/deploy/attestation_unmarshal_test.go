@@ -8,6 +8,7 @@ import (
 	"github.com/istr/strike/internal/deploy"
 	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/record"
 	"github.com/istr/strike/internal/target"
 )
 
@@ -20,7 +21,7 @@ func TestSealed_UnmarshalEngine(t *testing.T) {
 		LaneID:     "demo",
 		LaneDigest: "",
 		Target:     target.Deploy{ID: "prod-1", Type: "registry", Description: "production"},
-		Artifacts:  map[string]deploy.ArtifactRecord{},
+		Artifacts:  map[string]record.Artifact{},
 		Peers:      map[string][]lane.Peer{},
 		Engine: endpoint.EngineMTLS{
 			Type:                  "mtls",

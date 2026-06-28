@@ -32,6 +32,7 @@ import (
 	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/probe"
 	"github.com/istr/strike/internal/provenance"
+	"github.com/istr/strike/internal/record"
 	"github.com/istr/strike/internal/registry"
 	"github.com/istr/strike/internal/target"
 	"github.com/istr/strike/internal/transport"
@@ -52,14 +53,14 @@ type Attestation struct {
 
 // Sealed -- CP-bound claims, sound to any verifier without engine trust.
 type Sealed struct {
-	Artifacts     map[string]ArtifactRecord `json:"artifacts"`
-	Peers         map[string][]lane.Peer    `json:"peers"`
-	Resolver      ResolverRecord            `json:"resolver"`
-	Engine        endpoint.Engine           `json:"engine,omitempty"`
-	ObservedPeers map[string]ObservedPeer   `json:"observedPeers,omitempty"`
-	Target        target.Deploy             `json:"target"`
-	LaneID        string                    `json:"laneId"`
-	LaneDigest    primitive.Digest          `json:"laneDigest"`
+	Artifacts     map[string]record.Artifact `json:"artifacts"`
+	Peers         map[string][]lane.Peer     `json:"peers"`
+	Resolver      ResolverRecord             `json:"resolver"`
+	Engine        endpoint.Engine            `json:"engine,omitempty"`
+	ObservedPeers map[string]ObservedPeer    `json:"observedPeers,omitempty"`
+	Target        target.Deploy              `json:"target"`
+	LaneID        string                     `json:"laneId"`
+	LaneDigest    primitive.Digest           `json:"laneDigest"`
 }
 
 // ---------------------------------------------------------------------------
@@ -182,18 +183,6 @@ type Informational struct {
 	PreStateDigest  primitive.Digest    `json:"preStateDigest"`
 	PostStateDigest primitive.Digest    `json:"postStateDigest"`
 	Provenance      []provenance.Record `json:"provenance"`
-}
-
-// ArtifactRecord is the provenance record for one artifact.
-type ArtifactRecord struct {
-	SBOM   *SBOMRecord      `json:"sbom,omitempty"`
-	Digest primitive.Digest `json:"digest"`
-}
-
-// SBOMRecord holds SBOM metadata for an artifact.
-type SBOMRecord struct {
-	Format string           `json:"format"`
-	Digest primitive.Digest `json:"digest"`
 }
 
 // EngineMetadata -- engine self-reports about itself. Lives under
@@ -497,7 +486,7 @@ func appendUniqueString(s []string, v string) []string {
 // including observed-peer collection and peer-attribution wiring.
 func (d *Deployer) buildAttestation(
 	step *lane.Step, spec lane.DeploySpec,
-	artifactDigests map[string]ArtifactRecord,
+	artifactDigests map[string]record.Artifact,
 	provenance []provenance.Record,
 	started clock.Time, preDigest, postDigest primitive.Digest,
 ) (*Attestation, error) {
@@ -682,8 +671,8 @@ func (d *Deployer) signStatements(ctx context.Context, att *Attestation, stepID 
 
 // resolveArtifactDigests resolves all artifact references to their provenance records.
 // refs maps artifact name -> "step.output" state ref (pre-resolved by the caller from DAG edges).
-func resolveArtifactDigests(stepID string, refs map[string]string, state *lane.State) (map[string]ArtifactRecord, error) {
-	artifacts := make(map[string]ArtifactRecord)
+func resolveArtifactDigests(stepID string, refs map[string]string, state *lane.State) (map[string]record.Artifact, error) {
+	artifacts := make(map[string]record.Artifact)
 	for artName, ref := range refs {
 		handle, resolveErr := state.Resolve(ref)
 		if resolveErr != nil {
@@ -693,7 +682,7 @@ func resolveArtifactDigests(stepID string, refs map[string]string, state *lane.S
 		if digestErr != nil {
 			return nil, fmt.Errorf("step %q: artifact %q: %w", stepID, artName, digestErr)
 		}
-		artifacts[artName] = ArtifactRecord{
+		artifacts[artName] = record.Artifact{
 			Digest: digest,
 		}
 	}

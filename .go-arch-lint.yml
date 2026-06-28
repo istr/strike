@@ -53,6 +53,7 @@ components:
       - internal/output
       - internal/provenance
       - internal/target
+      - internal/record
   services:
     in:
       - internal/container

@@ -19,6 +19,7 @@ import (
 	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/primitive"
+	"github.com/istr/strike/internal/record"
 	"github.com/istr/strike/internal/target"
 )
 
@@ -119,7 +120,7 @@ func syntheticGoldenAttestation(laneDigest primitive.Digest) *Attestation {
 	const artifactDigest = "1111111111111111111111111111111111111111111111111111111111111111"
 	return &Attestation{
 		Sealed: Sealed{
-			Artifacts: map[string]ArtifactRecord{
+			Artifacts: map[string]record.Artifact{
 				"app": {Digest: "sha256:" + artifactDigest},
 			},
 			Target: target.Deploy{

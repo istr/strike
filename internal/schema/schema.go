@@ -43,7 +43,7 @@ var (
 	trustLayersRoot = mustBuild("trustlayers")
 
 	// Deploy is the attest package instance: #Attestation, #Bundle, the
-	// published predicates and statements, and #ArtifactRecord.
+	// published predicates and statements, and record.#Artifact.
 	Deploy = deployRoot
 	// TrustLayers is the trustlayers package instance (the V/E/informational map).
 	TrustLayers = trustLayersRoot
