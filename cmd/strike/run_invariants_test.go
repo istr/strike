@@ -19,17 +19,17 @@ func TestBuild_RejectsNestedInputMounts(t *testing.T) {
 		Registry: "localhost:5555/test",
 		Steps: []lane.Step{
 			{
-				ID: "src", Image: lane.Ptr(primitive.ImageRef("img@sha256:" + strings.Repeat("a", 64))),
+				ID: "src", Image: primitive.ImageRefPtr("img@sha256:" + strings.Repeat("a", 64)),
 				Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.FileOutput{{ID: "tree", Type: "directory", Path: lane.Ptr(primitive.RelPath("tree"))}},
+				Outputs: []lane.FileOutput{{ID: "tree", Type: "directory", Path: primitive.RelPathPtr("tree")}},
 			},
 			{
-				ID: "deps", Image: lane.Ptr(primitive.ImageRef("img@sha256:" + strings.Repeat("b", 64))),
+				ID: "deps", Image: primitive.ImageRefPtr("img@sha256:" + strings.Repeat("b", 64)),
 				Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.FileOutput{{ID: "modules", Type: "directory", Path: lane.Ptr(primitive.RelPath("modules"))}},
+				Outputs: []lane.FileOutput{{ID: "modules", Type: "directory", Path: primitive.RelPathPtr("modules")}},
 			},
 			{
-				ID: "build", Image: lane.Ptr(primitive.ImageRef("img@sha256:" + strings.Repeat("c", 64))),
+				ID: "build", Image: primitive.ImageRefPtr("img@sha256:" + strings.Repeat("c", 64)),
 				Args: []string{}, Env: map[string]string{},
 				Inputs: []lane.InputRef{
 					{From: lane.OutputRef{Step: "src", Output: "tree"}, Mount: "/work"},
@@ -51,9 +51,9 @@ func TestBuild_RejectsProvenancePathOutsideOutputs(t *testing.T) {
 	p := &lane.Lane{
 		Steps: []lane.Step{
 			{
-				ID: "src", Image: lane.Ptr(primitive.ImageRef("img@sha256:" + strings.Repeat("a", 64))),
+				ID: "src", Image: primitive.ImageRefPtr("img@sha256:" + strings.Repeat("a", 64)),
 				Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.FileOutput{{ID: "tree", Type: "directory", Path: lane.Ptr(primitive.RelPath("tree"))}},
+				Outputs: []lane.FileOutput{{ID: "tree", Type: "directory", Path: primitive.RelPathPtr("tree")}},
 				Provenance: &lane.ProvenanceSpec{
 					Type: "git",
 					Path: "../escape.json",

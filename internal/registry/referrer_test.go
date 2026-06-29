@@ -246,7 +246,7 @@ func TestFetchTrustRootRoundTrip(t *testing.T) {
 		t.Fatalf("digest: %v", err)
 	}
 
-	got, err := registry.FetchTrustRoot(context.Background(), primitive.ImageRef(host+"/trust@"+digest.String()))
+	got, err := registry.FetchTrustRoot(context.Background(), primitive.NewImageRef(host+"/trust@"+digest.String()))
 	if err != nil {
 		t.Fatalf("FetchTrustRoot: %v", err)
 	}
@@ -260,7 +260,7 @@ func TestFetchTrustRootRoundTrip(t *testing.T) {
 
 func TestFetchTrustRootRejectsTag(t *testing.T) {
 	host := localRegistry(t, true)
-	if _, err := registry.FetchTrustRoot(context.Background(), primitive.ImageRef(host+"/trust:v1")); err == nil {
+	if _, err := registry.FetchTrustRoot(context.Background(), primitive.NewImageRef(host+"/trust:v1")); err == nil {
 		t.Fatal("FetchTrustRoot accepted a tag reference, want error")
 	}
 }
@@ -335,7 +335,7 @@ func TestFetchBaseSBOMReferrers(t *testing.T) {
 	// A non-SBOM attestation under the same artifactType filter: must be skipped.
 	pushBaseSBOMReferrer(t, repo, subject, "https://slsa.dev/provenance/v1", []byte("slsa-bundle"))
 
-	got, err := registry.FetchBaseSBOMReferrers(context.Background(), primitive.ImageRef(host+"/base@"+subject.Digest.String()))
+	got, err := registry.FetchBaseSBOMReferrers(context.Background(), primitive.NewImageRef(host+"/base@"+subject.Digest.String()))
 	if err != nil {
 		t.Fatalf("FetchBaseSBOMReferrers: %v", err)
 	}
@@ -372,7 +372,7 @@ func TestFetchBaseSBOMReferrersSkipsStrikeOwnBundle(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("attach: %v", err)
 	}
-	got, err := registry.FetchBaseSBOMReferrers(context.Background(), primitive.ImageRef(host+"/base@"+subject.Digest.String()))
+	got, err := registry.FetchBaseSBOMReferrers(context.Background(), primitive.NewImageRef(host+"/base@"+subject.Digest.String()))
 	if err != nil {
 		t.Fatalf("FetchBaseSBOMReferrers: %v", err)
 	}
@@ -383,7 +383,7 @@ func TestFetchBaseSBOMReferrersSkipsStrikeOwnBundle(t *testing.T) {
 
 func TestFetchBaseSBOMReferrersRejectsTag(t *testing.T) {
 	host := localRegistry(t, true)
-	if _, err := registry.FetchBaseSBOMReferrers(context.Background(), primitive.ImageRef(host+"/base:v1")); err == nil {
+	if _, err := registry.FetchBaseSBOMReferrers(context.Background(), primitive.NewImageRef(host+"/base:v1")); err == nil {
 		t.Fatal("accepted a tag reference, want error")
 	}
 }
@@ -392,7 +392,7 @@ func TestFetchBaseSBOMReferrersNoReferrers(t *testing.T) {
 	host := localRegistry(t, true)
 	target := host + "/base:v1"
 	subject := pushSubject(t, target)
-	got, err := registry.FetchBaseSBOMReferrers(context.Background(), primitive.ImageRef(host+"/base@"+subject.Digest.String()))
+	got, err := registry.FetchBaseSBOMReferrers(context.Background(), primitive.NewImageRef(host+"/base@"+subject.Digest.String()))
 	if err != nil {
 		t.Fatalf("FetchBaseSBOMReferrers: %v", err)
 	}

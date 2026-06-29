@@ -59,3 +59,8 @@ _sha256Hex: "[a-f0-9]{64}"
 
 // #Port is a TCP/UDP port number, 1-65535.
 #Port: int & >=1 & <=65535
+
+// #UserSpec is the OCI image-config user: a uid, uid:gid, user, or user:group
+// string. Left unconstrained because all of these forms are valid; it is a
+// named type so the field is carried as primitive.UserSpec end to end.
+#UserSpec: string

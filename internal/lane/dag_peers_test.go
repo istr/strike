@@ -27,13 +27,13 @@ func httpsPeer(host string) lane.Peer {
 func minStep(name string, peers []lane.Peer) lane.Step {
 	return lane.Step{
 		ID:      primitive.Identifier(name),
-		Image:   lane.Ptr(primitive.ImageRef("alpine:3.20")),
+		Image:   primitive.ImageRefPtr("alpine:3.20"),
 		Args:    []string{"echo", "ok"},
 		Env:     map[string]string{},
 		Inputs:  []lane.InputRef{},
 		Secrets: []lane.SecretRef{},
 		Outputs: []lane.FileOutput{
-			{ID: "out", Type: "file", Path: lane.Ptr(primitive.RelPath("o"))},
+			{ID: "out", Type: "file", Path: primitive.RelPathPtr("o")},
 		},
 		Peers: peers,
 	}
@@ -241,7 +241,8 @@ func withTwoInputs(s lane.Step, fromA, outA, mountA, fromB, outB, mountB string)
 func keysOf(m map[primitive.Identifier][]lane.Peer) []string {
 	keys := make([]string, 0, len(m))
 	for k := range m {
-		keys = append(keys, string(k))
+		ks := string(k)
+		keys = append(keys, ks)
 	}
 	sort.Strings(keys)
 	return keys

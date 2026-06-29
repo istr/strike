@@ -107,6 +107,33 @@ base" with no exception.
 
 ---
 
+## Type conversions are owned in the type's own package `type-conversion-ownership`
+
+**Rule.** A CUE-driven named type carries its structure from CUE; Go adds
+behavior, and a type conversion is behavior. A conversion of such a named type
+that appears directly as a call argument -- `f(string(id))`,
+`g(primitive.Host(raw))` -- is a defect: it scatters the type's boundary across
+every caller. Conversions are owned in exactly one place, the type's own defining
+package, through its methods (`(AbsPath).Clean`, `(Digest).Hex`). Everywhere
+else, a value is typed end to end.
+
+**Permitted forms.** The conversion is not a call argument when it is a named
+assignment (`s := string(id); f(s)`), a composite-literal field
+(`T{Name: string(id)}`), a method call on the type (`f(id.String())`), or a bare
+return (`return string(id)`). These own or defer the boundary explicitly and are
+allowed; the call-argument form is not.
+
+**Enforcement.** `tools/linttypeconv` walks the type-checked AST and fails the
+build on any conversion of a strike named type sitting in a call argument, except
+within that type's own package -- or its external test package, the same
+ownership layer for that package's own test code -- or a site named in the
+linter's central allowlist. The allowlist is auditable and editable; each entry
+carries the reason a conversion is deferred, and an empty allowlist means the
+tree is exhaustively type-clean. `make lint-typeconv` runs it; it is part of
+`make check`.
+
+---
+
 ## File I/O is path-confined `path-confined-io`
 
 **Rule.** File I/O on a composed or external path goes through `*os.Root`.

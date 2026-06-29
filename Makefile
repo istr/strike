@@ -47,6 +47,11 @@ lint-from:
 	cd tools/lintfrom && go build -o $(CURDIR)/.build/lintfrom .
 	$(CURDIR)/.build/lintfrom ./...
 
+.PHONY: lint-typeconv
+lint-typeconv:
+	cd tools/linttypeconv && go build -o $(CURDIR)/.build/linttypeconv .
+	$(CURDIR)/.build/linttypeconv ./...
+
 lint-ascii:
 	@! grep -rPn '[^\x00-\x7F]' --include='*.md' --include='*.go' --include='*.cue' \
 		--exclude='*_test.go' . \
@@ -70,7 +75,7 @@ lint-ci:
 lint-cue-fmt:
 	cue fmt --check --files contract
 
-lint: lint-ci lint-from lint-arch lint-ascii lint-adr-index lint-cue-fmt
+lint: lint-ci lint-from lint-typeconv lint-arch lint-ascii lint-adr-index lint-cue-fmt
 
 test:
 	go test -race -coverprofile=coverage.out -covermode=atomic ./...

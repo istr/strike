@@ -842,7 +842,8 @@ func (d *Deployer) executeKubernetesDeploy(ctx context.Context, m lane.DeployKub
 		{Source: kubeconfig, Target: "/root/.kube/config", ReadOnly: true},
 	}
 
-	caps, err := d.startUnitCapsule(ctx, string(d.StepID), peers)
+	sid := string(d.StepID)
+	caps, err := d.startUnitCapsule(ctx, sid, peers)
 	if err != nil {
 		return err
 	}
@@ -881,7 +882,8 @@ func (d *Deployer) executeCustomDeploy(ctx context.Context, m lane.DeployCustom,
 		return fmt.Errorf("custom deploy: image required")
 	}
 
-	caps, err := d.startUnitCapsule(ctx, string(d.StepID), peers)
+	sid := string(d.StepID)
+	caps, err := d.startUnitCapsule(ctx, sid, peers)
 	if err != nil {
 		return err
 	}

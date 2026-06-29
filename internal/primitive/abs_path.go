@@ -10,6 +10,13 @@ import (
 	"strings"
 )
 
+// NewAbsPath returns the AbsPath form of s. It does not validate; callers that
+// need a checked path use Validate. It owns the conversion in this package so
+// callers do not convert at the call site.
+func NewAbsPath(s string) AbsPath {
+	return AbsPath(s)
+}
+
 // Validate checks that the AbsPath is absolute and canonical.
 // Uses path (not filepath) because container paths are always forward-slash.
 func (p AbsPath) Validate() error {

@@ -17,8 +17,8 @@ func TestPackBaseRefs_CollectsSubtreeBases(t *testing.T) {
 	p := &lane.Lane{
 		Steps: []lane.Step{
 			{
-				ID: "compile", Image: lane.Ptr(primitive.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.FileOutput{{ID: "binary", Type: "file", Path: lane.Ptr(primitive.RelPath("binary"))}},
+				ID: "compile", Image: primitive.ImageRefPtr("img"), Args: []string{}, Env: map[string]string{},
+				Outputs: []lane.FileOutput{{ID: "binary", Type: "file", Path: primitive.RelPathPtr("binary")}},
 			},
 			{
 				ID: "pack", Args: []string{}, Env: map[string]string{},
@@ -55,8 +55,8 @@ func TestValidateBaseSBOMTrustAnchor_RequiresTrustRoot(t *testing.T) {
 			BaseSBOMSigners: []lane.SBOMSigner{{Issuer: "https://issuer.example", Identity: "signer@example"}},
 			Steps: []lane.Step{
 				{
-					ID: "run", Image: lane.Ptr(primitive.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-					Outputs: []lane.FileOutput{{ID: "out", Type: "file", Path: lane.Ptr(primitive.RelPath("out"))}},
+					ID: "run", Image: primitive.ImageRefPtr("img"), Args: []string{}, Env: map[string]string{},
+					Outputs: []lane.FileOutput{{ID: "out", Type: "file", Path: primitive.RelPathPtr("out")}},
 				},
 			},
 		}
@@ -80,8 +80,8 @@ func TestValidateBaseSBOMTrustAnchor_NoSignersNoConstraint(t *testing.T) {
 	p := &lane.Lane{
 		Steps: []lane.Step{
 			{
-				ID: "run", Image: lane.Ptr(primitive.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.FileOutput{{ID: "out", Type: "file", Path: lane.Ptr(primitive.RelPath("out"))}},
+				ID: "run", Image: primitive.ImageRefPtr("img"), Args: []string{}, Env: map[string]string{},
+				Outputs: []lane.FileOutput{{ID: "out", Type: "file", Path: primitive.RelPathPtr("out")}},
 			},
 		},
 	}

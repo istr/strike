@@ -75,7 +75,8 @@ func (r Run) Execute(ctx context.Context) (string, error) {
 	// are digest-pinned at the schema boundary (ADR-011); image_from bases
 	// arrive as a content-addressed local reference. Reject anything else
 	// structurally, so an execute-by-tag path cannot reappear.
-	if !strings.Contains(string(opts.Image), "@sha256:") {
+	img := string(opts.Image)
+	if !strings.Contains(img, "@sha256:") {
 		return "", fmt.Errorf("executor: refusing to run non-digest-pinned image %q (ADR-045)", opts.Image)
 	}
 	opts.Cmd = r.Step.Args

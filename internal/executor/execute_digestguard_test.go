@@ -27,7 +27,7 @@ func TestExecute_DigestGuard(t *testing.T) {
 	}{
 		{
 			name:    "mutable tag rejected",
-			image:   lane.Ptr(primitive.ImageRef("alpine:latest")),
+			image:   primitive.ImageRefPtr("alpine:latest"),
 			wantErr: "ADR-045",
 		},
 		{
@@ -36,13 +36,13 @@ func TestExecute_DigestGuard(t *testing.T) {
 		},
 		{
 			name:     "image_from tag override rejected",
-			image:    lane.Ptr(primitive.ImageRef(digest)),
+			image:    primitive.ImageRefPtr(digest),
 			imageRef: "localhost/strike/lane/step:spechash",
 			wantErr:  "ADR-045",
 		},
 		{
 			name:        "digest reference passes guard",
-			image:       lane.Ptr(primitive.ImageRef(digest)),
+			image:       primitive.ImageRefPtr(digest),
 			wantErr:     "capsule",
 			wantNoGuard: true,
 		},

@@ -101,7 +101,7 @@ func TestExecute_WithSSHPeer(t *testing.T) {
 		Secrets:   nil,
 		Step: &lane.Step{
 			ID:    "test-step",
-			Image: lane.Ptr(primitive.ImageRef("alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000")),
+			Image: primitive.ImageRefPtr("alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000"),
 			Args:  []string{"true"},
 			Peers: []lane.Peer{
 				endpoint.SSH{
@@ -163,7 +163,7 @@ func TestExecute_WithoutSSHPeer(t *testing.T) {
 		Secrets:  nil,
 		Step: &lane.Step{
 			ID:    "test-step",
-			Image: lane.Ptr(primitive.ImageRef("alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000")),
+			Image: primitive.ImageRefPtr("alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000"),
 			Args:  []string{"true"},
 			Peers: []lane.Peer{
 				endpoint.TLS{
@@ -209,9 +209,9 @@ func TestRunExecute_Seeds_PassedThrough(t *testing.T) {
 		Secrets:  nil,
 		Step: &lane.Step{
 			ID:      "consumer",
-			Image:   lane.Ptr(primitive.ImageRef("alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000")),
+			Image:   primitive.ImageRefPtr("alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000"),
 			Args:    []string{"cat", "/work/binary"},
-			Workdir: lane.Ptr(primitive.AbsPath("/work")),
+			Workdir: primitive.AbsPathPtr("/work"),
 		},
 		VolumeName: "test-vol",
 		Seeds: []container.Seed{

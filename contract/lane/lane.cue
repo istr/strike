@@ -279,8 +279,8 @@ import (
 	}
 	entrypoint?: [...string] @go(Entrypoint)
 	cmd?: [...string] @go(Cmd)
-	workdir?: primitive.#AbsPath @go(Workdir,optional=nillable)
-	user?:    string             @go(User,optional=nillable)
+	workdir?: primitive.#AbsPath  @go(Workdir,optional=nillable)
+	user?:    primitive.#UserSpec @go(User,optional=nillable)
 	labels?: {
 		[string]: string @go(Labels)
 	}

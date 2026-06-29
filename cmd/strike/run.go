@@ -76,7 +76,8 @@ type runContext struct {
 
 func (rc *runContext) runStep(stepID primitive.Identifier) error {
 	step := rc.dag.Steps[stepID]
-	safeName := sanitizeForLog(string(stepID))
+	sid := string(stepID)
+	safeName := sanitizeForLog(sid)
 
 	// Timeout resolution: explicit step value > lane-wide default > hard floor.
 	var rawTimeout *primitive.Duration
@@ -245,7 +246,8 @@ func (rc *runContext) computeSpecHash(step *lane.Step, stepID primitive.Identifi
 	}
 
 	key := registry.SpecHash(step, imageDigest, inputHashes, map[string]primitive.Digest{})
-	tag := registry.Tag(rc.lane.Registry, string(stepID), key)
+	sid := string(stepID)
+	tag := registry.Tag(rc.lane.Registry, sid, key)
 	rc.state.specHashes[stepID] = key
 	return key, tag, nil
 }
@@ -898,7 +900,8 @@ func (rc *runContext) planTrustVolumes(ctx context.Context, caPEM []byte) (trust
 		if kh == nil {
 			continue
 		}
-		name := fmt.Sprintf("strike-ssh-%s-%d", sanitizeForLog(string(step.ID)), clock.Wall().UnixNano())
+		sid := string(step.ID)
+		name := fmt.Sprintf("strike-ssh-%s-%d", sanitizeForLog(sid), clock.Wall().UnixNano())
 		sshTar, tarErr := executor.SSHTrustTar(kh, cfg)
 		if tarErr != nil {
 			return trustVolumes{}, fmt.Errorf("ssh volume tar for %s: %w", step.ID, tarErr)
@@ -995,7 +998,8 @@ func (rc *runContext) buildCapsules(ctx context.Context) error {
 func (rc *runContext) stopCapsules() {
 	for name, caps := range rc.capsules {
 		if stopErr := caps.Stop(); stopErr != nil {
-			log.Printf("WARN   %s: capsule stop: %v", sanitizeForLog(string(name)), stopErr)
+			n := string(name)
+			log.Printf("WARN   %s: capsule stop: %v", sanitizeForLog(n), stopErr)
 		}
 	}
 }

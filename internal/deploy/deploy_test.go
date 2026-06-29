@@ -1229,7 +1229,7 @@ func TestDeployerExecute_ObservedPeersPopulated(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				ID:      "build",
-				Image:   lane.Ptr(primitive.ImageRef("alpine:3.20")),
+				Image:   primitive.ImageRefPtr("alpine:3.20"),
 				Args:    []string{"echo", "ok"},
 				Env:     map[string]string{},
 				Inputs:  []lane.InputRef{},
@@ -1384,19 +1384,19 @@ func TestDeployerExecute_ObservedPeersConflictAborts(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				ID:      "step-a",
-				Image:   lane.Ptr(primitive.ImageRef("alpine:3.20")),
+				Image:   primitive.ImageRefPtr("alpine:3.20"),
 				Args:    []string{"echo", "ok"},
 				Env:     map[string]string{},
 				Inputs:  []lane.InputRef{},
 				Secrets: []lane.SecretRef{},
 				Outputs: []lane.FileOutput{
-					{ID: "out", Type: "file", Path: lane.Ptr(primitive.RelPath("a"))},
+					{ID: "out", Type: "file", Path: primitive.RelPathPtr("a")},
 				},
 				Peers: []lane.Peer{peerA},
 			},
 			{
 				ID:      "step-b",
-				Image:   lane.Ptr(primitive.ImageRef("alpine:3.20")),
+				Image:   primitive.ImageRefPtr("alpine:3.20"),
 				Args:    []string{"echo", "ok"},
 				Env:     map[string]string{},
 				Inputs:  []lane.InputRef{},

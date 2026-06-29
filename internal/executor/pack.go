@@ -297,7 +297,7 @@ func applyConfig(img v1.Image, spec *lane.PackSpec) (v1.Image, error) {
 		cfg.Config.WorkingDir = spec.Config.Workdir.String()
 	}
 	if spec.Config.User != nil {
-		cfg.Config.User = *spec.Config.User
+		cfg.Config.User = string(*spec.Config.User)
 	}
 	if spec.Config.Labels != nil {
 		if cfg.Config.Labels == nil {

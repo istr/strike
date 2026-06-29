@@ -14,15 +14,15 @@ func twoInputLane(mountA, mountB primitive.AbsPath) *lane.Lane {
 	return &lane.Lane{
 		Steps: []lane.Step{
 			{
-				ID: "a", Image: lane.Ptr(primitive.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.FileOutput{{ID: "o", Type: "file", Path: lane.Ptr(primitive.RelPath("o"))}},
+				ID: "a", Image: primitive.ImageRefPtr("img"), Args: []string{}, Env: map[string]string{},
+				Outputs: []lane.FileOutput{{ID: "o", Type: "file", Path: primitive.RelPathPtr("o")}},
 			},
 			{
-				ID: "b", Image: lane.Ptr(primitive.ImageRef("img")), Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.FileOutput{{ID: "o", Type: "file", Path: lane.Ptr(primitive.RelPath("o"))}},
+				ID: "b", Image: primitive.ImageRefPtr("img"), Args: []string{}, Env: map[string]string{},
+				Outputs: []lane.FileOutput{{ID: "o", Type: "file", Path: primitive.RelPathPtr("o")}},
 			},
 			{
-				ID: "c", Image: lane.Ptr(primitive.ImageRef("img")), Args: []string{}, Env: map[string]string{},
+				ID: "c", Image: primitive.ImageRefPtr("img"), Args: []string{}, Env: map[string]string{},
 				Inputs: []lane.InputRef{
 					{From: lane.OutputRef{Step: "a", Output: "o"}, Mount: mountA},
 					{From: lane.OutputRef{Step: "b", Output: "o"}, Mount: mountB},
@@ -36,19 +36,19 @@ func TestBuild_NestedInputMountsRejected(t *testing.T) {
 	p := &lane.Lane{
 		Steps: []lane.Step{
 			{
-				ID: "src", Image: lane.Ptr(primitive.ImageRef("img")), Args: []string{}, Env: map[string]string{},
+				ID: "src", Image: primitive.ImageRefPtr("img"), Args: []string{}, Env: map[string]string{},
 				Outputs: []lane.FileOutput{
-					{ID: "tree", Type: "directory", Path: lane.Ptr(primitive.RelPath("tree"))},
+					{ID: "tree", Type: "directory", Path: primitive.RelPathPtr("tree")},
 				},
 			},
 			{
-				ID: "deps", Image: lane.Ptr(primitive.ImageRef("img")), Args: []string{}, Env: map[string]string{},
+				ID: "deps", Image: primitive.ImageRefPtr("img"), Args: []string{}, Env: map[string]string{},
 				Outputs: []lane.FileOutput{
-					{ID: "node_modules", Type: "directory", Path: lane.Ptr(primitive.RelPath("node_modules"))},
+					{ID: "node_modules", Type: "directory", Path: primitive.RelPathPtr("node_modules")},
 				},
 			},
 			{
-				ID: "build", Image: lane.Ptr(primitive.ImageRef("img")), Args: []string{}, Env: map[string]string{},
+				ID: "build", Image: primitive.ImageRefPtr("img"), Args: []string{}, Env: map[string]string{},
 				Inputs: []lane.InputRef{
 					{From: lane.OutputRef{Step: "src", Output: "tree"}, Mount: "/work"},
 					{From: lane.OutputRef{Step: "deps", Output: "node_modules"}, Mount: "/work/node_modules"},
@@ -89,10 +89,10 @@ func TestBuild_DuplicateOutputIDRejected(t *testing.T) {
 	p := &lane.Lane{
 		Steps: []lane.Step{
 			{
-				ID: "build", Image: lane.Ptr(primitive.ImageRef("img")), Args: []string{}, Env: map[string]string{},
+				ID: "build", Image: primitive.ImageRefPtr("img"), Args: []string{}, Env: map[string]string{},
 				Outputs: []lane.FileOutput{
-					{ID: "bin", Type: "file", Path: lane.Ptr(primitive.RelPath("one"))},
-					{ID: "bin", Type: "file", Path: lane.Ptr(primitive.RelPath("two"))},
+					{ID: "bin", Type: "file", Path: primitive.RelPathPtr("one")},
+					{ID: "bin", Type: "file", Path: primitive.RelPathPtr("two")},
 				},
 			},
 		},
@@ -111,10 +111,10 @@ func TestBuild_DistinctOutputIDsSharedBasenameAccepted(t *testing.T) {
 	p := &lane.Lane{
 		Steps: []lane.Step{
 			{
-				ID: "build", Image: lane.Ptr(primitive.ImageRef("img")), Args: []string{}, Env: map[string]string{},
+				ID: "build", Image: primitive.ImageRefPtr("img"), Args: []string{}, Env: map[string]string{},
 				Outputs: []lane.FileOutput{
-					{ID: "first", Type: "file", Path: lane.Ptr(primitive.RelPath("bin"))},
-					{ID: "second", Type: "file", Path: lane.Ptr(primitive.RelPath("bin"))},
+					{ID: "first", Type: "file", Path: primitive.RelPathPtr("bin")},
+					{ID: "second", Type: "file", Path: primitive.RelPathPtr("bin")},
 				},
 			},
 		},
