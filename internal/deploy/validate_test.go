@@ -26,7 +26,7 @@ func TestValidateAttestation_Valid(t *testing.T) {
 			Artifacts: map[string]record.Artifact{
 				"image": {Digest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
 			},
-			Peers: map[string][]lane.Peer{},
+			Peers: map[primitive.Identifier][]lane.Peer{},
 		},
 		Informational: &deploy.Informational{
 			Timestamp:       clock.Reproducible(),
@@ -55,7 +55,7 @@ func TestValidateAttestation_WithEngine(t *testing.T) {
 				CATrustType:           "pinned",
 				ServerCertFingerprint: "sha256:cccccccccccccccccccccc",
 			},
-			Peers: map[string][]lane.Peer{},
+			Peers: map[primitive.Identifier][]lane.Peer{},
 		},
 		Informational: &deploy.Informational{
 			Timestamp:       clock.Reproducible(),
@@ -83,7 +83,7 @@ func TestValidateAttestation_InvalidEngineConnectionType(t *testing.T) {
 			Engine: endpoint.EngineTLS{
 				Type: "plaintext", // not in enum
 			},
-			Peers: map[string][]lane.Peer{},
+			Peers: map[primitive.Identifier][]lane.Peer{},
 		},
 		Informational: &deploy.Informational{
 			Timestamp:       clock.Reproducible(),
@@ -130,7 +130,7 @@ func TestValidateAttestation_EmptyDigestsAllowed(t *testing.T) {
 			LaneID:    "test-lane",
 			Target:    target.Deploy{ID: "test-1", Type: "registry", Description: "first deploy"},
 			Artifacts: map[string]record.Artifact{},
-			Peers:     map[string][]lane.Peer{},
+			Peers:     map[primitive.Identifier][]lane.Peer{},
 		},
 		Informational: &deploy.Informational{
 			Timestamp:       clock.Reproducible(),
@@ -219,7 +219,7 @@ func TestValidateAttestation_WithResolverRecord(t *testing.T) {
 				TLSVersion:            "TLS 1.3",
 				CipherSuite:           "TLS_AES_128_GCM_SHA256",
 			},
-			Peers: map[string][]lane.Peer{},
+			Peers: map[primitive.Identifier][]lane.Peer{},
 		},
 		Informational: &deploy.Informational{
 			Timestamp:       clock.Reproducible(),
@@ -242,7 +242,7 @@ func TestValidateAttestation_WithPeers(t *testing.T) {
 			Artifacts: map[string]record.Artifact{
 				"image": {Digest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
 			},
-			Peers: map[string][]lane.Peer{
+			Peers: map[primitive.Identifier][]lane.Peer{
 				"build": {
 					endpoint.TLS{
 						Type:    "https",
@@ -288,7 +288,7 @@ func TestValidateAttestation_InvalidPeer(t *testing.T) {
 			Artifacts: map[string]record.Artifact{
 				"image": {Digest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
 			},
-			Peers: map[string][]lane.Peer{
+			Peers: map[primitive.Identifier][]lane.Peer{
 				"build": {
 					endpoint.TLS{
 						Type:    "https",

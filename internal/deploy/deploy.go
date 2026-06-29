@@ -53,14 +53,14 @@ type Attestation struct {
 
 // Sealed -- CP-bound claims, sound to any verifier without engine trust.
 type Sealed struct {
-	Artifacts     map[string]record.Artifact `json:"artifacts"`
-	Peers         map[string][]lane.Peer     `json:"peers"`
-	Resolver      ResolverRecord             `json:"resolver"`
-	Engine        endpoint.Engine            `json:"engine,omitempty"`
-	ObservedPeers map[string]ObservedPeer    `json:"observedPeers,omitempty"`
-	Target        target.Deploy              `json:"target"`
-	LaneID        string                     `json:"laneId"`
-	LaneDigest    primitive.Digest           `json:"laneDigest"`
+	Artifacts     map[string]record.Artifact           `json:"artifacts"`
+	Peers         map[primitive.Identifier][]lane.Peer `json:"peers"`
+	Resolver      ResolverRecord                       `json:"resolver"`
+	Engine        endpoint.Engine                      `json:"engine,omitempty"`
+	ObservedPeers map[string]ObservedPeer              `json:"observedPeers,omitempty"`
+	Target        target.Deploy                        `json:"target"`
+	LaneID        string                               `json:"laneId"`
+	LaneDigest    primitive.Digest                     `json:"laneDigest"`
 }
 
 // ---------------------------------------------------------------------------
@@ -170,7 +170,7 @@ func (p *ObservedPeer) UnmarshalJSON(data []byte) error {
 type EngineDependent struct {
 	// PeerAttribution maps each step to the peer endpoints its mediated
 	// connections reached ("host:port" keys into Sealed.ObservedPeers).
-	PeerAttribution map[string][]string `json:"peerAttribution,omitempty"`
+	PeerAttribution map[primitive.Identifier][]string `json:"peerAttribution,omitempty"`
 }
 
 // Informational -- recorded for audit and IoC; no trust claim.
@@ -301,8 +301,8 @@ func (d *Deployer) applyCapsule(opts *container.RunOpts, caps *capsule.NetworkCa
 
 // captureKey is the stepPorts key for a state-capture container; it
 // must match cmd/strike/run.go captureKey.
-func captureKey(stepID, captureID string) string {
-	return "capture:" + stepID + ":" + captureID
+func captureKey(stepID, captureID primitive.Identifier) string {
+	return "capture:" + string(stepID) + ":" + string(captureID)
 }
 
 // Deployer executes deploy steps and produces attestations.
@@ -318,13 +318,13 @@ type Deployer struct {
 	ArtifactRefs    map[string]string                                                                           // pre-resolved: artifact name -> "step.output" state ref
 	produceBundles  func(ctx context.Context, eps lane.KeylessEndpoints, statements [][]byte) ([][]byte, error) // test seam; nil selects the real keyless chain
 	Keyless         lane.Keyless                                                                                // lane-declared keyless config (ADR-040 D2, ADR-041); .Endpoints dials Fulcio, Rekor v2, TSA; .TrustRoot/.TrustRootRef carry the verify anchor
-	LaneID          string
-	LaneDigest      primitive.Digest  // prefixed "sha256:<hex>" over the lane file bytes; sealed as lane_digest
-	StepID          string            // deploy step name; method-container port key and capture-key prefix
-	CAVolume        string            // lane-wide CA volume name; mounted r/o at /etc/ssl/certs
-	BaseSBOMSigners []lane.SBOMSigner // ADR-040 2c: declared base-SBOM signers; lane build requires a Keyless trust root when non-empty
-	ownRecords      []capsule.Records // method + capture container records, accumulated during Execute
-	Resolver        ResolverProbe     // declared resolver endpoint + the identity the pre-flight probe observed and verified
+	LaneID          primitive.Identifier
+	LaneDigest      primitive.Digest     // prefixed "sha256:<hex>" over the lane file bytes; sealed as lane_digest
+	StepID          primitive.Identifier // deploy step name; method-container port key and capture-key prefix
+	CAVolume        string               // lane-wide CA volume name; mounted r/o at /etc/ssl/certs
+	BaseSBOMSigners []lane.SBOMSigner    // ADR-040 2c: declared base-SBOM signers; lane build requires a Keyless trust root when non-empty
+	ownRecords      []capsule.Records    // method + capture container records, accumulated during Execute
+	Resolver        ResolverProbe        // declared resolver endpoint + the identity the pre-flight probe observed and verified
 }
 
 // collectObservedPeers builds the Layer-V observed_peers map and the Layer-E
@@ -341,17 +341,18 @@ type Deployer struct {
 // ingested; deploy units are HTTPS-only, so their own records yield ObservedTLS.
 func (d *Deployer) collectObservedPeers(
 	step *lane.Step,
-	declaredPeers map[string][]lane.Peer,
-) (map[string]ObservedPeer, map[string][]string, error) {
+	declaredPeers map[primitive.Identifier][]lane.Peer,
+) (map[string]ObservedPeer, map[primitive.Identifier][]string, error) {
 	observed := map[string]ObservedPeer{}
-	attribution := map[string][]string{}
+	attribution := map[primitive.Identifier][]string{}
 
 	// Predecessors and the deploy step's method container: declared-peer steps
 	// of the sub-tree. Only steps with declared peers can have connections; the
 	// deploy step's own method records live in ownRecords (folded below), so the
 	// step.ID lookup here only matches run/build predecessors.
 	for stepID := range declaredPeers {
-		if recs, ok := d.NetworkRecords[stepID]; ok {
+		key := string(stepID)
+		if recs, ok := d.NetworkRecords[key]; ok {
 			if err := ingestRecords(stepID, recs, observed, attribution); err != nil {
 				return nil, nil, err
 			}
@@ -361,15 +362,15 @@ func (d *Deployer) collectObservedPeers(
 	// Deploy step's own units (method + captures): fold under the deploy step
 	// name (a1). Also fold the capture declared peers into declaredPeers.
 	for _, recs := range d.ownRecords {
-		if err := ingestRecords(string(step.ID), recs, observed, attribution); err != nil {
+		if err := ingestRecords(step.ID, recs, observed, attribution); err != nil {
 			return nil, nil, err
 		}
 	}
 	for _, sc := range step.Deploy.Recording.PreState.Captures {
-		declaredPeers[string(step.ID)] = append(declaredPeers[string(step.ID)], sc.Peers...)
+		declaredPeers[step.ID] = append(declaredPeers[step.ID], sc.Peers...)
 	}
 	for _, sc := range step.Deploy.Recording.PostState.Captures {
-		declaredPeers[string(step.ID)] = append(declaredPeers[string(step.ID)], sc.Peers...)
+		declaredPeers[step.ID] = append(declaredPeers[step.ID], sc.Peers...)
 	}
 
 	return observed, attribution, nil
@@ -378,7 +379,7 @@ func (d *Deployer) collectObservedPeers(
 // ingestRecords adds the allowed TLS and SSH connections from recs into
 // observed and attribution under stepKey. Returns an error on identity
 // conflict.
-func ingestRecords(stepKey string, recs capsule.Records, observed map[string]ObservedPeer, attribution map[string][]string) error {
+func ingestRecords(stepKey primitive.Identifier, recs capsule.Records, observed map[string]ObservedPeer, attribution map[primitive.Identifier][]string) error {
 	for _, c := range recs.Connections {
 		if c.Decision != mediator.DecisionAllowed || c.Upstream == nil {
 			continue
@@ -488,14 +489,14 @@ func (d *Deployer) buildAttestation(
 	started clock.Time, preDigest, postDigest primitive.Digest,
 ) (*Attestation, error) {
 	engineConn, engineMeta := d.engineRecords()
-	declaredPeers := d.DAG.CollectPeers(string(step.ID))
+	declaredPeers := d.DAG.CollectPeers(step.ID)
 	observedPeers, peerAttribution, err := d.collectObservedPeers(step, declaredPeers)
 	if err != nil {
 		return nil, err
 	}
 	return &Attestation{
 		Sealed: Sealed{
-			LaneID:        d.LaneID,
+			LaneID:        string(d.LaneID),
 			LaneDigest:    d.LaneDigest,
 			Target:        spec.Target,
 			Artifacts:     artifactDigests,
@@ -537,13 +538,13 @@ func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.Sta
 	preDigest := StateDigest(preCaptures)
 
 	// 2. Resolve artifact digests.
-	artifactDigests, err := resolveArtifactDigests(string(step.ID), d.ArtifactRefs, state)
+	artifactDigests, err := resolveArtifactDigests(step.ID, d.ArtifactRefs, state)
 	if err != nil {
 		return nil, err
 	}
 
 	// 3. Collect provenance records from transitive predecessors.
-	provenance := state.CollectProvenance(d.DAG, string(step.ID))
+	provenance := state.CollectProvenance(d.DAG, step.ID)
 
 	// 4. Execute deploy action. For registry deploys the returned attach
 	// target carries the pushed manifest descriptor; nil otherwise.
@@ -575,7 +576,7 @@ func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.Sta
 
 	// 8. Project into the three output statements and produce one keyless
 	// sigstore bundle per statement (ADR-040 D2/D3), fail-closed.
-	if err := d.signStatements(ctx, att, string(step.ID)); err != nil {
+	if err := d.signStatements(ctx, att, step.ID); err != nil {
 		return nil, err
 	}
 
@@ -611,7 +612,7 @@ func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.Sta
 // transparency proof, so no Rekor entry is mirrored into the collect-model.
 // For registry deploys, the bundles are then attached as OCI referrers of
 // the pushed manifest digest (Execute step 8b).
-func (d *Deployer) signStatements(ctx context.Context, att *Attestation, stepID string) error {
+func (d *Deployer) signStatements(ctx context.Context, att *Attestation, stepID primitive.Identifier) error {
 	baseSBOMDeps, err := d.verifyBaseSBOMs(ctx, stepID)
 	if err != nil {
 		return err
@@ -668,7 +669,7 @@ func (d *Deployer) signStatements(ctx context.Context, att *Attestation, stepID 
 
 // resolveArtifactDigests resolves all artifact references to their provenance records.
 // refs maps artifact name -> "step.output" state ref (pre-resolved by the caller from DAG edges).
-func resolveArtifactDigests(stepID string, refs map[string]string, state *lane.State) (map[string]record.Artifact, error) {
+func resolveArtifactDigests(stepID primitive.Identifier, refs map[string]string, state *lane.State) (map[string]record.Artifact, error) {
 	artifacts := make(map[string]record.Artifact)
 	for artName, ref := range refs {
 		handle, resolveErr := state.Resolve(ref)
@@ -743,7 +744,7 @@ func (d *Deployer) captureOne(ctx context.Context, sc lane.Capture) (captureSnap
 		})
 	}
 
-	caps, err := d.startUnitCapsule(ctx, captureKey(d.StepID, string(sc.ID)), sc.Peers)
+	caps, err := d.startUnitCapsule(ctx, captureKey(d.StepID, sc.ID), sc.Peers)
 	if err != nil {
 		return captureSnap{}, err
 	}
@@ -841,7 +842,7 @@ func (d *Deployer) executeKubernetesDeploy(ctx context.Context, m lane.DeployKub
 		{Source: kubeconfig, Target: "/root/.kube/config", ReadOnly: true},
 	}
 
-	caps, err := d.startUnitCapsule(ctx, d.StepID, peers)
+	caps, err := d.startUnitCapsule(ctx, string(d.StepID), peers)
 	if err != nil {
 		return err
 	}
@@ -880,7 +881,7 @@ func (d *Deployer) executeCustomDeploy(ctx context.Context, m lane.DeployCustom,
 		return fmt.Errorf("custom deploy: image required")
 	}
 
-	caps, err := d.startUnitCapsule(ctx, d.StepID, peers)
+	caps, err := d.startUnitCapsule(ctx, string(d.StepID), peers)
 	if err != nil {
 		return err
 	}

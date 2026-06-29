@@ -42,7 +42,7 @@ func TestSignStatementsRejectsMismatchedTokenIdentity(t *testing.T) {
 			Artifacts: map[string]record.Artifact{
 				"b-image": {Digest: primitive.DigestFromHex(strings.Repeat("b", 64))},
 			},
-			Peers: map[string][]lane.Peer{},
+			Peers: map[primitive.Identifier][]lane.Peer{},
 		},
 	}
 

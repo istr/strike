@@ -69,13 +69,13 @@ func Tag(registry, stepID string, hash primitive.Digest) string {
 // shared by WrapTag (tag form) and WrapDigest (digest form) so the RepoDigest
 // libpod records at ImageTag time matches the reference a consumer step is
 // executed against.
-func wrapRepo(laneID, stepID string) string {
+func wrapRepo(laneID, stepID primitive.Identifier) string {
 	return fmt.Sprintf("localhost/strike/%s/%s", laneID, stepID)
 }
 
 // WrapTag builds the local engine tag used by wrapOutputs and input extraction.
 // Format: localhost/strike/{laneID}/{stepID}:{specHashHex}.
-func WrapTag(laneID, stepID string, specHash primitive.Digest) string {
+func WrapTag(laneID, stepID primitive.Identifier, specHash primitive.Digest) string {
 	return fmt.Sprintf("%s:%s", wrapRepo(laneID, stepID), specHash.Hex())
 }
 
@@ -83,7 +83,7 @@ func WrapTag(laneID, stepID string, specHash primitive.Digest) string {
 // is executed against (ADR-045): localhost/strike/{laneID}/{stepID}@{D}. libpod
 // records this exact RepoDigest at ImageTag time (see WrapTag), so it resolves
 // the locally-loaded image with no registry pull.
-func WrapDigest(laneID, stepID string, digest primitive.Digest) string {
+func WrapDigest(laneID, stepID primitive.Identifier, digest primitive.Digest) string {
 	return fmt.Sprintf("%s@%s", wrapRepo(laneID, stepID), digest.String())
 }
 

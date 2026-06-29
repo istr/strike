@@ -20,7 +20,7 @@ import (
 // SBOM signers, this is a no-op (the lane build guard guarantees a resolvable
 // trust root whenever signers are present; a declared-but-unresolvable trust root
 // fails closed here).
-func (d *Deployer) verifyBaseSBOMs(ctx context.Context, stepID string) ([]ResourceDescriptor, error) {
+func (d *Deployer) verifyBaseSBOMs(ctx context.Context, stepID primitive.Identifier) ([]ResourceDescriptor, error) {
 	if len(d.BaseSBOMSigners) == 0 {
 		return nil, nil
 	}

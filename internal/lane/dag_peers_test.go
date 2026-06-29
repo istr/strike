@@ -238,10 +238,10 @@ func withTwoInputs(s lane.Step, fromA, outA, mountA, fromB, outB, mountB string)
 	return s
 }
 
-func keysOf(m map[string][]lane.Peer) []string {
+func keysOf(m map[primitive.Identifier][]lane.Peer) []string {
 	keys := make([]string, 0, len(m))
 	for k := range m {
-		keys = append(keys, k)
+		keys = append(keys, string(k))
 	}
 	sort.Strings(keys)
 	return keys

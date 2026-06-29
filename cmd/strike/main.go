@@ -227,7 +227,7 @@ func cmdRun(ctx context.Context, path string, engine container.Engine) {
 		laneState:      lane.NewState(),
 		stepPorts:      stepPorts,
 		networkRecords: map[string]capsule.Records{},
-		capsules:       map[string]*capsule.NetworkCapsule{},
+		capsules:       map[primitive.Identifier]*capsule.NetworkCapsule{},
 		laneRoot:       laneRoot,
 		resolverID:     resolverID,
 		laneDir:        laneDir,
@@ -285,7 +285,7 @@ func probeResolver(ctx context.Context, p *lane.Lane) transport.ConnectionIdenti
 // initLaneCA creates the lane-wide ephemeral CA. The returned cleanup
 // function closes the CA.
 func initLaneCA(p *lane.Lane) (*transport.EphemeralCA, func()) {
-	ca, caErr := transport.New(string(p.ID))
+	ca, caErr := transport.New(p.ID)
 	if caErr != nil {
 		log.Fatalf("error: ephemeral CA: %v", caErr)
 	}
@@ -330,10 +330,10 @@ func allocateMediatedPorts(p *lane.Lane) map[string]capsule.HostPorts {
 		case s.Deploy != nil:
 			reqs = append(reqs, capsule.StepPortReq{Name: string(s.ID)})
 			for _, sc := range s.Deploy.Recording.PreState.Captures {
-				reqs = append(reqs, capsule.StepPortReq{Name: captureKey(string(s.ID), string(sc.ID))})
+				reqs = append(reqs, capsule.StepPortReq{Name: captureKey(s.ID, sc.ID)})
 			}
 			for _, sc := range s.Deploy.Recording.PostState.Captures {
-				reqs = append(reqs, capsule.StepPortReq{Name: captureKey(string(s.ID), string(sc.ID))})
+				reqs = append(reqs, capsule.StepPortReq{Name: captureKey(s.ID, sc.ID)})
 			}
 		default:
 			reqs = append(reqs, capsule.StepPortReq{Name: string(s.ID)})
@@ -350,8 +350,8 @@ func allocateMediatedPorts(p *lane.Lane) map[string]capsule.HostPorts {
 // Pre and post captures of the same name within one deploy step share
 // a key (they run sequentially), but captures in different deploy
 // steps do not collide.
-func captureKey(stepID, captureID string) string {
-	return "capture:" + stepID + ":" + captureID
+func captureKey(stepID, captureID primitive.Identifier) string {
+	return "capture:" + string(stepID) + ":" + string(captureID)
 }
 
 func cmdCompare(file1, file2, output string) {

@@ -46,7 +46,7 @@ func newTestRC(t *testing.T, engine *mockEngine) *runContext {
 	return &runContext{
 		ctx:       context.Background(),
 		lane:      &lane.Lane{Registry: "localhost:5555/test"},
-		dag:       &lane.DAG{Steps: map[string]*lane.Step{}},
+		dag:       &lane.DAG{Steps: map[primitive.Identifier]*lane.Step{}},
 		regClient: &registry.Client{Engine: engine},
 		engine:    engine,
 		front:     ft,
@@ -461,7 +461,7 @@ func TestComputeSpecHash_ChangesWithImageDigest(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Reset specHashes to avoid accumulation from prior call.
-	rc.state.specHashes = map[string]primitive.Digest{}
+	rc.state.specHashes = map[primitive.Identifier]primitive.Digest{}
 	h2, _, err := rc.computeSpecHash(step, "s", primitive.DigestFromHex("bbb0000000000000000000000000000000000000000000000000000000000000"))
 	if err != nil {
 		t.Fatal(err)
@@ -529,7 +529,7 @@ func TestCheckCache_Hit(t *testing.T) {
 	// On a cache hit, checkCache exports the cached image and recovers each
 	// output's LayerDiffID from the config rootfs.diff_ids in canonical layer
 	// order. Provide a one-layer image keyed by the digest ref it pulls.
-	imageRef := registry.WrapDigest(string(rc.lane.ID), "step1", digest)
+	imageRef := registry.WrapDigest(rc.lane.ID, "step1", digest)
 	tarBytes, diffID, buildErr := regtest.BuildLayeredImageTar("bin", map[string][]byte{"bin": []byte("data")})
 	if buildErr != nil {
 		t.Fatalf("BuildLayeredImageTar: %v", buildErr)

@@ -16,6 +16,7 @@ import (
 	"sync"
 
 	"github.com/istr/strike/internal/clock"
+	"github.com/istr/strike/internal/primitive"
 )
 
 // EphemeralCA is a per-lane-run certificate authority. The
@@ -45,7 +46,7 @@ type EphemeralCA struct {
 	privKey   *ecdsa.PrivateKey
 	cert      *x509.Certificate
 	cache     map[string]*tls.Certificate
-	laneID    string
+	laneID    primitive.Identifier
 	certSHA   string
 	certPEM   []byte
 	mu        sync.RWMutex
@@ -61,7 +62,7 @@ var ErrEphemeralCAClosed = errors.New("transport: ephemeral CA closed")
 // granularity between cert issuance and consumer verification.
 // The lane ID is included in the CA's Subject OU for forensic
 // traceability; it does not affect verification.
-func New(laneID string) (*EphemeralCA, error) {
+func New(laneID primitive.Identifier) (*EphemeralCA, error) {
 	privKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return nil, fmt.Errorf("transport: generate CA key: %w", err)
@@ -81,7 +82,7 @@ func New(laneID string) (*EphemeralCA, error) {
 		Subject: pkix.Name{
 			CommonName:         "strike-ephemeral-CA",
 			Organization:       []string{"strike"},
-			OrganizationalUnit: []string{laneID},
+			OrganizationalUnit: []string{string(laneID)},
 		},
 		NotBefore:             notBefore,
 		NotAfter:              notAfter,

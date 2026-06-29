@@ -6,6 +6,7 @@ import (
 
 	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/primitive"
 )
 
 // UnmarshalJSON implements json.Unmarshaler for Sealed.
@@ -17,8 +18,8 @@ func (s *Sealed) UnmarshalJSON(data []byte) error {
 	type alias Sealed
 	aux := struct {
 		*alias
-		Peers  map[string][]json.RawMessage `json:"peers,omitempty"`
-		Engine json.RawMessage              `json:"engine,omitempty"`
+		Peers  map[primitive.Identifier][]json.RawMessage `json:"peers,omitempty"`
+		Engine json.RawMessage                            `json:"engine,omitempty"`
 	}{
 		alias: (*alias)(s),
 	}
@@ -36,7 +37,7 @@ func (s *Sealed) UnmarshalJSON(data []byte) error {
 		s.Peers = nil
 		return nil
 	}
-	out := make(map[string][]lane.Peer, len(aux.Peers))
+	out := make(map[primitive.Identifier][]lane.Peer, len(aux.Peers))
 	for stepID, rawPeers := range aux.Peers {
 		peers := make([]lane.Peer, len(rawPeers))
 		for i, raw := range rawPeers {

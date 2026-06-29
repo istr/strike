@@ -63,14 +63,14 @@ type SLSABuildDefinition struct {
 // strike's typed Layer-V facts (Fork C, Fork D). EngineConnection is Layer V
 // and lives here, not in the engine-context predicate.
 type StrikeExternalParameters struct {
-	Target        target.Deploy           `json:"target"`
-	Peers         map[string][]lane.Peer  `json:"peers"`
-	ObservedPeers map[string]ObservedPeer `json:"observedPeers,omitempty"`
-	Resolver      ResolverRecord          `json:"resolver"`
-	Engine        endpoint.Engine         `json:"engine,omitempty"`
-	OIDC          ProvenanceOIDC          `json:"oidc"`
-	LaneID        string                  `json:"laneId"`
-	LaneDigest    primitive.Digest        `json:"laneDigest"`
+	Target        target.Deploy                        `json:"target"`
+	Peers         map[primitive.Identifier][]lane.Peer `json:"peers"`
+	ObservedPeers map[string]ObservedPeer              `json:"observedPeers,omitempty"`
+	Resolver      ResolverRecord                       `json:"resolver"`
+	Engine        endpoint.Engine                      `json:"engine,omitempty"`
+	OIDC          ProvenanceOIDC                       `json:"oidc"`
+	LaneID        string                               `json:"laneId"`
+	LaneDigest    primitive.Digest                     `json:"laneDigest"`
 }
 
 // ProvenanceOIDC is the declared signing identity carried into the sealed
@@ -110,7 +110,7 @@ type EngineContextStatement struct {
 // attribution. EngineConnection (Layer V) and the engine self-report
 // (engineMetadata, informational) are not here.
 type EngineContextPredicate struct {
-	PeerAttribution map[string][]string `json:"peerAttribution,omitempty"`
+	PeerAttribution map[primitive.Identifier][]string `json:"peerAttribution,omitempty"`
 }
 
 // InformationalStatement is the informational output: an in-toto Statement v1

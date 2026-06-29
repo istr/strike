@@ -350,7 +350,7 @@ func TestTree(t *testing.T) {
 // --------------------------------------------------------------------------.
 
 // assertOrder verifies that 'before' appears before 'after' in the order slice.
-func assertOrder(t *testing.T, order []string, before, after string) {
+func assertOrder(t *testing.T, order []primitive.Identifier, before, after primitive.Identifier) {
 	t.Helper()
 	bi, ai := -1, -1
 	for i, s := range order {
@@ -459,7 +459,7 @@ func TestBuild_DeterministicOrder(t *testing.T) {
 		},
 	}
 
-	want := []string{"alpha", "middle", "zebra"}
+	want := []primitive.Identifier{"alpha", "middle", "zebra"}
 	for i := range 100 {
 		dag, err := lane.Build(p)
 		if err != nil {
@@ -508,7 +508,7 @@ func TestBuild_DeterministicOrder_Diamond(t *testing.T) {
 	}
 
 	// root first; left before right (alphabetic); bottom last.
-	want := []string{"root", "left", "right", "bottom"}
+	want := []primitive.Identifier{"root", "left", "right", "bottom"}
 	for i := range 100 {
 		dag, err := lane.Build(p)
 		if err != nil {
@@ -577,7 +577,7 @@ func TestBuild_DeterministicOrder_LexSmallestNotFIFO(t *testing.T) {
 		},
 	}
 
-	want := []string{"A", "B", "P", "Q", "R", "S"}
+	want := []primitive.Identifier{"A", "B", "P", "Q", "R", "S"}
 	for i := range 100 {
 		dag, err := lane.Build(p)
 		if err != nil {

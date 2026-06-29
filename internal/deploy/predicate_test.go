@@ -33,7 +33,7 @@ func TestSLSAProvenanceStatement_Valid(t *testing.T) {
 					LaneDigest: "",
 					Target:     target.Deploy{ID: "prod-1", Type: "registry", Description: "production"},
 					OIDC:       deploy.ProvenanceOIDC{Issuer: "https://idp.example.com", Identity: "strike@example.com"},
-					Peers:      map[string][]lane.Peer{},
+					Peers:      map[primitive.Identifier][]lane.Peer{},
 				},
 			},
 			RunDetails: deploy.SLSARunDetails{Builder: deploy.SLSABuilder{ID: "https://istr.dev/strike"}},
@@ -71,7 +71,7 @@ func TestEngineContextStatement_Valid(t *testing.T) {
 		Subject:       []deploy.Subject{{Name: "image", Digest: deploy.DigestSet{SHA256: "0000000000000000000000000000000000000000000000000000000000000000"}}},
 		PredicateType: "https://istr.dev/strike/predicates/engine-context/v1",
 		Predicate: deploy.EngineContextPredicate{
-			PeerAttribution: map[string][]string{"build": {"git.example.com:22"}},
+			PeerAttribution: map[primitive.Identifier][]string{"build": {"git.example.com:22"}},
 		},
 	}
 	data, err := json.Marshal(stmt)

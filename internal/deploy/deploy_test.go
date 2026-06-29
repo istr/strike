@@ -1172,7 +1172,7 @@ func TestValidateAttestation_InvalidLaneID(t *testing.T) {
 			LaneID:    "INVALID_LANE_ID",
 			Target:    target.Deploy{ID: "prod-1", Type: "registry", Description: "test"},
 			Artifacts: map[string]record.Artifact{},
-			Peers:     map[string][]lane.Peer{},
+			Peers:     map[primitive.Identifier][]lane.Peer{},
 		},
 		Informational: &deploy.Informational{
 			Timestamp:       clock.Reproducible(),

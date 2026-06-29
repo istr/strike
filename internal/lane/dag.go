@@ -48,13 +48,13 @@ type ImageFromEdge struct {
 
 // DAG is the directed acyclic graph of step dependencies in a lane.
 type DAG struct {
-	Steps          map[string]*Step
-	InputEdges     map[string][]InputEdge // key: consuming step name
-	PackFileEdges  map[string][]PackFileEdge
-	DeployEdges    map[string][]DeployArtifactEdge
-	ImageFromEdges map[string]ImageFromEdge // one per step, if any
-	edges          map[string][]string      // step -> []dependencies
-	reverse        map[string][]string      // dep -> []dependents
+	Steps          map[primitive.Identifier]*Step
+	InputEdges     map[primitive.Identifier][]InputEdge // key: consuming step name
+	PackFileEdges  map[primitive.Identifier][]PackFileEdge
+	DeployEdges    map[primitive.Identifier][]DeployArtifactEdge
+	ImageFromEdges map[primitive.Identifier]ImageFromEdge          // one per step, if any
+	edges          map[primitive.Identifier][]primitive.Identifier // step -> []dependencies
+	reverse        map[primitive.Identifier][]primitive.Identifier // dep -> []dependents
 	// Order is the lexicographically smallest valid topological
 	// execution order of the lane's steps, computed by
 	// kahnSort. The same step graph always produces the same
@@ -62,27 +62,27 @@ type DAG struct {
 	// implementation languages; see kahnSort's doc comment and
 	// DESIGN-PRINCIPLES.md "Reproducibility is enforced, not
 	// hoped for".
-	Order []string
+	Order []primitive.Identifier
 }
 
 // Build constructs a DAG from a Lane definition, resolving all inter-step edges.
 func Build(p *Lane) (*DAG, error) {
 	d := &DAG{
-		Steps:          make(map[string]*Step),
-		InputEdges:     make(map[string][]InputEdge),
-		PackFileEdges:  make(map[string][]PackFileEdge),
-		DeployEdges:    make(map[string][]DeployArtifactEdge),
-		ImageFromEdges: make(map[string]ImageFromEdge),
-		edges:          make(map[string][]string),
-		reverse:        make(map[string][]string),
+		Steps:          make(map[primitive.Identifier]*Step),
+		InputEdges:     make(map[primitive.Identifier][]InputEdge),
+		PackFileEdges:  make(map[primitive.Identifier][]PackFileEdge),
+		DeployEdges:    make(map[primitive.Identifier][]DeployArtifactEdge),
+		ImageFromEdges: make(map[primitive.Identifier]ImageFromEdge),
+		edges:          make(map[primitive.Identifier][]primitive.Identifier),
+		reverse:        make(map[primitive.Identifier][]primitive.Identifier),
 	}
 
 	for i := range p.Steps {
 		s := &p.Steps[i]
-		if _, exists := d.Steps[string(s.ID)]; exists {
+		if _, exists := d.Steps[s.ID]; exists {
 			return nil, fmt.Errorf("duplicate step name: %q", s.ID)
 		}
-		d.Steps[string(s.ID)] = s
+		d.Steps[s.ID] = s
 	}
 
 	if err := validateOutputIDDisjointness(p); err != nil {
@@ -128,12 +128,12 @@ func Build(p *Lane) (*DAG, error) {
 
 func (d *DAG) resolveImageFromEdges(p *Lane) error {
 	for _, s := range p.Steps {
-		name := string(s.ID)
+		name := s.ID
 		if s.ImageFromStep == nil {
 			continue
 		}
 		from := *s.ImageFromStep
-		fromStep, ok := d.Steps[string(from)]
+		fromStep, ok := d.Steps[from]
 		if !ok {
 			return fmt.Errorf("step %q: imageFromStep references unknown step %q", name, from)
 		}
@@ -141,23 +141,23 @@ func (d *DAG) resolveImageFromEdges(p *Lane) error {
 			return fmt.Errorf("step %q: imageFromStep %q declares no image output", name, from)
 		}
 		d.ImageFromEdges[name] = ImageFromEdge{FromStep: fromStep}
-		d.addEdge(name, string(from))
+		d.addEdge(name, from)
 	}
 	return nil
 }
 
 func (d *DAG) resolveInputEdges(p *Lane) error {
 	for _, s := range p.Steps {
-		name := string(s.ID)
+		name := s.ID
 		for _, inp := range s.Inputs {
 			refStep := inp.From.Step
 			refOutput := inp.From.Output
-			fromStep, ok := d.Steps[string(refStep)]
+			fromStep, ok := d.Steps[refStep]
 			if !ok {
 				return fmt.Errorf("step %q: input at %q references unknown step %q",
 					name, inp.Mount, refStep)
 			}
-			out := findOutput(fromStep, string(refOutput))
+			out := findOutput(fromStep, refOutput)
 			if out == nil {
 				return fmt.Errorf("step %q: input at %q: output %q not found in step %q",
 					name, inp.Mount, refOutput, refStep)
@@ -172,7 +172,7 @@ func (d *DAG) resolveInputEdges(p *Lane) error {
 				FromStep:   fromStep,
 				FromOutput: out,
 			})
-			d.addEdge(name, string(refStep))
+			d.addEdge(name, refStep)
 		}
 	}
 	return nil
@@ -180,7 +180,7 @@ func (d *DAG) resolveInputEdges(p *Lane) error {
 
 func (d *DAG) resolvePackEdges(p *Lane) error {
 	for _, s := range p.Steps {
-		name := string(s.ID)
+		name := s.ID
 		if s.Pack == nil {
 			continue
 		}
@@ -193,14 +193,14 @@ func (d *DAG) resolvePackEdges(p *Lane) error {
 	return nil
 }
 
-func (d *DAG) resolvePackFileEdge(name string, f PackFile) error {
+func (d *DAG) resolvePackFileEdge(name primitive.Identifier, f PackFile) error {
 	stepID := f.From.Step
 	outputID := f.From.Output
-	fromStep, ok := d.Steps[string(stepID)]
+	fromStep, ok := d.Steps[stepID]
 	if !ok {
 		return fmt.Errorf("step %q: pack file references unknown step %q", name, stepID)
 	}
-	out := findOutput(fromStep, string(outputID))
+	out := findOutput(fromStep, outputID)
 	if out == nil {
 		return fmt.Errorf("step %q: pack file output %q not found in step %q",
 			name, outputID, stepID)
@@ -210,16 +210,16 @@ func (d *DAG) resolvePackFileEdge(name string, f PackFile) error {
 		FromStep:   fromStep,
 		FromOutput: out,
 	})
-	d.addEdge(name, string(stepID))
+	d.addEdge(name, stepID)
 	return nil
 }
 
 // findOutput returns a pointer to the FileOutput with the given name,
 // or nil if not found. The returned pointer aliases into s.Outputs,
 // so callers must not mutate s after Build returns.
-func findOutput(s *Step, name string) *FileOutput {
+func findOutput(s *Step, name primitive.Identifier) *FileOutput {
 	for i := range s.Outputs {
-		if string(s.Outputs[i].ID) == name {
+		if s.Outputs[i].ID == name {
 			return &s.Outputs[i]
 		}
 	}
@@ -228,7 +228,7 @@ func findOutput(s *Step, name string) *FileOutput {
 
 func (d *DAG) resolveDeployEdges(p *Lane) error {
 	for _, s := range p.Steps {
-		name := string(s.ID)
+		name := s.ID
 		if s.Deploy == nil {
 			continue
 		}
@@ -247,10 +247,10 @@ func (d *DAG) resolveDeployEdges(p *Lane) error {
 // resolveDeployArtifact resolves one deploy.artifacts[name].from disjunction:
 // a StepImageRef (the producing step's image, by step) or an OutputRef (a named
 // file or directory output, by step+output).
-func (d *DAG) resolveDeployArtifact(name, artName string, src ArtifactSource) (DeployArtifactEdge, string, error) {
+func (d *DAG) resolveDeployArtifact(name primitive.Identifier, artName string, src ArtifactSource) (DeployArtifactEdge, primitive.Identifier, error) {
 	switch ref := src.(type) {
 	case StepImageRef:
-		fromStep, ok := d.Steps[string(ref.Step)]
+		fromStep, ok := d.Steps[ref.Step]
 		if !ok {
 			return DeployArtifactEdge{}, "", fmt.Errorf(
 				"step %q: deploy artifact %q references unknown step %q", name, artName, ref.Step)
@@ -259,20 +259,20 @@ func (d *DAG) resolveDeployArtifact(name, artName string, src ArtifactSource) (D
 			return DeployArtifactEdge{}, "", fmt.Errorf(
 				"step %q: deploy artifact %q: step %q declares no image output", name, artName, ref.Step)
 		}
-		return DeployArtifactEdge{ArtifactName: artName, FromStep: fromStep, Image: true}, string(ref.Step), nil
+		return DeployArtifactEdge{ArtifactName: artName, FromStep: fromStep, Image: true}, ref.Step, nil
 	case OutputRef:
-		fromStep, ok := d.Steps[string(ref.Step)]
+		fromStep, ok := d.Steps[ref.Step]
 		if !ok {
 			return DeployArtifactEdge{}, "", fmt.Errorf(
 				"step %q: deploy artifact %q references unknown step %q", name, artName, ref.Step)
 		}
-		out := findOutput(fromStep, string(ref.Output))
+		out := findOutput(fromStep, ref.Output)
 		if out == nil {
 			return DeployArtifactEdge{}, "", fmt.Errorf(
 				"step %q: deploy artifact %q: output %q not found in step %q",
 				name, artName, ref.Output, ref.Step)
 		}
-		return DeployArtifactEdge{ArtifactName: artName, FromStep: fromStep, FromOutput: out}, string(ref.Step), nil
+		return DeployArtifactEdge{ArtifactName: artName, FromStep: fromStep, FromOutput: out}, ref.Step, nil
 	default:
 		return DeployArtifactEdge{}, "", fmt.Errorf(
 			"step %q: deploy artifact %q: unknown source kind %q", name, artName, src.SourceKind())
@@ -321,12 +321,12 @@ func (d *DAG) validateDeployLeaves(p *Lane) error {
 		if s.Deploy == nil {
 			continue
 		}
-		dependents := d.reverse[string(s.ID)]
+		dependents := d.reverse[s.ID]
 		if len(dependents) == 0 {
 			continue
 		}
-		sorted := append([]string(nil), dependents...)
-		sort.Strings(sorted)
+		sorted := append([]primitive.Identifier(nil), dependents...)
+		slices.Sort(sorted)
 		return fmt.Errorf("deploy step %q must be a DAG leaf but is depended on by %v",
 			s.ID, sorted)
 	}
@@ -355,7 +355,7 @@ func (d *DAG) ValidateLeavesAreDeploys(p *Lane) error {
 		if s.Deploy != nil {
 			continue
 		}
-		if len(d.reverse[string(s.ID)]) == 0 {
+		if len(d.reverse[s.ID]) == 0 {
 			return fmt.Errorf("step %q is a non-deploy DAG leaf: nothing consumes "+
 				"its output and it is not a deploy step; a gate must produce an "+
 				"output the deploy consumes so it sits in the chain (ADR-039 D5)",
@@ -437,7 +437,7 @@ func peerAnchor(peer Peer) string {
 // and makes composition explicit and content-addressed.
 func (d *DAG) validateMountDisjointness(p *Lane) error {
 	for _, s := range p.Steps {
-		edges := d.InputEdges[string(s.ID)]
+		edges := d.InputEdges[s.ID]
 		if len(edges) < 2 {
 			continue
 		}
@@ -463,12 +463,12 @@ func (d *DAG) validateMountDisjointness(p *Lane) error {
 // basename; only ids must be disjoint (ADR-046).
 func validateOutputIDDisjointness(p *Lane) error {
 	for _, s := range p.Steps {
-		seen := make(map[string]struct{}, len(s.Outputs))
+		seen := make(map[primitive.Identifier]struct{}, len(s.Outputs))
 		for _, out := range s.Outputs {
-			if _, dup := seen[string(out.ID)]; dup {
+			if _, dup := seen[out.ID]; dup {
 				return fmt.Errorf("step %q: duplicate output id %q", s.ID, out.ID)
 			}
-			seen[string(out.ID)] = struct{}{}
+			seen[out.ID] = struct{}{}
 		}
 	}
 	return nil
@@ -519,7 +519,7 @@ func isPathPrefix(prefix, full string) bool {
 // appended together through this function, the presence of "to" in
 // edges[from] implies the presence of "from" in reverse[to], so one
 // membership check guards both.
-func (d *DAG) addEdge(from, to string) {
+func (d *DAG) addEdge(from, to primitive.Identifier) {
 	if slices.Contains(d.edges[from], to) {
 		return
 	}
@@ -555,11 +555,11 @@ func (d *DAG) addEdge(from, to string) {
 // "Reproducibility is enforced, not hoped for".
 //
 // Returns an error if the graph is cyclic.
-func kahnSort(d *DAG) ([]string, error) {
+func kahnSort(d *DAG) ([]primitive.Identifier, error) {
 	// Compute in-degree for every step from its declared
 	// inputs. The map-iteration here is read-only and does
 	// not leak into the output.
-	inDegree := make(map[string]int, len(d.Steps))
+	inDegree := make(map[primitive.Identifier]int, len(d.Steps))
 	for name := range d.Steps {
 		inDegree[name] = len(d.edges[name])
 	}
@@ -567,14 +567,14 @@ func kahnSort(d *DAG) ([]string, error) {
 	// Collect initially-ready steps. The map-iteration order
 	// here also does not affect the output, because the ready
 	// slice is sorted at every extraction below.
-	ready := make([]string, 0, len(d.Steps))
+	ready := make([]primitive.Identifier, 0, len(d.Steps))
 	for name, deg := range inDegree {
 		if deg == 0 {
 			ready = append(ready, name)
 		}
 	}
 
-	order := make([]string, 0, len(d.Steps))
+	order := make([]primitive.Identifier, 0, len(d.Steps))
 	for len(ready) > 0 {
 		// Sort the ready set and extract its smallest member.
 		// This is the single point where the lex-smallest
@@ -582,7 +582,7 @@ func kahnSort(d *DAG) ([]string, error) {
 		// if "ready was already sorted last iteration" appears
 		// to be invariant. New dependents are appended without
 		// re-sorting, so the invariant does not hold.
-		sort.Strings(ready)
+		slices.Sort(ready)
 		node := ready[0]
 		ready = ready[1:]
 		order = append(order, node)
@@ -613,14 +613,14 @@ func kahnSort(d *DAG) ([]string, error) {
 // callers may invoke this on a nil receiver and receive a non-nil
 // empty map (matching the schema requirement that Attestation.peers
 // be a present map).
-func (d *DAG) CollectPeers(fromStep string) map[string][]Peer {
-	peers := map[string][]Peer{}
+func (d *DAG) CollectPeers(fromStep primitive.Identifier) map[primitive.Identifier][]Peer {
+	peers := map[primitive.Identifier][]Peer{}
 	if d == nil {
 		return peers
 	}
-	visited := map[string]bool{}
-	var walk func(name string)
-	walk = func(name string) {
+	visited := map[primitive.Identifier]bool{}
+	var walk func(name primitive.Identifier)
+	walk = func(name primitive.Identifier) {
 		if visited[name] {
 			return
 		}
@@ -657,22 +657,23 @@ func (d *DAG) Tree() string {
 
 	// Roots: sinks (steps no other step depends on), sorted for
 	// deterministic output.
-	roots := []string{}
+	roots := []primitive.Identifier{}
 	for name := range d.Steps {
 		if len(d.reverse[name]) == 0 {
 			roots = append(roots, name)
 		}
 	}
-	sort.Strings(roots)
+	slices.Sort(roots)
 
-	visited := make(map[string]bool, len(d.Steps))
+	visited := make(map[primitive.Identifier]bool, len(d.Steps))
 	for i, root := range roots {
 		last := i == len(roots)-1
 		connector := "+-- "
 		if last {
 			connector = "`-- "
 		}
-		sb.WriteString(connector + root + "\n")
+		rootStr := string(root)
+		sb.WriteString(connector + rootStr + "\n")
 		visited[root] = true
 		d.treeNode(&sb, root, "", last, visited)
 	}
@@ -680,12 +681,12 @@ func (d *DAG) Tree() string {
 	return sb.String()
 }
 
-func (d *DAG) treeNode(sb *strings.Builder, node, prefix string, lastParent bool, visited map[string]bool) {
+func (d *DAG) treeNode(sb *strings.Builder, node primitive.Identifier, prefix string, lastParent bool, visited map[primitive.Identifier]bool) {
 	// Copy and sort the node's dependencies so the traversal order -- and
 	// thus which occurrence of a shared dependency is the full one -- is
 	// deterministic. Do not sort d.edges[node] in place; it is shared.
-	deps := append([]string(nil), d.edges[node]...)
-	sort.Strings(deps)
+	deps := append([]primitive.Identifier(nil), d.edges[node]...)
+	slices.Sort(deps)
 
 	childPrefix := prefix
 	if lastParent {
@@ -700,14 +701,15 @@ func (d *DAG) treeNode(sb *strings.Builder, node, prefix string, lastParent bool
 		if last {
 			connector = "`-- "
 		}
+		depStr := string(dep)
 		if visited[dep] {
 			// Already printed in full elsewhere. Emit a back-reference
 			// and do not recurse, so the shared subtree is not repeated.
-			sb.WriteString(childPrefix + connector + dep + " (*)\n")
+			sb.WriteString(childPrefix + connector + depStr + " (*)\n")
 			continue
 		}
 		visited[dep] = true
-		sb.WriteString(childPrefix + connector + dep + "\n")
+		sb.WriteString(childPrefix + connector + depStr + "\n")
 		d.treeNode(sb, dep, childPrefix, last, visited)
 	}
 }
@@ -718,13 +720,13 @@ func (d *DAG) treeNode(sb *strings.Builder, node, prefix string, lastParent bool
 // over the dependency edges (excluding fromStep itself), reading PackSpec.Base
 // for each pack step reached. These are the base images whose signed SBOMs the
 // deploy step's producer-side verification considers.
-func (d *DAG) PackBaseRefs(fromStep string) []primitive.ImageRef {
+func (d *DAG) PackBaseRefs(fromStep primitive.Identifier) []primitive.ImageRef {
 	if d == nil {
 		return nil
 	}
-	visited := map[string]bool{}
-	var walk func(name string)
-	walk = func(name string) {
+	visited := map[primitive.Identifier]bool{}
+	var walk func(name primitive.Identifier)
+	walk = func(name primitive.Identifier) {
 		if visited[name] {
 			return
 		}

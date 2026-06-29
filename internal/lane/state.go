@@ -3,7 +3,7 @@ package lane
 import (
 	"encoding/json"
 	"fmt"
-	"sort"
+	"slices"
 	"sync"
 
 	"github.com/istr/strike/internal/clock"
@@ -43,21 +43,22 @@ func NewState() *State {
 }
 
 // RecordProvenance stores a validated provenance record for a step.
-func (s *State) RecordProvenance(stepID string, rec provenance.Record) error {
+func (s *State) RecordProvenance(stepID primitive.Identifier, rec provenance.Record) error {
+	key := string(stepID)
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, exists := s.Provenance[stepID]; exists {
+	if _, exists := s.Provenance[key]; exists {
 		return fmt.Errorf("provenance for step %q already recorded", stepID)
 	}
-	s.Provenance[stepID] = rec
+	s.Provenance[key] = rec
 	return nil
 }
 
 // Register stores the resolved output handle under the producer's canonical
 // output ref (OutputRef.Ref, "step_name.output_name"). The handle carries the
 // digest-pinned image reference produced by the normalize round-trip (ADR-046).
-func (s *State) Register(stepID, outputID string, h output.Handle) error {
-	key := OutputRef{Step: primitive.Identifier(stepID), Output: primitive.Identifier(outputID)}.Ref()
+func (s *State) Register(stepID, outputID primitive.Identifier, h output.Handle) error {
+	key := OutputRef{Step: stepID, Output: outputID}.Ref()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, exists := s.Outputs[key]; exists {
@@ -85,16 +86,16 @@ func (s *State) Resolve(ref string) (output.Handle, error) {
 // CollectProvenance walks the DAG backwards from fromStep and returns
 // all provenance records of transitive predecessors, sorted by step name
 // for deterministic attestation output.
-func (s *State) CollectProvenance(dag *DAG, fromStep string) []provenance.Record {
+func (s *State) CollectProvenance(dag *DAG, fromStep primitive.Identifier) []provenance.Record {
 	if dag == nil {
 		return []provenance.Record{}
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	visited := map[string]bool{}
-	var walk func(name string)
-	walk = func(name string) {
+	visited := map[primitive.Identifier]bool{}
+	var walk func(name primitive.Identifier)
+	walk = func(name primitive.Identifier) {
 		if visited[name] {
 			return
 		}
@@ -106,17 +107,19 @@ func (s *State) CollectProvenance(dag *DAG, fromStep string) []provenance.Record
 	walk(fromStep)
 	delete(visited, fromStep) // exclude the deploy step itself
 
-	var names []string
+	var names []primitive.Identifier
 	for n := range visited {
-		if _, ok := s.Provenance[n]; ok {
+		key := string(n)
+		if _, ok := s.Provenance[key]; ok {
 			names = append(names, n)
 		}
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 
 	out := make([]provenance.Record, 0, len(names))
 	for _, n := range names {
-		out = append(out, s.Provenance[n])
+		key := string(n)
+		out = append(out, s.Provenance[key])
 	}
 	return out
 }

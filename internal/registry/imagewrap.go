@@ -163,7 +163,7 @@ type OutputArchive struct {
 	Tar         io.Reader
 	StripPrefix string
 	DestPrefix  string
-	OutputID    string
+	OutputID    primitive.Identifier
 }
 
 // WrapResult is the outcome of assembling a step's outputs into one image.
@@ -172,7 +172,7 @@ type OutputArchive struct {
 // id to its layer's uncompressed-content digest (diff_id), the engine-level
 // key a consumer uses to select that layer after an engine round-trip.
 type WrapResult struct {
-	LayerDiffIDs map[string]string
+	LayerDiffIDs map[primitive.Identifier]string
 	Digest       primitive.Digest
 	Size         int64
 }
@@ -189,7 +189,7 @@ func (c *Client) WrapOutputsAsImage(ctx context.Context, outs []OutputArchive, t
 		types.OCIConfigJSON,
 	)
 	adds := make([]mutate.Addendum, 0, len(outs))
-	diffIDs := make(map[string]string, len(outs))
+	diffIDs := make(map[primitive.Identifier]string, len(outs))
 	var total int64
 	for _, out := range outs {
 		layer, size, err := canonicalLayerFromTar(out.Tar, out.StripPrefix, out.DestPrefix)
@@ -203,7 +203,7 @@ func (c *Client) WrapOutputsAsImage(ctx context.Context, outs []OutputArchive, t
 		diffIDs[out.OutputID] = diffID.String()
 		adds = append(adds, mutate.Addendum{
 			Layer:       layer,
-			Annotations: map[string]string{OutputLayerAnnotation: out.OutputID},
+			Annotations: map[string]string{OutputLayerAnnotation: string(out.OutputID)},
 		})
 		total += size
 	}

@@ -27,11 +27,11 @@ func TestProjectStatements(t *testing.T) {
 				"b-image": {Digest: primitive.DigestFromHex(strings.Repeat("b", 64))},
 				"a-image": {Digest: primitive.DigestFromHex(strings.Repeat("a", 64))},
 			},
-			Peers:  map[string][]lane.Peer{},
+			Peers:  map[primitive.Identifier][]lane.Peer{},
 			Engine: endpoint.EngineTLS{Type: "tls", CATrustType: "pinned", ServerCertFingerprint: "sha256:cc"},
 		},
 		EngineDependent: deploy.EngineDependent{
-			PeerAttribution: map[string][]string{"build": {"git.example.com:22"}},
+			PeerAttribution: map[primitive.Identifier][]string{"build": {"git.example.com:22"}},
 		},
 		Informational: &deploy.Informational{
 			Timestamp:       clock.Reproducible(),

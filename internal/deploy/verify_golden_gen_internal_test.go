@@ -130,10 +130,10 @@ func syntheticGoldenAttestation(laneDigest primitive.Digest) *Attestation {
 			},
 			LaneID:     "golden-lane",
 			LaneDigest: laneDigest,
-			Peers:      map[string][]lane.Peer{},
+			Peers:      map[primitive.Identifier][]lane.Peer{},
 		},
 		EngineDependent: EngineDependent{
-			PeerAttribution: map[string][]string{"deploy": {"registry.example:443"}},
+			PeerAttribution: map[primitive.Identifier][]string{"deploy": {"registry.example:443"}},
 		},
 		Informational: &Informational{
 			PreStateDigest:  primitive.DigestFromHex(artifactDigest),

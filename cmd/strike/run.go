@@ -32,7 +32,7 @@ import (
 
 // runState holds accumulated state across steps during a lane execution.
 type runState struct {
-	specHashes map[string]primitive.Digest
+	specHashes map[primitive.Identifier]primitive.Digest
 	// imageFromRefs maps a consumer step name to the producer's
 	// content-addressed local digest reference
 	// (localhost/strike/<lane>/<step>@sha256:<D>), populated by
@@ -41,13 +41,13 @@ type runState struct {
 	// executor invocation without mutating the parsed Lane. The base is
 	// executed only by this digest reference, never by a mutable tag
 	// (ADR-045).
-	imageFromRefs map[string]string
+	imageFromRefs map[primitive.Identifier]string
 }
 
 func newRunState() *runState {
 	return &runState{
-		specHashes:    map[string]primitive.Digest{},
-		imageFromRefs: map[string]string{},
+		specHashes:    map[primitive.Identifier]primitive.Digest{},
+		imageFromRefs: map[primitive.Identifier]string{},
 	}
 }
 
@@ -65,18 +65,18 @@ type runContext struct {
 	lane           *lane.Lane
 	laneDigest     primitive.Digest
 	dag            *lane.DAG
-	stepPorts      map[string]capsule.HostPorts       // mediated step name -> host ports
-	networkRecords map[string]capsule.Records         // step name -> records
-	capsules       map[string]*capsule.NetworkCapsule // run-step name -> pre-built capsule
+	stepPorts      map[string]capsule.HostPorts                     // mediated step name -> host ports
+	networkRecords map[string]capsule.Records                       // step name -> records
+	capsules       map[primitive.Identifier]*capsule.NetworkCapsule // run-step name -> pre-built capsule
 	laneRoot       *os.Root
 	trust          trustVolumes
 	laneDir        string
 	resolverID     transport.ConnectionIdentity
 }
 
-func (rc *runContext) runStep(stepID string) error {
+func (rc *runContext) runStep(stepID primitive.Identifier) error {
 	step := rc.dag.Steps[stepID]
-	safeName := sanitizeForLog(stepID)
+	safeName := sanitizeForLog(string(stepID))
 
 	// Timeout resolution: explicit step value > lane-wide default > hard floor.
 	var rawTimeout *primitive.Duration
@@ -125,7 +125,7 @@ func (rc *runContext) runStep(stepID string) error {
 	return rc.executeContainerStep(ctx, step, stepID, safeName, tag)
 }
 
-func (rc *runContext) executeDeploy(ctx context.Context, step *lane.Step, stepID, safeName string) error {
+func (rc *runContext) executeDeploy(ctx context.Context, step *lane.Step, stepID primitive.Identifier, safeName string) error {
 	log.Printf("DEPLOY %s", safeName)
 
 	artifactRefs := make(map[string]string)
@@ -146,7 +146,7 @@ func (rc *runContext) executeDeploy(ctx context.Context, step *lane.Step, stepID
 		Keyless:         rc.lane.Keyless,
 		BaseSBOMSigners: rc.lane.BaseSBOMSigners,
 		ArtifactRefs:    artifactRefs,
-		LaneID:          string(rc.lane.ID),
+		LaneID:          rc.lane.ID,
 		LaneDigest:      rc.laneDigest,
 		CA:              rc.ca,
 		UpstreamLook:    rc.upstreamLook,
@@ -167,7 +167,7 @@ func (rc *runContext) executeDeploy(ctx context.Context, step *lane.Step, stepID
 	}
 	log.Printf("OK     %s -> %s/%s", safeName, att.Sealed.LaneID, att.Sealed.Target.ID)
 
-	outDir, err := os.MkdirTemp("", "strike-"+stepID+"-")
+	outDir, err := os.MkdirTemp("", "strike-"+string(stepID)+"-")
 	if err != nil {
 		return fmt.Errorf("%s: create temp dir: %w", safeName, err)
 	}
@@ -200,12 +200,12 @@ func (rc *runContext) resolveImageDigest(ctx context.Context, step *lane.Step, s
 		}
 		return digest, nil
 	}
-	if edge, ok := rc.dag.ImageFromEdges[string(step.ID)]; ok {
-		fromStep := string(edge.FromStep.ID)
+	if edge, ok := rc.dag.ImageFromEdges[step.ID]; ok {
+		fromStep := edge.FromStep.ID
 		// The image output is id-less; it is registered and resolved by step via
 		// the empty-output key, collision-free because a step that declares an
 		// image output declares no other output (ADR-046).
-		ref := lane.OutputRef{Step: primitive.Identifier(fromStep), Output: ""}.Ref()
+		ref := lane.OutputRef{Step: fromStep, Output: ""}.Ref()
 		handle, err := rc.laneState.Resolve(ref)
 		if err != nil {
 			return "", fmt.Errorf("%s: imageFromStep %s: %w",
@@ -218,7 +218,7 @@ func (rc *runContext) resolveImageDigest(ctx context.Context, step *lane.Step, s
 		}
 		// ADR-045: execute the producer's image by its content-addressed
 		// digest, not the mutable WrapTag (ADR-046).
-		rc.state.imageFromRefs[string(step.ID)] = handle.ImageRef()
+		rc.state.imageFromRefs[step.ID] = handle.ImageRef()
 		return digest, nil
 	}
 	digest, err := resolveDigest(ctx, rc.regClient, *step.Image)
@@ -228,35 +228,35 @@ func (rc *runContext) resolveImageDigest(ctx context.Context, step *lane.Step, s
 	return digest, nil
 }
 
-func (rc *runContext) computeSpecHash(step *lane.Step, stepID string, imageDigest primitive.Digest) (primitive.Digest, string, error) {
+func (rc *runContext) computeSpecHash(step *lane.Step, stepID primitive.Identifier, imageDigest primitive.Digest) (primitive.Digest, string, error) {
 	// Per ADR-027, an input is identified in the spec hash by the
 	// canonical triple (from, mount, subpath); mount is unique per step
 	// by disjointness, and subpath is "" when the whole producer output
 	// is mounted. The hashed value remains the producer's spec hash.
 	inputHashes := map[string]primitive.Digest{}
-	for _, e := range rc.dag.InputEdges[string(step.ID)] {
+	for _, e := range rc.dag.InputEdges[step.ID] {
 		from := lane.OutputRef{Step: e.FromStep.ID, Output: e.FromOutput.ID}.Ref()
 		subpath := ""
 		if e.Subpath != nil {
 			subpath = string(*e.Subpath)
 		}
 		key := from + "|" + e.Mount.String() + "|" + subpath
-		inputHashes[key] = rc.state.specHashes[string(e.FromStep.ID)]
+		inputHashes[key] = rc.state.specHashes[e.FromStep.ID]
 	}
 
 	key := registry.SpecHash(step, imageDigest, inputHashes, map[string]primitive.Digest{})
-	tag := registry.Tag(rc.lane.Registry, stepID, key)
+	tag := registry.Tag(rc.lane.Registry, string(stepID), key)
 	rc.state.specHashes[stepID] = key
 	return key, tag, nil
 }
 
-func (rc *runContext) checkCache(ctx context.Context, step *lane.Step, stepID, safeName string, specHash primitive.Digest) (bool, error) {
+func (rc *runContext) checkCache(ctx context.Context, step *lane.Step, stepID primitive.Identifier, safeName string, specHash primitive.Digest) (bool, error) {
 	if step.ForceRun {
 		log.Printf("FORCED %s", safeName)
 		return false, nil
 	}
 
-	tag := registry.WrapTag(string(rc.lane.ID), stepID, specHash)
+	tag := registry.WrapTag(rc.lane.ID, stepID, specHash)
 	info, err := rc.engine.ImageInspect(ctx, tag)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
@@ -281,7 +281,7 @@ func (rc *runContext) checkCache(ctx context.Context, step *lane.Step, stepID, s
 	if err != nil {
 		return false, err
 	}
-	imageRef := registry.WrapDigest(string(rc.lane.ID), stepID, digest)
+	imageRef := registry.WrapDigest(rc.lane.ID, stepID, digest)
 	if regErr := rc.registerCachedOutputs(ctx, step, stepID, safeName, imageRef); regErr != nil {
 		return false, regErr
 	}
@@ -296,7 +296,7 @@ func (rc *runContext) checkCache(ctx context.Context, step *lane.Step, stepID, s
 // (deterministic, ADR-046), and the producer assembles one layer per output in
 // step.Outputs order (ADR-046 canonical ordering), so config rootfs.diff_ids[i]
 // is output i's layer. The image output (step.Output) has no layer.
-func (rc *runContext) registerCachedOutputs(ctx context.Context, step *lane.Step, stepID, safeName, imageRef string) error {
+func (rc *runContext) registerCachedOutputs(ctx context.Context, step *lane.Step, stepID primitive.Identifier, safeName, imageRef string) error {
 	if len(step.Outputs) > 0 {
 		tarBytes, saveErr := registry.SaveImage(ctx, rc.engine, imageRef)
 		if saveErr != nil {
@@ -316,7 +316,7 @@ func (rc *runContext) registerCachedOutputs(ctx context.Context, step *lane.Step
 				OutputID:    out.ID,
 				LayerDiffID: diffIDs[i],
 			}
-			if regErr := rc.laneState.Register(stepID, string(out.ID), handle); regErr != nil {
+			if regErr := rc.laneState.Register(stepID, out.ID, handle); regErr != nil {
 				return fmt.Errorf("cache hit register %s/%s: %w", stepID, out.ID, regErr)
 			}
 		}
@@ -330,8 +330,8 @@ func (rc *runContext) registerCachedOutputs(ctx context.Context, step *lane.Step
 	return nil
 }
 
-func (rc *runContext) executePack(ctx context.Context, step *lane.Step, stepID, safeName string) error {
-	outDir, err := os.MkdirTemp("", "strike-"+stepID+"-")
+func (rc *runContext) executePack(ctx context.Context, step *lane.Step, stepID primitive.Identifier, safeName string) error {
+	outDir, err := os.MkdirTemp("", "strike-"+string(stepID)+"-")
 	if err != nil {
 		return fmt.Errorf("%s: create temp dir: %w", safeName, err)
 	}
@@ -351,7 +351,7 @@ func (rc *runContext) executePack(ctx context.Context, step *lane.Step, stepID, 
 	if step.Output == "" {
 		return fmt.Errorf("%s: pack output requires an image output", safeName)
 	}
-	outputID := stepID
+	outputID := string(stepID)
 	result, err := executor.Pack(executor.PackOpts{
 		Spec:       step.Pack,
 		InputPaths: inputPaths,
@@ -368,7 +368,7 @@ func (rc *runContext) executePack(ctx context.Context, step *lane.Step, stepID, 
 	// carry the engine-stored digest -- it is what a consumer (imageFromStep)
 	// pulls by; result.Digest is the pre-annotation cross-validation anchor.
 	specHash := rc.state.specHashes[stepID]
-	tag := registry.WrapTag(string(rc.lane.ID), stepID, specHash)
+	tag := registry.WrapTag(rc.lane.ID, stepID, specHash)
 	digest, _, wrapErr := rc.regClient.WrapImageOutputAsImage(ctx, outRoot, outputID, tag, nil)
 	if wrapErr != nil {
 		return fmt.Errorf("%s: wrap image: %w", safeName, wrapErr)
@@ -381,7 +381,7 @@ func (rc *runContext) executePack(ctx context.Context, step *lane.Step, stepID, 
 	}
 
 	handle := output.ImageHandle{
-		Ref: registry.WrapDigest(string(rc.lane.ID), stepID, digest),
+		Ref: registry.WrapDigest(rc.lane.ID, stepID, digest),
 	}
 	if regErr := rc.laneState.Register(stepID, "", handle); regErr != nil {
 		return fmt.Errorf("%s: register artifact: %w", safeName, regErr)
@@ -390,7 +390,7 @@ func (rc *runContext) executePack(ctx context.Context, step *lane.Step, stepID, 
 }
 
 func (rc *runContext) resolvePackInputPaths(ctx context.Context, step *lane.Step, scratchDir, safeName string) (map[string]string, error) {
-	edges := rc.dag.PackFileEdges[string(step.ID)]
+	edges := rc.dag.PackFileEdges[step.ID]
 	inputPaths := make(map[string]string, len(edges))
 
 	scratchRoot, rootErr := os.OpenRoot(scratchDir)
@@ -404,10 +404,10 @@ func (rc *runContext) resolvePackInputPaths(ctx context.Context, step *lane.Step
 	inputsRoot := filepath.Join(scratchDir, "inputs")
 
 	for _, e := range edges {
-		fromStep := string(e.FromStep.ID)
+		fromStep := e.FromStep.ID
 		fromOutput := e.FromOutput.ID
 
-		handle, artErr := rc.laneState.Resolve(lane.OutputRef{Step: primitive.Identifier(fromStep), Output: fromOutput}.Ref())
+		handle, artErr := rc.laneState.Resolve(lane.OutputRef{Step: fromStep, Output: fromOutput}.Ref())
 		if artErr != nil {
 			return nil, fmt.Errorf("%s: pack input %s.%s: %w", safeName, fromStep, fromOutput, artErr)
 		}
@@ -439,7 +439,7 @@ func (rc *runContext) resolvePackInputPaths(ctx context.Context, step *lane.Step
 	return inputPaths, nil
 }
 
-func (rc *runContext) executeContainerStep(ctx context.Context, step *lane.Step, stepID, safeName, tag string) error {
+func (rc *runContext) executeContainerStep(ctx context.Context, step *lane.Step, stepID primitive.Identifier, safeName, tag string) error {
 	secrets, err := lane.ResolveSecrets(step.Secrets, rc.lane.Secrets, rc.laneRoot)
 	if err != nil {
 		return fmt.Errorf("%s: secrets: %w", safeName, err)
@@ -468,7 +468,8 @@ func (rc *runContext) executeContainerStep(ctx context.Context, step *lane.Step,
 	}
 	defer func() {
 		caps.CloseOutbound()
-		rc.networkRecords[stepID] = caps.Records()
+		key := string(stepID)
+		rc.networkRecords[key] = caps.Records()
 	}()
 
 	run := executor.Run{
@@ -506,7 +507,7 @@ func (rc *runContext) executeContainerStep(ctx context.Context, step *lane.Step,
 	return rc.pushAndReport(ctx, step, safeName, tag)
 }
 
-func (rc *runContext) wrapOutputs(ctx context.Context, step *lane.Step, stepID, safeName, containerID string) error {
+func (rc *runContext) wrapOutputs(ctx context.Context, step *lane.Step, stepID primitive.Identifier, safeName, containerID string) error {
 	if err := rc.wrapFileOutputs(ctx, step, stepID, safeName, containerID); err != nil {
 		return err
 	}
@@ -525,13 +526,13 @@ func (rc *runContext) wrapOutputs(ctx context.Context, step *lane.Step, stepID, 
 // output. The manifest digest is the single integrity anchor; every consumer
 // pulls the image by that digest and extracts the layer identified by the output id in
 // its handle.
-func (rc *runContext) wrapFileOutputs(ctx context.Context, step *lane.Step, stepID, safeName, containerID string) error {
+func (rc *runContext) wrapFileOutputs(ctx context.Context, step *lane.Step, stepID primitive.Identifier, safeName, containerID string) error {
 	if len(step.Outputs) == 0 {
 		return nil
 	}
 	workdir := step.Workdir.String()
 	specHash := rc.state.specHashes[stepID]
-	tag := registry.WrapTag(string(rc.lane.ID), stepID, specHash)
+	tag := registry.WrapTag(rc.lane.ID, stepID, specHash)
 
 	outs := make([]registry.OutputArchive, 0, len(step.Outputs))
 	for _, out := range step.Outputs {
@@ -545,7 +546,7 @@ func (rc *runContext) wrapFileOutputs(ctx context.Context, step *lane.Step, step
 			Tar:         stream,
 			StripPrefix: stripPrefix,
 			DestPrefix:  destPrefix,
-			OutputID:    string(out.ID),
+			OutputID:    out.ID,
 		})
 	}
 
@@ -554,9 +555,9 @@ func (rc *runContext) wrapFileOutputs(ctx context.Context, step *lane.Step, step
 		return fmt.Errorf("%s: assemble output image: %w", safeName, wrapErr)
 	}
 
-	imageRef := registry.WrapDigest(string(rc.lane.ID), stepID, result.Digest)
+	imageRef := registry.WrapDigest(rc.lane.ID, stepID, result.Digest)
 	for _, out := range step.Outputs {
-		diffID, ok := result.LayerDiffIDs[string(out.ID)]
+		diffID, ok := result.LayerDiffIDs[out.ID]
 		if !ok {
 			return fmt.Errorf("%s: output %q has no assembled layer", safeName, out.ID)
 		}
@@ -565,7 +566,7 @@ func (rc *runContext) wrapFileOutputs(ctx context.Context, step *lane.Step, step
 			OutputID:    out.ID,
 			LayerDiffID: diffID,
 		}
-		if regErr := rc.laneState.Register(stepID, string(out.ID), handle); regErr != nil {
+		if regErr := rc.laneState.Register(stepID, out.ID, handle); regErr != nil {
 			return fmt.Errorf("%s: register output %q: %w", safeName, out.ID, regErr)
 		}
 	}
@@ -575,8 +576,8 @@ func (rc *runContext) wrapFileOutputs(ctx context.Context, step *lane.Step, step
 // wrapImageOutput commits the held container to a new image, normalizes it
 // through ggcr for reproducible digests (ADR-046), and registers the
 // digest-pinned output handle.
-func (rc *runContext) wrapImageOutput(ctx context.Context, _ *lane.Step, stepID, safeName, containerID string, specHash primitive.Digest) error {
-	tag := registry.WrapTag(string(rc.lane.ID), stepID, specHash)
+func (rc *runContext) wrapImageOutput(ctx context.Context, _ *lane.Step, stepID primitive.Identifier, safeName, containerID string, specHash primitive.Digest) error {
+	tag := registry.WrapTag(rc.lane.ID, stepID, specHash)
 
 	imageID, commitErr := rc.engine.ContainerCommit(ctx, containerID)
 	if commitErr != nil {
@@ -595,7 +596,7 @@ func (rc *runContext) wrapImageOutput(ctx context.Context, _ *lane.Step, stepID,
 	}
 
 	handle := output.ImageHandle{
-		Ref: registry.WrapDigest(string(rc.lane.ID), stepID, digest),
+		Ref: registry.WrapDigest(rc.lane.ID, stepID, digest),
 	}
 	if regErr := rc.laneState.Register(stepID, "", handle); regErr != nil {
 		return fmt.Errorf("%s: register output: %w", safeName, regErr)
@@ -629,7 +630,7 @@ func (rc *runContext) captureProvenance(ctx context.Context, step *lane.Step, sa
 		return fmt.Errorf("validate %s provenance: %w", spec.Type, err)
 	}
 	log.Printf("PROV   %s type=%s", safeName, spec.Type)
-	return rc.laneState.RecordProvenance(string(step.ID), rec)
+	return rc.laneState.RecordProvenance(step.ID, rec)
 }
 
 // buildInputDelivery resolves each input edge to its delivery: inside the
@@ -645,7 +646,7 @@ func (rc *runContext) captureProvenance(ctx context.Context, step *lane.Step, sa
 // subpath resolves to a regular file, rather than surfacing the engine's
 // opaque runtime error.
 func (rc *runContext) buildInputDelivery(ctx context.Context, step *lane.Step) ([]container.Seed, []container.ImageVolume, error) {
-	edges := rc.dag.InputEdges[string(step.ID)]
+	edges := rc.dag.InputEdges[step.ID]
 	if len(edges) == 0 {
 		return nil, nil, nil
 	}
@@ -862,7 +863,7 @@ func (rc *runContext) createWorkdirVolume(ctx context.Context, step *lane.Step, 
 // by step name). All are created and seeded in one SeedVolumes batch
 // before the step loop runs.
 type trustVolumes struct {
-	ssh map[string]string // step name -> ssh trust volume name; nil when no step needs SSH
+	ssh map[primitive.Identifier]string // step name -> ssh trust volume name; nil when no step needs SSH
 	ca  string
 }
 
@@ -873,7 +874,7 @@ type trustVolumes struct {
 // of named volumes the orchestrator owns; the caller removes them at
 // lane end.
 func (rc *runContext) planTrustVolumes(ctx context.Context, caPEM []byte) (trustVolumes, error) {
-	tv := trustVolumes{ssh: map[string]string{}}
+	tv := trustVolumes{ssh: map[primitive.Identifier]string{}}
 
 	// CA (lane-wide).
 	tv.ca = fmt.Sprintf("strike-ca-%s-%d", rc.lane.ID, clock.Wall().UnixNano())
@@ -891,7 +892,7 @@ func (rc *runContext) planTrustVolumes(ctx context.Context, caPEM []byte) (trust
 	// capsule.SSHConfig().
 	for i := range rc.lane.Steps {
 		step := &rc.lane.Steps[i]
-		caps := rc.capsules[string(step.ID)]
+		caps := rc.capsules[step.ID]
 		kh, cfg := executor.SSHTrustContent(step.Peers, caps, rc.front.HostKeyPublic())
 		if kh == nil {
 			continue
@@ -901,7 +902,7 @@ func (rc *runContext) planTrustVolumes(ctx context.Context, caPEM []byte) (trust
 		if tarErr != nil {
 			return trustVolumes{}, fmt.Errorf("ssh volume tar for %s: %w", step.ID, tarErr)
 		}
-		tv.ssh[string(step.ID)] = name
+		tv.ssh[step.ID] = name
 		seeds = append(seeds, container.VolumeSeed{
 			Volume: name, Tar: bytes.NewReader(sshTar),
 		})
@@ -977,7 +978,7 @@ func (rc *runContext) buildCapsules(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		rc.capsules[name] = caps
+		rc.capsules[step.ID] = caps
 		for _, tok := range caps.Tokens() {
 			if regErr := rc.front.Register(tok, caps); regErr != nil {
 				return regErr
@@ -993,7 +994,7 @@ func (rc *runContext) buildCapsules(ctx context.Context) error {
 func (rc *runContext) stopCapsules() {
 	for name, caps := range rc.capsules {
 		if stopErr := caps.Stop(); stopErr != nil {
-			log.Printf("WARN   %s: capsule stop: %v", sanitizeForLog(name), stopErr)
+			log.Printf("WARN   %s: capsule stop: %v", sanitizeForLog(string(name)), stopErr)
 		}
 	}
 }
