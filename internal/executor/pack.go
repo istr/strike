@@ -121,7 +121,7 @@ func AssembleImage(base v1.Image, spec *lane.PackSpec, inputPaths map[string]str
 // security-critical computations.
 func Pack(opts PackOpts) (*PackResult, error) {
 	// 1. Pull and verify the base image (network I/O)
-	base, err := pullVerified(string(opts.Spec.Base))
+	base, err := pullVerified(opts.Spec.Base)
 	if err != nil {
 		return nil, fmt.Errorf("pack: pull base image: %w", err)
 	}
@@ -348,8 +348,9 @@ func writeOCILayout(img v1.Image, sbomImages []v1.Image, outputRoot *os.Root, ou
 // pullVerified pulls a remote image by digest-pinned reference.
 // For multi-arch images the ref digest pins the index; go-containerregistry
 // verifies the index digest on fetch, then resolves to the platform image.
-func pullVerified(ref string) (v1.Image, error) {
-	nameRef, err := name.ParseReference(ref)
+func pullVerified(ref primitive.ImageRef) (v1.Image, error) {
+	s := string(ref)
+	nameRef, err := name.ParseReference(s)
 	if err != nil {
 		return nil, fmt.Errorf("parse ref %q: %w", ref, err)
 	}

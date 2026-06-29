@@ -13,6 +13,8 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/go-containerregistry/pkg/v1/static"
 	"github.com/google/go-containerregistry/pkg/v1/types"
+
+	"github.com/istr/strike/internal/primitive"
 )
 
 // SigstoreBundleMediaType is the artifact type under which keylessly signed
@@ -221,8 +223,9 @@ func fetchOneBundle(ctx context.Context, ref name.Digest) (*StatementBundle, err
 // exact bytes they trust. The image is a plain artifact, not a referrer of
 // anything; its sole layer is the document. The read is bounded by maxBundleBytes
 // against a hostile or buggy registry.
-func FetchTrustRoot(ctx context.Context, ref string) ([]byte, error) {
-	d, err := name.NewDigest(ref)
+func FetchTrustRoot(ctx context.Context, ref primitive.ImageRef) ([]byte, error) {
+	s := string(ref)
+	d, err := name.NewDigest(s)
 	if err != nil {
 		return nil, fmt.Errorf("trust root ref must be digest-pinned: %w", err)
 	}
@@ -301,8 +304,9 @@ type BaseSBOMReferrer struct {
 //
 // The subject must be digest-pinned (name.NewDigest rejects a tag) because a
 // mutable reference cannot anchor a reproducible verification.
-func FetchBaseSBOMReferrers(ctx context.Context, baseRef string) ([]BaseSBOMReferrer, error) {
-	ref, err := name.NewDigest(baseRef)
+func FetchBaseSBOMReferrers(ctx context.Context, baseRef primitive.ImageRef) ([]BaseSBOMReferrer, error) {
+	s := string(baseRef)
+	ref, err := name.NewDigest(s)
 	if err != nil {
 		return nil, fmt.Errorf("base image must be digest-pinned: %w", err)
 	}

@@ -114,7 +114,7 @@ type RunOpts struct {
 	Stdout       io.Writer
 	Env          map[string]string
 	Tmpfs        map[string]string
-	Image        string
+	Image        primitive.ImageRef
 	Network      string
 	UsernsMode   string
 	Workdir      string

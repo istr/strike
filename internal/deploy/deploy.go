@@ -760,7 +760,7 @@ func (d *Deployer) captureOne(ctx context.Context, sc lane.Capture) (captureSnap
 	}
 
 	opts := HardenedRunOpts()
-	opts.Image = string(sc.Image)
+	opts.Image = sc.Image
 	opts.Cmd = sc.Command
 	opts.Mounts = mounts
 	opts.Stdout = &stdout
@@ -858,7 +858,7 @@ func (d *Deployer) executeKubernetesDeploy(ctx context.Context, m lane.DeployKub
 	}
 
 	opts := HardenedRunOpts()
-	opts.Image = string(m.Image)
+	opts.Image = m.Image
 	opts.Cmd = kubectlArgs
 	opts.Mounts = mounts
 	opts.Stdin = os.Stdin
@@ -901,7 +901,7 @@ func (d *Deployer) executeCustomDeploy(ctx context.Context, m lane.DeployCustom,
 	}
 
 	opts := HardenedRunOpts()
-	opts.Image = string(m.Image)
+	opts.Image = m.Image
 	opts.Entrypoint = m.Entrypoint
 	opts.Cmd = m.Args
 	opts.Env = env

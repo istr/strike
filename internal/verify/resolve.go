@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/registry"
 )
 
@@ -28,7 +29,7 @@ var ErrNoTrustRoot = errors.New("verify: no trust root; declare keyless.trustRoo
 // The override ref is the operator's explicit anchor, distinct from the lane's:
 // it always wins, and being digest-pinned it carries the same content-addressed
 // guarantee as the lane-declared ref.
-func ResolveTrustedMaterial(ctx context.Context, overrideRef string, k lane.Keyless) (*TrustedMaterial, error) {
+func ResolveTrustedMaterial(ctx context.Context, overrideRef primitive.ImageRef, k lane.Keyless) (*TrustedMaterial, error) {
 	switch {
 	case overrideRef != "":
 		data, err := registry.FetchTrustRoot(ctx, overrideRef)
@@ -43,7 +44,7 @@ func ResolveTrustedMaterial(ctx context.Context, overrideRef string, k lane.Keyl
 		}
 		return ParseTrustedRoot(data)
 	case k.TrustRootRef != "":
-		data, err := registry.FetchTrustRoot(ctx, string(k.TrustRootRef))
+		data, err := registry.FetchTrustRoot(ctx, k.TrustRootRef)
 		if err != nil {
 			return nil, err
 		}

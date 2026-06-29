@@ -30,11 +30,12 @@ func (d *Deployer) verifyBaseSBOMs(ctx context.Context, stepID primitive.Identif
 	}
 	var deps []ResourceDescriptor
 	for _, base := range d.DAG.PackBaseRefs(stepID) {
-		baseDigest, ok := sha256Hex(string(base))
+		baseStr := string(base)
+		baseDigest, ok := sha256Hex(baseStr)
 		if !ok {
 			return nil, fmt.Errorf("base SBOM: base %q is not digest-pinned", base)
 		}
-		referrers, err := registry.FetchBaseSBOMReferrers(ctx, string(base))
+		referrers, err := registry.FetchBaseSBOMReferrers(ctx, base)
 		if err != nil {
 			return nil, fmt.Errorf("base SBOM: fetch referrers of %s: %w", base, err)
 		}
@@ -100,7 +101,7 @@ func (d *Deployer) verifyOneBaseSBOM(
 	}
 	return ResourceDescriptor{
 		Digest:    &DigestSet{SHA256: refDigest},
-		Name:      baseRepo(string(base)),
+		Name:      baseRepo(base),
 		URI:       string(base),
 		MediaType: stmt.PredicateType,
 	}, true, nil
@@ -117,7 +118,8 @@ func sha256Hex(ref string) (primitive.Sha256, bool) {
 }
 
 // baseRepo returns the repository portion of a digest-pinned image reference.
-func baseRepo(ref string) string {
-	repo, _, _ := strings.Cut(ref, "@")
+func baseRepo(ref primitive.ImageRef) string {
+	s := string(ref)
+	repo, _, _ := strings.Cut(s, "@")
 	return repo
 }

@@ -948,7 +948,7 @@ type specImageVolume struct {
 // semantic condition (netns/userns/network_options).
 func buildSpecGenerator(opts RunOpts) specGen {
 	spec := specGen{
-		Image:              opts.Image,
+		Image:              string(opts.Image),
 		Command:            opts.Cmd,
 		Entrypoint:         opts.Entrypoint,
 		WorkDir:            opts.Workdir,

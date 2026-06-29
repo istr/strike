@@ -13,6 +13,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/name"
 
 	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/registry"
 	"github.com/istr/strike/internal/verify"
 )
@@ -182,7 +183,8 @@ func runVerify(ctx context.Context, out io.Writer, opts verifyOptions) error {
 	if err != nil {
 		return err
 	}
-	tm, err := verify.ResolveTrustedMaterial(ctx, opts.trustRootRef, pol.keyless)
+	ref := primitive.ImageRef(opts.trustRootRef)
+	tm, err := verify.ResolveTrustedMaterial(ctx, ref, pol.keyless)
 	if err != nil {
 		return err
 	}

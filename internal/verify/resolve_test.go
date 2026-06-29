@@ -65,7 +65,7 @@ func pushGoldenTrustRoot(t *testing.T) string {
 }
 
 func TestResolveOverride(t *testing.T) {
-	tm, err := verify.ResolveTrustedMaterial(context.Background(), pushGoldenTrustRoot(t), lane.Keyless{})
+	tm, err := verify.ResolveTrustedMaterial(context.Background(), primitive.ImageRef(pushGoldenTrustRoot(t)), lane.Keyless{})
 	if err != nil {
 		t.Fatalf("ResolveTrustedMaterial: %v", err)
 	}
@@ -110,7 +110,7 @@ func TestResolvePrecedenceOverrideShortCircuits(t *testing.T) {
 	// A deliberately invalid inline replica: if the override did not short-
 	// circuit, marshalling and parsing this would fail.
 	k := lane.Keyless{TrustRoot: &lane.TrustedRootReplica{}}
-	tm, err := verify.ResolveTrustedMaterial(context.Background(), pushGoldenTrustRoot(t), k)
+	tm, err := verify.ResolveTrustedMaterial(context.Background(), primitive.ImageRef(pushGoldenTrustRoot(t)), k)
 	if err != nil {
 		t.Fatalf("override should short-circuit invalid inline: %v", err)
 	}

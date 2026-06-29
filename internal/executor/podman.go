@@ -10,6 +10,7 @@ import (
 	"github.com/istr/strike/internal/capsule"
 	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/primitive"
 )
 
 // Run holds the configuration for executing a step container.
@@ -65,16 +66,16 @@ func (r Run) Execute(ctx context.Context) (string, error) {
 	// SSH egress reaches the front on port 22 -- no agent socket (ADR-038 D6).
 	opts := container.DefaultSecureOpts()
 	if r.Step.Image != nil {
-		opts.Image = string(*r.Step.Image)
+		opts.Image = *r.Step.Image
 	}
 	if r.ImageRef != "" {
-		opts.Image = r.ImageRef
+		opts.Image = primitive.ImageRef(r.ImageRef)
 	}
 	// ADR-045: a step executes only a digest-pinned image. External bases
 	// are digest-pinned at the schema boundary (ADR-011); image_from bases
 	// arrive as a content-addressed local reference. Reject anything else
 	// structurally, so an execute-by-tag path cannot reappear.
-	if !strings.Contains(opts.Image, "@sha256:") {
+	if !strings.Contains(string(opts.Image), "@sha256:") {
 		return "", fmt.Errorf("executor: refusing to run non-digest-pinned image %q (ADR-045)", opts.Image)
 	}
 	opts.Cmd = r.Step.Args
