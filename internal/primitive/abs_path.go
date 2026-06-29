@@ -37,3 +37,8 @@ func (p AbsPath) Dir() string {
 func (p AbsPath) String() string {
 	return string(p)
 }
+
+// Clean returns the lexically cleaned form of the path.
+func (p AbsPath) Clean() string {
+	return path.Clean(string(p))
+}

@@ -530,7 +530,7 @@ func (rc *runContext) wrapFileOutputs(ctx context.Context, step *lane.Step, step
 	if len(step.Outputs) == 0 {
 		return nil
 	}
-	workdir := step.Workdir.String()
+	workdir := *step.Workdir
 	specHash := rc.state.specHashes[stepID]
 	tag := registry.WrapTag(rc.lane.ID, stepID, specHash)
 
@@ -671,7 +671,7 @@ func (rc *runContext) buildInputDelivery(ctx context.Context, step *lane.Step) (
 		inside := false
 		var rel string
 		if step.Workdir != nil {
-			rel, inside = relWithinWorkdir(step.Workdir.String(), e.Mount.String())
+			rel, inside = relWithinWorkdir(*step.Workdir, e.Mount)
 		}
 
 		if inside {
@@ -784,10 +784,10 @@ func singleFileOutsideErr(e lane.InputEdge) error {
 //
 // stripPrefix/destPrefix are unused for image outputs (wrapped via
 // WrapImageArchiveAsImage); archivePath is used for all types.
-func archiveReroot(workdir string, out lane.FileOutput) (archivePath, stripPrefix, destPrefix string) {
-	archivePath = workdir
+func archiveReroot(workdir primitive.AbsPath, out lane.FileOutput) (archivePath, stripPrefix, destPrefix string) {
+	archivePath = workdir.String()
 	if out.Path != nil {
-		archivePath = path.Join(workdir, out.Path.String())
+		archivePath = path.Join(workdir.String(), out.Path.String())
 	}
 	if out.Type == artifactTypeFile {
 		return archivePath, "", ""
@@ -811,15 +811,16 @@ func inputContentPath(e lane.InputEdge) string {
 	if e.Subpath == nil {
 		return base
 	}
-	return path.Join(base, string(*e.Subpath))
+	sub := string(*e.Subpath)
+	return path.Join(base, sub)
 }
 
 // relWithinWorkdir returns the path of mount relative to workdir, and whether
 // mount is at or inside workdir. Lexical, component-wise: "/work" contains
 // "/work" (".") and "/work/x", but not "/workspace".
-func relWithinWorkdir(workdir, mount string) (string, bool) {
-	w := path.Clean(workdir)
-	m := path.Clean(mount)
+func relWithinWorkdir(workdir, mount primitive.AbsPath) (string, bool) {
+	w := workdir.Clean()
+	m := mount.Clean()
 	if m == w {
 		return ".", true
 	}

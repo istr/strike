@@ -4,7 +4,6 @@ package lane
 
 import (
 	"fmt"
-	"path"
 	"slices"
 	"sort"
 	"strings"
@@ -297,7 +296,8 @@ func (d *DAG) validateProvenancePaths(p *Lane) error {
 				found = true
 				break
 			}
-			if provPath == *out.Path || provPath.HasPrefix(string(*out.Path)+"/") {
+			prefix := string(*out.Path) + "/"
+			if provPath == *out.Path || provPath.HasPrefix(prefix) {
 				found = true
 				break
 			}
@@ -483,8 +483,8 @@ func validateOutputIDDisjointness(p *Lane) error {
 //	"/a/b"   and "/a/c"    -> no conflict (siblings)
 //	"/a"     and "/abc"    -> no conflict (NOT a prefix in path terms)
 func mountsConflict(a, b primitive.AbsPath) bool {
-	ca := path.Clean(string(a))
-	cb := path.Clean(string(b))
+	ca := a.Clean()
+	cb := b.Clean()
 	if ca == cb {
 		return true
 	}

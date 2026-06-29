@@ -898,7 +898,7 @@ func TestNewRunState(t *testing.T) {
 func TestArchiveReroot(t *testing.T) {
 	tests := []struct {
 		name                             string
-		workdir                          string
+		workdir                          primitive.AbsPath
 		out                              lane.FileOutput
 		wantArchive, wantStrip, wantDest string
 	}{
