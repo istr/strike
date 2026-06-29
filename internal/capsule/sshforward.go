@@ -11,6 +11,7 @@ import (
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/closer"
 	"github.com/istr/strike/internal/mediator"
+	"github.com/istr/strike/internal/primitive"
 )
 
 // defaultSSHPort is the upstream port the capsule dials when an SSH
@@ -25,7 +26,7 @@ const defaultSSHPort uint16 = 22
 // when it dials the peer (the front, not the container, now validates the
 // peer -- ADR-038 D5, left-to-right dialing).
 type SSHTarget struct {
-	Host     string
+	Host     primitive.Host
 	HostKeys []string
 	Port     uint16 // upstream SSH port; 0 means use defaultSSHPort
 }
@@ -77,7 +78,7 @@ func newSSHForwarder(stepID string, t SSHTarget, upstreamLook UpstreamLookupFunc
 	}
 	return &sshForwarder{
 		stepID:       stepID,
-		host:         t.Host,
+		host:         string(t.Host),
 		port:         port,
 		upstreamLook: upstreamLook,
 	}, nil

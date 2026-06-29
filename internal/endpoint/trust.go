@@ -29,3 +29,9 @@ type CABundle struct {
 
 // TrustType implements Trust.
 func (t CABundle) TrustType() string { return t.Type }
+
+// KnownHostsLine renders the host key as an OpenSSH known_hosts entry body:
+// the key type, a space, and the base64-encoded public key.
+func (k HostKey) KnownHostsLine() string {
+	return k.KeyType + " " + string(k.Key)
+}

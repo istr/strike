@@ -1048,7 +1048,7 @@ func sshTargetsOf(peers []lane.Peer) []capsule.SSHTarget {
 		if sp, ok := p.(endpoint.SSH); ok {
 			keys := make([]string, len(sp.KnownHosts))
 			for j, e := range sp.KnownHosts {
-				keys[j] = e.KeyType + " " + string(e.Key)
+				keys[j] = e.KnownHostsLine()
 			}
 			out = append(out, sshTarget(sp, keys))
 		}
@@ -1057,7 +1057,7 @@ func sshTargetsOf(peers []lane.Peer) []capsule.SSHTarget {
 }
 
 func sshTarget(sp endpoint.SSH, keys []string) capsule.SSHTarget {
-	t := capsule.SSHTarget{Host: string(sp.Address.Host), HostKeys: keys}
+	t := capsule.SSHTarget{Host: sp.Address.Host, HostKeys: keys}
 	if p := sp.Address.Port; p != nil && *p >= 0 && *p <= 65535 {
 		t.Port = uint16(*p)
 	}

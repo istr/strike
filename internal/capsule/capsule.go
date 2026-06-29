@@ -146,7 +146,7 @@ func New(
 		allowlist = append(allowlist, p.Host)
 	}
 	for _, t := range sshTargets {
-		allowlist = append(allowlist, primitive.Host(t.Host))
+		allowlist = append(allowlist, t.Host)
 	}
 
 	res, err := resolver.New(stepID, allowlist, loopbackV4)

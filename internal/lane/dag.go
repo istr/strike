@@ -416,7 +416,7 @@ func peerAnchor(peer Peer) string {
 	case endpoint.SSH:
 		entries := make([]string, len(x.KnownHosts))
 		for i, kh := range x.KnownHosts {
-			entries[i] = kh.KeyType + " " + string(kh.Key)
+			entries[i] = kh.KnownHostsLine()
 		}
 		sort.Strings(entries)
 		return "ssh/" + strings.Join(entries, "\n")

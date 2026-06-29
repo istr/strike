@@ -20,7 +20,8 @@ func ParseDuration(d *primitive.Duration, defaultVal clock.Duration) (clock.Dura
 	if d == nil {
 		return defaultVal, nil
 	}
-	return clock.ParseDuration(string(*d))
+	s := string(*d)
+	return clock.ParseDuration(s)
 }
 
 // Parse reads a lane YAML file, validates it against the embedded CUE schema,

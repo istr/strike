@@ -19,6 +19,7 @@ import (
 
 	"github.com/istr/strike/internal/capsule"
 	"github.com/istr/strike/internal/front"
+	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/transport"
 )
 
@@ -328,7 +329,7 @@ func TestBridge_EndToEnd(t *testing.T) {
 	ca := bridgeTestCA(t)
 	hp := capsule.HostPorts{Resolver: 15400, Mediator: 15401}
 	targets := []capsule.SSHTarget{{
-		Host:     upstream.addr(),
+		Host:     primitive.Host(upstream.addr()),
 		HostKeys: []string{upstream.hostKeyLine()},
 		Port:     upstream.port(),
 	}}
@@ -405,7 +406,7 @@ func TestBridge_WrongToken_Refused(t *testing.T) {
 	ca := bridgeTestCA(t)
 	hp := capsule.HostPorts{Resolver: 15410, Mediator: 15411}
 	targets := []capsule.SSHTarget{{
-		Host:     upstream.addr(),
+		Host:     primitive.Host(upstream.addr()),
 		HostKeys: []string{upstream.hostKeyLine()},
 		Port:     upstream.port(),
 	}}
@@ -483,7 +484,7 @@ func TestBridge_InboundCloseUnblocksHandler(t *testing.T) {
 	ca := bridgeTestCA(t)
 	hp := capsule.HostPorts{Resolver: 15430, Mediator: 15431}
 	targets := []capsule.SSHTarget{{
-		Host:     upstream.addr(),
+		Host:     primitive.Host(upstream.addr()),
 		HostKeys: []string{upstream.hostKeyLine()},
 		Port:     upstream.port(),
 	}}
@@ -577,7 +578,7 @@ func TestBridge_DisallowedCommand_Refused(t *testing.T) {
 	ca := bridgeTestCA(t)
 	hp := capsule.HostPorts{Resolver: 15420, Mediator: 15421}
 	targets := []capsule.SSHTarget{{
-		Host:     upstream.addr(),
+		Host:     primitive.Host(upstream.addr()),
 		HostKeys: []string{upstream.hostKeyLine()},
 		Port:     upstream.port(),
 	}}
