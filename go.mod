@@ -3,7 +3,7 @@ module github.com/istr/strike
 go 1.26.4
 
 require (
-	cuelang.org/go v0.17.0-rc.1.0.20260622152212-0fc639bbe981
+	cuelang.org/go v0.17.0
 	github.com/CycloneDX/cyclonedx-go v0.11.0
 	github.com/digitorus/pkcs7 v0.0.0-20230818184609-3a137a874352
 	github.com/digitorus/timestamp v0.0.0-20231217203849-220c5c2851b7
