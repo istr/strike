@@ -30,7 +30,7 @@ func TestSLSAProvenanceStatement_Valid(t *testing.T) {
 				BuildType: "https://istr.dev/strike/buildtypes/lane/v1",
 				ExternalParameters: deploy.StrikeExternalParameters{
 					LaneID:     "demo",
-					LaneDigest: "",
+					LaneDigest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
 					Target:     target.Deploy{ID: "prod-1", Type: "registry", Description: "production"},
 					OIDC:       deploy.ProvenanceOIDC{Issuer: "https://idp.example.com", Identity: "strike@example.com"},
 					Peers:      map[primitive.Identifier][]lane.Peer{},

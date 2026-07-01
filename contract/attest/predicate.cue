@@ -94,7 +94,7 @@ import (
 // anchors -- all control-plane-established, sound without engine trust.
 #StrikeExternalParameters: {
 	laneId:     primitive.#Identifier
-	laneDigest: primitive.#Digest | ""
+	laneDigest: primitive.#Digest
 	target:     deploytarget.#Deploy
 	oidc:       #ProvenanceOIDC
 	peers: [ID=primitive.#Identifier]: [...lane.#Peer]

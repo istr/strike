@@ -21,8 +21,9 @@ import (
 func TestValidateAttestation_Valid(t *testing.T) {
 	att := &deploy.Attestation{
 		Sealed: deploy.Sealed{
-			LaneID: "test-lane",
-			Target: target.Deploy{ID: "prod-1", Type: "registry", Description: "production"},
+			LaneID:     "test-lane",
+			LaneDigest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+			Target:     target.Deploy{ID: "prod-1", Type: "registry", Description: "production"},
 			Artifacts: map[string]record.Artifact{
 				"image": {Digest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
 			},
@@ -45,8 +46,9 @@ func TestValidateAttestation_WithEngine(t *testing.T) {
 	rootless := true
 	att := &deploy.Attestation{
 		Sealed: deploy.Sealed{
-			LaneID: "test-lane",
-			Target: target.Deploy{ID: "staging-1", Type: "kubernetes", Description: "staging"},
+			LaneID:     "test-lane",
+			LaneDigest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+			Target:     target.Deploy{ID: "staging-1", Type: "kubernetes", Description: "staging"},
 			Artifacts: map[string]record.Artifact{
 				"app": {Digest: "sha256:1111111111111111111111111111111111111111111111111111111111111111"},
 			},
@@ -102,7 +104,7 @@ func TestValidateAttestation_MissingTarget(t *testing.T) {
 	raw := `{
 		"sealed": {
 			"laneId": "test-lane",
-			"laneDigest": "",
+			"laneDigest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
 			"artifacts": {},
 			"peers": {}
 		},
@@ -127,10 +129,11 @@ func TestValidateAttestation_MissingTarget(t *testing.T) {
 func TestValidateAttestation_EmptyDigestsAllowed(t *testing.T) {
 	att := &deploy.Attestation{
 		Sealed: deploy.Sealed{
-			LaneID:    "test-lane",
-			Target:    target.Deploy{ID: "test-1", Type: "registry", Description: "first deploy"},
-			Artifacts: map[string]record.Artifact{},
-			Peers:     map[primitive.Identifier][]lane.Peer{},
+			LaneID:     "test-lane",
+			LaneDigest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+			Target:     target.Deploy{ID: "test-1", Type: "registry", Description: "first deploy"},
+			Artifacts:  map[string]record.Artifact{},
+			Peers:      map[primitive.Identifier][]lane.Peer{},
 		},
 		Informational: &deploy.Informational{
 			Timestamp:       clock.Reproducible(),
@@ -210,9 +213,10 @@ func runAttestationVector(t *testing.T, name string) {
 func TestValidateAttestation_WithResolverRecord(t *testing.T) {
 	att := &deploy.Attestation{
 		Sealed: deploy.Sealed{
-			LaneID:    "test-lane",
-			Target:    target.Deploy{ID: "staging-1", Type: "kubernetes", Description: "staging"},
-			Artifacts: map[string]record.Artifact{},
+			LaneID:     "test-lane",
+			LaneDigest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+			Target:     target.Deploy{ID: "staging-1", Type: "kubernetes", Description: "staging"},
+			Artifacts:  map[string]record.Artifact{},
 			Resolver: deploy.ResolverRecord{
 				Host:                  "1.1.1.1:853",
 				ServerCertFingerprint: "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
@@ -237,8 +241,9 @@ func TestValidateAttestation_WithResolverRecord(t *testing.T) {
 func TestValidateAttestation_WithPeers(t *testing.T) {
 	att := &deploy.Attestation{
 		Sealed: deploy.Sealed{
-			LaneID: "test-lane",
-			Target: target.Deploy{ID: "prod-1", Type: "registry", Description: "production"},
+			LaneID:     "test-lane",
+			LaneDigest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+			Target:     target.Deploy{ID: "prod-1", Type: "registry", Description: "production"},
 			Artifacts: map[string]record.Artifact{
 				"image": {Digest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
 			},

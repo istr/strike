@@ -357,6 +357,7 @@ func TestDeployerExecute(t *testing.T) {
 
 	d := &deploy.Deployer{
 		Engine:       eng,
+		LaneDigest:   "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
 		ArtifactRefs: map[string]string{"image": "build.image"},
 		LaneID:       "test-lane",
 		CA:           ca,
@@ -447,6 +448,7 @@ func TestDeployerExecuteRegistryAttachesReferrers(t *testing.T) {
 
 	d := &deploy.Deployer{
 		Engine:       eng,
+		LaneDigest:   "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
 		ArtifactRefs: map[string]string{"image": "build.image"},
 		LaneID:       "test-lane",
 		CA:           ca,
@@ -623,6 +625,7 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 
 	d := &deploy.Deployer{
 		Engine: eng, EngineID: eng.Identity(),
+		LaneDigest:   "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
 		ArtifactRefs: map[string]string{"image": "build.image"},
 		LaneID:       "test-lane",
 		CA:           ca,
@@ -706,6 +709,7 @@ func TestEngineRecord_NilEngineID(t *testing.T) {
 	// EngineID is nil -- engineRecord should return nil.
 	d := &deploy.Deployer{
 		Engine: eng, EngineID: nil,
+		LaneDigest:   "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
 		ArtifactRefs: map[string]string{"image": "build.image"},
 		LaneID:       "test-lane",
 		CA:           ca,
@@ -765,6 +769,7 @@ func TestEngineRecord_WithRuntime(t *testing.T) {
 
 	d := &deploy.Deployer{
 		Engine: eng, EngineID: id,
+		LaneDigest:   "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
 		ArtifactRefs: map[string]string{"image": "build.image"},
 		LaneID:       "test-lane",
 		CA:           ca,
@@ -839,6 +844,7 @@ func TestEngineRecord_WithoutRuntime(t *testing.T) {
 
 	d := &deploy.Deployer{
 		Engine: eng, EngineID: id,
+		LaneDigest:   "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
 		ArtifactRefs: map[string]string{"image": "build.image"},
 		LaneID:       "test-lane",
 		CA:           ca,
@@ -907,7 +913,8 @@ func TestResolverRecord_Populated(t *testing.T) {
 	ca, look, caPath, ports := deployCapsuleFields(t, "deploy-resolver")
 
 	d := &deploy.Deployer{
-		Engine: eng,
+		Engine:     eng,
+		LaneDigest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
 		Resolver: deploy.ResolverProbe{
 			Declared: endpoint.TLS{Type: "https", Address: endpoint.MustParseAuthority("1.1.1.1:853"), Trust: endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}},
 			Observed: rid,
@@ -1057,6 +1064,7 @@ func TestDeployerExecute_KeylessBundles(t *testing.T) {
 	d := &deploy.Deployer{
 		Engine:       eng,
 		EngineID:     eng.Identity(),
+		LaneDigest:   "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
 		ArtifactRefs: map[string]string{"image": "build.image"},
 		LaneID:       "test-lane",
 		CA:           ca,
@@ -1108,6 +1116,7 @@ func TestDeployerExecute_KeylessFailureIsFatal(t *testing.T) {
 	step := deployStep()
 	d := &deploy.Deployer{
 		Engine:       eng,
+		LaneDigest:   "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
 		ArtifactRefs: map[string]string{"image": "build.image"},
 		LaneID:       "test-lane",
 		CA:           ca,
@@ -1295,6 +1304,7 @@ func TestDeployerExecute_ObservedPeersPopulated(t *testing.T) {
 	step := dag.Steps["deploy-prod"]
 	d := &deploy.Deployer{
 		Engine:         eng,
+		LaneDigest:     "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
 		ArtifactRefs:   map[string]string{"image": "build.image"},
 		LaneID:         "test-lane",
 		DAG:            dag,

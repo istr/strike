@@ -75,7 +75,7 @@ import (
 
 	// laneDigest is the raw sha256 over the lane definition file bytes,
 	// computed by CP at parse time (hash and parse read the same bytes).
-	laneDigest: primitive.#Digest | ""
+	laneDigest: primitive.#Digest
 
 	// artifacts maps artifact names to their signed provenance records.
 	// Each artifact's digest is consumer-dereferenceable from the registry
