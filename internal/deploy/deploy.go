@@ -623,7 +623,7 @@ func (d *Deployer) signStatements(ctx context.Context, att *Attestation, stepID 
 	}
 	statements := make([][]byte, 0, 3)
 	for _, stmt := range []any{slsa, engineCtx, info} {
-		stmtJSON, mErr := json.Marshal(stmt)
+		stmtJSON, mErr := canonicalJSON(stmt)
 		if mErr != nil {
 			return fmt.Errorf("step %q: marshal statement: %w", stepID, mErr)
 		}
@@ -689,7 +689,7 @@ func resolveArtifactDigests(stepID primitive.Identifier, refs map[string]string,
 
 // recordAttestation marshals and records the attestation in lane state.
 func (d *Deployer) recordAttestation(att *Attestation, step *lane.Step, state *lane.State, started clock.Time) error {
-	attJSON, err := json.Marshal(att)
+	attJSON, err := canonicalJSON(att)
 	if err != nil {
 		return fmt.Errorf("marshal attestation: %w", err)
 	}
