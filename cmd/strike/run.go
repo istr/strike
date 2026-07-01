@@ -162,34 +162,7 @@ func (rc *runContext) executeDeploy(ctx context.Context, step *lane.Step, stepID
 		return fmt.Errorf("%s: deploy failed: %w", safeName, err)
 	}
 
-	attJSON, err := att.JSON()
-	if err != nil {
-		return fmt.Errorf("%s: attestation marshal: %w", safeName, err)
-	}
 	log.Printf("OK     %s -> %s/%s", safeName, att.Sealed.LaneID, att.Sealed.Target.ID)
-
-	outDir, err := os.MkdirTemp("", "strike-"+string(stepID)+"-")
-	if err != nil {
-		return fmt.Errorf("%s: create temp dir: %w", safeName, err)
-	}
-	defer removeStrikeScratch(outDir)
-	if writeErr := writeToOutputDir(outDir, "attestation.json", attJSON); writeErr != nil {
-		return fmt.Errorf("%s: write attestation: %w", safeName, writeErr)
-	}
-	if att.Signed != nil {
-		for _, w := range []struct {
-			name string
-			env  []byte
-		}{
-			{"slsa-provenance.sigstore.json", att.Signed.Sealed.Bundle},
-			{"engine-context.sigstore.json", att.Signed.EngineContext.Bundle},
-			{"informational.sigstore.json", att.Signed.Informational.Bundle},
-		} {
-			if writeErr := writeToOutputDir(outDir, w.name, w.env); writeErr != nil {
-				return fmt.Errorf("%s: write %s: %w", safeName, w.name, writeErr)
-			}
-		}
-	}
 	return nil
 }
 

@@ -178,9 +178,9 @@ func TestAttestationJSON(t *testing.T) {
 		},
 	}
 
-	data, err := att.JSON()
+	data, err := json.Marshal(att)
 	if err != nil {
-		t.Fatalf("JSON: %v", err)
+		t.Fatalf("Marshal: %v", err)
 	}
 
 	var m map[string]any
@@ -652,9 +652,9 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 	}
 
 	// Verify it round-trips through JSON
-	data, err := att.JSON()
+	data, err := json.Marshal(att)
 	if err != nil {
-		t.Fatalf("JSON: %v", err)
+		t.Fatalf("Marshal: %v", err)
 	}
 	var m map[string]any
 	if err := json.Unmarshal(data, &m); err != nil {

@@ -7,7 +7,6 @@ import (
 	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/registry"
-	"github.com/istr/strike/internal/testutil"
 )
 
 // --------------------------------------------------------------------------.
@@ -37,30 +36,6 @@ func TestSanitizeForLog(t *testing.T) {
 				t.Errorf("sanitizeForLog(%q) = %q, want %q", tt.in, got, tt.want)
 			}
 		})
-	}
-}
-
-// --------------------------------------------------------------------------.
-// writeToOutputDir
-// --------------------------------------------------------------------------.
-
-func TestWriteToOutputDir(t *testing.T) {
-	dir := t.TempDir()
-	data := []byte("test-content")
-	if err := writeToOutputDir(dir, "out.txt", data); err != nil {
-		t.Fatalf("writeToOutputDir: %v", err)
-	}
-
-	got := testutil.ReadTemp(t, dir, "out.txt")
-	if string(got) != "test-content" {
-		t.Errorf("content = %q, want test-content", got)
-	}
-}
-
-func TestWriteToOutputDir_BadDir(t *testing.T) {
-	err := writeToOutputDir("/nonexistent-dir-abc123", "file", []byte("x"))
-	if err == nil {
-		t.Fatal("expected error for nonexistent directory")
 	}
 }
 

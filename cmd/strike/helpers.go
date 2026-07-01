@@ -25,30 +25,6 @@ func sanitizeForLog(s string) string {
 	return b.String()
 }
 
-// writeToOutputDir opens an os.Root on dir, creates name, and writes data.
-func writeToOutputDir(dir, name string, data []byte) (err error) {
-	root, err := os.OpenRoot(dir)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if cerr := root.Close(); cerr != nil && err == nil {
-			err = cerr
-		}
-	}()
-	f, err := root.Create(name)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if cerr := f.Close(); cerr != nil && err == nil {
-			err = cerr
-		}
-	}()
-	_, err = f.Write(data)
-	return err
-}
-
 // removeStrikeScratch deletes a per-step scratch directory.
 // It guards against accidental removal of unrelated paths by
 // verifying the path begins with the expected strike-tempdir

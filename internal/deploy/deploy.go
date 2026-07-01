@@ -706,11 +706,6 @@ func (d *Deployer) recordAttestation(att *Attestation, step *lane.Step, state *l
 	return nil
 }
 
-// JSON serializes an attestation for storage or signing.
-func (a *Attestation) JSON() ([]byte, error) {
-	return json.MarshalIndent(a, "", "  ")
-}
-
 // captureState runs all state capture commands and returns the raw captures.
 func (d *Deployer) captureState(ctx context.Context, spec lane.CaptureSet) ([]captureSnap, error) {
 	var captures []captureSnap
