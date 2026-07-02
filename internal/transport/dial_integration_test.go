@@ -37,7 +37,7 @@ func TestDialVerified_CloudflareDoT_INTEGRATION(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DialVerified: %v", err)
 	}
-	defer closer.Warn(conn, "cloudflare DoT conn")
+	defer closer.Warn(conn.Conn(), "cloudflare DoT conn")
 	id := conn.Identity()
 	if id.TLSVersion != tls.VersionTLS13 {
 		t.Errorf("TLS version = 0x%x, want TLS 1.3", id.TLSVersion)

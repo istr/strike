@@ -73,17 +73,21 @@ type ConnectionIdentity struct {
 
 // VerifiedConn is a TLS connection whose peer has been verified
 // against a declared trust anchor. Identity is captured at
-// handshake time and is available via Identity(). Read, Write,
-// Close, and other net.Conn methods delegate to the embedded
-// *tls.Conn.
+// handshake time and is available via Identity(); the underlying
+// verified connection is available via Conn().
 type VerifiedConn struct {
-	*tls.Conn
+	conn     *tls.Conn
 	identity ConnectionIdentity
 }
 
 // Identity returns the connection identity captured at handshake.
 func (c *VerifiedConn) Identity() ConnectionIdentity {
 	return c.identity
+}
+
+// Conn returns the underlying verified TLS connection.
+func (c *VerifiedConn) Conn() net.Conn {
+	return c.conn
 }
 
 // BuildTLSConfig produces a *tls.Config that verifies a peer
@@ -167,7 +171,7 @@ func DialVerified(ctx context.Context, addr string, trust endpoint.Trust) (*Veri
 	}
 
 	identity := CaptureIdentity(conn.ConnectionState(), endpoint.MustParseAuthority(addr))
-	return &VerifiedConn{Conn: conn, identity: identity}, nil
+	return &VerifiedConn{conn: conn, identity: identity}, nil
 }
 
 // makeFingerprintVerifier returns a VerifyPeerCertificate

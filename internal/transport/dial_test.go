@@ -187,7 +187,7 @@ func TestDialVerified_FingerprintMatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DialVerified: %v", err)
 	}
-	defer closer.Warn(conn, "test verified conn")
+	defer closer.Warn(conn.Conn(), "test verified conn")
 	id := conn.Identity()
 	if id.LeafFingerprint != fingerprint {
 		t.Errorf("Identity.LeafFingerprint = %q, want %q", id.LeafFingerprint, fingerprint)
@@ -244,7 +244,7 @@ func TestDialVerified_CABundleValid(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DialVerified: %v", err)
 	}
-	defer closer.Warn(conn, "test verified conn")
+	defer closer.Warn(conn.Conn(), "test verified conn")
 	id := conn.Identity()
 	if id.TLSVersion != tls.VersionTLS13 {
 		t.Errorf("TLSVersion = 0x%x, want TLS 1.3", id.TLSVersion)
@@ -300,7 +300,7 @@ func TestDialVerified_TLS12Accepted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DialVerified: %v", err)
 	}
-	defer closer.Warn(conn, "test verified conn")
+	defer closer.Warn(conn.Conn(), "test verified conn")
 	if conn.Identity().TLSVersion != tls.VersionTLS12 {
 		t.Errorf("TLSVersion = 0x%x, want 0x%x (TLS 1.2)", conn.Identity().TLSVersion, tls.VersionTLS12)
 	}
@@ -393,7 +393,7 @@ func TestDialVerified_SNIForFQDN(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DialVerified: %v", err)
 	}
-	defer closer.Warn(conn, "test verified conn")
+	defer closer.Warn(conn.Conn(), "test verified conn")
 
 	sniCtx, sniCancel := context.WithTimeout(context.Background(), 2*clock.Second)
 	defer sniCancel()
@@ -428,7 +428,7 @@ func TestDialVerified_NoSNIForIPLiteral(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DialVerified: %v", err)
 	}
-	defer closer.Warn(conn, "test verified conn")
+	defer closer.Warn(conn.Conn(), "test verified conn")
 	if conn.Identity().ServerName != "" {
 		t.Errorf("ServerName = %q, want empty (IP literal addr)", conn.Identity().ServerName)
 	}

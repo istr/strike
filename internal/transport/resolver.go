@@ -54,7 +54,11 @@ func dotResolver(decl endpoint.TLS) *net.Resolver {
 	return &net.Resolver{
 		PreferGo: true,
 		Dial: func(ctx context.Context, _, _ string) (net.Conn, error) {
-			return DialVerified(ctx, decl.Address.Authority(), decl.Trust)
+			vc, err := DialVerified(ctx, decl.Address.Authority(), decl.Trust)
+			if err != nil {
+				return nil, err
+			}
+			return vc.Conn(), nil
 		},
 	}
 }
@@ -112,7 +116,7 @@ func ProbeResolver(ctx context.Context, decl endpoint.TLS) (ConnectionIdentity, 
 				return nil, err
 			}
 			ic.record(conn.Identity())
-			return conn, nil
+			return conn.Conn(), nil
 		},
 	}
 	if _, err := r.LookupNS(ctx, "."); err != nil {
