@@ -52,6 +52,14 @@ lint-typeconv:
 	cd tools/linttypeconv && go build -o $(CURDIR)/.build/linttypeconv .
 	$(CURDIR)/.build/linttypeconv ./...
 
+# Standalone gate, intentionally not in the aggregate `lint` target: it reports
+# hand-written types that a CUE-first tree would generate instead, and is run on
+# demand rather than gating.
+.PHONY: lint-cuecoverage
+lint-cuecoverage:
+	cd tools/lintcuecoverage && go build -o $(CURDIR)/.build/lintcuecoverage .
+	$(CURDIR)/.build/lintcuecoverage ./...
+
 lint-ascii:
 	@! grep -rPn '[^\x00-\x7F]' --include='*.md' --include='*.go' --include='*.cue' \
 		--exclude='*_test.go' . \
