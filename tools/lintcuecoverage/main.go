@@ -1,10 +1,12 @@
 // Command lintcuecoverage fails when a hand-written Go type ought to be a
 // generated CUE type. A named type is reported when it is not declared in a
-// generated file, is not behavioral, and any of the following holds: it shares
-// its name with a CUE definition under contract/; it carries a json-tagged
-// struct field; or another package refers to it. A behavioral type is an
-// interface, function, or channel type, or a struct holding a field that is one
-// of those or a sync/os handle. The tree must compile for the report to be
+// generated file, is not behavioral, is not a struct whose every field is
+// unexported, and any of the following holds: it shares its name with a CUE
+// definition under contract/; it carries a json-tagged struct field; or another
+// package refers to it. A behavioral type is an interface, function, or channel
+// type, or a struct holding a field that is one of those or a sync/os handle. A
+// struct with only unexported fields has no CUE representation, since generated
+// types carry exported fields. The tree must compile for the report to be
 // meaningful, so the command aborts when the package loader reports any error.
 package main
 
@@ -86,7 +88,8 @@ func appendFindings(findings []string, p *packages.Package,
 			continue
 		}
 		pos := p.Fset.Position(tn.Pos())
-		if strings.HasSuffix(pos.Filename, ".gen.go") || behavioralNamed(named) {
+		if strings.HasSuffix(pos.Filename, ".gen.go") || behavioralNamed(named) ||
+			unexportedStruct(named) {
 			continue
 		}
 		if !required(named, name, cueNames) &&
@@ -117,6 +120,22 @@ func hasJSONField(st *types.Struct) bool {
 		}
 	}
 	return false
+}
+
+// unexportedStruct reports whether a named type is a struct with no exported
+// field. Such a type has no CUE representation -- generated types carry exported
+// fields -- so it can never be a generated type and is not reported.
+func unexportedStruct(n *types.Named) bool {
+	st, ok := n.Underlying().(*types.Struct)
+	if !ok {
+		return false
+	}
+	for i := 0; i < st.NumFields(); i++ {
+		if st.Field(i).Exported() {
+			return false
+		}
+	}
+	return true
 }
 
 func behavioralNamed(n *types.Named) bool {

@@ -83,3 +83,22 @@ func TestCueGoTypeNames(t *testing.T) {
 		}
 	}
 }
+
+func TestUnexportedStruct(t *testing.T) {
+	src := "package p\n" +
+		"type Hidden struct{ v string }\n" +
+		"type Empty struct{}\n" +
+		"type Mixed struct{ X int; y string }\n" +
+		"type Exported struct{ X int }\n" +
+		"type Scalar string\n"
+	pkg := checkSource(t, src)
+	cases := map[string]bool{
+		"Hidden": true, "Empty": true, "Mixed": false,
+		"Exported": false, "Scalar": false,
+	}
+	for name, want := range cases {
+		if got := unexportedStruct(named(t, pkg, name)); got != want {
+			t.Errorf("unexportedStruct(%s) = %v, want %v", name, got, want)
+		}
+	}
+}
