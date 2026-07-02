@@ -102,3 +102,22 @@ func TestUnexportedStruct(t *testing.T) {
 		}
 	}
 }
+
+func TestMixedStruct(t *testing.T) {
+	src := "package p\n" +
+		"type Mixed struct{ X int; y string }\n" +
+		"type Exported struct{ X int }\n" +
+		"type Hidden struct{ v string }\n" +
+		"type Empty struct{}\n" +
+		"type Scalar string\n"
+	pkg := checkSource(t, src)
+	cases := map[string]bool{
+		"Mixed": true, "Exported": false, "Hidden": false,
+		"Empty": false, "Scalar": false,
+	}
+	for name, want := range cases {
+		if got := mixedStruct(named(t, pkg, name)); got != want {
+			t.Errorf("mixedStruct(%s) = %v, want %v", name, got, want)
+		}
+	}
+}

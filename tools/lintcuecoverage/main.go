@@ -6,8 +6,10 @@
 // package refers to it. A behavioral type is an interface, function, or channel
 // type, or a struct holding a field that is one of those or a sync/os handle. A
 // struct with only unexported fields has no CUE representation, since generated
-// types carry exported fields. The tree must compile for the report to be
-// meaningful, so the command aborts when the package loader reports any error.
+// types carry exported fields. It also reports a struct that mixes exported and
+// unexported fields, which likewise has no single generated form. The tree must
+// compile for the report to be meaningful, so the command aborts when the
+// package loader reports any error.
 package main
 
 import (
@@ -92,6 +94,11 @@ func appendFindings(findings []string, p *packages.Package,
 			unexportedStruct(named) {
 			continue
 		}
+		if mixedStruct(named) {
+			findings = append(findings, fmt.Sprintf(
+				"%s: %s.%s mixes exported and unexported fields; make it all-unexported with accessors, or split the exported data from the unexported state",
+				pos, strings.TrimPrefix(p.PkgPath, modulePrefix), name))
+		}
 		if !required(named, name, cueNames) &&
 			!referencedCrossPackage(tn, p.PkgPath, used) {
 			continue
@@ -136,6 +143,27 @@ func unexportedStruct(n *types.Named) bool {
 		}
 	}
 	return true
+}
+
+// mixedStruct reports whether a named type is a struct with both an exported and
+// an unexported field. The exported data could be generated from CUE, but the
+// unexported state has no CUE representation, so the two cannot come from one
+// generated definition until the struct is made all-unexported with accessors
+// or split.
+func mixedStruct(n *types.Named) bool {
+	st, ok := n.Underlying().(*types.Struct)
+	if !ok {
+		return false
+	}
+	exported, unexported := false, false
+	for i := 0; i < st.NumFields(); i++ {
+		if st.Field(i).Exported() {
+			exported = true
+		} else {
+			unexported = true
+		}
+	}
+	return exported && unexported
 }
 
 func behavioralNamed(n *types.Named) bool {
