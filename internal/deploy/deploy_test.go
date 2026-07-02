@@ -884,7 +884,7 @@ func TestResolverRecord_Populated(t *testing.T) {
 		TLSVersion:      0x0304, // TLS 1.3
 		CipherSuite:     0x1301, // TLS_AES_128_GCM_SHA256
 		ServerName:      "",
-		PeerAddress:     "1.1.1.1:853",
+		PeerAddress:     endpoint.MustParseAuthority("1.1.1.1:853"),
 	}
 
 	eng := newTLSTestEngine(t, containerMock(t, "v1.0"))
@@ -1286,7 +1286,7 @@ func TestDeployerExecute_ObservedPeersPopulated(t *testing.T) {
 				SNI:      "api.example.com",
 				Upstream: &transport.ConnectionIdentity{
 					LeafFingerprint: tlsFP,
-					PeerAddress:     "api.example.com:443",
+					PeerAddress:     endpoint.MustParseAuthority("api.example.com:443"),
 				},
 				Resolved: []netip.Addr{netip.MustParseAddr("93.184.216.34")},
 			}},
@@ -1363,6 +1363,116 @@ func TestDeployerExecute_ObservedPeersPopulated(t *testing.T) {
 	}
 	if len(buildAttr) != 2 {
 		t.Fatalf("build attribution count = %d, want 2", len(buildAttr))
+	}
+}
+
+func TestDeployerExecute_ObservedPeers_HonorsSSHPort(t *testing.T) {
+	eng := newTLSTestEngine(t, containerMock(t, "v1.0"))
+
+	buildSSHPeer := endpoint.SSH{
+		Type:    "ssh",
+		Address: endpoint.MustParseAuthority("sshhost.com:222"),
+		KnownHosts: []endpoint.HostKey{{
+			KeyType: "ssh-ed25519",
+			Key:     "AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl",
+		}},
+	}
+
+	p := &lane.Lane{
+		Name:     "test-ssh-port",
+		Registry: "localhost:5555/test",
+		Steps: []lane.Step{
+			{
+				ID:      "build",
+				Image:   primitive.ImageRefPtr("alpine:3.20"),
+				Args:    []string{"echo", "ok"},
+				Env:     map[string]string{},
+				Inputs:  []lane.InputRef{},
+				Secrets: []lane.SecretRef{},
+				Output:  "image",
+				Peers:   []lane.Peer{buildSSHPeer},
+			},
+			{
+				ID: "deploy-prod",
+				Deploy: &lane.DeploySpec{
+					Method: lane.DeployCustom{
+						Type:  "custom",
+						Image: "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+					},
+					Artifacts: map[string]lane.ArtifactRef{
+						"image": {From: lane.StepImageRef{Step: "build"}},
+					},
+					Target:    target.Deploy{ID: "prod-1", Type: "registry", Description: "production"},
+					Recording: lane.StateRecording{},
+				},
+			},
+		},
+	}
+	dag, buildErr := lane.Build(p)
+	if buildErr != nil {
+		t.Fatalf("Build: %v", buildErr)
+	}
+
+	state := lane.NewState()
+	if regErr := state.Register("build", "image", output.ImageHandle{
+		Ref: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
+	}); regErr != nil {
+		t.Fatal(regErr)
+	}
+
+	ca, look, caPath, ports := deployCapsuleFields(t, "deploy-prod")
+
+	// The declared port (222) must survive into the observed-peer key; before
+	// the port-drop fix, deploy.go's SSH key derivation already used
+	// s.Port directly, so this pins that behavior against regression as the
+	// TLS-side key derivation changes from string re-parsing to Address.Authority().
+	sshFP := "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+	networkRecords := map[string]capsule.Records{
+		"build": {
+			SSH: []capsule.SSHConnectionRecord{{
+				Decision:           mediator.DecisionAllowed,
+				Host:               "sshhost.com",
+				Port:               222,
+				HostKeyFingerprint: sshFP,
+				HostKeyAlgo:        "ssh-ed25519",
+				Resolved:           []netip.Addr{netip.MustParseAddr("192.0.2.9")},
+			}},
+		},
+	}
+
+	step := dag.Steps["deploy-prod"]
+	d := &deploy.Deployer{
+		Engine:         eng,
+		LaneDigest:     "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+		ArtifactRefs:   map[string]string{"image": "build.image"},
+		LaneID:         "test-lane",
+		DAG:            dag,
+		CA:             ca,
+		UpstreamLook:   look,
+		CAVolume:       caPath,
+		StepID:         "deploy-prod",
+		StepPorts:      ports,
+		NetworkRecords: networkRecords,
+	}
+	deploy.SetProduceBundles(d, stubProduceBundles())
+	att, err := d.Execute(context.Background(), step, state)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	if _, wrongPort := att.Sealed.ObservedPeers["sshhost.com:22"]; wrongPort {
+		t.Error("observed peer recorded under default port 22, want declared port 222")
+	}
+	obs, ok := att.Sealed.ObservedPeers["sshhost.com:222"]
+	if !ok {
+		t.Fatalf("missing observed peer sshhost.com:222; got %v", att.Sealed.ObservedPeers)
+	}
+	sshID, ok := obs.Identity.(deploy.ObservedSSH)
+	if !ok {
+		t.Fatalf("identity type = %T, want ObservedSSH", obs.Identity)
+	}
+	if sshID.HostKeyFingerprint != sshFP {
+		t.Errorf("HostKeyFingerprint = %q, want %q", sshID.HostKeyFingerprint, sshFP)
 	}
 }
 
@@ -1453,7 +1563,7 @@ func TestDeployerExecute_ObservedPeersConflictAborts(t *testing.T) {
 				SNI:      "api.example.com",
 				Upstream: &transport.ConnectionIdentity{
 					LeafFingerprint: "sha256:1111111111111111111111111111111111111111111111111111111111111111",
-					PeerAddress:     "api.example.com:443",
+					PeerAddress:     endpoint.MustParseAuthority("api.example.com:443"),
 				},
 				Resolved: []netip.Addr{netip.MustParseAddr("93.184.216.34")},
 			}},
@@ -1464,7 +1574,7 @@ func TestDeployerExecute_ObservedPeersConflictAborts(t *testing.T) {
 				SNI:      "api.example.com",
 				Upstream: &transport.ConnectionIdentity{
 					LeafFingerprint: "sha256:2222222222222222222222222222222222222222222222222222222222222222",
-					PeerAddress:     "api.example.com:443",
+					PeerAddress:     endpoint.MustParseAuthority("api.example.com:443"),
 				},
 				Resolved: []netip.Addr{netip.MustParseAddr("93.184.216.34")},
 			}},

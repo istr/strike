@@ -143,7 +143,7 @@ func New(
 
 	allowlist := make([]primitive.Host, 0, len(peers)+len(sshTargets))
 	for _, p := range peers {
-		allowlist = append(allowlist, p.Host)
+		allowlist = append(allowlist, p.Address.Host)
 	}
 	for _, t := range sshTargets {
 		allowlist = append(allowlist, t.Host)

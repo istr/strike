@@ -236,8 +236,8 @@ func TestProbeResolver_HappyPath(t *testing.T) {
 	if id.LeafFingerprint == "" {
 		t.Error("expected non-empty leaf fingerprint from probe handshake")
 	}
-	if id.PeerAddress != decl.Address.Authority() {
-		t.Errorf("PeerAddress = %q, want %q", id.PeerAddress, decl.Address.Authority())
+	if id.PeerAddress.Authority() != decl.Address.Authority() {
+		t.Errorf("PeerAddress = %q, want %q", id.PeerAddress.Authority(), decl.Address.Authority())
 	}
 }
 

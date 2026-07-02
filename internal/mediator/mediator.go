@@ -35,8 +35,8 @@ import (
 
 // PeerTrust ties a peer SNI to its TLS trust anchor.
 type PeerTrust struct {
-	Trust endpoint.Trust
-	Host  primitive.Host
+	Trust   endpoint.Trust
+	Address endpoint.Address
 }
 
 // UpstreamLookupFunc resolves a name to addresses via the lane's
@@ -72,7 +72,7 @@ var ErrMediatorClosed = errors.New("mediator: closed")
 
 // Mediator is a per-step TLS proxy.
 type Mediator struct {
-	peers        map[string]endpoint.Trust // canonical SNI -> trust
+	peers        map[string]PeerTrust // canonical SNI -> peer (trust + declared address)
 	ca           *transport.EphemeralCA
 	upstreamLook UpstreamLookupFunc
 	stepID       string
@@ -104,16 +104,16 @@ func New(stepID string, peers []PeerTrust, ca *transport.EphemeralCA, upstreamLo
 		return nil, errors.New("mediator: upstreamLook must not be nil")
 	}
 
-	peerMap := make(map[string]endpoint.Trust, len(peers))
+	peerMap := make(map[string]PeerTrust, len(peers))
 	for _, p := range peers {
-		c, err := canonicalize(string(p.Host))
+		c, err := canonicalize(string(p.Address.Host))
 		if err != nil {
-			return nil, fmt.Errorf("mediator: invalid peer host %q: %w", p.Host, err)
+			return nil, fmt.Errorf("mediator: invalid peer host %q: %w", p.Address.Host, err)
 		}
 		if _, dup := peerMap[c]; dup {
 			return nil, fmt.Errorf("mediator: duplicate peer %q", c)
 		}
-		peerMap[c] = p.Trust
+		peerMap[c] = p
 	}
 
 	return &Mediator{
@@ -164,7 +164,6 @@ func (m *Mediator) Close() error {
 const (
 	acceptPollInterval = 200 * clock.Millisecond
 	handshakeTimeout   = 10 * clock.Second
-	upstreamPort       = "443"
 )
 
 func (m *Mediator) acceptLoop(ctx context.Context, listener net.Listener) error {
@@ -226,7 +225,7 @@ func (m *Mediator) handleConn(ctx context.Context, raw net.Conn) {
 	}
 
 	sni := canonicalizeOrEmpty(clientSide.ConnectionState().ServerName)
-	trust, ok := m.peers[sni]
+	pt, ok := m.peers[sni]
 	if !ok {
 		// Should not reach here: getCertificate would have
 		// rejected. Defensive check.
@@ -236,7 +235,7 @@ func (m *Mediator) handleConn(ctx context.Context, raw net.Conn) {
 		return
 	}
 
-	upstreamConn, identity, resolved, err := m.dialUpstream(handshakeCtx, sni, trust)
+	upstreamConn, identity, resolved, err := m.dialUpstream(handshakeCtx, sni, pt)
 	if err != nil {
 		log.Printf("WARN   mediator[%s]: upstream %s failed: %v", m.stepID, sni, err)
 		m.appendRecord(ConnectionRecord{
@@ -277,7 +276,7 @@ func (m *Mediator) getCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate,
 	return m.ca.GetCertificate(hello)
 }
 
-func (m *Mediator) dialUpstream(ctx context.Context, sni string, trust endpoint.Trust) (*tls.Conn, *transport.ConnectionIdentity, []netip.Addr, error) {
+func (m *Mediator) dialUpstream(ctx context.Context, sni string, peer PeerTrust) (*tls.Conn, *transport.ConnectionIdentity, []netip.Addr, error) {
 	addrs, err := m.upstreamLook(ctx, sni)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("upstream lookup %q: %w", sni, err)
@@ -286,13 +285,18 @@ func (m *Mediator) dialUpstream(ctx context.Context, sni string, trust endpoint.
 		return nil, nil, nil, fmt.Errorf("upstream lookup %q: no addresses", sni)
 	}
 
-	target := net.JoinHostPort(addrs[0].String(), upstreamPort)
+	port := peer.Address.Port
+	if port == nil {
+		def := primitive.Port(443)
+		port = &def
+	}
+	target := net.JoinHostPort(addrs[0].String(), fmt.Sprintf("%d", *port))
 	raw, err := transport.DialTCP(ctx, target)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("upstream dial %s: %w", target, err)
 	}
 
-	tlsConfig, configErr := transport.BuildTLSConfig(trust)
+	tlsConfig, configErr := transport.BuildTLSConfig(peer.Trust)
 	if configErr != nil {
 		closer.Warn(raw, "mediator: upstream raw (config error)")
 		return nil, nil, nil, fmt.Errorf("upstream tls config for %s: %w", sni, configErr)
@@ -305,7 +309,7 @@ func (m *Mediator) dialUpstream(ctx context.Context, sni string, trust endpoint.
 		return nil, nil, nil, fmt.Errorf("upstream handshake %s: %w", sni, hsErr)
 	}
 
-	identity := transport.CaptureIdentity(upstream.ConnectionState(), sni)
+	identity := transport.CaptureIdentity(upstream.ConnectionState(), endpoint.Address{Host: primitive.Host(sni), Port: port})
 	return upstream, &identity, addrs, nil
 }
 

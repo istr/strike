@@ -195,8 +195,8 @@ func TestDialVerified_FingerprintMatch(t *testing.T) {
 	if id.TLSVersion != tls.VersionTLS13 {
 		t.Errorf("Identity.TLSVersion = 0x%x, want 0x%x (TLS 1.3)", id.TLSVersion, tls.VersionTLS13)
 	}
-	if id.PeerAddress != addr {
-		t.Errorf("Identity.PeerAddress = %q, want %q", id.PeerAddress, addr)
+	if id.PeerAddress.Authority() != addr {
+		t.Errorf("Identity.PeerAddress = %q, want %q", id.PeerAddress.Authority(), addr)
 	}
 }
 

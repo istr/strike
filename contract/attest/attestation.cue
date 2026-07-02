@@ -101,7 +101,7 @@ import (
 	// before any entry is written, so every entry here is a validated identity
 	// (Layer V). No step attribution: which step reached a peer is an
 	// engine-asserted fact and lives in engineDependent.peerAttribution.
-	observedPeers?: [Endpoint=string]: #ObservedPeer
+	observedPeers?: [Endpoint=endpoint.#Authority]: #ObservedPeer
 }
 
 // ---------------------------------------------------------------------------
@@ -159,7 +159,7 @@ import (
 	// peerAttribution maps each step to the peer endpoints its mediated
 	// connections reached ("host:port" keys into sealed.observedPeers).
 	// Engine-asserted (Layer E).
-	peerAttribution?: [ID=primitive.#Identifier]: [...string]
+	peerAttribution?: [ID=primitive.#Identifier]: [...endpoint.#Authority]
 }
 
 // Informational -- recorded for audit and IoC purposes; no trust claim.

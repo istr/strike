@@ -98,7 +98,7 @@ import (
 	target:     deploytarget.#Deploy
 	oidc:       #ProvenanceOIDC
 	peers: [ID=primitive.#Identifier]: [...lane.#Peer]
-	observedPeers?: [Endpoint=string]: #ObservedPeer
+	observedPeers?: [Endpoint=endpoint.#Authority]: #ObservedPeer
 	resolver: #ResolverRecord
 	engine?:  endpoint.#Engine
 }
@@ -154,7 +154,7 @@ import (
 // (Fork C). The engine's self-report (engineMetadata) is NOT here either -- it
 // carries no trust claim and lives in the informational statement.
 #EngineContextPredicate: {
-	peerAttribution?: [ID=primitive.#Identifier]: [...string]
+	peerAttribution?: [ID=primitive.#Identifier]: [...endpoint.#Authority]
 }
 
 // ---------------------------------------------------------------------------

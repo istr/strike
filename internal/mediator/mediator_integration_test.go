@@ -48,7 +48,7 @@ func TestMediator_CloudflareHTTPS_INTEGRATION(t *testing.T) {
 
 	peers := []mediator.PeerTrust{
 		{
-			Host: "one.one.one.one",
+			Address: endpoint.MustParseAuthority("one.one.one.one"),
 			Trust: endpoint.Fingerprint{
 				Type:        "certFingerprint",
 				Fingerprint: httpsFingerprint,

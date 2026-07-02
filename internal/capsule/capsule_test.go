@@ -343,8 +343,8 @@ func TestTwoCapsules_DistinctPorts(t *testing.T) {
 	}
 
 	peers := []mediator.PeerTrust{{
-		Host:  "example.com",
-		Trust: endpoint.Fingerprint{Type: "fingerprint", Fingerprint: "sha256:aaaa"},
+		Address: endpoint.MustParseAuthority("example.com"),
+		Trust:   endpoint.Fingerprint{Type: "fingerprint", Fingerprint: "sha256:aaaa"},
 	}}
 
 	c1, err := capsule.New("step-a", ports["step-a"], peers, nil, 0, ca, testUpstream())
@@ -543,8 +543,8 @@ func TestCapsule_ResolverSynthesizesStepAddr(t *testing.T) {
 	hp := capsule.HostPorts{Resolver: 15363, Mediator: 15364}
 
 	peers := []mediator.PeerTrust{{
-		Host:  primitive.Host(sni),
-		Trust: endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:aaaa"},
+		Address: endpoint.MustParseAuthority(sni),
+		Trust:   endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:aaaa"},
 	}}
 
 	c, err := capsule.New("synth-step", hp, peers, nil, 0, ca, testUpstream())
@@ -645,7 +645,7 @@ func TestCapsule_DNSThenConnect_EndToEnd(t *testing.T) {
 	})
 
 	peers := []mediator.PeerTrust{{
-		Host: primitive.Host(sni),
+		Address: endpoint.MustParseAuthority(sni),
 		Trust: endpoint.Fingerprint{
 			Type:        "certFingerprint",
 			Fingerprint: fp,
@@ -741,8 +741,8 @@ func TestCapsule_DeniedName_NXDOMAIN(t *testing.T) {
 	hp := capsule.HostPorts{Resolver: 15367, Mediator: 15368}
 
 	peers := []mediator.PeerTrust{{
-		Host:  "allowed.example",
-		Trust: endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:aaaa"},
+		Address: endpoint.MustParseAuthority("allowed.example"),
+		Trust:   endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:aaaa"},
 	}}
 
 	c, err := capsule.New("deny-step", hp, peers, nil, 0, ca, testUpstream())
@@ -778,8 +778,8 @@ func TestCapsule_AAAA_AllowedName_Empty(t *testing.T) {
 	hp := capsule.HostPorts{Resolver: 15369, Mediator: 15370}
 
 	peers := []mediator.PeerTrust{{
-		Host:  primitive.Host(sni),
-		Trust: endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:aaaa"},
+		Address: endpoint.MustParseAuthority(sni),
+		Trust:   endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:aaaa"},
 	}}
 
 	c, err := capsule.New("aaaa-step", hp, peers, nil, 0, ca, testUpstream())

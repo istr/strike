@@ -51,7 +51,7 @@ type ConnectionIdentity struct {
 
 	// PeerAddress is the address the connection was established
 	// to, as passed to DialVerified.
-	PeerAddress string
+	PeerAddress endpoint.Address
 
 	// PeerCertificates is the certificate chain presented by
 	// the peer during the handshake. Index 0 is the leaf cert.
@@ -166,7 +166,7 @@ func DialVerified(ctx context.Context, addr string, trust endpoint.Trust) (*Veri
 		return nil, fmt.Errorf("transport: dialer returned non-TLS connection %T", nc)
 	}
 
-	identity := CaptureIdentity(conn.ConnectionState(), addr)
+	identity := CaptureIdentity(conn.ConnectionState(), endpoint.MustParseAuthority(addr))
 	return &VerifiedConn{Conn: conn, identity: identity}, nil
 }
 
@@ -229,7 +229,7 @@ func loadCABundle(path string) (*x509.CertPool, error) {
 // completed TLS handshake. The addr parameter populates
 // PeerAddress (typically host:port or the SNI, depending on
 // the caller's context).
-func CaptureIdentity(state tls.ConnectionState, addr string) ConnectionIdentity {
+func CaptureIdentity(state tls.ConnectionState, addr endpoint.Address) ConnectionIdentity {
 	id := ConnectionIdentity{
 		PeerCertificates: state.PeerCertificates,
 		TLSVersion:       state.Version,

@@ -14,11 +14,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"net"
 	"net/netip"
 	"os"
 	"path/filepath"
-	"strconv"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 
@@ -256,7 +254,7 @@ func (d *Deployer) startUnitCapsule(ctx context.Context, name string, peers []la
 	var trusts []mediator.PeerTrust
 	for _, p := range peers {
 		if hp, ok := p.(endpoint.TLS); ok {
-			trusts = append(trusts, mediator.PeerTrust{Host: hp.Address.Host, Trust: hp.Trust})
+			trusts = append(trusts, mediator.PeerTrust{Address: hp.Address, Trust: hp.Trust})
 		}
 	}
 	var targets []capsule.SSHTarget
@@ -384,17 +382,7 @@ func ingestRecords(stepKey primitive.Identifier, recs capsule.Records, observed 
 		if c.Decision != mediator.DecisionAllowed || c.Upstream == nil {
 			continue
 		}
-		host := c.SNI
-		port, perr := portOfAddress(c.Upstream.PeerAddress)
-		if perr != nil {
-			return fmt.Errorf("step %q: tls peer address %q: %w", stepKey, c.Upstream.PeerAddress, perr)
-		}
-		if host == "" {
-			if h, _, herr := net.SplitHostPort(c.Upstream.PeerAddress); herr == nil {
-				host = h
-			}
-		}
-		key := net.JoinHostPort(host, port)
+		key := c.Upstream.PeerAddress.Authority()
 		id := ObservedTLS{Type: "https", ServerCertFingerprint: c.Upstream.LeafFingerprint}
 		if err := addObservedPeer(key, c.Resolved, id, observed); err != nil {
 			return err
@@ -405,7 +393,8 @@ func ingestRecords(stepKey primitive.Identifier, recs capsule.Records, observed 
 		if s.Decision != mediator.DecisionAllowed {
 			continue
 		}
-		key := net.JoinHostPort(s.Host, strconv.Itoa(int(s.Port)))
+		sshPort := primitive.Port(s.Port)
+		key := endpoint.Address{Host: primitive.Host(s.Host), Port: &sshPort}.Authority()
 		id := ObservedSSH{Type: "ssh", HostKeyFingerprint: s.HostKeyFingerprint, HostKeyAlgo: s.HostKeyAlgo}
 		if err := addObservedPeer(key, s.Resolved, id, observed); err != nil {
 			return err
@@ -449,15 +438,6 @@ func sameObservedIdentity(a, b ObservedIdentity) bool {
 	default:
 		return false
 	}
-}
-
-// portOfAddress returns the port substring of a "host:port" address.
-func portOfAddress(addr string) (string, error) {
-	_, port, err := net.SplitHostPort(addr)
-	if err != nil {
-		return "", err
-	}
-	return port, nil
 }
 
 // unionStrings returns the union of two string slices, order-stable on a then
@@ -1008,7 +988,7 @@ func (d *Deployer) engineRecords() (endpoint.Engine, *EngineMetadata) {
 func (d *Deployer) resolverRecord() ResolverRecord {
 	id := d.Resolver.Observed
 	return ResolverRecord{
-		Host:                  id.PeerAddress,
+		Host:                  id.PeerAddress.Authority(),
 		ServerCertFingerprint: id.LeafFingerprint,
 		TLSVersion:            tls.VersionName(id.TLSVersion),
 		CipherSuite:           tls.CipherSuiteName(id.CipherSuite),

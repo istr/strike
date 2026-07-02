@@ -991,7 +991,7 @@ func (rc *runContext) startCapsule(ctx context.Context, name, safeName string, p
 	httpsPeers := httpsPeersOf(peers)
 	peerTrusts := make([]mediator.PeerTrust, len(httpsPeers))
 	for i, p := range httpsPeers {
-		peerTrusts[i] = mediator.PeerTrust{Host: p.Address.Host, Trust: p.Trust}
+		peerTrusts[i] = mediator.PeerTrust{Address: p.Address, Trust: p.Trust}
 	}
 	sshTargets := sshTargetsOf(peers)
 
