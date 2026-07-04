@@ -73,7 +73,7 @@ func TestVerifyGoldenGenerate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("golden lane path: %v", err)
 	}
-	goldenLane, laneDigest, err := lane.Parse(lanePath)
+	goldenLane, _, laneDigest, err := lane.Parse(lanePath)
 	if err != nil {
 		t.Fatalf("parse golden lane: %v", err)
 	}

@@ -24,15 +24,32 @@ func ParseDuration(d *primitive.Duration, defaultVal clock.Duration) (clock.Dura
 	return clock.ParseDuration(s)
 }
 
+// IndexSteps builds the step-id lookup index for a lane and rejects a
+// duplicate step id. The index maps each step id to a pointer into
+// p.Steps, so callers must not mutate p.Steps after indexing. Parse
+// returns it alongside the Lane; Build consumes it as its private step
+// reference.
+func IndexSteps(p *Lane) (map[primitive.Identifier]*Step, error) {
+	index := make(map[primitive.Identifier]*Step, len(p.Steps))
+	for i := range p.Steps {
+		s := &p.Steps[i]
+		if _, exists := index[s.ID]; exists {
+			return nil, fmt.Errorf("duplicate step name: %q", s.ID)
+		}
+		index[s.ID] = s
+	}
+	return index, nil
+}
+
 // Parse reads a lane YAML file, validates it against the embedded CUE schema,
 // and returns a typed Lane instance together with the raw sha256 digest of
 // the file bytes. Hash and parse consume the same single read, so the digest
 // is bound to exactly the bytes the Lane was built from; it is carried into
 // the sealed attestation as lane_digest.
-func Parse(fp FilePath) (*Lane, primitive.Digest, error) {
+func Parse(fp FilePath) (*Lane, map[primitive.Identifier]*Step, primitive.Digest, error) {
 	raw, err := fp.Read()
 	if err != nil {
-		return nil, "", fmt.Errorf("read: %w", err)
+		return nil, nil, "", fmt.Errorf("read: %w", err)
 	}
 	// The input is "sha256:" followed by 64 lowercase hex by construction, so it
 	// satisfies #Digest directly; it is bound to exactly the bytes the Lane was
@@ -43,61 +60,49 @@ func Parse(fp FilePath) (*Lane, primitive.Digest, error) {
 	// YAML to generic map (for CUE validation)
 	var asMap any
 	if yamlErr := yaml.Unmarshal(raw, &asMap); yamlErr != nil {
-		return nil, "", fmt.Errorf("yaml parse: %w", yamlErr)
+		return nil, nil, "", fmt.Errorf("yaml parse: %w", yamlErr)
 	}
 
 	// Convert to JSON (CUE is a superset of JSON)
 	asJSON, err := json.Marshal(asMap)
 	if err != nil {
-		return nil, "", fmt.Errorf("json marshal: %w", err)
+		return nil, nil, "", fmt.Errorf("json marshal: %w", err)
 	}
 
 	// Validate against embedded CUE schema
 	if err := schema.ValidateLaneJSON(asJSON); err != nil {
-		return nil, "", fmt.Errorf("validation:\n%w", err)
+		return nil, nil, "", fmt.Errorf("validation:\n%w", err)
 	}
 
 	// Deserialize from JSON into typed Lane struct.
 	// Using JSON (not YAML) because gengotypes only emits json struct tags.
 	var p Lane
 	if err := json.Unmarshal(asJSON, &p); err != nil {
-		return nil, "", fmt.Errorf("deserialize: %w", err)
+		return nil, nil, "", fmt.Errorf("deserialize: %w", err)
 	}
 
-	// Validate: exactly one of image, image_from, pack, or deploy per step
-	for _, s := range p.Steps {
-		count := 0
-		if s.Image != nil {
-			count++
-		}
-		if s.ImageFromStep != nil {
-			count++
-		}
-		if s.Pack != nil {
-			count++
-		}
-		if s.Deploy != nil {
-			count++
-		}
-		if count != 1 {
-			return nil, "", fmt.Errorf(
-				"step %q: exactly one of image, imageFromStep, pack, or deploy required", s.ID)
-		}
+	if err := validateStepKindDisjointness(&p); err != nil {
+		return nil, nil, "", err
 	}
 
 	if err := validateDeployPresence(&p); err != nil {
-		return nil, "", err
+		return nil, nil, "", err
 	}
 
 	if err := validateResolver(&p); err != nil {
-		return nil, "", err
+		return nil, nil, "", err
 	}
 
 	if err := ValidatePaths(&p); err != nil {
-		return nil, "", err
+		return nil, nil, "", err
 	}
 
-	return &p, dg, nil
+	index, idxErr := IndexSteps(&p)
+	if idxErr != nil {
+		return nil, nil, "", idxErr
+	}
+
+	return &p, index, dg, nil
 }
 
 // ValidatePaths rejects unsafe paths in outputs and pack dests.
@@ -147,6 +152,32 @@ func validateOutputPaths(s Step) error {
 			if err := out.Path.Validate(); err != nil {
 				return fmt.Errorf("step %q: output path %q: %w", s.ID, *out.Path, err)
 			}
+		}
+	}
+	return nil
+}
+
+// validateStepKindDisjointness enforces that each step declares exactly one
+// of image, imageFromStep, pack, or deploy: the four ways a step's container
+// content is determined are mutually exclusive.
+func validateStepKindDisjointness(p *Lane) error {
+	for _, s := range p.Steps {
+		count := 0
+		if s.Image != nil {
+			count++
+		}
+		if s.ImageFromStep != nil {
+			count++
+		}
+		if s.Pack != nil {
+			count++
+		}
+		if s.Deploy != nil {
+			count++
+		}
+		if count != 1 {
+			return fmt.Errorf(
+				"step %q: exactly one of image, imageFromStep, pack, or deploy required", s.ID)
 		}
 	}
 	return nil

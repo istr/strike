@@ -33,7 +33,7 @@ func TestOutputRef_Ref(t *testing.T) {
 // flagging that Ref (and the spec hashes and cache tags built on it) need
 // revisiting.
 func TestOutputRef_RefRejectsDottedIdentifier(t *testing.T) {
-	_, _, err := lane.Parse(mustFilePath(t, "testdata/invalid_dotted_ref.yaml"))
+	_, _, _, err := lane.Parse(mustFilePath(t, "testdata/invalid_dotted_ref.yaml"))
 	if err == nil {
 		t.Fatal("expected error for output ref with a dotted identifier")
 	}

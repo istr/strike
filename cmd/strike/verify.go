@@ -78,7 +78,7 @@ func resolveVerifyPolicy(opts verifyOptions) (verifyPolicy, error) {
 		return verifyPolicy{}, fmt.Errorf("provide --lane (UC2), or --identity and --issuer (UC1)")
 	}
 	if uc2 {
-		_, p, dg, _, err := validateLane(opts.laneFile)
+		_, p, dg, _, _, err := validateLane(opts.laneFile)
 		if err != nil {
 			return verifyPolicy{}, err
 		}

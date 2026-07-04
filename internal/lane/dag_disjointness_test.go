@@ -56,7 +56,11 @@ func TestBuild_NestedInputMountsRejected(t *testing.T) {
 			},
 		},
 	}
-	_, err := lane.Build(p)
+	index, err := lane.IndexSteps(p)
+	if err != nil {
+		t.Fatalf("lane.IndexSteps: %v", err)
+	}
+	_, err = lane.Build(p, index)
 	if err == nil {
 		t.Fatal("expected error for nested input mounts")
 	}
@@ -66,21 +70,36 @@ func TestBuild_NestedInputMountsRejected(t *testing.T) {
 }
 
 func TestBuild_IdenticalInputMountsRejected(t *testing.T) {
-	_, err := lane.Build(twoInputLane("/in", "/in"))
+	p := twoInputLane("/in", "/in")
+	index, err := lane.IndexSteps(p)
+	if err != nil {
+		t.Fatalf("lane.IndexSteps: %v", err)
+	}
+	_, err = lane.Build(p, index)
 	if err == nil {
 		t.Fatal("expected error for identical input mounts")
 	}
 }
 
 func TestBuild_SiblingInputMountsAccepted(t *testing.T) {
-	if _, err := lane.Build(twoInputLane("/in/x", "/in/y")); err != nil {
+	p := twoInputLane("/in/x", "/in/y")
+	index, err := lane.IndexSteps(p)
+	if err != nil {
+		t.Fatalf("lane.IndexSteps: %v", err)
+	}
+	if _, err := lane.Build(p, index); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
 func TestBuild_PathPrefixNotComponentPrefix(t *testing.T) {
 	// "/work" must not match "/workspace" -- only path-component prefixes count
-	if _, err := lane.Build(twoInputLane("/work", "/workspace")); err != nil {
+	p := twoInputLane("/work", "/workspace")
+	index, err := lane.IndexSteps(p)
+	if err != nil {
+		t.Fatalf("lane.IndexSteps: %v", err)
+	}
+	if _, err := lane.Build(p, index); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -97,7 +116,11 @@ func TestBuild_DuplicateOutputIDRejected(t *testing.T) {
 			},
 		},
 	}
-	_, err := lane.Build(p)
+	index, err := lane.IndexSteps(p)
+	if err != nil {
+		t.Fatalf("lane.IndexSteps: %v", err)
+	}
+	_, err = lane.Build(p, index)
 	if err == nil {
 		t.Fatal("expected error for duplicate output id")
 	}
@@ -119,7 +142,11 @@ func TestBuild_DistinctOutputIDsSharedBasenameAccepted(t *testing.T) {
 			},
 		},
 	}
-	if _, err := lane.Build(p); err != nil {
+	index, err := lane.IndexSteps(p)
+	if err != nil {
+		t.Fatalf("lane.IndexSteps: %v", err)
+	}
+	if _, err := lane.Build(p, index); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

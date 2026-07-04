@@ -46,7 +46,8 @@ func newTestRC(t *testing.T, engine *mockEngine) *runContext {
 	return &runContext{
 		ctx:       context.Background(),
 		lane:      &lane.Lane{Registry: "localhost:5555/test"},
-		dag:       &lane.DAG{Steps: map[primitive.Identifier]*lane.Step{}},
+		dag:       &lane.DAG{},
+		stepIndex: map[primitive.Identifier]*lane.Step{},
 		regClient: &registry.Client{Engine: engine},
 		engine:    engine,
 		front:     ft,
@@ -79,7 +80,7 @@ func TestBuildInputDelivery_Single(t *testing.T) {
 			},
 		},
 	}
-	rc.dag = buildTestDAG(t, p)
+	rc.dag, rc.stepIndex = buildTestDAG(t, p)
 
 	compileDigest := primitive.DigestFromHex("aabbccdd11223344000000000000000000000000000000000000000000000000")
 	compileRef := "localhost/test/compile@" + compileDigest.String()
@@ -98,7 +99,7 @@ func TestBuildInputDelivery_Single(t *testing.T) {
 
 	eng.saveTars = map[string][]byte{compileRef: tarBytes}
 
-	seeds, _, seedErr := rc.buildInputDelivery(context.Background(), rc.dag.Steps["test"])
+	seeds, _, seedErr := rc.buildInputDelivery(context.Background(), rc.stepIndex["test"])
 	if seedErr != nil {
 		t.Fatalf("buildInputDelivery: %v", seedErr)
 	}
@@ -135,7 +136,7 @@ func TestBuildInputDelivery_Multiple(t *testing.T) {
 			},
 		},
 	}
-	rc.dag = buildTestDAG(t, p)
+	rc.dag, rc.stepIndex = buildTestDAG(t, p)
 
 	d1 := primitive.DigestFromHex("aaaa111122223333000000000000000000000000000000000000000000000000")
 	d2 := primitive.DigestFromHex("bbbb444455556666000000000000000000000000000000000000000000000000")
@@ -160,7 +161,7 @@ func TestBuildInputDelivery_Multiple(t *testing.T) {
 
 	eng.saveTars = map[string][]byte{ref1: tar1, ref2: tar2}
 
-	seeds, _, seedErr := rc.buildInputDelivery(context.Background(), rc.dag.Steps["consumer"])
+	seeds, _, seedErr := rc.buildInputDelivery(context.Background(), rc.stepIndex["consumer"])
 	if seedErr != nil {
 		t.Fatalf("buildInputDelivery: %v", seedErr)
 	}
@@ -189,7 +190,7 @@ func TestBuildInputDelivery_MissingSubpath(t *testing.T) {
 			},
 		},
 	}
-	rc.dag = buildTestDAG(t, p)
+	rc.dag, rc.stepIndex = buildTestDAG(t, p)
 
 	srcDigest := primitive.DigestFromHex("aabbccdd11223344000000000000000000000000000000000000000000000000")
 	srcRef := "localhost/test/src@" + srcDigest.String()
@@ -208,7 +209,7 @@ func TestBuildInputDelivery_MissingSubpath(t *testing.T) {
 
 	eng.saveTars = map[string][]byte{srcRef: tarBytes}
 
-	_, _, seedErr := rc.buildInputDelivery(context.Background(), rc.dag.Steps["consumer"])
+	_, _, seedErr := rc.buildInputDelivery(context.Background(), rc.stepIndex["consumer"])
 	if seedErr == nil {
 		t.Fatal("expected error for missing subpath")
 	}
@@ -235,7 +236,7 @@ func TestBuildInputDelivery_OutsideWorkdir_DirectoryMount(t *testing.T) {
 			},
 		},
 	}
-	rc.dag = buildTestDAG(t, p)
+	rc.dag, rc.stepIndex = buildTestDAG(t, p)
 
 	srcDigest := primitive.DigestFromHex("aabbccdd11223344000000000000000000000000000000000000000000000000")
 	srcRef := "localhost/test/src@" + srcDigest.String()
@@ -256,7 +257,7 @@ func TestBuildInputDelivery_OutsideWorkdir_DirectoryMount(t *testing.T) {
 
 	eng.saveTars = map[string][]byte{srcRef: tarBytes}
 
-	seeds, mounts, dErr := rc.buildInputDelivery(context.Background(), rc.dag.Steps["consumer"])
+	seeds, mounts, dErr := rc.buildInputDelivery(context.Background(), rc.stepIndex["consumer"])
 	if dErr != nil {
 		t.Fatalf("buildInputDelivery: %v", dErr)
 	}
@@ -297,7 +298,7 @@ func TestBuildInputDelivery_NoWorkdir_Mounts(t *testing.T) {
 			},
 		},
 	}
-	rc.dag = buildTestDAG(t, p)
+	rc.dag, rc.stepIndex = buildTestDAG(t, p)
 
 	srcDigest := primitive.DigestFromHex("aabbccdd11223344000000000000000000000000000000000000000000000000")
 	srcRef := "localhost/test/src@" + srcDigest.String()
@@ -318,7 +319,7 @@ func TestBuildInputDelivery_NoWorkdir_Mounts(t *testing.T) {
 
 	eng.saveTars = map[string][]byte{srcRef: tarBytes}
 
-	seeds, mounts, dErr := rc.buildInputDelivery(context.Background(), rc.dag.Steps["consumer"])
+	seeds, mounts, dErr := rc.buildInputDelivery(context.Background(), rc.stepIndex["consumer"])
 	if dErr != nil {
 		t.Fatalf("buildInputDelivery: %v", dErr)
 	}
@@ -347,7 +348,7 @@ func TestBuildInputDelivery_SingleFileOutside_Rejected(t *testing.T) {
 			},
 		},
 	}
-	rc.dag = buildTestDAG(t, p)
+	rc.dag, rc.stepIndex = buildTestDAG(t, p)
 
 	if err := rc.laneState.Register("src", "bin", output.FileHandle{
 		Ref:      "localhost/test/src@sha256:aabbccdd11223344000000000000000000000000000000000000000000000000",
@@ -357,7 +358,7 @@ func TestBuildInputDelivery_SingleFileOutside_Rejected(t *testing.T) {
 	}
 	rc.state.specHashes["src"] = primitive.DigestFromHex("1111111111111111000000000000000000000000000000000000000000000000")
 
-	_, _, err := rc.buildInputDelivery(context.Background(), rc.dag.Steps["consumer"])
+	_, _, err := rc.buildInputDelivery(context.Background(), rc.stepIndex["consumer"])
 	if err == nil {
 		t.Fatal("expected single-file-outside rejection")
 	}
@@ -387,7 +388,7 @@ func TestBuildInputDelivery_ExportsProducerOnce(t *testing.T) {
 			},
 		},
 	}
-	rc.dag = buildTestDAG(t, p)
+	rc.dag, rc.stepIndex = buildTestDAG(t, p)
 
 	srcDigest := primitive.DigestFromHex("aabbccdd11223344000000000000000000000000000000000000000000000000")
 	srcRef := "localhost/test/src@" + srcDigest.String()
@@ -409,7 +410,7 @@ func TestBuildInputDelivery_ExportsProducerOnce(t *testing.T) {
 
 	eng.saveTars = map[string][]byte{srcRef: tarBytes}
 
-	seeds, _, seedErr := rc.buildInputDelivery(context.Background(), rc.dag.Steps["consumer"])
+	seeds, _, seedErr := rc.buildInputDelivery(context.Background(), rc.stepIndex["consumer"])
 	if seedErr != nil {
 		t.Fatalf("buildInputDelivery: %v", seedErr)
 	}
@@ -687,14 +688,14 @@ func TestResolveImageDigest_ImageFrom(t *testing.T) {
 		},
 	}
 	rc.lane = p
-	rc.dag = buildTestDAG(t, p)
+	rc.dag, rc.stepIndex = buildTestDAG(t, p)
 	packDigest := primitive.DigestFromHex("abcdef1234567890000000000000000000000000000000000000000000000000")
 	if err := rc.laneState.Register("pack", "", output.ImageHandle{
 		Ref: registry.WrapDigest("test-lane", "pack", packDigest),
 	}); err != nil {
 		t.Fatal(err)
 	}
-	step := rc.dag.Steps["run"]
+	step := rc.stepIndex["run"]
 	imageBefore := step.Image
 	digest, err := rc.resolveImageDigest(context.Background(), step, "test")
 	if err != nil {
@@ -729,9 +730,9 @@ func TestResolveImageDigest_ImageFromMissing(t *testing.T) {
 			},
 		},
 	}
-	rc.dag = buildTestDAG(t, p)
+	rc.dag, rc.stepIndex = buildTestDAG(t, p)
 
-	_, err := rc.resolveImageDigest(context.Background(), rc.dag.Steps["run"], "test")
+	_, err := rc.resolveImageDigest(context.Background(), rc.stepIndex["run"], "test")
 	if err == nil {
 		t.Fatal("expected error for missing digest")
 	}
@@ -765,7 +766,7 @@ func TestResolvePackInputPaths(t *testing.T) {
 			},
 		},
 	}
-	rc.dag = buildTestDAG(t, p)
+	rc.dag, rc.stepIndex = buildTestDAG(t, p)
 
 	compileDigest := primitive.DigestFromHex("aabbccdd11223344000000000000000000000000000000000000000000000000")
 	compileRef := "localhost/test/compile@" + compileDigest.String()
@@ -785,7 +786,7 @@ func TestResolvePackInputPaths(t *testing.T) {
 	eng.saveTars = map[string][]byte{compileRef: tarBytes}
 
 	scratchDir := t.TempDir()
-	paths, pathErr := rc.resolvePackInputPaths(context.Background(), rc.dag.Steps["pack"], scratchDir, "test")
+	paths, pathErr := rc.resolvePackInputPaths(context.Background(), rc.stepIndex["pack"], scratchDir, "test")
 	if pathErr != nil {
 		t.Fatal(pathErr)
 	}
@@ -843,7 +844,7 @@ func TestPushAndReport_ImagePushOK(t *testing.T) {
 
 func TestRunStep_InvalidTimeout(t *testing.T) {
 	rc := newTestRC(t, &mockEngine{})
-	rc.dag.Steps["bad"] = &lane.Step{
+	rc.stepIndex["bad"] = &lane.Step{
 		Timeout: primitive.DurationPtr("not-a-duration"),
 		Image:   primitive.ImageRefPtr("img@sha256:abc0000000000000000000000000000000000000000000000000000000000000"),
 		Args:    []string{"run"},
@@ -862,7 +863,7 @@ func TestRunStep_InvalidTimeout(t *testing.T) {
 func TestRunStep_TimeoutFromLaneDefaults(t *testing.T) {
 	rc := newTestRC(t, &mockEngine{})
 	rc.lane.Defaults = &lane.LaneDefaults{Timeout: "invalid"}
-	rc.dag.Steps["bad"] = &lane.Step{
+	rc.stepIndex["bad"] = &lane.Step{
 		Image: primitive.ImageRefPtr("img@sha256:abc0000000000000000000000000000000000000000000000000000000000000"),
 		Args:  []string{"run"},
 		Env:   map[string]string{},

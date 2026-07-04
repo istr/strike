@@ -58,7 +58,11 @@ func TestCollectPeers_StepWithoutPeers(t *testing.T) {
 			minStep("a", nil),
 		},
 	}
-	d, err := lane.Build(p)
+	index, err := lane.IndexSteps(p)
+	if err != nil {
+		t.Fatalf("lane.IndexSteps: %v", err)
+	}
+	d, err := lane.Build(p, index)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -77,7 +81,11 @@ func TestCollectPeers_SingleStepIncludesSelf(t *testing.T) {
 			minStep("a", []lane.Peer{peer}),
 		},
 	}
-	d, err := lane.Build(p)
+	index, err := lane.IndexSteps(p)
+	if err != nil {
+		t.Fatalf("lane.IndexSteps: %v", err)
+	}
+	d, err := lane.Build(p, index)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -107,7 +115,11 @@ func TestCollectPeers_TransitivePredecessors(t *testing.T) {
 			withInput(minStep("c", []lane.Peer{peerC}), "b", "out", "/in/b"),
 		},
 	}
-	d, err := lane.Build(p)
+	index, err := lane.IndexSteps(p)
+	if err != nil {
+		t.Fatalf("lane.IndexSteps: %v", err)
+	}
+	d, err := lane.Build(p, index)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -139,7 +151,11 @@ func TestCollectPeers_OnlyTransitive(t *testing.T) {
 				"b", "out", "/in/b"),
 		},
 	}
-	d, err := lane.Build(p)
+	index, err := lane.IndexSteps(p)
+	if err != nil {
+		t.Fatalf("lane.IndexSteps: %v", err)
+	}
+	d, err := lane.Build(p, index)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -173,7 +189,11 @@ func TestCollectPeers_DiamondDedup(t *testing.T) {
 				"right", "out", "/in/r"),
 		},
 	}
-	d, err := lane.Build(p)
+	index, err := lane.IndexSteps(p)
+	if err != nil {
+		t.Fatalf("lane.IndexSteps: %v", err)
+	}
+	d, err := lane.Build(p, index)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -206,7 +226,11 @@ func TestCollectPeers_StepsWithoutPeersOmitted(t *testing.T) {
 			withInput(minStep("c", []lane.Peer{peerC}), "b", "out", "/in/b"),
 		},
 	}
-	d, err := lane.Build(p)
+	index, err := lane.IndexSteps(p)
+	if err != nil {
+		t.Fatalf("lane.IndexSteps: %v", err)
+	}
+	d, err := lane.Build(p, index)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}

@@ -36,7 +36,11 @@ func TestPackBaseRefs_CollectsSubtreeBases(t *testing.T) {
 			},
 		},
 	}
-	dag, err := lane.Build(p)
+	index, err := lane.IndexSteps(p)
+	if err != nil {
+		t.Fatalf("lane.IndexSteps: %v", err)
+	}
+	dag, err := lane.Build(p, index)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,14 +67,24 @@ func TestValidateBaseSBOMTrustAnchor_RequiresTrustRoot(t *testing.T) {
 	}
 
 	// No trust root: build must fail.
-	if _, err := lane.Build(mkLane(lane.Keyless{})); err == nil {
+	noRootLane := mkLane(lane.Keyless{})
+	noRootIndex, idxErr := lane.IndexSteps(noRootLane)
+	if idxErr != nil {
+		t.Fatalf("lane.IndexSteps: %v", idxErr)
+	}
+	if _, err := lane.Build(noRootLane, noRootIndex); err == nil {
 		t.Fatal("expected build error: baseSbomSigners without a trust root")
 	} else if !strings.Contains(err.Error(), "baseSbomSigners") {
 		t.Errorf("error should mention baseSbomSigners: %v", err)
 	}
 
 	// trustRootRef present: the anchor is satisfied, build passes.
-	if _, err := lane.Build(mkLane(lane.Keyless{TrustRootRef: digestRef("tr")})); err != nil {
+	withRootLane := mkLane(lane.Keyless{TrustRootRef: digestRef("tr")})
+	withRootIndex, err := lane.IndexSteps(withRootLane)
+	if err != nil {
+		t.Fatalf("lane.IndexSteps: %v", err)
+	}
+	if _, err := lane.Build(withRootLane, withRootIndex); err != nil {
 		t.Fatalf("build should pass with a trust root ref: %v", err)
 	}
 }
@@ -85,7 +99,11 @@ func TestValidateBaseSBOMTrustAnchor_NoSignersNoConstraint(t *testing.T) {
 			},
 		},
 	}
-	if _, err := lane.Build(p); err != nil {
+	index, err := lane.IndexSteps(p)
+	if err != nil {
+		t.Fatalf("lane.IndexSteps: %v", err)
+	}
+	if _, err := lane.Build(p, index); err != nil {
 		t.Fatalf("build should pass with no base SBOM signers: %v", err)
 	}
 }

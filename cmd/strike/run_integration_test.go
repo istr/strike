@@ -43,11 +43,11 @@ func assertLanePanicFree(t *testing.T, path string) {
 	if fpErr != nil {
 		t.Fatalf("lane.NewFilePath(%s): %v", path, fpErr)
 	}
-	p, _, err := lane.Parse(fp)
+	p, index, _, err := lane.Parse(fp)
 	if err != nil {
 		t.Fatalf("lane.Parse(%s): %v", path, err)
 	}
-	dag, err := lane.Build(p)
+	dag, err := lane.Build(p, index)
 	if err != nil {
 		t.Fatalf("lane.Build(%s): %v", path, err)
 	}
@@ -62,6 +62,7 @@ func assertLanePanicFree(t *testing.T, path string) {
 	rc := newTestRC(t, eng)
 	rc.lane = p
 	rc.dag = dag
+	rc.stepIndex = index
 
 	for _, stepID := range dag.Order {
 		if err := rc.runStep(stepID); err != nil {

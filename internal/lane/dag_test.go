@@ -20,7 +20,11 @@ func TestBuild_SingleStep(t *testing.T) {
 			{ID: "build", Image: primitive.ImageRefPtr("golang"), Args: []string{"go", "build"}, Env: map[string]string{}},
 		},
 	}
-	dag, err := lane.Build(p)
+	index, err := lane.IndexSteps(p)
+	if err != nil {
+		t.Fatalf("lane.IndexSteps: %v", err)
+	}
+	dag, err := lane.Build(p, index)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,7 +51,11 @@ func TestBuild_LinearChain(t *testing.T) {
 			},
 		},
 	}
-	dag, err := lane.Build(p)
+	index, err := lane.IndexSteps(p)
+	if err != nil {
+		t.Fatalf("lane.IndexSteps: %v", err)
+	}
+	dag, err := lane.Build(p, index)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +89,11 @@ func TestBuild_Diamond(t *testing.T) {
 			},
 		},
 	}
-	dag, err := lane.Build(p)
+	index, err := lane.IndexSteps(p)
+	if err != nil {
+		t.Fatalf("lane.IndexSteps: %v", err)
+	}
+	dag, err := lane.Build(p, index)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,7 +127,11 @@ func TestBuild_FanOut(t *testing.T) {
 			},
 		},
 	}
-	dag, err := lane.Build(p)
+	index, err := lane.IndexSteps(p)
+	if err != nil {
+		t.Fatalf("lane.IndexSteps: %v", err)
+	}
+	dag, err := lane.Build(p, index)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -140,7 +156,11 @@ func TestBuild_ImageFromEdge(t *testing.T) {
 			},
 		},
 	}
-	dag, err := lane.Build(p)
+	index, err := lane.IndexSteps(p)
+	if err != nil {
+		t.Fatalf("lane.IndexSteps: %v", err)
+	}
+	dag, err := lane.Build(p, index)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -164,7 +184,11 @@ func TestBuild_PackFileEdge(t *testing.T) {
 			},
 		},
 	}
-	dag, err := lane.Build(p)
+	index, err := lane.IndexSteps(p)
+	if err != nil {
+		t.Fatalf("lane.IndexSteps: %v", err)
+	}
+	dag, err := lane.Build(p, index)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -186,7 +210,11 @@ func TestBuild_DeployArtifactEdge(t *testing.T) {
 			},
 		},
 	}
-	dag, err := lane.Build(p)
+	index, err := lane.IndexSteps(p)
+	if err != nil {
+		t.Fatalf("lane.IndexSteps: %v", err)
+	}
+	dag, err := lane.Build(p, index)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -197,14 +225,14 @@ func TestBuild_DeployArtifactEdge(t *testing.T) {
 // TestBuild -- error cases.
 // --------------------------------------------------------------------------.
 
-func TestBuild_DuplicateStepID(t *testing.T) {
+func TestIndexSteps_DuplicateStepID(t *testing.T) {
 	p := &lane.Lane{
 		Steps: []lane.Step{
 			{ID: "build", Image: primitive.ImageRefPtr("img"), Args: []string{}, Env: map[string]string{}},
 			{ID: "build", Image: primitive.ImageRefPtr("img"), Args: []string{}, Env: map[string]string{}},
 		},
 	}
-	_, err := lane.Build(p)
+	_, err := lane.IndexSteps(p)
 	assertErrContains(t, err, "duplicate step name")
 }
 
@@ -217,7 +245,11 @@ func TestBuild_UnknownImageFromStep(t *testing.T) {
 			},
 		},
 	}
-	_, err := lane.Build(p)
+	index, err := lane.IndexSteps(p)
+	if err != nil {
+		t.Fatalf("lane.IndexSteps: %v", err)
+	}
+	_, err = lane.Build(p, index)
 	assertErrContains(t, err, "unknown step")
 }
 
@@ -231,7 +263,11 @@ func TestBuild_ImageFromStepNoImageOutput(t *testing.T) {
 			},
 		},
 	}
-	_, err := lane.Build(p)
+	index, err := lane.IndexSteps(p)
+	if err != nil {
+		t.Fatalf("lane.IndexSteps: %v", err)
+	}
+	_, err = lane.Build(p, index)
 	assertErrContains(t, err, "declares no image output")
 }
 
@@ -244,7 +280,11 @@ func TestBuild_UnknownInputStep(t *testing.T) {
 			},
 		},
 	}
-	_, err := lane.Build(p)
+	index, err := lane.IndexSteps(p)
+	if err != nil {
+		t.Fatalf("lane.IndexSteps: %v", err)
+	}
+	_, err = lane.Build(p, index)
 	assertErrContains(t, err, "unknown step")
 }
 
@@ -260,7 +300,11 @@ func TestBuild_UnknownPackFileStep(t *testing.T) {
 			},
 		},
 	}
-	_, err := lane.Build(p)
+	index, err := lane.IndexSteps(p)
+	if err != nil {
+		t.Fatalf("lane.IndexSteps: %v", err)
+	}
+	_, err = lane.Build(p, index)
 	assertErrContains(t, err, "unknown step")
 }
 
@@ -280,7 +324,11 @@ func TestBuild_PackFileMissingOutput(t *testing.T) {
 			},
 		},
 	}
-	_, err := lane.Build(p)
+	index, err := lane.IndexSteps(p)
+	if err != nil {
+		t.Fatalf("lane.IndexSteps: %v", err)
+	}
+	_, err = lane.Build(p, index)
 	assertErrContains(t, err, "not found")
 }
 
@@ -295,7 +343,11 @@ func TestBuild_UnknownDeployArtifact(t *testing.T) {
 			},
 		},
 	}
-	_, err := lane.Build(p)
+	index, err := lane.IndexSteps(p)
+	if err != nil {
+		t.Fatalf("lane.IndexSteps: %v", err)
+	}
+	_, err = lane.Build(p, index)
 	assertErrContains(t, err, "unknown step")
 }
 
@@ -314,7 +366,11 @@ func TestBuild_Cycle(t *testing.T) {
 			},
 		},
 	}
-	_, err := lane.Build(p)
+	index, err := lane.IndexSteps(p)
+	if err != nil {
+		t.Fatalf("lane.IndexSteps: %v", err)
+	}
+	_, err = lane.Build(p, index)
 	assertErrContains(t, err, "cyclic dependency")
 }
 
@@ -335,7 +391,11 @@ func TestTree(t *testing.T) {
 			},
 		},
 	}
-	dag, err := lane.Build(p)
+	index, err := lane.IndexSteps(p)
+	if err != nil {
+		t.Fatalf("lane.IndexSteps: %v", err)
+	}
+	dag, err := lane.Build(p, index)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -389,7 +449,11 @@ func TestBuild_ProvenancePathInOutput(t *testing.T) {
 			},
 		},
 	}
-	if _, err := lane.Build(p); err != nil {
+	index, err := lane.IndexSteps(p)
+	if err != nil {
+		t.Fatalf("lane.IndexSteps: %v", err)
+	}
+	if _, err := lane.Build(p, index); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -407,7 +471,11 @@ func TestBuild_ProvenancePathOutsideOutput(t *testing.T) {
 			},
 		},
 	}
-	_, err := lane.Build(p)
+	index, err := lane.IndexSteps(p)
+	if err != nil {
+		t.Fatalf("lane.IndexSteps: %v", err)
+	}
+	_, err = lane.Build(p, index)
 	assertErrContains(t, err, "path traversal")
 }
 
@@ -424,7 +492,11 @@ func TestBuild_ProvenancePathNotInOutput(t *testing.T) {
 			},
 		},
 	}
-	_, err := lane.Build(p)
+	index, err := lane.IndexSteps(p)
+	if err != nil {
+		t.Fatalf("lane.IndexSteps: %v", err)
+	}
+	_, err = lane.Build(p, index)
 	assertErrContains(t, err, "not within any declared output")
 }
 
@@ -461,7 +533,11 @@ func TestBuild_DeterministicOrder(t *testing.T) {
 
 	want := []primitive.Identifier{"alpha", "middle", "zebra"}
 	for i := range 100 {
-		dag, err := lane.Build(p)
+		index, err := lane.IndexSteps(p)
+		if err != nil {
+			t.Fatalf("lane.IndexSteps: %v", err)
+		}
+		dag, err := lane.Build(p, index)
 		if err != nil {
 			t.Fatalf("iteration %d: Build: %v", i, err)
 		}
@@ -510,7 +586,11 @@ func TestBuild_DeterministicOrder_Diamond(t *testing.T) {
 	// root first; left before right (alphabetic); bottom last.
 	want := []primitive.Identifier{"root", "left", "right", "bottom"}
 	for i := range 100 {
-		dag, err := lane.Build(p)
+		index, err := lane.IndexSteps(p)
+		if err != nil {
+			t.Fatalf("lane.IndexSteps: %v", err)
+		}
+		dag, err := lane.Build(p, index)
 		if err != nil {
 			t.Fatalf("iteration %d: Build: %v", i, err)
 		}
@@ -579,7 +659,11 @@ func TestBuild_DeterministicOrder_LexSmallestNotFIFO(t *testing.T) {
 
 	want := []primitive.Identifier{"A", "B", "P", "Q", "R", "S"}
 	for i := range 100 {
-		dag, err := lane.Build(p)
+		index, err := lane.IndexSteps(p)
+		if err != nil {
+			t.Fatalf("lane.IndexSteps: %v", err)
+		}
+		dag, err := lane.Build(p, index)
 		if err != nil {
 			t.Fatalf("iteration %d: Build: %v", i, err)
 		}
@@ -674,7 +758,12 @@ func TestBuild_PeerAnchorConflict(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := lane.Build(&lane.Lane{Steps: tc.steps})
+			p := &lane.Lane{Steps: tc.steps}
+			index, err := lane.IndexSteps(p)
+			if err != nil {
+				t.Fatalf("lane.IndexSteps: %v", err)
+			}
+			_, err = lane.Build(p, index)
 			if tc.wantErr && err == nil {
 				t.Fatal("expected a peer-anchor conflict error, got nil")
 			}
@@ -706,7 +795,11 @@ func TestTree_DeduplicatesRepeatedDependency(t *testing.T) {
 			},
 		},
 	}
-	dag, err := lane.Build(p)
+	index, err := lane.IndexSteps(p)
+	if err != nil {
+		t.Fatalf("lane.IndexSteps: %v", err)
+	}
+	dag, err := lane.Build(p, index)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -743,7 +836,11 @@ func TestTree_DiamondRendersSharedNodeOnce(t *testing.T) {
 				lane.InputRef{From: lane.OutputRef{Step: "right", Output: "out"}, Mount: "/ri"}),
 		},
 	}
-	dag, err := lane.Build(p)
+	index, err := lane.IndexSteps(p)
+	if err != nil {
+		t.Fatalf("lane.IndexSteps: %v", err)
+	}
+	dag, err := lane.Build(p, index)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -794,7 +891,11 @@ func TestValidateLeavesAreDeploys_Valid(t *testing.T) {
 			},
 		},
 	}
-	dag, err := lane.Build(p)
+	index, err := lane.IndexSteps(p)
+	if err != nil {
+		t.Fatalf("lane.IndexSteps: %v", err)
+	}
+	dag, err := lane.Build(p, index)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -814,7 +915,11 @@ func TestValidateLeavesAreDeploys_DeployOnly(t *testing.T) {
 			},
 		},
 	}
-	dag, err := lane.Build(p)
+	index, err := lane.IndexSteps(p)
+	if err != nil {
+		t.Fatalf("lane.IndexSteps: %v", err)
+	}
+	dag, err := lane.Build(p, index)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -846,7 +951,11 @@ func TestValidateLeavesAreDeploys_DanglingLeafRejected(t *testing.T) {
 			},
 		},
 	}
-	dag, err := lane.Build(p)
+	index, err := lane.IndexSteps(p)
+	if err != nil {
+		t.Fatalf("lane.IndexSteps: %v", err)
+	}
+	dag, err := lane.Build(p, index)
 	if err != nil {
 		t.Fatalf("Build should accept the lane (policy is separate): %v", err)
 	}

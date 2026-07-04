@@ -38,7 +38,11 @@ func TestBuild_RejectsNestedInputMounts(t *testing.T) {
 			},
 		},
 	}
-	_, err := lane.Build(p)
+	index, err := lane.IndexSteps(p)
+	if err != nil {
+		t.Fatalf("lane.IndexSteps: %v", err)
+	}
+	_, err = lane.Build(p, index)
 	if err == nil {
 		t.Fatal("expected error: nested input mounts must be rejected")
 	}
@@ -61,7 +65,11 @@ func TestBuild_RejectsProvenancePathOutsideOutputs(t *testing.T) {
 			},
 		},
 	}
-	_, err := lane.Build(p)
+	index, err := lane.IndexSteps(p)
+	if err != nil {
+		t.Fatalf("lane.IndexSteps: %v", err)
+	}
+	_, err = lane.Build(p, index)
 	if err == nil {
 		t.Fatal("expected error: provenance path outside outputs")
 	}
@@ -98,7 +106,7 @@ steps:
 	if fpErr != nil {
 		t.Fatalf("NewFilePath: %v", fpErr)
 	}
-	_, _, err := lane.Parse(fp)
+	_, _, _, err := lane.Parse(fp)
 	if err == nil {
 		t.Fatal("expected parse error: 'sources' field does not exist in schema")
 	}
@@ -113,11 +121,11 @@ func TestProvenanceCapture_EndToEnd(t *testing.T) {
 	if fpErr != nil {
 		t.Fatal(fpErr)
 	}
-	p, _, err := lane.Parse(fp)
+	p, index, _, err := lane.Parse(fp)
 	if err != nil {
 		t.Fatal(err)
 	}
-	dag, err := lane.Build(p)
+	dag, err := lane.Build(p, index)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -127,7 +135,7 @@ func TestProvenanceCapture_EndToEnd(t *testing.T) {
 	// Simulate provenance capture for steps that declare provenance.
 	// This exercises ValidateProvenance -> RecordProvenance -> CollectProvenance.
 	for _, stepID := range dag.Order {
-		step := dag.Steps[stepID]
+		step := index[stepID]
 		if step.Provenance == nil {
 			continue
 		}

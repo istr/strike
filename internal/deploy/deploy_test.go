@@ -1262,7 +1262,11 @@ func TestDeployerExecute_ObservedPeersPopulated(t *testing.T) {
 			},
 		},
 	}
-	dag, buildErr := lane.Build(p)
+	index, buildErr := lane.IndexSteps(p)
+	if buildErr != nil {
+		t.Fatalf("IndexSteps: %v", buildErr)
+	}
+	dag, buildErr := lane.Build(p, index)
 	if buildErr != nil {
 		t.Fatalf("Build: %v", buildErr)
 	}
@@ -1301,7 +1305,7 @@ func TestDeployerExecute_ObservedPeersPopulated(t *testing.T) {
 		},
 	}
 
-	step := dag.Steps["deploy-prod"]
+	step := index["deploy-prod"]
 	d := &deploy.Deployer{
 		Engine:         eng,
 		LaneDigest:     "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -1408,7 +1412,11 @@ func TestDeployerExecute_ObservedPeers_HonorsSSHPort(t *testing.T) {
 			},
 		},
 	}
-	dag, buildErr := lane.Build(p)
+	index, buildErr := lane.IndexSteps(p)
+	if buildErr != nil {
+		t.Fatalf("IndexSteps: %v", buildErr)
+	}
+	dag, buildErr := lane.Build(p, index)
 	if buildErr != nil {
 		t.Fatalf("Build: %v", buildErr)
 	}
@@ -1440,7 +1448,7 @@ func TestDeployerExecute_ObservedPeers_HonorsSSHPort(t *testing.T) {
 		},
 	}
 
-	step := dag.Steps["deploy-prod"]
+	step := index["deploy-prod"]
 	d := &deploy.Deployer{
 		Engine:         eng,
 		LaneDigest:     "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -1541,7 +1549,11 @@ func TestDeployerExecute_ObservedPeersConflictAborts(t *testing.T) {
 			},
 		},
 	}
-	dag, buildErr := lane.Build(p)
+	index, buildErr := lane.IndexSteps(p)
+	if buildErr != nil {
+		t.Fatalf("IndexSteps: %v", buildErr)
+	}
+	dag, buildErr := lane.Build(p, index)
 	if buildErr != nil {
 		t.Fatalf("Build: %v", buildErr)
 	}
@@ -1581,7 +1593,7 @@ func TestDeployerExecute_ObservedPeersConflictAborts(t *testing.T) {
 		},
 	}
 
-	step := dag.Steps["deploy-conflict"]
+	step := index["deploy-conflict"]
 	d := &deploy.Deployer{
 		Engine:         eng,
 		ArtifactRefs:   map[string]string{"image": "step-b.out"},

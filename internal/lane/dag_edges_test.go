@@ -25,7 +25,11 @@ func TestBuild_InputEdgesPopulated(t *testing.T) {
 			},
 		},
 	}
-	dag, err := lane.Build(p)
+	index, err := lane.IndexSteps(p)
+	if err != nil {
+		t.Fatalf("lane.IndexSteps: %v", err)
+	}
+	dag, err := lane.Build(p, index)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,7 +64,11 @@ func TestBuild_UnknownInputOutput(t *testing.T) {
 			},
 		},
 	}
-	_, err := lane.Build(p)
+	index, err := lane.IndexSteps(p)
+	if err != nil {
+		t.Fatalf("lane.IndexSteps: %v", err)
+	}
+	_, err = lane.Build(p, index)
 	if err == nil {
 		t.Fatal("expected error for unknown output")
 	}
@@ -90,7 +98,11 @@ func TestBuild_PackFileEdgesPopulated(t *testing.T) {
 			},
 		},
 	}
-	dag, err := lane.Build(p)
+	index, err := lane.IndexSteps(p)
+	if err != nil {
+		t.Fatalf("lane.IndexSteps: %v", err)
+	}
+	dag, err := lane.Build(p, index)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,7 +137,11 @@ func TestBuild_UnknownPackFileOutput(t *testing.T) {
 			},
 		},
 	}
-	_, err := lane.Build(p)
+	index, err := lane.IndexSteps(p)
+	if err != nil {
+		t.Fatalf("lane.IndexSteps: %v", err)
+	}
+	_, err = lane.Build(p, index)
 	if err == nil {
 		t.Fatal("expected error for unknown output")
 	}
@@ -153,7 +169,11 @@ func TestBuild_DeployEdgesPopulated(t *testing.T) {
 			},
 		},
 	}
-	dag, err := lane.Build(p)
+	index, err := lane.IndexSteps(p)
+	if err != nil {
+		t.Fatalf("lane.IndexSteps: %v", err)
+	}
+	dag, err := lane.Build(p, index)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -187,7 +207,11 @@ func TestBuild_UnknownDeployOutput(t *testing.T) {
 			},
 		},
 	}
-	_, err := lane.Build(p)
+	index, err := lane.IndexSteps(p)
+	if err != nil {
+		t.Fatalf("lane.IndexSteps: %v", err)
+	}
+	_, err = lane.Build(p, index)
 	if err == nil {
 		t.Fatal("expected error for unknown output")
 	}
@@ -213,7 +237,11 @@ func TestBuild_ImageFromEdgesPopulated(t *testing.T) {
 			},
 		},
 	}
-	dag, err := lane.Build(p)
+	index, err := lane.IndexSteps(p)
+	if err != nil {
+		t.Fatalf("lane.IndexSteps: %v", err)
+	}
+	dag, err := lane.Build(p, index)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -241,7 +269,11 @@ func TestBuild_InputRelPathPopulated(t *testing.T) {
 			},
 		},
 	}
-	dag, err := lane.Build(p)
+	index, err := lane.IndexSteps(p)
+	if err != nil {
+		t.Fatalf("lane.IndexSteps: %v", err)
+	}
+	dag, err := lane.Build(p, index)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -269,7 +301,11 @@ func TestBuild_SubpathOnFileOutputRejected(t *testing.T) {
 			},
 		},
 	}
-	_, err := lane.Build(p)
+	index, err := lane.IndexSteps(p)
+	if err != nil {
+		t.Fatalf("lane.IndexSteps: %v", err)
+	}
+	_, err = lane.Build(p, index)
 	if err == nil {
 		t.Fatal("expected error: subpath on file output")
 	}
@@ -294,7 +330,11 @@ func TestBuild_SiblingSubpathsFromSameProducerAccepted(t *testing.T) {
 			},
 		},
 	}
-	if _, err := lane.Build(p); err != nil {
+	index, err := lane.IndexSteps(p)
+	if err != nil {
+		t.Fatalf("lane.IndexSteps: %v", err)
+	}
+	if _, err := lane.Build(p, index); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

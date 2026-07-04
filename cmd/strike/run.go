@@ -65,6 +65,7 @@ type runContext struct {
 	lane           *lane.Lane
 	laneDigest     primitive.Digest
 	dag            *lane.DAG
+	stepIndex      map[primitive.Identifier]*lane.Step
 	stepPorts      map[string]capsule.HostPorts                     // mediated step name -> host ports
 	networkRecords map[string]capsule.Records                       // step name -> records
 	capsules       map[primitive.Identifier]*capsule.NetworkCapsule // run-step name -> pre-built capsule
@@ -75,7 +76,7 @@ type runContext struct {
 }
 
 func (rc *runContext) runStep(stepID primitive.Identifier) error {
-	step := rc.dag.Steps[stepID]
+	step := rc.stepIndex[stepID]
 	sid := string(stepID)
 	safeName := sanitizeForLog(sid)
 

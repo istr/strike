@@ -47,7 +47,7 @@ type ImageFromEdge struct {
 
 // DAG is the directed acyclic graph of step dependencies in a lane.
 type DAG struct {
-	Steps          map[primitive.Identifier]*Step
+	index          map[primitive.Identifier]*Step       // step id -> step, from Parse
 	InputEdges     map[primitive.Identifier][]InputEdge // key: consuming step name
 	PackFileEdges  map[primitive.Identifier][]PackFileEdge
 	DeployEdges    map[primitive.Identifier][]DeployArtifactEdge
@@ -65,23 +65,15 @@ type DAG struct {
 }
 
 // Build constructs a DAG from a Lane definition, resolving all inter-step edges.
-func Build(p *Lane) (*DAG, error) {
+func Build(p *Lane, index map[primitive.Identifier]*Step) (*DAG, error) {
 	d := &DAG{
-		Steps:          make(map[primitive.Identifier]*Step),
+		index:          index,
 		InputEdges:     make(map[primitive.Identifier][]InputEdge),
 		PackFileEdges:  make(map[primitive.Identifier][]PackFileEdge),
 		DeployEdges:    make(map[primitive.Identifier][]DeployArtifactEdge),
 		ImageFromEdges: make(map[primitive.Identifier]ImageFromEdge),
 		edges:          make(map[primitive.Identifier][]primitive.Identifier),
 		reverse:        make(map[primitive.Identifier][]primitive.Identifier),
-	}
-
-	for i := range p.Steps {
-		s := &p.Steps[i]
-		if _, exists := d.Steps[s.ID]; exists {
-			return nil, fmt.Errorf("duplicate step name: %q", s.ID)
-		}
-		d.Steps[s.ID] = s
 	}
 
 	if err := validateOutputIDDisjointness(p); err != nil {
@@ -132,7 +124,7 @@ func (d *DAG) resolveImageFromEdges(p *Lane) error {
 			continue
 		}
 		from := *s.ImageFromStep
-		fromStep, ok := d.Steps[from]
+		fromStep, ok := d.index[from]
 		if !ok {
 			return fmt.Errorf("step %q: imageFromStep references unknown step %q", name, from)
 		}
@@ -151,7 +143,7 @@ func (d *DAG) resolveInputEdges(p *Lane) error {
 		for _, inp := range s.Inputs {
 			refStep := inp.From.Step
 			refOutput := inp.From.Output
-			fromStep, ok := d.Steps[refStep]
+			fromStep, ok := d.index[refStep]
 			if !ok {
 				return fmt.Errorf("step %q: input at %q references unknown step %q",
 					name, inp.Mount, refStep)
@@ -195,7 +187,7 @@ func (d *DAG) resolvePackEdges(p *Lane) error {
 func (d *DAG) resolvePackFileEdge(name primitive.Identifier, f PackFile) error {
 	stepID := f.From.Step
 	outputID := f.From.Output
-	fromStep, ok := d.Steps[stepID]
+	fromStep, ok := d.index[stepID]
 	if !ok {
 		return fmt.Errorf("step %q: pack file references unknown step %q", name, stepID)
 	}
@@ -249,7 +241,7 @@ func (d *DAG) resolveDeployEdges(p *Lane) error {
 func (d *DAG) resolveDeployArtifact(name primitive.Identifier, artName string, src ArtifactSource) (DeployArtifactEdge, primitive.Identifier, error) {
 	switch ref := src.(type) {
 	case StepImageRef:
-		fromStep, ok := d.Steps[ref.Step]
+		fromStep, ok := d.index[ref.Step]
 		if !ok {
 			return DeployArtifactEdge{}, "", fmt.Errorf(
 				"step %q: deploy artifact %q references unknown step %q", name, artName, ref.Step)
@@ -260,7 +252,7 @@ func (d *DAG) resolveDeployArtifact(name primitive.Identifier, artName string, s
 		}
 		return DeployArtifactEdge{ArtifactName: artName, FromStep: fromStep, Image: true}, ref.Step, nil
 	case OutputRef:
-		fromStep, ok := d.Steps[ref.Step]
+		fromStep, ok := d.index[ref.Step]
 		if !ok {
 			return DeployArtifactEdge{}, "", fmt.Errorf(
 				"step %q: deploy artifact %q references unknown step %q", name, artName, ref.Step)
@@ -559,22 +551,22 @@ func kahnSort(d *DAG) ([]primitive.Identifier, error) {
 	// Compute in-degree for every step from its declared
 	// inputs. The map-iteration here is read-only and does
 	// not leak into the output.
-	inDegree := make(map[primitive.Identifier]int, len(d.Steps))
-	for name := range d.Steps {
+	inDegree := make(map[primitive.Identifier]int, len(d.index))
+	for name := range d.index {
 		inDegree[name] = len(d.edges[name])
 	}
 
 	// Collect initially-ready steps. The map-iteration order
 	// here also does not affect the output, because the ready
 	// slice is sorted at every extraction below.
-	ready := make([]primitive.Identifier, 0, len(d.Steps))
+	ready := make([]primitive.Identifier, 0, len(d.index))
 	for name, deg := range inDegree {
 		if deg == 0 {
 			ready = append(ready, name)
 		}
 	}
 
-	order := make([]primitive.Identifier, 0, len(d.Steps))
+	order := make([]primitive.Identifier, 0, len(d.index))
 	for len(ready) > 0 {
 		// Sort the ready set and extract its smallest member.
 		// This is the single point where the lex-smallest
@@ -600,7 +592,7 @@ func kahnSort(d *DAG) ([]primitive.Identifier, error) {
 		}
 	}
 
-	if len(order) != len(d.Steps) {
+	if len(order) != len(d.index) {
 		return nil, fmt.Errorf("cyclic dependency in lane graph")
 	}
 	return order, nil
@@ -625,7 +617,7 @@ func (d *DAG) CollectPeers(fromStep primitive.Identifier) map[primitive.Identifi
 			return
 		}
 		visited[name] = true
-		if step := d.Steps[name]; step != nil && len(step.Peers) > 0 {
+		if step := d.index[name]; step != nil && len(step.Peers) > 0 {
 			peers[name] = step.Peers
 		}
 		for _, dep := range d.edges[name] {
@@ -658,14 +650,14 @@ func (d *DAG) Tree() string {
 	// Roots: sinks (steps no other step depends on), sorted for
 	// deterministic output.
 	roots := []primitive.Identifier{}
-	for name := range d.Steps {
+	for name := range d.index {
 		if len(d.reverse[name]) == 0 {
 			roots = append(roots, name)
 		}
 	}
 	slices.Sort(roots)
 
-	visited := make(map[primitive.Identifier]bool, len(d.Steps))
+	visited := make(map[primitive.Identifier]bool, len(d.index))
 	for i, root := range roots {
 		last := i == len(roots)-1
 		connector := "+-- "
@@ -741,7 +733,7 @@ func (d *DAG) PackBaseRefs(fromStep primitive.Identifier) []primitive.ImageRef {
 	seen := map[primitive.ImageRef]bool{}
 	var out []primitive.ImageRef
 	for name := range visited {
-		s := d.Steps[name]
+		s := d.index[name]
 		if s == nil || s.Pack == nil {
 			continue
 		}

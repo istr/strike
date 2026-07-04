@@ -8,6 +8,7 @@ import (
 
 	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/primitive"
 )
 
 // mockEngine implements container.Engine for testing runContext methods.
@@ -91,12 +92,17 @@ func (m *mockEngine) VolumeCreate(_ context.Context, _ string) error            
 func (m *mockEngine) SeedVolumes(_ context.Context, _ []container.VolumeSeed) error { return nil }
 func (m *mockEngine) VolumeRemove(_ context.Context, _ string) error                { return nil }
 
-// buildTestDAG runs lane.Build on p and fails the test on error.
-func buildTestDAG(t *testing.T, p *lane.Lane) *lane.DAG {
+// buildTestDAG runs lane.IndexSteps and lane.Build on p and fails the test on
+// error, returning the DAG and its step index.
+func buildTestDAG(t *testing.T, p *lane.Lane) (*lane.DAG, map[primitive.Identifier]*lane.Step) {
 	t.Helper()
-	dag, err := lane.Build(p)
+	index, err := lane.IndexSteps(p)
+	if err != nil {
+		t.Fatalf("lane.IndexSteps: %v", err)
+	}
+	dag, err := lane.Build(p, index)
 	if err != nil {
 		t.Fatalf("lane.Build: %v", err)
 	}
-	return dag
+	return dag, index
 }

@@ -25,14 +25,14 @@ func TestAllFixturesBuild(t *testing.T) {
 				}
 				t.Fatalf("NewFilePath: %v", fpErr)
 			}
-			p, _, err := lane.Parse(fp)
+			p, index, _, err := lane.Parse(fp)
 			if err != nil {
 				if strings.HasPrefix(filepath.Base(path), "invalid_") {
 					return
 				}
 				t.Fatalf("parse: %v", err)
 			}
-			dag, err := lane.Build(p)
+			dag, err := lane.Build(p, index)
 			if strings.HasPrefix(filepath.Base(path), "invalid_") {
 				if err == nil {
 					t.Fatal("expected build error for invalid fixture")
