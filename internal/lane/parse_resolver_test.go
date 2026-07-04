@@ -9,20 +9,16 @@ import (
 	"github.com/istr/strike/internal/lane"
 )
 
-// TestResolver_FQDNRejectedByParse pins the Go-side
-// validateResolver behaviour: an FQDN passes CUE but is
-// rejected by the early Go validation, so both `strike
-// validate` and `strike run` (which call Parse identically)
-// fail at the same point with the same diagnostic.
-func TestResolver_FQDNRejectedByParse(t *testing.T) {
+// TestResolver_FQDNRejected pins the Go-side validateResolver
+// behaviour: an FQDN passes CUE but is rejected by the
+// validate-lane gate, so both `strike validate` and `strike
+// run` (which pass every lane through the same gate) fail at
+// the same point with the same diagnostic.
+func TestResolver_FQDNRejected(t *testing.T) {
 	path := filepath.Join("testdata", "peers", "invalid_resolver_fqdn_host.yaml")
-	fp, fpErr := lane.NewFilePath(path)
-	if fpErr != nil {
-		t.Fatalf("NewFilePath: %v", fpErr)
-	}
-	_, _, _, err := lane.Parse(fp)
+	err := parseAndValidate(t, path)
 	if err == nil {
-		t.Fatal("Parse must reject FQDN resolver host")
+		t.Fatal("validation must reject FQDN resolver host")
 	}
 	if !strings.Contains(err.Error(), "must be IP literal") {
 		t.Errorf("error message must contain 'must be IP literal'; got: %v", err)
@@ -32,18 +28,14 @@ func TestResolver_FQDNRejectedByParse(t *testing.T) {
 	}
 }
 
-// TestResolver_MissingRejectedByParse pins the CUE-side
+// TestResolver_MissingRejected pins the CUE-side
 // mandatory-field behaviour. The error message identifies
 // the resolver field explicitly.
-func TestResolver_MissingRejectedByParse(t *testing.T) {
+func TestResolver_MissingRejected(t *testing.T) {
 	path := filepath.Join("testdata", "peers", "invalid_missing_resolver.yaml")
-	fp, fpErr := lane.NewFilePath(path)
-	if fpErr != nil {
-		t.Fatalf("NewFilePath: %v", fpErr)
-	}
-	_, _, _, err := lane.Parse(fp)
+	err := parseAndValidate(t, path)
 	if err == nil {
-		t.Fatal("Parse must reject lane without resolver")
+		t.Fatal("validation must reject lane without resolver")
 	}
 	if !strings.Contains(err.Error(), "resolver") {
 		t.Errorf("error message must mention 'resolver'; got: %v", err)

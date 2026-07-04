@@ -80,16 +80,12 @@ func TestParse_PeersReject(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.fixture, func(t *testing.T) {
 			path := filepath.Join("testdata", "peers", tc.fixture)
-			fp, fpErr := lane.NewFilePath(path)
-			if fpErr != nil {
-				t.Fatalf("NewFilePath(%s): %v", path, fpErr)
-			}
-			_, _, _, err := lane.Parse(fp)
+			err := parseAndValidate(t, path)
 			if err == nil {
-				t.Fatalf("Parse(%s): expected error, got nil", path)
+				t.Fatalf("validate(%s): expected error, got nil", path)
 			}
 			if !strings.Contains(err.Error(), tc.wantContains) {
-				t.Errorf("Parse(%s): error %q does not contain %q",
+				t.Errorf("validate(%s): error %q does not contain %q",
 					path, err.Error(), tc.wantContains)
 			}
 		})

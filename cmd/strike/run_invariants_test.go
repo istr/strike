@@ -7,73 +7,11 @@ import (
 	"testing"
 
 	"github.com/istr/strike/internal/lane"
-	"github.com/istr/strike/internal/primitive"
 )
 
 // --------------------------------------------------------------------------.
 // Negative: structural invariants enforced by Build.
 // --------------------------------------------------------------------------.
-
-func TestBuild_RejectsNestedInputMounts(t *testing.T) {
-	p := &lane.Lane{
-		Registry: "localhost:5555/test",
-		Steps: []lane.Step{
-			{
-				ID: "src", Image: primitive.ImageRefPtr("img@sha256:" + strings.Repeat("a", 64)),
-				Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.FileOutput{{ID: "tree", Type: "directory", Path: primitive.RelPathPtr("tree")}},
-			},
-			{
-				ID: "deps", Image: primitive.ImageRefPtr("img@sha256:" + strings.Repeat("b", 64)),
-				Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.FileOutput{{ID: "modules", Type: "directory", Path: primitive.RelPathPtr("modules")}},
-			},
-			{
-				ID: "build", Image: primitive.ImageRefPtr("img@sha256:" + strings.Repeat("c", 64)),
-				Args: []string{}, Env: map[string]string{},
-				Inputs: []lane.InputRef{
-					{From: lane.OutputRef{Step: "src", Output: "tree"}, Mount: "/work"},
-					{From: lane.OutputRef{Step: "deps", Output: "modules"}, Mount: "/work/node_modules"},
-				},
-			},
-		},
-	}
-	index, err := lane.IndexSteps(p)
-	if err != nil {
-		t.Fatalf("lane.IndexSteps: %v", err)
-	}
-	_, err = lane.Build(p, index)
-	if err == nil {
-		t.Fatal("expected error: nested input mounts must be rejected")
-	}
-	if !strings.Contains(err.Error(), "overlap") {
-		t.Errorf("error should mention 'overlap': %v", err)
-	}
-}
-
-func TestBuild_RejectsProvenancePathOutsideOutputs(t *testing.T) {
-	p := &lane.Lane{
-		Steps: []lane.Step{
-			{
-				ID: "src", Image: primitive.ImageRefPtr("img@sha256:" + strings.Repeat("a", 64)),
-				Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.FileOutput{{ID: "tree", Type: "directory", Path: primitive.RelPathPtr("tree")}},
-				Provenance: &lane.ProvenanceSpec{
-					Type: "git",
-					Path: "../escape.json",
-				},
-			},
-		},
-	}
-	index, err := lane.IndexSteps(p)
-	if err != nil {
-		t.Fatalf("lane.IndexSteps: %v", err)
-	}
-	_, err = lane.Build(p, index)
-	if err == nil {
-		t.Fatal("expected error: provenance path outside outputs")
-	}
-}
 
 func TestParse_RejectsSourcesField(t *testing.T) {
 	yaml := `

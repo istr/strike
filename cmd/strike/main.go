@@ -146,6 +146,9 @@ func validateLane(path string) (fp lane.FilePath, p *lane.Lane, dg primitive.Dig
 	if err != nil {
 		return fp, p, dg, idx, dag, err
 	}
+	if err = lane.ValidateLane(p, idx); err != nil {
+		return fp, p, dg, idx, dag, err
+	}
 	dag, err = lane.Build(p, idx)
 	if err != nil {
 		return fp, p, dg, idx, dag, err

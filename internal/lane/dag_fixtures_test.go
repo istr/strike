@@ -32,6 +32,14 @@ func TestAllFixturesBuild(t *testing.T) {
 				}
 				t.Fatalf("parse: %v", err)
 			}
+
+			if err = lane.ValidateLane(p, index); err != nil {
+				if strings.HasPrefix(filepath.Base(path), "invalid_") {
+					return // negative fixture, validation error expected
+				}
+				t.Fatalf("validate: %v", err)
+			}
+
 			dag, err := lane.Build(p, index)
 			if strings.HasPrefix(filepath.Base(path), "invalid_") {
 				if err == nil {

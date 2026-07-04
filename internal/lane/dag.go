@@ -8,7 +8,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/primitive"
 )
 
@@ -76,10 +75,6 @@ func Build(p *Lane, index map[primitive.Identifier]*Step) (*DAG, error) {
 		reverse:        make(map[primitive.Identifier][]primitive.Identifier),
 	}
 
-	if err := validateOutputIDDisjointness(p); err != nil {
-		return nil, err
-	}
-
 	if err := d.resolveImageFromEdges(p); err != nil {
 		return nil, err
 	}
@@ -93,19 +88,7 @@ func Build(p *Lane, index map[primitive.Identifier]*Step) (*DAG, error) {
 		return nil, err
 	}
 
-	if err := d.validateProvenancePaths(p); err != nil {
-		return nil, err
-	}
-	if err := d.validateMountDisjointness(p); err != nil {
-		return nil, err
-	}
 	if err := d.validateDeployLeaves(p); err != nil {
-		return nil, err
-	}
-	if err := d.validatePeerAnchors(p); err != nil {
-		return nil, err
-	}
-	if err := d.validateBaseSBOMTrustAnchor(p); err != nil {
 		return nil, err
 	}
 
@@ -124,14 +107,7 @@ func (d *DAG) resolveImageFromEdges(p *Lane) error {
 			continue
 		}
 		from := *s.ImageFromStep
-		fromStep, ok := d.index[from]
-		if !ok {
-			return fmt.Errorf("step %q: imageFromStep references unknown step %q", name, from)
-		}
-		if fromStep.Output == "" {
-			return fmt.Errorf("step %q: imageFromStep %q declares no image output", name, from)
-		}
-		d.ImageFromEdges[name] = ImageFromEdge{FromStep: fromStep}
+		d.ImageFromEdges[name] = ImageFromEdge{FromStep: d.index[from]}
 		d.addEdge(name, from)
 	}
 	return nil
@@ -143,20 +119,8 @@ func (d *DAG) resolveInputEdges(p *Lane) error {
 		for _, inp := range s.Inputs {
 			refStep := inp.From.Step
 			refOutput := inp.From.Output
-			fromStep, ok := d.index[refStep]
-			if !ok {
-				return fmt.Errorf("step %q: input at %q references unknown step %q",
-					name, inp.Mount, refStep)
-			}
+			fromStep := d.index[refStep]
 			out := findOutput(fromStep, refOutput)
-			if out == nil {
-				return fmt.Errorf("step %q: input at %q: output %q not found in step %q",
-					name, inp.Mount, refOutput, refStep)
-			}
-			if inp.Subpath != nil && out.Type == "file" {
-				return fmt.Errorf("step %q: input at %q: subpath %q not allowed on file output %q.%q",
-					name, inp.Mount, *inp.Subpath, refStep, refOutput)
-			}
 			d.InputEdges[name] = append(d.InputEdges[name], InputEdge{
 				Mount:      inp.Mount,
 				Subpath:    inp.Subpath,
@@ -187,33 +151,14 @@ func (d *DAG) resolvePackEdges(p *Lane) error {
 func (d *DAG) resolvePackFileEdge(name primitive.Identifier, f PackFile) error {
 	stepID := f.From.Step
 	outputID := f.From.Output
-	fromStep, ok := d.index[stepID]
-	if !ok {
-		return fmt.Errorf("step %q: pack file references unknown step %q", name, stepID)
-	}
+	fromStep := d.index[stepID]
 	out := findOutput(fromStep, outputID)
-	if out == nil {
-		return fmt.Errorf("step %q: pack file output %q not found in step %q",
-			name, outputID, stepID)
-	}
 	d.PackFileEdges[name] = append(d.PackFileEdges[name], PackFileEdge{
 		Dest:       f.Dest,
 		FromStep:   fromStep,
 		FromOutput: out,
 	})
 	d.addEdge(name, stepID)
-	return nil
-}
-
-// findOutput returns a pointer to the FileOutput with the given name,
-// or nil if not found. The returned pointer aliases into s.Outputs,
-// so callers must not mutate s after Build returns.
-func findOutput(s *Step, name primitive.Identifier) *FileOutput {
-	for i := range s.Outputs {
-		if s.Outputs[i].ID == name {
-			return &s.Outputs[i]
-		}
-	}
 	return nil
 }
 
@@ -241,65 +186,15 @@ func (d *DAG) resolveDeployEdges(p *Lane) error {
 func (d *DAG) resolveDeployArtifact(name primitive.Identifier, artName string, src ArtifactSource) (DeployArtifactEdge, primitive.Identifier, error) {
 	switch ref := src.(type) {
 	case StepImageRef:
-		fromStep, ok := d.index[ref.Step]
-		if !ok {
-			return DeployArtifactEdge{}, "", fmt.Errorf(
-				"step %q: deploy artifact %q references unknown step %q", name, artName, ref.Step)
-		}
-		if fromStep.Output == "" {
-			return DeployArtifactEdge{}, "", fmt.Errorf(
-				"step %q: deploy artifact %q: step %q declares no image output", name, artName, ref.Step)
-		}
-		return DeployArtifactEdge{ArtifactName: artName, FromStep: fromStep, Image: true}, ref.Step, nil
+		return DeployArtifactEdge{ArtifactName: artName, FromStep: d.index[ref.Step], Image: true}, ref.Step, nil
 	case OutputRef:
-		fromStep, ok := d.index[ref.Step]
-		if !ok {
-			return DeployArtifactEdge{}, "", fmt.Errorf(
-				"step %q: deploy artifact %q references unknown step %q", name, artName, ref.Step)
-		}
+		fromStep := d.index[ref.Step]
 		out := findOutput(fromStep, ref.Output)
-		if out == nil {
-			return DeployArtifactEdge{}, "", fmt.Errorf(
-				"step %q: deploy artifact %q: output %q not found in step %q",
-				name, artName, ref.Output, ref.Step)
-		}
 		return DeployArtifactEdge{ArtifactName: artName, FromStep: fromStep, FromOutput: out}, ref.Step, nil
 	default:
 		return DeployArtifactEdge{}, "", fmt.Errorf(
 			"step %q: deploy artifact %q: unknown source kind %q", name, artName, src.SourceKind())
 	}
-}
-
-// validateProvenancePaths checks that each step's provenance.path
-// (if declared) is relative, canonical, and lies within a declared output.
-// A whole-workdir output (path absent) contains any provenance file.
-func (d *DAG) validateProvenancePaths(p *Lane) error {
-	for _, s := range p.Steps {
-		if s.Provenance == nil {
-			continue
-		}
-		provPath := s.Provenance.Path
-		if err := provPath.Validate(); err != nil {
-			return fmt.Errorf("step %q: provenance.path %q: %w", s.ID, provPath, err)
-		}
-		found := false
-		for _, out := range s.Outputs {
-			if out.Path == nil { // whole workdir contains everything
-				found = true
-				break
-			}
-			prefix := string(*out.Path) + "/"
-			if provPath == *out.Path || provPath.HasPrefix(prefix) {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return fmt.Errorf("step %q: provenance.path %q is not within any declared output",
-				s.ID, provPath)
-		}
-	}
-	return nil
 }
 
 // validateDeployLeaves enforces ADR-039 D2: a deploy step is a DAG leaf.
@@ -355,148 +250,6 @@ func (d *DAG) ValidateLeavesAreDeploys(p *Lane) error {
 		}
 	}
 	return nil
-}
-
-// validatePeerAnchors enforces that no two steps declare the same network
-// endpoint (host:port) with different trust anchors. Declaring one endpoint
-// with the same anchor from several steps is allowed; declaring it with
-// differing anchors is a contradiction the lane cannot satisfy and that the
-// runtime identity-conflict abort would only catch after containers run. The
-// endpoint key is host:port alone (peer.Host already carries the optional
-// port), so two peers of different protocols on the same host:port are treated
-// as a conflict -- the strictest rule, matching the runtime dedup posture.
-//
-// The anchor is reduced to a canonical string. For TLS trust the discriminator
-// plus its anchor material (fingerprint or CA-bundle path); for SSH the sorted
-// set of "keytype key" entries, so known_hosts order is irrelevant. Steps and
-// peers are iterated in declaration order; the first conflicting endpoint
-// yields a deterministic error.
-func (d *DAG) validatePeerAnchors(p *Lane) error {
-	seen := map[string]string{} // host:port -> canonical anchor
-	for _, s := range p.Steps {
-		for _, peer := range s.Peers {
-			endpoint := peer.Addr().Authority()
-			anchor := peerAnchor(peer)
-			if prev, ok := seen[endpoint]; ok {
-				if prev != anchor {
-					return fmt.Errorf(
-						"peer endpoint %q declared with conflicting trust anchors", endpoint)
-				}
-				continue
-			}
-			seen[endpoint] = anchor
-		}
-	}
-	return nil
-}
-
-// peerAnchor returns a canonical string for a peer's trust anchor. Two peers on
-// the same endpoint are compatible iff their peerAnchor strings are equal. The
-// protocol discriminator is part of the string, so an HTTPS and an SSH anchor
-// on one endpoint never compare equal (C-1).
-func peerAnchor(peer Peer) string {
-	switch x := peer.(type) {
-	case endpoint.TLS:
-		switch t := x.Trust.(type) {
-		case endpoint.Fingerprint:
-			return "https/certFingerprint/" + t.Fingerprint
-		case endpoint.CABundle:
-			return "https/caBundle/" + t.Path
-		default:
-			return "https/unknown"
-		}
-	case endpoint.SSH:
-		entries := make([]string, len(x.KnownHosts))
-		for i, kh := range x.KnownHosts {
-			entries[i] = kh.KnownHostsLine()
-		}
-		sort.Strings(entries)
-		return "ssh/" + strings.Join(entries, "\n")
-	default:
-		return "unknown"
-	}
-}
-
-// validateMountDisjointness checks that input mounts within the same step
-// do not nest. Two mounts a and b conflict iff a == b, or a is a path
-// prefix of b, or b is a path prefix of a. Workdir is not a mount and
-// is excluded from this check.
-//
-// When a step legitimately needs multiple sources to appear at related
-// container paths (e.g. /work + /work/node_modules), the user must compose
-// them in a separate pack step that produces a single image output, then
-// mount that image at the desired root. This keeps mount topology trivial
-// and makes composition explicit and content-addressed.
-func (d *DAG) validateMountDisjointness(p *Lane) error {
-	for _, s := range p.Steps {
-		edges := d.InputEdges[s.ID]
-		if len(edges) < 2 {
-			continue
-		}
-		for i := range edges {
-			for j := i + 1; j < len(edges); j++ {
-				a, b := edges[i].Mount, edges[j].Mount
-				if mountsConflict(a, b) {
-					return fmt.Errorf(
-						"step %q: input mounts %q and %q overlap; compose them in a pack step",
-						s.ID, a, b)
-				}
-			}
-		}
-	}
-	return nil
-}
-
-// validateOutputIDDisjointness rejects a step whose outputs declare the same
-// id twice. The output id is the per-step addressing key for an output and its
-// layer: a duplicate would alias output resolution (findOutput returns the
-// first match) and overwrite the lane-state registration keyed by that id, so
-// one output would silently vanish. Distinct ids may still share a path
-// basename; only ids must be disjoint (ADR-046).
-func validateOutputIDDisjointness(p *Lane) error {
-	for _, s := range p.Steps {
-		seen := make(map[primitive.Identifier]struct{}, len(s.Outputs))
-		for _, out := range s.Outputs {
-			if _, dup := seen[out.ID]; dup {
-				return fmt.Errorf("step %q: duplicate output id %q", s.ID, out.ID)
-			}
-			seen[out.ID] = struct{}{}
-		}
-	}
-	return nil
-}
-
-// mountsConflict reports whether two absolute container paths overlap
-// in a way that would make their bind mounts nested.
-//
-//	"/a"     and "/a"      -> conflict (identical)
-//	"/a"     and "/a/b"    -> conflict (a is prefix of b)
-//	"/a/b"   and "/a"      -> conflict (a is prefix of b)
-//	"/a/b"   and "/a/c"    -> no conflict (siblings)
-//	"/a"     and "/abc"    -> no conflict (NOT a prefix in path terms)
-func mountsConflict(a, b primitive.AbsPath) bool {
-	ca := a.Clean()
-	cb := b.Clean()
-	if ca == cb {
-		return true
-	}
-	return isPathPrefix(ca, cb) || isPathPrefix(cb, ca)
-}
-
-// isPathPrefix reports whether prefix is a strict path-component prefix
-// of full. "/a" is a prefix of "/a/b" but not of "/abc".
-func isPathPrefix(prefix, full string) bool {
-	if !strings.HasPrefix(full, prefix) {
-		return false
-	}
-	if len(full) == len(prefix) {
-		return false // identical, not a strict prefix
-	}
-	// "/" is a prefix of everything -- the separator is already there.
-	if prefix == "/" {
-		return true
-	}
-	return full[len(prefix)] == '/'
 }
 
 // addEdge records that step "from" depends on step "to". The
@@ -665,7 +418,9 @@ func (d *DAG) Tree() string {
 			connector = "`-- "
 		}
 		rootStr := string(root)
-		sb.WriteString(connector + rootStr + "\n")
+		sb.WriteString(connector)
+		sb.WriteString(rootStr)
+		sb.WriteString("\n")
 		visited[root] = true
 		d.treeNode(&sb, root, "", last, visited)
 	}
@@ -697,11 +452,17 @@ func (d *DAG) treeNode(sb *strings.Builder, node primitive.Identifier, prefix st
 		if visited[dep] {
 			// Already printed in full elsewhere. Emit a back-reference
 			// and do not recurse, so the shared subtree is not repeated.
-			sb.WriteString(childPrefix + connector + depStr + " (*)\n")
+			sb.WriteString(childPrefix)
+			sb.WriteString(connector)
+			sb.WriteString(depStr)
+			sb.WriteString(" (*)\n")
 			continue
 		}
 		visited[dep] = true
-		sb.WriteString(childPrefix + connector + depStr + "\n")
+		sb.WriteString(childPrefix)
+		sb.WriteString(connector)
+		sb.WriteString(depStr)
+		sb.WriteString("\n")
 		d.treeNode(sb, dep, childPrefix, last, visited)
 	}
 }
@@ -744,22 +505,4 @@ func (d *DAG) PackBaseRefs(fromStep primitive.Identifier) []primitive.ImageRef {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
 	return out
-}
-
-// validateBaseSBOMTrustAnchor enforces that a lane declaring base SBOM signers
-// also declares a resolvable keyless trust root: producer-side base-SBOM
-// signature verification has nothing to verify against otherwise. Like a mutable
-// image reference, declaring signers without an anchor is a structural error
-// caught at lane build, not a deploy-time surprise. The receiver is unused, kept
-// for symmetry with the other build validations.
-func (d *DAG) validateBaseSBOMTrustAnchor(p *Lane) error {
-	if len(p.BaseSBOMSigners) == 0 {
-		return nil
-	}
-	if p.Keyless.TrustRoot == nil && p.Keyless.TrustRootRef == "" {
-		return fmt.Errorf(
-			"lane declares baseSbomSigners but no keyless trust root (trustRoot or trustRootRef); " +
-				"base-SBOM verification has no anchor")
-	}
-	return nil
 }

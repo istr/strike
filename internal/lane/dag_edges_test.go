@@ -1,7 +1,6 @@
 package lane_test
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/istr/strike/internal/lane"
@@ -51,32 +50,6 @@ func TestBuild_InputEdgesPopulated(t *testing.T) {
 	}
 }
 
-func TestBuild_UnknownInputOutput(t *testing.T) {
-	p := &lane.Lane{
-		Steps: []lane.Step{
-			{
-				ID: "a", Image: primitive.ImageRefPtr("img"), Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.FileOutput{{ID: "out", Type: "file", Path: primitive.RelPathPtr("a")}},
-			},
-			{
-				ID: "b", Image: primitive.ImageRefPtr("img"), Args: []string{}, Env: map[string]string{},
-				Inputs: []lane.InputRef{{From: lane.OutputRef{Step: "a", Output: "missing"}, Mount: "/in"}},
-			},
-		},
-	}
-	index, err := lane.IndexSteps(p)
-	if err != nil {
-		t.Fatalf("lane.IndexSteps: %v", err)
-	}
-	_, err = lane.Build(p, index)
-	if err == nil {
-		t.Fatal("expected error for unknown output")
-	}
-	if !strings.Contains(err.Error(), "not found") {
-		t.Errorf("error should mention 'not found': %v", err)
-	}
-}
-
 // --------------------------------------------------------------------------.
 // PackFileEdges.
 // --------------------------------------------------------------------------.
@@ -121,35 +94,6 @@ func TestBuild_PackFileEdgesPopulated(t *testing.T) {
 	}
 }
 
-func TestBuild_UnknownPackFileOutput(t *testing.T) {
-	p := &lane.Lane{
-		Steps: []lane.Step{
-			{
-				ID: "compile", Image: primitive.ImageRefPtr("img"), Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.FileOutput{{ID: "other", Type: "file", Path: primitive.RelPathPtr("other")}},
-			},
-			{
-				ID: "pack", Env: map[string]string{}, Args: []string{},
-				Pack: &lane.PackSpec{
-					Base:  "scratch",
-					Files: []lane.PackFile{{From: lane.OutputRef{Step: "compile", Output: "missing"}, Dest: "/app"}},
-				},
-			},
-		},
-	}
-	index, err := lane.IndexSteps(p)
-	if err != nil {
-		t.Fatalf("lane.IndexSteps: %v", err)
-	}
-	_, err = lane.Build(p, index)
-	if err == nil {
-		t.Fatal("expected error for unknown output")
-	}
-	if !strings.Contains(err.Error(), "not found") {
-		t.Errorf("error should mention 'not found': %v", err)
-	}
-}
-
 // --------------------------------------------------------------------------.
 // DeployEdges.
 // --------------------------------------------------------------------------.
@@ -189,34 +133,6 @@ func TestBuild_DeployEdgesPopulated(t *testing.T) {
 	}
 	if !edges[0].Image {
 		t.Error("edge should be the step-image arm")
-	}
-}
-
-func TestBuild_UnknownDeployOutput(t *testing.T) {
-	p := &lane.Lane{
-		Steps: []lane.Step{
-			{
-				ID: "pack", Image: primitive.ImageRefPtr("img"), Args: []string{}, Env: map[string]string{},
-				Output: "image",
-			},
-			{
-				ID: "deploy", Env: map[string]string{}, Args: []string{},
-				Deploy: &lane.DeploySpec{
-					Artifacts: map[string]lane.ArtifactRef{"image": {From: lane.OutputRef{Step: "pack", Output: "missing"}}},
-				},
-			},
-		},
-	}
-	index, err := lane.IndexSteps(p)
-	if err != nil {
-		t.Fatalf("lane.IndexSteps: %v", err)
-	}
-	_, err = lane.Build(p, index)
-	if err == nil {
-		t.Fatal("expected error for unknown output")
-	}
-	if !strings.Contains(err.Error(), "not found") {
-		t.Errorf("error should mention 'not found': %v", err)
 	}
 }
 
@@ -283,34 +199,6 @@ func TestBuild_InputRelPathPopulated(t *testing.T) {
 	}
 	if edges[0].Subpath == nil || *edges[0].Subpath != "package.json" {
 		t.Errorf("Subpath = %v, want package.json", edges[0].Subpath)
-	}
-}
-
-func TestBuild_SubpathOnFileOutputRejected(t *testing.T) {
-	p := &lane.Lane{
-		Steps: []lane.Step{
-			{
-				ID: "compile", Image: primitive.ImageRefPtr("img"), Args: []string{}, Env: map[string]string{},
-				Outputs: []lane.FileOutput{{ID: "bin", Type: "file", Path: primitive.RelPathPtr("bin")}},
-			},
-			{
-				ID: "consumer", Image: primitive.ImageRefPtr("img"), Args: []string{}, Env: map[string]string{},
-				Inputs: []lane.InputRef{
-					{From: lane.OutputRef{Step: "compile", Output: "bin"}, Subpath: primitive.RelPathPtr("anything"), Mount: "/in/bin"},
-				},
-			},
-		},
-	}
-	index, err := lane.IndexSteps(p)
-	if err != nil {
-		t.Fatalf("lane.IndexSteps: %v", err)
-	}
-	_, err = lane.Build(p, index)
-	if err == nil {
-		t.Fatal("expected error: subpath on file output")
-	}
-	if !strings.Contains(err.Error(), "subpath") {
-		t.Errorf("error should mention 'subpath': %v", err)
 	}
 }
 

@@ -1,0 +1,87 @@
+name: deploy-lane
+id: deploy-lane
+registry: localhost:5555/test
+secrets: {}
+resolver:
+  host: "1.1.1.1:853"
+  trust:
+    type: certFingerprint
+    fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+oidc:
+  issuer: "https://idp.example.com"
+  audience: "strike"
+  identity: "strike@example.com"
+  trust:
+    type: certFingerprint
+    fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+keyless:
+  endpoints:
+    fulcio:
+      url: "https://fulcio.example:5555"
+      trust:
+        type: certFingerprint
+        fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+    rekor:
+      url: "https://rekor.example:3003"
+      trust:
+        type: certFingerprint
+        fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+    tsa:
+      url: "https://tsa.example:3004"
+      trust:
+        type: certFingerprint
+        fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+steps:
+  - id: build
+    image: docker.io/library/golang@sha256:abababababababababababababababababababababababababababababababab
+    args: ["go", "build"]
+    workdir: /out
+    env: {}
+    inputs: []
+    secrets: []
+    outputs:
+      - id: binary
+        type: file
+        path: binary
+  - id: consumer
+    image: docker.io/library/golang@sha256:cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd
+    args: ["true"]
+    env: {}
+    inputs:
+      - from:
+          step: build
+          output: binary
+        mount: /work
+      - from:
+          step: build
+          output: binary
+        mount: /work/sub
+    secrets: []
+    outputs: []
+  - id: deploy
+    deploy:
+      method:
+        type: registry
+        source: localhost:5555/test/image:latest
+        target: registry.example.com/app:latest
+      artifacts:
+        binary:
+          from:
+            step: build
+            output: binary
+      target:
+        id: prod-registry
+        type: registry
+        description: push to registry
+      recording:
+        preState:
+          required: false
+          captures: []
+        postState:
+          required: false
+          captures: []
+    args: []
+    env: {}
+    inputs: []
+    secrets: []
+    outputs: []

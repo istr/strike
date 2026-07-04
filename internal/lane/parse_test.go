@@ -347,7 +347,7 @@ func TestParse_InvalidSecretKeyRejected(t *testing.T) {
 }
 
 func TestParse_StepMultiImage(t *testing.T) {
-	_, _, _, err := lane.Parse(mustFilePath(t, "testdata/invalid_step_multi.yaml"))
+	err := parseAndValidate(t, "testdata/invalid_step_multi.yaml")
 	if err == nil {
 		t.Fatal("expected error for step with both image and pack")
 	}
