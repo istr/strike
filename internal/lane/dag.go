@@ -4,6 +4,7 @@ package lane
 
 import (
 	"fmt"
+	"iter"
 	"slices"
 	"sort"
 	"strings"
@@ -351,6 +352,39 @@ func kahnSort(d *DAG) ([]primitive.Identifier, error) {
 	return order, nil
 }
 
+// predecessors yields fromStep and its transitive predecessors over the
+// dependency adjacency, each id exactly once. includeFrom selects whether
+// fromStep itself is yielded. The attestation walks (peers, base refs,
+// provenance) consume this; each keys a map or sorts its result, so the yield
+// order is unspecified. Nil-safe: a nil receiver yields nothing.
+func (d *DAG) predecessors(fromStep primitive.Identifier, includeFrom bool) iter.Seq[primitive.Identifier] {
+	return func(yield func(primitive.Identifier) bool) {
+		if d == nil {
+			return
+		}
+		visited := map[primitive.Identifier]bool{}
+		var walk func(name primitive.Identifier) bool
+		walk = func(name primitive.Identifier) bool {
+			if visited[name] {
+				return true
+			}
+			visited[name] = true
+			if includeFrom || name != fromStep {
+				if !yield(name) {
+					return false
+				}
+			}
+			for _, dep := range d.edges[name] {
+				if !walk(dep) {
+					return false
+				}
+			}
+			return true
+		}
+		walk(fromStep)
+	}
+}
+
 // CollectPeers returns peer declarations for fromStep and all its
 // transitive predecessors, keyed by step name. Steps without declared
 // peers are omitted from the result. Used by deploy attestation to
@@ -360,24 +394,11 @@ func kahnSort(d *DAG) ([]primitive.Identifier, error) {
 // be a present map).
 func (d *DAG) CollectPeers(fromStep primitive.Identifier) map[primitive.Identifier][]Peer {
 	peers := map[primitive.Identifier][]Peer{}
-	if d == nil {
-		return peers
-	}
-	visited := map[primitive.Identifier]bool{}
-	var walk func(name primitive.Identifier)
-	walk = func(name primitive.Identifier) {
-		if visited[name] {
-			return
-		}
-		visited[name] = true
+	for name := range d.predecessors(fromStep, true) {
 		if step := d.index[name]; step != nil && len(step.Peers) > 0 {
 			peers[name] = step.Peers
 		}
-		for _, dep := range d.edges[name] {
-			walk(dep)
-		}
 	}
-	walk(fromStep)
 	return peers
 }
 
@@ -474,26 +495,9 @@ func (d *DAG) treeNode(sb *strings.Builder, node primitive.Identifier, prefix st
 // for each pack step reached. These are the base images whose signed SBOMs the
 // deploy step's producer-side verification considers.
 func (d *DAG) PackBaseRefs(fromStep primitive.Identifier) []primitive.ImageRef {
-	if d == nil {
-		return nil
-	}
-	visited := map[primitive.Identifier]bool{}
-	var walk func(name primitive.Identifier)
-	walk = func(name primitive.Identifier) {
-		if visited[name] {
-			return
-		}
-		visited[name] = true
-		for _, dep := range d.edges[name] {
-			walk(dep)
-		}
-	}
-	walk(fromStep)
-	delete(visited, fromStep)
-
 	seen := map[primitive.ImageRef]bool{}
 	var out []primitive.ImageRef
-	for name := range visited {
+	for name := range d.predecessors(fromStep, false) {
 		s := d.index[name]
 		if s == nil || s.Pack == nil {
 			continue

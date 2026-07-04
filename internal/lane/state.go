@@ -93,22 +93,8 @@ func (s *State) CollectProvenance(dag *DAG, fromStep primitive.Identifier) []pro
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	visited := map[primitive.Identifier]bool{}
-	var walk func(name primitive.Identifier)
-	walk = func(name primitive.Identifier) {
-		if visited[name] {
-			return
-		}
-		visited[name] = true
-		for _, dep := range dag.edges[name] {
-			walk(dep)
-		}
-	}
-	walk(fromStep)
-	delete(visited, fromStep) // exclude the deploy step itself
-
 	var names []primitive.Identifier
-	for n := range visited {
+	for n := range dag.predecessors(fromStep, false) {
 		key := string(n)
 		if _, ok := s.Provenance[key]; ok {
 			names = append(names, n)
