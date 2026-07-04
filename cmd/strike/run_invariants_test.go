@@ -72,7 +72,7 @@ func TestProvenanceCapture_EndToEnd(t *testing.T) {
 
 	// Simulate provenance capture for steps that declare provenance.
 	// This exercises ValidateProvenance -> RecordProvenance -> CollectProvenance.
-	for _, stepID := range dag.Order {
+	for _, stepID := range dag.Order() {
 		step := index[stepID]
 		if step.Provenance == nil {
 			continue

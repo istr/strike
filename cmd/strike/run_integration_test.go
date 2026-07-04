@@ -64,7 +64,7 @@ func assertLanePanicFree(t *testing.T, path string) {
 	rc.dag = dag
 	rc.stepIndex = index
 
-	for _, stepID := range dag.Order {
+	for _, stepID := range dag.Order() {
 		if err := rc.runStep(stepID); err != nil {
 			t.Logf("step %q returned error (OK, panic would not be): %v",
 				stepID, err)

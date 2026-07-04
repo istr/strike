@@ -166,17 +166,16 @@ func cmdValidate(path string) {
 }
 
 func cmdDAG(path string) {
-	_, _, _, _, dag, err := validateLane(path)
+	_, p, _, _, dag, err := validateLane(path)
 	if err != nil {
 		log.Fatalf("error: %v", err)
 	}
 
 	log.Print("Execution order:")
-	for i, name := range dag.Order {
-		edges := dag.InputEdges[name]
-		deps := make([]string, len(edges))
-		for j, e := range edges {
-			deps[j] = lane.OutputRef{Step: e.FromStep.ID, Output: e.FromOutput.ID}.Ref()
+	for i, name := range dag.Order() {
+		var deps []string
+		for inp := range p.Inputs(name) {
+			deps = append(deps, inp.From.Ref())
 		}
 		if len(deps) > 0 {
 			log.Printf("  %d. %s <- %v", i+1, name, deps) // #nosec G706 -- name/deps from parsed lane YAML
@@ -255,7 +254,7 @@ func cmdRun(ctx context.Context, path string, engine container.Engine) {
 	// serve).
 	ft.Start(ctx)
 
-	for _, stepID := range dag.Order {
+	for _, stepID := range dag.Order() {
 		if stepErr := rc.runStep(stepID); stepErr != nil {
 			log.Fatalf("error: %v", stepErr)
 		}

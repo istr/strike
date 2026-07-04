@@ -131,12 +131,15 @@ func (rc *runContext) executeDeploy(ctx context.Context, step *lane.Step, stepID
 	log.Printf("DEPLOY %s", safeName)
 
 	artifactRefs := make(map[string]string)
-	for _, e := range rc.dag.DeployEdges[stepID] {
-		var out primitive.Identifier
-		if !e.Image {
-			out = e.FromOutput.ID
+	for artName, artRef := range rc.lane.DeployArtifacts(stepID) {
+		var ref lane.OutputRef
+		switch src := artRef.From.(type) {
+		case lane.StepImageRef:
+			ref = lane.OutputRef{Step: src.Step}
+		case lane.OutputRef:
+			ref = src
 		}
-		artifactRefs[e.ArtifactName] = lane.OutputRef{Step: e.FromStep.ID, Output: out}.Ref()
+		artifactRefs[string(artName)] = ref.Ref()
 	}
 
 	d := &deploy.Deployer{
@@ -175,8 +178,8 @@ func (rc *runContext) resolveImageDigest(ctx context.Context, step *lane.Step, s
 		}
 		return digest, nil
 	}
-	if edge, ok := rc.dag.ImageFromEdges[step.ID]; ok {
-		fromStep := edge.FromStep.ID
+	if step.ImageFromStep != nil {
+		fromStep := *step.ImageFromStep
 		// The image output is id-less; it is registered and resolved by step via
 		// the empty-output key, collision-free because a step that declares an
 		// image output declares no other output (ADR-046).
@@ -209,14 +212,14 @@ func (rc *runContext) computeSpecHash(step *lane.Step, stepID primitive.Identifi
 	// by disjointness, and subpath is "" when the whole producer output
 	// is mounted. The hashed value remains the producer's spec hash.
 	inputHashes := map[string]primitive.Digest{}
-	for _, e := range rc.dag.InputEdges[step.ID] {
-		from := lane.OutputRef{Step: e.FromStep.ID, Output: e.FromOutput.ID}.Ref()
+	for inp := range rc.lane.Inputs(step.ID) {
+		from := inp.From.Ref()
 		subpath := ""
-		if e.Subpath != nil {
-			subpath = string(*e.Subpath)
+		if inp.Subpath != nil {
+			subpath = string(*inp.Subpath)
 		}
-		key := from + "|" + e.Mount.String() + "|" + subpath
-		inputHashes[key] = rc.state.specHashes[e.FromStep.ID]
+		key := from + "|" + inp.Mount.String() + "|" + subpath
+		inputHashes[key] = rc.state.specHashes[inp.From.Step]
 	}
 
 	key := registry.SpecHash(step, imageDigest, inputHashes, map[string]primitive.Digest{})
@@ -366,8 +369,7 @@ func (rc *runContext) executePack(ctx context.Context, step *lane.Step, stepID p
 }
 
 func (rc *runContext) resolvePackInputPaths(ctx context.Context, step *lane.Step, scratchDir, safeName string) (map[string]string, error) {
-	edges := rc.dag.PackFileEdges[step.ID]
-	inputPaths := make(map[string]string, len(edges))
+	inputPaths := make(map[string]string)
 
 	scratchRoot, rootErr := os.OpenRoot(scratchDir)
 	if rootErr != nil {
@@ -379,11 +381,12 @@ func (rc *runContext) resolvePackInputPaths(ctx context.Context, step *lane.Step
 	}
 	inputsRoot := filepath.Join(scratchDir, "inputs")
 
-	for _, e := range edges {
-		fromStep := e.FromStep.ID
-		fromOutput := e.FromOutput.ID
+	for f := range rc.lane.PackFiles(step.ID) {
+		fromStep := f.From.Step
+		fromOutput := f.From.Output
+		out := rc.lane.Output(fromStep, fromOutput)
 
-		handle, artErr := rc.laneState.Resolve(lane.OutputRef{Step: fromStep, Output: fromOutput}.Ref())
+		handle, artErr := rc.laneState.Resolve(f.From.Ref())
 		if artErr != nil {
 			return nil, fmt.Errorf("%s: pack input %s.%s: %w", safeName, fromStep, fromOutput, artErr)
 		}
@@ -401,16 +404,16 @@ func (rc *runContext) resolvePackInputPaths(ctx context.Context, step *lane.Step
 		if mkErr := scratchRoot.Mkdir(filepath.Join("inputs", dedupDir), 0o750); mkErr == nil {
 			tarBytes, saveErr := registry.SaveImage(ctx, rc.engine, fh.Ref)
 			if saveErr != nil {
-				return nil, fmt.Errorf("%s: pack input %s save: %w", safeName, e.Dest, saveErr)
+				return nil, fmt.Errorf("%s: pack input %s save: %w", safeName, f.Dest, saveErr)
 			}
 			if extractErr := registry.ExtractLayer(tarBytes, fh.LayerDiffID, inputDir); extractErr != nil {
-				return nil, fmt.Errorf("%s: pack input %s extract: %w", safeName, e.Dest, extractErr)
+				return nil, fmt.Errorf("%s: pack input %s extract: %w", safeName, f.Dest, extractErr)
 			}
 		} else if !errors.Is(mkErr, os.ErrExist) {
 			return nil, fmt.Errorf("%s: pack input mkdir: %w", safeName, mkErr)
 		}
 
-		inputPaths[e.Dest.String()] = filepath.Join(inputDir, lane.OutputContentPrefix(*e.FromOutput))
+		inputPaths[f.Dest.String()] = filepath.Join(inputDir, lane.OutputContentPrefix(*out))
 	}
 	return inputPaths, nil
 }
@@ -622,42 +625,38 @@ func (rc *runContext) captureProvenance(ctx context.Context, step *lane.Step, sa
 // subpath resolves to a regular file, rather than surfacing the engine's
 // opaque runtime error.
 func (rc *runContext) buildInputDelivery(ctx context.Context, step *lane.Step) ([]container.Seed, []container.ImageVolume, error) {
-	edges := rc.dag.InputEdges[step.ID]
-	if len(edges) == 0 {
-		return nil, nil, nil
-	}
-
 	var (
 		seeds      []container.Seed
 		mounts     []container.ImageVolume
 		imageCache = make(map[string][]byte) // keyed by producer image ref (digest)
 	)
-	for _, e := range edges {
-		ref := lane.OutputRef{Step: e.FromStep.ID, Output: e.FromOutput.ID}.Ref()
+	for inp := range rc.lane.Inputs(step.ID) {
+		out := rc.lane.Output(inp.From.Step, inp.From.Output)
+		ref := inp.From.Ref()
 		art, artErr := rc.laneState.Resolve(ref)
 		if artErr != nil {
 			return nil, nil, fmt.Errorf("input at %q: source artifact %s not found: %w",
-				e.Mount, ref, artErr)
+				inp.Mount, ref, artErr)
 		}
 		fh, ok := art.(output.FileHandle)
 		if !ok {
-			return nil, nil, fmt.Errorf("input at %q: source artifact %s is not a file output", e.Mount, ref)
+			return nil, nil, fmt.Errorf("input at %q: source artifact %s is not a file output", inp.Mount, ref)
 		}
 
 		inside := false
 		var rel string
 		if step.Workdir != nil {
-			rel, inside = relWithinWorkdir(*step.Workdir, e.Mount)
+			rel, inside = relWithinWorkdir(*step.Workdir, inp.Mount)
 		}
 
 		if inside {
-			tarBytes, cacheErr := producerTar(ctx, rc.engine, imageCache, fh.Ref, e)
+			tarBytes, cacheErr := producerTar(ctx, rc.engine, imageCache, fh.Ref, inp)
 			if cacheErr != nil {
 				return nil, nil, cacheErr
 			}
-			seedTar, buildErr := registry.SeedTarFromImage(tarBytes, fh.LayerDiffID, inputContentPath(e), rel)
+			seedTar, buildErr := registry.SeedTarFromImage(tarBytes, fh.LayerDiffID, inputContentPath(inp, out), rel)
 			if buildErr != nil {
-				return nil, nil, fmt.Errorf("input at %q: %w", e.Mount, buildErr)
+				return nil, nil, fmt.Errorf("input at %q: %w", inp.Mount, buildErr)
 			}
 			seeds = append(seeds, container.Seed{
 				Tar:  bytes.NewReader(seedTar),
@@ -667,7 +666,7 @@ func (rc *runContext) buildInputDelivery(ctx context.Context, step *lane.Step) (
 		}
 
 		// Outside the workdir (or no workdir): read-only image-volume mount.
-		mount, mountErr := buildImageMount(ctx, rc.engine, imageCache, fh, e)
+		mount, mountErr := buildImageMount(ctx, rc.engine, imageCache, fh, inp, out)
 		if mountErr != nil {
 			return nil, nil, mountErr
 		}
@@ -679,25 +678,25 @@ func (rc *runContext) buildInputDelivery(ctx context.Context, step *lane.Step) (
 // buildImageMount validates and constructs a read-only image-volume mount for
 // an input delivered outside the workdir. A single-file selection is rejected
 // in lane terms, statically for a type:file output, by walk otherwise.
-func buildImageMount(ctx context.Context, engine container.Engine, cache map[string][]byte, h output.FileHandle, e lane.InputEdge) (container.ImageVolume, error) {
-	if e.FromOutput.Type == artifactTypeFile && e.Subpath == nil {
-		return container.ImageVolume{}, singleFileOutsideErr(e)
+func buildImageMount(ctx context.Context, engine container.Engine, cache map[string][]byte, h output.FileHandle, inp lane.InputRef, out *lane.FileOutput) (container.ImageVolume, error) {
+	if out.Type == artifactTypeFile && inp.Subpath == nil {
+		return container.ImageVolume{}, singleFileOutsideErr(inp)
 	}
-	tarBytes, cacheErr := producerTar(ctx, engine, cache, h.Ref, e)
+	tarBytes, cacheErr := producerTar(ctx, engine, cache, h.Ref, inp)
 	if cacheErr != nil {
 		return container.ImageVolume{}, cacheErr
 	}
-	subPath := inputContentPath(e)
+	subPath := inputContentPath(inp, out)
 	kind, valErr := registry.ValidateImageMount(tarBytes, h.LayerDiffID, subPath)
 	if valErr != nil {
-		return container.ImageVolume{}, fmt.Errorf("input at %q: %w", e.Mount, valErr)
+		return container.ImageVolume{}, fmt.Errorf("input at %q: %w", inp.Mount, valErr)
 	}
 	if kind == registry.MountKindFile {
-		return container.ImageVolume{}, singleFileOutsideErr(e)
+		return container.ImageVolume{}, singleFileOutsideErr(inp)
 	}
 	return container.ImageVolume{
 		Source:      h.Ref,
-		Destination: e.Mount.String(),
+		Destination: inp.Mount.String(),
 		SubPath:     subPath,
 		ReadWrite:   false,
 	}, nil
@@ -705,14 +704,14 @@ func buildImageMount(ctx context.Context, engine container.Engine, cache map[str
 
 // producerTar returns the producer image's OCI-layout tar, exporting it
 // from the engine at most once per ref across all input edges of a step.
-func producerTar(ctx context.Context, engine container.Engine, cache map[string][]byte, ref string, e lane.InputEdge) ([]byte, error) {
+func producerTar(ctx context.Context, engine container.Engine, cache map[string][]byte, ref string, inp lane.InputRef) ([]byte, error) {
 	if tarBytes, ok := cache[ref]; ok {
 		return tarBytes, nil
 	}
 	tarBytes, saveErr := registry.SaveImage(ctx, engine, ref)
 	if saveErr != nil {
 		return nil, fmt.Errorf("input at %q: save %s.%s: %w",
-			e.Mount, e.FromStep.ID, e.FromOutput.ID, saveErr)
+			inp.Mount, inp.From.Step, inp.From.Output, saveErr)
 	}
 	cache[ref] = tarBytes
 	return tarBytes, nil
@@ -721,10 +720,10 @@ func producerTar(ctx context.Context, engine container.Engine, cache map[string]
 // singleFileOutsideErr is the lane-surface diagnostic for a single regular
 // file selected as an input mounted outside the workdir. It names neither
 // mount nor overlay; it tells the author what to change.
-func singleFileOutsideErr(e lane.InputEdge) error {
+func singleFileOutsideErr(inp lane.InputRef) error {
 	return fmt.Errorf("input at %q resolves to a single file, which can only "+
 		"be delivered inside the step workdir; mount its parent directory, "+
-		"use a directory output, or place it inside the workdir", e.Mount)
+		"use a directory output, or place it inside the workdir", inp.Mount)
 }
 
 // archiveReroot returns the path to archive from the container and the
@@ -779,15 +778,15 @@ func archiveReroot(workdir primitive.AbsPath, out lane.FileOutput) (archivePath,
 // output-type layer convention. Image outputs are rooted at the layer root;
 // file/directory outputs sit under OutputContentPrefix. This is the caller-side
 // re-rooting the engine boundary must not know about (Record 4).
-func inputContentPath(e lane.InputEdge) string {
+func inputContentPath(inp lane.InputRef, out *lane.FileOutput) string {
 	base := ""
-	if e.FromOutput.Type != artifactTypeImage {
-		base = lane.OutputContentPrefix(*e.FromOutput)
+	if out.Type != artifactTypeImage {
+		base = lane.OutputContentPrefix(*out)
 	}
-	if e.Subpath == nil {
+	if inp.Subpath == nil {
 		return base
 	}
-	sub := string(*e.Subpath)
+	sub := string(*inp.Subpath)
 	return path.Join(base, sub)
 }
 

@@ -12,82 +12,30 @@ import (
 	"github.com/istr/strike/internal/primitive"
 )
 
-// InputEdge is a fully resolved step.inputs[i] entry.
-// FromStep and FromOutput are guaranteed non-nil by Build.
-// Subpath is nil when the entire producer output is mounted.
-type InputEdge struct {
-	FromStep   *Step
-	FromOutput *FileOutput
-	Subpath    *primitive.RelPath // == InputRef.Subpath; nil means whole output
-	Mount      primitive.AbsPath  // == InputRef.Mount
-}
-
-// PackFileEdge is a fully resolved step.pack.files[i] entry.
-type PackFileEdge struct {
-	FromStep   *Step
-	FromOutput *FileOutput
-	Dest       primitive.AbsPath // == PackFile.Dest
-}
-
-// DeployArtifactEdge is a fully resolved step.deploy.artifacts[name] entry.
-// Image marks the step-image arm of the from disjunction (FromOutput is nil);
-// otherwise FromOutput names the file or directory output.
-type DeployArtifactEdge struct {
-	FromStep     *Step
-	FromOutput   *FileOutput
-	ArtifactName string
-	Image        bool
-}
-
-// ImageFromEdge is a fully resolved step.image_from_step. Resolved by step: the
-// producing step's single image output, addressed by step (no output name).
-type ImageFromEdge struct {
-	FromStep *Step
-}
-
 // DAG is the directed acyclic graph of step dependencies in a lane.
 type DAG struct {
-	index          map[primitive.Identifier]*Step       // step id -> step, from Parse
-	InputEdges     map[primitive.Identifier][]InputEdge // key: consuming step name
-	PackFileEdges  map[primitive.Identifier][]PackFileEdge
-	DeployEdges    map[primitive.Identifier][]DeployArtifactEdge
-	ImageFromEdges map[primitive.Identifier]ImageFromEdge          // one per step, if any
-	edges          map[primitive.Identifier][]primitive.Identifier // step -> []dependencies
-	reverse        map[primitive.Identifier][]primitive.Identifier // dep -> []dependents
-	// Order is the lexicographically smallest valid topological
+	index   map[primitive.Identifier]*Step                  // step id -> step, from Parse
+	edges   map[primitive.Identifier][]primitive.Identifier // step -> []dependencies
+	reverse map[primitive.Identifier][]primitive.Identifier // dep -> []dependents
+	// order is the lexicographically smallest valid topological
 	// execution order of the lane's steps, computed by
 	// kahnSort. The same step graph always produces the same
-	// Order across runs, machines, Go versions, and
+	// order across runs, machines, Go versions, and
 	// implementation languages; see kahnSort's doc comment and
 	// DESIGN-PRINCIPLES.md "Reproducibility is enforced, not
-	// hoped for".
-	Order []primitive.Identifier
+	// hoped for". Exposed read-only via Order().
+	order []primitive.Identifier
 }
 
 // Build constructs a DAG from a Lane definition, resolving all inter-step edges.
 func Build(p *Lane, index map[primitive.Identifier]*Step) (*DAG, error) {
 	d := &DAG{
-		index:          index,
-		InputEdges:     make(map[primitive.Identifier][]InputEdge),
-		PackFileEdges:  make(map[primitive.Identifier][]PackFileEdge),
-		DeployEdges:    make(map[primitive.Identifier][]DeployArtifactEdge),
-		ImageFromEdges: make(map[primitive.Identifier]ImageFromEdge),
-		edges:          make(map[primitive.Identifier][]primitive.Identifier),
-		reverse:        make(map[primitive.Identifier][]primitive.Identifier),
+		index:   index,
+		edges:   make(map[primitive.Identifier][]primitive.Identifier),
+		reverse: make(map[primitive.Identifier][]primitive.Identifier),
 	}
 
-	if err := d.resolveImageFromEdges(p); err != nil {
-		return nil, err
-	}
-	if err := d.resolveInputEdges(p); err != nil {
-		return nil, err
-	}
-	if err := d.resolvePackEdges(p); err != nil {
-		return nil, err
-	}
-	if err := d.resolveDeployEdges(p); err != nil {
-		return nil, err
-	}
+	d.buildAdjacency(p)
 
 	if err := d.validateDeployLeaves(p); err != nil {
 		return nil, err
@@ -97,105 +45,45 @@ func Build(p *Lane, index map[primitive.Identifier]*Step) (*DAG, error) {
 	if err != nil {
 		return nil, err
 	}
-	d.Order = order
+	d.order = order
 	return d, nil
 }
 
-func (d *DAG) resolveImageFromEdges(p *Lane) error {
+// buildAdjacency records the dependency edge from each step to every step it
+// references -- image-from, inputs, pack files, and deploy artifacts -- from the
+// reference identifiers alone. Reference integrity is a precondition
+// (ValidateLane), so an unknown reference has already been rejected and an
+// unknown deploy-source kind cannot reach this point.
+func (d *DAG) buildAdjacency(p *Lane) {
 	for _, s := range p.Steps {
-		name := s.ID
-		if s.ImageFromStep == nil {
-			continue
+		if s.ImageFromStep != nil {
+			d.addEdge(s.ID, *s.ImageFromStep)
 		}
-		from := *s.ImageFromStep
-		d.ImageFromEdges[name] = ImageFromEdge{FromStep: d.index[from]}
-		d.addEdge(name, from)
-	}
-	return nil
-}
-
-func (d *DAG) resolveInputEdges(p *Lane) error {
-	for _, s := range p.Steps {
-		name := s.ID
 		for _, inp := range s.Inputs {
-			refStep := inp.From.Step
-			refOutput := inp.From.Output
-			fromStep := d.index[refStep]
-			out := findOutput(fromStep, refOutput)
-			d.InputEdges[name] = append(d.InputEdges[name], InputEdge{
-				Mount:      inp.Mount,
-				Subpath:    inp.Subpath,
-				FromStep:   fromStep,
-				FromOutput: out,
-			})
-			d.addEdge(name, refStep)
+			d.addEdge(s.ID, inp.From.Step)
 		}
-	}
-	return nil
-}
-
-func (d *DAG) resolvePackEdges(p *Lane) error {
-	for _, s := range p.Steps {
-		name := s.ID
-		if s.Pack == nil {
-			continue
+		if s.Pack != nil {
+			for _, f := range s.Pack.Files {
+				d.addEdge(s.ID, f.From.Step)
+			}
 		}
-		for _, f := range s.Pack.Files {
-			if err := d.resolvePackFileEdge(name, f); err != nil {
-				return err
+		if s.Deploy != nil {
+			for _, art := range s.Deploy.Artifacts {
+				switch src := art.From.(type) {
+				case StepImageRef:
+					d.addEdge(s.ID, src.Step)
+				case OutputRef:
+					d.addEdge(s.ID, src.Step)
+				}
 			}
 		}
 	}
-	return nil
 }
 
-func (d *DAG) resolvePackFileEdge(name primitive.Identifier, f PackFile) error {
-	stepID := f.From.Step
-	outputID := f.From.Output
-	fromStep := d.index[stepID]
-	out := findOutput(fromStep, outputID)
-	d.PackFileEdges[name] = append(d.PackFileEdges[name], PackFileEdge{
-		Dest:       f.Dest,
-		FromStep:   fromStep,
-		FromOutput: out,
-	})
-	d.addEdge(name, stepID)
-	return nil
-}
-
-func (d *DAG) resolveDeployEdges(p *Lane) error {
-	for _, s := range p.Steps {
-		name := s.ID
-		if s.Deploy == nil {
-			continue
-		}
-		for artName, artRef := range s.Deploy.Artifacts {
-			edge, stepID, err := d.resolveDeployArtifact(name, artName, artRef.From)
-			if err != nil {
-				return err
-			}
-			d.DeployEdges[name] = append(d.DeployEdges[name], edge)
-			d.addEdge(name, stepID)
-		}
-	}
-	return nil
-}
-
-// resolveDeployArtifact resolves one deploy.artifacts[name].from disjunction:
-// a StepImageRef (the producing step's image, by step) or an OutputRef (a named
-// file or directory output, by step+output).
-func (d *DAG) resolveDeployArtifact(name primitive.Identifier, artName string, src ArtifactSource) (DeployArtifactEdge, primitive.Identifier, error) {
-	switch ref := src.(type) {
-	case StepImageRef:
-		return DeployArtifactEdge{ArtifactName: artName, FromStep: d.index[ref.Step], Image: true}, ref.Step, nil
-	case OutputRef:
-		fromStep := d.index[ref.Step]
-		out := findOutput(fromStep, ref.Output)
-		return DeployArtifactEdge{ArtifactName: artName, FromStep: fromStep, FromOutput: out}, ref.Step, nil
-	default:
-		return DeployArtifactEdge{}, "", fmt.Errorf(
-			"step %q: deploy artifact %q: unknown source kind %q", name, artName, src.SourceKind())
-	}
+// Order returns the lexicographically smallest valid topological execution
+// order of the lane's steps (see the order field and kahnSort).
+func (d *DAG) Order() []primitive.Identifier {
+	return d.order
 }
 
 // validateDeployLeaves enforces ADR-039 D2: a deploy step is a DAG leaf.
@@ -257,13 +145,11 @@ func (d *DAG) ValidateLeavesAreDeploys(p *Lane) error {
 // dependency relation modelled by edges/reverse is a set, not a
 // multiset: a step that references the same producer through several
 // inputs, pack files, or deploy artifacts depends on it exactly once.
-// The typed edge maps (InputEdges, PackFileEdges, DeployEdges,
-// ImageFromEdges) carry the full per-reference detail; edges/reverse
-// carry only the collapsed relation that kahnSort, Tree, and the
-// attestation predecessor chain consume. Idempotent: a repeated
-// (from, to) pair is a no-op. Because both slices are only ever
-// appended together through this function, the presence of "to" in
-// edges[from] implies the presence of "from" in reverse[to], so one
+// edges/reverse carry only the collapsed relation that kahnSort, Tree,
+// and the attestation predecessor chain consume. Idempotent: a
+// repeated (from, to) pair is a no-op. Because both slices are only
+// ever appended together through this function, the presence of "to"
+// in edges[from] implies the presence of "from" in reverse[to], so one
 // membership check guards both.
 func (d *DAG) addEdge(from, to primitive.Identifier) {
 	if slices.Contains(d.edges[from], to) {
@@ -415,9 +301,9 @@ func (d *DAG) CollectPeers(fromStep primitive.Identifier) map[primitive.Identifi
 // back-reference "name (*)" -- without its subtree -- thereafter, so no
 // subtree is duplicated. Sinks and each node's dependencies are sorted,
 // so the output is deterministic for a given graph regardless of
-// map-iteration order in the resolvers (resolveDeployEdges iterates a
-// map). See DESIGN-PRINCIPLES.md "Reproducibility is enforced, not
-// hoped for".
+// map-iteration order in buildAdjacency (which iterates a step's deploy
+// artifacts map). See DESIGN-PRINCIPLES.md "Reproducibility is enforced,
+// not hoped for".
 func (d *DAG) Tree() string {
 	var sb strings.Builder
 

@@ -80,6 +80,7 @@ func TestBuildInputDelivery_Single(t *testing.T) {
 			},
 		},
 	}
+	rc.lane = p
 	rc.dag, rc.stepIndex = buildTestDAG(t, p)
 
 	compileDigest := primitive.DigestFromHex("aabbccdd11223344000000000000000000000000000000000000000000000000")
@@ -136,6 +137,7 @@ func TestBuildInputDelivery_Multiple(t *testing.T) {
 			},
 		},
 	}
+	rc.lane = p
 	rc.dag, rc.stepIndex = buildTestDAG(t, p)
 
 	d1 := primitive.DigestFromHex("aaaa111122223333000000000000000000000000000000000000000000000000")
@@ -190,6 +192,7 @@ func TestBuildInputDelivery_MissingSubpath(t *testing.T) {
 			},
 		},
 	}
+	rc.lane = p
 	rc.dag, rc.stepIndex = buildTestDAG(t, p)
 
 	srcDigest := primitive.DigestFromHex("aabbccdd11223344000000000000000000000000000000000000000000000000")
@@ -236,6 +239,7 @@ func TestBuildInputDelivery_OutsideWorkdir_DirectoryMount(t *testing.T) {
 			},
 		},
 	}
+	rc.lane = p
 	rc.dag, rc.stepIndex = buildTestDAG(t, p)
 
 	srcDigest := primitive.DigestFromHex("aabbccdd11223344000000000000000000000000000000000000000000000000")
@@ -298,6 +302,7 @@ func TestBuildInputDelivery_NoWorkdir_Mounts(t *testing.T) {
 			},
 		},
 	}
+	rc.lane = p
 	rc.dag, rc.stepIndex = buildTestDAG(t, p)
 
 	srcDigest := primitive.DigestFromHex("aabbccdd11223344000000000000000000000000000000000000000000000000")
@@ -348,6 +353,7 @@ func TestBuildInputDelivery_SingleFileOutside_Rejected(t *testing.T) {
 			},
 		},
 	}
+	rc.lane = p
 	rc.dag, rc.stepIndex = buildTestDAG(t, p)
 
 	if err := rc.laneState.Register("src", "bin", output.FileHandle{
@@ -388,6 +394,7 @@ func TestBuildInputDelivery_ExportsProducerOnce(t *testing.T) {
 			},
 		},
 	}
+	rc.lane = p
 	rc.dag, rc.stepIndex = buildTestDAG(t, p)
 
 	srcDigest := primitive.DigestFromHex("aabbccdd11223344000000000000000000000000000000000000000000000000")
@@ -730,6 +737,7 @@ func TestResolveImageDigest_ImageFromMissing(t *testing.T) {
 			},
 		},
 	}
+	rc.lane = p
 	rc.dag, rc.stepIndex = buildTestDAG(t, p)
 
 	_, err := rc.resolveImageDigest(context.Background(), rc.stepIndex["run"], "test")
@@ -766,6 +774,7 @@ func TestResolvePackInputPaths(t *testing.T) {
 			},
 		},
 	}
+	rc.lane = p
 	rc.dag, rc.stepIndex = buildTestDAG(t, p)
 
 	compileDigest := primitive.DigestFromHex("aabbccdd11223344000000000000000000000000000000000000000000000000")

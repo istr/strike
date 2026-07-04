@@ -27,8 +27,8 @@ func TestBuild_SingleStep(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(dag.Order) != 1 || dag.Order[0] != "build" {
-		t.Errorf("order = %v, want [build]", dag.Order)
+	if len(dag.Order()) != 1 || dag.Order()[0] != "build" {
+		t.Errorf("order = %v, want [build]", dag.Order())
 	}
 }
 
@@ -58,8 +58,8 @@ func TestBuild_LinearChain(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertOrder(t, dag.Order, "a", "b")
-	assertOrder(t, dag.Order, "b", "c")
+	assertOrder(t, dag.Order(), "a", "b")
+	assertOrder(t, dag.Order(), "b", "c")
 }
 
 func TestBuild_Diamond(t *testing.T) {
@@ -96,13 +96,13 @@ func TestBuild_Diamond(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if dag.Order[0] != "a" {
-		t.Errorf("first should be 'a', got %q", dag.Order[0])
+	if dag.Order()[0] != "a" {
+		t.Errorf("first should be 'a', got %q", dag.Order()[0])
 	}
-	assertOrder(t, dag.Order, "a", "b")
-	assertOrder(t, dag.Order, "a", "c")
-	assertOrder(t, dag.Order, "b", "d")
-	assertOrder(t, dag.Order, "c", "d")
+	assertOrder(t, dag.Order(), "a", "b")
+	assertOrder(t, dag.Order(), "a", "c")
+	assertOrder(t, dag.Order(), "b", "d")
+	assertOrder(t, dag.Order(), "c", "d")
 }
 
 func TestBuild_FanOut(t *testing.T) {
@@ -134,11 +134,11 @@ func TestBuild_FanOut(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if dag.Order[0] != "a" {
-		t.Errorf("first should be 'a', got %q", dag.Order[0])
+	if dag.Order()[0] != "a" {
+		t.Errorf("first should be 'a', got %q", dag.Order()[0])
 	}
-	if len(dag.Order) != 4 {
-		t.Errorf("order length = %d, want 4", len(dag.Order))
+	if len(dag.Order()) != 4 {
+		t.Errorf("order length = %d, want 4", len(dag.Order()))
 	}
 }
 
@@ -163,7 +163,7 @@ func TestBuild_ImageFromEdge(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertOrder(t, dag.Order, "pack", "run")
+	assertOrder(t, dag.Order(), "pack", "run")
 }
 
 func TestBuild_PackFileEdge(t *testing.T) {
@@ -191,7 +191,7 @@ func TestBuild_PackFileEdge(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertOrder(t, dag.Order, "build", "pack")
+	assertOrder(t, dag.Order(), "build", "pack")
 }
 
 func TestBuild_DeployArtifactEdge(t *testing.T) {
@@ -217,7 +217,7 @@ func TestBuild_DeployArtifactEdge(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertOrder(t, dag.Order, "pack", "deploy")
+	assertOrder(t, dag.Order(), "pack", "deploy")
 }
 
 // --------------------------------------------------------------------------.
@@ -325,7 +325,7 @@ func assertOrder(t *testing.T, order []primitive.Identifier, before, after primi
 // --------------------------------------------------------------------------.
 
 // TestBuild_DeterministicOrder asserts that lane.Build
-// produces a byte-identical dag.Order across many invocations
+// produces a byte-identical dag.Order() across many invocations
 // of the same input. With three independent root steps and
 // Go's non-deterministic map iteration, a naive Kahn
 // implementation would produce different orderings on
@@ -361,10 +361,10 @@ func TestBuild_DeterministicOrder(t *testing.T) {
 		if err != nil {
 			t.Fatalf("iteration %d: Build: %v", i, err)
 		}
-		if !reflect.DeepEqual(dag.Order, want) {
+		if !reflect.DeepEqual(dag.Order(), want) {
 			t.Fatalf("iteration %d: Order = %v, want %v "+
 				"(alphabetic among independent roots)",
-				i, dag.Order, want)
+				i, dag.Order(), want)
 		}
 	}
 }
@@ -414,8 +414,8 @@ func TestBuild_DeterministicOrder_Diamond(t *testing.T) {
 		if err != nil {
 			t.Fatalf("iteration %d: Build: %v", i, err)
 		}
-		if !reflect.DeepEqual(dag.Order, want) {
-			t.Fatalf("iteration %d: Order = %v, want %v", i, dag.Order, want)
+		if !reflect.DeepEqual(dag.Order(), want) {
+			t.Fatalf("iteration %d: Order = %v, want %v", i, dag.Order(), want)
 		}
 	}
 }
@@ -487,11 +487,11 @@ func TestBuild_DeterministicOrder_LexSmallestNotFIFO(t *testing.T) {
 		if err != nil {
 			t.Fatalf("iteration %d: Build: %v", i, err)
 		}
-		if !reflect.DeepEqual(dag.Order, want) {
+		if !reflect.DeepEqual(dag.Order(), want) {
 			t.Fatalf("iteration %d: Order = %v, want %v "+
 				"(lex-smallest valid topology, not FIFO Kahn -- "+
 				"see test doc comment for the algorithmic contract)",
-				i, dag.Order, want)
+				i, dag.Order(), want)
 		}
 	}
 }

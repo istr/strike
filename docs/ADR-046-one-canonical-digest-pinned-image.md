@@ -202,3 +202,23 @@ projection survives as `primitive.Digest.Hex()`, with `primitive.DigestFromHex`
 as its inverse constructor -- the one chokepoint that prepends the `sha256:`
 prefix to a freshly computed hex body. This changes representation, not behavior:
 the wire form is byte-identical, so the golden fixtures are unchanged.
+
+## Amendment -- lintfrom retired (item-0068)
+
+The `tools/lintfrom` linter and its `lint-from` make gate are removed. lintfrom
+forbade code outside `internal/lane` from reading the wire `.From` field on
+`InputRef`, `PackFile`, and `ArtifactRef`, on the premise that after `lane.Build`
+the resolved DAG edges were the only valid consumer API. The DAG-reduction arc
+(item-0068) deletes those resolved edge structs and their maps: consumers now
+read the lane iterators (`Inputs`, `PackFiles`, `DeployArtifacts`) and their
+typed `#OutputRef` `.From` directly, which is the sanctioned consumer API. The
+linter's premise no longer holds, and it would forbid exactly that API.
+
+The hazard lintfrom originally guarded -- consumers parsing a dotted
+`"step.output"` string ref with scattered ad hoc splitting -- had already been
+eliminated earlier, when producer references were unified on the typed
+`#OutputRef`. A `.From.Step` read is then a typed field access with no parse
+step, so the compiler already provides structurally what the linter enforced by
+discipline. Removing the tool follows the code-is-liability principle: a gate
+that protects a deleted API and blocks its replacement is pure liability. This
+changes tooling, not behavior; goldens and attestations are unchanged.
