@@ -251,7 +251,11 @@ go tool cover -func=coverage.out
 ```
 
 Exclude from coverage measurement:
-- `lane/cue_types_lane_gen.go` (generated code)
+- The generated CUE type files `internal/*/*.gen.go` (produced by `make
+  generate`, gitignored): `internal/lane/lane.gen.go`,
+  `internal/primitive/primitive.gen.go`, `internal/endpoint/endpoint.gen.go`,
+  `internal/output/output.gen.go`, `internal/provenance/provenance.gen.go`,
+  `internal/target/target.gen.go`, `internal/record/record.gen.go`.
 
 Focus coverage investment on:
 - All error return paths (what happens when podman fails, when the registry is
@@ -431,11 +435,13 @@ Package-level doc goes in the package clause comment or a `doc.go` file.
 
 ### 3.8 Concurrency
 
-- The `lane.State` type uses `sync.RWMutex` -- always `defer mu.Unlock()`
-  immediately after `Lock()`.
+- `lane.State` holds one write-once record per step and carries no central
+  lock: each step owns its record, and a successor reads a predecessor's
+  record only after that step has completed.
 - Use `errgroup.WithContext` for bounded parallel operations.
 - Run `go test -race ./...` in CI -- always, no exceptions.
-- Do not use `sync.Map` unless profiling shows contention on `sync.RWMutex`.
+- Prefer per-owner write-once records over a shared lock-guarded map; reach
+  for `sync.Map` only if profiling later shows contention.
 - Do not use `init()` functions.
 
 ## 4. golangci-lint configuration
