@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/istr/strike/internal/capsule"
-	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/output"
 	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/provenance"
@@ -33,16 +32,6 @@ type StepRecord struct {
 	Outputs    map[primitive.Identifier]output.Handle `json:"outputs,omitempty"`
 	Result     *StepResult                            `json:"result,omitempty"`
 	Network    *capsule.Records                       `json:"network,omitempty"`
-}
-
-// StepResult records execution metadata for a completed step.
-type StepResult struct {
-	StartedAt clock.Time           `json:"startedAt"`
-	Outputs   map[string]string    `json:"outputs"`
-	ID        primitive.Identifier `json:"id"`
-	StepType  string               `json:"stepType"`
-	Duration  clock.Duration       `json:"duration"`
-	ExitCode  int                  `json:"exitCode"`
 }
 
 // NewState creates an empty lane state.

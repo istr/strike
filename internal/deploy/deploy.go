@@ -675,11 +675,13 @@ func (d *Deployer) recordAttestation(att *Attestation, step *lane.Step, state *l
 	attHex := hex.EncodeToString(sha256Sum(attJSON))
 
 	attDigest := primitive.DigestFromHex(attHex)
+	elapsed := clock.Since(started)
+	seconds := elapsed.Round(clock.Second) / clock.Second
 	state.RecordStep(lane.StepResult{
 		ID:        step.ID,
 		StepType:  "deploy",
-		StartedAt: started,
-		Duration:  clock.Since(started),
+		StartedAt: primitive.Timestamp(started.Format(clock.RFC3339)),
+		Duration:  primitive.Duration(fmt.Sprintf("%ds", seconds)),
 		Outputs:   map[string]string{"attestation": attDigest.String()},
 	})
 	return nil

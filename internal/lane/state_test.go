@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/output"
 	"github.com/istr/strike/internal/primitive"
@@ -71,8 +70,8 @@ func TestRecordStep(t *testing.T) {
 	s.RecordStep(lane.StepResult{
 		ID:        "build",
 		StepType:  "run",
-		StartedAt: clock.Wall(),
-		Duration:  5 * clock.Second,
+		StartedAt: primitive.Timestamp("2024-01-01T00:00:00Z"),
+		Duration:  primitive.Duration("5s"),
 		Outputs:   map[string]string{"binary": "sha256:222"},
 		ExitCode:  0,
 	})

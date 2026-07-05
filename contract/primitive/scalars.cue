@@ -53,6 +53,11 @@ _sha256Hex: "[a-f0-9]{64}"
 
 #Duration: =~"^[0-9]+(s|m|h)$"
 
+// #Timestamp is an RFC3339 wall-clock timestamp string. Informational
+// (debug/CI state dump only, never attestation-facing); the regex is
+// intentionally loose and not a full RFC3339 grammar.
+#Timestamp: =~"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}"
+
 // #Host is a bare network hostname or IP literal, lowercase ASCII, without a
 // port. Punycode is required for internationalized domains.
 #Host: =~"^[a-z0-9.-]+$"
