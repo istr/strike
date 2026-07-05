@@ -153,7 +153,7 @@ func validateLane(path string) (fp lane.FilePath, p *lane.Lane, dg primitive.Dig
 	if err != nil {
 		return fp, p, dg, idx, dag, err
 	}
-	err = dag.ValidateLeavesAreDeploys(p)
+	err = dag.ValidateDAG(p)
 	return fp, p, dg, idx, dag, err
 }
 

@@ -37,10 +37,6 @@ func Build(p *Lane, index map[primitive.Identifier]*Step) (*DAG, error) {
 
 	d.buildAdjacency(p)
 
-	if err := d.validateDeployLeaves(p); err != nil {
-		return nil, err
-	}
-
 	order, err := kahnSort(d)
 	if err != nil {
 		return nil, err
@@ -123,8 +119,8 @@ func (d *DAG) validateDeployLeaves(p *Lane) error {
 //
 // This is a lane-validity policy that needs the resolved graph, so it
 // is deliberately NOT called from Build (which stays usable for graph-
-// mechanism tests that build partial graphs). The CLI calls it as part
-// of the single validation gate every subcommand passes through. Steps
+// mechanism tests that build partial graphs). ValidateDAG runs it after
+// Build, the validate-dag gate every subcommand passes through. Steps
 // are iterated in lane order so the first error is deterministic.
 func (d *DAG) ValidateLeavesAreDeploys(p *Lane) error {
 	for _, s := range p.Steps {
@@ -139,6 +135,17 @@ func (d *DAG) ValidateLeavesAreDeploys(p *Lane) error {
 		}
 	}
 	return nil
+}
+
+// ValidateDAG is the validate-dag phase: over the built graph it checks that
+// every deploy step is a leaf (validateDeployLeaves, ADR-039 D2) and that every
+// leaf is a deploy step (ValidateLeavesAreDeploys, ADR-039 D5). The orchestration
+// runs it after Build, symmetric with ValidateLane.
+func (d *DAG) ValidateDAG(p *Lane) error {
+	if err := d.validateDeployLeaves(p); err != nil {
+		return err
+	}
+	return d.ValidateLeavesAreDeploys(p)
 }
 
 // addEdge records that step "from" depends on step "to". The

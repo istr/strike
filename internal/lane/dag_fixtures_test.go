@@ -50,8 +50,8 @@ func TestAllFixturesBuild(t *testing.T) {
 			if err != nil {
 				t.Fatalf("build: %v", err)
 			}
-			if depErr := dag.ValidateLeavesAreDeploys(p); depErr != nil {
-				t.Fatalf("leaf-is-deploy policy (ADR-039 D5): %v", depErr)
+			if depErr := dag.ValidateDAG(p); depErr != nil {
+				t.Fatalf("leaf topology violated: %v", depErr)
 			}
 		})
 	}
