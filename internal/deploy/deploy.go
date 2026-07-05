@@ -308,7 +308,6 @@ type Deployer struct {
 	OIDC            lane.OIDCConfig // lane-declared signing identity (ADR-040 D5); carried into the sealed provenance externalParameters
 	Engine          container.Engine
 	StepPorts       map[string]capsule.HostPorts // unit name -> host ports
-	NetworkRecords  map[string]capsule.Records   // run/build step records, keyed by step name (injected by cmd/strike)
 	DAG             *lane.DAG
 	EngineID        *container.EngineIdentity
 	CA              *transport.EphemeralCA
@@ -340,6 +339,7 @@ type Deployer struct {
 func (d *Deployer) collectObservedPeers(
 	step *lane.Step,
 	declaredPeers map[primitive.Identifier][]lane.Peer,
+	state *lane.State,
 ) (map[string]ObservedPeer, map[primitive.Identifier][]string, error) {
 	observed := map[string]ObservedPeer{}
 	attribution := map[primitive.Identifier][]string{}
@@ -349,8 +349,7 @@ func (d *Deployer) collectObservedPeers(
 	// deploy step's own method records live in ownRecords (folded below), so the
 	// step.ID lookup here only matches run/build predecessors.
 	for stepID := range declaredPeers {
-		key := string(stepID)
-		if recs, ok := d.NetworkRecords[key]; ok {
+		if recs, ok := state.Network(stepID); ok {
 			if err := ingestRecords(stepID, recs, observed, attribution); err != nil {
 				return nil, nil, err
 			}
@@ -463,14 +462,14 @@ func appendUniqueString(s []string, v string) []string {
 // buildAttestation constructs the attestation struct for step 6 of Execute,
 // including observed-peer collection and peer-attribution wiring.
 func (d *Deployer) buildAttestation(
-	step *lane.Step, spec lane.DeploySpec,
+	step *lane.Step, spec lane.DeploySpec, state *lane.State,
 	artifactDigests map[string]record.Artifact,
 	provenance []provenance.Record,
 	started clock.Time, preDigest, postDigest primitive.Digest,
 ) (*Attestation, error) {
 	engineConn, engineMeta := d.engineRecords()
 	declaredPeers := d.DAG.CollectPeers(step.ID)
-	observedPeers, peerAttribution, err := d.collectObservedPeers(step, declaredPeers)
+	observedPeers, peerAttribution, err := d.collectObservedPeers(step, declaredPeers, state)
 	if err != nil {
 		return nil, err
 	}
@@ -544,7 +543,7 @@ func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.Sta
 	postDigest := StateDigest(postCaptures)
 
 	// 6. Build attestation.
-	att, obsErr := d.buildAttestation(step, spec, artifactDigests, provenance, started, preDigest, postDigest)
+	att, obsErr := d.buildAttestation(step, spec, state, artifactDigests, provenance, started, preDigest, postDigest)
 	if obsErr != nil {
 		return nil, fmt.Errorf("step %q: %w", step.ID, obsErr)
 	}
@@ -677,7 +676,7 @@ func (d *Deployer) recordAttestation(att *Attestation, step *lane.Step, state *l
 
 	attDigest := primitive.DigestFromHex(attHex)
 	state.RecordStep(lane.StepResult{
-		Name:      string(step.ID),
+		ID:        step.ID,
 		StepType:  "deploy",
 		StartedAt: started,
 		Duration:  clock.Since(started),

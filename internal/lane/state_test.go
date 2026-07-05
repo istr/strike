@@ -68,23 +68,31 @@ func TestResolveMissing(t *testing.T) {
 
 func TestRecordStep(t *testing.T) {
 	s := lane.NewState()
-	r := lane.StepResult{
-		Name:      "build",
+	s.RecordStep(lane.StepResult{
+		ID:        "build",
 		StepType:  "run",
 		StartedAt: clock.Wall(),
 		Duration:  5 * clock.Second,
-		Inputs:    map[string]string{"src": "sha256:111"},
 		Outputs:   map[string]string{"binary": "sha256:222"},
 		ExitCode:  0,
-	}
-	s.RecordStep(r)
+	})
 
-	got, ok := s.Steps["build"]
-	if !ok {
-		t.Fatal("step not recorded")
+	var m map[string]struct {
+		Result *lane.StepResult `json:"result"`
 	}
-	if got.ExitCode != 0 {
-		t.Errorf("exit code = %d, want 0", got.ExitCode)
+	data, err := s.JSON()
+	if err != nil {
+		t.Fatalf("JSON: %v", err)
+	}
+	if err := json.Unmarshal(data, &m); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	rec, ok := m["build"]
+	if !ok || rec.Result == nil {
+		t.Fatal("step result not recorded")
+	}
+	if rec.Result.ExitCode != 0 {
+		t.Errorf("exit code = %d, want 0", rec.Result.ExitCode)
 	}
 }
 
@@ -96,7 +104,7 @@ func TestStateJSON(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.RecordStep(lane.StepResult{
-		Name:     "build",
+		ID:       "build",
 		StepType: "run",
 		Outputs:  map[string]string{"binary": "sha256:abc1230000000000000000000000000000000000000000000000000000000000"},
 	})
@@ -106,14 +114,18 @@ func TestStateJSON(t *testing.T) {
 		t.Fatalf("JSON: %v", err)
 	}
 
-	var m map[string]any
+	var m map[string]map[string]any
 	if err := json.Unmarshal(data, &m); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if _, ok := m["outputs"]; !ok {
-		t.Error("missing outputs key in JSON")
+	build, ok := m["build"]
+	if !ok {
+		t.Fatal("missing build step in JSON")
 	}
-	if _, ok := m["steps"]; !ok {
-		t.Error("missing steps key in JSON")
+	if _, ok := build["outputs"]; !ok {
+		t.Error("missing outputs in build record")
+	}
+	if _, ok := build["result"]; !ok {
+		t.Error("missing result in build record")
 	}
 }

@@ -1304,20 +1304,23 @@ func TestDeployerExecute_ObservedPeersPopulated(t *testing.T) {
 			}},
 		},
 	}
+	for netStep, recs := range networkRecords {
+		stepID := primitive.Identifier(netStep)
+		state.RecordNetwork(stepID, recs)
+	}
 
 	step := index["deploy-prod"]
 	d := &deploy.Deployer{
-		Engine:         eng,
-		LaneDigest:     "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-		ArtifactRefs:   map[string]string{"image": "build.image"},
-		LaneID:         "test-lane",
-		DAG:            dag,
-		CA:             ca,
-		UpstreamLook:   look,
-		CAVolume:       caPath,
-		StepID:         "deploy-prod",
-		StepPorts:      ports,
-		NetworkRecords: networkRecords,
+		Engine:       eng,
+		LaneDigest:   "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+		ArtifactRefs: map[string]string{"image": "build.image"},
+		LaneID:       "test-lane",
+		DAG:          dag,
+		CA:           ca,
+		UpstreamLook: look,
+		CAVolume:     caPath,
+		StepID:       "deploy-prod",
+		StepPorts:    ports,
 	}
 	deploy.SetProduceBundles(d, stubProduceBundles())
 	att, err := d.Execute(context.Background(), step, state)
@@ -1447,20 +1450,23 @@ func TestDeployerExecute_ObservedPeers_HonorsSSHPort(t *testing.T) {
 			}},
 		},
 	}
+	for netStep, recs := range networkRecords {
+		stepID := primitive.Identifier(netStep)
+		state.RecordNetwork(stepID, recs)
+	}
 
 	step := index["deploy-prod"]
 	d := &deploy.Deployer{
-		Engine:         eng,
-		LaneDigest:     "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-		ArtifactRefs:   map[string]string{"image": "build.image"},
-		LaneID:         "test-lane",
-		DAG:            dag,
-		CA:             ca,
-		UpstreamLook:   look,
-		CAVolume:       caPath,
-		StepID:         "deploy-prod",
-		StepPorts:      ports,
-		NetworkRecords: networkRecords,
+		Engine:       eng,
+		LaneDigest:   "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+		ArtifactRefs: map[string]string{"image": "build.image"},
+		LaneID:       "test-lane",
+		DAG:          dag,
+		CA:           ca,
+		UpstreamLook: look,
+		CAVolume:     caPath,
+		StepID:       "deploy-prod",
+		StepPorts:    ports,
 	}
 	deploy.SetProduceBundles(d, stubProduceBundles())
 	att, err := d.Execute(context.Background(), step, state)
@@ -1592,19 +1598,22 @@ func TestDeployerExecute_ObservedPeersConflictAborts(t *testing.T) {
 			}},
 		},
 	}
+	for netStep, recs := range networkRecords {
+		stepID := primitive.Identifier(netStep)
+		state.RecordNetwork(stepID, recs)
+	}
 
 	step := index["deploy-conflict"]
 	d := &deploy.Deployer{
-		Engine:         eng,
-		ArtifactRefs:   map[string]string{"image": "step-b.out"},
-		LaneID:         "test-lane",
-		DAG:            dag,
-		CA:             ca,
-		UpstreamLook:   look,
-		CAVolume:       caPath,
-		StepID:         "deploy-conflict",
-		StepPorts:      ports,
-		NetworkRecords: networkRecords,
+		Engine:       eng,
+		ArtifactRefs: map[string]string{"image": "step-b.out"},
+		LaneID:       "test-lane",
+		DAG:          dag,
+		CA:           ca,
+		UpstreamLook: look,
+		CAVolume:     caPath,
+		StepID:       "deploy-conflict",
+		StepPorts:    ports,
 	}
 	deploy.SetProduceBundles(d, stubProduceBundles())
 	_, execErr := d.Execute(context.Background(), step, state)

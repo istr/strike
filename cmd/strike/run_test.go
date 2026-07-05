@@ -51,7 +51,6 @@ func newTestRC(t *testing.T, engine *mockEngine) *runContext {
 		regClient: &registry.Client{Engine: engine},
 		engine:    engine,
 		front:     ft,
-		state:     newRunState(),
 		laneState: lane.NewState(),
 		laneRoot:  root,
 		laneDir:   dir,
@@ -96,7 +95,7 @@ func TestBuildInputDelivery_Single(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	rc.state.specHashes["compile"] = primitive.DigestFromHex("1111111111111111000000000000000000000000000000000000000000000000")
+	rc.laneState.RecordSpecHash("compile", primitive.DigestFromHex("1111111111111111000000000000000000000000000000000000000000000000"))
 
 	eng.saveTars = map[string][]byte{compileRef: tarBytes}
 
@@ -158,8 +157,8 @@ func TestBuildInputDelivery_Multiple(t *testing.T) {
 	if err := rc.laneState.Register("s2", "b", output.FileHandle{Ref: ref2, OutputID: "b", LayerDiffID: diff2}); err != nil {
 		t.Fatal(err)
 	}
-	rc.state.specHashes["s1"] = primitive.DigestFromHex("2222222222222222000000000000000000000000000000000000000000000000")
-	rc.state.specHashes["s2"] = primitive.DigestFromHex("3333333333333333000000000000000000000000000000000000000000000000")
+	rc.laneState.RecordSpecHash("s1", primitive.DigestFromHex("2222222222222222000000000000000000000000000000000000000000000000"))
+	rc.laneState.RecordSpecHash("s2", primitive.DigestFromHex("3333333333333333000000000000000000000000000000000000000000000000"))
 
 	eng.saveTars = map[string][]byte{ref1: tar1, ref2: tar2}
 
@@ -208,7 +207,7 @@ func TestBuildInputDelivery_MissingSubpath(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	rc.state.specHashes["src"] = primitive.DigestFromHex("1111111111111111000000000000000000000000000000000000000000000000")
+	rc.laneState.RecordSpecHash("src", primitive.DigestFromHex("1111111111111111000000000000000000000000000000000000000000000000"))
 
 	eng.saveTars = map[string][]byte{srcRef: tarBytes}
 
@@ -257,7 +256,7 @@ func TestBuildInputDelivery_OutsideWorkdir_DirectoryMount(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	rc.state.specHashes["src"] = primitive.DigestFromHex("1111111111111111000000000000000000000000000000000000000000000000")
+	rc.laneState.RecordSpecHash("src", primitive.DigestFromHex("1111111111111111000000000000000000000000000000000000000000000000"))
 
 	eng.saveTars = map[string][]byte{srcRef: tarBytes}
 
@@ -320,7 +319,7 @@ func TestBuildInputDelivery_NoWorkdir_Mounts(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	rc.state.specHashes["src"] = primitive.DigestFromHex("1111111111111111000000000000000000000000000000000000000000000000")
+	rc.laneState.RecordSpecHash("src", primitive.DigestFromHex("1111111111111111000000000000000000000000000000000000000000000000"))
 
 	eng.saveTars = map[string][]byte{srcRef: tarBytes}
 
@@ -362,7 +361,7 @@ func TestBuildInputDelivery_SingleFileOutside_Rejected(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	rc.state.specHashes["src"] = primitive.DigestFromHex("1111111111111111000000000000000000000000000000000000000000000000")
+	rc.laneState.RecordSpecHash("src", primitive.DigestFromHex("1111111111111111000000000000000000000000000000000000000000000000"))
 
 	_, _, err := rc.buildInputDelivery(context.Background(), rc.stepIndex["consumer"])
 	if err == nil {
@@ -413,7 +412,7 @@ func TestBuildInputDelivery_ExportsProducerOnce(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	rc.state.specHashes["src"] = primitive.DigestFromHex("1111111111111111000000000000000000000000000000000000000000000000")
+	rc.laneState.RecordSpecHash("src", primitive.DigestFromHex("1111111111111111000000000000000000000000000000000000000000000000"))
 
 	eng.saveTars = map[string][]byte{srcRef: tarBytes}
 
@@ -469,7 +468,7 @@ func TestComputeSpecHash_ChangesWithImageDigest(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Reset specHashes to avoid accumulation from prior call.
-	rc.state.specHashes = map[primitive.Identifier]primitive.Digest{}
+	rc.laneState = lane.NewState()
 	h2, _, err := rc.computeSpecHash(step, "s", primitive.DigestFromHex("bbb0000000000000000000000000000000000000000000000000000000000000"))
 	if err != nil {
 		t.Fatal(err)
@@ -507,7 +506,7 @@ func TestCheckCache_Miss(t *testing.T) {
 		ID:      "step1",
 		Outputs: []lane.FileOutput{{ID: "bin", Type: "file", Path: primitive.RelPathPtr("bin")}},
 	}
-	rc.state.specHashes["step1"] = primitive.DigestFromHex("abc0000000000000000000000000000000000000000000000000000000000000")
+	rc.laneState.RecordSpecHash("step1", primitive.DigestFromHex("abc0000000000000000000000000000000000000000000000000000000000000"))
 
 	hit, err := rc.checkCache(context.Background(), step, "step1", "step1", primitive.DigestFromHex("abc0000000000000000000000000000000000000000000000000000000000000"))
 	if err != nil {
@@ -835,7 +834,7 @@ func TestResolvePackInputPaths(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	rc.state.specHashes["compile"] = primitive.DigestFromHex("1111111111111111000000000000000000000000000000000000000000000000")
+	rc.laneState.RecordSpecHash("compile", primitive.DigestFromHex("1111111111111111000000000000000000000000000000000000000000000000"))
 
 	eng.saveTars = map[string][]byte{compileRef: tarBytes}
 
@@ -932,17 +931,6 @@ func TestRunStep_TimeoutFromLaneDefaults(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "invalid") {
 		t.Errorf("error should mention the offending value: %v", err)
-	}
-}
-
-// --------------------------------------------------------------------------.
-// newRunState
-// --------------------------------------------------------------------------.
-
-func TestNewRunState(t *testing.T) {
-	s := newRunState()
-	if s.specHashes == nil {
-		t.Fatal("specHashes should be initialized")
 	}
 }
 

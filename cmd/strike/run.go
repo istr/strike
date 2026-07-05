@@ -30,39 +30,26 @@ import (
 	"github.com/istr/strike/internal/transport"
 )
 
-// runState holds accumulated state across steps during a lane execution.
-type runState struct {
-	specHashes map[primitive.Identifier]primitive.Digest
-}
-
-func newRunState() *runState {
-	return &runState{
-		specHashes: map[primitive.Identifier]primitive.Digest{},
-	}
-}
-
 // runContext bundles everything needed to execute steps.
 type runContext struct {
-	ctx            context.Context
-	engine         container.Engine
-	state          *runState
-	laneState      *lane.State // artifact graph for deploy attestations
-	regClient      *registry.Client
-	engineID       *container.EngineIdentity
-	ca             *transport.EphemeralCA
-	front          *front.Front
-	upstreamLook   capsule.UpstreamLookupFunc
-	lane           *lane.Lane
-	laneDigest     primitive.Digest
-	dag            *lane.DAG
-	stepIndex      map[primitive.Identifier]*lane.Step
-	stepPorts      map[string]capsule.HostPorts                     // mediated step name -> host ports
-	networkRecords map[string]capsule.Records                       // step name -> records
-	capsules       map[primitive.Identifier]*capsule.NetworkCapsule // run-step name -> pre-built capsule
-	laneRoot       *os.Root
-	trust          trustVolumes
-	laneDir        string
-	resolverID     transport.ConnectionIdentity
+	ctx          context.Context
+	engine       container.Engine
+	laneState    *lane.State // artifact graph for deploy attestations
+	regClient    *registry.Client
+	engineID     *container.EngineIdentity
+	ca           *transport.EphemeralCA
+	front        *front.Front
+	upstreamLook capsule.UpstreamLookupFunc
+	lane         *lane.Lane
+	laneDigest   primitive.Digest
+	dag          *lane.DAG
+	stepIndex    map[primitive.Identifier]*lane.Step
+	stepPorts    map[string]capsule.HostPorts                     // mediated step name -> host ports
+	capsules     map[primitive.Identifier]*capsule.NetworkCapsule // run-step name -> pre-built capsule
+	laneRoot     *os.Root
+	trust        trustVolumes
+	laneDir      string
+	resolverID   transport.ConnectionIdentity
 }
 
 func (rc *runContext) runStep(stepID primitive.Identifier) error {
@@ -148,7 +135,6 @@ func (rc *runContext) executeDeploy(ctx context.Context, step *lane.Step, stepID
 		CAVolume:        rc.trust.ca,
 		StepID:          stepID,
 		StepPorts:       rc.stepPorts,
-		NetworkRecords:  rc.networkRecords,
 	}
 
 	att, err := d.Execute(ctx, step, rc.laneState)
@@ -222,13 +208,13 @@ func (rc *runContext) computeSpecHash(step *lane.Step, stepID primitive.Identifi
 			subpath = string(*inp.Subpath)
 		}
 		key := from + "|" + inp.Mount.String() + "|" + subpath
-		inputHashes[key] = rc.state.specHashes[inp.From.Step]
+		inputHashes[key] = rc.laneState.SpecHash(inp.From.Step)
 	}
 
 	key := registry.SpecHash(step, imageDigest, inputHashes, map[string]primitive.Digest{})
 	sid := string(stepID)
 	tag := registry.Tag(rc.lane.Registry, sid, key)
-	rc.state.specHashes[stepID] = key
+	rc.laneState.RecordSpecHash(stepID, key)
 	return key, tag, nil
 }
 
@@ -349,7 +335,7 @@ func (rc *runContext) executePack(ctx context.Context, step *lane.Step, stepID p
 	// under a manifest digest distinct from result.Digest. The handle must
 	// carry the engine-stored digest -- it is what a consumer (imageFromStep)
 	// pulls by; result.Digest is the pre-annotation cross-validation anchor.
-	specHash := rc.state.specHashes[stepID]
+	specHash := rc.laneState.SpecHash(stepID)
 	tag := registry.WrapTag(rc.lane.ID, stepID, specHash)
 	digest, _, wrapErr := rc.regClient.WrapImageOutputAsImage(ctx, outRoot, outputID, tag, nil)
 	if wrapErr != nil {
@@ -450,8 +436,7 @@ func (rc *runContext) executeContainerStep(ctx context.Context, step *lane.Step,
 	}
 	defer func() {
 		caps.CloseOutbound()
-		key := string(stepID)
-		rc.networkRecords[key] = caps.Records()
+		rc.laneState.RecordNetwork(stepID, caps.Records())
 	}()
 
 	imageRef, err := rc.imageFromRef(step)
@@ -499,7 +484,7 @@ func (rc *runContext) wrapOutputs(ctx context.Context, step *lane.Step, stepID p
 		return err
 	}
 	if step.Output != "" {
-		specHash := rc.state.specHashes[stepID]
+		specHash := rc.laneState.SpecHash(stepID)
 		if wrapErr := rc.wrapImageOutput(ctx, step, stepID, safeName, containerID, specHash); wrapErr != nil {
 			return wrapErr
 		}
@@ -518,7 +503,7 @@ func (rc *runContext) wrapFileOutputs(ctx context.Context, step *lane.Step, step
 		return nil
 	}
 	workdir := *step.Workdir
-	specHash := rc.state.specHashes[stepID]
+	specHash := rc.laneState.SpecHash(stepID)
 	tag := registry.WrapTag(rc.lane.ID, stepID, specHash)
 
 	outs := make([]registry.OutputArchive, 0, len(step.Outputs))
