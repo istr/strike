@@ -52,6 +52,53 @@ type runContext struct {
 	resolverID   transport.ConnectionIdentity
 }
 
+// stepInputs carries a step's direct-predecessor data, resolved once before
+// the step runs and passed down by value so no execution function reaches back
+// into the shared lane.State for its own inputs. Producer output handles are
+// keyed by canonical output ref (OutputRef.Ref); producer spec hashes are keyed
+// by producer step id. Under the sequential walk every predecessor has already
+// run; this is the single seam the parallel scheduler will later feed from
+// published records.
+type stepInputs struct {
+	handles    map[string]output.Handle
+	specHashes map[primitive.Identifier]primitive.Digest
+}
+
+// gatherInputs resolves every direct-predecessor edge a step declares --
+// image_from, container inputs, and pack files -- from lane.State exactly once.
+func (rc *runContext) gatherInputs(step *lane.Step) (stepInputs, error) {
+	in := stepInputs{
+		handles:    map[string]output.Handle{},
+		specHashes: map[primitive.Identifier]primitive.Digest{},
+	}
+	if step.ImageFromStep != nil {
+		ref := lane.OutputRef{Step: *step.ImageFromStep, Output: ""}.Ref()
+		h, err := rc.laneState.Resolve(ref)
+		if err != nil {
+			return in, fmt.Errorf("imageFromStep %s: %w", ref, err)
+		}
+		in.handles[ref] = h
+	}
+	for inp := range rc.lane.Inputs(step.ID) {
+		ref := inp.From.Ref()
+		h, err := rc.laneState.Resolve(ref)
+		if err != nil {
+			return in, fmt.Errorf("input %s: %w", ref, err)
+		}
+		in.handles[ref] = h
+		in.specHashes[inp.From.Step] = rc.laneState.SpecHash(inp.From.Step)
+	}
+	for f := range rc.lane.PackFiles(step.ID) {
+		ref := f.From.Ref()
+		h, err := rc.laneState.Resolve(ref)
+		if err != nil {
+			return in, fmt.Errorf("pack input %s: %w", ref, err)
+		}
+		in.handles[ref] = h
+	}
+	return in, nil
+}
+
 func (rc *runContext) runStep(stepID primitive.Identifier) error {
 	step := rc.stepIndex[stepID]
 	sid := string(stepID)
@@ -79,11 +126,16 @@ func (rc *runContext) runStep(stepID primitive.Identifier) error {
 		return rc.executeDeploy(ctx, step, stepID, safeName)
 	}
 
-	imageDigest, err := rc.resolveImageDigest(ctx, step, safeName)
+	inputs, err := rc.gatherInputs(step)
+	if err != nil {
+		return fmt.Errorf("%s: %w", safeName, err)
+	}
+
+	imageDigest, err := rc.resolveImageDigest(ctx, step, safeName, inputs)
 	if err != nil {
 		return err
 	}
-	specHash, tag, err := rc.computeSpecHash(step, stepID, imageDigest)
+	specHash, tag, err := rc.computeSpecHash(step, stepID, imageDigest, inputs)
 	if err != nil {
 		return err
 	}
@@ -99,9 +151,9 @@ func (rc *runContext) runStep(stepID primitive.Identifier) error {
 	log.Printf("RUN    %s", safeName)
 
 	if step.Pack != nil {
-		return rc.executePack(ctx, step, stepID, safeName)
+		return rc.executePack(ctx, step, stepID, safeName, inputs)
 	}
-	return rc.executeContainerStep(ctx, step, stepID, safeName, tag)
+	return rc.executeContainerStep(ctx, step, stepID, safeName, tag, inputs)
 }
 
 func (rc *runContext) executeDeploy(ctx context.Context, step *lane.Step, stepID primitive.Identifier, safeName string) error {
@@ -146,7 +198,7 @@ func (rc *runContext) executeDeploy(ctx context.Context, step *lane.Step, stepID
 	return nil
 }
 
-func (rc *runContext) resolveImageDigest(ctx context.Context, step *lane.Step, safeName string) (primitive.Digest, error) {
+func (rc *runContext) resolveImageDigest(ctx context.Context, step *lane.Step, safeName string, inputs stepInputs) (primitive.Digest, error) {
 	if step.Pack != nil {
 		digest, err := resolveDigest(ctx, rc.regClient, step.Pack.Base)
 		if err != nil {
@@ -160,12 +212,7 @@ func (rc *runContext) resolveImageDigest(ctx context.Context, step *lane.Step, s
 		// the empty-output key, collision-free because a step that declares an
 		// image output declares no other output (ADR-046).
 		ref := lane.OutputRef{Step: fromStep, Output: ""}.Ref()
-		handle, err := rc.laneState.Resolve(ref)
-		if err != nil {
-			return "", fmt.Errorf("%s: imageFromStep %s: %w",
-				safeName, ref, err)
-		}
-		digest, digestErr := output.ManifestDigest(handle)
+		digest, digestErr := output.ManifestDigest(inputs.handles[ref])
 		if digestErr != nil {
 			return "", fmt.Errorf("%s: imageFromStep %s: %w",
 				safeName, ref, digestErr)
@@ -183,19 +230,15 @@ func (rc *runContext) resolveImageDigest(ctx context.Context, step *lane.Step, s
 // edge from laneState, returning "" when the step declares no image_from edge.
 // ADR-045: the producer image is executed by its content-addressed digest
 // reference, not the mutable WrapTag (ADR-046).
-func (rc *runContext) imageFromRef(step *lane.Step) (string, error) {
+func (rc *runContext) imageFromRef(step *lane.Step, inputs stepInputs) (string, error) {
 	if step.ImageFromStep == nil {
 		return "", nil
 	}
 	ref := lane.OutputRef{Step: *step.ImageFromStep, Output: ""}.Ref()
-	handle, err := rc.laneState.Resolve(ref)
-	if err != nil {
-		return "", fmt.Errorf("imageFromStep %s: %w", ref, err)
-	}
-	return handle.ImageRef(), nil
+	return inputs.handles[ref].ImageRef(), nil
 }
 
-func (rc *runContext) computeSpecHash(step *lane.Step, stepID primitive.Identifier, imageDigest primitive.Digest) (primitive.Digest, string, error) {
+func (rc *runContext) computeSpecHash(step *lane.Step, stepID primitive.Identifier, imageDigest primitive.Digest, inputs stepInputs) (primitive.Digest, string, error) {
 	// Per ADR-027, an input is identified in the spec hash by the
 	// canonical triple (from, mount, subpath); mount is unique per step
 	// by disjointness, and subpath is "" when the whole producer output
@@ -208,7 +251,7 @@ func (rc *runContext) computeSpecHash(step *lane.Step, stepID primitive.Identifi
 			subpath = string(*inp.Subpath)
 		}
 		key := from + "|" + inp.Mount.String() + "|" + subpath
-		inputHashes[key] = rc.laneState.SpecHash(inp.From.Step)
+		inputHashes[key] = inputs.specHashes[inp.From.Step]
 	}
 
 	key := registry.SpecHash(step, imageDigest, inputHashes, map[string]primitive.Digest{})
@@ -298,14 +341,14 @@ func (rc *runContext) registerCachedOutputs(ctx context.Context, step *lane.Step
 	return nil
 }
 
-func (rc *runContext) executePack(ctx context.Context, step *lane.Step, stepID primitive.Identifier, safeName string) error {
+func (rc *runContext) executePack(ctx context.Context, step *lane.Step, stepID primitive.Identifier, safeName string, inputs stepInputs) error {
 	outDir, err := os.MkdirTemp("", "strike-"+string(stepID)+"-")
 	if err != nil {
 		return fmt.Errorf("%s: create temp dir: %w", safeName, err)
 	}
 	defer removeStrikeScratch(outDir)
 
-	inputPaths, err := rc.resolvePackInputPaths(ctx, step, outDir, safeName)
+	inputPaths, err := rc.resolvePackInputPaths(ctx, step, outDir, safeName, inputs)
 	if err != nil {
 		return err
 	}
@@ -357,7 +400,7 @@ func (rc *runContext) executePack(ctx context.Context, step *lane.Step, stepID p
 	return nil
 }
 
-func (rc *runContext) resolvePackInputPaths(ctx context.Context, step *lane.Step, scratchDir, safeName string) (map[string]string, error) {
+func (rc *runContext) resolvePackInputPaths(ctx context.Context, step *lane.Step, scratchDir, safeName string, inputs stepInputs) (map[string]string, error) {
 	inputPaths := make(map[string]string)
 
 	scratchRoot, rootErr := os.OpenRoot(scratchDir)
@@ -375,10 +418,7 @@ func (rc *runContext) resolvePackInputPaths(ctx context.Context, step *lane.Step
 		fromOutput := f.From.Output
 		out := rc.lane.Output(fromStep, fromOutput)
 
-		handle, artErr := rc.laneState.Resolve(f.From.Ref())
-		if artErr != nil {
-			return nil, fmt.Errorf("%s: pack input %s.%s: %w", safeName, fromStep, fromOutput, artErr)
-		}
+		handle := inputs.handles[f.From.Ref()]
 		fh, ok := handle.(output.FileHandle)
 		if !ok {
 			return nil, fmt.Errorf("%s: pack input %s.%s: not a file output", safeName, fromStep, fromOutput)
@@ -407,13 +447,13 @@ func (rc *runContext) resolvePackInputPaths(ctx context.Context, step *lane.Step
 	return inputPaths, nil
 }
 
-func (rc *runContext) executeContainerStep(ctx context.Context, step *lane.Step, stepID primitive.Identifier, safeName, tag string) error {
+func (rc *runContext) executeContainerStep(ctx context.Context, step *lane.Step, stepID primitive.Identifier, safeName, tag string, inputs stepInputs) error {
 	secrets, err := lane.ResolveSecrets(step.Secrets, rc.lane.Secrets, rc.laneRoot)
 	if err != nil {
 		return fmt.Errorf("%s: secrets: %w", safeName, err)
 	}
 
-	inputSeeds, inputMounts, err := rc.buildInputDelivery(ctx, step)
+	inputSeeds, inputMounts, err := rc.buildInputDelivery(ctx, step, inputs)
 	if err != nil {
 		return fmt.Errorf("%s: inputs: %w", safeName, err)
 	}
@@ -439,7 +479,7 @@ func (rc *runContext) executeContainerStep(ctx context.Context, step *lane.Step,
 		rc.laneState.RecordNetwork(stepID, caps.Records())
 	}()
 
-	imageRef, err := rc.imageFromRef(step)
+	imageRef, err := rc.imageFromRef(step, inputs)
 	if err != nil {
 		return fmt.Errorf("%s: %w", safeName, err)
 	}
@@ -617,7 +657,7 @@ func (rc *runContext) captureProvenance(ctx context.Context, step *lane.Step, sa
 // when the producing output is type file and at the validation walk when a
 // subpath resolves to a regular file, rather than surfacing the engine's
 // opaque runtime error.
-func (rc *runContext) buildInputDelivery(ctx context.Context, step *lane.Step) ([]container.Seed, []container.ImageVolume, error) {
+func (rc *runContext) buildInputDelivery(ctx context.Context, step *lane.Step, inputs stepInputs) ([]container.Seed, []container.ImageVolume, error) {
 	var (
 		seeds      []container.Seed
 		mounts     []container.ImageVolume
@@ -626,12 +666,7 @@ func (rc *runContext) buildInputDelivery(ctx context.Context, step *lane.Step) (
 	for inp := range rc.lane.Inputs(step.ID) {
 		out := rc.lane.Output(inp.From.Step, inp.From.Output)
 		ref := inp.From.Ref()
-		art, artErr := rc.laneState.Resolve(ref)
-		if artErr != nil {
-			return nil, nil, fmt.Errorf("input at %q: source artifact %s not found: %w",
-				inp.Mount, ref, artErr)
-		}
-		fh, ok := art.(output.FileHandle)
+		fh, ok := inputs.handles[ref].(output.FileHandle)
 		if !ok {
 			return nil, nil, fmt.Errorf("input at %q: source artifact %s is not a file output", inp.Mount, ref)
 		}

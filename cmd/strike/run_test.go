@@ -99,7 +99,11 @@ func TestBuildInputDelivery_Single(t *testing.T) {
 
 	eng.saveTars = map[string][]byte{compileRef: tarBytes}
 
-	seeds, _, seedErr := rc.buildInputDelivery(context.Background(), rc.stepIndex["test"])
+	inputs, gatherErr := rc.gatherInputs(rc.stepIndex["test"])
+	if gatherErr != nil {
+		t.Fatalf("gatherInputs: %v", gatherErr)
+	}
+	seeds, _, seedErr := rc.buildInputDelivery(context.Background(), rc.stepIndex["test"], inputs)
 	if seedErr != nil {
 		t.Fatalf("buildInputDelivery: %v", seedErr)
 	}
@@ -162,7 +166,11 @@ func TestBuildInputDelivery_Multiple(t *testing.T) {
 
 	eng.saveTars = map[string][]byte{ref1: tar1, ref2: tar2}
 
-	seeds, _, seedErr := rc.buildInputDelivery(context.Background(), rc.stepIndex["consumer"])
+	inputs, gatherErr := rc.gatherInputs(rc.stepIndex["consumer"])
+	if gatherErr != nil {
+		t.Fatalf("gatherInputs: %v", gatherErr)
+	}
+	seeds, _, seedErr := rc.buildInputDelivery(context.Background(), rc.stepIndex["consumer"], inputs)
 	if seedErr != nil {
 		t.Fatalf("buildInputDelivery: %v", seedErr)
 	}
@@ -211,7 +219,11 @@ func TestBuildInputDelivery_MissingSubpath(t *testing.T) {
 
 	eng.saveTars = map[string][]byte{srcRef: tarBytes}
 
-	_, _, seedErr := rc.buildInputDelivery(context.Background(), rc.stepIndex["consumer"])
+	inputs, gatherErr := rc.gatherInputs(rc.stepIndex["consumer"])
+	if gatherErr != nil {
+		t.Fatalf("gatherInputs: %v", gatherErr)
+	}
+	_, _, seedErr := rc.buildInputDelivery(context.Background(), rc.stepIndex["consumer"], inputs)
 	if seedErr == nil {
 		t.Fatal("expected error for missing subpath")
 	}
@@ -260,7 +272,11 @@ func TestBuildInputDelivery_OutsideWorkdir_DirectoryMount(t *testing.T) {
 
 	eng.saveTars = map[string][]byte{srcRef: tarBytes}
 
-	seeds, mounts, dErr := rc.buildInputDelivery(context.Background(), rc.stepIndex["consumer"])
+	inputs, gatherErr := rc.gatherInputs(rc.stepIndex["consumer"])
+	if gatherErr != nil {
+		t.Fatalf("gatherInputs: %v", gatherErr)
+	}
+	seeds, mounts, dErr := rc.buildInputDelivery(context.Background(), rc.stepIndex["consumer"], inputs)
 	if dErr != nil {
 		t.Fatalf("buildInputDelivery: %v", dErr)
 	}
@@ -323,7 +339,11 @@ func TestBuildInputDelivery_NoWorkdir_Mounts(t *testing.T) {
 
 	eng.saveTars = map[string][]byte{srcRef: tarBytes}
 
-	seeds, mounts, dErr := rc.buildInputDelivery(context.Background(), rc.stepIndex["consumer"])
+	inputs, gatherErr := rc.gatherInputs(rc.stepIndex["consumer"])
+	if gatherErr != nil {
+		t.Fatalf("gatherInputs: %v", gatherErr)
+	}
+	seeds, mounts, dErr := rc.buildInputDelivery(context.Background(), rc.stepIndex["consumer"], inputs)
 	if dErr != nil {
 		t.Fatalf("buildInputDelivery: %v", dErr)
 	}
@@ -363,7 +383,11 @@ func TestBuildInputDelivery_SingleFileOutside_Rejected(t *testing.T) {
 	}
 	rc.laneState.RecordSpecHash("src", primitive.DigestFromHex("1111111111111111000000000000000000000000000000000000000000000000"))
 
-	_, _, err := rc.buildInputDelivery(context.Background(), rc.stepIndex["consumer"])
+	inputs, gatherErr := rc.gatherInputs(rc.stepIndex["consumer"])
+	if gatherErr != nil {
+		t.Fatalf("gatherInputs: %v", gatherErr)
+	}
+	_, _, err := rc.buildInputDelivery(context.Background(), rc.stepIndex["consumer"], inputs)
 	if err == nil {
 		t.Fatal("expected single-file-outside rejection")
 	}
@@ -416,7 +440,11 @@ func TestBuildInputDelivery_ExportsProducerOnce(t *testing.T) {
 
 	eng.saveTars = map[string][]byte{srcRef: tarBytes}
 
-	seeds, _, seedErr := rc.buildInputDelivery(context.Background(), rc.stepIndex["consumer"])
+	inputs, gatherErr := rc.gatherInputs(rc.stepIndex["consumer"])
+	if gatherErr != nil {
+		t.Fatalf("gatherInputs: %v", gatherErr)
+	}
+	seeds, _, seedErr := rc.buildInputDelivery(context.Background(), rc.stepIndex["consumer"], inputs)
 	if seedErr != nil {
 		t.Fatalf("buildInputDelivery: %v", seedErr)
 	}
@@ -440,11 +468,15 @@ func TestComputeSpecHash_Deterministic(t *testing.T) {
 		Env:  map[string]string{"K": "V"},
 	}
 
-	h1, tag1, err := rc.computeSpecHash(step, "step1", primitive.DigestFromHex("abc0000000000000000000000000000000000000000000000000000000000000"))
+	inputs, gatherErr := rc.gatherInputs(step)
+	if gatherErr != nil {
+		t.Fatal(gatherErr)
+	}
+	h1, tag1, err := rc.computeSpecHash(step, "step1", primitive.DigestFromHex("abc0000000000000000000000000000000000000000000000000000000000000"), inputs)
 	if err != nil {
 		t.Fatal(err)
 	}
-	h2, tag2, err := rc.computeSpecHash(step, "step1", primitive.DigestFromHex("abc0000000000000000000000000000000000000000000000000000000000000"))
+	h2, tag2, err := rc.computeSpecHash(step, "step1", primitive.DigestFromHex("abc0000000000000000000000000000000000000000000000000000000000000"), inputs)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -463,13 +495,17 @@ func TestComputeSpecHash_ChangesWithImageDigest(t *testing.T) {
 	rc := newTestRC(t, &mockEngine{})
 	step := &lane.Step{Args: []string{"build"}, Env: map[string]string{}}
 
-	h1, _, err := rc.computeSpecHash(step, "s", primitive.DigestFromHex("aaa0000000000000000000000000000000000000000000000000000000000000"))
+	inputs, gatherErr := rc.gatherInputs(step)
+	if gatherErr != nil {
+		t.Fatal(gatherErr)
+	}
+	h1, _, err := rc.computeSpecHash(step, "s", primitive.DigestFromHex("aaa0000000000000000000000000000000000000000000000000000000000000"), inputs)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Reset specHashes to avoid accumulation from prior call.
 	rc.laneState = lane.NewState()
-	h2, _, err := rc.computeSpecHash(step, "s", primitive.DigestFromHex("bbb0000000000000000000000000000000000000000000000000000000000000"))
+	h2, _, err := rc.computeSpecHash(step, "s", primitive.DigestFromHex("bbb0000000000000000000000000000000000000000000000000000000000000"), inputs)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -486,7 +522,11 @@ func TestComputeSpecHash_NoSources(t *testing.T) {
 		Env:  map[string]string{},
 	}
 
-	h, _, err := rc.computeSpecHash(step, "build", primitive.DigestFromHex("0000000000000000000000000000000000000000000000000000000000000001"))
+	inputs, gatherErr := rc.gatherInputs(step)
+	if gatherErr != nil {
+		t.Fatal(gatherErr)
+	}
+	h, _, err := rc.computeSpecHash(step, "build", primitive.DigestFromHex("0000000000000000000000000000000000000000000000000000000000000001"), inputs)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -650,7 +690,7 @@ func TestResolveImageDigest_FromRef(t *testing.T) {
 	rc := newTestRC(t, &mockEngine{})
 	step := &lane.Step{Image: primitive.ImageRefPtr("docker.io/lib/golang@sha256:abcdef1234567890000000000000000000000000000000000000000000000000")}
 
-	digest, err := rc.resolveImageDigest(context.Background(), step, "test")
+	digest, err := rc.resolveImageDigest(context.Background(), step, "test", stepInputs{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -668,7 +708,7 @@ func TestResolveImageDigest_FromInspect(t *testing.T) {
 	rc := newTestRC(t, eng)
 	step := &lane.Step{Image: primitive.ImageRefPtr("docker.io/lib/golang:1.22")}
 
-	digest, err := rc.resolveImageDigest(context.Background(), step, "test")
+	digest, err := rc.resolveImageDigest(context.Background(), step, "test", stepInputs{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -703,7 +743,11 @@ func TestResolveImageDigest_ImageFrom(t *testing.T) {
 	}
 	step := rc.stepIndex["run"]
 	imageBefore := step.Image
-	digest, err := rc.resolveImageDigest(context.Background(), step, "test")
+	inputs, gatherErr := rc.gatherInputs(step)
+	if gatherErr != nil {
+		t.Fatal(gatherErr)
+	}
+	digest, err := rc.resolveImageDigest(context.Background(), step, "test", inputs)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -734,7 +778,7 @@ func TestResolveImageDigest_ImageFromMissing(t *testing.T) {
 	rc.lane = p
 	rc.dag, rc.stepIndex = buildTestDAG(t, p)
 
-	_, err := rc.resolveImageDigest(context.Background(), rc.stepIndex["run"], "test")
+	_, err := rc.gatherInputs(rc.stepIndex["run"])
 	if err == nil {
 		t.Fatal("expected error for missing digest")
 	}
@@ -757,7 +801,6 @@ func TestImageFromRef(t *testing.T) {
 		step    *lane.Step
 		name    string
 		wantRef string
-		wantErr bool
 	}{
 		{
 			name:    "resolves image_from edge",
@@ -768,21 +811,14 @@ func TestImageFromRef(t *testing.T) {
 			name: "empty for no image_from edge",
 			step: &lane.Step{ID: "plain", Image: primitive.ImageRefPtr("img")},
 		},
-		{
-			name:    "error for unresolved producer",
-			step:    &lane.Step{ID: "orphan", ImageFromStep: primitive.IdentifierPtr("missing")},
-			wantErr: true,
-		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := rc.imageFromRef(tt.step)
-			if tt.wantErr {
-				if err == nil {
-					t.Fatal("expected error")
-				}
-				return
+			inputs, gatherErr := rc.gatherInputs(tt.step)
+			if gatherErr != nil {
+				t.Fatal(gatherErr)
 			}
+			got, err := rc.imageFromRef(tt.step, inputs)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -838,8 +874,12 @@ func TestResolvePackInputPaths(t *testing.T) {
 
 	eng.saveTars = map[string][]byte{compileRef: tarBytes}
 
+	inputs, gatherErr := rc.gatherInputs(rc.stepIndex["pack"])
+	if gatherErr != nil {
+		t.Fatalf("gatherInputs: %v", gatherErr)
+	}
 	scratchDir := t.TempDir()
-	paths, pathErr := rc.resolvePackInputPaths(context.Background(), rc.stepIndex["pack"], scratchDir, "test")
+	paths, pathErr := rc.resolvePackInputPaths(context.Background(), rc.stepIndex["pack"], scratchDir, "test", inputs)
 	if pathErr != nil {
 		t.Fatal(pathErr)
 	}
