@@ -33,21 +33,11 @@ import (
 // runState holds accumulated state across steps during a lane execution.
 type runState struct {
 	specHashes map[primitive.Identifier]primitive.Digest
-	// imageFromRefs maps a consumer step name to the producer's
-	// content-addressed local digest reference
-	// (localhost/strike/<lane>/<step>@sha256:<D>), populated by
-	// resolveImageDigest when the consumer has an image_from edge.
-	// Consumed by executeContainerStep to override Step.Image in the
-	// executor invocation without mutating the parsed Lane. The base is
-	// executed only by this digest reference, never by a mutable tag
-	// (ADR-045).
-	imageFromRefs map[primitive.Identifier]string
 }
 
 func newRunState() *runState {
 	return &runState{
-		specHashes:    map[primitive.Identifier]primitive.Digest{},
-		imageFromRefs: map[primitive.Identifier]string{},
+		specHashes: map[primitive.Identifier]primitive.Digest{},
 	}
 }
 
@@ -194,9 +184,6 @@ func (rc *runContext) resolveImageDigest(ctx context.Context, step *lane.Step, s
 			return "", fmt.Errorf("%s: imageFromStep %s: %w",
 				safeName, ref, digestErr)
 		}
-		// ADR-045: execute the producer's image by its content-addressed
-		// digest, not the mutable WrapTag (ADR-046).
-		rc.state.imageFromRefs[step.ID] = handle.ImageRef()
 		return digest, nil
 	}
 	digest, err := resolveDigest(ctx, rc.regClient, *step.Image)
@@ -204,6 +191,22 @@ func (rc *runContext) resolveImageDigest(ctx context.Context, step *lane.Step, s
 		return "", fmt.Errorf("%s: image digest: %w", safeName, err)
 	}
 	return digest, nil
+}
+
+// imageFromRef resolves the producer image reference for a step's image_from
+// edge from laneState, returning "" when the step declares no image_from edge.
+// ADR-045: the producer image is executed by its content-addressed digest
+// reference, not the mutable WrapTag (ADR-046).
+func (rc *runContext) imageFromRef(step *lane.Step) (string, error) {
+	if step.ImageFromStep == nil {
+		return "", nil
+	}
+	ref := lane.OutputRef{Step: *step.ImageFromStep, Output: ""}.Ref()
+	handle, err := rc.laneState.Resolve(ref)
+	if err != nil {
+		return "", fmt.Errorf("imageFromStep %s: %w", ref, err)
+	}
+	return handle.ImageRef(), nil
 }
 
 func (rc *runContext) computeSpecHash(step *lane.Step, stepID primitive.Identifier, imageDigest primitive.Digest) (primitive.Digest, string, error) {
@@ -451,6 +454,11 @@ func (rc *runContext) executeContainerStep(ctx context.Context, step *lane.Step,
 		rc.networkRecords[key] = caps.Records()
 	}()
 
+	imageRef, err := rc.imageFromRef(step)
+	if err != nil {
+		return fmt.Errorf("%s: %w", safeName, err)
+	}
+
 	run := executor.Run{
 		Engine:       rc.engine,
 		Step:         step,
@@ -458,7 +466,7 @@ func (rc *runContext) executeContainerStep(ctx context.Context, step *lane.Step,
 		ImageVolumes: inputMounts,
 		VolumeName:   volName,
 		Secrets:      secrets,
-		ImageRef:     rc.state.imageFromRefs[stepID],
+		ImageRef:     imageRef,
 		Capsule:      caps,
 		CAVolume:     rc.trust.ca,
 		SSHVolume:    rc.trust.ssh[stepID],

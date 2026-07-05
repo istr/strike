@@ -715,11 +715,6 @@ func TestResolveImageDigest_ImageFrom(t *testing.T) {
 		t.Errorf("resolveImageDigest must not mutate step.Image; got %v, was %v",
 			step.Image, imageBefore)
 	}
-	got := rc.state.imageFromRefs["run"]
-	want := registry.WrapDigest("test-lane", "pack", digest)
-	if got != want {
-		t.Errorf("imageFromRefs[run] = %q, want %q", got, want)
-	}
 }
 
 func TestResolveImageDigest_ImageFromMissing(t *testing.T) {
@@ -746,6 +741,56 @@ func TestResolveImageDigest_ImageFromMissing(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "not found") {
 		t.Errorf("error should mention 'not found': %v", err)
+	}
+}
+
+func TestImageFromRef(t *testing.T) {
+	rc := newTestRC(t, &mockEngine{})
+	packDigest := primitive.DigestFromHex("abcdef1234567890000000000000000000000000000000000000000000000000")
+	if err := rc.laneState.Register("pack", "", output.ImageHandle{
+		Ref: registry.WrapDigest("test-lane", "pack", packDigest),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	wantRef := registry.WrapDigest("test-lane", "pack", packDigest)
+
+	tests := []struct {
+		step    *lane.Step
+		name    string
+		wantRef string
+		wantErr bool
+	}{
+		{
+			name:    "resolves image_from edge",
+			wantRef: wantRef,
+			step:    &lane.Step{ID: "run", ImageFromStep: primitive.IdentifierPtr("pack")},
+		},
+		{
+			name: "empty for no image_from edge",
+			step: &lane.Step{ID: "plain", Image: primitive.ImageRefPtr("img")},
+		},
+		{
+			name:    "error for unresolved producer",
+			step:    &lane.Step{ID: "orphan", ImageFromStep: primitive.IdentifierPtr("missing")},
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := rc.imageFromRef(tt.step)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != tt.wantRef {
+				t.Errorf("imageFromRef = %q, want %q", got, tt.wantRef)
+			}
+		})
 	}
 }
 
