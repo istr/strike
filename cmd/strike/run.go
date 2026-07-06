@@ -34,7 +34,7 @@ import (
 type runContext struct {
 	ctx          context.Context
 	engine       container.Engine
-	laneState    *lane.State // artifact graph for deploy attestations
+	runtime      *lane.Runtime // per-step record store and fire-at-zero scheduler
 	regClient    *registry.Client
 	engineID     *container.EngineIdentity
 	ca           *transport.EphemeralCA
@@ -54,47 +54,46 @@ type runContext struct {
 
 // stepInputs carries a step's direct-predecessor data, resolved once before
 // the step runs and passed down by value so no execution function reaches back
-// into the shared lane.State for its own inputs. Producer output handles are
-// keyed by canonical output ref (OutputRef.Ref); producer spec hashes are keyed
-// by producer step id. Under the sequential walk every predecessor has already
-// run; this is the single seam the parallel scheduler will later feed from
-// published records.
+// into the Runtime for its own inputs. Producer output handles are keyed by
+// canonical output ref (OutputRef.Ref); producer spec hashes are keyed by
+// producer step id. Every predecessor has published its record before a step
+// fires, so this reads each predecessor's published node exactly once at the
+// step's head.
 type stepInputs struct {
 	handles    map[string]output.Handle
 	specHashes map[primitive.Identifier]primitive.Digest
 }
 
 // gatherInputs resolves every direct-predecessor edge a step declares --
-// image_from, container inputs, and pack files -- from lane.State exactly once.
+// image_from, container inputs, and pack files -- from the Runtime's published
+// predecessor records exactly once.
 func (rc *runContext) gatherInputs(step *lane.Step) (stepInputs, error) {
 	in := stepInputs{
 		handles:    map[string]output.Handle{},
 		specHashes: map[primitive.Identifier]primitive.Digest{},
 	}
 	if step.ImageFromStep != nil {
-		ref := lane.OutputRef{Step: *step.ImageFromStep, Output: ""}.Ref()
-		h, err := rc.laneState.Resolve(ref)
+		from := lane.OutputRef{Step: *step.ImageFromStep, Output: ""}
+		h, err := rc.runtime.Resolve(from)
 		if err != nil {
-			return in, fmt.Errorf("imageFromStep %s: %w", ref, err)
+			return in, fmt.Errorf("imageFromStep %s: %w", from.Ref(), err)
 		}
-		in.handles[ref] = h
+		in.handles[from.Ref()] = h
 	}
 	for inp := range rc.lane.Inputs(step.ID) {
-		ref := inp.From.Ref()
-		h, err := rc.laneState.Resolve(ref)
+		h, err := rc.runtime.Resolve(inp.From)
 		if err != nil {
-			return in, fmt.Errorf("input %s: %w", ref, err)
+			return in, fmt.Errorf("input %s: %w", inp.From.Ref(), err)
 		}
-		in.handles[ref] = h
-		in.specHashes[inp.From.Step] = rc.laneState.SpecHash(inp.From.Step)
+		in.handles[inp.From.Ref()] = h
+		in.specHashes[inp.From.Step] = rc.runtime.SpecHash(inp.From.Step)
 	}
 	for f := range rc.lane.PackFiles(step.ID) {
-		ref := f.From.Ref()
-		h, err := rc.laneState.Resolve(ref)
+		h, err := rc.runtime.Resolve(f.From)
 		if err != nil {
-			return in, fmt.Errorf("pack input %s: %w", ref, err)
+			return in, fmt.Errorf("pack input %s: %w", f.From.Ref(), err)
 		}
-		in.handles[ref] = h
+		in.handles[f.From.Ref()] = h
 	}
 	return in, nil
 }
@@ -159,7 +158,7 @@ func (rc *runContext) runStep(stepID primitive.Identifier) error {
 func (rc *runContext) executeDeploy(ctx context.Context, step *lane.Step, stepID primitive.Identifier, safeName string) error {
 	log.Printf("DEPLOY %s", safeName)
 
-	artifactRefs := make(map[string]string)
+	artifactRefs := make(map[string]lane.OutputRef)
 	for artName, artRef := range rc.lane.DeployArtifacts(stepID) {
 		var ref lane.OutputRef
 		switch src := artRef.From.(type) {
@@ -168,7 +167,7 @@ func (rc *runContext) executeDeploy(ctx context.Context, step *lane.Step, stepID
 		case lane.OutputRef:
 			ref = src
 		}
-		artifactRefs[string(artName)] = ref.Ref()
+		artifactRefs[string(artName)] = ref
 	}
 
 	d := &deploy.Deployer{
@@ -189,7 +188,7 @@ func (rc *runContext) executeDeploy(ctx context.Context, step *lane.Step, stepID
 		StepPorts:       rc.stepPorts,
 	}
 
-	att, err := d.Execute(ctx, step, rc.laneState)
+	att, err := d.Execute(ctx, step, rc.runtime)
 	if err != nil {
 		return fmt.Errorf("%s: deploy failed: %w", safeName, err)
 	}
@@ -227,7 +226,8 @@ func (rc *runContext) resolveImageDigest(ctx context.Context, step *lane.Step, s
 }
 
 // imageFromRef resolves the producer image reference for a step's image_from
-// edge from laneState, returning "" when the step declares no image_from edge.
+// edge from the resolved inputs, returning "" when the step declares no
+// image_from edge.
 // ADR-045: the producer image is executed by its content-addressed digest
 // reference, not the mutable WrapTag (ADR-046).
 func (rc *runContext) imageFromRef(step *lane.Step, inputs stepInputs) (string, error) {
@@ -257,7 +257,7 @@ func (rc *runContext) computeSpecHash(step *lane.Step, stepID primitive.Identifi
 	key := registry.SpecHash(step, imageDigest, inputHashes, map[string]primitive.Digest{})
 	sid := string(stepID)
 	tag := registry.Tag(rc.lane.Registry, sid, key)
-	rc.laneState.RecordSpecHash(stepID, key)
+	rc.runtime.RecordSpecHash(stepID, key)
 	return key, tag, nil
 }
 
@@ -327,14 +327,14 @@ func (rc *runContext) registerCachedOutputs(ctx context.Context, step *lane.Step
 				OutputID:    out.ID,
 				LayerDiffID: diffIDs[i],
 			}
-			if regErr := rc.laneState.Register(stepID, out.ID, handle); regErr != nil {
+			if regErr := rc.runtime.Register(stepID, out.ID, handle); regErr != nil {
 				return fmt.Errorf("cache hit register %s/%s: %w", stepID, out.ID, regErr)
 			}
 		}
 	}
 	if step.Output != "" {
 		handle := output.ImageHandle{Ref: imageRef}
-		if regErr := rc.laneState.Register(stepID, "", handle); regErr != nil {
+		if regErr := rc.runtime.Register(stepID, "", handle); regErr != nil {
 			return fmt.Errorf("cache hit register %s image: %w", stepID, regErr)
 		}
 	}
@@ -378,7 +378,7 @@ func (rc *runContext) executePack(ctx context.Context, step *lane.Step, stepID p
 	// under a manifest digest distinct from result.Digest. The handle must
 	// carry the engine-stored digest -- it is what a consumer (imageFromStep)
 	// pulls by; result.Digest is the pre-annotation cross-validation anchor.
-	specHash := rc.laneState.SpecHash(stepID)
+	specHash := rc.runtime.SpecHash(stepID)
 	tag := registry.WrapTag(rc.lane.ID, stepID, specHash)
 	digest, _, wrapErr := rc.regClient.WrapImageOutputAsImage(ctx, outRoot, outputID, tag, nil)
 	if wrapErr != nil {
@@ -394,7 +394,7 @@ func (rc *runContext) executePack(ctx context.Context, step *lane.Step, stepID p
 	handle := output.ImageHandle{
 		Ref: registry.WrapDigest(rc.lane.ID, stepID, digest),
 	}
-	if regErr := rc.laneState.Register(stepID, "", handle); regErr != nil {
+	if regErr := rc.runtime.Register(stepID, "", handle); regErr != nil {
 		return fmt.Errorf("%s: register artifact: %w", safeName, regErr)
 	}
 	return nil
@@ -476,7 +476,7 @@ func (rc *runContext) executeContainerStep(ctx context.Context, step *lane.Step,
 	}
 	defer func() {
 		caps.CloseOutbound()
-		rc.laneState.RecordNetwork(stepID, caps.Records())
+		rc.runtime.RecordNetwork(stepID, caps.Records())
 	}()
 
 	imageRef, err := rc.imageFromRef(step, inputs)
@@ -524,7 +524,7 @@ func (rc *runContext) wrapOutputs(ctx context.Context, step *lane.Step, stepID p
 		return err
 	}
 	if step.Output != "" {
-		specHash := rc.laneState.SpecHash(stepID)
+		specHash := rc.runtime.SpecHash(stepID)
 		if wrapErr := rc.wrapImageOutput(ctx, step, stepID, safeName, containerID, specHash); wrapErr != nil {
 			return wrapErr
 		}
@@ -543,7 +543,7 @@ func (rc *runContext) wrapFileOutputs(ctx context.Context, step *lane.Step, step
 		return nil
 	}
 	workdir := *step.Workdir
-	specHash := rc.laneState.SpecHash(stepID)
+	specHash := rc.runtime.SpecHash(stepID)
 	tag := registry.WrapTag(rc.lane.ID, stepID, specHash)
 
 	outs := make([]registry.OutputArchive, 0, len(step.Outputs))
@@ -578,7 +578,7 @@ func (rc *runContext) wrapFileOutputs(ctx context.Context, step *lane.Step, step
 			OutputID:    out.ID,
 			LayerDiffID: diffID,
 		}
-		if regErr := rc.laneState.Register(stepID, out.ID, handle); regErr != nil {
+		if regErr := rc.runtime.Register(stepID, out.ID, handle); regErr != nil {
 			return fmt.Errorf("%s: register output %q: %w", safeName, out.ID, regErr)
 		}
 	}
@@ -610,7 +610,7 @@ func (rc *runContext) wrapImageOutput(ctx context.Context, _ *lane.Step, stepID 
 	handle := output.ImageHandle{
 		Ref: registry.WrapDigest(rc.lane.ID, stepID, digest),
 	}
-	if regErr := rc.laneState.Register(stepID, "", handle); regErr != nil {
+	if regErr := rc.runtime.Register(stepID, "", handle); regErr != nil {
 		return fmt.Errorf("%s: register output: %w", safeName, regErr)
 	}
 	return nil
@@ -642,7 +642,7 @@ func (rc *runContext) captureProvenance(ctx context.Context, step *lane.Step, sa
 		return fmt.Errorf("validate %s provenance: %w", spec.Type, err)
 	}
 	log.Printf("PROV   %s type=%s", safeName, spec.Type)
-	return rc.laneState.RecordProvenance(step.ID, rec)
+	return rc.runtime.RecordProvenance(step.ID, rec)
 }
 
 // buildInputDelivery resolves each input edge to its delivery: inside the

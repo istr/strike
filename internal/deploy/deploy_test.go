@@ -313,7 +313,7 @@ func containerMock(t *testing.T, stdout string) http.HandlerFunc {
 func TestDeployerExecute(t *testing.T) {
 	eng := newTLSTestEngine(t, containerMock(t, "v1.2.3"))
 
-	state := lane.NewState()
+	state := newRuntime(t, "build", "deploy-prod")
 	if err := state.Register("build", "image", output.ImageHandle{
 		Ref: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
 	}); err != nil {
@@ -358,7 +358,7 @@ func TestDeployerExecute(t *testing.T) {
 	d := &deploy.Deployer{
 		Engine:       eng,
 		LaneDigest:   "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-		ArtifactRefs: map[string]string{"image": "build.image"},
+		ArtifactRefs: map[string]lane.OutputRef{"image": {Step: "build", Output: "image"}},
 		LaneID:       "test-lane",
 		CA:           ca,
 		UpstreamLook: look,
@@ -417,7 +417,7 @@ func TestDeployerExecuteRegistryAttachesReferrers(t *testing.T) {
 		t.Fatalf("digest: %v", err)
 	}
 
-	state := lane.NewState()
+	state := newRuntime(t, "build", "deploy-prod")
 	if regErr := state.Register("build", "image", output.ImageHandle{
 		Ref: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
 	}); regErr != nil {
@@ -449,7 +449,7 @@ func TestDeployerExecuteRegistryAttachesReferrers(t *testing.T) {
 	d := &deploy.Deployer{
 		Engine:       eng,
 		LaneDigest:   "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-		ArtifactRefs: map[string]string{"image": "build.image"},
+		ArtifactRefs: map[string]lane.OutputRef{"image": {Step: "build", Output: "image"}},
 		LaneID:       "test-lane",
 		CA:           ca,
 		UpstreamLook: look,
@@ -507,7 +507,7 @@ func TestDeployerExecuteRegistryAttachesReferrers(t *testing.T) {
 
 func TestDeployerExecute_MissingArtifact(t *testing.T) {
 	eng := newTLSTestEngine(t, containerMock(t, ""))
-	state := lane.NewState() // empty -- no artifacts registered
+	state := newRuntime(t, "build", "deploy-prod") // no artifact outputs registered
 
 	step := &lane.Step{
 		ID: "deploy-prod",
@@ -522,7 +522,7 @@ func TestDeployerExecute_MissingArtifact(t *testing.T) {
 
 	d := &deploy.Deployer{
 		Engine:       eng,
-		ArtifactRefs: map[string]string{"image": "build.image"},
+		ArtifactRefs: map[string]lane.OutputRef{"image": {Step: "build", Output: "image"}},
 		LaneID:       "test-lane",
 	}
 	deploy.SetProduceBundles(d, stubProduceBundles())
@@ -581,7 +581,7 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 		t.Fatalf("Ping: %v", err)
 	}
 
-	state := lane.NewState()
+	state := newRuntime(t, "build", "deploy-prod")
 	if err := state.Register("build", "image", output.ImageHandle{
 		Ref: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
 	}); err != nil {
@@ -626,7 +626,7 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 	d := &deploy.Deployer{
 		Engine: eng, EngineID: eng.Identity(),
 		LaneDigest:   "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-		ArtifactRefs: map[string]string{"image": "build.image"},
+		ArtifactRefs: map[string]lane.OutputRef{"image": {Step: "build", Output: "image"}},
 		LaneID:       "test-lane",
 		CA:           ca,
 		UpstreamLook: look,
@@ -682,7 +682,7 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 
 func TestEngineRecord_NilEngineID(t *testing.T) {
 	eng := newTLSTestEngine(t, containerMock(t, "v1.0"))
-	state := lane.NewState()
+	state := newRuntime(t, "build", "deploy-nil-engine")
 	if err := state.Register("build", "image", output.ImageHandle{
 		Ref: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
 	}); err != nil {
@@ -710,7 +710,7 @@ func TestEngineRecord_NilEngineID(t *testing.T) {
 	d := &deploy.Deployer{
 		Engine: eng, EngineID: nil,
 		LaneDigest:   "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-		ArtifactRefs: map[string]string{"image": "build.image"},
+		ArtifactRefs: map[string]lane.OutputRef{"image": {Step: "build", Output: "image"}},
 		LaneID:       "test-lane",
 		CA:           ca,
 		UpstreamLook: look,
@@ -743,7 +743,7 @@ func TestEngineRecord_WithRuntime(t *testing.T) {
 	}
 
 	eng := newTLSTestEngine(t, containerMock(t, "v1.0"))
-	state := lane.NewState()
+	state := newRuntime(t, "build", "deploy-runtime")
 	if err := state.Register("build", "image", output.ImageHandle{
 		Ref: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
 	}); err != nil {
@@ -770,7 +770,7 @@ func TestEngineRecord_WithRuntime(t *testing.T) {
 	d := &deploy.Deployer{
 		Engine: eng, EngineID: id,
 		LaneDigest:   "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-		ArtifactRefs: map[string]string{"image": "build.image"},
+		ArtifactRefs: map[string]lane.OutputRef{"image": {Step: "build", Output: "image"}},
 		LaneID:       "test-lane",
 		CA:           ca,
 		UpstreamLook: look,
@@ -818,7 +818,7 @@ func TestEngineRecord_WithoutRuntime(t *testing.T) {
 	}
 
 	eng := newTLSTestEngine(t, containerMock(t, "v1.0"))
-	state := lane.NewState()
+	state := newRuntime(t, "build", "deploy-no-runtime")
 	if err := state.Register("build", "image", output.ImageHandle{
 		Ref: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
 	}); err != nil {
@@ -845,7 +845,7 @@ func TestEngineRecord_WithoutRuntime(t *testing.T) {
 	d := &deploy.Deployer{
 		Engine: eng, EngineID: id,
 		LaneDigest:   "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-		ArtifactRefs: map[string]string{"image": "build.image"},
+		ArtifactRefs: map[string]lane.OutputRef{"image": {Step: "build", Output: "image"}},
 		LaneID:       "test-lane",
 		CA:           ca,
 		UpstreamLook: look,
@@ -888,7 +888,7 @@ func TestResolverRecord_Populated(t *testing.T) {
 	}
 
 	eng := newTLSTestEngine(t, containerMock(t, "v1.0"))
-	state := lane.NewState()
+	state := newRuntime(t, "build", "deploy-resolver")
 	if err := state.Register("build", "image", output.ImageHandle{
 		Ref: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
 	}); err != nil {
@@ -919,7 +919,7 @@ func TestResolverRecord_Populated(t *testing.T) {
 			Declared: endpoint.TLS{Type: "https", Address: endpoint.MustParseAuthority("1.1.1.1:853"), Trust: endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}},
 			Observed: rid,
 		},
-		ArtifactRefs: map[string]string{"image": "build.image"},
+		ArtifactRefs: map[string]lane.OutputRef{"image": {Step: "build", Output: "image"}},
 		LaneID:       "test-lane",
 		CA:           ca,
 		UpstreamLook: look,
@@ -952,7 +952,7 @@ func TestResolverRecord_Populated(t *testing.T) {
 
 func TestDeployerExecute_NotDeployStep(t *testing.T) {
 	eng := newTLSTestEngine(t, containerMock(t, ""))
-	state := lane.NewState()
+	state := newRuntime(t)
 	step := &lane.Step{ID: "build", Deploy: nil}
 	d := &deploy.Deployer{Engine: eng, LaneID: "test-lane"}
 	deploy.SetProduceBundles(d, stubProduceBundles())
@@ -984,7 +984,7 @@ func TestDeployerExecute_RequiredPreStateFails(t *testing.T) {
 	}
 
 	eng := newTLSTestEngine(t, http.HandlerFunc(failMock))
-	state := lane.NewState()
+	state := newRuntime(t, "deploy-fail-pre")
 
 	step := &lane.Step{
 		ID: "deploy-fail-pre",
@@ -1050,7 +1050,7 @@ func stubProduceBundles() func(context.Context, lane.KeylessEndpoints, [][]byte)
 func TestDeployerExecute_KeylessBundles(t *testing.T) {
 	eng := newTLSTestEngine(t, containerMock(t, "v1.2.3"))
 
-	state := lane.NewState()
+	state := newRuntime(t, "build", "deploy-prod")
 	if err := state.Register("build", "image", output.ImageHandle{
 		Ref: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
 	}); err != nil {
@@ -1065,7 +1065,7 @@ func TestDeployerExecute_KeylessBundles(t *testing.T) {
 		Engine:       eng,
 		EngineID:     eng.Identity(),
 		LaneDigest:   "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-		ArtifactRefs: map[string]string{"image": "build.image"},
+		ArtifactRefs: map[string]lane.OutputRef{"image": {Step: "build", Output: "image"}},
 		LaneID:       "test-lane",
 		CA:           ca,
 		UpstreamLook: look,
@@ -1103,7 +1103,7 @@ func TestDeployerExecute_KeylessBundles(t *testing.T) {
 func TestDeployerExecute_KeylessFailureIsFatal(t *testing.T) {
 	eng := newTLSTestEngine(t, containerMock(t, "v1.2.3"))
 
-	state := lane.NewState()
+	state := newRuntime(t, "build", "deploy-prod")
 	if err := state.Register("build", "image", output.ImageHandle{
 		Ref: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
 	}); err != nil {
@@ -1117,7 +1117,7 @@ func TestDeployerExecute_KeylessFailureIsFatal(t *testing.T) {
 	d := &deploy.Deployer{
 		Engine:       eng,
 		LaneDigest:   "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-		ArtifactRefs: map[string]string{"image": "build.image"},
+		ArtifactRefs: map[string]lane.OutputRef{"image": {Step: "build", Output: "image"}},
 		LaneID:       "test-lane",
 		CA:           ca,
 		UpstreamLook: look,
@@ -1271,7 +1271,7 @@ func TestDeployerExecute_ObservedPeersPopulated(t *testing.T) {
 		t.Fatalf("Build: %v", buildErr)
 	}
 
-	state := lane.NewState()
+	state := lane.NewRuntime(dag)
 	if regErr := state.Register("build", "image", output.ImageHandle{
 		Ref: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
 	}); regErr != nil {
@@ -1313,7 +1313,7 @@ func TestDeployerExecute_ObservedPeersPopulated(t *testing.T) {
 	d := &deploy.Deployer{
 		Engine:       eng,
 		LaneDigest:   "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-		ArtifactRefs: map[string]string{"image": "build.image"},
+		ArtifactRefs: map[string]lane.OutputRef{"image": {Step: "build", Output: "image"}},
 		LaneID:       "test-lane",
 		DAG:          dag,
 		CA:           ca,
@@ -1424,7 +1424,7 @@ func TestDeployerExecute_ObservedPeers_HonorsSSHPort(t *testing.T) {
 		t.Fatalf("Build: %v", buildErr)
 	}
 
-	state := lane.NewState()
+	state := lane.NewRuntime(dag)
 	if regErr := state.Register("build", "image", output.ImageHandle{
 		Ref: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
 	}); regErr != nil {
@@ -1459,7 +1459,7 @@ func TestDeployerExecute_ObservedPeers_HonorsSSHPort(t *testing.T) {
 	d := &deploy.Deployer{
 		Engine:       eng,
 		LaneDigest:   "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-		ArtifactRefs: map[string]string{"image": "build.image"},
+		ArtifactRefs: map[string]lane.OutputRef{"image": {Step: "build", Output: "image"}},
 		LaneID:       "test-lane",
 		DAG:          dag,
 		CA:           ca,
@@ -1564,7 +1564,7 @@ func TestDeployerExecute_ObservedPeersConflictAborts(t *testing.T) {
 		t.Fatalf("Build: %v", buildErr)
 	}
 
-	state := lane.NewState()
+	state := lane.NewRuntime(dag)
 	if regErr := state.Register("step-b", "out", output.ImageHandle{
 		Ref: "localhost/test/step-b@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
 	}); regErr != nil {
@@ -1606,7 +1606,7 @@ func TestDeployerExecute_ObservedPeersConflictAborts(t *testing.T) {
 	step := index["deploy-conflict"]
 	d := &deploy.Deployer{
 		Engine:       eng,
-		ArtifactRefs: map[string]string{"image": "step-b.out"},
+		ArtifactRefs: map[string]lane.OutputRef{"image": {Step: "step-b", Output: "out"}},
 		LaneID:       "test-lane",
 		DAG:          dag,
 		CA:           ca,

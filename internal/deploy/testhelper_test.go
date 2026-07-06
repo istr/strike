@@ -5,7 +5,32 @@ import (
 	"encoding/json"
 	"net/http"
 	"testing"
+
+	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/primitive"
 )
+
+// newRuntime builds a lane.Runtime whose node index is exactly ids, wired as
+// independent nodes. Deploy tests register artifact outputs and a deploy step's
+// result against these nodes without running the scheduler; tests that need the
+// real dependency edges build the Runtime from a full DAG instead.
+func newRuntime(t *testing.T, ids ...primitive.Identifier) *lane.Runtime {
+	t.Helper()
+	steps := make([]lane.Step, len(ids))
+	for i, id := range ids {
+		steps[i] = lane.Step{ID: id}
+	}
+	p := &lane.Lane{Steps: steps}
+	index, err := lane.IndexSteps(p)
+	if err != nil {
+		t.Fatalf("lane.IndexSteps: %v", err)
+	}
+	dag, err := lane.Build(p, index)
+	if err != nil {
+		t.Fatalf("lane.Build: %v", err)
+	}
+	return lane.NewRuntime(dag)
+}
 
 // writeJSON encodes v as JSON to w, failing the test on error.
 func writeJSON(t *testing.T, w http.ResponseWriter, v any) {

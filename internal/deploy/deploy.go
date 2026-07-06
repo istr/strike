@@ -312,7 +312,7 @@ type Deployer struct {
 	EngineID        *container.EngineIdentity
 	CA              *transport.EphemeralCA
 	UpstreamLook    capsule.UpstreamLookupFunc
-	ArtifactRefs    map[string]string                                                                           // pre-resolved: artifact name -> "step.output" state ref
+	ArtifactRefs    map[string]lane.OutputRef                                                                   // pre-resolved: artifact name -> producer output reference
 	produceBundles  func(ctx context.Context, eps lane.KeylessEndpoints, statements [][]byte) ([][]byte, error) // test seam; nil selects the real keyless chain
 	Keyless         lane.Keyless                                                                                // lane-declared keyless config (ADR-040 D2, ADR-041); .Endpoints dials Fulcio, Rekor v2, TSA; .TrustRoot/.TrustRootRef carry the verify anchor
 	LaneID          primitive.Identifier
@@ -339,7 +339,7 @@ type Deployer struct {
 func (d *Deployer) collectObservedPeers(
 	step *lane.Step,
 	declaredPeers map[primitive.Identifier][]lane.Peer,
-	state *lane.State,
+	state *lane.Runtime,
 ) (map[string]ObservedPeer, map[primitive.Identifier][]string, error) {
 	observed := map[string]ObservedPeer{}
 	attribution := map[primitive.Identifier][]string{}
@@ -462,7 +462,7 @@ func appendUniqueString(s []string, v string) []string {
 // buildAttestation constructs the attestation struct for step 6 of Execute,
 // including observed-peer collection and peer-attribution wiring.
 func (d *Deployer) buildAttestation(
-	step *lane.Step, spec lane.DeploySpec, state *lane.State,
+	step *lane.Step, spec lane.DeploySpec, state *lane.Runtime,
 	artifactDigests map[string]record.Artifact,
 	provenance []provenance.Record,
 	started clock.Time, preDigest, postDigest primitive.Digest,
@@ -499,7 +499,7 @@ func (d *Deployer) buildAttestation(
 
 // Execute runs a deploy step: capture pre-state, execute the deploy
 // action, capture post-state, and build the attestation.
-func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.State) (*Attestation, error) {
+func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.Runtime) (*Attestation, error) {
 	if step.Deploy == nil {
 		return nil, fmt.Errorf("step %q: not a deploy step", step.ID)
 	}
@@ -647,8 +647,8 @@ func (d *Deployer) signStatements(ctx context.Context, att *Attestation, stepID 
 }
 
 // resolveArtifactDigests resolves all artifact references to their provenance records.
-// refs maps artifact name -> "step.output" state ref (pre-resolved by the caller from DAG edges).
-func resolveArtifactDigests(stepID primitive.Identifier, refs map[string]string, state *lane.State) (map[string]record.Artifact, error) {
+// refs maps artifact name -> producer output reference (pre-resolved by the caller from DAG edges).
+func resolveArtifactDigests(stepID primitive.Identifier, refs map[string]lane.OutputRef, state *lane.Runtime) (map[string]record.Artifact, error) {
 	artifacts := make(map[string]record.Artifact)
 	for artName, ref := range refs {
 		handle, resolveErr := state.Resolve(ref)
@@ -667,7 +667,7 @@ func resolveArtifactDigests(stepID primitive.Identifier, refs map[string]string,
 }
 
 // recordAttestation marshals and records the attestation in lane state.
-func (d *Deployer) recordAttestation(att *Attestation, step *lane.Step, state *lane.State, started clock.Time) error {
+func (d *Deployer) recordAttestation(att *Attestation, step *lane.Step, state *lane.Runtime, started clock.Time) error {
 	attJSON, err := canonicalJSON(att)
 	if err != nil {
 		return fmt.Errorf("marshal attestation: %w", err)

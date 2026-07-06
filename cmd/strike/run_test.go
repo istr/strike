@@ -51,7 +51,7 @@ func newTestRC(t *testing.T, engine *mockEngine) *runContext {
 		regClient: &registry.Client{Engine: engine},
 		engine:    engine,
 		front:     ft,
-		laneState: lane.NewState(),
+		runtime:   lane.NewRuntime(&lane.DAG{}),
 		laneRoot:  root,
 		laneDir:   dir,
 	}
@@ -79,8 +79,7 @@ func TestBuildInputDelivery_Single(t *testing.T) {
 			},
 		},
 	}
-	rc.lane = p
-	rc.dag, rc.stepIndex = buildTestDAG(t, p)
+	rc.loadLane(t, p)
 
 	compileDigest := primitive.DigestFromHex("aabbccdd11223344000000000000000000000000000000000000000000000000")
 	compileRef := "localhost/test/compile@" + compileDigest.String()
@@ -88,14 +87,14 @@ func TestBuildInputDelivery_Single(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildLayeredImageTar: %v", err)
 	}
-	if err := rc.laneState.Register("compile", "bin", output.FileHandle{
+	if err := rc.runtime.Register("compile", "bin", output.FileHandle{
 		Ref:         compileRef,
 		OutputID:    "bin",
 		LayerDiffID: diffID,
 	}); err != nil {
 		t.Fatal(err)
 	}
-	rc.laneState.RecordSpecHash("compile", primitive.DigestFromHex("1111111111111111000000000000000000000000000000000000000000000000"))
+	rc.runtime.RecordSpecHash("compile", primitive.DigestFromHex("1111111111111111000000000000000000000000000000000000000000000000"))
 
 	eng.saveTars = map[string][]byte{compileRef: tarBytes}
 
@@ -140,8 +139,7 @@ func TestBuildInputDelivery_Multiple(t *testing.T) {
 			},
 		},
 	}
-	rc.lane = p
-	rc.dag, rc.stepIndex = buildTestDAG(t, p)
+	rc.loadLane(t, p)
 
 	d1 := primitive.DigestFromHex("aaaa111122223333000000000000000000000000000000000000000000000000")
 	d2 := primitive.DigestFromHex("bbbb444455556666000000000000000000000000000000000000000000000000")
@@ -155,14 +153,14 @@ func TestBuildInputDelivery_Multiple(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildLayeredImageTar s2: %v", err)
 	}
-	if err := rc.laneState.Register("s1", "a", output.FileHandle{Ref: ref1, OutputID: "a", LayerDiffID: diff1}); err != nil {
+	if err := rc.runtime.Register("s1", "a", output.FileHandle{Ref: ref1, OutputID: "a", LayerDiffID: diff1}); err != nil {
 		t.Fatal(err)
 	}
-	if err := rc.laneState.Register("s2", "b", output.FileHandle{Ref: ref2, OutputID: "b", LayerDiffID: diff2}); err != nil {
+	if err := rc.runtime.Register("s2", "b", output.FileHandle{Ref: ref2, OutputID: "b", LayerDiffID: diff2}); err != nil {
 		t.Fatal(err)
 	}
-	rc.laneState.RecordSpecHash("s1", primitive.DigestFromHex("2222222222222222000000000000000000000000000000000000000000000000"))
-	rc.laneState.RecordSpecHash("s2", primitive.DigestFromHex("3333333333333333000000000000000000000000000000000000000000000000"))
+	rc.runtime.RecordSpecHash("s1", primitive.DigestFromHex("2222222222222222000000000000000000000000000000000000000000000000"))
+	rc.runtime.RecordSpecHash("s2", primitive.DigestFromHex("3333333333333333000000000000000000000000000000000000000000000000"))
 
 	eng.saveTars = map[string][]byte{ref1: tar1, ref2: tar2}
 
@@ -199,8 +197,7 @@ func TestBuildInputDelivery_MissingSubpath(t *testing.T) {
 			},
 		},
 	}
-	rc.lane = p
-	rc.dag, rc.stepIndex = buildTestDAG(t, p)
+	rc.loadLane(t, p)
 
 	srcDigest := primitive.DigestFromHex("aabbccdd11223344000000000000000000000000000000000000000000000000")
 	srcRef := "localhost/test/src@" + srcDigest.String()
@@ -208,14 +205,14 @@ func TestBuildInputDelivery_MissingSubpath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildLayeredImageTar: %v", err)
 	}
-	if err := rc.laneState.Register("src", "tree", output.FileHandle{
+	if err := rc.runtime.Register("src", "tree", output.FileHandle{
 		Ref:         srcRef,
 		OutputID:    "tree",
 		LayerDiffID: diffID,
 	}); err != nil {
 		t.Fatal(err)
 	}
-	rc.laneState.RecordSpecHash("src", primitive.DigestFromHex("1111111111111111000000000000000000000000000000000000000000000000"))
+	rc.runtime.RecordSpecHash("src", primitive.DigestFromHex("1111111111111111000000000000000000000000000000000000000000000000"))
 
 	eng.saveTars = map[string][]byte{srcRef: tarBytes}
 
@@ -250,8 +247,7 @@ func TestBuildInputDelivery_OutsideWorkdir_DirectoryMount(t *testing.T) {
 			},
 		},
 	}
-	rc.lane = p
-	rc.dag, rc.stepIndex = buildTestDAG(t, p)
+	rc.loadLane(t, p)
 
 	srcDigest := primitive.DigestFromHex("aabbccdd11223344000000000000000000000000000000000000000000000000")
 	srcRef := "localhost/test/src@" + srcDigest.String()
@@ -261,14 +257,14 @@ func TestBuildInputDelivery_OutsideWorkdir_DirectoryMount(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildLayeredImageTar: %v", err)
 	}
-	if err := rc.laneState.Register("src", "tree", output.FileHandle{
+	if err := rc.runtime.Register("src", "tree", output.FileHandle{
 		Ref:         srcRef,
 		OutputID:    "tree",
 		LayerDiffID: diffID,
 	}); err != nil {
 		t.Fatal(err)
 	}
-	rc.laneState.RecordSpecHash("src", primitive.DigestFromHex("1111111111111111000000000000000000000000000000000000000000000000"))
+	rc.runtime.RecordSpecHash("src", primitive.DigestFromHex("1111111111111111000000000000000000000000000000000000000000000000"))
 
 	eng.saveTars = map[string][]byte{srcRef: tarBytes}
 
@@ -317,8 +313,7 @@ func TestBuildInputDelivery_NoWorkdir_Mounts(t *testing.T) {
 			},
 		},
 	}
-	rc.lane = p
-	rc.dag, rc.stepIndex = buildTestDAG(t, p)
+	rc.loadLane(t, p)
 
 	srcDigest := primitive.DigestFromHex("aabbccdd11223344000000000000000000000000000000000000000000000000")
 	srcRef := "localhost/test/src@" + srcDigest.String()
@@ -328,14 +323,14 @@ func TestBuildInputDelivery_NoWorkdir_Mounts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildLayeredImageTar: %v", err)
 	}
-	if err := rc.laneState.Register("src", "tree", output.FileHandle{
+	if err := rc.runtime.Register("src", "tree", output.FileHandle{
 		Ref:         srcRef,
 		OutputID:    "tree",
 		LayerDiffID: diffID,
 	}); err != nil {
 		t.Fatal(err)
 	}
-	rc.laneState.RecordSpecHash("src", primitive.DigestFromHex("1111111111111111000000000000000000000000000000000000000000000000"))
+	rc.runtime.RecordSpecHash("src", primitive.DigestFromHex("1111111111111111000000000000000000000000000000000000000000000000"))
 
 	eng.saveTars = map[string][]byte{srcRef: tarBytes}
 
@@ -372,16 +367,15 @@ func TestBuildInputDelivery_SingleFileOutside_Rejected(t *testing.T) {
 			},
 		},
 	}
-	rc.lane = p
-	rc.dag, rc.stepIndex = buildTestDAG(t, p)
+	rc.loadLane(t, p)
 
-	if err := rc.laneState.Register("src", "bin", output.FileHandle{
+	if err := rc.runtime.Register("src", "bin", output.FileHandle{
 		Ref:      "localhost/test/src@sha256:aabbccdd11223344000000000000000000000000000000000000000000000000",
 		OutputID: "bin",
 	}); err != nil {
 		t.Fatal(err)
 	}
-	rc.laneState.RecordSpecHash("src", primitive.DigestFromHex("1111111111111111000000000000000000000000000000000000000000000000"))
+	rc.runtime.RecordSpecHash("src", primitive.DigestFromHex("1111111111111111000000000000000000000000000000000000000000000000"))
 
 	inputs, gatherErr := rc.gatherInputs(rc.stepIndex["consumer"])
 	if gatherErr != nil {
@@ -417,8 +411,7 @@ func TestBuildInputDelivery_ExportsProducerOnce(t *testing.T) {
 			},
 		},
 	}
-	rc.lane = p
-	rc.dag, rc.stepIndex = buildTestDAG(t, p)
+	rc.loadLane(t, p)
 
 	srcDigest := primitive.DigestFromHex("aabbccdd11223344000000000000000000000000000000000000000000000000")
 	srcRef := "localhost/test/src@" + srcDigest.String()
@@ -429,14 +422,14 @@ func TestBuildInputDelivery_ExportsProducerOnce(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildLayeredImageTar: %v", err)
 	}
-	if err := rc.laneState.Register("src", "tree", output.FileHandle{
+	if err := rc.runtime.Register("src", "tree", output.FileHandle{
 		Ref:         srcRef,
 		OutputID:    "tree",
 		LayerDiffID: diffID,
 	}); err != nil {
 		t.Fatal(err)
 	}
-	rc.laneState.RecordSpecHash("src", primitive.DigestFromHex("1111111111111111000000000000000000000000000000000000000000000000"))
+	rc.runtime.RecordSpecHash("src", primitive.DigestFromHex("1111111111111111000000000000000000000000000000000000000000000000"))
 
 	eng.saveTars = map[string][]byte{srcRef: tarBytes}
 
@@ -503,8 +496,8 @@ func TestComputeSpecHash_ChangesWithImageDigest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Reset specHashes to avoid accumulation from prior call.
-	rc.laneState = lane.NewState()
+	// Reset the record store to avoid accumulation from prior call.
+	rc.runtime = runtimeForSteps(t, "s")
 	h2, _, err := rc.computeSpecHash(step, "s", primitive.DigestFromHex("bbb0000000000000000000000000000000000000000000000000000000000000"), inputs)
 	if err != nil {
 		t.Fatal(err)
@@ -546,7 +539,7 @@ func TestCheckCache_Miss(t *testing.T) {
 		ID:      "step1",
 		Outputs: []lane.FileOutput{{ID: "bin", Type: "file", Path: primitive.RelPathPtr("bin")}},
 	}
-	rc.laneState.RecordSpecHash("step1", primitive.DigestFromHex("abc0000000000000000000000000000000000000000000000000000000000000"))
+	rc.runtime.RecordSpecHash("step1", primitive.DigestFromHex("abc0000000000000000000000000000000000000000000000000000000000000"))
 
 	hit, err := rc.checkCache(context.Background(), step, "step1", "step1", primitive.DigestFromHex("abc0000000000000000000000000000000000000000000000000000000000000"))
 	if err != nil {
@@ -568,6 +561,7 @@ func TestCheckCache_Hit(t *testing.T) {
 		},
 	}
 	rc := newTestRC(t, eng)
+	rc.runtime = runtimeForSteps(t, "step1")
 	step := &lane.Step{
 		ID:      "step1",
 		Outputs: []lane.FileOutput{{ID: "bin", Type: "file", Path: primitive.RelPathPtr("bin")}},
@@ -590,7 +584,7 @@ func TestCheckCache_Hit(t *testing.T) {
 	if !hit {
 		t.Error("expected cache hit")
 	}
-	handle, err2 := rc.laneState.Resolve("step1.bin")
+	handle, err2 := rc.runtime.Resolve(lane.OutputRef{Step: "step1", Output: "bin"})
 	if err2 != nil {
 		t.Fatalf("output not registered: %v", err2)
 	}
@@ -733,10 +727,9 @@ func TestResolveImageDigest_ImageFrom(t *testing.T) {
 			},
 		},
 	}
-	rc.lane = p
-	rc.dag, rc.stepIndex = buildTestDAG(t, p)
+	rc.loadLane(t, p)
 	packDigest := primitive.DigestFromHex("abcdef1234567890000000000000000000000000000000000000000000000000")
-	if err := rc.laneState.Register("pack", "", output.ImageHandle{
+	if err := rc.runtime.Register("pack", "", output.ImageHandle{
 		Ref: registry.WrapDigest("test-lane", "pack", packDigest),
 	}); err != nil {
 		t.Fatal(err)
@@ -775,8 +768,7 @@ func TestResolveImageDigest_ImageFromMissing(t *testing.T) {
 			},
 		},
 	}
-	rc.lane = p
-	rc.dag, rc.stepIndex = buildTestDAG(t, p)
+	rc.loadLane(t, p)
 
 	_, err := rc.gatherInputs(rc.stepIndex["run"])
 	if err == nil {
@@ -789,8 +781,9 @@ func TestResolveImageDigest_ImageFromMissing(t *testing.T) {
 
 func TestImageFromRef(t *testing.T) {
 	rc := newTestRC(t, &mockEngine{})
+	rc.runtime = runtimeForSteps(t, "pack")
 	packDigest := primitive.DigestFromHex("abcdef1234567890000000000000000000000000000000000000000000000000")
-	if err := rc.laneState.Register("pack", "", output.ImageHandle{
+	if err := rc.runtime.Register("pack", "", output.ImageHandle{
 		Ref: registry.WrapDigest("test-lane", "pack", packDigest),
 	}); err != nil {
 		t.Fatal(err)
@@ -854,8 +847,7 @@ func TestResolvePackInputPaths(t *testing.T) {
 			},
 		},
 	}
-	rc.lane = p
-	rc.dag, rc.stepIndex = buildTestDAG(t, p)
+	rc.loadLane(t, p)
 
 	compileDigest := primitive.DigestFromHex("aabbccdd11223344000000000000000000000000000000000000000000000000")
 	compileRef := "localhost/test/compile@" + compileDigest.String()
@@ -863,14 +855,14 @@ func TestResolvePackInputPaths(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildLayeredImageTar: %v", err)
 	}
-	if err := rc.laneState.Register("compile", "bin", output.FileHandle{
+	if err := rc.runtime.Register("compile", "bin", output.FileHandle{
 		Ref:         compileRef,
 		OutputID:    "bin",
 		LayerDiffID: diffID,
 	}); err != nil {
 		t.Fatal(err)
 	}
-	rc.laneState.RecordSpecHash("compile", primitive.DigestFromHex("1111111111111111000000000000000000000000000000000000000000000000"))
+	rc.runtime.RecordSpecHash("compile", primitive.DigestFromHex("1111111111111111000000000000000000000000000000000000000000000000"))
 
 	eng.saveTars = map[string][]byte{compileRef: tarBytes}
 

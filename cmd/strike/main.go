@@ -226,7 +226,7 @@ func cmdRun(ctx context.Context, path string, engine container.Engine) {
 		ca:           ca,
 		front:        ft,
 		upstreamLook: upstreamLook,
-		laneState:    lane.NewState(),
+		runtime:      lane.NewRuntime(dag),
 		stepPorts:    stepPorts,
 		capsules:     map[primitive.Identifier]*capsule.NetworkCapsule{},
 		laneRoot:     laneRoot,
@@ -252,18 +252,28 @@ func cmdRun(ctx context.Context, path string, engine container.Engine) {
 	// serve).
 	ft.Start(ctx)
 
-	for _, stepID := range dag.Order() {
-		if stepErr := rc.runStep(stepID); stepErr != nil {
-			log.Fatalf("error: %v", stepErr)
-		}
-	}
+	// Fire-at-zero walk: roots fire, each completion decrements its successors,
+	// and the goroutine that drives a node's in-degree to zero fires it. The
+	// container engine is the worker, so parallelism is the DAG's antichain
+	// width with no pool or bound. Failure is fail-fast but branch-local: a
+	// step whose predecessor (or own execution) failed is skipped, but every
+	// node still fires, so the walk always drains.
+	runErr := rc.runtime.Run(rc.runStep)
 
-	// Dump final lane state for debugging and CI artifact collection.
-	stateJSON, err := rc.laneState.JSON()
+	// Report-at-drain: a single-threaded sweep dumps the final per-step records
+	// (STATE) for debugging and CI artifact collection, then the run exits with
+	// the aggregated failure of any step. The dump is sanitized -- lane step and
+	// output ids are constrained ASCII, but the debug line still goes through the
+	// same control-character guard as every other lane-derived log.
+	stateJSON, err := rc.runtime.JSON()
 	if err != nil {
 		log.Fatalf("error: marshal lane state: %v", err)
 	}
-	log.Printf("STATE  %s", stateJSON)
+	log.Printf("STATE  %s", sanitizeForLog(string(stateJSON)))
+
+	if runErr != nil {
+		log.Fatalf("error: %v", runErr)
+	}
 }
 
 // probeResolver runs the pre-flight resolver probe. lane.Parse is a pure

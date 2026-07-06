@@ -68,7 +68,7 @@ func TestProvenanceCapture_EndToEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	state := lane.NewState()
+	state := lane.NewRuntime(dag)
 
 	// Simulate provenance capture for steps that declare provenance.
 	// This exercises ValidateProvenance -> RecordProvenance -> CollectProvenance.

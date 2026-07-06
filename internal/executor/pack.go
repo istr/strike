@@ -34,7 +34,6 @@ import (
 type PackOpts struct {
 	InputPaths map[string]string
 	Spec       *lane.PackSpec
-	State      *lane.State
 	OutputRoot *os.Root // root-scoped output directory
 	OutputName string   // filename within OutputRoot
 }

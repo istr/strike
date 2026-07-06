@@ -106,3 +106,33 @@ func buildTestDAG(t *testing.T, p *lane.Lane) (*lane.DAG, map[primitive.Identifi
 	}
 	return dag, index
 }
+
+// loadLane wires p into rc: its lane, DAG, step index, and a Runtime whose node
+// index covers every step. Mirrors cmdRun's setup for the unit tests that
+// record and read a single step's inputs and outputs without running the walk.
+func (rc *runContext) loadLane(t *testing.T, p *lane.Lane) {
+	t.Helper()
+	rc.lane = p
+	rc.dag, rc.stepIndex = buildTestDAG(t, p)
+	rc.runtime = lane.NewRuntime(rc.dag)
+}
+
+// runtimeForSteps builds a lane.Runtime whose node index is exactly ids, wired
+// as independent nodes, for tests that record to a step id without a full lane.
+func runtimeForSteps(t *testing.T, ids ...primitive.Identifier) *lane.Runtime {
+	t.Helper()
+	steps := make([]lane.Step, len(ids))
+	for i, id := range ids {
+		steps[i] = lane.Step{ID: id}
+	}
+	p := &lane.Lane{Steps: steps}
+	index, err := lane.IndexSteps(p)
+	if err != nil {
+		t.Fatalf("lane.IndexSteps: %v", err)
+	}
+	dag, err := lane.Build(p, index)
+	if err != nil {
+		t.Fatalf("lane.Build: %v", err)
+	}
+	return lane.NewRuntime(dag)
+}
