@@ -81,8 +81,25 @@ func (a *auditTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	if resp != nil {
 		status = resp.StatusCode
 	}
-	log.Printf("AUDIT  %s %s -> %d (%s)", // #nosec G706 -- internal engine HTTP request, not user input
+	line := fmt.Sprintf("AUDIT  %s %s -> %d (%s)",
 		req.Method, req.URL.Path, status, duration.Round(clock.Millisecond))
+	log.Print(sanitizeForLog(line))
 
 	return resp, err
+}
+
+// sanitizeForLog replaces control characters -- which could forge audit log
+// lines -- with '_'. The engine request path folds in lane-derived container
+// and image names, so it passes through this guard before it reaches the log.
+func sanitizeForLog(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		if r < 0x20 || r == 0x7f {
+			b.WriteRune('_')
+		} else {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }

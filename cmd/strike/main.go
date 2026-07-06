@@ -8,6 +8,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/istr/strike/internal/capsule"
 	"github.com/istr/strike/internal/clock"
@@ -162,7 +163,7 @@ func cmdValidate(path string) {
 	if err != nil {
 		log.Fatalf("error: %v", err)
 	}
-	log.Printf("ok: %s is valid (%d steps)", path, len(p.Steps)) // #nosec G706 -- path is a local file path from CLI args
+	log.Printf("ok: %s is valid (%d steps)", sanitizeForLog(path), len(p.Steps))
 }
 
 func cmdDAG(path string) {
@@ -173,19 +174,30 @@ func cmdDAG(path string) {
 
 	log.Print("Execution order:")
 	for i, name := range dag.Order() {
+		nameStr := string(name)
 		var deps []string
 		for inp := range p.Inputs(name) {
-			deps = append(deps, inp.From.Ref())
+			deps = append(deps, sanitizeForLog(inp.From.Ref()))
 		}
+		safeName := sanitizeForLog(nameStr)
 		if len(deps) > 0 {
-			log.Printf("  %d. %s <- %v", i+1, name, deps) // #nosec G706 -- name/deps from parsed lane YAML
+			log.Printf("  %d. %s <- %v", i+1, safeName, deps)
 		} else {
-			log.Printf("  %d. %s", i+1, name) // #nosec G706 -- name from parsed lane YAML
+			log.Printf("  %d. %s", i+1, safeName)
 		}
 	}
 
+	// The tree is multi-line: sanitize each line's content, but keep the
+	// structural newlines so the graph layout survives the control-char guard.
 	log.Print("\nDependency graph:")
-	log.Print(dag.Tree()) // #nosec G706 -- internally generated DAG tree
+	var tree strings.Builder
+	for i, line := range strings.Split(dag.Tree(), "\n") {
+		if i > 0 {
+			tree.WriteByte('\n')
+		}
+		tree.WriteString(sanitizeForLog(line))
+	}
+	log.Print(tree.String())
 }
 
 func cmdRun(ctx context.Context, path string, engine container.Engine) {
@@ -407,5 +419,5 @@ func cmdCompare(file1, file2, output string) {
 	if closeErr := outFile.Close(); closeErr != nil {
 		log.Fatalf("error: write %s: %v", safeOutput, closeErr)
 	}
-	log.Printf("ok: %s", h1) // #nosec G706 -- h1 is a SHA-256 hex digest
+	log.Printf("ok: %s", sanitizeForLog(h1.String()))
 }
