@@ -81,19 +81,19 @@ func MustParseURL(s string) Address {
 
 // Authority returns the packed "host" or "host:port" wire form. A path, if
 // present, is not included.
-func (a Address) Authority() string {
+func (a Address) Authority() Authority {
 	h := string(a.Host)
 	if a.Port == nil {
-		return h
+		return Authority(h)
 	}
 	p := int(*a.Port)
-	return h + ":" + strconv.Itoa(p)
+	return Authority(h + ":" + strconv.Itoa(p))
 }
 
 // URL returns the "https://host[:port][/path]" wire form. It round-trips an
 // Address produced by ParseURL.
 func (a Address) URL() string {
-	s := "https://" + a.Authority()
+	s := "https://" + string(a.Authority())
 	if a.Path != nil {
 		p := string(*a.Path)
 		s += p

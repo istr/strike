@@ -169,7 +169,7 @@ func TestAttestationJSON(t *testing.T) {
 		Sealed: deploy.Sealed{
 			LaneID:    "test-lane",
 			Target:    target.Deploy{ID: "prod-1", Type: "registry", Description: "test"},
-			Artifacts: map[string]record.Artifact{"image": {Digest: "sha256:abc"}},
+			Artifacts: map[primitive.Identifier]record.Artifact{"image": {Digest: "sha256:abc"}},
 		},
 		Informational: &deploy.Informational{
 			PreStateDigest:  primitive.DigestFromHex("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
@@ -1073,20 +1073,26 @@ func TestDeployerExecute_KeylessBundles(t *testing.T) {
 		StepID:       "deploy-prod",
 		StepPorts:    ports,
 	}
-	deploy.SetProduceBundles(d, stubProduceBundles())
+	var producedBundles [][]byte
+	stub := stubProduceBundles()
+	deploy.SetProduceBundles(d, func(ctx context.Context, eps lane.KeylessEndpoints, statements [][]byte) ([][]byte, error) {
+		bundles, err := stub(ctx, eps, statements)
+		producedBundles = bundles
+		return bundles, err
+	})
 
-	att, err := d.Execute(context.Background(), step, state)
+	_, err := d.Execute(context.Background(), step, state)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
 
-	if att.Signed == nil {
-		t.Fatal("expected non-nil Signed")
+	if len(producedBundles) != 3 {
+		t.Fatalf("expected 3 signed bundles (sealed, engine-context, informational), got %d", len(producedBundles))
 	}
 	got := map[string][]byte{
-		"sealed":         att.Signed.Sealed.Bundle,
-		"engine-context": att.Signed.EngineContext.Bundle,
-		"informational":  att.Signed.Informational.Bundle,
+		"sealed":         producedBundles[0],
+		"engine-context": producedBundles[1],
+		"informational":  producedBundles[2],
 	}
 	want := map[string][]byte{
 		"sealed":         []byte(`{"stub":"bundle-0"}`),
@@ -1180,11 +1186,11 @@ func TestValidateAttestation_InvalidLaneID(t *testing.T) {
 		Sealed: deploy.Sealed{
 			LaneID:    "INVALID_LANE_ID",
 			Target:    target.Deploy{ID: "prod-1", Type: "registry", Description: "test"},
-			Artifacts: map[string]record.Artifact{},
+			Artifacts: map[primitive.Identifier]record.Artifact{},
 			Peers:     map[primitive.Identifier][]lane.Peer{},
 		},
 		Informational: &deploy.Informational{
-			Timestamp:       clock.Reproducible(),
+			Timestamp:       deploy.Timestamp(clock.Reproducible().Format(clock.RFC3339)),
 			PreStateDigest:  primitive.DigestFromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
 			PostStateDigest: primitive.DigestFromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
 			Provenance:      []provenance.Record{},

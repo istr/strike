@@ -23,7 +23,7 @@ func TestProjectStatements(t *testing.T) {
 			LaneID:     "demo",
 			LaneDigest: "",
 			Target:     target.Deploy{ID: "prod-1", Type: "registry", Description: "production"},
-			Artifacts: map[string]record.Artifact{
+			Artifacts: map[primitive.Identifier]record.Artifact{
 				"b-image": {Digest: primitive.DigestFromHex(strings.Repeat("b", 64))},
 				"a-image": {Digest: primitive.DigestFromHex(strings.Repeat("a", 64))},
 			},
@@ -31,10 +31,10 @@ func TestProjectStatements(t *testing.T) {
 			Engine: endpoint.EngineTLS{Type: "tls", CATrustType: "pinned", ServerCertFingerprint: "sha256:cc"},
 		},
 		EngineDependent: deploy.EngineDependent{
-			PeerAttribution: map[primitive.Identifier][]string{"build": {"git.example.com:22"}},
+			PeerAttribution: map[primitive.Identifier][]endpoint.Authority{"build": {"git.example.com:22"}},
 		},
 		Informational: &deploy.Informational{
-			Timestamp:       clock.Reproducible(),
+			Timestamp:       deploy.Timestamp(clock.Reproducible().Format(clock.RFC3339)),
 			EngineMetadata:  &deploy.EngineMetadata{Rootless: &rootless, Version: "5.3.1"},
 			PreStateDigest:  preState,
 			PostStateDigest: postState,

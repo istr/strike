@@ -143,15 +143,12 @@ func BuildTLSConfig(trust endpoint.Trust) (*tls.Config, error) {
 //
 // The context governs the dial timeout; pass a context with
 // deadline if a timeout is desired.
-func DialVerified(ctx context.Context, addr string, trust endpoint.Trust) (*VerifiedConn, error) {
+func DialVerified(ctx context.Context, addr endpoint.Address, trust endpoint.Trust) (*VerifiedConn, error) {
 	config, err := BuildTLSConfig(trust)
 	if err != nil {
 		return nil, err
 	}
-	host, _, err := net.SplitHostPort(addr)
-	if err != nil {
-		return nil, fmt.Errorf("transport: invalid address %q: %w", addr, err)
-	}
+	host := string(addr.Host)
 	if !isIPLiteral(host) {
 		config.ServerName = host
 	}
@@ -160,9 +157,10 @@ func DialVerified(ctx context.Context, addr string, trust endpoint.Trust) (*Veri
 		NetDialer: &net.Dialer{},
 		Config:    config,
 	}
-	nc, err := dialer.DialContext(ctx, "tcp", addr)
+	authority := string(addr.Authority())
+	nc, err := dialer.DialContext(ctx, "tcp", authority)
 	if err != nil {
-		return nil, fmt.Errorf("transport: dial %s: %w", addr, err)
+		return nil, fmt.Errorf("transport: dial %s: %w", authority, err)
 	}
 	conn, ok := nc.(*tls.Conn)
 	if !ok {
@@ -170,7 +168,7 @@ func DialVerified(ctx context.Context, addr string, trust endpoint.Trust) (*Veri
 		return nil, fmt.Errorf("transport: dialer returned non-TLS connection %T", nc)
 	}
 
-	identity := CaptureIdentity(conn.ConnectionState(), endpoint.MustParseAuthority(addr))
+	identity := CaptureIdentity(conn.ConnectionState(), addr)
 	return &VerifiedConn{conn: conn, identity: identity}, nil
 }
 

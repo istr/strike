@@ -23,6 +23,7 @@ import (
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/closer"
 	"github.com/istr/strike/internal/endpoint"
+	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/testutil"
 	"github.com/istr/strike/internal/transport"
 )
@@ -140,7 +141,7 @@ func testCAAndServerCert(t *testing.T, hosts ...string) (*tls.Certificate, []byt
 // startTLSServer launches a TLS listener on 127.0.0.1 that
 // accepts connections and keeps them open until the test ends.
 // The test only exercises the handshake; payload is not relevant.
-func startTLSServer(t *testing.T, config *tls.Config) string {
+func startTLSServer(t *testing.T, config *tls.Config) endpoint.Address {
 	t.Helper()
 	ln, err := tls.Listen("tcp", "127.0.0.1:0", config)
 	if err != nil {
@@ -168,7 +169,7 @@ func startTLSServer(t *testing.T, config *tls.Config) string {
 			go drainConn(conn)
 		}
 	}()
-	return ln.Addr().String()
+	return endpoint.MustParseAuthority(ln.Addr().String())
 }
 
 func TestDialVerified_FingerprintMatch(t *testing.T) {
@@ -195,8 +196,8 @@ func TestDialVerified_FingerprintMatch(t *testing.T) {
 	if id.TLSVersion != tls.VersionTLS13 {
 		t.Errorf("Identity.TLSVersion = 0x%x, want 0x%x (TLS 1.3)", id.TLSVersion, tls.VersionTLS13)
 	}
-	if id.PeerAddress.Authority() != addr {
-		t.Errorf("Identity.PeerAddress = %q, want %q", id.PeerAddress.Authority(), addr)
+	if id.PeerAddress.Authority() != addr.Authority() {
+		t.Errorf("Identity.PeerAddress = %q, want %q", id.PeerAddress.Authority(), addr.Authority())
 	}
 }
 
@@ -377,11 +378,12 @@ func TestDialVerified_SNIForFQDN(t *testing.T) {
 		}
 	}()
 
-	_, port, splitErr := net.SplitHostPort(ln.Addr().String())
-	if splitErr != nil {
-		t.Fatalf("SplitHostPort: %v", splitErr)
+	tcpAddr, ok := ln.Addr().(*net.TCPAddr)
+	if !ok {
+		t.Fatalf("listener address %v is not a *net.TCPAddr", ln.Addr())
 	}
-	addr := "localhost:" + port
+	port := primitive.Port(tcpAddr.Port)
+	addr := endpoint.Address{Host: "localhost", Port: &port}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
 	defer cancel()

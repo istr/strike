@@ -14,7 +14,7 @@ func (e TLS) MarshalJSON() ([]byte, error) {
 		Trust Trust  `json:"trust"`
 		Type  string `json:"type"`
 		Host  string `json:"host"`
-	}{Type: e.Type, Host: e.Address.Authority(), Trust: e.Trust})
+	}{Type: e.Type, Host: string(e.Address.Authority()), Trust: e.Trust})
 }
 
 // MarshalJSON projects the host to its packed authority wire form.
@@ -23,5 +23,5 @@ func (e SSH) MarshalJSON() ([]byte, error) {
 		Type       string    `json:"type"`
 		Host       string    `json:"host"`
 		KnownHosts []HostKey `json:"knownHosts"`
-	}{Type: e.Type, Host: e.Address.Authority(), KnownHosts: e.KnownHosts})
+	}{Type: e.Type, Host: string(e.Address.Authority()), KnownHosts: e.KnownHosts})
 }

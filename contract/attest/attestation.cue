@@ -62,13 +62,13 @@ import (
 #Attestation: {
 	sealed:          #Sealed
 	engineDependent: #EngineDependent
-	informational?:  #Informational
+	informational?:  #Informational @go(Informational,optional=nillable)
 }
 
 // Sealed -- CP-bound claims, sound under both trust(E) and ~trust(E).
 #Sealed: {
 	// laneId is the stable identifier from the lane definition.
-	laneId: primitive.#Identifier
+	laneId: primitive.#Identifier @go(LaneID)
 
 	// target describes what was deployed to. Declared, lane-anchored.
 	target: deploytarget.#Deploy
@@ -80,7 +80,9 @@ import (
 	// artifacts maps artifact names to their signed provenance records.
 	// Each artifact's digest is consumer-dereferenceable from the registry
 	// (C3 sealed boundary).
-	artifacts: [ID=primitive.#Identifier]: record.#Artifact
+	artifacts: {
+		[ID=primitive.#Identifier]: record.#Artifact
+	} @go(Artifacts,type=map[primitive.Identifier]record.Artifact)
 
 	// resolver records the DoT resolver's observed TLS identity, matched
 	// against the declared anchor at the pre-flight handshake.
@@ -88,7 +90,9 @@ import (
 
 	// peers maps step name to the network peer declarations attached to
 	// that step. Declared, lane-anchored.
-	peers: [ID=primitive.#Identifier]: [...lane.#Peer]
+	peers: {
+		[ID=primitive.#Identifier]: [...lane.#Peer]
+	} @go(Peers,type=map[primitive.Identifier][]lane.Peer)
 
 	// engine carries the CP-observed connection facts about the engine.
 	// The engine's self-reports (version, rootless) live in
@@ -101,7 +105,9 @@ import (
 	// before any entry is written, so every entry here is a validated identity
 	// (Layer V). No step attribution: which step reached a peer is an
 	// engine-asserted fact and lives in engineDependent.peerAttribution.
-	observedPeers?: [Endpoint=endpoint.#Authority]: #ObservedPeer
+	observedPeers?: {
+		[Endpoint=endpoint.#Authority]: #ObservedPeer
+	} @go(ObservedPeers,type=map[endpoint.Authority]ObservedPeer)
 }
 
 // ---------------------------------------------------------------------------
@@ -120,7 +126,7 @@ import (
 	resolved: [...string]
 
 	// identity is the validated channel identity, discriminated by type.
-	identity: #ObservedSSH | #ObservedTLS
+	identity: #ObservedSSH | #ObservedTLS @go(Identity,type=ObservedIdentity)
 }
 
 // ObservedSSH is a validated SSH host identity. hostKeyFingerprint is the
@@ -159,7 +165,9 @@ import (
 	// peerAttribution maps each step to the peer endpoints its mediated
 	// connections reached ("host:port" keys into sealed.observedPeers).
 	// Engine-asserted (Layer E).
-	peerAttribution?: [ID=primitive.#Identifier]: [...endpoint.#Authority]
+	peerAttribution?: {
+		[ID=primitive.#Identifier]: [...endpoint.#Authority]
+	} @go(PeerAttribution,type=map[primitive.Identifier][]endpoint.Authority)
 }
 
 // Informational -- recorded for audit and IoC purposes; no trust claim.
@@ -174,7 +182,7 @@ import (
 	timestamp?: #Timestamp
 
 	// engineMetadata carries the engine's self-reports about itself.
-	engineMetadata?: #EngineMetadata
+	engineMetadata?: #EngineMetadata @go(EngineMetadata,optional=nillable)
 
 	// preStateDigest is CP's canonical SHA-256 digest of pre-deploy
 	// state captures. The bytes were produced by the (untrusted) capture
@@ -203,7 +211,7 @@ import (
 #EngineMetadata: {
 	// rootless indicates whether the engine runs in rootless mode
 	// (engine self-report).
-	rootless?: bool
+	rootless?: bool @go(Rootless,optional=nillable)
 
 	// version is the engine's self-reported version string
 	// (engine self-report).
@@ -223,7 +231,7 @@ import (
 	serverCertFingerprint: string
 
 	// tlsVersion is the negotiated TLS version, human-readable.
-	tlsVersion: string
+	tlsVersion: string @go(TLSVersion)
 
 	// cipherSuite is the negotiated cipher suite, human-readable.
 	cipherSuite: string

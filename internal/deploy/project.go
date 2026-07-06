@@ -100,14 +100,14 @@ func projectStatements(att *Attestation, oidc lane.OIDCConfig, resolvedDeps []Re
 // subject. The list is sorted by name: the sealed statement must be
 // reproducible (byte-identical inputs -> byte-identical output), and Go map
 // iteration order is not stable.
-func projectSubject(artifacts map[string]record.Artifact) ([]Subject, error) {
+func projectSubject(artifacts map[primitive.Identifier]record.Artifact) ([]Subject, error) {
 	subjects := make([]Subject, 0, len(artifacts))
 	for name, art := range artifacts {
 		d, err := primitive.ParseDigest(art.Digest)
 		if err != nil {
 			return nil, fmt.Errorf("subject %q: %w", name, err)
 		}
-		subjects = append(subjects, Subject{Name: name, Digest: DigestSet{SHA256: d.Hex()}})
+		subjects = append(subjects, Subject{Name: string(name), Digest: &DigestSet{SHA256: d.Hex()}})
 	}
 	sort.Slice(subjects, func(i, j int) bool { return subjects[i].Name < subjects[j].Name })
 	return subjects, nil

@@ -54,7 +54,7 @@ func dotResolver(decl endpoint.TLS) *net.Resolver {
 	return &net.Resolver{
 		PreferGo: true,
 		Dial: func(ctx context.Context, _, _ string) (net.Conn, error) {
-			vc, err := DialVerified(ctx, decl.Address.Authority(), decl.Trust)
+			vc, err := DialVerified(ctx, decl.Address, decl.Trust)
 			if err != nil {
 				return nil, err
 			}
@@ -111,7 +111,7 @@ func ProbeResolver(ctx context.Context, decl endpoint.TLS) (ConnectionIdentity, 
 	r := &net.Resolver{
 		PreferGo: true,
 		Dial: func(ctx context.Context, _, _ string) (net.Conn, error) {
-			conn, err := DialVerified(ctx, decl.Address.Authority(), decl.Trust)
+			conn, err := DialVerified(ctx, decl.Address, decl.Trust)
 			if err != nil {
 				return nil, err
 			}

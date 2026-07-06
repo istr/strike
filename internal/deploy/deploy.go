@@ -32,44 +32,18 @@ import (
 	"github.com/istr/strike/internal/provenance"
 	"github.com/istr/strike/internal/record"
 	"github.com/istr/strike/internal/registry"
-	"github.com/istr/strike/internal/target"
 	"github.com/istr/strike/internal/transport"
 )
-
-// Attestation is the signed record produced by every deploy step.
-//
-// The three top-level sections classify every recorded field by the trust
-// the consumer must supply to rely on it. See
-// docs/ATTESTATION-SOUNDNESS-AND-THE-TRUST-BOUNDARY.md and
-// ADR-037 for the trust-layer theory.
-type Attestation struct {
-	Informational   *Informational    `json:"informational,omitempty"`
-	Signed          *SignedStatements `json:"-"`
-	EngineDependent EngineDependent   `json:"engineDependent"`
-	Sealed          Sealed            `json:"sealed"`
-}
-
-// Sealed -- CP-bound claims, sound to any verifier without engine trust.
-type Sealed struct {
-	Artifacts     map[string]record.Artifact           `json:"artifacts"`
-	Peers         map[primitive.Identifier][]lane.Peer `json:"peers"`
-	Resolver      ResolverRecord                       `json:"resolver"`
-	Engine        endpoint.Engine                      `json:"engine,omitempty"`
-	ObservedPeers map[string]ObservedPeer              `json:"observedPeers,omitempty"`
-	Target        target.Deploy                        `json:"target"`
-	LaneID        string                               `json:"laneId"`
-	LaneDigest    primitive.Digest                     `json:"laneDigest"`
-}
 
 // ---------------------------------------------------------------------------
 // Observed peer identity (Sealed.ObservedPeers)
 //
-// These types are hand-written, mirroring the CUE in
-// contract/attest/attestation.cue. The attest package is runtime-validated, not
-// gengotypes-generated -- it carries no @go redirects -- so its Go types are
-// hand-written, like the rest of the deploy predicate and transport's types.
-// The identity union additionally needs a dispatching UnmarshalJSON on a "type"
-// discriminator, which gengotypes does not emit.
+// Attestation, Sealed, EngineDependent, Informational, EngineMetadata,
+// ResolverRecord, ObservedPeer, ObservedSSH, and ObservedTLS are generated
+// from contract/attest into attest.gen.go. The identity union's interface and
+// dispatching UnmarshalJSON stay hand-written here: gengotypes emits the
+// concrete arms (ObservedSSH, ObservedTLS) but not Go interface/sum-type
+// machinery for a disjunction, mirroring endpoint.Trust.
 //
 // The identity union mirrors lane.Peer: an interface with a type discriminator,
 // concrete branch structs, and a dispatching UnmarshalJSON on the container.
@@ -79,25 +53,6 @@ type Sealed struct {
 type ObservedIdentity interface {
 	// IdentityType returns the discriminator ("ssh", "https").
 	IdentityType() string
-}
-
-// ObservedPeer is one validated peer endpoint (sealed.observed_peers value).
-type ObservedPeer struct {
-	Identity ObservedIdentity `json:"identity"`
-	Resolved []string         `json:"resolved"`
-}
-
-// ObservedSSH is a validated SSH host identity.
-type ObservedSSH struct {
-	Type               string `json:"type"`
-	HostKeyFingerprint string `json:"hostKeyFingerprint"`
-	HostKeyAlgo        string `json:"hostKeyAlgo"`
-}
-
-// ObservedTLS is a validated HTTPS server identity.
-type ObservedTLS struct {
-	Type                  string `json:"type"`
-	ServerCertFingerprint string `json:"serverCertFingerprint"`
 }
 
 // IdentityType implements ObservedIdentity.
@@ -149,47 +104,6 @@ func (p *ObservedPeer) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// EngineDependent -- claims sound only under trust(E). Engine-asserted: the
-// binding of a network action to a step rests on the engine routing the right
-// container's traffic; there is no control-plane-independent basis (ADR-037 D2).
-//
-// These records are the mediated set: connections strike observed because they
-// traversed its mediation. The set is never exhaustive, and exhaustiveness is
-// not a claim a mediator can make -- a mediator certifies what passed through
-// it, never that nothing else did; the complement is, by construction,
-// unobservable. Engine trust does not lift this: "the container had no other
-// egress path" is a separate engine proposition (confinement), not a scope of
-// these records -- folding it in would be a category error. Hence there is, and
-// can be, no completeness flag.
-//
-// PeerAttribution is populated from capsule-observed routing by
-// collectObservedPeers / ingestRecords. Registry deploys (no capsule)
-// contribute no attribution.
-type EngineDependent struct {
-	// PeerAttribution maps each step to the peer endpoints its mediated
-	// connections reached ("host:port" keys into Sealed.ObservedPeers).
-	PeerAttribution map[primitive.Identifier][]string `json:"peerAttribution,omitempty"`
-}
-
-// Informational -- recorded for audit and IoC; no trust claim.
-type Informational struct {
-	Timestamp       clock.Time          `json:"timestamp,omitempty"`
-	EngineMetadata  *EngineMetadata     `json:"engineMetadata,omitempty"`
-	PreStateDigest  primitive.Digest    `json:"preStateDigest"`
-	PostStateDigest primitive.Digest    `json:"postStateDigest"`
-	Provenance      []provenance.Record `json:"provenance"`
-}
-
-// EngineMetadata -- engine self-reports about itself. Lives under
-// Informational.EngineMetadata.
-type EngineMetadata struct {
-	// Rootless is true if the engine reported rootless mode.
-	Rootless *bool `json:"rootless,omitempty"`
-
-	// Version is the engine's self-reported version string.
-	Version string `json:"version,omitempty"`
-}
-
 // ResolverProbe binds the declared DoT resolver endpoint to the connection
 // identity observed when the pre-flight probe dialed and verified it. The two
 // are paired at the attestation producer's boundary so the declared->dialed->
@@ -201,38 +115,6 @@ type EngineMetadata struct {
 type ResolverProbe struct {
 	Declared endpoint.TLS
 	Observed transport.ConnectionIdentity
-}
-
-// ResolverRecord captures the DoT resolver's observed TLS identity,
-// recorded once per lane run from the pre-flight handshake. Per
-// ADR-030, the DoT resolver is the one controller-side connection
-// whose channel identity is part of the trust chain: DNS answers are
-// not content-addressable, so the resolver's identity is the trust
-// anchor for resolution. The declared anchor (resolver.trust) was
-// enforced at the handshake; this record stores what that verified
-// handshake observed, for a verifier to compare against the declared
-// anchor.
-type ResolverRecord struct {
-	// Host is the declared resolver endpoint (host:port) the probe
-	// connected to and verified.
-	Host string `json:"host"`
-
-	// ServerCertFingerprint is sha256:<hex> of the resolver's leaf
-	// certificate, observed at the handshake.
-	ServerCertFingerprint string `json:"serverCertFingerprint"`
-
-	// TLSVersion is the negotiated TLS version, human-readable
-	// (e.g. "TLS 1.3").
-	TLSVersion string `json:"tlsVersion"`
-
-	// CipherSuite is the negotiated cipher suite, human-readable
-	// (e.g. "TLS_AES_128_GCM_SHA256").
-	CipherSuite string `json:"cipherSuite"`
-
-	// ServerName is the SNI sent during the handshake. Empty for
-	// IP-literal resolver hosts (RFC 6066 forbids IP-literal SNI),
-	// which is the common case for DoT endpoints like "1.1.1.1:853".
-	ServerName string `json:"serverName,omitempty"`
 }
 
 // HardenedRunOpts returns a RunOpts with the standard security profile.
@@ -340,9 +222,9 @@ func (d *Deployer) collectObservedPeers(
 	step *lane.Step,
 	declaredPeers map[primitive.Identifier][]lane.Peer,
 	state *lane.Runtime,
-) (map[string]ObservedPeer, map[primitive.Identifier][]string, error) {
-	observed := map[string]ObservedPeer{}
-	attribution := map[primitive.Identifier][]string{}
+) (map[endpoint.Authority]ObservedPeer, map[primitive.Identifier][]endpoint.Authority, error) {
+	observed := map[endpoint.Authority]ObservedPeer{}
+	attribution := map[primitive.Identifier][]endpoint.Authority{}
 
 	// Predecessors and the deploy step's method container: declared-peer steps
 	// of the sub-tree. Only steps with declared peers can have connections; the
@@ -376,7 +258,7 @@ func (d *Deployer) collectObservedPeers(
 // ingestRecords adds the allowed TLS and SSH connections from recs into
 // observed and attribution under stepKey. Returns an error on identity
 // conflict.
-func ingestRecords(stepKey primitive.Identifier, recs capsule.Records, observed map[string]ObservedPeer, attribution map[primitive.Identifier][]string) error {
+func ingestRecords(stepKey primitive.Identifier, recs capsule.Records, observed map[endpoint.Authority]ObservedPeer, attribution map[primitive.Identifier][]endpoint.Authority) error {
 	for _, c := range recs.Connections {
 		if c.Decision != mediator.DecisionAllowed || c.Upstream == nil {
 			continue
@@ -386,7 +268,7 @@ func ingestRecords(stepKey primitive.Identifier, recs capsule.Records, observed 
 		if err := addObservedPeer(key, c.Resolved, id, observed); err != nil {
 			return err
 		}
-		attribution[stepKey] = appendUniqueString(attribution[stepKey], key)
+		attribution[stepKey] = appendUnique(attribution[stepKey], key)
 	}
 	for _, s := range recs.SSH {
 		if s.Decision != mediator.DecisionAllowed {
@@ -398,7 +280,7 @@ func ingestRecords(stepKey primitive.Identifier, recs capsule.Records, observed 
 		if err := addObservedPeer(key, s.Resolved, id, observed); err != nil {
 			return err
 		}
-		attribution[stepKey] = appendUniqueString(attribution[stepKey], key)
+		attribution[stepKey] = appendUnique(attribution[stepKey], key)
 	}
 	return nil
 }
@@ -406,7 +288,7 @@ func ingestRecords(stepKey primitive.Identifier, recs capsule.Records, observed 
 // addObservedPeer inserts or merges a peer observation into observed.
 // Returns an error if the same key was already observed with a different
 // validated identity.
-func addObservedPeer(key string, resolved []netip.Addr, id ObservedIdentity, observed map[string]ObservedPeer) error {
+func addObservedPeer(key endpoint.Authority, resolved []netip.Addr, id ObservedIdentity, observed map[endpoint.Authority]ObservedPeer) error {
 	ips := make([]string, len(resolved))
 	for i, a := range resolved {
 		ips[i] = a.String()
@@ -444,13 +326,13 @@ func sameObservedIdentity(a, b ObservedIdentity) bool {
 func unionStrings(a, b []string) []string {
 	out := a
 	for _, v := range b {
-		out = appendUniqueString(out, v)
+		out = appendUnique(out, v)
 	}
 	return out
 }
 
-// appendUniqueString appends v to s unless already present.
-func appendUniqueString(s []string, v string) []string {
+// appendUnique appends v to s unless already present.
+func appendUnique[T comparable](s []T, v T) []T {
 	for _, e := range s {
 		if e == v {
 			return s
@@ -463,7 +345,7 @@ func appendUniqueString(s []string, v string) []string {
 // including observed-peer collection and peer-attribution wiring.
 func (d *Deployer) buildAttestation(
 	step *lane.Step, spec lane.DeploySpec, state *lane.Runtime,
-	artifactDigests map[string]record.Artifact,
+	artifactDigests map[primitive.Identifier]record.Artifact,
 	provenance []provenance.Record,
 	started clock.Time, preDigest, postDigest primitive.Digest,
 ) (*Attestation, error) {
@@ -475,7 +357,7 @@ func (d *Deployer) buildAttestation(
 	}
 	return &Attestation{
 		Sealed: Sealed{
-			LaneID:        string(d.LaneID),
+			LaneID:        d.LaneID,
 			LaneDigest:    d.LaneDigest,
 			Target:        spec.Target,
 			Artifacts:     artifactDigests,
@@ -488,7 +370,7 @@ func (d *Deployer) buildAttestation(
 			PeerAttribution: peerAttribution,
 		},
 		Informational: &Informational{
-			Timestamp:       started,
+			Timestamp:       Timestamp(started.Format(clock.RFC3339)),
 			EngineMetadata:  engineMeta,
 			PreStateDigest:  preDigest,
 			PostStateDigest: postDigest,
@@ -549,13 +431,14 @@ func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.Run
 	}
 
 	// 7. Validate attestation against CUE schema.
-	if err := ValidateAttestation(att); err != nil {
+	if err = ValidateAttestation(att); err != nil {
 		return nil, fmt.Errorf("step %q: attestation invalid: %w", step.ID, err)
 	}
 
 	// 8. Project into the three output statements and produce one keyless
 	// sigstore bundle per statement (ADR-040 D2/D3), fail-closed.
-	if err := d.signStatements(ctx, att, step.ID); err != nil {
+	signed, err := d.signStatements(ctx, att, step.ID)
+	if err != nil {
 		return nil, err
 	}
 
@@ -565,9 +448,9 @@ func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.Run
 	// to the artifact fails before the lane state records it.
 	if attach != nil {
 		if err := registry.AttachStatementBundles(ctx, attach.ref, attach.subject, []registry.StatementBundle{
-			{Statement: "sealed", Bundle: att.Signed.Sealed.Bundle},
-			{Statement: "engine-context", Bundle: att.Signed.EngineContext.Bundle},
-			{Statement: "informational", Bundle: att.Signed.Informational.Bundle},
+			{Statement: "sealed", Bundle: signed.Sealed.Bundle},
+			{Statement: "engine-context", Bundle: signed.EngineContext.Bundle},
+			{Statement: "informational", Bundle: signed.Informational.Bundle},
 		}); err != nil {
 			return nil, fmt.Errorf("step %q: attach statement bundles: %w", step.ID, err)
 		}
@@ -585,26 +468,29 @@ func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.Run
 // statements (ADR-040 D3) and produces one keyless sigstore bundle per
 // statement (ADR-040 D2): one ephemeral key and one Fulcio certificate per
 // deploy, then per statement DSSE -> RFC3161 timestamp -> Rekor v2
-// inclusion -> v0.3 bundle, stored on att.Signed. Fail-closed (D-3b-2): a
-// deploy that cannot obtain a certificate, a timestamp, or an inclusion
-// proof fails; there is no unsigned fallback. The bundle carries the
-// transparency proof, so no Rekor entry is mirrored into the collect-model.
-// For registry deploys, the bundles are then attached as OCI referrers of
-// the pushed manifest digest (Execute step 8b).
-func (d *Deployer) signStatements(ctx context.Context, att *Attestation, stepID primitive.Identifier) error {
+// inclusion -> v0.3 bundle. Fail-closed (D-3b-2): a deploy that cannot obtain
+// a certificate, a timestamp, or an inclusion proof fails; there is no
+// unsigned fallback. The bundle carries the transparency proof, so no Rekor
+// entry is mirrored into the collect-model. For registry deploys, the
+// returned bundles are then attached as OCI referrers of the pushed manifest
+// digest (Execute step 8b). Signed statements never enter the attestation
+// record itself (json:"-" territory before the migration, and out of the
+// contract/attest schema entirely now): they are ephemeral producer-side
+// output, threaded back to the caller directly.
+func (d *Deployer) signStatements(ctx context.Context, att *Attestation, stepID primitive.Identifier) (*SignedStatements, error) {
 	baseSBOMDeps, err := d.verifyBaseSBOMs(ctx, stepID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	slsa, engineCtx, info, err := projectStatements(att, d.OIDC, baseSBOMDeps)
 	if err != nil {
-		return fmt.Errorf("step %q: project statements: %w", stepID, err)
+		return nil, fmt.Errorf("step %q: project statements: %w", stepID, err)
 	}
 	statements := make([][]byte, 0, 3)
 	for _, stmt := range []any{slsa, engineCtx, info} {
 		stmtJSON, mErr := canonicalJSON(stmt)
 		if mErr != nil {
-			return fmt.Errorf("step %q: marshal statement: %w", stepID, mErr)
+			return nil, fmt.Errorf("step %q: marshal statement: %w", stepID, mErr)
 		}
 		statements = append(statements, stmtJSON)
 	}
@@ -612,7 +498,7 @@ func (d *Deployer) signStatements(ctx context.Context, att *Attestation, stepID 
 	if produce == nil {
 		token, tErr := ambientIDToken()
 		if tErr != nil {
-			return fmt.Errorf("step %q: %w", stepID, tErr)
+			return nil, fmt.Errorf("step %q: %w", stepID, tErr)
 		}
 		// Observation over declaration, fail-closed at the source: the
 		// token's subject is the observed signing identity, the lane's
@@ -621,10 +507,10 @@ func (d *Deployer) signStatements(ctx context.Context, att *Attestation, stepID 
 		// verifier rejects against the same declaration later.
 		subject, sErr := subjectFromIDToken(token)
 		if sErr != nil {
-			return fmt.Errorf("step %q: %w", stepID, sErr)
+			return nil, fmt.Errorf("step %q: %w", stepID, sErr)
 		}
 		if subject != d.OIDC.Identity {
-			return fmt.Errorf("step %q: keyless: token identity %q does not match the lane-declared identity %q",
+			return nil, fmt.Errorf("step %q: keyless: token identity %q does not match the lane-declared identity %q",
 				stepID, subject, d.OIDC.Identity)
 		}
 		produce = func(ctx context.Context, eps lane.KeylessEndpoints, stmts [][]byte) ([][]byte, error) {
@@ -633,23 +519,22 @@ func (d *Deployer) signStatements(ctx context.Context, att *Attestation, stepID 
 	}
 	bundles, err := produce(ctx, d.Keyless.Endpoints, statements)
 	if err != nil {
-		return fmt.Errorf("step %q: %w", stepID, err)
+		return nil, fmt.Errorf("step %q: %w", stepID, err)
 	}
 	if len(bundles) != len(statements) {
-		return fmt.Errorf("step %q: keyless: got %d bundles, want %d", stepID, len(bundles), len(statements))
+		return nil, fmt.Errorf("step %q: keyless: got %d bundles, want %d", stepID, len(bundles), len(statements))
 	}
-	att.Signed = &SignedStatements{
+	return &SignedStatements{
 		Sealed:        SignedStatement{Bundle: bundles[0]},
 		EngineContext: SignedStatement{Bundle: bundles[1]},
 		Informational: SignedStatement{Bundle: bundles[2]},
-	}
-	return nil
+	}, nil
 }
 
 // resolveArtifactDigests resolves all artifact references to their provenance records.
 // refs maps artifact name -> producer output reference (pre-resolved by the caller from DAG edges).
-func resolveArtifactDigests(stepID primitive.Identifier, refs map[string]lane.OutputRef, state *lane.Runtime) (map[string]record.Artifact, error) {
-	artifacts := make(map[string]record.Artifact)
+func resolveArtifactDigests(stepID primitive.Identifier, refs map[string]lane.OutputRef, state *lane.Runtime) (map[primitive.Identifier]record.Artifact, error) {
+	artifacts := make(map[primitive.Identifier]record.Artifact, len(refs))
 	for artName, ref := range refs {
 		handle, resolveErr := state.Resolve(ref)
 		if resolveErr != nil {
@@ -659,7 +544,7 @@ func resolveArtifactDigests(stepID primitive.Identifier, refs map[string]lane.Ou
 		if digestErr != nil {
 			return nil, fmt.Errorf("step %q: artifact %q: %w", stepID, artName, digestErr)
 		}
-		artifacts[artName] = record.Artifact{
+		artifacts[primitive.Identifier(artName)] = record.Artifact{
 			Digest: digest,
 		}
 	}
@@ -989,7 +874,7 @@ func (d *Deployer) engineRecords() (endpoint.Engine, *EngineMetadata) {
 func (d *Deployer) resolverRecord() ResolverRecord {
 	id := d.Resolver.Observed
 	return ResolverRecord{
-		Host:                  id.PeerAddress.Authority(),
+		Host:                  string(id.PeerAddress.Authority()),
 		ServerCertFingerprint: id.LeafFingerprint,
 		TLSVersion:            tls.VersionName(id.TLSVersion),
 		CipherSuite:           tls.CipherSuiteName(id.CipherSuite),

@@ -33,7 +33,7 @@ func TestDialVerified_CloudflareDoT_INTEGRATION(t *testing.T) {
 		Type:        "certFingerprint",
 		Fingerprint: fingerprint,
 	}
-	conn, err := transport.DialVerified(ctx, "1.1.1.1:853", trust)
+	conn, err := transport.DialVerified(ctx, endpoint.MustParseAuthority("1.1.1.1:853"), trust)
 	if err != nil {
 		t.Fatalf("DialVerified: %v", err)
 	}

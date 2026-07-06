@@ -6,6 +6,7 @@ import (
 
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/deploy"
+	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/provenance"
@@ -23,7 +24,7 @@ func validateAgainstDef(t *testing.T, data []byte, def string) {
 func TestSLSAProvenanceStatement_Valid(t *testing.T) {
 	stmt := deploy.SLSAProvenanceStatement{
 		Type:          "https://in-toto.io/Statement/v1",
-		Subject:       []deploy.Subject{{Name: "image", Digest: deploy.DigestSet{SHA256: "0000000000000000000000000000000000000000000000000000000000000000"}}},
+		Subject:       []deploy.Subject{{Name: "image", Digest: &deploy.DigestSet{SHA256: "0000000000000000000000000000000000000000000000000000000000000000"}}},
 		PredicateType: "https://slsa.dev/provenance/v1",
 		Predicate: deploy.SLSAProvenancePredicate{
 			BuildDefinition: deploy.SLSABuildDefinition{
@@ -49,10 +50,10 @@ func TestSLSAProvenanceStatement_Valid(t *testing.T) {
 func TestInformationalStatement_Valid(t *testing.T) {
 	stmt := deploy.InformationalStatement{
 		Type:          "https://in-toto.io/Statement/v1",
-		Subject:       []deploy.Subject{{Name: "image", Digest: deploy.DigestSet{SHA256: "0000000000000000000000000000000000000000000000000000000000000000"}}},
+		Subject:       []deploy.Subject{{Name: "image", Digest: &deploy.DigestSet{SHA256: "0000000000000000000000000000000000000000000000000000000000000000"}}},
 		PredicateType: "https://istr.dev/strike/predicates/informational/v1",
 		Predicate: deploy.InformationalPredicate{
-			Timestamp:       clock.Reproducible(),
+			Timestamp:       deploy.Timestamp(clock.Reproducible().Format(clock.RFC3339)),
 			PreStateDigest:  primitive.DigestFromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
 			PostStateDigest: primitive.DigestFromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
 			Provenance:      []provenance.Record{},
@@ -68,10 +69,10 @@ func TestInformationalStatement_Valid(t *testing.T) {
 func TestEngineContextStatement_Valid(t *testing.T) {
 	stmt := deploy.EngineContextStatement{
 		Type:          "https://in-toto.io/Statement/v1",
-		Subject:       []deploy.Subject{{Name: "image", Digest: deploy.DigestSet{SHA256: "0000000000000000000000000000000000000000000000000000000000000000"}}},
+		Subject:       []deploy.Subject{{Name: "image", Digest: &deploy.DigestSet{SHA256: "0000000000000000000000000000000000000000000000000000000000000000"}}},
 		PredicateType: "https://istr.dev/strike/predicates/engine-context/v1",
 		Predicate: deploy.EngineContextPredicate{
-			PeerAttribution: map[primitive.Identifier][]string{"build": {"git.example.com:22"}},
+			PeerAttribution: map[primitive.Identifier][]endpoint.Authority{"build": {"git.example.com:22"}},
 		},
 	}
 	data, err := json.Marshal(stmt)

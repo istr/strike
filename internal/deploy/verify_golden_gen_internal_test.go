@@ -120,7 +120,7 @@ func syntheticGoldenAttestation(laneDigest primitive.Digest) *Attestation {
 	const artifactDigest = "1111111111111111111111111111111111111111111111111111111111111111"
 	return &Attestation{
 		Sealed: Sealed{
-			Artifacts: map[string]record.Artifact{
+			Artifacts: map[primitive.Identifier]record.Artifact{
 				"app": {Digest: "sha256:" + artifactDigest},
 			},
 			Target: target.Deploy{
@@ -133,7 +133,7 @@ func syntheticGoldenAttestation(laneDigest primitive.Digest) *Attestation {
 			Peers:      map[primitive.Identifier][]lane.Peer{},
 		},
 		EngineDependent: EngineDependent{
-			PeerAttribution: map[primitive.Identifier][]string{"deploy": {"registry.example:443"}},
+			PeerAttribution: map[primitive.Identifier][]endpoint.Authority{"deploy": {"registry.example:443"}},
 		},
 		Informational: &Informational{
 			PreStateDigest:  primitive.DigestFromHex(artifactDigest),

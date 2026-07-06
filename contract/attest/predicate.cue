@@ -38,8 +38,8 @@ import (
 // carry sha256; git resolved-dependencies carry gitCommit (40-hex SHA-1 or
 // 64-hex SHA-256, matching the source-provenance commit width).
 #DigestSet: {
-	sha256?:    primitive.#Sha256
-	sha512?:    =~"^[a-f0-9]{128}$"
+	sha256?:    primitive.#Sha256   @go(SHA256)
+	sha512?:    =~"^[a-f0-9]{128}$" @go(SHA512)
 	gitCommit?: primitive.#GitCommit
 }
 
@@ -48,8 +48,8 @@ import (
 // the spec, and an open annotations object would reintroduce a map).
 #ResourceDescriptor: {
 	name?:             string
-	uri?:              string
-	digest?:           #DigestSet
+	uri?:              string     @go(URI)
+	digest?:           #DigestSet @go(Digest,optional=nillable)
 	mediaType?:        string
 	downloadLocation?: string
 }
@@ -70,7 +70,7 @@ import (
 // ---------------------------------------------------------------------------
 
 #SLSAProvenanceStatement: {
-	"_type": "https://in-toto.io/Statement/v1"
+	"_type": "https://in-toto.io/Statement/v1" @go(Type)
 	subject: [...#Subject]
 	predicateType: "https://slsa.dev/provenance/v1"
 	predicate:     #SLSAProvenancePredicate
@@ -93,12 +93,16 @@ import (
 // identities the control plane observed and validated against the declared
 // anchors -- all control-plane-established, sound without engine trust.
 #StrikeExternalParameters: {
-	laneId:     primitive.#Identifier
+	laneId:     primitive.#Identifier @go(LaneID)
 	laneDigest: primitive.#Digest
 	target:     deploytarget.#Deploy
-	oidc:       #ProvenanceOIDC
-	peers: [ID=primitive.#Identifier]: [...lane.#Peer]
-	observedPeers?: [Endpoint=endpoint.#Authority]: #ObservedPeer
+	oidc:       #ProvenanceOIDC @go(OIDC)
+	peers: {
+		[ID=primitive.#Identifier]: [...lane.#Peer]
+	} @go(Peers,type=map[primitive.Identifier][]lane.Peer)
+	observedPeers?: {
+		[Endpoint=endpoint.#Authority]: #ObservedPeer
+	} @go(ObservedPeers,type=map[endpoint.Authority]ObservedPeer)
 	resolver: #ResolverRecord
 	engine?:  endpoint.#Engine
 }
@@ -114,7 +118,7 @@ import (
 
 #SLSARunDetails: {
 	builder:   #SLSABuilder
-	metadata?: #SLSABuildMetadata
+	metadata?: #SLSABuildMetadata @go(Metadata,optional=nillable)
 	byproducts?: [...#ResourceDescriptor]
 }
 
@@ -122,7 +126,7 @@ import (
 // and version are optional in the spec and omitted here (the open version map
 // would violate the no-map rule); add them only on a concrete need.
 #SLSABuilder: {
-	id: string
+	id: string @go(ID)
 }
 
 // #SLSABuildMetadata carries only reproducible fields. Wall-clock timestamps
@@ -132,7 +136,7 @@ import (
 // here. invocationId is present for parity, populated only with a reproducible
 // value if any.
 #SLSABuildMetadata: {
-	invocationId?: string
+	invocationId?: string @go(InvocationID)
 }
 
 // ---------------------------------------------------------------------------
@@ -141,7 +145,7 @@ import (
 // ---------------------------------------------------------------------------
 
 #EngineContextStatement: {
-	"_type": "https://in-toto.io/Statement/v1"
+	"_type": "https://in-toto.io/Statement/v1" @go(Type)
 	subject: [...#Subject]
 	predicateType: "https://istr.dev/strike/predicates/engine-context/v1"
 	predicate:     #EngineContextPredicate
@@ -154,7 +158,9 @@ import (
 // (Fork C). The engine's self-report (engineMetadata) is NOT here either -- it
 // carries no trust claim and lives in the informational statement.
 #EngineContextPredicate: {
-	peerAttribution?: [ID=primitive.#Identifier]: [...endpoint.#Authority]
+	peerAttribution?: {
+		[ID=primitive.#Identifier]: [...endpoint.#Authority]
+	} @go(PeerAttribution,type=map[primitive.Identifier][]endpoint.Authority)
 }
 
 // ---------------------------------------------------------------------------
@@ -167,7 +173,7 @@ import (
 // ---------------------------------------------------------------------------
 
 #InformationalStatement: {
-	"_type": "https://in-toto.io/Statement/v1"
+	"_type": "https://in-toto.io/Statement/v1" @go(Type)
 	subject: [...#Subject]
 	predicateType: "https://istr.dev/strike/predicates/informational/v1"
 	predicate:     #InformationalPredicate
@@ -197,5 +203,5 @@ import (
 	// itself participates in no source-to-deploy claim -- so it is
 	// informational, not an engine-context (Layer E) claim. (Layer E is the
 	// engine asserting facts about something else, e.g. peerAttribution.)
-	engineMetadata?: #EngineMetadata
+	engineMetadata?: #EngineMetadata @go(EngineMetadata,optional=nillable)
 }

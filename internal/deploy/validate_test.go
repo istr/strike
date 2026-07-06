@@ -24,13 +24,13 @@ func TestValidateAttestation_Valid(t *testing.T) {
 			LaneID:     "test-lane",
 			LaneDigest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
 			Target:     target.Deploy{ID: "prod-1", Type: "registry", Description: "production"},
-			Artifacts: map[string]record.Artifact{
+			Artifacts: map[primitive.Identifier]record.Artifact{
 				"image": {Digest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
 			},
 			Peers: map[primitive.Identifier][]lane.Peer{},
 		},
 		Informational: &deploy.Informational{
-			Timestamp:       clock.Reproducible(),
+			Timestamp:       deploy.Timestamp(clock.Reproducible().Format(clock.RFC3339)),
 			PreStateDigest:  primitive.DigestFromHex("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
 			PostStateDigest: primitive.DigestFromHex("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
 			Provenance:      []provenance.Record{},
@@ -49,7 +49,7 @@ func TestValidateAttestation_WithEngine(t *testing.T) {
 			LaneID:     "test-lane",
 			LaneDigest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
 			Target:     target.Deploy{ID: "staging-1", Type: "kubernetes", Description: "staging"},
-			Artifacts: map[string]record.Artifact{
+			Artifacts: map[primitive.Identifier]record.Artifact{
 				"app": {Digest: "sha256:1111111111111111111111111111111111111111111111111111111111111111"},
 			},
 			Engine: endpoint.EngineTLS{
@@ -60,7 +60,7 @@ func TestValidateAttestation_WithEngine(t *testing.T) {
 			Peers: map[primitive.Identifier][]lane.Peer{},
 		},
 		Informational: &deploy.Informational{
-			Timestamp:       clock.Reproducible(),
+			Timestamp:       deploy.Timestamp(clock.Reproducible().Format(clock.RFC3339)),
 			PreStateDigest:  primitive.DigestFromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
 			PostStateDigest: primitive.DigestFromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
 			EngineMetadata: &deploy.EngineMetadata{
@@ -81,14 +81,14 @@ func TestValidateAttestation_InvalidEngineConnectionType(t *testing.T) {
 		Sealed: deploy.Sealed{
 			LaneID:    "test-lane",
 			Target:    target.Deploy{ID: "test-1", Type: "registry", Description: "test"},
-			Artifacts: map[string]record.Artifact{},
+			Artifacts: map[primitive.Identifier]record.Artifact{},
 			Engine: endpoint.EngineTLS{
 				Type: "plaintext", // not in enum
 			},
 			Peers: map[primitive.Identifier][]lane.Peer{},
 		},
 		Informational: &deploy.Informational{
-			Timestamp:       clock.Reproducible(),
+			Timestamp:       deploy.Timestamp(clock.Reproducible().Format(clock.RFC3339)),
 			PreStateDigest:  primitive.DigestFromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
 			PostStateDigest: primitive.DigestFromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
 			Provenance:      []provenance.Record{},
@@ -132,11 +132,11 @@ func TestValidateAttestation_EmptyDigestsAllowed(t *testing.T) {
 			LaneID:     "test-lane",
 			LaneDigest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
 			Target:     target.Deploy{ID: "test-1", Type: "registry", Description: "first deploy"},
-			Artifacts:  map[string]record.Artifact{},
+			Artifacts:  map[primitive.Identifier]record.Artifact{},
 			Peers:      map[primitive.Identifier][]lane.Peer{},
 		},
 		Informational: &deploy.Informational{
-			Timestamp:       clock.Reproducible(),
+			Timestamp:       deploy.Timestamp(clock.Reproducible().Format(clock.RFC3339)),
 			PreStateDigest:  primitive.DigestFromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
 			PostStateDigest: primitive.DigestFromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
 			Provenance:      []provenance.Record{},
@@ -216,7 +216,7 @@ func TestValidateAttestation_WithResolverRecord(t *testing.T) {
 			LaneID:     "test-lane",
 			LaneDigest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
 			Target:     target.Deploy{ID: "staging-1", Type: "kubernetes", Description: "staging"},
-			Artifacts:  map[string]record.Artifact{},
+			Artifacts:  map[primitive.Identifier]record.Artifact{},
 			Resolver: deploy.ResolverRecord{
 				Host:                  "1.1.1.1:853",
 				ServerCertFingerprint: "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
@@ -226,7 +226,7 @@ func TestValidateAttestation_WithResolverRecord(t *testing.T) {
 			Peers: map[primitive.Identifier][]lane.Peer{},
 		},
 		Informational: &deploy.Informational{
-			Timestamp:       clock.Reproducible(),
+			Timestamp:       deploy.Timestamp(clock.Reproducible().Format(clock.RFC3339)),
 			PreStateDigest:  primitive.DigestFromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
 			PostStateDigest: primitive.DigestFromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
 			Provenance:      []provenance.Record{},
@@ -244,7 +244,7 @@ func TestValidateAttestation_WithPeers(t *testing.T) {
 			LaneID:     "test-lane",
 			LaneDigest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
 			Target:     target.Deploy{ID: "prod-1", Type: "registry", Description: "production"},
-			Artifacts: map[string]record.Artifact{
+			Artifacts: map[primitive.Identifier]record.Artifact{
 				"image": {Digest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
 			},
 			Peers: map[primitive.Identifier][]lane.Peer{
@@ -273,7 +273,7 @@ func TestValidateAttestation_WithPeers(t *testing.T) {
 			},
 		},
 		Informational: &deploy.Informational{
-			Timestamp:       clock.Reproducible(),
+			Timestamp:       deploy.Timestamp(clock.Reproducible().Format(clock.RFC3339)),
 			PreStateDigest:  primitive.DigestFromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
 			PostStateDigest: primitive.DigestFromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
 			Provenance:      []provenance.Record{},
@@ -290,7 +290,7 @@ func TestValidateAttestation_InvalidPeer(t *testing.T) {
 		Sealed: deploy.Sealed{
 			LaneID: "test-lane",
 			Target: target.Deploy{ID: "prod-1", Type: "registry", Description: "production"},
-			Artifacts: map[string]record.Artifact{
+			Artifacts: map[primitive.Identifier]record.Artifact{
 				"image": {Digest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
 			},
 			Peers: map[primitive.Identifier][]lane.Peer{
@@ -304,7 +304,7 @@ func TestValidateAttestation_InvalidPeer(t *testing.T) {
 			},
 		},
 		Informational: &deploy.Informational{
-			Timestamp:       clock.Reproducible(),
+			Timestamp:       deploy.Timestamp(clock.Reproducible().Format(clock.RFC3339)),
 			PreStateDigest:  primitive.DigestFromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
 			PostStateDigest: primitive.DigestFromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
 			Provenance:      []provenance.Record{},

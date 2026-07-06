@@ -119,7 +119,7 @@ func TestAuthorityRoundTrip(t *testing.T) {
 			if err != nil {
 				t.Fatalf("ParseAuthority(%q): %v", s, err)
 			}
-			if got := a.Authority(); got != s {
+			if got := string(a.Authority()); got != s {
 				t.Errorf("round-trip Authority() = %q, want %q", got, s)
 			}
 		})

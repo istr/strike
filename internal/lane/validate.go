@@ -308,7 +308,7 @@ func validatePeerAnchors(p *Lane) error {
 	seen := map[string]string{} // host:port -> canonical anchor
 	for _, s := range p.Steps {
 		for _, peer := range s.Peers {
-			endpoint := peer.Addr().Authority()
+			endpoint := string(peer.Addr().Authority())
 			anchor := peerAnchor(peer)
 			if prev, ok := seen[endpoint]; ok {
 				if prev != anchor {
@@ -474,7 +474,7 @@ func validateDeployPresence(p *Lane) error {
 // validate-lane phase (before build), so `strike validate` and
 // `strike run` fail identically on the same invalid input.
 func validateResolver(p *Lane) error {
-	host := p.Resolver.Address.Authority()
+	host := string(p.Resolver.Address.Authority())
 	if host == "" {
 		return fmt.Errorf("resolver: host required")
 	}

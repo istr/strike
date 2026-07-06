@@ -39,14 +39,14 @@ func TestSignStatementsRejectsMismatchedTokenIdentity(t *testing.T) {
 			LaneID:     "demo",
 			LaneDigest: "",
 			Target:     target.Deploy{ID: "prod-1", Type: "registry", Description: "production"},
-			Artifacts: map[string]record.Artifact{
+			Artifacts: map[primitive.Identifier]record.Artifact{
 				"b-image": {Digest: primitive.DigestFromHex(strings.Repeat("b", 64))},
 			},
 			Peers: map[primitive.Identifier][]lane.Peer{},
 		},
 	}
 
-	err := d.signStatements(context.Background(), att, "deploy-step")
+	_, err := d.signStatements(context.Background(), att, "deploy-step")
 	if err == nil {
 		t.Fatal("expected the mismatched token identity to abort signing")
 	}
