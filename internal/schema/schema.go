@@ -116,14 +116,22 @@ func mustBuild(pkg string) cue.Value {
 	return v
 }
 
-// ValidateLaneJSON validates lane JSON (converted from YAML) against #Lane.
-func ValidateLaneJSON(data []byte) error {
+// FillLaneJSON validates lane JSON (converted from YAML) against #Lane and
+// returns the JSON with every non-optional schema default materialized, so a
+// caller that deserializes the result gets the schema's declared defaults
+// (deploy strategy, capture required, file mode, ...) rather than Go zero
+// values for fields omitted on the wire. The cue.Value never leaves this
+// package.
+func FillLaneJSON(data []byte) ([]byte, error) {
 	expr, err := cuejson.Extract("lane.yaml", data)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	unified := laneDef.Unify(ctx.BuildExpr(expr))
-	return FormatValidationError(unified.Validate(cue.Concrete(true)))
+	if err := FormatValidationError(unified.Validate(cue.Concrete(true))); err != nil {
+		return nil, err
+	}
+	return unified.MarshalJSON()
 }
 
 // ValidateAttestationJSON validates a serialized attestation against

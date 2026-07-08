@@ -68,15 +68,19 @@ func Parse(fp FilePath) (*Lane, map[primitive.Identifier]*Step, primitive.Digest
 		return nil, nil, "", fmt.Errorf("json marshal: %w", err)
 	}
 
-	// Validate against embedded CUE schema
-	if err := schema.ValidateLaneJSON(asJSON); err != nil {
+	// Validate against the embedded CUE schema and materialize its defaults.
+	// The filled JSON carries every non-optional CUE default so the decoded
+	// Lane reflects the schema's declared meaning, not Go zero values, for
+	// fields omitted on the wire.
+	filled, err := schema.FillLaneJSON(asJSON)
+	if err != nil {
 		return nil, nil, "", fmt.Errorf("validation:\n%w", err)
 	}
 
 	// Deserialize from JSON into typed Lane struct.
 	// Using JSON (not YAML) because gengotypes only emits json struct tags.
 	var p Lane
-	if err := json.Unmarshal(asJSON, &p); err != nil {
+	if err := json.Unmarshal(filled, &p); err != nil {
 		return nil, nil, "", fmt.Errorf("deserialize: %w", err)
 	}
 
