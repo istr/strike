@@ -208,21 +208,24 @@ func extractTarStream(r io.Reader, root *os.Root, allowSymlinks bool) error {
 // when allowSymlinks is true; otherwise a symlink entry is rejected.
 func extractEntry(root *os.Root, hdr *tar.Header, tr io.Reader, allowSymlinks bool) error {
 	mode := hdr.FileInfo().Mode().Perm()
+	// Tar directory entries carry a trailing separator, which os.Root
+	// rejects since the go1.26.5 trailing-slash traversal fix (GO-2026-4970).
+	name := filepath.Clean(hdr.Name)
 
 	switch hdr.Typeflag {
 	case tar.TypeDir:
-		if err := root.MkdirAll(hdr.Name, mode); err != nil {
-			return fmt.Errorf("mkdir %s: %w", hdr.Name, err)
+		if err := root.MkdirAll(name, mode); err != nil {
+			return fmt.Errorf("mkdir %s: %w", name, err)
 		}
 	case tar.TypeReg:
-		if err := extractRegularFile(root, hdr.Name, tr, hdr.Size, mode); err != nil {
+		if err := extractRegularFile(root, name, tr, hdr.Size, mode); err != nil {
 			return err
 		}
 	case tar.TypeSymlink:
 		if !allowSymlinks {
 			return fmt.Errorf("tar entry %q is a symlink, which is not allowed here", hdr.Name)
 		}
-		if err := extractSymlink(root, hdr.Name, hdr.Linkname); err != nil {
+		if err := extractSymlink(root, name, hdr.Linkname); err != nil {
 			return err
 		}
 	default:
