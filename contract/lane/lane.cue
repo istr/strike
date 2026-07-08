@@ -303,14 +303,16 @@ import (
 	} @go(Source,optional=nillable)
 }
 
+#DeployStrategy: *"apply" | "replace" | "rollout"
+
 #DeployMethod: (#DeployKubernetes | #DeployRegistry | #DeployCustom) @go(-)
 
 #DeployKubernetes: {
 	@go(DeployKubernetes)
-	type:      "kubernetes"                     @go(Type)
-	image:     primitive.#ImageRef              @go(Image)
-	namespace: string                           @go(Namespace)
-	strategy:  *"apply" | "replace" | "rollout" @go(Strategy)
+	type:      "kubernetes"        @go(Type)
+	image:     primitive.#ImageRef @go(Image)
+	namespace: string              @go(Namespace)
+	strategy:  #DeployStrategy     @go(Strategy)
 	// kubeconfig is a host-side path to a kubeconfig file, resolved by
 	// ResolveKubeconfig (explicit value, then $KUBECONFIG, then the
 	// default). It is intentionally unconstrained: host paths may be

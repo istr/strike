@@ -689,7 +689,7 @@ func (d *Deployer) executeKubernetesDeploy(ctx context.Context, m lane.DeployKub
 		return fmt.Errorf("kubernetes deploy: %w", err)
 	}
 
-	kubectlArgs := []string{m.Strategy, "-f", "-"}
+	kubectlArgs := []string{m.Strategy.KubectlVerb(), "-f", "-"}
 	if m.Namespace != "" {
 		kubectlArgs = append(kubectlArgs, "-n", m.Namespace)
 	}
