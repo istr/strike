@@ -51,6 +51,8 @@ generate: specs
 	mv contract/target/cue_types_gen.go internal/target/target.gen.go
 	mv contract/record/cue_types_gen.go internal/record/record.gen.go
 	mv contract/attest/cue_types_gen.go internal/deploy/attest.gen.go
+	cd tools/genenums && go build -o $(CURDIR)/.build/genenums .
+	$(CURDIR)/.build/genenums ./contract/lane ./contract/primitive ./contract/endpoint ./contract/output ./contract/provenance ./contract/target ./contract/record ./contract/attest
 
 # Update golden test fixtures (run after intentional changes to sign/pack/digest).
 golden:

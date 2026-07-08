@@ -34,11 +34,6 @@ func (f fatalWriter) Write(p []byte) (int, error) {
 	return n, nil
 }
 
-const (
-	artifactTypeImage = "image"
-	artifactTypeFile  = "file"
-)
-
 const usage = `strike - reproducible, rootless CI/CD lanes
 
 Usage:

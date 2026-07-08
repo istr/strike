@@ -42,8 +42,6 @@ _sha256Hex: "[a-f0-9]{64}"
 
 #ImageRef: =~"^.+@sha256:\(_sha256Hex)$"
 
-#ArtifactType: "file" | "directory" | "image"
-
 #FileArtifactType: "file" | "directory"
 
 // #Digest is the wire form of a content-addressed digest: the prefixed
