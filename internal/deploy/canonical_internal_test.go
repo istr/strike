@@ -70,7 +70,7 @@ func assertNoNumeric(t *testing.T, typ reflect.Type, path string, seen map[refle
 		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
 		reflect.Float32, reflect.Float64:
 		t.Errorf("numeric field reaches the signed graph at %s (%s)", path, typ.Kind())
-	case reflect.Ptr:
+	case reflect.Pointer:
 		assertNoNumeric(t, typ.Elem(), path, seen)
 	case reflect.Slice, reflect.Array:
 		if typ.Elem().Kind() == reflect.Uint8 {
