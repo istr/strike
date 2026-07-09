@@ -82,6 +82,7 @@ referenced here at all.
 | 046 | [A step with output produces exactly one canonical digest-pinned image](ADR-046-one-canonical-digest-pinned-image.md) | Accepted | Digest-pinned references; Containers are the only storage; Reproducibility; Enforcement is structural; Code is liability |
 | 047 | [Spec layering: file-prefix layers in one generated CUE package](ADR-047-spec-package-layering.md) | Superseded by ADR-048 | CUE first; Meaning is single-sourced; Code is liability |
 | 048 | [Contract type semantics: naming by role, representation-neutral concepts, and the primitive/concept layering](ADR-048-contract-type-semantics.md) | Accepted | CUE first; Meaning is single-sourced; Enforcement is structural; Code is liability |
+| 049 | [Type discipline at internal seams: grammar operations, wire projections, and boundary determination](ADR-049-type-discipline-internal-seams.md) | Accepted | CUE first; Meaning is single-sourced; Enforcement is structural; Code is liability |
 
 ## By principle
 
@@ -96,7 +97,7 @@ ADR-011, ADR-013, ADR-014, ADR-015, ADR-016, ADR-017, ADR-018,
 ADR-019, ADR-020, ADR-021, ADR-023, ADR-024, ADR-025, ADR-026, ADR-027,
 ADR-028, ADR-029, ADR-030, ADR-031, ADR-032, ADR-033, ADR-034, ADR-035,
 ADR-036, ADR-037, ADR-038, ADR-039, ADR-040, ADR-041, ADR-042, ADR-043,
-ADR-044, ADR-045, ADR-046, ADR-047, ADR-048.
+ADR-044, ADR-045, ADR-046, ADR-047, ADR-048, ADR-049.
 
 ### No shell
 
@@ -114,7 +115,7 @@ ADR-031, ADR-033.
 ### CUE first
 
 ADR-004, ADR-010, ADR-015, ADR-017, ADR-022, ADR-027, ADR-035, ADR-039,
-ADR-041, ADR-042, ADR-047, ADR-048.
+ADR-041, ADR-042, ADR-047, ADR-048, ADR-049.
 
 ### Secrets are typed
 
@@ -159,11 +160,11 @@ ADR-032, ADR-034.
 
 ADR-005, ADR-006, ADR-022, ADR-024, ADR-025, ADR-028, ADR-029,
 ADR-031, ADR-033, ADR-034, ADR-035, ADR-036, ADR-037, ADR-038, ADR-041, ADR-043,
-ADR-044, ADR-045, ADR-046, ADR-048.
+ADR-044, ADR-045, ADR-046, ADR-048, ADR-049.
 
 ### Meaning is single-sourced
 
-ADR-044, ADR-047, ADR-048.
+ADR-044, ADR-047, ADR-048, ADR-049.
 
 ### Observation over declaration
 

@@ -79,3 +79,6 @@ the index fails the build instead of waiting for the next review.
 
 - `AI-WORKFLOW.md` -- the core human-AI loop and the authoring contract.
 - `DESIGN-PRINCIPLES.md` -- the product axioms these reviews check against.
+- `TYPE-SURVEY-RULEBOOK.md` -- the classification rules and boundary catalog a
+  type-safety survey or its verification stage cites; a verdict without a
+  citation is a defect of the audit.
