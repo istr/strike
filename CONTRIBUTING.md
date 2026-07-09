@@ -3,7 +3,7 @@
 Thank you for considering a contribution. This document explains the project's
 goals and what we are (and are not) looking for.
 
-Governance documents that stand as peers, defining how the project is built or run rather than detailing another document, live at the repository root: [README](README.md), [ARCHITECTURE](ARCHITECTURE.md), [SECURITY](SECURITY.md), [DESIGN-PRINCIPLES](DESIGN-PRINCIPLES.md), [AGENTS](AGENTS.md), CONTRIBUTING (this document), [AI-WORKFLOW](AI-WORKFLOW.md).
+Governance documents that stand as peers, defining how the project is built or run rather than detailing another document, live at the repository root: [README](README.md), [ARCHITECTURE](ARCHITECTURE.md), [SECURITY](SECURITY.md), [DESIGN-PRINCIPLES](DESIGN-PRINCIPLES.md), [AGENTS](AGENTS.md), CONTRIBUTING (this document), [AI-WORKFLOW](AI-WORKFLOW.md), [AI-ORCHESTRATION](AI-ORCHESTRATION.md).
 
 The separate folder docs/ holds the permanent ADR decision log together with reference material subordinate to a root document, such as [CODE-STYLE](docs/CODE-STYLE.md), [DEVELOPMENT](docs/DEVELOPMENT.md), or [CLI-CONVENTIONS](docs/CLI-CONVENTIONS.md).
 

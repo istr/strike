@@ -316,5 +316,7 @@ first.
 - [AGENTS.md](AGENTS.md) -- instructions for AI coding agents.
 - [AI-WORKFLOW.md](AI-WORKFLOW.md) -- the human-AI collaboration model and
   authoring contract.
+- [AI-ORCHESTRATION.md](AI-ORCHESTRATION.md) -- the orchestrate-only
+  development model and the evidence behind its rules.
 - [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) -- code quality, style, and
   toolchain rules that implement these principles.

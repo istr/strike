@@ -14,6 +14,7 @@ coverage.out
 /*.md
 !/AGENTS.md
 !/AI-WORKFLOW.md
+!/AI-ORCHESTRATION.md
 !/ARCHITECTURE.md
 !/CONTRIBUTING.md
 !/DESIGN-PRINCIPLES.md

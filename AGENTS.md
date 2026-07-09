@@ -9,7 +9,9 @@ This file is the agent's read-fully contract: it states only what the agent
 must internalize at each anchor. Full reference lives in lookup docs cited
 inline -- `docs/DEVELOPMENT.md` (security, testing, and style detail),
 `docs/CODE-STYLE.md` (named code patterns), `docs/CUE-WORKFLOW.md` (schema
-workflow), `DESIGN-PRINCIPLES.md` (the underlying why), and `ARCHITECTURE.md`.
+workflow), `DESIGN-PRINCIPLES.md` (the underlying why), `ARCHITECTURE.md`, and
+`AI-ORCHESTRATION.md` (why the rules below exist, and what each cost to
+learn).
 
 ## Code is liability (operational rule)
 
@@ -264,13 +266,9 @@ functions in, or do not write them.
   alone.
 - Do not establish a file's contents through an arbitrary line window
   (`sed -n 'A,Bp'`, `head`, `tail`). An existence or absence claim rests on a
-  whole-file search (`grep -n` over the whole file) or a full read, never on
-  a slice: a truncated slice looks identical to a complete one, so a wrong
-  window turns "I did not see it" into a false "it is not there". A window is
-  legitimate only after a search has located the target, and only for
-  surrounding context -- prefer `grep -n -C3 PATTERN file`. Rationale and the
-  failure that set this rule:
-  `AI-WORKFLOW.md#inspect-the-whole-file-never-a-ritual-window`.
+  whole-file search or a full read, never on a slice. A window is legitimate
+  only after a search has located the target -- prefer `grep -n -C3 PATTERN
+  file`. Why: `AI-ORCHESTRATION.md#the-ritual-window`.
 
 ## Commit messages
 
@@ -284,29 +282,33 @@ explain in the body. Detail and examples:
 
 ## When a gate fails: diagnose, never assign blame
 
-A failing check -- one test, a whole suite, a lint rule, a vuln finding, a
-build -- is a signal to diagnose, not a verdict to defend against. The
-RLHF-trained reflex to ask "was my change at fault?" and stop at the first
-plausible external cause is actively harmful: it substitutes a blame verdict
-for a diagnosis and leaves the defect in the tree.
+A failing check is a signal to diagnose, not a verdict to defend against.
 
-1. **Blame is irrelevant; spend zero reasoning on it.** Yours, a
-   predecessor's, or no commit's at all -- none of it changes what happens
-   next. The failure is part of the working state you own; it gets diagnosed.
+1. **Blame is irrelevant; spend zero reasoning on it.** The failure is part of
+   the working state you own; it gets diagnosed.
 2. **Never locate the cause outside the work.** Three forbidden stopping
-   points: the environment ("podman is not running" -- unit tests need no
-   podman, and the dev engine is always up via `CONTAINER_HOST`, so an
-   environment excuse is almost always a misread test); other commits
-   ("pre-existing" is a still-open defect you now own); and an unexpected
-   in-tree file (a file in the tree is part of the contract -- your model was
-   incomplete, the file is not at fault).
-3. **Diagnose in a fixed order, every time:** re-read the relevant
-   doc/spec/ADR/schema; re-read the existing code the failure touches; re-read
-   your own change. The order grounds the diagnosis in declared intent and the
-   existing contract before it reaches your edit.
+   points: the environment (unit tests need no podman, and the dev engine is
+   always up via `CONTAINER_HOST`); other commits ("pre-existing" is a
+   still-open defect you now own); an unexpected in-tree file (the file is
+   part of the contract; your model was incomplete).
+3. **Diagnose in a fixed order:** re-read the relevant doc/spec/ADR/schema;
+   re-read the existing code the failure touches; re-read your own change.
 4. **Never shrink the gate to make it pass.** No package selector, `-run`
    filter, build tag, `t.Skip`, `-short`, pipe to `true`, or swallowed exit
-   code. A gate that is green only because its scope was cut has been
-   disabled, not passed. If the full gate cannot pass, that is the finding to
-   report.
+   code. If the full gate cannot pass, that is the finding to report.
 5. **The verbatim gate is `make check`**, run exactly as written.
+
+Why: `AI-ORCHESTRATION.md#the-blame-reflex`.
+
+## Completion report
+
+Every run ends with a report whose last two sections are mandatory:
+
+- **Observations** -- the verbatim output of every acceptance observation the
+  instruction names. Not a paraphrase, not "as expected".
+- **Follow-up candidates** -- every correct-but-out-of-scope improvement
+  encountered, each with its file and one line of what and why; or the single
+  word `none`.
+
+A missing section is a gate failure. Why:
+`AI-ORCHESTRATION.md#the-follow-up-channel`.
