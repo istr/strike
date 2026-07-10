@@ -7,6 +7,12 @@ for queries; this file is the cross-arc truth for *what runs next*. IDs only
 
 - item-0073
 - item-0074
+- item-0086
+- item-0087
+- item-0088
+- item-0092
+- item-0090
+- item-0091
 - item-0045
 - item-0035
 - item-0050
@@ -27,6 +33,7 @@ for queries; this file is the cross-arc truth for *what runs next*. IDs only
 - item-0082
 - item-0083
 - item-0084
+- item-0089
 - item-0027
 - item-0004
 - item-0005
