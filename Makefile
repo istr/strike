@@ -74,6 +74,15 @@ lint-cuecoverage:
 	cd tools/lintcuecoverage && go build -o $(CURDIR)/.build/lintcuecoverage .
 	$(CURDIR)/.build/lintcuecoverage ./...
 
+# Standalone gate, intentionally not in the aggregate `lint` target: it fails
+# on the flow-typing classes it covers and stands up red (empty allowlist), so
+# the covered tree is proven clean class by class. It graduates into aggregate
+# lint at the first point where every covered class passes at once.
+.PHONY: lint-typeflow
+lint-typeflow:
+	cd tools/linttypeflow && go build -o $(CURDIR)/.build/linttypeflow .
+	$(CURDIR)/.build/linttypeflow ./...
+
 lint-ascii:
 	@! grep -rPn '[^\x00-\x7F]' --include='*.md' --include='*.go' --include='*.cue' \
 		--exclude='*_test.go' . \
