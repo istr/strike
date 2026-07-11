@@ -1,5 +1,6 @@
 /strike
 contract/*.json
+contract/**/cue_types_gen.go
 internal/**/*.gen.go
 /.claude
 !/.claude/skills/**

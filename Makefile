@@ -1,58 +1,13 @@
-.PHONY: build specs generate golden lint test integration vuln check
+.PHONY: build generate golden lint test integration vuln check
 
 build: generate
 	CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o strike ./cmd/strike
 
 # --- Schema pipeline: CUE -> JSON Schema -> Go/Rust types ---
 
-# Step 1: Export CUE specs to JSON Schema.
-# These JSON Schema files are the cross-implementation contract that
-# both the Go and (future) Rust validators build from.
-specs: contract/primitive/scalars.cue contract/lane/peer.cue contract/target/target.cue contract/lane/lane.cue contract/lane/trustroot.cue contract/provenance/provenance.cue contract/attest/attestation.cue contract/record/record.cue
-	cue export ./contract/lane -e '#Lane' \
-	    --out jsonschema --force -o contract/lane.schema.json
-	cue export ./contract/attest -e '#Attestation' \
-	    --out jsonschema --force -o contract/attestation.schema.json
-	cue export ./contract/trustlayers \
-	    --out json --force -o contract/trust-layers.json
-
-# Step 2: Generate Go types from the CUE schemas via gengotypes.
-generate: specs
-	cue exp gengotypes ./contract/lane
-	cue exp gengotypes ./contract/primitive
-	cue exp gengotypes ./contract/endpoint
-	cue exp gengotypes ./contract/output
-	cue exp gengotypes ./contract/provenance
-	cue exp gengotypes ./contract/target
-	cue exp gengotypes ./contract/record
-	cue exp gengotypes ./contract/attest
-	sed -i 's#github.com/istr/strike/contract/#github.com/istr/strike/internal/#g' contract/lane/cue_types_gen.go contract/primitive/cue_types_gen.go contract/endpoint/cue_types_gen.go contract/output/cue_types_gen.go contract/provenance/cue_types_gen.go contract/target/cue_types_gen.go contract/record/cue_types_gen.go contract/attest/cue_types_gen.go
-	# contract/attest's Go home is internal/deploy (package deploy), not internal/attest:
-	# the CUE package name stays "attest" (matching its contract/ directory), but the
-	# generated Go joins the hand-written deploy package that already imports it.
-	sed -i '0,/^package attest$$/{s/^package attest$$/package deploy/}' contract/attest/cue_types_gen.go
-	# gengotypes emits a bogus bare import (e.g. "lane") for every cross-package
-	# qualifier used inside a @go(,type=map[pkg.K]V) override string. For endpoint
-	# and primitive a real import already exists from an un-overridden field
-	# elsewhere, so the bare line is a duplicate and is dropped; lane and record
-	# are referenced only inside override strings, so their bare line is the only
-	# source of that import and is corrected to the real path instead.
-	sed -i -e '/^\t"endpoint"$$/d' -e '/^\t"primitive"$$/d' \
-	    -e 's#^\t"lane"$$#\t"github.com/istr/strike/internal/lane"#' \
-	    -e 's#^\t"record"$$#\t"github.com/istr/strike/internal/record"#' \
-	    contract/attest/cue_types_gen.go
-	gofmt -w contract/attest/cue_types_gen.go
-	mkdir -p internal/primitive internal/endpoint internal/output internal/provenance internal/target internal/record
-	mv contract/lane/cue_types_gen.go internal/lane/lane.gen.go
-	mv contract/primitive/cue_types_gen.go internal/primitive/primitive.gen.go
-	mv contract/endpoint/cue_types_gen.go internal/endpoint/endpoint.gen.go
-	mv contract/output/cue_types_gen.go internal/output/output.gen.go
-	mv contract/provenance/cue_types_gen.go internal/provenance/provenance.gen.go
-	mv contract/target/cue_types_gen.go internal/target/target.gen.go
-	mv contract/record/cue_types_gen.go internal/record/record.gen.go
-	mv contract/attest/cue_types_gen.go internal/deploy/attest.gen.go
-	cd tools/genenums && go build -o $(CURDIR)/.build/genenums .
-	$(CURDIR)/.build/genenums ./contract/lane ./contract/primitive ./contract/endpoint ./contract/output ./contract/provenance ./contract/target ./contract/record ./contract/attest
+# Generate JSON Schema exports and Go types from the CUE contracts.
+generate:
+	go generate ./contract
 
 # Update golden test fixtures (run after intentional changes to sign/pack/digest).
 golden:
@@ -104,7 +59,7 @@ lint-ci:
 	golangci-lint run ./...
 
 lint-cue-fmt:
-	cue fmt --check --files contract
+	go tool cue fmt --check --files contract
 
 lint: lint-ci lint-typeconv lint-arch lint-ascii lint-adr-index lint-cue-fmt
 

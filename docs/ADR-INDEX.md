@@ -83,6 +83,7 @@ referenced here at all.
 | 047 | [Spec layering: file-prefix layers in one generated CUE package](ADR-047-spec-package-layering.md) | Superseded by ADR-048 | CUE first; Meaning is single-sourced; Code is liability |
 | 048 | [Contract type semantics: naming by role, representation-neutral concepts, and the primitive/concept layering](ADR-048-contract-type-semantics.md) | Accepted | CUE first; Meaning is single-sourced; Enforcement is structural; Code is liability |
 | 049 | [Type discipline at internal seams: grammar operations, wire projections, and boundary determination](ADR-049-type-discipline-internal-seams.md) | Accepted | CUE first; Meaning is single-sourced; Enforcement is structural; Code is liability |
+| 050 | [Build-toolchain: the cue CLI as a go.mod tool dependency](ADR-050-cue-cli-as-go-tool-dependency.md) | Accepted | Code is liability; Meaning is single-sourced; CUE first |
 
 ## By principle
 
