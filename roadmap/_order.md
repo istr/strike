@@ -5,22 +5,6 @@ Items not listed here are unscheduled. `rank` orders items *within* an arc
 for queries; this file is the cross-arc truth for *what runs next*. IDs only
 -- titles live in the item files (single source).
 
-# === BETA CUT: public-announcement bar -- all promises MET, exhaustively type-clean, no Makefile ===
-# 0063  dogfood strike lane (option B) -- the gate that REPLACES `make check`.
-# 0035  retire cue codegen/fmt Makefile targets (also repairs the broken bootstrap).
-# --- full type-cleanliness arc (by rank): clean tree, then graduate the flow gate ---
-# 0045 0075 0090 0091 0076 0077 0085 0078 0086 0087 0088 0079 0080 0092 0081 0082 0089 0083
-#   retire every typed-site class; 0090 owns the sites 0074's cuelint gate flags red.
-# 0084  graduate linttypeflow standalone -> aggregate (green, allowlist-free).
-# --- build-toolchain endgame: every gate now go-native and green ---
-# 0093  fold the two Go-type linters into gotypelint golangci analyzers (needs 0084's settled surface).
-# 0094  make the cuelint gate go-native (needs 0090).  0095 replace shell gates.
-# 0097  retire the sigstore-local Makefile.
-# 0096  CAPSTONE: delete the root Makefile into the green dogfood gate; migrate the docs.
-# --- promise proofs + docs ---
-# 0006 base-SBOM E2E; 0007 cosign independent; 0011 verify enforces SCT.  0064(+0051) README true.
-# 0062  cut the tag + live E2E re-validation.  <- THE TAG (clean tree, no Makefile)
-- item-0063
 - item-0035
 - item-0045
 - item-0075
@@ -45,6 +29,7 @@ for queries; this file is the cross-arc truth for *what runs next*. IDs only
 - item-0094
 - item-0095
 - item-0097
+- item-0063
 - item-0096
 - item-0006
 - item-0007
@@ -52,7 +37,6 @@ for queries; this file is the cross-arc truth for *what runs next*. IDs only
 - item-0064
 - item-0051
 - item-0062
-# === POST-BETA: cue-coverage, test-hygiene, dns, output-model, engine, ssh-front, sigstore/ct harness, parked ===
 - item-0050
 - item-0052
 - item-0057
