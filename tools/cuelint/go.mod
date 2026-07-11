@@ -1,4 +1,4 @@
-module github.com/istr/strike/tools/lintcuecoverage
+module github.com/istr/strike/tools/cuelint
 
 go 1.26.5
 

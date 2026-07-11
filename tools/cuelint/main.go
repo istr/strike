@@ -1,4 +1,4 @@
-// Command lintcuecoverage fails when a hand-written Go type ought to be a
+// Command cuelint fails when a hand-written Go type ought to be a
 // generated CUE type. A named type is reported when it is not declared in a
 // generated file, is not behavioral, is not a struct whose every field is
 // unexported, and any of the following holds: it shares its name with a CUE
@@ -10,6 +10,10 @@
 // unexported fields, which likewise has no single generated form. The tree must
 // compile for the report to be meaningful, so the command aborts when the
 // package loader reports any error.
+//
+// It also lints the CUE source under contract/: an inline string disjunction in
+// a field (ADR-049 rule 5), a field that re-inlines a primitive grammar, and a
+// map whose constrained key is redirected to a plain-string Go key.
 package main
 
 import (
@@ -72,6 +76,11 @@ func run(patterns []string) ([]string, error) {
 			findings = appendFindings(findings, p, cueNames, used)
 		}
 	}
+	synFindings, err := contractSyntaxFindings(".")
+	if err != nil {
+		return nil, fmt.Errorf("contract syntax lint: %w", err)
+	}
+	findings = append(findings, synFindings...)
 	sort.Strings(findings)
 	return findings, nil
 }

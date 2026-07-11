@@ -69,10 +69,10 @@ lint-typeconv:
 # Standalone gate, intentionally not in the aggregate `lint` target: it reports
 # hand-written types that a CUE-first tree would generate instead, and is run on
 # demand rather than gating.
-.PHONY: lint-cuecoverage
-lint-cuecoverage:
-	cd tools/lintcuecoverage && go build -o $(CURDIR)/.build/lintcuecoverage .
-	$(CURDIR)/.build/lintcuecoverage ./...
+.PHONY: cuelint
+cuelint:
+	cd tools/cuelint && go build -o $(CURDIR)/.build/cuelint .
+	$(CURDIR)/.build/cuelint ./...
 
 # Standalone gate, intentionally not in the aggregate `lint` target: it fails
 # on the flow-typing classes it covers and stands up red (empty allowlist), so

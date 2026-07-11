@@ -157,7 +157,24 @@ The codifications of section 8.6, which no register row carries:
 | `unix`/`tls`/`mtls` in `UnmarshalEngine` | boundary | BC-03 | -- |
 | the same literals in `container` and `deploy` | D1 | BC-03 | item-0090, item-0092 |
 
+## Lint gates (cuelint)
+
+cuelint mechanizes three CUE-source rules over `contract/`. Each lands red until
+the owning cleanup item retypes the sites; none uses an allowlist.
+
+- **inline-string-disjunction** (ADR-049 rule 5): a non-definition field whose
+  value is a disjunction of string literals (`field: "a" | "b"`). A named
+  definition (`#Name: "a" | "b"`) and a single-literal struct-arm discriminator
+  (BC-03) are not reached.
+- **primitive-reuse**: a field whose constraint source is byte-identical (modulo
+  whitespace) to a `contract/primitive` definition constraint -- the field
+  re-inlines a grammar a primitive already owns instead of referencing it.
+- **lossy-map-key**: a map whose CUE key carries a constraint but whose `@go`
+  annotation redirects it to `map[string]...`, dropping the key grammar in Go.
+
 ## Amendment log
 
+- Version 2, 2026-07-11: add the Lint gates section (cuelint mechanizes rule 5,
+  primitive-reuse, and lossy-map-key).
 - Version 1, 2026-07-09: initial ratification. RB-01 through RB-07, BC-01
   through BC-03, and the disputed set of the 2026-07-07 dual audit.
