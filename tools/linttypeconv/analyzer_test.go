@@ -13,3 +13,9 @@ func TestAnalyzer(t *testing.T) {
 		"github.com/istr/strike/internal/mediator",
 	)
 }
+
+func TestStutterAnalyzer(t *testing.T) {
+	analysistest.Run(t, analysistest.TestData(), StutterAnalyzer,
+		"github.com/istr/strike/stutter",
+	)
+}
