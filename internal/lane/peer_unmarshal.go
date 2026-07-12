@@ -91,20 +91,20 @@ func unmarshalTLSTrust(data []byte) (endpoint.Trust, error) {
 	}
 
 	var probe struct {
-		Type string `json:"type"`
+		Type endpoint.TrustType `json:"type"`
 	}
 	if err := json.Unmarshal(data, &probe); err != nil {
 		return nil, fmt.Errorf("trust: %w", err)
 	}
 
 	switch probe.Type {
-	case "certFingerprint":
+	case endpoint.TrustTypeCertFingerprint:
 		var t endpoint.Fingerprint
 		if err := json.Unmarshal(data, &t); err != nil {
 			return nil, fmt.Errorf("decode certFingerprint trust: %w", err)
 		}
 		return t, nil
-	case "caBundle":
+	case endpoint.TrustTypeCaBundle:
 		var t endpoint.CABundle
 		if err := json.Unmarshal(data, &t); err != nil {
 			return nil, fmt.Errorf("decode caBundle trust: %w", err)

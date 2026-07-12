@@ -10,6 +10,9 @@ package endpoint
 
 import "github.com/istr/strike/contract/primitive"
 
+// #TrustType is the TLS server-trust anchor discriminator vocabulary.
+#TrustType: "certFingerprint" | "caBundle"
+
 #Trust: (#Fingerprint | #CABundle) @go(-)
 
 #Fingerprint: {

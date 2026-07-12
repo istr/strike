@@ -16,21 +16,21 @@ type Trust interface {
 
 // Fingerprint pins a server certificate by its SHA-256 fingerprint.
 type Fingerprint struct {
-	Type        string           `json:"type"`
+	Type        TrustType        `json:"type"`
 	Fingerprint primitive.Digest `json:"fingerprint"`
 }
 
 // TrustType implements Trust.
-func (t Fingerprint) TrustType() string { return t.Type }
+func (t Fingerprint) TrustType() string { return string(t.Type) }
 
 // CABundle validates a server certificate against a CA bundle.
 type CABundle struct {
-	Type string            `json:"type"`
+	Type TrustType         `json:"type"`
 	Path primitive.AbsPath `json:"path"`
 }
 
 // TrustType implements Trust.
-func (t CABundle) TrustType() string { return t.Type }
+func (t CABundle) TrustType() string { return string(t.Type) }
 
 // KnownHostsLine renders the host key as an OpenSSH known_hosts entry body:
 // the key type, a space, and the base64-encoded public key.
