@@ -301,7 +301,7 @@ func TestEphemeralCA_Fingerprint_Stable(t *testing.T) {
 	block, _ := pem.Decode(ca.PublicCertPEM())
 	sum := sha256.Sum256(block.Bytes)
 	want := "sha256:" + hex.EncodeToString(sum[:])
-	if fp1 != want {
+	if fp1.String() != want {
 		t.Errorf("fingerprint = %q, want %q", fp1, want)
 	}
 }

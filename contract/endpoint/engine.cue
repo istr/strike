@@ -8,6 +8,8 @@
 // the controller's own client-cert identity.
 package endpoint
 
+import "github.com/istr/strike/contract/primitive"
+
 #Engine: (#EngineUnix | #EngineTLS | #EngineMTLS) @go(-)
 
 #EngineUnix: {
@@ -22,7 +24,7 @@ package endpoint
 	caTrustType: "pinned" | "system" @go(CATrustType)
 	// serverCertFingerprint is sha256:<hex> of the engine's leaf cert,
 	// observed by CP during the TLS handshake.
-	serverCertFingerprint: string
+	serverCertFingerprint: primitive.#Digest
 	// serverCertSubject / serverCertIssuer are the Subject CN and Issuer CN
 	// of that leaf certificate, observed in the same handshake.
 	serverCertSubject?: string
@@ -39,6 +41,6 @@ package endpoint
 	type: "mtls"
 	// clientCertFingerprint is sha256:<hex> of the controller's own cert;
 	// clientCertSubject is its Subject CN.
-	clientCertFingerprint: string
+	clientCertFingerprint: primitive.#Digest
 	clientCertSubject?:    string
 }

@@ -28,7 +28,7 @@ func TestProjectStatements(t *testing.T) {
 				"a-image": {Digest: primitive.DigestFromHex(strings.Repeat("a", 64))},
 			},
 			Peers:  map[primitive.Identifier][]lane.Peer{},
-			Engine: endpoint.EngineTLS{Type: "tls", CATrustType: "pinned", ServerCertFingerprint: "sha256:cc"},
+			Engine: endpoint.EngineTLS{Type: "tls", CATrustType: "pinned", ServerCertFingerprint: "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"},
 		},
 		EngineDependent: deploy.EngineDependent{
 			PeerAttribution: map[primitive.Identifier][]endpoint.Authority{"build": {"git.example.com:22"}},

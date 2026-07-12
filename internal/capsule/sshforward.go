@@ -39,9 +39,9 @@ type SSHTarget struct {
 // DecisionAllowed; a failed interaction aborts the run before notarization.
 type SSHConnectionRecord struct {
 	Time               clock.Time
-	Host               string // declared upstream host (no port)
-	HostKeyFingerprint string // "sha256:<hex>" of the validated host key; set on DecisionAllowed
-	HostKeyAlgo        string // host-key algorithm, e.g. "ssh-ed25519"; set on DecisionAllowed
+	Host               string           // declared upstream host (no port)
+	HostKeyFingerprint primitive.Digest // "sha256:<hex>" of the validated host key; set on DecisionAllowed
+	HostKeyAlgo        string           // host-key algorithm, e.g. "ssh-ed25519"; set on DecisionAllowed
 	Err                string
 	Decision           mediator.Decision
 	Resolved           []netip.Addr // upstream IPs from the DoT lookup; dialed addr is Resolved[0]

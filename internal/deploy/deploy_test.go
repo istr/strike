@@ -650,7 +650,7 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 	if !ok {
 		t.Fatalf("Engine type = %T, want endpoint.EngineTLS", att.Sealed.Engine)
 	}
-	if !strings.HasPrefix(tlsConn.ServerCertFingerprint, "sha256:") {
+	if !strings.HasPrefix(tlsConn.ServerCertFingerprint.String(), "sha256:") {
 		t.Errorf("Engine.ServerCertFingerprint = %q, want sha256: prefix", tlsConn.ServerCertFingerprint)
 	}
 
@@ -733,8 +733,8 @@ func TestEngineRecord_WithRuntime(t *testing.T) {
 		Connection: container.ConnectionInfo{
 			Type:                  connTypeMTLS,
 			CATrustType:           "pinned",
-			ServerCertFingerprint: "sha256:abc",
-			ClientCertFingerprint: "sha256:def",
+			ServerCertFingerprint: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			ClientCertFingerprint: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 		},
 		Runtime: &container.RuntimeInfo{
 			Version:  "5.2.1",
@@ -793,11 +793,11 @@ func TestEngineRecord_WithRuntime(t *testing.T) {
 	if !ok {
 		t.Fatalf("Engine type = %T, want endpoint.EngineMTLS", att.Sealed.Engine)
 	}
-	if mtlsConn.ServerCertFingerprint != "sha256:abc" {
-		t.Errorf("ServerCertFingerprint = %q, want sha256:abc", mtlsConn.ServerCertFingerprint)
+	if mtlsConn.ServerCertFingerprint != "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" {
+		t.Errorf("ServerCertFingerprint = %q, want sha256:aaaa...", mtlsConn.ServerCertFingerprint)
 	}
-	if mtlsConn.ClientCertFingerprint != "sha256:def" {
-		t.Errorf("ClientCertFingerprint = %q, want sha256:def", mtlsConn.ClientCertFingerprint)
+	if mtlsConn.ClientCertFingerprint != "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" {
+		t.Errorf("ClientCertFingerprint = %q, want sha256:bbbb...", mtlsConn.ClientCertFingerprint)
 	}
 	if att.Informational.EngineMetadata == nil {
 		t.Fatal("expected non-nil EngineMetadata")
@@ -935,7 +935,7 @@ func TestResolverRecord_Populated(t *testing.T) {
 	if att.Sealed.Resolver.Host != "1.1.1.1:853" {
 		t.Errorf("Host = %q, want 1.1.1.1:853", att.Sealed.Resolver.Host)
 	}
-	if att.Sealed.Resolver.ServerCertFingerprint != rid.LeafFingerprint {
+	if att.Sealed.Resolver.ServerCertFingerprint != rid.LeafFingerprint.String() {
 		t.Errorf("ServerCertFingerprint = %q, want %q", att.Sealed.Resolver.ServerCertFingerprint, rid.LeafFingerprint)
 	}
 	if att.Sealed.Resolver.TLSVersion != "TLS 1.3" {
@@ -1287,8 +1287,8 @@ func TestDeployerExecute_ObservedPeersPopulated(t *testing.T) {
 	ca, look, caPath, ports := deployCapsuleFields(t, "deploy-prod")
 
 	// Inject synthetic network records for the "build" step.
-	tlsFP := "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-	sshFP := "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+	tlsFP := primitive.DigestFromHex(strings.Repeat("b", 64))
+	sshFP := primitive.DigestFromHex(strings.Repeat("c", 64))
 	networkRecords := map[string]capsule.Records{
 		"build": {
 			Connections: []mediator.ConnectionRecord{{
@@ -1443,7 +1443,7 @@ func TestDeployerExecute_ObservedPeers_HonorsSSHPort(t *testing.T) {
 	// the port-drop fix, deploy.go's SSH key derivation already used
 	// s.Port directly, so this pins that behavior against regression as the
 	// TLS-side key derivation changes from string re-parsing to Address.Authority().
-	sshFP := "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+	sshFP := primitive.DigestFromHex(strings.Repeat("d", 64))
 	networkRecords := map[string]capsule.Records{
 		"build": {
 			SSH: []capsule.SSHConnectionRecord{{

@@ -870,7 +870,7 @@ func (d *Deployer) resolverRecord() ResolverRecord {
 	id := d.Resolver.Observed
 	return ResolverRecord{
 		Host:                  string(id.PeerAddress.Authority()),
-		ServerCertFingerprint: id.LeafFingerprint,
+		ServerCertFingerprint: id.LeafFingerprint.String(),
 		TLSVersion:            tls.VersionName(id.TLSVersion),
 		CipherSuite:           tls.CipherSuiteName(id.CipherSuite),
 		ServerName:            id.ServerName,

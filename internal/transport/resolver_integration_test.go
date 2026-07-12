@@ -7,6 +7,7 @@ import (
 
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/endpoint"
+	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/transport"
 )
 
@@ -20,7 +21,7 @@ import (
 // Test fails fast if the env variable is unset; the operator
 // running integration tests is expected to set it.
 func TestProbeResolver_CloudflareDoT_INTEGRATION(t *testing.T) {
-	fingerprint := os.Getenv("STRIKE_CLOUDFLARE_DOT_FINGERPRINT")
+	fingerprint := primitive.Digest(os.Getenv("STRIKE_CLOUDFLARE_DOT_FINGERPRINT"))
 	if fingerprint == "" {
 		t.Skip("STRIKE_CLOUDFLARE_DOT_FINGERPRINT not set; skipping")
 	}

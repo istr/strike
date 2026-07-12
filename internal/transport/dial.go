@@ -16,6 +16,7 @@ import (
 
 	"github.com/istr/strike/internal/closer"
 	"github.com/istr/strike/internal/endpoint"
+	"github.com/istr/strike/internal/primitive"
 )
 
 // bsiTLS12CipherSuites is the set of TLS 1.2 cipher suites strike
@@ -42,7 +43,7 @@ type ConnectionIdentity struct {
 	// LeafFingerprint is the SHA-256 fingerprint of the leaf
 	// certificate, formatted as "sha256:<64 lowercase hex>".
 	// Empty when PeerCertificates is empty.
-	LeafFingerprint string
+	LeafFingerprint primitive.Digest
 
 	// ServerName is the SNI value the client sent during the
 	// handshake. Empty for IP-literal addresses (per RFC 6066,
@@ -175,13 +176,13 @@ func DialVerified(ctx context.Context, addr endpoint.Address, trust endpoint.Tru
 // makeFingerprintVerifier returns a VerifyPeerCertificate
 // callback that succeeds iff the leaf certificate's SHA-256
 // fingerprint matches the expected "sha256:<hex>" string.
-func makeFingerprintVerifier(expected string) func([][]byte, [][]*x509.Certificate) error {
+func makeFingerprintVerifier(expected primitive.Digest) func([][]byte, [][]*x509.Certificate) error {
 	return func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
 		if len(rawCerts) == 0 {
 			return errors.New("transport: no peer certificate presented")
 		}
 		sum := sha256.Sum256(rawCerts[0])
-		got := "sha256:" + hex.EncodeToString(sum[:])
+		got := primitive.DigestFromHex(hex.EncodeToString(sum[:]))
 		if got != expected {
 			return fmt.Errorf("transport: peer certificate fingerprint mismatch: got %s, want %s",
 				got, expected)
@@ -195,13 +196,13 @@ func makeFingerprintVerifier(expected string) func([][]byte, [][]*x509.Certifica
 // sessions. VerifyPeerCertificate is not called for resumed
 // connections (the raw certs are not re-sent); VerifyConnection
 // receives the cached peer certificates and closes the gap.
-func makeConnectionFingerprintVerifier(expected string) func(tls.ConnectionState) error {
+func makeConnectionFingerprintVerifier(expected primitive.Digest) func(tls.ConnectionState) error {
 	return func(state tls.ConnectionState) error {
 		if len(state.PeerCertificates) == 0 {
 			return errors.New("transport: no peer certificate in connection state")
 		}
 		sum := sha256.Sum256(state.PeerCertificates[0].Raw)
-		got := "sha256:" + hex.EncodeToString(sum[:])
+		got := primitive.DigestFromHex(hex.EncodeToString(sum[:]))
 		if got != expected {
 			return fmt.Errorf("transport: peer certificate fingerprint mismatch (resumed): got %s, want %s",
 				got, expected)
@@ -215,8 +216,8 @@ func makeConnectionFingerprintVerifier(expected string) func(tls.ConnectionState
 // filesystem location; lane schema validation has already
 // confirmed it is canonical absolute, but it is still variable
 // from gosec's perspective.
-func loadCABundle(path string) (*x509.CertPool, error) {
-	pemData, err := os.ReadFile(filepath.Clean(path))
+func loadCABundle(path primitive.AbsPath) (*x509.CertPool, error) {
+	pemData, err := os.ReadFile(filepath.Clean(path.String()))
 	if err != nil {
 		return nil, fmt.Errorf("transport: read CA bundle %q: %w", path, err)
 	}
@@ -241,7 +242,7 @@ func CaptureIdentity(state tls.ConnectionState, addr endpoint.Address) Connectio
 	}
 	if len(state.PeerCertificates) > 0 {
 		sum := sha256.Sum256(state.PeerCertificates[0].Raw)
-		id.LeafFingerprint = "sha256:" + hex.EncodeToString(sum[:])
+		id.LeafFingerprint = primitive.DigestFromHex(hex.EncodeToString(sum[:]))
 	}
 	return id
 }

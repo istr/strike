@@ -7,6 +7,8 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
+
+	"github.com/istr/strike/internal/primitive"
 )
 
 // TLSConfig holds paths for TLS configuration.
@@ -82,9 +84,9 @@ func (c TLSConfig) Build() (*tls.Config, error) {
 
 // CertFingerprint computes the SHA-256 fingerprint of a DER-encoded
 // certificate. Returns "sha256:<hex>".
-func CertFingerprint(cert *x509.Certificate) string {
+func CertFingerprint(cert *x509.Certificate) primitive.Digest {
 	sum := sha256.Sum256(cert.Raw)
-	return "sha256:" + hex.EncodeToString(sum[:])
+	return primitive.DigestFromHex(hex.EncodeToString(sum[:]))
 }
 
 // TLSIdentity holds the cryptographic identity information captured from
@@ -92,7 +94,7 @@ func CertFingerprint(cert *x509.Certificate) string {
 type TLSIdentity struct {
 	// ServerFingerprint is the SHA-256 fingerprint of the engine's leaf
 	// certificate. Always set for TCP connections.
-	ServerFingerprint string
+	ServerFingerprint primitive.Digest
 
 	// ServerSubject is the Subject CN of the engine's certificate.
 	ServerSubject string
@@ -102,7 +104,7 @@ type TLSIdentity struct {
 
 	// ClientFingerprint is the SHA-256 fingerprint of the controller's
 	// certificate. Empty if mTLS is not configured.
-	ClientFingerprint string
+	ClientFingerprint primitive.Digest
 
 	// ClientSubject is the Subject CN of the controller's certificate.
 	// Empty if mTLS is not configured.

@@ -134,7 +134,7 @@ import (
 // anchor; hostKeyAlgo is that key's algorithm.
 #ObservedSSH: {
 	type:               "ssh"
-	hostKeyFingerprint: string
+	hostKeyFingerprint: primitive.#Digest
 	hostKeyAlgo:        string
 }
 
@@ -142,7 +142,7 @@ import (
 // the SHA-256 of the leaf certificate that matched the declared anchor.
 #ObservedTLS: {
 	type:                  "https"
-	serverCertFingerprint: string
+	serverCertFingerprint: primitive.#Digest
 }
 
 // EngineDependent -- claims sound only under trust(E). Engine-asserted: the

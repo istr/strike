@@ -461,7 +461,7 @@ func parseAAnswers(t *testing.T, raw []byte) (dnsmessage.RCode, []netip.Addr) {
 // startTestUpstreamTLS spins up a TLS echo server with a self-signed cert
 // valid for the given SNI. Returns the cert fingerprint, listener address,
 // and a cleanup function.
-func startTestUpstreamTLS(t *testing.T, sni string) (fingerprint string, addr string, cleanup func()) {
+func startTestUpstreamTLS(t *testing.T, sni string) (fingerprint primitive.Digest, addr string, cleanup func()) {
 	t.Helper()
 
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -491,7 +491,7 @@ func startTestUpstreamTLS(t *testing.T, sni string) (fingerprint string, addr st
 	}
 
 	sum := sha256.Sum256(certDER)
-	fingerprint = "sha256:" + hex.EncodeToString(sum[:])
+	fingerprint = primitive.DigestFromHex(hex.EncodeToString(sum[:]))
 
 	tlsCert := tls.Certificate{
 		Certificate: [][]byte{certDER},

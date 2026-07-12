@@ -47,7 +47,7 @@ type EphemeralCA struct {
 	cert      *x509.Certificate
 	cache     map[string]*tls.Certificate
 	laneID    primitive.Identifier
-	certSHA   string
+	certSHA   primitive.Digest
 	certPEM   []byte
 	mu        sync.RWMutex
 	closed    bool
@@ -106,7 +106,7 @@ func New(laneID primitive.Identifier) (*EphemeralCA, error) {
 	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
 
 	sum := sha256.Sum256(certDER)
-	certSHA := "sha256:" + hex.EncodeToString(sum[:])
+	certSHA := primitive.DigestFromHex(hex.EncodeToString(sum[:]))
 
 	return &EphemeralCA{
 		laneID:    laneID,
@@ -133,7 +133,7 @@ func (c *EphemeralCA) PublicCertPEM() []byte {
 // public certificate, formatted as "sha256:<64 lowercase hex>".
 // PR-23 will include this in deploy attestation as part of the
 // captured runtime context.
-func (c *EphemeralCA) Fingerprint() string {
+func (c *EphemeralCA) Fingerprint() primitive.Digest {
 	return c.certSHA
 }
 

@@ -23,6 +23,7 @@ import (
 	"github.com/istr/strike/internal/closer"
 	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/mediator"
+	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/transport"
 )
 
@@ -31,7 +32,7 @@ import (
 // testUpstream spins up a TLS echo server with a self-signed cert
 // valid for the given SNI. Returns the server's cert fingerprint,
 // listener address, and a cleanup function.
-func testUpstream(t *testing.T, sni string) (fingerprint string, addr string, cleanup func()) {
+func testUpstream(t *testing.T, sni string) (fingerprint primitive.Digest, addr string, cleanup func()) {
 	t.Helper()
 
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -61,7 +62,7 @@ func testUpstream(t *testing.T, sni string) (fingerprint string, addr string, cl
 	}
 
 	sum := sha256.Sum256(certDER)
-	fingerprint = "sha256:" + hex.EncodeToString(sum[:])
+	fingerprint = primitive.DigestFromHex(hex.EncodeToString(sum[:]))
 
 	tlsCert := tls.Certificate{
 		Certificate: [][]byte{certDER},

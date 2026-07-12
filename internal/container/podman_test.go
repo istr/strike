@@ -588,7 +588,7 @@ func TestServerTLSCapturesFingerprint(t *testing.T) {
 	if tlsID == nil {
 		t.Fatal("expected non-nil TLSIdentity after TLS ping")
 	}
-	if !strings.HasPrefix(tlsID.ServerFingerprint, "sha256:") {
+	if !strings.HasPrefix(tlsID.ServerFingerprint.String(), "sha256:") {
 		t.Errorf("ServerFingerprint = %q, want sha256: prefix", tlsID.ServerFingerprint)
 	}
 	if tlsID.ServerSubject != "strike-test-engine" {
@@ -612,10 +612,10 @@ func TestMTLSCapturesBothFingerprints(t *testing.T) {
 	if tlsID == nil {
 		t.Fatal("expected non-nil TLSIdentity after mTLS ping")
 	}
-	if !strings.HasPrefix(tlsID.ServerFingerprint, "sha256:") {
+	if !strings.HasPrefix(tlsID.ServerFingerprint.String(), "sha256:") {
 		t.Errorf("ServerFingerprint = %q, want sha256: prefix", tlsID.ServerFingerprint)
 	}
-	if !strings.HasPrefix(tlsID.ClientFingerprint, "sha256:") {
+	if !strings.HasPrefix(tlsID.ClientFingerprint.String(), "sha256:") {
 		t.Errorf("ClientFingerprint = %q, want sha256: prefix", tlsID.ClientFingerprint)
 	}
 	if !tlsID.Mutual {
@@ -652,7 +652,7 @@ func TestIdentityAfterPing_ServerTLS(t *testing.T) {
 	if id.Connection.Type != "tls" {
 		t.Errorf("Connection.Type = %q, want tls", id.Connection.Type)
 	}
-	if !strings.HasPrefix(id.Connection.ServerCertFingerprint, "sha256:") {
+	if !strings.HasPrefix(id.Connection.ServerCertFingerprint.String(), "sha256:") {
 		t.Errorf("ServerCertFingerprint = %q, want sha256: prefix", id.Connection.ServerCertFingerprint)
 	}
 	if id.Connection.ServerCertSubject != "strike-test-engine" {
@@ -679,10 +679,10 @@ func TestIdentityAfterPing_MTLS(t *testing.T) {
 	if id.Connection.Type != "mtls" {
 		t.Errorf("Connection.Type = %q, want mtls", id.Connection.Type)
 	}
-	if !strings.HasPrefix(id.Connection.ServerCertFingerprint, "sha256:") {
+	if !strings.HasPrefix(id.Connection.ServerCertFingerprint.String(), "sha256:") {
 		t.Errorf("ServerCertFingerprint = %q, want sha256: prefix", id.Connection.ServerCertFingerprint)
 	}
-	if !strings.HasPrefix(id.Connection.ClientCertFingerprint, "sha256:") {
+	if !strings.HasPrefix(id.Connection.ClientCertFingerprint.String(), "sha256:") {
 		t.Errorf("ClientCertFingerprint = %q, want sha256: prefix", id.Connection.ClientCertFingerprint)
 	}
 	if id.Connection.ClientCertSubject != "strike-test-controller" {

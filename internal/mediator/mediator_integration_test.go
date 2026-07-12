@@ -14,6 +14,7 @@ import (
 	"github.com/istr/strike/internal/closer"
 	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/mediator"
+	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/transport"
 )
 
@@ -22,8 +23,8 @@ import (
 // one.one.one.one HTTPS endpoint and verifies that an HTTP/1.1
 // HEAD request receives a response.
 func TestMediator_CloudflareHTTPS_INTEGRATION(t *testing.T) {
-	dotFingerprint := os.Getenv("STRIKE_CLOUDFLARE_DOT_FINGERPRINT")
-	httpsFingerprint := os.Getenv("STRIKE_CLOUDFLARE_HTTPS_FINGERPRINT")
+	dotFingerprint := primitive.Digest(os.Getenv("STRIKE_CLOUDFLARE_DOT_FINGERPRINT"))
+	httpsFingerprint := primitive.Digest(os.Getenv("STRIKE_CLOUDFLARE_HTTPS_FINGERPRINT"))
 	if dotFingerprint == "" || httpsFingerprint == "" {
 		t.Skip("STRIKE_CLOUDFLARE_DOT_FINGERPRINT or STRIKE_CLOUDFLARE_HTTPS_FINGERPRINT not set; skipping")
 	}

@@ -17,6 +17,7 @@ import (
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/closer"
 	"github.com/istr/strike/internal/endpoint"
+	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/transport"
 )
 
@@ -187,7 +188,7 @@ func TestLookupHost_FingerprintMismatch(t *testing.T) {
 		Address: endpoint.MustParseAuthority(addr),
 		Trust: endpoint.Fingerprint{
 			Type:        "certFingerprint",
-			Fingerprint: "sha256:" + strings.Repeat("0", 64),
+			Fingerprint: primitive.DigestFromHex(strings.Repeat("0", 64)),
 		},
 	}
 	addrs, err := transport.LookupHost(ctx, decl, "example.com")
@@ -207,7 +208,7 @@ func TestLookupHost_ServerUnreachable(t *testing.T) {
 		Address: endpoint.MustParseAuthority("127.0.0.1:1"),
 		Trust: endpoint.Fingerprint{
 			Type:        "certFingerprint",
-			Fingerprint: "sha256:" + strings.Repeat("a", 64),
+			Fingerprint: primitive.DigestFromHex(strings.Repeat("a", 64)),
 		},
 	}
 	_, err := transport.LookupHost(ctx, decl, "example.com")
@@ -255,7 +256,7 @@ func TestProbeResolver_FingerprintMismatch(t *testing.T) {
 		Address: endpoint.MustParseAuthority(addr),
 		Trust: endpoint.Fingerprint{
 			Type:        "certFingerprint",
-			Fingerprint: "sha256:" + strings.Repeat("0", 64),
+			Fingerprint: primitive.DigestFromHex(strings.Repeat("0", 64)),
 		},
 	}
 	if _, err := transport.ProbeResolver(ctx, decl); err == nil {
@@ -283,7 +284,7 @@ func TestProbeResolver_CABundleMismatch(t *testing.T) {
 		Address: endpoint.MustParseAuthority(addr),
 		Trust: endpoint.CABundle{
 			Type: "caBundle",
-			Path: caPath,
+			Path: primitive.AbsPath(caPath),
 		},
 	}
 	if _, err := transport.ProbeResolver(ctx, decl); err == nil {

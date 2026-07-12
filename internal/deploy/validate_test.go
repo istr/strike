@@ -55,7 +55,7 @@ func TestValidateAttestation_WithEngine(t *testing.T) {
 			Engine: endpoint.EngineTLS{
 				Type:                  "tls",
 				CATrustType:           "pinned",
-				ServerCertFingerprint: "sha256:cccccccccccccccccccccc",
+				ServerCertFingerprint: "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
 			},
 			Peers: map[primitive.Identifier][]lane.Peer{},
 		},

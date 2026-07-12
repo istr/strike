@@ -536,7 +536,7 @@ func (c *NetworkCapsule) BridgePeer(ctx context.Context, channel ssh.Channel, to
 	defer fwd.untrackClient(upstream)
 
 	sum := sha256.Sum256(hostKey.Marshal())
-	rec.HostKeyFingerprint = "sha256:" + hex.EncodeToString(sum[:])
+	rec.HostKeyFingerprint = primitive.DigestFromHex(hex.EncodeToString(sum[:]))
 	rec.HostKeyAlgo = hostKey.Type()
 	rec.Decision = mediator.DecisionAllowed
 	fwd.record(rec)

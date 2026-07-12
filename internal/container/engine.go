@@ -222,7 +222,7 @@ type ConnectionInfo struct {
 
 	// ServerCertFingerprint is the SHA-256 of the engine's leaf certificate.
 	// Empty for Unix socket connections.
-	ServerCertFingerprint string `json:"serverCertFingerprint,omitempty"`
+	ServerCertFingerprint primitive.Digest `json:"serverCertFingerprint,omitempty"`
 
 	// ServerCertSubject is the Subject CN of the engine's certificate.
 	ServerCertSubject string `json:"serverCertSubject,omitempty"`
@@ -232,7 +232,7 @@ type ConnectionInfo struct {
 
 	// ClientCertFingerprint is the SHA-256 of the controller's certificate.
 	// Empty unless mTLS is configured.
-	ClientCertFingerprint string `json:"clientCertFingerprint,omitempty"`
+	ClientCertFingerprint primitive.Digest `json:"clientCertFingerprint,omitempty"`
 
 	// ClientCertSubject is the Subject CN of the controller's certificate.
 	ClientCertSubject string `json:"clientCertSubject,omitempty"`

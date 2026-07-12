@@ -43,7 +43,7 @@ func drainConn(c net.Conn) {
 // testCertPair generates a self-signed ECDSA P-256 cert valid
 // for the given hosts (DNS names and/or IPs). Returns the cert
 // and its SHA-256 fingerprint string.
-func testCertPair(t *testing.T, hosts ...string) (*tls.Certificate, string) {
+func testCertPair(t *testing.T, hosts ...string) (*tls.Certificate, primitive.Digest) {
 	t.Helper()
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
@@ -70,7 +70,7 @@ func testCertPair(t *testing.T, hosts ...string) (*tls.Certificate, string) {
 		t.Fatalf("create cert: %v", err)
 	}
 	sum := sha256.Sum256(certDER)
-	fingerprint := "sha256:" + hex.EncodeToString(sum[:])
+	fingerprint := primitive.DigestFromHex(hex.EncodeToString(sum[:]))
 	tlsCert := tls.Certificate{
 		Certificate: [][]byte{certDER},
 		PrivateKey:  key,
@@ -211,7 +211,7 @@ func TestDialVerified_FingerprintMismatch(t *testing.T) {
 	defer cancel()
 	trust := endpoint.Fingerprint{
 		Type:        "certFingerprint",
-		Fingerprint: "sha256:" + strings.Repeat("0", 64),
+		Fingerprint: primitive.DigestFromHex(strings.Repeat("0", 64)),
 	}
 	_, err := transport.DialVerified(ctx, addr, trust)
 	if err == nil {
@@ -239,7 +239,7 @@ func TestDialVerified_CABundleValid(t *testing.T) {
 	defer cancel()
 	trust := endpoint.CABundle{
 		Type: "caBundle",
-		Path: caPath,
+		Path: primitive.AbsPath(caPath),
 	}
 	conn, err := transport.DialVerified(ctx, addr, trust)
 	if err != nil {
@@ -273,7 +273,7 @@ func TestDialVerified_CABundleWrongCA(t *testing.T) {
 	defer cancel()
 	trust := endpoint.CABundle{
 		Type: "caBundle",
-		Path: caPath,
+		Path: primitive.AbsPath(caPath),
 	}
 	_, err := transport.DialVerified(ctx, addr, trust)
 	if err == nil {

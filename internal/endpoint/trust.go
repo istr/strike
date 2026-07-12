@@ -4,6 +4,8 @@
 // depends only on primitive.
 package endpoint
 
+import "github.com/istr/strike/internal/primitive"
+
 // Trust is the interface implemented by TLS server-trust anchors (Fingerprint,
 // CABundle). The CUE disjunction (#Fingerprint | #CABundle) is annotated @go(-)
 // so the generator skips it; this hand-written interface is the Go-side union.
@@ -14,8 +16,8 @@ type Trust interface {
 
 // Fingerprint pins a server certificate by its SHA-256 fingerprint.
 type Fingerprint struct {
-	Type        string `json:"type"`
-	Fingerprint string `json:"fingerprint"`
+	Type        string           `json:"type"`
+	Fingerprint primitive.Digest `json:"fingerprint"`
 }
 
 // TrustType implements Trust.
@@ -23,8 +25,8 @@ func (t Fingerprint) TrustType() string { return t.Type }
 
 // CABundle validates a server certificate against a CA bundle.
 type CABundle struct {
-	Type string `json:"type"`
-	Path string `json:"path"`
+	Type string            `json:"type"`
+	Path primitive.AbsPath `json:"path"`
 }
 
 // TrustType implements Trust.

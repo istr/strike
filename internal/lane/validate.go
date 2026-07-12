@@ -305,36 +305,39 @@ func isPathPrefix(prefix, full string) bool {
 // peers are iterated in declaration order; the first conflicting endpoint
 // yields a deterministic error.
 func validatePeerAnchors(p *Lane) error {
-	seen := map[string]string{} // host:port -> canonical anchor
+	seen := map[endpoint.Authority]canonicalAnchor{} // host:port -> canonical anchor
 	for _, s := range p.Steps {
 		for _, peer := range s.Peers {
-			endpoint := string(peer.Addr().Authority())
+			auth := peer.Addr().Authority()
 			anchor := peerAnchor(peer)
-			if prev, ok := seen[endpoint]; ok {
+			if prev, ok := seen[auth]; ok {
 				if prev != anchor {
 					return fmt.Errorf(
-						"peer endpoint %q declared with conflicting trust anchors", endpoint)
+						"peer endpoint %q declared with conflicting trust anchors", auth)
 				}
 				continue
 			}
-			seen[endpoint] = anchor
+			seen[auth] = anchor
 		}
 	}
 	return nil
 }
 
-// peerAnchor returns a canonical string for a peer's trust anchor. Two peers on
-// the same endpoint are compatible iff their peerAnchor strings are equal. The
-// protocol discriminator is part of the string, so an HTTPS and an SSH anchor
-// on one endpoint never compare equal (C-1).
-func peerAnchor(peer Peer) string {
+// canonicalAnchor is the reduced equality token for a peer's trust anchor:
+// two peers on one endpoint are compatible iff their tokens are equal.
+type canonicalAnchor string
+
+// peerAnchor returns the canonical anchor for a peer's trust configuration. The
+// protocol discriminator is part of the token, so an HTTPS and an SSH anchor on
+// one endpoint never compare equal (C-1).
+func peerAnchor(peer Peer) canonicalAnchor {
 	switch x := peer.(type) {
 	case endpoint.TLS:
 		switch t := x.Trust.(type) {
 		case endpoint.Fingerprint:
-			return "https/certFingerprint/" + t.Fingerprint
+			return canonicalAnchor("https/certFingerprint/" + t.Fingerprint.String())
 		case endpoint.CABundle:
-			return "https/caBundle/" + t.Path
+			return canonicalAnchor("https/caBundle/" + t.Path.String())
 		default:
 			return "https/unknown"
 		}
@@ -344,7 +347,7 @@ func peerAnchor(peer Peer) string {
 			entries[i] = kh.KnownHostsLine()
 		}
 		sort.Strings(entries)
-		return "ssh/" + strings.Join(entries, "\n")
+		return canonicalAnchor("ssh/" + strings.Join(entries, "\n"))
 	default:
 		return "unknown"
 	}

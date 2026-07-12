@@ -364,7 +364,7 @@ func TestBridge_EndToEnd(t *testing.T) {
 	if len(sshRecs) != 1 {
 		t.Fatalf("expected 1 SSH record, got %d", len(sshRecs))
 	}
-	if got := sshRecs[0].HostKeyFingerprint; !strings.HasPrefix(got, "sha256:") {
+	if got := sshRecs[0].HostKeyFingerprint; !strings.HasPrefix(got.String(), "sha256:") {
 		t.Errorf("HostKeyFingerprint = %q, want sha256: prefix", got)
 	}
 	if sshRecs[0].HostKeyAlgo == "" {
