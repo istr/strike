@@ -11,10 +11,10 @@ type DeployMethod interface {
 }
 
 // MethodType implements DeployMethod.
-func (m DeployKubernetes) MethodType() string { return m.Type }
+func (m DeployKubernetes) MethodType() string { return string(m.Type) }
 
 // MethodType implements DeployMethod.
-func (m DeployRegistry) MethodType() string { return m.Type }
+func (m DeployRegistry) MethodType() string { return string(m.Type) }
 
 // MethodType implements DeployMethod.
-func (m DeployCustom) MethodType() string { return m.Type }
+func (m DeployCustom) MethodType() string { return string(m.Type) }

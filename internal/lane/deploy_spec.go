@@ -28,26 +28,26 @@ func (s *DeploySpec) UnmarshalJSON(data []byte) error {
 	}
 
 	var probe struct {
-		Type string `json:"type"`
+		Type DeployMethodType `json:"type"`
 	}
 	if err := json.Unmarshal(aux.Method, &probe); err != nil {
 		return fmt.Errorf("deploy method: %w", err)
 	}
 
 	switch probe.Type {
-	case "kubernetes":
+	case DeployMethodTypeKubernetes:
 		var m DeployKubernetes
 		if err := json.Unmarshal(aux.Method, &m); err != nil {
 			return fmt.Errorf("decode kubernetes deploy method: %w", err)
 		}
 		s.Method = m
-	case "registry":
+	case DeployMethodTypeRegistry:
 		var m DeployRegistry
 		if err := json.Unmarshal(aux.Method, &m); err != nil {
 			return fmt.Errorf("decode registry deploy method: %w", err)
 		}
 		s.Method = m
-	case "custom":
+	case DeployMethodTypeCustom:
 		var m DeployCustom
 		if err := json.Unmarshal(aux.Method, &m); err != nil {
 			return fmt.Errorf("decode custom deploy method: %w", err)

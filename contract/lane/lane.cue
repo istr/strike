@@ -306,9 +306,12 @@ import (
 
 #DeployMethod: (#DeployKubernetes | #DeployRegistry | #DeployCustom) @go(-)
 
+// #DeployMethodType is the deploy method discriminator vocabulary.
+#DeployMethodType: "kubernetes" | "registry" | "custom"
+
 #DeployKubernetes: {
 	@go(DeployKubernetes)
-	type:      "kubernetes"        @go(Type)
+	type:      "kubernetes"        @go(Type,type=DeployMethodType)
 	image:     primitive.#ImageRef @go(Image)
 	namespace: string              @go(Namespace)
 	strategy:  #DeployStrategy     @go(Strategy)
@@ -322,7 +325,7 @@ import (
 
 #DeployRegistry: {
 	@go(DeployRegistry)
-	type: "registry" @go(Type)
+	type: "registry" @go(Type,type=DeployMethodType)
 	// source and target are registry image references (the copy source and
 	// destination), not filesystem paths; they flow to registry.CopyImage.
 	source: string @go(Source)
@@ -331,7 +334,7 @@ import (
 
 #DeployCustom: {
 	@go(DeployCustom)
-	type:  "custom"            @go(Type)
+	type:  "custom"            @go(Type,type=DeployMethodType)
 	image: primitive.#ImageRef @go(Image)
 	args: [...string] @go(Args)
 	env: {
