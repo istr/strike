@@ -24,25 +24,25 @@ func ValidateProvenance(declaredType SourceType, raw []byte) (provenance.Record,
 
 func unmarshalProvenanceRecord(typ SourceType, raw []byte) (provenance.Record, error) {
 	switch typ {
-	case "git":
+	case SourceTypeGit:
 		var r provenance.Git
 		if err := json.Unmarshal(raw, &r); err != nil {
 			return nil, fmt.Errorf("decode git record: %w", err)
 		}
 		return r, nil
-	case "tarball":
+	case SourceTypeTarball:
 		var r provenance.Tarball
 		if err := json.Unmarshal(raw, &r); err != nil {
 			return nil, fmt.Errorf("decode tarball record: %w", err)
 		}
 		return r, nil
-	case "oci":
+	case SourceTypeOci:
 		var r provenance.OCI
 		if err := json.Unmarshal(raw, &r); err != nil {
 			return nil, fmt.Errorf("decode oci record: %w", err)
 		}
 		return r, nil
-	case "url":
+	case SourceTypeUrl:
 		var r provenance.URL
 		if err := json.Unmarshal(raw, &r); err != nil {
 			return nil, fmt.Errorf("decode url record: %w", err)
