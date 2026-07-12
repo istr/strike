@@ -56,10 +56,10 @@ type ObservedIdentity interface {
 }
 
 // IdentityType implements ObservedIdentity.
-func (o ObservedSSH) IdentityType() string { return o.Type }
+func (o ObservedSSH) IdentityType() string { return string(o.Type) }
 
 // IdentityType implements ObservedIdentity.
-func (o ObservedTLS) IdentityType() string { return o.Type }
+func (o ObservedTLS) IdentityType() string { return string(o.Type) }
 
 // UnmarshalJSON decodes an ObservedPeer, dispatching the identity union on its
 // "type" discriminator. Mirrors lane peer dispatch; the dispatch is kept inline

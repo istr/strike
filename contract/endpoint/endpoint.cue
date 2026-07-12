@@ -7,11 +7,15 @@
 // Address.Authority project in and out at the boundary.
 package endpoint
 
+// #CarriageType is the peer carriage discriminator vocabulary shared by the TLS
+// and SSH peer endpoints and the observed-identity records.
+#CarriageType: "https" | "ssh"
+
 // TLS is a TLS-carriage endpoint: an address plus a single server-trust
 // anchor.
 #TLS: {
 	@go(TLS)
-	type: "https" @go(Type)
+	type: "https" @go(Type,type=CarriageType)
 	// host (left of @go) is the packed-authority wire grammar; the Go side
 	// (inside @go) is the Address concept in both name and type, since the wire
 	// diverges from the concept and a diverging field maps fully, not half.
@@ -29,7 +33,7 @@ package endpoint
 // the server is permitted to present.
 #SSH: {
 	@go(SSH)
-	type: "ssh" @go(Type)
+	type: "ssh" @go(Type,type=CarriageType)
 	// host (left of @go) is the packed-authority wire grammar; the Go side is
 	// the Address concept in name and type; see #TLS.host.
 	host: #Authority @go(Address,type=Address)

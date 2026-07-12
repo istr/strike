@@ -137,7 +137,7 @@ import (
 // SHA-256 of the key the server presented that matched the declared known_hosts
 // anchor; hostKeyAlgo is that key's algorithm.
 #ObservedSSH: {
-	type:               "ssh"
+	type:               "ssh" @go(Type,type=endpoint.CarriageType)
 	hostKeyFingerprint: primitive.#Digest
 	hostKeyAlgo:        string
 }
@@ -145,7 +145,7 @@ import (
 // ObservedTLS is a validated HTTPS server identity. serverCertFingerprint is
 // the SHA-256 of the leaf certificate that matched the declared anchor.
 #ObservedTLS: {
-	type:                  "https"
+	type:                  "https" @go(Type,type=endpoint.CarriageType)
 	serverCertFingerprint: primitive.#Digest
 }
 

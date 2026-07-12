@@ -20,16 +20,16 @@ func unmarshalPeer(data []byte) (Peer, error) {
 	}
 
 	var probe struct {
-		Type string `json:"type"`
+		Type endpoint.CarriageType `json:"type"`
 	}
 	if err := json.Unmarshal(data, &probe); err != nil {
 		return nil, fmt.Errorf("peer: %w", err)
 	}
 
 	switch probe.Type {
-	case "https":
+	case endpoint.CarriageTypeHttps:
 		return unmarshalHTTPSPeer(data)
-	case "ssh":
+	case endpoint.CarriageTypeSsh:
 		return unmarshalSSHPeer(data)
 	case "":
 		return nil, fmt.Errorf("peer missing type discriminator")
@@ -43,9 +43,9 @@ func unmarshalPeer(data []byte) (Peer, error) {
 // Trust is required; missing trust is an error.
 func unmarshalHTTPSPeer(data []byte) (Peer, error) {
 	var aux struct {
-		Type  string          `json:"type"`
-		Host  string          `json:"host"`
-		Trust json.RawMessage `json:"trust"`
+		Type  endpoint.CarriageType `json:"type"`
+		Host  string                `json:"host"`
+		Trust json.RawMessage       `json:"trust"`
 	}
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return nil, fmt.Errorf("decode https peer: %w", err)
@@ -68,9 +68,9 @@ func unmarshalHTTPSPeer(data []byte) (Peer, error) {
 // packed authority host and carrying the known-hosts set verbatim.
 func unmarshalSSHPeer(data []byte) (Peer, error) {
 	var aux struct {
-		Type       string             `json:"type"`
-		Host       string             `json:"host"`
-		KnownHosts []endpoint.HostKey `json:"knownHosts"`
+		Type       endpoint.CarriageType `json:"type"`
+		Host       string                `json:"host"`
+		KnownHosts []endpoint.HostKey    `json:"knownHosts"`
 	}
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return nil, fmt.Errorf("decode ssh peer: %w", err)
