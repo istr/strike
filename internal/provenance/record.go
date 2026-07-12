@@ -14,13 +14,13 @@ type Record interface {
 }
 
 // ProvenanceType implements Record.
-func (r Git) ProvenanceType() string { return r.Type }
+func (r Git) ProvenanceType() string { return string(r.Type) }
 
 // ProvenanceType implements Record.
-func (r Tarball) ProvenanceType() string { return r.Type }
+func (r Tarball) ProvenanceType() string { return string(r.Type) }
 
 // ProvenanceType implements Record.
-func (r OCI) ProvenanceType() string { return r.Type }
+func (r OCI) ProvenanceType() string { return string(r.Type) }
 
 // ProvenanceType implements Record.
-func (r URL) ProvenanceType() string { return r.Type }
+func (r URL) ProvenanceType() string { return string(r.Type) }

@@ -10,9 +10,12 @@ import "github.com/istr/strike/contract/primitive"
 	#OCI |
 	#URL) @go(-)
 
+// #SourceType is the provenance source discriminator vocabulary.
+#SourceType: "git" | "tarball" | "oci" | "url"
+
 #Git: {
 	@go(Git)
-	type:       "git"                @go(Type)
+	type:       "git"                @go(Type,type=SourceType)
 	uri:        string               @go(URI)
 	commit:     primitive.#GitCommit @go(Commit)
 	ref?:       string               @go(Ref)
@@ -21,7 +24,7 @@ import "github.com/istr/strike/contract/primitive"
 
 #Tarball: {
 	@go(Tarball)
-	type:       "tarball"         @go(Type)
+	type:       "tarball"         @go(Type,type=SourceType)
 	uri:        string            @go(URI)
 	sha256:     primitive.#Sha256 @go(SHA256)
 	fetchedAt?: string            @go(FetchedAt)
@@ -29,7 +32,7 @@ import "github.com/istr/strike/contract/primitive"
 
 #OCI: {
 	@go(OCI)
-	type:       "oci"             @go(Type)
+	type:       "oci"             @go(Type,type=SourceType)
 	uri:        string            @go(URI)
 	digest:     primitive.#Digest @go(Digest)
 	fetchedAt?: string            @go(FetchedAt)
@@ -37,7 +40,7 @@ import "github.com/istr/strike/contract/primitive"
 
 #URL: {
 	@go(URL)
-	type:       "url"             @go(Type)
+	type:       "url"             @go(Type,type=SourceType)
 	uri:        string            @go(URI)
 	sha256:     primitive.#Sha256 @go(SHA256)
 	fetchedAt?: string            @go(FetchedAt)
