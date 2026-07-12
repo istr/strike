@@ -52,14 +52,14 @@ import (
 // discriminated by IdentityType ("ssh" | "https"). Layer V.
 type ObservedIdentity interface {
 	// IdentityType returns the discriminator ("ssh", "https").
-	IdentityType() string
+	IdentityType() endpoint.CarriageType
 }
 
 // IdentityType implements ObservedIdentity.
-func (o ObservedSSH) IdentityType() string { return string(o.Type) }
+func (o ObservedSSH) IdentityType() endpoint.CarriageType { return o.Type }
 
 // IdentityType implements ObservedIdentity.
-func (o ObservedTLS) IdentityType() string { return string(o.Type) }
+func (o ObservedTLS) IdentityType() endpoint.CarriageType { return o.Type }
 
 // UnmarshalJSON decodes an ObservedPeer, dispatching the identity union on its
 // "type" discriminator. Mirrors lane peer dispatch; the dispatch is kept inline
