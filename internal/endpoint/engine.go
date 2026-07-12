@@ -13,17 +13,17 @@ import (
 // handshake itself.
 type Engine interface {
 	// ConnectionType returns the discriminator ("unix", "tls", "mtls").
-	ConnectionType() string
+	ConnectionType() EngineType
 }
 
 // ConnectionType implements Engine.
-func (c EngineUnix) ConnectionType() string { return string(c.Type) }
+func (c EngineUnix) ConnectionType() EngineType { return c.Type }
 
 // ConnectionType implements Engine.
-func (c EngineTLS) ConnectionType() string { return string(c.Type) }
+func (c EngineTLS) ConnectionType() EngineType { return c.Type }
 
 // ConnectionType implements Engine.
-func (c EngineMTLS) ConnectionType() string { return string(c.Type) }
+func (c EngineMTLS) ConnectionType() EngineType { return c.Type }
 
 // UnmarshalEngine decodes one engine-connection JSON object into the concrete
 // branch named by its "type" discriminator. Exported for internal/deploy, which

@@ -11,7 +11,7 @@ import "github.com/istr/strike/internal/primitive"
 // so the generator skips it; this hand-written interface is the Go-side union.
 type Trust interface {
 	// TrustType returns the discriminator ("certFingerprint", "caBundle").
-	TrustType() string
+	TrustType() TrustType
 }
 
 // Fingerprint pins a server certificate by its SHA-256 fingerprint.
@@ -21,7 +21,7 @@ type Fingerprint struct {
 }
 
 // TrustType implements Trust.
-func (t Fingerprint) TrustType() string { return string(t.Type) }
+func (t Fingerprint) TrustType() TrustType { return t.Type }
 
 // CABundle validates a server certificate against a CA bundle.
 type CABundle struct {
@@ -30,7 +30,7 @@ type CABundle struct {
 }
 
 // TrustType implements Trust.
-func (t CABundle) TrustType() string { return string(t.Type) }
+func (t CABundle) TrustType() TrustType { return t.Type }
 
 // KnownHostsLine renders the host key as an OpenSSH known_hosts entry body:
 // the key type, a space, and the base64-encoded public key.

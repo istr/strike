@@ -330,7 +330,7 @@ func TestDialVerified_TLS11Rejected(t *testing.T) {
 
 type fakeTrust struct{}
 
-func (fakeTrust) TrustType() string { return "fake" }
+func (fakeTrust) TrustType() endpoint.TrustType { return "fake" }
 
 func TestBuildTLSConfig_UnknownTrust(t *testing.T) {
 	_, err := transport.BuildTLSConfig(fakeTrust{})
