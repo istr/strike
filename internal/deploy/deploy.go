@@ -835,7 +835,7 @@ func (d *Deployer) engineRecords() (endpoint.Engine, *EngineMetadata) {
 	case "mtls":
 		conn = endpoint.EngineMTLS{
 			Type:                  c.Type,
-			CATrustType:           c.CATrustType,
+			CATrustType:           endpoint.CATrustType(c.CATrustType),
 			ServerCertFingerprint: c.ServerCertFingerprint,
 			ServerCertSubject:     c.ServerCertSubject,
 			ServerCertIssuer:      c.ServerCertIssuer,
@@ -845,7 +845,7 @@ func (d *Deployer) engineRecords() (endpoint.Engine, *EngineMetadata) {
 	case "tls":
 		conn = endpoint.EngineTLS{
 			Type:                  c.Type,
-			CATrustType:           c.CATrustType,
+			CATrustType:           endpoint.CATrustType(c.CATrustType),
 			ServerCertFingerprint: c.ServerCertFingerprint,
 			ServerCertSubject:     c.ServerCertSubject,
 			ServerCertIssuer:      c.ServerCertIssuer,

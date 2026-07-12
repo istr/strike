@@ -18,12 +18,15 @@ import "github.com/istr/strike/contract/primitive"
 	digest: primitive.#Digest @go(Digest)
 }
 
+// #Format is the SBOM document standard.
+#Format: "cyclonedx-json" | "spdx-json"
+
 // #SBOM is SBOM metadata for an artifact.
 #SBOM: {
 	@go(SBOM)
 
 	// format is the SBOM standard used.
-	format: "cyclonedx-json" | "spdx-json" @go(Format)
+	format: #Format
 
 	// digest is the content hash of the SBOM document.
 	digest: primitive.#Digest @go(Digest)

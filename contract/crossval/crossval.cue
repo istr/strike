@@ -15,16 +15,14 @@ package crossval
 
 import "github.com/istr/strike/contract/primitive"
 
-// Shared envelope for all cross-validation test vectors.
-#Vector: {
-	boundary:    "AssembleImage" | "SpecHash" | "ValidateAttestation" | "StateDigest" | "RenderKnownHosts"
-	description: string
-	inputs:      _
-	expected:    _
-}
+// #Vector is the union of all cross-validation test vector shapes, each
+// discriminated by its concrete boundary literal.
+#Vector: (#AssembleVector | #SpecHashVector | #AttestationVector |
+	#StateDigestVector | #RenderKnownHostsVector) @go(-)
 
-#AssembleVector: #Vector & {
-	boundary: "AssembleImage"
+#AssembleVector: {
+	boundary:    "AssembleImage"
+	description: string
 	inputs: {
 		// "oci:empty" or "oci:layout" (with inline manifest).
 		base: string
@@ -43,8 +41,9 @@ import "github.com/istr/strike/contract/primitive"
 	}
 }
 
-#SpecHashVector: #Vector & {
-	boundary: "SpecHash"
+#SpecHashVector: {
+	boundary:    "SpecHash"
+	description: string
 	inputs: {
 		step: {
 			args: [...string]
@@ -59,8 +58,9 @@ import "github.com/istr/strike/contract/primitive"
 	}
 }
 
-#AttestationVector: #Vector & {
-	boundary: "ValidateAttestation"
+#AttestationVector: {
+	boundary:    "ValidateAttestation"
+	description: string
 	inputs: {
 		attestation: _
 	}
@@ -72,8 +72,9 @@ import "github.com/istr/strike/contract/primitive"
 	}
 }
 
-#StateDigestVector: #Vector & {
-	boundary: "StateDigest"
+#StateDigestVector: {
+	boundary:    "StateDigest"
+	description: string
 	inputs: {
 		captures: [...{
 			name:          string
@@ -86,8 +87,9 @@ import "github.com/istr/strike/contract/primitive"
 	}
 }
 
-#RenderKnownHostsVector: #Vector & {
-	boundary: "RenderKnownHosts"
+#RenderKnownHostsVector: {
+	boundary:    "RenderKnownHosts"
+	description: string
 	inputs: {
 		peers: [...]
 	}

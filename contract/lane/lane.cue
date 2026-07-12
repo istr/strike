@@ -245,7 +245,6 @@ import (
 	annotations?: {
 		[string]: string @go(Annotations)
 	}
-	sbom?: #SBOMConfig @go(SBOM,optional=nillable)
 	push?: [...string] @go(Push)
 }
 
@@ -402,6 +401,9 @@ import (
 // Provenance declaration
 // ---------------------------------------------------------------------------
 
+// #SourceType is a provenance source kind.
+#SourceType: "git" | "tarball" | "oci" | "url"
+
 // ProvenanceSpec declares that a step produces a source-provenance
 // record at a specific path inside its container, in a specific format.
 // After step exit, strike reads the file, validates against the schema
@@ -410,17 +412,7 @@ import (
 // path is the provenance file, relative to the step workdir.
 #ProvenanceSpec: {
 	@go(ProvenanceSpec)
-	type: "git" | "tarball" | "oci" | "url" @go(Type)
+	type: #SourceType
 	// path is the provenance file, relative to the step workdir.
 	path: primitive.#RelPath @go(Path)
-}
-
-// ---------------------------------------------------------------------------
-// Supply chain types
-// ---------------------------------------------------------------------------
-
-#SBOMConfig: {
-	@go(SBOMConfig)
-	generate: *true | bool                    @go(Generate)
-	format:   *"spdx-json" | "cyclonedx-json" @go(Format)
 }

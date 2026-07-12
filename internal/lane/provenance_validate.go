@@ -12,15 +12,17 @@ import (
 // declared type and returns the typed provenance.Record. The schema-side
 // checks run in internal/schema; the typed unmarshal stays in this services
 // package, which may import both the schema (foundation) and provenance
-// (concept) packages.
-func ValidateProvenance(declaredType string, raw []byte) (provenance.Record, error) {
-	if err := schema.ValidateProvenanceJSON(declaredType, raw); err != nil {
+// (concept) packages. schema is a foundation package that must not import
+// internal/lane (ADR-048), so SourceType is narrowed to a plain string only
+// at that boundary call.
+func ValidateProvenance(declaredType SourceType, raw []byte) (provenance.Record, error) {
+	if err := schema.ValidateProvenanceJSON(string(declaredType), raw); err != nil {
 		return nil, err
 	}
 	return unmarshalProvenanceRecord(declaredType, raw)
 }
 
-func unmarshalProvenanceRecord(typ string, raw []byte) (provenance.Record, error) {
+func unmarshalProvenanceRecord(typ SourceType, raw []byte) (provenance.Record, error) {
 	switch typ {
 	case "git":
 		var r provenance.Git

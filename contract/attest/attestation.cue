@@ -114,6 +114,10 @@ import (
 // Observed peer identity (sealed.observedPeers)
 // ---------------------------------------------------------------------------
 
+// #ObservedIdentity is the validated channel identity union, discriminated by
+// type; its Go form is the hand-written deploy.ObservedIdentity interface.
+#ObservedIdentity: (#ObservedSSH | #ObservedTLS) @go(-)
+
 // ObservedPeer is one peer endpoint the control plane connected to and
 // validated against the declared anchor. Layer V: the control plane dials per
 // the lane spec and verifies the presented identity itself; the engine is not
@@ -126,7 +130,7 @@ import (
 	resolved: [...string]
 
 	// identity is the validated channel identity, discriminated by type.
-	identity: #ObservedSSH | #ObservedTLS @go(Identity,type=ObservedIdentity)
+	identity: #ObservedIdentity
 }
 
 // ObservedSSH is a validated SSH host identity. hostKeyFingerprint is the

@@ -98,7 +98,7 @@ func TestProvenanceCapture_EndToEnd(t *testing.T) {
 	}
 }
 
-func fakeProvenanceJSON(t *testing.T, typ string) []byte {
+func fakeProvenanceJSON(t *testing.T, typ lane.SourceType) []byte {
 	t.Helper()
 	switch typ {
 	case "git":

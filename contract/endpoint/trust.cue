@@ -26,13 +26,16 @@ import "github.com/istr/strike/contract/primitive"
 	path: primitive.#AbsPath
 }
 
+// #KeyType is an SSH host-key algorithm identifier.
+#KeyType: "ssh-ed25519" | "ecdsa-sha2-nistp256" |
+	"rsa-sha2-512" | "rsa-sha2-256"
+
 // SSH server-trust anchor: a host key, one OpenSSH known_hosts line decomposed
 // into typed fields. The trust anchor for an SSH endpoint is the set of host
 // keys the server is permitted to present.
 #HostKey: {
 	@go(HostKey)
-	keyType: "ssh-ed25519" | "ecdsa-sha2-nistp256" |
-		"rsa-sha2-512" | "rsa-sha2-256" @go(KeyType)
+	keyType: #KeyType
 	// key is the base64-encoded public key body (no PEM armor).
 	key: primitive.#Base64 @go(Key)
 }

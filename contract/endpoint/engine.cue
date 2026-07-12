@@ -16,12 +16,15 @@ import "github.com/istr/strike/contract/primitive"
 	type: "unix"
 }
 
+// #CATrustType is how an engine's server certificate was trusted.
+#CATrustType: "pinned" | "system"
+
 // EngineServerTLS is the observed engine server-cert identity shared by the tls
 // and mtls variants. Not a connection on its own (no discriminator).
 #EngineServerTLS: {
 	// caTrustType is how the engine's server certificate was trusted:
 	// "pinned" (explicit CA) or "system" (OS trust store).
-	caTrustType: "pinned" | "system" @go(CATrustType)
+	caTrustType: #CATrustType @go(CATrustType)
 	// serverCertFingerprint is sha256:<hex> of the engine's leaf cert,
 	// observed by CP during the TLS handshake.
 	serverCertFingerprint: primitive.#Digest
