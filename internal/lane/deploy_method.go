@@ -7,14 +7,14 @@ package lane
 // ProvenanceRecord.
 type DeployMethod interface {
 	// MethodType returns the discriminator ("kubernetes", "registry", "custom").
-	MethodType() string
+	MethodType() DeployMethodType
 }
 
 // MethodType implements DeployMethod.
-func (m DeployKubernetes) MethodType() string { return string(m.Type) }
+func (m DeployKubernetes) MethodType() DeployMethodType { return m.Type }
 
 // MethodType implements DeployMethod.
-func (m DeployRegistry) MethodType() string { return string(m.Type) }
+func (m DeployRegistry) MethodType() DeployMethodType { return m.Type }
 
 // MethodType implements DeployMethod.
-func (m DeployCustom) MethodType() string { return string(m.Type) }
+func (m DeployCustom) MethodType() DeployMethodType { return m.Type }
