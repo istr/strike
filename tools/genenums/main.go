@@ -236,19 +236,10 @@ func render(pkg string, defs []enumDef) []byte {
 	return []byte(b.String())
 }
 
-// constIdent builds the unexported constant identifier: lowerFirst(goType) plus
+// constIdent builds the exported constant identifier: goType plus
 // the CamelCased value. "spdx-json" -> "SpdxJson"; "file" -> "File".
 func constIdent(goType, val string) string {
-	return lowerFirst(goType) + camel(val)
-}
-
-func lowerFirst(s string) string {
-	if s == "" {
-		return s
-	}
-	r := []rune(s)
-	r[0] = unicode.ToLower(r[0])
-	return string(r)
+	return goType + camel(val)
 }
 
 func camel(s string) string {

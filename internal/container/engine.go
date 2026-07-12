@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/probe"
 )
@@ -212,13 +213,13 @@ type EngineIdentity struct {
 // ConnectionInfo describes the transport between strike and the engine.
 type ConnectionInfo struct {
 	// Type is "unix", "tls", or "mtls".
-	Type string `json:"type"`
+	Type endpoint.EngineType `json:"type"`
 
 	// CATrustType is "pinned" if an explicit CA was configured, or "system"
 	// if the OS trust store was used. Empty for Unix socket connections.
 	// Verifiers use this to assess the scope of trust behind the server
 	// certificate fingerprint.
-	CATrustType string `json:"caTrustType,omitempty"`
+	CATrustType endpoint.CATrustType `json:"caTrustType,omitempty"`
 
 	// ServerCertFingerprint is the SHA-256 of the engine's leaf certificate.
 	// Empty for Unix socket connections.

@@ -7,11 +7,11 @@ package lane
 // guarantee is one of the cases above.
 func (s DeployStrategy) KubectlVerb() string {
 	switch s {
-	case deployStrategyApply:
+	case DeployStrategyApply:
 		return "apply"
-	case deployStrategyReplace:
+	case DeployStrategyReplace:
 		return "replace"
-	case deployStrategyRollout:
+	case DeployStrategyRollout:
 		return "rollout"
 	}
 	return string(s)

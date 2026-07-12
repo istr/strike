@@ -14,6 +14,7 @@ import (
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/closer"
 	"github.com/istr/strike/internal/container"
+	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/front"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/primitive"
@@ -114,13 +115,13 @@ func initEngine(ctx context.Context) container.Engine {
 			log.Print("WARN   engine is running as root -- rootless mode recommended")
 		}
 		switch id.Connection.Type {
-		case "mtls":
+		case endpoint.EngineTypeMtls:
 			log.Printf("INFO   engine: mTLS, ca=%s (server=%s, client=%s)",
 				id.Connection.CATrustType, id.Connection.ServerCertSubject, id.Connection.ClientCertSubject)
-		case "tls":
+		case endpoint.EngineTypeTls:
 			log.Printf("INFO   engine: server-TLS, ca=%s (server=%s)",
 				id.Connection.CATrustType, id.Connection.ServerCertSubject)
-		case "unix":
+		case endpoint.EngineTypeUnix:
 			// No log -- Unix socket is the normal case.
 		}
 	}

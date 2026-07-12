@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/istr/strike/internal/closer"
+	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/primitive"
 )
 
@@ -72,12 +73,12 @@ func (e *podmanEngine) captureTLSIdentity(resp *http.Response) {
 	e.identity = &EngineIdentity{}
 
 	if e.isUnix {
-		e.identity.Connection.Type = "unix"
+		e.identity.Connection.Type = endpoint.EngineTypeUnix
 		return
 	}
 
 	if resp.TLS == nil || len(resp.TLS.PeerCertificates) == 0 {
-		e.identity.Connection.Type = "tls"
+		e.identity.Connection.Type = endpoint.EngineTypeTls
 		return
 	}
 
@@ -87,7 +88,7 @@ func (e *podmanEngine) captureTLSIdentity(resp *http.Response) {
 	e.identity.Connection.ServerCertIssuer = serverCert.Issuer.CommonName
 
 	if e.tlsCfg.HasClientCert() {
-		e.identity.Connection.Type = "mtls"
+		e.identity.Connection.Type = endpoint.EngineTypeMtls
 		clientPair, loadErr := tls.LoadX509KeyPair(e.tlsCfg.CertFile, e.tlsCfg.KeyFile)
 		if loadErr == nil && len(clientPair.Certificate) > 0 {
 			clientCert, parseErr := x509.ParseCertificate(clientPair.Certificate[0])
@@ -97,13 +98,13 @@ func (e *podmanEngine) captureTLSIdentity(resp *http.Response) {
 			}
 		}
 	} else {
-		e.identity.Connection.Type = "tls"
+		e.identity.Connection.Type = endpoint.EngineTypeTls
 	}
 
 	if e.tlsCfg.IsPinned() {
-		e.identity.Connection.CATrustType = "pinned"
+		e.identity.Connection.CATrustType = endpoint.CATrustTypePinned
 	} else {
-		e.identity.Connection.CATrustType = "system"
+		e.identity.Connection.CATrustType = endpoint.CATrustTypeSystem
 	}
 
 	e.tlsID = &TLSIdentity{
@@ -112,7 +113,7 @@ func (e *podmanEngine) captureTLSIdentity(resp *http.Response) {
 		ServerIssuer:      e.identity.Connection.ServerCertIssuer,
 		ClientFingerprint: e.identity.Connection.ClientCertFingerprint,
 		ClientSubject:     e.identity.Connection.ClientCertSubject,
-		Mutual:            e.identity.Connection.Type == "mtls",
+		Mutual:            e.identity.Connection.Type == endpoint.EngineTypeMtls,
 	}
 }
 

@@ -12,8 +12,11 @@ import "github.com/istr/strike/contract/primitive"
 
 #Engine: (#EngineUnix | #EngineTLS | #EngineMTLS) @go(-)
 
+// #EngineType is the engine connection discriminator vocabulary.
+#EngineType: "unix" | "tls" | "mtls"
+
 #EngineUnix: {
-	type: "unix"
+	type: "unix" @go(Type,type=EngineType)
 }
 
 // #CATrustType is how an engine's server certificate was trusted.
@@ -36,12 +39,12 @@ import "github.com/istr/strike/contract/primitive"
 
 #EngineTLS: {
 	#EngineServerTLS
-	type: "tls"
+	type: "tls" @go(Type,type=EngineType)
 }
 
 #EngineMTLS: {
 	#EngineServerTLS
-	type: "mtls"
+	type: "mtls" @go(Type,type=EngineType)
 	// clientCertFingerprint is sha256:<hex> of the controller's own cert;
 	// clientCertSubject is its Subject CN.
 	clientCertFingerprint: primitive.#Digest
