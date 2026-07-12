@@ -10,17 +10,17 @@ package provenance
 // union.
 type Record interface {
 	// ProvenanceType returns the discriminator ("git", "tarball", "oci", "url").
-	ProvenanceType() string
+	ProvenanceType() SourceType
 }
 
 // ProvenanceType implements Record.
-func (r Git) ProvenanceType() string { return string(r.Type) }
+func (r Git) ProvenanceType() SourceType { return r.Type }
 
 // ProvenanceType implements Record.
-func (r Tarball) ProvenanceType() string { return string(r.Type) }
+func (r Tarball) ProvenanceType() SourceType { return r.Type }
 
 // ProvenanceType implements Record.
-func (r OCI) ProvenanceType() string { return string(r.Type) }
+func (r OCI) ProvenanceType() SourceType { return r.Type }
 
 // ProvenanceType implements Record.
-func (r URL) ProvenanceType() string { return string(r.Type) }
+func (r URL) ProvenanceType() SourceType { return r.Type }
