@@ -34,25 +34,25 @@ func UnmarshalEngine(data []byte) (Engine, error) {
 		return nil, fmt.Errorf("engine connection missing")
 	}
 	var probe struct {
-		Type string `json:"type"`
+		Type EngineType `json:"type"`
 	}
 	if err := json.Unmarshal(data, &probe); err != nil {
 		return nil, fmt.Errorf("engine connection: %w", err)
 	}
 	switch probe.Type {
-	case "unix":
+	case EngineTypeUnix:
 		var c EngineUnix
 		if err := json.Unmarshal(data, &c); err != nil {
 			return nil, fmt.Errorf("decode unix engine connection: %w", err)
 		}
 		return c, nil
-	case "tls":
+	case EngineTypeTls:
 		var c EngineTLS
 		if err := json.Unmarshal(data, &c); err != nil {
 			return nil, fmt.Errorf("decode tls engine connection: %w", err)
 		}
 		return c, nil
-	case "mtls":
+	case EngineTypeMtls:
 		var c EngineMTLS
 		if err := json.Unmarshal(data, &c); err != nil {
 			return nil, fmt.Errorf("decode mtls engine connection: %w", err)

@@ -78,19 +78,19 @@ func (p *ObservedPeer) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("observed peer missing identity")
 	}
 	var probe struct {
-		Type string `json:"type"`
+		Type endpoint.CarriageType `json:"type"`
 	}
 	if err := json.Unmarshal(aux.Identity, &probe); err != nil {
 		return fmt.Errorf("observed identity: %w", err)
 	}
 	switch probe.Type {
-	case "ssh":
+	case endpoint.CarriageTypeSsh:
 		var id ObservedSSH
 		if err := json.Unmarshal(aux.Identity, &id); err != nil {
 			return fmt.Errorf("decode ssh identity: %w", err)
 		}
 		p.Identity = id
-	case "https":
+	case endpoint.CarriageTypeHttps:
 		var id ObservedTLS
 		if err := json.Unmarshal(aux.Identity, &id); err != nil {
 			return fmt.Errorf("decode https identity: %w", err)
