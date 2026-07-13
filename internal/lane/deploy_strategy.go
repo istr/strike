@@ -5,14 +5,14 @@ package lane
 // forces a decision here instead of a silent passthrough. The trailing return
 // handles the value that schema validation and the parse-seam default already
 // guarantee is one of the cases above.
-func (s DeployStrategy) KubectlVerb() string {
+func (s DeployStrategy) KubectlVerb() DeployStrategy {
 	switch s {
 	case DeployStrategyApply:
-		return "apply"
+		return DeployStrategyApply
 	case DeployStrategyReplace:
-		return "replace"
+		return DeployStrategyReplace
 	case DeployStrategyRollout:
-		return "rollout"
+		return DeployStrategyRollout
 	}
-	return string(s)
+	return s
 }
