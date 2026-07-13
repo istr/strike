@@ -201,13 +201,9 @@ func liveTrustRoot(ctx context.Context, t *testing.T, fulcioEp endpoint.HTTPS, r
 	if block == nil {
 		t.Fatalf("rekor public key is not PEM")
 	}
-	rekorKey, err := x509.ParsePKIXPublicKey(block.Bytes)
+	edKey, err := parseEd25519PKIX(block.Bytes)
 	if err != nil {
 		t.Fatalf("parse rekor public key: %v", err)
-	}
-	edKey, ok := rekorKey.(ed25519.PublicKey)
-	if !ok {
-		t.Fatalf("rekor public key is %T, want ed25519", rekorKey)
 	}
 	logID := sha256LogID(liveRekorOrigin, edKey)
 	tlog := &root.TransparencyLog{
@@ -216,7 +212,7 @@ func liveTrustRoot(ctx context.Context, t *testing.T, fulcioEp endpoint.HTTPS, r
 		ValidityPeriodStart: clock.Unix(0, 0),
 		ValidityPeriodEnd:   clock.Unix(1<<40, 0),
 		HashFunc:            crypto.SHA256,
-		PublicKey:           rekorKey,
+		PublicKey:           edKey,
 		SignatureHashFunc:   crypto.Hash(0),
 	}
 
@@ -268,4 +264,17 @@ func liveTrustRoot(ctx context.Context, t *testing.T, fulcioEp endpoint.HTTPS, r
 func sha256LogID(origin string, pub ed25519.PublicKey) []byte {
 	sum := sha256.Sum256(append([]byte(origin+"\n\x01"), pub...))
 	return sum[:]
+}
+
+// parseEd25519PKIX extracts an Ed25519 public key from PKIX/SPKI DER.
+func parseEd25519PKIX(der []byte) (ed25519.PublicKey, error) {
+	pub, err := x509.ParsePKIXPublicKey(der)
+	if err != nil {
+		return nil, err
+	}
+	ed, ok := pub.(ed25519.PublicKey)
+	if !ok {
+		return nil, fmt.Errorf("public key is %T, want ed25519", pub)
+	}
+	return ed, nil
 }
