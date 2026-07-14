@@ -34,7 +34,7 @@ import (
 	// until the secrets contract is revisited separately (YAGNI).
 	secrets: {
 		[ID=primitive.#Identifier]: #SecretSource
-	} @go(Secrets,type=map[string]SecretSource)
+	} @go(Secrets,type=map["github.com/istr/strike/contract/primitive".Identifier]SecretSource)
 	steps: [#Step, ...#Step] @go(Steps)
 	resolver: endpoint.#TLS @go(Resolver)
 	oidc:     #OIDCConfig   @go(OIDC)
@@ -51,7 +51,7 @@ import (
 
 #LaneDefaults: {
 	@go(LaneDefaults)
-	timeout: *"10m" | primitive.#Duration @go(Timeout)
+	timeout: *"10m" | primitive.#Duration @go(Timeout,type="github.com/istr/strike/contract/primitive".Duration)
 }
 
 // OIDCConfig declares the lane-wide keyless signing identity (ADR-040 D5).
@@ -225,8 +225,8 @@ import (
 
 #SecretRef: {
 	@go(SecretRef)
-	name: string @go(Name)
-	env:  string @go(Env)
+	name: primitive.#Identifier @go(Name)
+	env:  string                @go(Env)
 }
 
 // ---------------------------------------------------------------------------

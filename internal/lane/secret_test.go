@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/primitive"
 )
 
 func randomHex(t *testing.T) string {
@@ -76,7 +77,7 @@ func TestReadSecret_UnknownScheme(t *testing.T) {
 
 func TestResolveSecrets_MissingDefinition(t *testing.T) {
 	refs := []lane.SecretRef{{Name: "missing", Env: "MISSING"}}
-	sources := map[string]lane.SecretSource{}
+	sources := map[primitive.Identifier]lane.SecretSource{}
 	root := openTestRoot(t, t.TempDir())
 
 	_, err := lane.ResolveSecrets(refs, sources, root)
@@ -91,16 +92,13 @@ func TestResolveSecrets_Valid(t *testing.T) {
 	t.Setenv("STRIKE_TEST_A", valA)
 	t.Setenv("STRIKE_TEST_B", valB)
 
-	nameA := "s_" + randomHex(t)
-	nameB := "s_" + randomHex(t)
-
 	refs := []lane.SecretRef{
-		{Name: nameA, Env: "OUT_A"},
-		{Name: nameB, Env: "OUT_B"},
+		{Name: "s-alpha", Env: "OUT_A"},
+		{Name: "s-beta", Env: "OUT_B"},
 	}
-	defs := map[string]lane.SecretSource{
-		nameA: "env://STRIKE_TEST_A",
-		nameB: "env://STRIKE_TEST_B",
+	defs := map[primitive.Identifier]lane.SecretSource{
+		"s-alpha": "env://STRIKE_TEST_A",
+		"s-beta":  "env://STRIKE_TEST_B",
 	}
 
 	root := openTestRoot(t, t.TempDir())

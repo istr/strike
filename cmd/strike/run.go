@@ -109,8 +109,7 @@ func (rc *runContext) runStep(stepID primitive.Identifier) error {
 	case step.Timeout != nil:
 		rawTimeout = step.Timeout
 	case rc.lane.Defaults != nil:
-		d := primitive.Duration(rc.lane.Defaults.Timeout)
-		rawTimeout = &d
+		rawTimeout = &rc.lane.Defaults.Timeout
 	}
 	timeout, err := lane.ParseDuration(rawTimeout, 10*clock.Minute)
 	if err != nil {

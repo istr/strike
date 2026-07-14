@@ -7,6 +7,8 @@ import (
 	"io"
 	"os"
 	"strings"
+
+	"github.com/istr/strike/internal/primitive"
 )
 
 // SecretString holds a sensitive value that is redacted in all string
@@ -93,7 +95,7 @@ func ReadSecret(source SecretSource, root *os.Root) (SecretString, error) {
 
 // ResolveSecrets resolves all secret references to their values.
 // File secrets are resolved through the lane root scope.
-func ResolveSecrets(refs []SecretRef, sources map[string]SecretSource, root *os.Root) (map[string]SecretString, error) {
+func ResolveSecrets(refs []SecretRef, sources map[primitive.Identifier]SecretSource, root *os.Root) (map[string]SecretString, error) {
 	result := map[string]SecretString{}
 	for _, ref := range refs {
 		source, ok := sources[ref.Name]
