@@ -84,6 +84,7 @@ referenced here at all.
 | 048 | [Contract type semantics: naming by role, representation-neutral concepts, and the primitive/concept layering](ADR-048-contract-type-semantics.md) | Accepted | CUE first; Meaning is single-sourced; Enforcement is structural; Code is liability |
 | 049 | [Type discipline at internal seams: grammar operations, wire projections, and boundary determination](ADR-049-type-discipline-internal-seams.md) | Accepted | CUE first; Meaning is single-sourced; Enforcement is structural; Code is liability |
 | 050 | [Build-toolchain: the cue CLI as a go.mod tool dependency](ADR-050-cue-cli-as-go-tool-dependency.md) | Accepted | Code is liability; Meaning is single-sourced; CUE first |
+| 051 | [Deploy is the sealing point -- a signed, SBOM'd subject over the deployed payload](ADR-051-deploy-as-sealing-point.md) | Accepted | Runtime is attested; Digest-pinned references; Reproducibility; Identity is asymmetric; Enforcement is structural; Code is liability |
 
 ## By principle
 
@@ -98,7 +99,7 @@ ADR-011, ADR-013, ADR-014, ADR-015, ADR-016, ADR-017, ADR-018,
 ADR-019, ADR-020, ADR-021, ADR-023, ADR-024, ADR-025, ADR-026, ADR-027,
 ADR-028, ADR-029, ADR-030, ADR-031, ADR-032, ADR-033, ADR-034, ADR-035,
 ADR-036, ADR-037, ADR-038, ADR-039, ADR-040, ADR-041, ADR-042, ADR-043,
-ADR-044, ADR-045, ADR-046, ADR-047, ADR-048, ADR-049.
+ADR-044, ADR-045, ADR-046, ADR-047, ADR-048, ADR-049, ADR-051.
 
 ### No shell
 
@@ -125,7 +126,8 @@ ADR-006, ADR-014, ADR-016, ADR-018.
 ### Runtime is attested
 
 ADR-012, ADR-013, ADR-014, ADR-016, ADR-019, ADR-028, ADR-030,
-ADR-033, ADR-037, ADR-038, ADR-040, ADR-041, ADR-042, ADR-043, ADR-045.
+ADR-033, ADR-037, ADR-038, ADR-040, ADR-041, ADR-042, ADR-043, ADR-045,
+ADR-051.
 
 ### Peers are declared
 
@@ -136,18 +138,19 @@ ADR-031, ADR-032, ADR-033, ADR-038, ADR-040.
 
 ADR-007, ADR-008, ADR-012, ADR-013, ADR-019, ADR-022, ADR-024,
 ADR-025, ADR-028, ADR-029, ADR-030, ADR-033, ADR-037, ADR-038, ADR-040,
-ADR-041.
+ADR-041, ADR-051.
 
 ### External references are digest-pinned
 
 ADR-008, ADR-009, ADR-011, ADR-012, ADR-013, ADR-016, ADR-017,
 ADR-018, ADR-019, ADR-020, ADR-021, ADR-026, ADR-027, ADR-029,
-ADR-030, ADR-031, ADR-034, ADR-035, ADR-036, ADR-038, ADR-040, ADR-041, ADR-043, ADR-045, ADR-046.
+ADR-030, ADR-031, ADR-034, ADR-035, ADR-036, ADR-038, ADR-040, ADR-041, ADR-043, ADR-045, ADR-046, ADR-051.
 
 ### Reproducibility is enforced, not hoped for
 
 ADR-009, ADR-010, ADR-011, ADR-015, ADR-016, ADR-017, ADR-026, ADR-027,
-ADR-031, ADR-034, ADR-035, ADR-036, ADR-037, ADR-039, ADR-040, ADR-046.
+ADR-031, ADR-034, ADR-035, ADR-036, ADR-037, ADR-039, ADR-040, ADR-046,
+ADR-051.
 
 ### Containers are the only storage
 
@@ -161,7 +164,7 @@ ADR-032, ADR-034.
 
 ADR-005, ADR-006, ADR-022, ADR-024, ADR-025, ADR-028, ADR-029,
 ADR-031, ADR-033, ADR-034, ADR-035, ADR-036, ADR-037, ADR-038, ADR-041, ADR-043,
-ADR-044, ADR-045, ADR-046, ADR-048, ADR-049.
+ADR-044, ADR-045, ADR-046, ADR-048, ADR-049, ADR-051.
 
 ### Meaning is single-sourced
 
