@@ -215,3 +215,25 @@ method carries a bespoke second recording path.
   documented around.
 - **Code is liability.** A lane-wide registry field, a redundant source, a
   promote path, a dead field, and an out-of-V method are removed, not carried.
+
+## Amendment -- D8: the pack payload comes only from digest-pinned inputs
+
+`PackSpec.configFiles` is removed. D1 defines a pack step as assembling a
+payload as a pure deterministic function of digest-pinned inputs. A
+`configFiles` entry is literal text carried in the lane and materialized as
+bytes in an image layer, so the payload it contributes has no digest-pinned
+origin. That the lane is itself hashed does not repair this: D1 requires the
+inputs to be pinned, not merely the assembly to be deterministic, and a
+reproducible function of unpinned text is still a function of unpinned text.
+
+D1 draws its line at the payload, not at the lane literal. Lane values that
+become image or manifest metadata stay: the image configuration (env,
+entrypoint, cmd, workdir, user, labels), the manifest annotations, and the
+per-file mode, uid, and gid. They are not the payload, no digest-pinned source
+for them exists, and an image without an entrypoint is not runnable. Only
+lane text that becomes payload bytes falls, which makes `configFiles` its
+single member; `FileEntry`, whose only user it is, goes with it.
+
+A lane that needs a generated file inside an image produces the file as a step
+output and references it through `PackFile.from`, which is the digest-pinned
+path D1 names. This is a lane-schema break; pre-beta, no migration.
