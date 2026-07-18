@@ -269,3 +269,48 @@ D9 does not settle the deployed-payload shape for a kubernetes deploy. The
 SBOM-decomposition role above holds for kubernetes, but the kubernetes
 cardinality and what plays the role of the pushed image there are decided by
 the kubernetes rewiring, not by this amendment.
+
+## Amendment -- D10: the deploy target identity is removed; the attestable target is the dialed endpoint
+
+D6 retains "the attestation target identity (the deploy target value type)" and
+grounds it in the ADR-016 pairing of pre- and post-state across consecutive
+deploys to the same target. That identity is removed, and D6's retention clause
+is superseded.
+
+The identity had reduced to an operator-assigned label (`target.id`) with a
+free-string type and an optional description, url, and namespace. The type was
+populated with the deploy method's own vocabulary and duplicated the method
+discriminator with no coupling constraint; url and namespace were never
+populated; namespace, where meaningful, is owned by the kubernetes method. No
+strike code reads any field of the identity -- the whole value is serialized
+opaquely into the sealed attestation and the published external parameters.
+
+`target.id` has no verifiable value to an independent verifier. strike performs
+only Recording (ADR-016); Detection and Action are external. An offline verify
+authenticates the signed envelope over the label but cannot confirm the label
+denotes a real destination: there is no oracle for that correspondence. The
+optional declared-chain-continuity check -- group attestations by `target.id`
+and test that a deploy's pre-state digest equals the predecessor's post-state
+digest -- verifies only the operator's self-asserted chain; an id split or merge
+is invisible.
+
+What is soundly attestable is the dialed endpoint, and it is already carried.
+The deploy attestation records the declared-to-dialed-to-observed peer identity
+in `Sealed.ObservedPeers`: a kubernetes deploy dials its cluster as an observed
+peer, and a registry deploy carries its push destination and the resulting
+pushed digest (D6). The removed identity was redundant with the artifact subject
+-- the verifiable payload (D2) -- and with the observed peers -- the verifiable
+dialed target.
+
+Removals (applied by the follow-on fix item, not this amendment): the
+`contract/target` package (`#Deploy`) and its import; `DeploySpec.target`; the
+attest `Sealed.target` and `StrikeExternalParameters.target`; the trust-layer
+`target` entry. This is a lane-schema and attestation-schema break; pre-beta, no
+migration.
+
+This resolves the deploy-target naming, type, and namespace questions by
+removal: with `DeploySpec.target` gone there is no name clash with the registry
+method's push destination, no target type beside the method enum, and no target
+namespace beside the kubernetes method namespace. The kubernetes dialed-target
+representation is unaffected -- it is the observed cluster peer -- and any
+refinement belongs to the kubernetes rewiring (cf. D9), not this amendment.
