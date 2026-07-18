@@ -53,7 +53,7 @@ func TestInformationalStatement_Valid(t *testing.T) {
 		Subject:       []deploy.Subject{{Name: "image", Digest: &deploy.DigestSet{SHA256: "0000000000000000000000000000000000000000000000000000000000000000"}}},
 		PredicateType: "https://istr.dev/strike/predicates/informational/v1",
 		Predicate: deploy.InformationalPredicate{
-			Timestamp:       deploy.Timestamp(clock.Reproducible().Format(clock.RFC3339)),
+			Timestamp:       primitive.Timestamp(clock.Reproducible().Format(clock.RFC3339)),
 			PreStateDigest:  primitive.DigestFromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
 			PostStateDigest: primitive.DigestFromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
 			Provenance:      []provenance.Record{},

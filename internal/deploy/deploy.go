@@ -370,7 +370,7 @@ func (d *Deployer) buildAttestation(
 			PeerAttribution: peerAttribution,
 		},
 		Informational: &Informational{
-			Timestamp:       Timestamp(started.Format(clock.RFC3339)),
+			Timestamp:       primitive.Timestamp(started.Format(clock.RFC3339)),
 			EngineMetadata:  engineMeta,
 			PreStateDigest:  preDigest,
 			PostStateDigest: postDigest,

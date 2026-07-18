@@ -19,29 +19,29 @@ import "github.com/istr/strike/contract/primitive"
 	uri:        string               @go(URI)
 	commit:     primitive.#GitCommit @go(Commit)
 	ref?:       string               @go(Ref)
-	fetchedAt?: string               @go(FetchedAt)
+	fetchedAt?: primitive.#Timestamp @go(FetchedAt)
 }
 
 #Tarball: {
 	@go(Tarball)
-	type:       "tarball"         @go(Type,type=SourceType)
-	uri:        string            @go(URI)
-	sha256:     primitive.#Sha256 @go(SHA256)
-	fetchedAt?: string            @go(FetchedAt)
+	type:       "tarball"            @go(Type,type=SourceType)
+	uri:        string               @go(URI)
+	sha256:     primitive.#Sha256    @go(SHA256)
+	fetchedAt?: primitive.#Timestamp @go(FetchedAt)
 }
 
 #OCI: {
 	@go(OCI)
-	type:       "oci"             @go(Type,type=SourceType)
-	uri:        string            @go(URI)
-	digest:     primitive.#Digest @go(Digest)
-	fetchedAt?: string            @go(FetchedAt)
+	type:       "oci"                @go(Type,type=SourceType)
+	uri:        string               @go(URI)
+	digest:     primitive.#Digest    @go(Digest)
+	fetchedAt?: primitive.#Timestamp @go(FetchedAt)
 }
 
 #URL: {
 	@go(URL)
-	type:       "url"             @go(Type,type=SourceType)
-	uri:        string            @go(URI)
-	sha256:     primitive.#Sha256 @go(SHA256)
-	fetchedAt?: string            @go(FetchedAt)
+	type:       "url"                @go(Type,type=SourceType)
+	uri:        string               @go(URI)
+	sha256:     primitive.#Sha256    @go(SHA256)
+	fetchedAt?: primitive.#Timestamp @go(FetchedAt)
 }

@@ -31,8 +31,6 @@ import (
 	deploytarget "github.com/istr/strike/contract/target"
 )
 
-#Timestamp: =~"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}"
-
 // ---------------------------------------------------------------------------
 // Top-level attestation
 // ---------------------------------------------------------------------------
@@ -183,7 +181,7 @@ import (
 #Informational: {
 	// timestamp is CP's wall-clock at deploy start. Not security-relevant
 	// per SECURITY.md: the RFC3161 TSA token is the trusted time (ADR-040).
-	timestamp?: #Timestamp
+	timestamp?: primitive.#Timestamp
 
 	// engineMetadata carries the engine's self-reports about itself.
 	engineMetadata?: #EngineMetadata @go(EngineMetadata,optional=nillable)

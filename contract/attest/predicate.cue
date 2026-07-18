@@ -13,10 +13,10 @@
 // Rekor inclusion lives in the sigstore bundle, never in a predicate payload
 // (ADR-013 satisfied structurally): no predicate here carries a rekor field.
 //
-// Shared types named here resolve two ways: #Timestamp, #ObservedPeer,
+// Shared types named here resolve two ways: #ObservedPeer,
 // #ResolverRecord, #EngineMetadata, and #Subject are defined in this attest
-// package (attestation.cue and this file); the lane declarations are named
-// qualified through the lane import.
+// package (attestation.cue and this file); #Timestamp is from the primitive
+// package; the lane declarations are named qualified through the lane import.
 
 package attest
 
@@ -184,7 +184,7 @@ import (
 	// trusted time: the RFC3161 TSA token is the trusted time (ADR-040). This is
 	// the one output statement that carries a wall-clock; the sealed provenance is
 	// reproducible and omits it.
-	timestamp?: #Timestamp
+	timestamp?: primitive.#Timestamp
 
 	// preStateDigest / postStateDigest are CP's canonical SHA-256 digests of
 	// the pre/post-deploy state captures. The bytes were produced by the

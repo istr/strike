@@ -1190,7 +1190,7 @@ func TestValidateAttestation_InvalidLaneID(t *testing.T) {
 			Peers:     map[primitive.Identifier][]lane.Peer{},
 		},
 		Informational: &deploy.Informational{
-			Timestamp:       deploy.Timestamp(clock.Reproducible().Format(clock.RFC3339)),
+			Timestamp:       primitive.Timestamp(clock.Reproducible().Format(clock.RFC3339)),
 			PreStateDigest:  primitive.DigestFromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
 			PostStateDigest: primitive.DigestFromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
 			Provenance:      []provenance.Record{},

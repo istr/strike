@@ -30,7 +30,7 @@ func TestValidateAttestation_Valid(t *testing.T) {
 			Peers: map[primitive.Identifier][]lane.Peer{},
 		},
 		Informational: &deploy.Informational{
-			Timestamp:       deploy.Timestamp(clock.Reproducible().Format(clock.RFC3339)),
+			Timestamp:       primitive.Timestamp(clock.Reproducible().Format(clock.RFC3339)),
 			PreStateDigest:  primitive.DigestFromHex("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
 			PostStateDigest: primitive.DigestFromHex("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
 			Provenance:      []provenance.Record{},
@@ -60,7 +60,7 @@ func TestValidateAttestation_WithEngine(t *testing.T) {
 			Peers: map[primitive.Identifier][]lane.Peer{},
 		},
 		Informational: &deploy.Informational{
-			Timestamp:       deploy.Timestamp(clock.Reproducible().Format(clock.RFC3339)),
+			Timestamp:       primitive.Timestamp(clock.Reproducible().Format(clock.RFC3339)),
 			PreStateDigest:  primitive.DigestFromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
 			PostStateDigest: primitive.DigestFromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
 			EngineMetadata: &deploy.EngineMetadata{
@@ -88,7 +88,7 @@ func TestValidateAttestation_InvalidEngineConnectionType(t *testing.T) {
 			Peers: map[primitive.Identifier][]lane.Peer{},
 		},
 		Informational: &deploy.Informational{
-			Timestamp:       deploy.Timestamp(clock.Reproducible().Format(clock.RFC3339)),
+			Timestamp:       primitive.Timestamp(clock.Reproducible().Format(clock.RFC3339)),
 			PreStateDigest:  primitive.DigestFromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
 			PostStateDigest: primitive.DigestFromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
 			Provenance:      []provenance.Record{},
@@ -136,7 +136,7 @@ func TestValidateAttestation_EmptyDigestsAllowed(t *testing.T) {
 			Peers:      map[primitive.Identifier][]lane.Peer{},
 		},
 		Informational: &deploy.Informational{
-			Timestamp:       deploy.Timestamp(clock.Reproducible().Format(clock.RFC3339)),
+			Timestamp:       primitive.Timestamp(clock.Reproducible().Format(clock.RFC3339)),
 			PreStateDigest:  primitive.DigestFromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
 			PostStateDigest: primitive.DigestFromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
 			Provenance:      []provenance.Record{},
@@ -226,7 +226,7 @@ func TestValidateAttestation_WithResolverRecord(t *testing.T) {
 			Peers: map[primitive.Identifier][]lane.Peer{},
 		},
 		Informational: &deploy.Informational{
-			Timestamp:       deploy.Timestamp(clock.Reproducible().Format(clock.RFC3339)),
+			Timestamp:       primitive.Timestamp(clock.Reproducible().Format(clock.RFC3339)),
 			PreStateDigest:  primitive.DigestFromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
 			PostStateDigest: primitive.DigestFromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
 			Provenance:      []provenance.Record{},
@@ -273,7 +273,7 @@ func TestValidateAttestation_WithPeers(t *testing.T) {
 			},
 		},
 		Informational: &deploy.Informational{
-			Timestamp:       deploy.Timestamp(clock.Reproducible().Format(clock.RFC3339)),
+			Timestamp:       primitive.Timestamp(clock.Reproducible().Format(clock.RFC3339)),
 			PreStateDigest:  primitive.DigestFromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
 			PostStateDigest: primitive.DigestFromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
 			Provenance:      []provenance.Record{},
@@ -304,7 +304,7 @@ func TestValidateAttestation_InvalidPeer(t *testing.T) {
 			},
 		},
 		Informational: &deploy.Informational{
-			Timestamp:       deploy.Timestamp(clock.Reproducible().Format(clock.RFC3339)),
+			Timestamp:       primitive.Timestamp(clock.Reproducible().Format(clock.RFC3339)),
 			PreStateDigest:  primitive.DigestFromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
 			PostStateDigest: primitive.DigestFromHex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
 			Provenance:      []provenance.Record{},

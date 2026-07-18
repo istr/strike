@@ -34,7 +34,7 @@ func TestProjectStatements(t *testing.T) {
 			PeerAttribution: map[primitive.Identifier][]endpoint.Authority{"build": {"git.example.com:22"}},
 		},
 		Informational: &deploy.Informational{
-			Timestamp:       deploy.Timestamp(clock.Reproducible().Format(clock.RFC3339)),
+			Timestamp:       primitive.Timestamp(clock.Reproducible().Format(clock.RFC3339)),
 			EngineMetadata:  &deploy.EngineMetadata{Rootless: &rootless, Version: "5.3.1"},
 			PreStateDigest:  preState,
 			PostStateDigest: postState,
