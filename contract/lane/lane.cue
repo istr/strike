@@ -242,7 +242,6 @@ import (
 	annotations?: {
 		[string]: string @go(Annotations)
 	}
-	push?: [...string] @go(Push)
 }
 
 #PackFile: {
@@ -286,9 +285,6 @@ import (
 	} @go(Artifacts,type=map[string]ArtifactRef)
 	target:    deploytarget.#Deploy @go(Target)
 	recording: #StateRecording      @go(Recording)
-	source?: {
-		gitImage: primitive.#ImageRef
-	} @go(Source,optional=nillable)
 }
 
 #DeployStrategy: *"apply" | "replace" | "rollout"
