@@ -237,3 +237,35 @@ single member; `FileEntry`, whose only user it is, goes with it.
 A lane that needs a generated file inside an image produces the file as a step
 output and references it through `PackFile.from`, which is the digest-pinned
 path D1 names. This is a lane-schema break; pre-beta, no migration.
+
+## Amendment -- D9: artifacts is the SBOM decomposition of the deployed image
+
+D6 says `DeploySpec.artifacts` resolves to exactly one produced image, the
+single subject the push writes. That phrasing reads the map as a one-image
+field and is corrected here: artifacts is the SBOM decomposition of the one
+deployed image, not a scalar.
+
+A deployed image is often not one ecosystem. A monolithic service image can
+carry a compiled backend binary, a frontend package from a second ecosystem,
+and base-image infrastructure that belongs to neither. The artifacts map names
+the SBOM-relevant regions of that single image so each is cataloged in the
+format its ecosystem uses; an artifact reference is either the step's whole
+image or a named file or directory output of a step, and each resolved
+artifact carries its own SBOM. Naming a region includes it. Leaving a region
+unnamed excludes it, which is what lets one lane attest the same payload over
+an Alpine or a Debian base without the base package set drifting the subject.
+This decomposition is why the map is a map, and it applies to a single-image
+registry deploy as much as to any other deploy that produces an SBOM.
+
+The constraint D6 intended is retained in corrected form and stays
+registry-scoped, as D6 already framed it. For a registry deploy, exactly one
+entry is the pushed image: the step-image arm, the single artifact remote.Write
+writes and the top-level subject the signature covers. The remaining entries
+are the file and directory regions of that image and are SBOM subjects only,
+not pushed. "Exactly one produced image" refers to that one push, not to the
+number of map entries.
+
+D9 does not settle the deployed-payload shape for a kubernetes deploy. The
+SBOM-decomposition role above holds for kubernetes, but the kubernetes
+cardinality and what plays the role of the pushed image there are decided by
+the kubernetes rewiring, not by this amendment.
