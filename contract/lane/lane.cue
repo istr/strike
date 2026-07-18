@@ -238,9 +238,6 @@ import (
 	base: primitive.#ImageRef @go(Base)
 	files: [...#PackFile] @go(Files)
 	packages?: [...#Package] @go(Packages)
-	configFiles?: {
-		[Path=string]: #FileEntry @go(ConfigFiles)
-	}
 	config?: #ImageConfig @go(Config,optional=nillable)
 	annotations?: {
 		[string]: string @go(Annotations)
@@ -261,14 +258,6 @@ import (
 	@go(Package)
 	name:     string @go(Name)
 	version?: string @go(Version,optional=nillable)
-}
-
-#FileEntry: {
-	@go(FileEntry)
-	content: string       @go(Content)
-	mode:    *0o644 | int @go(Mode)
-	uid:     *0 | int     @go(UID)
-	gid:     *0 | int     @go(GID)
 }
 
 #ImageConfig: {

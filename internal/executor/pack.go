@@ -66,19 +66,13 @@ func AssembleImage(base v1.Image, spec *lane.PackSpec, inputPaths map[string]str
 		return nil, err
 	}
 
-	// 2. Add config file layers (literal content)
-	img, err = addConfigFileLayers(img, spec.ConfigFiles)
-	if err != nil {
-		return nil, err
-	}
-
-	// 3. Apply image configuration
+	// 2. Apply image configuration
 	img, err = applyConfig(img, spec)
 	if err != nil {
 		return nil, err
 	}
 
-	// 4. Apply annotations
+	// 3. Apply annotations
 	if spec.Annotations != nil {
 		annotated, ok := mutate.Annotations(img, spec.Annotations).(v1.Image)
 		if !ok {
@@ -87,7 +81,7 @@ func AssembleImage(base v1.Image, spec *lane.PackSpec, inputPaths map[string]str
 		img = annotated
 	}
 
-	// 5. Compute digest -- the cross-validation anchor
+	// 4. Compute digest -- the cross-validation anchor
 	imgDigest, err := img.Digest()
 	if err != nil {
 		return nil, fmt.Errorf("assemble: image digest: %w", err)
@@ -227,40 +221,6 @@ func appendRegularFileLayer(img v1.Image, hostPath, dest string, mode int64) (v1
 	img, err = mutate.AppendLayers(img, layer)
 	if err != nil {
 		return nil, fmt.Errorf("append layer: %w", err)
-	}
-	return img, nil
-}
-
-// addConfigFileLayers appends a layer for each config file entry with literal content.
-func addConfigFileLayers(img v1.Image, configFiles map[string]lane.FileEntry) (v1.Image, error) {
-	if configFiles == nil {
-		return img, nil
-	}
-	paths := make([]string, 0, len(configFiles))
-	for path := range configFiles {
-		paths = append(paths, path)
-	}
-	sort.Strings(paths)
-	for _, path := range paths {
-		entry := configFiles[path]
-		if entry.Mode < 0 || entry.Mode > 0o7777 {
-			return nil, fmt.Errorf("pack: config file %q: invalid mode %#o", path, entry.Mode)
-		}
-		layer, cfErr := buildTarLayer(
-			[]byte(entry.Content),
-			path,
-			fs.FileMode(entry.Mode),
-			int(entry.UID),
-			int(entry.GID),
-		)
-		if cfErr != nil {
-			return nil, fmt.Errorf("pack: config file %q: %w", path, cfErr)
-		}
-		var err error
-		img, err = mutate.AppendLayers(img, layer)
-		if err != nil {
-			return nil, fmt.Errorf("pack: append config file layer: %w", err)
-		}
 	}
 	return img, nil
 }

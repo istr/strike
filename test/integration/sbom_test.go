@@ -27,17 +27,6 @@ func TestPackSBOM(t *testing.T) {
 	// Build a Go binary so the flattened image has go-buildinfo.
 	binPath := buildTestBinary(t, engine)
 
-	// Pack with config_files that inject an npm lockfile and dpkg status
-	// into the assembled image, exercising all three cataloger sources.
-	lockfileJSON := `{
-		"lockfileVersion": 3,
-		"packages": {
-			"": {"name": "root", "version": "1.0.0"},
-			"node_modules/express": {"version": "4.18.2"}
-		}
-	}`
-	dpkgStatus := "Package: libc6\nVersion: 2.36-9\nArchitecture: amd64\nStatus: install ok installed\n\n"
-
 	outDir := t.TempDir()
 	outRoot, err := os.OpenRoot(outDir)
 	if err != nil {
@@ -54,16 +43,6 @@ func TestPackSBOM(t *testing.T) {
 			Config: &lane.ImageConfig{
 				Entrypoint: []string{"/app"},
 				User:       primitive.UserSpecPtr("65534:65534"),
-			},
-			ConfigFiles: map[string]lane.FileEntry{
-				"/package-lock.json": {
-					Content: lockfileJSON,
-					Mode:    0o644,
-				},
-				"/var/lib/dpkg/status": {
-					Content: dpkgStatus,
-					Mode:    0o644,
-				},
 			},
 		},
 		InputPaths: map[string]string{"/app": binPath},
@@ -162,33 +141,9 @@ func TestPackSBOM(t *testing.T) {
 		}
 	})
 
-	t.Run("cdx_contains_npm", func(t *testing.T) {
-		if !strings.Contains(string(cdxData), "pkg:npm/express@4.18.2") {
-			t.Error("CycloneDX missing npm component")
-		}
-	})
-
-	t.Run("cdx_contains_dpkg", func(t *testing.T) {
-		if !strings.Contains(string(cdxData), "pkg:deb/debian/libc6@2.36-9") {
-			t.Error("CycloneDX missing dpkg component")
-		}
-	})
-
 	t.Run("cdx_contains_golang", func(t *testing.T) {
 		if !strings.Contains(string(cdxData), "pkg:golang/") {
 			t.Error("CycloneDX missing Go module component")
-		}
-	})
-
-	t.Run("spdx_contains_npm", func(t *testing.T) {
-		if !strings.Contains(string(spdxData), "pkg:npm/express@4.18.2") {
-			t.Error("SPDX missing npm component")
-		}
-	})
-
-	t.Run("spdx_contains_dpkg", func(t *testing.T) {
-		if !strings.Contains(string(spdxData), "pkg:deb/debian/libc6@2.36-9") {
-			t.Error("SPDX missing dpkg component")
 		}
 	})
 
@@ -209,16 +164,6 @@ func TestPackSBOM(t *testing.T) {
 				Config: &lane.ImageConfig{
 					Entrypoint: []string{"/app"},
 					User:       primitive.UserSpecPtr("65534:65534"),
-				},
-				ConfigFiles: map[string]lane.FileEntry{
-					"/package-lock.json": {
-						Content: lockfileJSON,
-						Mode:    0o644,
-					},
-					"/var/lib/dpkg/status": {
-						Content: dpkgStatus,
-						Mode:    0o644,
-					},
 				},
 			},
 			InputPaths: map[string]string{"/app": binPath},
