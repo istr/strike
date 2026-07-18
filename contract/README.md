@@ -8,8 +8,11 @@ external audit tools) must conform to them.
 
 Strike uses [CUE](https://cuelang.org) as the single definition language for
 both input and output formats. The contract is one CUE package per directory;
-the runtime embeds the whole tree (`embed.go`) and validates against it -- lane
-input before execution, attestation output before persistence.
+the runtime embeds the validation roots plus their import closure (`embed.go`)
+and validates against them -- lane input before execution, attestation output
+before persistence. The embedded set deliberately excludes `output`, which is
+codegen-only: its Go types are generated from CUE, but nothing loads or
+validates against it at runtime.
 
 | Package | Holds |
 |---------|-------|

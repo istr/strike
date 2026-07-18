@@ -7,7 +7,9 @@ package contract
 
 import "embed"
 
-// FS holds the embedded CUE contract files, one CUE package per subdirectory.
+// FS holds the embedded CUE contract files: the validation roots and their
+// import closure, one CUE package per subdirectory. It deliberately excludes
+// output, which is codegen-only and never loaded at runtime.
 // internal/schema presents them as a CUE module tree and loads each package
 // natively via cue/load.
 //

@@ -4,7 +4,8 @@
 // that verify identical behavior across implementations (Go, Rust).
 // Each vector file contains both inputs and expected outputs.
 //
-// This is a development-time specification, NOT embedded in the binary.
+// The schema is embedded in the binary: internal/schema builds a crossval
+// root from the embedded contract FS.
 //
 // The cross-implementation harness these vectors exist for is only
 // partial and still to come: the vectors are schema-validated and run
