@@ -15,34 +15,35 @@ import (
 // (concept) packages. schema is a foundation package that must not import
 // internal/lane (ADR-048), so SourceType is narrowed to a plain string only
 // at that boundary call.
-func ValidateProvenance(declaredType SourceType, raw []byte) (provenance.Record, error) {
-	if err := schema.ValidateProvenanceJSON(string(declaredType), raw); err != nil {
+func ValidateProvenance(declaredType provenance.SourceType, raw []byte) (provenance.Record, error) {
+	typeStr := string(declaredType)
+	if err := schema.ValidateProvenanceJSON(typeStr, raw); err != nil {
 		return nil, err
 	}
 	return unmarshalProvenanceRecord(declaredType, raw)
 }
 
-func unmarshalProvenanceRecord(typ SourceType, raw []byte) (provenance.Record, error) {
+func unmarshalProvenanceRecord(typ provenance.SourceType, raw []byte) (provenance.Record, error) {
 	switch typ {
-	case SourceTypeGit:
+	case provenance.SourceTypeGit:
 		var r provenance.Git
 		if err := json.Unmarshal(raw, &r); err != nil {
 			return nil, fmt.Errorf("decode git record: %w", err)
 		}
 		return r, nil
-	case SourceTypeTarball:
+	case provenance.SourceTypeTarball:
 		var r provenance.Tarball
 		if err := json.Unmarshal(raw, &r); err != nil {
 			return nil, fmt.Errorf("decode tarball record: %w", err)
 		}
 		return r, nil
-	case SourceTypeOci:
+	case provenance.SourceTypeOci:
 		var r provenance.OCI
 		if err := json.Unmarshal(raw, &r); err != nil {
 			return nil, fmt.Errorf("decode oci record: %w", err)
 		}
 		return r, nil
-	case SourceTypeUrl:
+	case provenance.SourceTypeUrl:
 		var r provenance.URL
 		if err := json.Unmarshal(raw, &r); err != nil {
 			return nil, fmt.Errorf("decode url record: %w", err)

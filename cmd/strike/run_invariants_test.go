@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/provenance"
 )
 
 // --------------------------------------------------------------------------.
@@ -98,7 +99,7 @@ func TestProvenanceCapture_EndToEnd(t *testing.T) {
 	}
 }
 
-func fakeProvenanceJSON(t *testing.T, typ lane.SourceType) []byte {
+func fakeProvenanceJSON(t *testing.T, typ provenance.SourceType) []byte {
 	t.Helper()
 	switch typ {
 	case "git":

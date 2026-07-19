@@ -10,6 +10,7 @@ package lane
 import (
 	"github.com/istr/strike/contract/endpoint"
 	"github.com/istr/strike/contract/primitive"
+	"github.com/istr/strike/contract/provenance"
 	deploytarget "github.com/istr/strike/contract/target"
 )
 
@@ -389,9 +390,6 @@ import (
 // Provenance declaration
 // ---------------------------------------------------------------------------
 
-// #SourceType is a provenance source kind.
-#SourceType: "git" | "tarball" | "oci" | "url"
-
 // ProvenanceSpec declares that a step produces a source-provenance
 // record at a specific path inside its container, in a specific format.
 // After step exit, strike reads the file, validates against the schema
@@ -400,7 +398,7 @@ import (
 // path is the provenance file, relative to the step workdir.
 #ProvenanceSpec: {
 	@go(ProvenanceSpec)
-	type: #SourceType
+	type: provenance.#SourceType
 	// path is the provenance file, relative to the step workdir.
 	path: primitive.#RelPath @go(Path)
 }
