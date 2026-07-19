@@ -11,7 +11,6 @@ import (
 	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/provenance"
 	"github.com/istr/strike/internal/schema"
-	"github.com/istr/strike/internal/target"
 )
 
 func validateAgainstDef(t *testing.T, data []byte, def string) {
@@ -32,7 +31,6 @@ func TestSLSAProvenanceStatement_Valid(t *testing.T) {
 				ExternalParameters: deploy.StrikeExternalParameters{
 					LaneID:     "demo",
 					LaneDigest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-					Target:     target.Deploy{ID: "prod-1", Type: "registry", Description: "production"},
 					OIDC:       deploy.ProvenanceOIDC{Issuer: "https://idp.example.com", Identity: "strike@example.com"},
 					Peers:      map[primitive.Identifier][]lane.Peer{},
 				},

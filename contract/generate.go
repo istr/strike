@@ -11,7 +11,6 @@ package contract
 //go:generate go tool cue exp gengotypes ./endpoint
 //go:generate go tool cue exp gengotypes ./output
 //go:generate go tool cue exp gengotypes ./provenance
-//go:generate go tool cue exp gengotypes ./target
 //go:generate go tool cue exp gengotypes ./record
 //go:generate go tool cue exp gengotypes ./attest
-//go:generate go run github.com/istr/strike/tools/genenums lane primitive endpoint output provenance target record attest
+//go:generate go run github.com/istr/strike/tools/genenums lane primitive endpoint output provenance record attest

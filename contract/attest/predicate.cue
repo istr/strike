@@ -25,7 +25,6 @@ import (
 	"github.com/istr/strike/contract/lane"
 	"github.com/istr/strike/contract/primitive"
 	provenancepkg "github.com/istr/strike/contract/provenance"
-	deploytarget "github.com/istr/strike/contract/target"
 )
 
 // ---------------------------------------------------------------------------
@@ -95,7 +94,6 @@ import (
 #StrikeExternalParameters: {
 	laneId:     primitive.#Identifier @go(LaneID)
 	laneDigest: primitive.#Digest
-	target:     deploytarget.#Deploy
 	oidc:       #ProvenanceOIDC @go(OIDC)
 	peers: {
 		[ID=primitive.#Identifier]: [...lane.#Peer]

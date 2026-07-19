@@ -344,7 +344,7 @@ func appendUnique[T comparable](s []T, v T) []T {
 // buildAttestation constructs the attestation struct for step 6 of Execute,
 // including observed-peer collection and peer-attribution wiring.
 func (d *Deployer) buildAttestation(
-	step *lane.Step, spec lane.DeploySpec, state *lane.Runtime,
+	step *lane.Step, state *lane.Runtime,
 	artifactDigests map[primitive.Identifier]record.Artifact,
 	provenance []provenance.Record,
 	started clock.Time, preDigest, postDigest primitive.Digest,
@@ -359,7 +359,6 @@ func (d *Deployer) buildAttestation(
 		Sealed: Sealed{
 			LaneID:        d.LaneID,
 			LaneDigest:    d.LaneDigest,
-			Target:        spec.Target,
 			Artifacts:     artifactDigests,
 			Resolver:      d.resolverRecord(),
 			Peers:         declaredPeers,
@@ -425,7 +424,7 @@ func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.Run
 	postDigest := StateDigest(postCaptures)
 
 	// 6. Build attestation.
-	att, obsErr := d.buildAttestation(step, spec, state, artifactDigests, provenance, started, preDigest, postDigest)
+	att, obsErr := d.buildAttestation(step, state, artifactDigests, provenance, started, preDigest, postDigest)
 	if obsErr != nil {
 		return nil, fmt.Errorf("step %q: %w", step.ID, obsErr)
 	}

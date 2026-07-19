@@ -5,11 +5,6 @@
     "attestation": {
       "sealed": {
         "laneId": "test-lane",
-        "target": {
-          "id": "test-target",
-          "type": "registry",
-          "description": "test"
-        },
         "artifacts": {},
         "laneDigest": "not-a-digest",
         "peers": {}

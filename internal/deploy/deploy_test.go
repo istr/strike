@@ -43,7 +43,6 @@ import (
 	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/provenance"
 	"github.com/istr/strike/internal/record"
-	"github.com/istr/strike/internal/target"
 	"github.com/istr/strike/internal/testutil"
 	"github.com/istr/strike/internal/transport"
 )
@@ -182,7 +181,6 @@ func TestAttestationJSON(t *testing.T) {
 	att := &deploy.Attestation{
 		Sealed: deploy.Sealed{
 			LaneID:    "test-lane",
-			Target:    target.Deploy{ID: "prod-1", Type: "registry", Description: "test"},
 			Artifacts: map[primitive.Identifier]record.Artifact{"image": {Digest: "sha256:abc"}},
 		},
 		Informational: &deploy.Informational{
@@ -347,7 +345,6 @@ func TestDeployerExecute(t *testing.T) {
 			Artifacts: map[string]lane.ArtifactRef{
 				"image": {From: lane.StepImageRef{Step: "build"}},
 			},
-			Target: target.Deploy{ID: "prod-1", Type: "registry", Description: "production"},
 			Recording: lane.StateRecording{
 				PreState: lane.CaptureSet{
 					Captures: []lane.Capture{{
@@ -452,7 +449,6 @@ func TestDeployerExecuteRegistryAttachesReferrers(t *testing.T) {
 			Artifacts: map[string]lane.ArtifactRef{
 				"image": {From: lane.StepImageRef{Step: "build"}},
 			},
-			Target: target.Deploy{ID: "prod-1", Type: "registry", Description: "production"},
 			Recording: lane.StateRecording{
 				PreState:  lane.CaptureSet{Captures: []lane.Capture{}},
 				PostState: lane.CaptureSet{Captures: []lane.Capture{}},
@@ -618,7 +614,6 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 			Artifacts: map[string]lane.ArtifactRef{
 				"image": {From: lane.StepImageRef{Step: "build"}},
 			},
-			Target: target.Deploy{ID: "prod-1", Type: "registry", Description: "production"},
 			Recording: lane.StateRecording{
 				PreState: lane.CaptureSet{
 					Captures: []lane.Capture{{
@@ -722,7 +717,6 @@ func TestEngineRecord_NilEngineID(t *testing.T) {
 			Artifacts: map[string]lane.ArtifactRef{
 				"image": {From: lane.StepImageRef{Step: "build"}},
 			},
-			Target:    target.Deploy{ID: "test-1", Type: "registry", Description: "test"},
 			Recording: lane.StateRecording{},
 		},
 	}
@@ -786,7 +780,6 @@ func TestEngineRecord_WithRuntime(t *testing.T) {
 			Artifacts: map[string]lane.ArtifactRef{
 				"image": {From: lane.StepImageRef{Step: "build"}},
 			},
-			Target:    target.Deploy{ID: "test-1", Type: "registry", Description: "test"},
 			Recording: lane.StateRecording{},
 		},
 	}
@@ -864,7 +857,6 @@ func TestEngineRecord_WithoutRuntime(t *testing.T) {
 			Artifacts: map[string]lane.ArtifactRef{
 				"image": {From: lane.StepImageRef{Step: "build"}},
 			},
-			Target:    target.Deploy{ID: "test-1", Type: "registry", Description: "test"},
 			Recording: lane.StateRecording{},
 		},
 	}
@@ -937,7 +929,6 @@ func TestResolverRecord_Populated(t *testing.T) {
 			Artifacts: map[string]lane.ArtifactRef{
 				"image": {From: lane.StepImageRef{Step: "build"}},
 			},
-			Target:    target.Deploy{ID: "test-1", Type: "registry", Description: "test"},
 			Recording: lane.StateRecording{},
 		},
 	}
@@ -1029,7 +1020,6 @@ func TestDeployerExecute_RequiredPreStateFails(t *testing.T) {
 				Kubeconfig: kubeconfigPtr(testKubeconfig(t)),
 			},
 			Artifacts: map[string]lane.ArtifactRef{},
-			Target:    target.Deploy{ID: "test-1", Type: "registry", Description: "test"},
 			Recording: lane.StateRecording{
 				PreState: lane.CaptureSet{
 					Required: true,
@@ -1196,7 +1186,6 @@ func deployStep(t *testing.T) *lane.Step {
 			Artifacts: map[string]lane.ArtifactRef{
 				"image": {From: lane.StepImageRef{Step: "build"}},
 			},
-			Target: target.Deploy{ID: "prod-1", Type: "registry", Description: "production"},
 			Recording: lane.StateRecording{
 				PreState: lane.CaptureSet{
 					Captures: []lane.Capture{{
@@ -1224,7 +1213,6 @@ func TestValidateAttestation_InvalidLaneID(t *testing.T) {
 	att := &deploy.Attestation{
 		Sealed: deploy.Sealed{
 			LaneID:    "INVALID_LANE_ID",
-			Target:    target.Deploy{ID: "prod-1", Type: "registry", Description: "test"},
 			Artifacts: map[primitive.Identifier]record.Artifact{},
 			Peers:     map[primitive.Identifier][]lane.Peer{},
 		},
@@ -1304,7 +1292,6 @@ func TestDeployerExecute_ObservedPeersPopulated(t *testing.T) {
 					Artifacts: map[string]lane.ArtifactRef{
 						"image": {From: lane.StepImageRef{Step: "build"}},
 					},
-					Target:    target.Deploy{ID: "prod-1", Type: "registry", Description: "production"},
 					Recording: lane.StateRecording{},
 				},
 			},
@@ -1460,7 +1447,6 @@ func TestDeployerExecute_ObservedPeers_HonorsSSHPort(t *testing.T) {
 					Artifacts: map[string]lane.ArtifactRef{
 						"image": {From: lane.StepImageRef{Step: "build"}},
 					},
-					Target:    target.Deploy{ID: "prod-1", Type: "registry", Description: "production"},
 					Recording: lane.StateRecording{},
 				},
 			},
@@ -1602,7 +1588,6 @@ func TestDeployerExecute_ObservedPeersConflictAborts(t *testing.T) {
 					Artifacts: map[string]lane.ArtifactRef{
 						"image": {From: lane.StepImageRef{Step: "step-b"}},
 					},
-					Target:    target.Deploy{ID: "prod-1", Type: "registry", Description: "production"},
 					Recording: lane.StateRecording{},
 				},
 				Inputs: []lane.InputRef{{From: lane.OutputRef{Step: "step-a", Output: "out"}, Mount: "/in/a"}},

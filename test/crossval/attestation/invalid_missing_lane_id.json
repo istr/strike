@@ -4,11 +4,6 @@
   "inputs": {
     "attestation": {
       "sealed": {
-        "target": {
-          "id": "test-target",
-          "type": "registry",
-          "description": "test"
-        },
         "artifacts": {},
         "laneDigest": "sha256:abc0000000000000000000000000000000000000000000000000000000000000",
         "peers": {}

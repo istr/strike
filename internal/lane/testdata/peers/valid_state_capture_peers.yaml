@@ -51,10 +51,6 @@ steps:
         image:
           from:
             step: build
-      target:
-        id: prod-registry
-        type: registry
-        description: prod
       recording:
         preState:
           required: false

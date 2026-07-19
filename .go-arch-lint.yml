@@ -52,7 +52,6 @@ components:
       - internal/endpoint
       - internal/output
       - internal/provenance
-      - internal/target
       - internal/record
   services:
     in:

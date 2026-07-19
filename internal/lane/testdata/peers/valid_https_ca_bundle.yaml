@@ -57,10 +57,6 @@ steps:
         source: localhost:5555/test/image:latest
         target: registry.example.com/app:latest
       artifacts: {}
-      target:
-        id: d1-minimal-target
-        type: registry
-        description: minimal deploy step for D1
       recording:
         preState:
           required: false

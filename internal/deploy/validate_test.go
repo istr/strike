@@ -14,7 +14,6 @@ import (
 	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/provenance"
 	"github.com/istr/strike/internal/record"
-	"github.com/istr/strike/internal/target"
 	"github.com/istr/strike/test/crossval"
 )
 
@@ -23,7 +22,6 @@ func TestValidateAttestation_Valid(t *testing.T) {
 		Sealed: deploy.Sealed{
 			LaneID:     "test-lane",
 			LaneDigest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-			Target:     target.Deploy{ID: "prod-1", Type: "registry", Description: "production"},
 			Artifacts: map[primitive.Identifier]record.Artifact{
 				"image": {Digest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
 			},
@@ -48,7 +46,6 @@ func TestValidateAttestation_WithEngine(t *testing.T) {
 		Sealed: deploy.Sealed{
 			LaneID:     "test-lane",
 			LaneDigest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-			Target:     target.Deploy{ID: "staging-1", Type: "kubernetes", Description: "staging"},
 			Artifacts: map[primitive.Identifier]record.Artifact{
 				"app": {Digest: "sha256:1111111111111111111111111111111111111111111111111111111111111111"},
 			},
@@ -80,7 +77,6 @@ func TestValidateAttestation_InvalidEngineConnectionType(t *testing.T) {
 	att := &deploy.Attestation{
 		Sealed: deploy.Sealed{
 			LaneID:    "test-lane",
-			Target:    target.Deploy{ID: "test-1", Type: "registry", Description: "test"},
 			Artifacts: map[primitive.Identifier]record.Artifact{},
 			Engine: endpoint.EngineTLS{
 				Type: "plaintext", // not in enum
@@ -100,38 +96,11 @@ func TestValidateAttestation_InvalidEngineConnectionType(t *testing.T) {
 	}
 }
 
-func TestValidateAttestation_MissingTarget(t *testing.T) {
-	raw := `{
-		"sealed": {
-			"laneId": "test-lane",
-			"laneDigest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-			"artifacts": {},
-			"peers": {}
-		},
-		"engineDependent": {},
-		"informational": {
-			"timestamp": "2025-01-15T10:30:00Z",
-			"preStateDigest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-			"postStateDigest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-			"provenance": []
-		}
-	}`
-
-	var att deploy.Attestation
-	if err := json.Unmarshal([]byte(raw), &att); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if err := deploy.ValidateAttestation(&att); err == nil {
-		t.Fatal("expected validation error for missing target")
-	}
-}
-
 func TestValidateAttestation_EmptyDigestsAllowed(t *testing.T) {
 	att := &deploy.Attestation{
 		Sealed: deploy.Sealed{
 			LaneID:     "test-lane",
 			LaneDigest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-			Target:     target.Deploy{ID: "test-1", Type: "registry", Description: "first deploy"},
 			Artifacts:  map[primitive.Identifier]record.Artifact{},
 			Peers:      map[primitive.Identifier][]lane.Peer{},
 		},
@@ -215,7 +184,6 @@ func TestValidateAttestation_WithResolverRecord(t *testing.T) {
 		Sealed: deploy.Sealed{
 			LaneID:     "test-lane",
 			LaneDigest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-			Target:     target.Deploy{ID: "staging-1", Type: "kubernetes", Description: "staging"},
 			Artifacts:  map[primitive.Identifier]record.Artifact{},
 			Resolver: deploy.ResolverRecord{
 				Host:                  "1.1.1.1:853",
@@ -243,7 +211,6 @@ func TestValidateAttestation_WithPeers(t *testing.T) {
 		Sealed: deploy.Sealed{
 			LaneID:     "test-lane",
 			LaneDigest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-			Target:     target.Deploy{ID: "prod-1", Type: "registry", Description: "production"},
 			Artifacts: map[primitive.Identifier]record.Artifact{
 				"image": {Digest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
 			},
@@ -289,7 +256,6 @@ func TestValidateAttestation_InvalidPeer(t *testing.T) {
 	att := &deploy.Attestation{
 		Sealed: deploy.Sealed{
 			LaneID: "test-lane",
-			Target: target.Deploy{ID: "prod-1", Type: "registry", Description: "production"},
 			Artifacts: map[primitive.Identifier]record.Artifact{
 				"image": {Digest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
 			},

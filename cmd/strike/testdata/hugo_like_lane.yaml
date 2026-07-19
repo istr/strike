@@ -70,10 +70,6 @@ steps:
           from:
             step: build
             output: site
-      target:
-        id: d1-minimal-target
-        type: registry
-        description: minimal deploy step for D1
       recording:
         preState:
           required: false

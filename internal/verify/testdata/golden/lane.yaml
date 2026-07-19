@@ -64,10 +64,6 @@ steps:
           from:
             step: build
             output: binary
-      target:
-        id: golden-target
-        type: registry
-        description: golden fixture deploy target
       recording:
         preState:
           required: false

@@ -28,7 +28,6 @@ import (
 	"github.com/istr/strike/contract/primitive"
 	"github.com/istr/strike/contract/record"
 	provenancepkg "github.com/istr/strike/contract/provenance"
-	deploytarget "github.com/istr/strike/contract/target"
 )
 
 // ---------------------------------------------------------------------------
@@ -67,9 +66,6 @@ import (
 #Sealed: {
 	// laneId is the stable identifier from the lane definition.
 	laneId: primitive.#Identifier @go(LaneID)
-
-	// target describes what was deployed to. Declared, lane-anchored.
-	target: deploytarget.#Deploy
 
 	// laneDigest is the raw sha256 over the lane definition file bytes,
 	// computed by CP at parse time (hash and parse read the same bytes).

@@ -71,10 +71,6 @@ steps:
         img:
           from:
             step: pack
-      target:
-        id: deploy-registry
-        type: registry
-        description: deploy to registry
       recording:
         preState:
           required: false

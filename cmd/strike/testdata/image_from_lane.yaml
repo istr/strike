@@ -63,10 +63,6 @@ steps:
           from:
             step: use-base
             output: result
-      target:
-        id: d1-minimal-target
-        type: registry
-        description: minimal deploy step for D1
       recording:
         preState:
           required: false

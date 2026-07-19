@@ -57,7 +57,6 @@ func projectStatements(att *Attestation, oidc lane.OIDCConfig, resolvedDeps []Re
 				ExternalParameters: StrikeExternalParameters{
 					LaneID:        att.Sealed.LaneID,
 					LaneDigest:    att.Sealed.LaneDigest,
-					Target:        att.Sealed.Target,
 					OIDC:          ProvenanceOIDC{Issuer: oidc.Issuer, Identity: oidc.Identity},
 					Peers:         att.Sealed.Peers,
 					ObservedPeers: att.Sealed.ObservedPeers,

@@ -114,10 +114,6 @@ steps:
         source: localhost:5555/test/image:latest
         target: registry.example.com/app:latest
       artifacts: {}
-      target:
-        id: deploy-only-target
-        type: registry
-        description: deploy-only lane
       recording:
         preState:
           required: false
@@ -194,10 +190,6 @@ steps:
         source: localhost:5555/test/image:latest
         target: registry.example.com/app:latest
       artifacts: {}
-      target:
-        id: sbom-signer-target
-        type: registry
-        description: sbom signer test
       recording:
         preState:
           required: false
@@ -499,9 +491,6 @@ steps:
         type: nonsense
         image: img@sha256:0000000000000000000000000000000000000000000000000000000000000000
       artifacts: {}
-      target:
-        type: registry
-        description: x
       recording:
         preState: {required: false, capture: []}
         postState: {required: false, capture: []}
@@ -593,10 +582,6 @@ steps:
         source: localhost:5555/test/image:latest
         target: registry.example.com/app:latest
       artifacts: {}
-      target:
-        id: d1-minimal-target
-        type: registry
-        description: minimal deploy step for D1
       recording:
         preState:
           required: false

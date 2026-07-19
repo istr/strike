@@ -54,10 +54,6 @@ steps:
           from:
             step: build
             output: binary
-      target:
-        id: prod-registry
-        type: registry
-        description: push to registry
       recording:
         preState:
           required: false

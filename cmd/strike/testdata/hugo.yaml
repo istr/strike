@@ -139,10 +139,6 @@ steps:
         site:
           from:
             step: pack-site
-      target:
-        id: site-registry
-        type: registry
-        description: push site image to registry
       recording:
         preState:
           required: false

@@ -11,7 +11,6 @@ import (
 	"github.com/istr/strike/contract/endpoint"
 	"github.com/istr/strike/contract/primitive"
 	"github.com/istr/strike/contract/provenance"
-	deploytarget "github.com/istr/strike/contract/target"
 )
 
 @go(lane) // generated go package name
@@ -284,8 +283,7 @@ import (
 	artifacts: {
 		[ID=primitive.#Identifier]: #ArtifactRef
 	} @go(Artifacts,type=map[string]ArtifactRef)
-	target:    deploytarget.#Deploy @go(Target)
-	recording: #StateRecording      @go(Recording)
+	recording: #StateRecording @go(Recording)
 }
 
 #DeployStrategy: *"apply" | "replace" | "rollout"

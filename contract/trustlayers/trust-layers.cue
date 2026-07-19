@@ -124,7 +124,6 @@ fields: {
 	// ---- V: CP-sealed canonical bytes (cpSealed) ----
 	laneId: {provenance: "cpSealed", internal: "sealed.laneId", published: "slsa-provenance", rationale: "declared lane scalar"}
 	laneDigest: {provenance: "cpSealed", internal: "sealed.laneDigest", published: "slsa-provenance", rationale: "CP hashes the lane file itself (data CP holds)"}
-	target: {provenance: "cpSealed", internal: "sealed.target", published: "slsa-provenance", rationale: "declared, lane-anchored"}
 	oidc: {provenance: "cpSealed", internal: "-", published: "slsa-provenance", rationale: "declared signing identity; injected at sign time from lane OIDC config (absent from the collect-model)"}
 	peers: {provenance: "cpSealed", internal: "sealed.peers", published: "slsa-provenance", rationale: "declared, lane-anchored"}
 
