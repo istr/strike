@@ -7,10 +7,10 @@ import (
 
 // UnmarshalJSON implements json.Unmarshaler for DeploySpec. It reads
 // the method.type discriminator and unmarshals method into the
-// appropriate concrete branch type (DeployKubernetes, DeployRegistry,
-// DeployCustom). An unknown or missing discriminator is a parse-time
-// error -- validation thus catches typos at `strike validate` rather
-// than at `strike run`.
+// appropriate concrete branch type (DeployKubernetes, DeployRegistry).
+// An unknown or missing discriminator is a parse-time error --
+// validation thus catches typos at `strike validate` rather than at
+// `strike run`.
 func (s *DeploySpec) UnmarshalJSON(data []byte) error {
 	type alias DeploySpec // break the recursion
 	aux := struct {
@@ -45,12 +45,6 @@ func (s *DeploySpec) UnmarshalJSON(data []byte) error {
 		var m DeployRegistry
 		if err := json.Unmarshal(aux.Method, &m); err != nil {
 			return fmt.Errorf("decode registry deploy method: %w", err)
-		}
-		s.Method = m
-	case DeployMethodTypeCustom:
-		var m DeployCustom
-		if err := json.Unmarshal(aux.Method, &m); err != nil {
-			return fmt.Errorf("decode custom deploy method: %w", err)
 		}
 		s.Method = m
 	case "":

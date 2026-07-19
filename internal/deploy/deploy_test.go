@@ -53,6 +53,20 @@ const (
 	connTypeMTLS = "mtls"
 )
 
+// testKubeconfig writes a throwaway kubeconfig file and returns its path,
+// for tests that exercise a kubernetes deploy method purely as a
+// container-running vehicle and do not care about its contents.
+func testKubeconfig(t *testing.T) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "kubeconfig")
+	if err := os.WriteFile(path, []byte("test"), 0o600); err != nil {
+		t.Fatalf("write kubeconfig: %v", err)
+	}
+	return path
+}
+
+func kubeconfigPtr(path string) *string { return &path }
+
 // deployCapsuleFields populates the capsule-related Deployer fields needed
 // by tests that exercise captureOne or method execution. portKeys lists
 // every StepPorts key the test's step will look up (capture keys and/or
@@ -323,9 +337,12 @@ func TestDeployerExecute(t *testing.T) {
 	step := &lane.Step{
 		ID: "deploy-prod",
 		Deploy: &lane.DeploySpec{
-			Method: lane.DeployCustom{
-				Type:  "custom",
-				Image: "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+			Method: lane.DeployKubernetes{
+				Type:       "kubernetes",
+				Image:      "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+				Namespace:  "default",
+				Strategy:   "apply",
+				Kubeconfig: kubeconfigPtr(testKubeconfig(t)),
 			},
 			Artifacts: map[string]lane.ArtifactRef{
 				"image": {From: lane.StepImageRef{Step: "build"}},
@@ -512,7 +529,7 @@ func TestDeployerExecute_MissingArtifact(t *testing.T) {
 	step := &lane.Step{
 		ID: "deploy-prod",
 		Deploy: &lane.DeploySpec{
-			Method: lane.DeployCustom{Type: "custom", Image: "img@sha256:0000000000000000000000000000000000000000000000000000000000000000"},
+			Method: lane.DeployKubernetes{Type: "kubernetes", Image: "img@sha256:0000000000000000000000000000000000000000000000000000000000000000"},
 			Artifacts: map[string]lane.ArtifactRef{
 				"image": {From: lane.StepImageRef{Step: "build"}},
 			},
@@ -535,7 +552,7 @@ func TestDeployerExecute_MissingArtifact(t *testing.T) {
 func TestRunStepDispatchesDeploy(t *testing.T) {
 	step := &lane.Step{
 		Deploy: &lane.DeploySpec{
-			Method: lane.DeployCustom{Type: "custom", Image: "img@sha256:0000000000000000000000000000000000000000000000000000000000000000"},
+			Method: lane.DeployKubernetes{Type: "kubernetes", Image: "img@sha256:0000000000000000000000000000000000000000000000000000000000000000"},
 		},
 	}
 	if step.Deploy == nil {
@@ -591,9 +608,12 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 	step := &lane.Step{
 		ID: "deploy-prod",
 		Deploy: &lane.DeploySpec{
-			Method: lane.DeployCustom{
-				Type:  "custom",
-				Image: "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+			Method: lane.DeployKubernetes{
+				Type:       "kubernetes",
+				Image:      "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+				Namespace:  "default",
+				Strategy:   "apply",
+				Kubeconfig: kubeconfigPtr(testKubeconfig(t)),
 			},
 			Artifacts: map[string]lane.ArtifactRef{
 				"image": {From: lane.StepImageRef{Step: "build"}},
@@ -692,9 +712,12 @@ func TestEngineRecord_NilEngineID(t *testing.T) {
 	step := &lane.Step{
 		ID: "deploy-nil-engine",
 		Deploy: &lane.DeploySpec{
-			Method: lane.DeployCustom{
-				Type:  "custom",
-				Image: "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+			Method: lane.DeployKubernetes{
+				Type:       "kubernetes",
+				Image:      "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+				Namespace:  "default",
+				Strategy:   "apply",
+				Kubeconfig: kubeconfigPtr(testKubeconfig(t)),
 			},
 			Artifacts: map[string]lane.ArtifactRef{
 				"image": {From: lane.StepImageRef{Step: "build"}},
@@ -753,9 +776,12 @@ func TestEngineRecord_WithRuntime(t *testing.T) {
 	step := &lane.Step{
 		ID: "deploy-runtime",
 		Deploy: &lane.DeploySpec{
-			Method: lane.DeployCustom{
-				Type:  "custom",
-				Image: "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+			Method: lane.DeployKubernetes{
+				Type:       "kubernetes",
+				Image:      "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+				Namespace:  "default",
+				Strategy:   "apply",
+				Kubeconfig: kubeconfigPtr(testKubeconfig(t)),
 			},
 			Artifacts: map[string]lane.ArtifactRef{
 				"image": {From: lane.StepImageRef{Step: "build"}},
@@ -828,9 +854,12 @@ func TestEngineRecord_WithoutRuntime(t *testing.T) {
 	step := &lane.Step{
 		ID: "deploy-no-runtime",
 		Deploy: &lane.DeploySpec{
-			Method: lane.DeployCustom{
-				Type:  "custom",
-				Image: "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+			Method: lane.DeployKubernetes{
+				Type:       "kubernetes",
+				Image:      "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+				Namespace:  "default",
+				Strategy:   "apply",
+				Kubeconfig: kubeconfigPtr(testKubeconfig(t)),
 			},
 			Artifacts: map[string]lane.ArtifactRef{
 				"image": {From: lane.StepImageRef{Step: "build"}},
@@ -898,9 +927,12 @@ func TestResolverRecord_Populated(t *testing.T) {
 	step := &lane.Step{
 		ID: "deploy-resolver",
 		Deploy: &lane.DeploySpec{
-			Method: lane.DeployCustom{
-				Type:  "custom",
-				Image: "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+			Method: lane.DeployKubernetes{
+				Type:       "kubernetes",
+				Image:      "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+				Namespace:  "default",
+				Strategy:   "apply",
+				Kubeconfig: kubeconfigPtr(testKubeconfig(t)),
 			},
 			Artifacts: map[string]lane.ArtifactRef{
 				"image": {From: lane.StepImageRef{Step: "build"}},
@@ -989,9 +1021,12 @@ func TestDeployerExecute_RequiredPreStateFails(t *testing.T) {
 	step := &lane.Step{
 		ID: "deploy-fail-pre",
 		Deploy: &lane.DeploySpec{
-			Method: lane.DeployCustom{
-				Type:  "custom",
-				Image: "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+			Method: lane.DeployKubernetes{
+				Type:       "kubernetes",
+				Image:      "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+				Namespace:  "default",
+				Strategy:   "apply",
+				Kubeconfig: kubeconfigPtr(testKubeconfig(t)),
 			},
 			Artifacts: map[string]lane.ArtifactRef{},
 			Target:    target.Deploy{ID: "test-1", Type: "registry", Description: "test"},
@@ -1060,7 +1095,7 @@ func TestDeployerExecute_KeylessBundles(t *testing.T) {
 	ca, look, caPath, ports := deployCapsuleFields(t,
 		"capture:deploy-prod:version", "deploy-prod")
 
-	step := deployStep()
+	step := deployStep(t)
 	d := &deploy.Deployer{
 		Engine:       eng,
 		EngineID:     eng.Identity(),
@@ -1119,7 +1154,7 @@ func TestDeployerExecute_KeylessFailureIsFatal(t *testing.T) {
 	ca, look, caPath, ports := deployCapsuleFields(t,
 		"capture:deploy-prod:version", "deploy-prod")
 
-	step := deployStep()
+	step := deployStep(t)
 	d := &deploy.Deployer{
 		Engine:       eng,
 		LaneDigest:   "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -1146,13 +1181,17 @@ func TestDeployerExecute_KeylessFailureIsFatal(t *testing.T) {
 }
 
 // deployStep returns a minimal deploy step for Rekor tests.
-func deployStep() *lane.Step {
+func deployStep(t *testing.T) *lane.Step {
+	t.Helper()
 	return &lane.Step{
 		ID: "deploy-prod",
 		Deploy: &lane.DeploySpec{
-			Method: lane.DeployCustom{
-				Type:  "custom",
-				Image: "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+			Method: lane.DeployKubernetes{
+				Type:       "kubernetes",
+				Image:      "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+				Namespace:  "default",
+				Strategy:   "apply",
+				Kubeconfig: kubeconfigPtr(testKubeconfig(t)),
 			},
 			Artifacts: map[string]lane.ArtifactRef{
 				"image": {From: lane.StepImageRef{Step: "build"}},
@@ -1255,9 +1294,12 @@ func TestDeployerExecute_ObservedPeersPopulated(t *testing.T) {
 			{
 				ID: "deploy-prod",
 				Deploy: &lane.DeploySpec{
-					Method: lane.DeployCustom{
-						Type:  "custom",
-						Image: "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+					Method: lane.DeployKubernetes{
+						Type:       "kubernetes",
+						Image:      "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+						Namespace:  "default",
+						Strategy:   "apply",
+						Kubeconfig: kubeconfigPtr(testKubeconfig(t)),
 					},
 					Artifacts: map[string]lane.ArtifactRef{
 						"image": {From: lane.StepImageRef{Step: "build"}},
@@ -1408,9 +1450,12 @@ func TestDeployerExecute_ObservedPeers_HonorsSSHPort(t *testing.T) {
 			{
 				ID: "deploy-prod",
 				Deploy: &lane.DeploySpec{
-					Method: lane.DeployCustom{
-						Type:  "custom",
-						Image: "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+					Method: lane.DeployKubernetes{
+						Type:       "kubernetes",
+						Image:      "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+						Namespace:  "default",
+						Strategy:   "apply",
+						Kubeconfig: kubeconfigPtr(testKubeconfig(t)),
 					},
 					Artifacts: map[string]lane.ArtifactRef{
 						"image": {From: lane.StepImageRef{Step: "build"}},
@@ -1547,9 +1592,12 @@ func TestDeployerExecute_ObservedPeersConflictAborts(t *testing.T) {
 			{
 				ID: "deploy-conflict",
 				Deploy: &lane.DeploySpec{
-					Method: lane.DeployCustom{
-						Type:  "custom",
-						Image: "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+					Method: lane.DeployKubernetes{
+						Type:       "kubernetes",
+						Image:      "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+						Namespace:  "default",
+						Strategy:   "apply",
+						Kubeconfig: kubeconfigPtr(testKubeconfig(t)),
 					},
 					Artifacts: map[string]lane.ArtifactRef{
 						"image": {From: lane.StepImageRef{Step: "step-b"}},

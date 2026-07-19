@@ -74,38 +74,13 @@ func TestDeploySpec_UnmarshalJSON_Discriminator(t *testing.T) {
 			},
 		},
 		{
-			name: "custom",
-			input: `{
-				"method": {
-					"type": "custom",
-					"image": "img@sha256:` + strings.Repeat("c", 64) + `",
-					"args": ["deploy", "--prod"],
-					"env": {"FOO": "bar"},
-					"entrypoint": ["/bin/sh", "-c"]
-				},
-				"artifacts": {},
-				"target": {"type": "custom", "description": "prod"},
-				"attestation": {
-					"preState": {"required": false, "capture": []},
-					"postState": {"required": false, "capture": []}
-				}
-			}`,
-			check: func(t *testing.T, m lane.DeployMethod) {
-				c, ok := m.(lane.DeployCustom)
-				if !ok {
-					t.Fatalf("Method type = %T, want DeployCustom", m)
-				}
-				if len(c.Args) != 2 {
-					t.Errorf("Args len = %d, want 2", len(c.Args))
-				}
-				if c.Env["FOO"] != "bar" {
-					t.Errorf("Env[FOO] = %q, want bar", c.Env["FOO"])
-				}
-			},
-		},
-		{
 			name:    "unknown_type",
 			input:   `{"method": {"type": "rsync"}}`,
+			wantErr: "unknown deploy method type",
+		},
+		{
+			name:    "custom_removed",
+			input:   `{"method": {"type": "custom"}}`,
 			wantErr: "unknown deploy method type",
 		},
 		{

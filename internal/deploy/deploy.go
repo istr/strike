@@ -660,8 +660,6 @@ func (d *Deployer) executeMethod(ctx context.Context, spec lane.DeploySpec, peer
 		return executeRegistryDeploy(m)
 	case lane.DeployKubernetes:
 		return nil, d.executeKubernetesDeploy(ctx, m, peers)
-	case lane.DeployCustom:
-		return nil, d.executeCustomDeploy(ctx, m, peers)
 	default:
 		return nil, fmt.Errorf("unknown deploy method type %q", spec.Method.MethodType())
 	}
@@ -729,50 +727,6 @@ func (d *Deployer) executeKubernetesDeploy(ctx context.Context, m lane.DeployKub
 	}
 	if exitCode != 0 {
 		return fmt.Errorf("kubernetes deploy: exit code %d", exitCode)
-	}
-	return nil
-}
-
-func (d *Deployer) executeCustomDeploy(ctx context.Context, m lane.DeployCustom, peers []lane.Peer) error {
-	if m.Image == "" {
-		return fmt.Errorf("custom deploy: image required")
-	}
-
-	sid := string(d.StepID)
-	caps, err := d.startUnitCapsule(ctx, sid, peers)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		d.ownRecords = append(d.ownRecords, caps.Records())
-		if stopErr := caps.Stop(); stopErr != nil {
-			log.Printf("WARN   deploy %s: capsule stop: %v", d.StepID, stopErr)
-		}
-	}()
-
-	if err = setupSSHEnv(peers); err != nil {
-		return err
-	}
-	env := make(map[string]string, len(m.Env))
-	for k, v := range m.Env {
-		env[k] = v
-	}
-
-	opts := HardenedRunOpts()
-	opts.Image = m.Image
-	opts.Entrypoint = m.Entrypoint
-	opts.Cmd = m.Args
-	opts.Env = env
-	opts.Stdout = os.Stdout
-	opts.Stderr = os.Stderr
-	d.applyCapsule(&opts, caps)
-
-	exitCode, err := d.Engine.ContainerRun(ctx, opts)
-	if err != nil {
-		return err
-	}
-	if exitCode != 0 {
-		return fmt.Errorf("custom deploy: exit code %d", exitCode)
 	}
 	return nil
 }

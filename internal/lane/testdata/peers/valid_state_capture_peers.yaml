@@ -43,8 +43,10 @@ steps:
   - id: deploy
     deploy:
       method:
-        type: custom
+        type: kubernetes
         image: alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000
+        namespace: default
+        strategy: apply
       artifacts:
         image:
           from:

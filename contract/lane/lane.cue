@@ -290,10 +290,10 @@ import (
 
 #DeployStrategy: *"apply" | "replace" | "rollout"
 
-#DeployMethod: (#DeployKubernetes | #DeployRegistry | #DeployCustom) @go(-)
+#DeployMethod: (#DeployKubernetes | #DeployRegistry) @go(-)
 
 // #DeployMethodType is the deploy method discriminator vocabulary.
-#DeployMethodType: "kubernetes" | "registry" | "custom"
+#DeployMethodType: "kubernetes" | "registry"
 
 #DeployKubernetes: {
 	@go(DeployKubernetes)
@@ -316,17 +316,6 @@ import (
 	// destination), not filesystem paths; they flow to registry.CopyImage.
 	source: string @go(Source)
 	target: string @go(Target)
-}
-
-#DeployCustom: {
-	@go(DeployCustom)
-	type:  "custom"            @go(Type,type=DeployMethodType)
-	image: primitive.#ImageRef @go(Image)
-	args: [...string] @go(Args)
-	env: {
-		[string]: string @go(Env)
-	}
-	entrypoint?: [...string] @go(Entrypoint)
 }
 
 // ArtifactSource is the deploy-artifact reference: a step's image (by step) or

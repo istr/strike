@@ -131,8 +131,10 @@ steps:
   - id: deploy
     deploy:
       method:
-        type: custom
+        type: kubernetes
         image: docker.io/library/alpine@sha256:1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a
+        namespace: default
+        strategy: apply
       artifacts:
         site:
           from:
