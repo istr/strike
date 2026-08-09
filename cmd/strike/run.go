@@ -158,15 +158,9 @@ func (rc *runContext) executeDeploy(ctx context.Context, step *lane.Step, stepID
 	log.Printf("DEPLOY %s", safeName)
 
 	artifactRefs := make(map[string]lane.OutputRef)
-	for artName, artRef := range rc.lane.DeployArtifacts(stepID) {
-		var ref lane.OutputRef
-		switch src := artRef.From.(type) {
-		case lane.StepImageRef:
-			ref = lane.OutputRef{Step: src.Step}
-		case lane.OutputRef:
-			ref = src
-		}
-		artifactRefs[string(artName)] = ref
+	if step.Deploy.Artifacts != nil {
+		imgStep := step.Deploy.Artifacts.Step
+		artifactRefs[string(imgStep)] = lane.OutputRef{Step: imgStep}
 	}
 
 	d := &deploy.Deployer{

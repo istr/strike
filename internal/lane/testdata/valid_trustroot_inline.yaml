@@ -65,7 +65,6 @@ steps:
         type: registry
         source: docker.io/library/golang@sha256:abababababababababababababababababababababababababababababababab
         target: registry.example.com/app:latest
-      artifacts: {}
       recording:
         preState:
           required: false

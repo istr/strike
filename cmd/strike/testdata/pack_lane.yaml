@@ -69,9 +69,7 @@ steps:
         source: localhost:5555/test/image:latest
         target: registry.example.com/app:latest
       artifacts:
-        image:
-          from:
-            step: pack
+        step: pack
       recording:
         preState:
           required: false

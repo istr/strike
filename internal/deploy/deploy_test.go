@@ -342,9 +342,7 @@ func TestDeployerExecute(t *testing.T) {
 				Strategy:   "apply",
 				Kubeconfig: kubeconfigPtr(testKubeconfig(t)),
 			},
-			Artifacts: map[string]lane.ArtifactRef{
-				"image": {From: lane.StepImageRef{Step: "build"}},
-			},
+			Artifacts: &lane.StepImageRef{Step: "build"},
 			Recording: lane.StateRecording{
 				PreState: lane.CaptureSet{
 					Captures: []lane.Capture{{
@@ -446,9 +444,7 @@ func TestDeployerExecuteRegistryAttachesReferrers(t *testing.T) {
 				Source: src,
 				Target: host + "/app:v1",
 			},
-			Artifacts: map[string]lane.ArtifactRef{
-				"image": {From: lane.StepImageRef{Step: "build"}},
-			},
+			Artifacts: &lane.StepImageRef{Step: "build"},
 			Recording: lane.StateRecording{
 				PreState:  lane.CaptureSet{Captures: []lane.Capture{}},
 				PostState: lane.CaptureSet{Captures: []lane.Capture{}},
@@ -525,10 +521,8 @@ func TestDeployerExecute_MissingArtifact(t *testing.T) {
 	step := &lane.Step{
 		ID: "deploy-prod",
 		Deploy: &lane.DeploySpec{
-			Method: lane.DeployKubernetes{Type: "kubernetes", Image: "img@sha256:0000000000000000000000000000000000000000000000000000000000000000"},
-			Artifacts: map[string]lane.ArtifactRef{
-				"image": {From: lane.StepImageRef{Step: "build"}},
-			},
+			Method:    lane.DeployKubernetes{Type: "kubernetes", Image: "img@sha256:0000000000000000000000000000000000000000000000000000000000000000"},
+			Artifacts: &lane.StepImageRef{Step: "build"},
 			Recording: lane.StateRecording{},
 		},
 	}
@@ -611,9 +605,7 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 				Strategy:   "apply",
 				Kubeconfig: kubeconfigPtr(testKubeconfig(t)),
 			},
-			Artifacts: map[string]lane.ArtifactRef{
-				"image": {From: lane.StepImageRef{Step: "build"}},
-			},
+			Artifacts: &lane.StepImageRef{Step: "build"},
 			Recording: lane.StateRecording{
 				PreState: lane.CaptureSet{
 					Captures: []lane.Capture{{
@@ -714,9 +706,7 @@ func TestEngineRecord_NilEngineID(t *testing.T) {
 				Strategy:   "apply",
 				Kubeconfig: kubeconfigPtr(testKubeconfig(t)),
 			},
-			Artifacts: map[string]lane.ArtifactRef{
-				"image": {From: lane.StepImageRef{Step: "build"}},
-			},
+			Artifacts: &lane.StepImageRef{Step: "build"},
 			Recording: lane.StateRecording{},
 		},
 	}
@@ -777,9 +767,7 @@ func TestEngineRecord_WithRuntime(t *testing.T) {
 				Strategy:   "apply",
 				Kubeconfig: kubeconfigPtr(testKubeconfig(t)),
 			},
-			Artifacts: map[string]lane.ArtifactRef{
-				"image": {From: lane.StepImageRef{Step: "build"}},
-			},
+			Artifacts: &lane.StepImageRef{Step: "build"},
 			Recording: lane.StateRecording{},
 		},
 	}
@@ -854,9 +842,7 @@ func TestEngineRecord_WithoutRuntime(t *testing.T) {
 				Strategy:   "apply",
 				Kubeconfig: kubeconfigPtr(testKubeconfig(t)),
 			},
-			Artifacts: map[string]lane.ArtifactRef{
-				"image": {From: lane.StepImageRef{Step: "build"}},
-			},
+			Artifacts: &lane.StepImageRef{Step: "build"},
 			Recording: lane.StateRecording{},
 		},
 	}
@@ -926,9 +912,7 @@ func TestResolverRecord_Populated(t *testing.T) {
 				Strategy:   "apply",
 				Kubeconfig: kubeconfigPtr(testKubeconfig(t)),
 			},
-			Artifacts: map[string]lane.ArtifactRef{
-				"image": {From: lane.StepImageRef{Step: "build"}},
-			},
+			Artifacts: &lane.StepImageRef{Step: "build"},
 			Recording: lane.StateRecording{},
 		},
 	}
@@ -1019,7 +1003,6 @@ func TestDeployerExecute_RequiredPreStateFails(t *testing.T) {
 				Strategy:   "apply",
 				Kubeconfig: kubeconfigPtr(testKubeconfig(t)),
 			},
-			Artifacts: map[string]lane.ArtifactRef{},
 			Recording: lane.StateRecording{
 				PreState: lane.CaptureSet{
 					Required: true,
@@ -1183,9 +1166,7 @@ func deployStep(t *testing.T) *lane.Step {
 				Strategy:   "apply",
 				Kubeconfig: kubeconfigPtr(testKubeconfig(t)),
 			},
-			Artifacts: map[string]lane.ArtifactRef{
-				"image": {From: lane.StepImageRef{Step: "build"}},
-			},
+			Artifacts: &lane.StepImageRef{Step: "build"},
 			Recording: lane.StateRecording{
 				PreState: lane.CaptureSet{
 					Captures: []lane.Capture{{
@@ -1289,9 +1270,7 @@ func TestDeployerExecute_ObservedPeersPopulated(t *testing.T) {
 						Strategy:   "apply",
 						Kubeconfig: kubeconfigPtr(testKubeconfig(t)),
 					},
-					Artifacts: map[string]lane.ArtifactRef{
-						"image": {From: lane.StepImageRef{Step: "build"}},
-					},
+					Artifacts: &lane.StepImageRef{Step: "build"},
 					Recording: lane.StateRecording{},
 				},
 			},
@@ -1444,9 +1423,7 @@ func TestDeployerExecute_ObservedPeers_HonorsSSHPort(t *testing.T) {
 						Strategy:   "apply",
 						Kubeconfig: kubeconfigPtr(testKubeconfig(t)),
 					},
-					Artifacts: map[string]lane.ArtifactRef{
-						"image": {From: lane.StepImageRef{Step: "build"}},
-					},
+					Artifacts: &lane.StepImageRef{Step: "build"},
 					Recording: lane.StateRecording{},
 				},
 			},
@@ -1585,9 +1562,7 @@ func TestDeployerExecute_ObservedPeersConflictAborts(t *testing.T) {
 						Strategy:   "apply",
 						Kubeconfig: kubeconfigPtr(testKubeconfig(t)),
 					},
-					Artifacts: map[string]lane.ArtifactRef{
-						"image": {From: lane.StepImageRef{Step: "step-b"}},
-					},
+					Artifacts: &lane.StepImageRef{Step: "step-b"},
 					Recording: lane.StateRecording{},
 				},
 				Inputs: []lane.InputRef{{From: lane.OutputRef{Step: "step-a", Output: "out"}, Mount: "/in/a"}},

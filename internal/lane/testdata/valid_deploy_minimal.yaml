@@ -1,5 +1,5 @@
-name: deploy-test
-id: deploy-test
+name: deploy-lane
+id: deploy-lane
 registry: localhost:5555/test
 secrets: {}
 resolver:
@@ -32,30 +32,10 @@ keyless:
         type: certFingerprint
         fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 steps:
-  - id: compile
+  - id: build
     image: docker.io/library/golang@sha256:abababababababababababababababababababababababababababababababab
-    args: [go, build, -o, /out/binary]
+    args: ["go", "build"]
     workdir: /out
-    env:
-      CGO_ENABLED: "0"
-    inputs: []
-    secrets: []
-    outputs:
-      - id: binary
-        type: file
-        path: binary
-  - id: pack
-    pack:
-      base: docker.io/library/static@sha256:cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd
-      files:
-        - from:
-            step: compile
-            output: binary
-          dest: /app
-          mode: 0o755
-      config:
-        entrypoint: [/app]
-    args: []
     env: {}
     inputs: []
     secrets: []
@@ -63,12 +43,11 @@ steps:
   - id: deploy
     deploy:
       method:
-        type: kubernetes
-        image: docker.io/library/alpine@sha256:efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef
-        namespace: default
-        strategy: apply
+        type: registry
+        source: localhost:5555/test/image:latest
+        target: registry.example.com/app:latest
       artifacts:
-        step: pack
+        step: build
       recording:
         preState:
           required: false

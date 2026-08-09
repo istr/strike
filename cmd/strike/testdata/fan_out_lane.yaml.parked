@@ -1,3 +1,4 @@
+# PARKED: currently invalid under the single-image deploy artifact (ADR-051 D6/D9); will be reactivated later.
 name: fan-out-test
 id: fan-out-test
 registry: localhost:5555/test

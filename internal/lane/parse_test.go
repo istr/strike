@@ -113,7 +113,6 @@ steps:
         type: registry
         source: localhost:5555/test/image:latest
         target: registry.example.com/app:latest
-      artifacts: {}
       recording:
         preState:
           required: false
@@ -189,7 +188,6 @@ steps:
         type: registry
         source: localhost:5555/test/image:latest
         target: registry.example.com/app:latest
-      artifacts: {}
       recording:
         preState:
           required: false
@@ -248,7 +246,7 @@ func TestParse_InvalidRegistryRejected(t *testing.T) {
 }
 
 func TestParse_ForceRunTrue(t *testing.T) {
-	p, _, _, err := lane.Parse(mustFilePath(t, "testdata/valid_force_run.yaml"))
+	p, _, _, err := lane.Parse(mustFilePath(t, "testdata/valid_force_run_minimal.yaml"))
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
@@ -268,7 +266,7 @@ func TestParse_ForceRunDefaultFalse(t *testing.T) {
 }
 
 func TestParse_ValidDeploy(t *testing.T) {
-	p, _, _, err := lane.Parse(mustFilePath(t, "testdata/valid_deploy.yaml"))
+	p, _, _, err := lane.Parse(mustFilePath(t, "testdata/valid_deploy_minimal.yaml"))
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
@@ -312,16 +310,6 @@ func TestParse_InvalidSchema(t *testing.T) {
 	_, _, _, err := lane.Parse(mustFilePath(t, "testdata/invalid_schema.yaml"))
 	if err == nil {
 		t.Fatal("expected error for schema violation")
-	}
-	if !strings.Contains(err.Error(), "validation") {
-		t.Errorf("error should mention validation: %v", err)
-	}
-}
-
-func TestParse_InvalidArtifactKeyRejected(t *testing.T) {
-	_, _, _, err := lane.Parse(mustFilePath(t, "testdata/invalid_artifact_key.yaml"))
-	if err == nil {
-		t.Fatal("expected error for non-identifier artifact key")
 	}
 	if !strings.Contains(err.Error(), "validation") {
 		t.Errorf("error should mention validation: %v", err)
@@ -490,7 +478,6 @@ steps:
       method:
         type: nonsense
         image: img@sha256:0000000000000000000000000000000000000000000000000000000000000000
-      artifacts: {}
       recording:
         preState: {required: false, capture: []}
         postState: {required: false, capture: []}
@@ -581,7 +568,6 @@ steps:
         type: registry
         source: localhost:5555/test/image:latest
         target: registry.example.com/app:latest
-      artifacts: {}
       recording:
         preState:
           required: false

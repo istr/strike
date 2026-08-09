@@ -39,25 +39,6 @@ func (l *Lane) PackFiles(id primitive.Identifier) iter.Seq[PackFile] {
 	}
 }
 
-// DeployArtifacts yields the deploy artifact references declared by the step
-// named id, keyed by artifact name. A step with no deploy spec yields nothing.
-// The artifact map has no inherent order; a caller that needs a deterministic
-// sequence sorts by the yielded name.
-func (l *Lane) DeployArtifacts(id primitive.Identifier) iter.Seq2[primitive.Identifier, ArtifactRef] {
-	return func(yield func(primitive.Identifier, ArtifactRef) bool) {
-		s := l.step(id)
-		if s == nil || s.Deploy == nil {
-			return
-		}
-		for name, ref := range s.Deploy.Artifacts {
-			artName := primitive.Identifier(name)
-			if !yield(artName, ref) {
-				return
-			}
-		}
-	}
-}
-
 // step returns a pointer to the lane step named id, or nil if no such step
 // exists. The pointer aliases into l.Steps, so callers must not mutate the
 // lane while iterating.

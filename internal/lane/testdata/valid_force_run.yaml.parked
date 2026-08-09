@@ -1,5 +1,6 @@
-name: deploy-lane
-id: deploy-lane
+# PARKED: currently invalid under the single-image deploy artifact (ADR-051 D6/D9); will be reactivated later.
+name: test-lane
+id: test-lane
 registry: localhost:5555/test
 secrets: {}
 resolver:
@@ -32,17 +33,18 @@ keyless:
         type: certFingerprint
         fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 steps:
-  - id: build
-    image: docker.io/library/golang@sha256:abababababababababababababababababababababababababababababababab
-    args: ["go", "build"]
+  - id: clone
+    image: docker.io/library/alpine@sha256:abababababababababababababababababababababababababababababababab
+    args: ["git", "clone", "https://example.com/repo"]
     workdir: /out
     env: {}
     inputs: []
     secrets: []
+    forceRun: true
     outputs:
-      - id: binary
-        type: file
-        path: binary
+      - id: src
+        type: directory
+        path: src
   - id: deploy
     deploy:
       method:
@@ -50,10 +52,10 @@ steps:
         source: localhost:5555/test/image:latest
         target: registry.example.com/app:latest
       artifacts:
-        not_an_identifier:
+        src:
           from:
-            step: build
-            output: binary
+            step: clone
+            output: src
       recording:
         preState:
           required: false

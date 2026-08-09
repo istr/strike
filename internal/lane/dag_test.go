@@ -204,7 +204,7 @@ func TestBuild_DeployArtifactEdge(t *testing.T) {
 			{
 				ID: "deploy", Env: map[string]string{}, Args: []string{},
 				Deploy: &lane.DeploySpec{
-					Artifacts: map[string]lane.ArtifactRef{"image": {From: lane.StepImageRef{Step: "pack"}}},
+					Artifacts: &lane.StepImageRef{Step: "pack"},
 				},
 			},
 		},
@@ -608,7 +608,7 @@ func TestValidateLeavesAreDeploys_Valid(t *testing.T) {
 			{
 				ID: "deploy", Env: map[string]string{}, Args: []string{},
 				Deploy: &lane.DeploySpec{
-					Artifacts: map[string]lane.ArtifactRef{"image": {From: lane.StepImageRef{Step: "pack"}}},
+					Artifacts: &lane.StepImageRef{Step: "pack"},
 				},
 			},
 		},
@@ -633,7 +633,7 @@ func TestValidateLeavesAreDeploys_DeployOnly(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				ID: "deploy", Env: map[string]string{}, Args: []string{},
-				Deploy: &lane.DeploySpec{Artifacts: map[string]lane.ArtifactRef{}},
+				Deploy: &lane.DeploySpec{},
 			},
 		},
 	}
@@ -664,7 +664,7 @@ func TestValidateLeavesAreDeploys_DanglingLeafRejected(t *testing.T) {
 			{
 				ID: "deploy", Env: map[string]string{}, Args: []string{},
 				Deploy: &lane.DeploySpec{
-					Artifacts: map[string]lane.ArtifactRef{"image": {From: lane.StepImageRef{Step: "pack"}}},
+					Artifacts: &lane.StepImageRef{Step: "pack"},
 				},
 			},
 			{

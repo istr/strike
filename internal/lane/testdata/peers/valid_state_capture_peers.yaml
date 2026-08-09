@@ -48,9 +48,7 @@ steps:
         namespace: default
         strategy: apply
       artifacts:
-        image:
-          from:
-            step: build
+        step: build
       recording:
         preState:
           required: false

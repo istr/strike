@@ -97,7 +97,6 @@ steps:
         type: registry
         source: localhost:5555/test/image:latest
         target: registry.example.com/app:latest
-      artifacts: {}
       recording:
         preState:
           required: false
@@ -180,7 +179,6 @@ steps:
         type: registry
         source: localhost:5555/test/image:latest
         target: registry.example.com/app:latest
-      artifacts: {}
       recording:
         preState:
           required: false

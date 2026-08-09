@@ -122,54 +122,25 @@ func validatePackFileRefs(p *Lane, index map[primitive.Identifier]*Step) error {
 	return nil
 }
 
-// validateDeployArtifactRefs checks that each deploy artifact source references
-// a known step (and output, for an OutputRef source).
+// validateDeployArtifactRefs checks that a step's deploy artifact, when
+// present, references a known step that produces an image (ADR-051 D6/D9).
 func validateDeployArtifactRefs(p *Lane, index map[primitive.Identifier]*Step) error {
 	for _, s := range p.Steps {
-		if s.Deploy == nil {
+		if s.Deploy == nil || s.Deploy.Artifacts == nil {
 			continue
 		}
-		for artName, artRef := range s.Deploy.Artifacts {
-			if err := validateDeployArtifactRef(s.ID, artName, artRef.From, index); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-// validateDeployArtifactRef validates one deploy.artifacts[name].from
-// disjunction: a StepImageRef (the producing step's image, by step) or an
-// OutputRef (a named file or directory output, by step+output).
-func validateDeployArtifactRef(name primitive.Identifier, artName string, src ArtifactSource, index map[primitive.Identifier]*Step) error {
-	switch ref := src.(type) {
-	case StepImageRef:
+		ref := s.Deploy.Artifacts
 		fromStep, ok := index[ref.Step]
 		if !ok {
 			return fmt.Errorf(
-				"step %q: deploy artifact %q references unknown step %q", name, artName, ref.Step)
+				"step %q: deploy artifact references unknown step %q", s.ID, ref.Step)
 		}
 		if fromStep.Output == "" {
 			return fmt.Errorf(
-				"step %q: deploy artifact %q: step %q declares no image output", name, artName, ref.Step)
+				"step %q: deploy artifact: step %q declares no image output", s.ID, ref.Step)
 		}
-		return nil
-	case OutputRef:
-		fromStep, ok := index[ref.Step]
-		if !ok {
-			return fmt.Errorf(
-				"step %q: deploy artifact %q references unknown step %q", name, artName, ref.Step)
-		}
-		if findOutput(fromStep, ref.Output) == nil {
-			return fmt.Errorf(
-				"step %q: deploy artifact %q: output %q not found in step %q",
-				name, artName, ref.Output, ref.Step)
-		}
-		return nil
-	default:
-		return fmt.Errorf(
-			"step %q: deploy artifact %q: unknown source kind %q", name, artName, src.SourceKind())
 	}
+	return nil
 }
 
 // findOutput returns a pointer to the FileOutput with the given name,

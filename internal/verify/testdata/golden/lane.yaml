@@ -53,6 +53,19 @@ steps:
       - id: binary
         type: file
         path: binary
+  - id: pack
+    pack:
+      base: docker.io/library/static@sha256:cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd
+      files:
+        - from:
+            step: build
+            output: binary
+          dest: /app
+    args: []
+    env: {}
+    inputs: []
+    secrets: []
+    output: image
   - id: deploy
     deploy:
       method:
@@ -60,10 +73,7 @@ steps:
         source: localhost:5555/golden/image:latest
         target: registry.example.com/golden:latest
       artifacts:
-        binary:
-          from:
-            step: build
-            output: binary
+        step: pack
       recording:
         preState:
           required: false

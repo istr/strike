@@ -1,5 +1,6 @@
-name: image-from-test
-id: image-from-test
+# PARKED: currently invalid under the single-image deploy artifact (ADR-051 D6/D9); will be reactivated later.
+name: hugo-test
+id: hugo-test
 registry: localhost:5555/test
 secrets: {}
 resolver:
@@ -32,25 +33,32 @@ keyless:
         type: certFingerprint
         fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 steps:
-  - id: build-base
-    image: docker.io/library/golang@sha256:abababababababababababababababababababababababababababababababab
-    args: [go, build, -o, /out/base]
-    workdir: /out
-    env: {}
-    inputs: []
-    secrets: []
-    output: image
-  - id: use-base
-    imageFromStep: build-base
-    args: [/app/run]
+  - id: npm-install
+    image: docker.io/library/node@sha256:abababababababababababababababababababababababababababababababab
+    args: [npm, ci]
     workdir: /out
     env: {}
     inputs: []
     secrets: []
     outputs:
-      - id: result
-        type: file
-        path: result.txt
+      - id: node-modules
+        type: directory
+        path: node_modules
+  - id: build
+    image: docker.io/library/hugo@sha256:cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd
+    args: [hugo]
+    workdir: /out
+    env: {}
+    inputs:
+      - from:
+          step: npm-install
+          output: node-modules
+        mount: /src/node_modules
+    secrets: []
+    outputs:
+      - id: site
+        type: directory
+        path: www
 
   - id: deploy
     deploy:
@@ -59,10 +67,10 @@ steps:
         source: localhost:5555/test/image:latest
         target: registry.example.com/app:latest
       artifacts:
-        result:
+        site:
           from:
-            step: use-base
-            output: result
+            step: build
+            output: site
       recording:
         preState:
           required: false

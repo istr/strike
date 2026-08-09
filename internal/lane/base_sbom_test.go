@@ -31,7 +31,7 @@ func TestPackBaseRefs_CollectsSubtreeBases(t *testing.T) {
 			{
 				ID: "deploy", Args: []string{}, Env: map[string]string{},
 				Deploy: &lane.DeploySpec{
-					Artifacts: map[string]lane.ArtifactRef{"image": {From: lane.StepImageRef{Step: "pack"}}},
+					Artifacts: &lane.StepImageRef{Step: "pack"},
 				},
 			},
 		},

@@ -173,8 +173,8 @@ import (
 // ---------------------------------------------------------------------------
 
 // StepImageRef references a step's image output by step alone: the image is
-// addressed by step, never by an output name (ADR-046). Used in the
-// deploy.artifacts.from disjunction.
+// addressed by step, never by an output name (ADR-046). It is the deploy
+// artifact of a registry deploy -- the single produced image (ADR-051 D6/D9).
 #StepImageRef: {
 	@go(StepImageRef)
 	step: primitive.#Identifier @go(Step)
@@ -205,7 +205,7 @@ import (
 // ---------------------------------------------------------------------------
 
 // FileOutput is a named file or directory output (plural outputs), referenced
-// by inputs.from, pack.files.from, and deploy.artifacts.from as {step, output}.
+// by inputs.from and pack.files.from as {step, output}.
 #FileOutput: {
 	@go(FileOutput)
 	id:   primitive.#Identifier       @go(ID)
@@ -279,11 +279,9 @@ import (
 
 #DeploySpec: {
 	@go(DeploySpec)
-	method: #DeployMethod @go(Method)
-	artifacts: {
-		[ID=primitive.#Identifier]: #ArtifactRef
-	} @go(Artifacts,type=map[string]ArtifactRef)
-	recording: #StateRecording @go(Recording)
+	method:     #DeployMethod   @go(Method)
+	artifacts?: #StepImageRef   @go(Artifacts,optional=nillable)
+	recording:  #StateRecording @go(Recording)
 }
 
 #DeployStrategy: *"apply" | "replace" | "rollout"
@@ -314,22 +312,6 @@ import (
 	// destination), not filesystem paths; they flow to registry.CopyImage.
 	source: string @go(Source)
 	target: string @go(Target)
-}
-
-// ArtifactSource is the deploy-artifact reference: a step's image (by step) or
-// a named file/directory output (by step+output).
-//
-// The image arm carries no discriminator field, so a bare {step} unifies with
-// both arms; the default marker (*) resolves that ambiguity to StepImageRef
-// under the concrete-validation pass (parse.go validates with
-// cue.Concrete(true), which rejects an unresolved disjunction). When the output
-// field is present the OutputRef arm is the more specific match and is selected
-// over the default.
-#ArtifactSource: (*#StepImageRef | #OutputRef) @go(-)
-
-#ArtifactRef: {
-	@go(ArtifactRef)
-	from: #ArtifactSource @go(From)
 }
 
 // ---------------------------------------------------------------------------

@@ -64,11 +64,6 @@ steps:
         type: registry
         source: localhost:5555/test/image:latest
         target: registry.example.com/app:latest
-      artifacts:
-        binary:
-          from:
-            step: build
-            output: binary
       recording:
         preState:
           required: false

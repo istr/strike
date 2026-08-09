@@ -136,9 +136,7 @@ steps:
         namespace: default
         strategy: apply
       artifacts:
-        site:
-          from:
-            step: pack-site
+        step: pack-site
       recording:
         preState:
           required: false
