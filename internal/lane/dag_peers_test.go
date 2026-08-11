@@ -52,8 +52,7 @@ func TestCollectPeers_NilDAG(t *testing.T) {
 
 func TestCollectPeers_StepWithoutPeers(t *testing.T) {
 	p := &lane.Lane{
-		Name:     "t",
-		Registry: "localhost:5555/test",
+		Name: "t",
 		Steps: []lane.Step{
 			minStep("a", nil),
 		},
@@ -75,8 +74,7 @@ func TestCollectPeers_StepWithoutPeers(t *testing.T) {
 func TestCollectPeers_SingleStepIncludesSelf(t *testing.T) {
 	peer := httpsPeer("api.example.com")
 	p := &lane.Lane{
-		Name:     "t",
-		Registry: "localhost:5555/test",
+		Name: "t",
 		Steps: []lane.Step{
 			minStep("a", []lane.Peer{peer}),
 		},
@@ -107,8 +105,7 @@ func TestCollectPeers_TransitivePredecessors(t *testing.T) {
 	peerC := httpsPeer("c.example")
 
 	p := &lane.Lane{
-		Name:     "t",
-		Registry: "localhost:5555/test",
+		Name: "t",
 		Steps: []lane.Step{
 			minStep("a", []lane.Peer{peerA}),
 			withInput(minStep("b", []lane.Peer{peerB}), "a", "out", "/in/a"),
@@ -141,8 +138,7 @@ func TestCollectPeers_OnlyTransitive(t *testing.T) {
 	peerC := httpsPeer("c.example")
 
 	p := &lane.Lane{
-		Name:     "t",
-		Registry: "localhost:5555/test",
+		Name: "t",
 		Steps: []lane.Step{
 			minStep("a", []lane.Peer{peerA}),
 			minStep("b", []lane.Peer{peerB}),
@@ -178,8 +174,7 @@ func TestCollectPeers_DiamondDedup(t *testing.T) {
 	peerB := httpsPeer("bottom.example")
 
 	p := &lane.Lane{
-		Name:     "t",
-		Registry: "localhost:5555/test",
+		Name: "t",
 		Steps: []lane.Step{
 			minStep("root", []lane.Peer{peerR}),
 			withInput(minStep("left", []lane.Peer{peerL}), "root", "out", "/in/r"),
@@ -218,8 +213,7 @@ func TestCollectPeers_StepsWithoutPeersOmitted(t *testing.T) {
 	peerC := httpsPeer("c.example")
 
 	p := &lane.Lane{
-		Name:     "t",
-		Registry: "localhost:5555/test",
+		Name: "t",
 		Steps: []lane.Step{
 			minStep("a", []lane.Peer{peerA}),
 			withInput(minStep("b", nil), "a", "out", "/in/a"),

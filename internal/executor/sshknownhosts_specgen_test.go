@@ -31,7 +31,6 @@ func (e *captureEngine) ContainerRun(_ context.Context, opts container.RunOpts) 
 
 func (e *captureEngine) ImageExists(context.Context, string) (bool, error)    { return true, nil }
 func (e *captureEngine) ImagePull(context.Context, string) error              { return nil }
-func (e *captureEngine) ImagePush(context.Context, string) error              { return nil }
 func (e *captureEngine) ImageLoad(context.Context, io.Reader) (string, error) { return "", nil }
 func (e *captureEngine) ImageInspect(context.Context, string) (*container.ImageInfo, error) {
 	return nil, nil

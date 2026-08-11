@@ -1,6 +1,5 @@
 name: deploy-test
 id: deploy-test
-registry: localhost:5555/test
 secrets: {}
 resolver:
   host: "1.1.1.1:853"

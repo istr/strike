@@ -10,7 +10,6 @@
 # it and seals its digest.
 name: golden-lane
 id: golden-lane
-registry: localhost:5555/golden
 secrets: {}
 resolver:
   host: "1.1.1.1:853"
@@ -70,8 +69,12 @@ steps:
     deploy:
       method:
         type: registry
-        source: localhost:5555/golden/image:latest
-        target: registry.example.com/golden:latest
+        target:
+          host: registry.example.com
+          trust:
+            type: certFingerprint
+            fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+          name: golden
       artifacts:
         step: pack
       recording:

@@ -1,5 +1,5 @@
-// Package executor implements container execution, OCI image assembly,
-// and SBOM generation for strike lane steps.
+// Package executor implements container execution and OCI image assembly
+// for strike lane steps.
 package executor
 
 import (
@@ -24,10 +24,8 @@ import (
 
 	"github.com/google/go-containerregistry/pkg/name"
 
-	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/primitive"
-	"github.com/istr/strike/internal/registry"
 )
 
 // PackOpts is everything pack needs; callers in main.go assemble this.
@@ -106,12 +104,12 @@ func AssembleImage(base v1.Image, spec *lane.PackSpec, inputPaths map[string]str
 	}, nil
 }
 
-// Pack assembles an OCI image from the given options, generates an SBOM,
-// and writes the result as an OCI layout tar.
+// Pack assembles an OCI image from the given options and writes the result
+// as an OCI layout tar. A pack output is an unsigned intermediate: signing,
+// SBOM generation, and publication happen once, at deploy (ADR-051 D1/D3).
 //
-// Pack is the orchestrator: it handles I/O (pull, write) and delegates
-// to pure functions (AssembleImage, GenerateImageSBOM) for the
-// security-critical computations.
+// Pack is the orchestrator: it handles I/O (pull, write) and delegates to
+// the pure AssembleImage for the security-critical computation.
 func Pack(opts PackOpts) (*PackResult, error) {
 	// 1. Pull and verify the base image (network I/O)
 	base, err := pullVerified(opts.Spec.Base)
@@ -125,31 +123,8 @@ func Pack(opts PackOpts) (*PackResult, error) {
 		return nil, fmt.Errorf("pack: %w", err)
 	}
 
-	// 3. Catalog the assembled image filesystem in-process (sealed, layer V):
-	// flatten the image to an fs.FS and emit both CycloneDX and SPDX 2.3 bound
-	// to the artifact's digest. No registry probe and no base-SBOM fetch --
-	// verified base-SBOM ingestion against base_sbom_signers is a later
-	// instruction. An empty catalog is surfaced as INFO inside the cataloger.
-	buildTime := clock.Reproducible()
-	imageFS, err := flattenImageToFS(assembled.Image)
-	if err != nil {
-		return nil, fmt.Errorf("pack: flatten image: %w", err)
-	}
-	cdxBytes, spdxBytes, err := GenerateImageSBOM(imageFS, assembled.Digest.String(), buildTime)
-	if err != nil {
-		return nil, fmt.Errorf("pack: sbom: %w", err)
-	}
-	cdxImage, err := registry.ArtifactImage(cdxBytes, "application/vnd.cyclonedx+json", assembled.Subject)
-	if err != nil {
-		return nil, fmt.Errorf("pack: cyclonedx artifact: %w", err)
-	}
-	spdxImage, err := registry.ArtifactImage(spdxBytes, "application/spdx+json", assembled.Subject)
-	if err != nil {
-		return nil, fmt.Errorf("pack: spdx artifact: %w", err)
-	}
-
-	// 4. Write OCI layout (filesystem I/O).
-	if err := writeOCILayout(assembled.Image, []v1.Image{cdxImage, spdxImage}, opts.OutputRoot, opts.OutputName, assembled.Digest.String()); err != nil {
+	// 3. Write OCI layout (filesystem I/O).
+	if err := writeOCILayout(assembled.Image, opts.OutputRoot, opts.OutputName, assembled.Digest.String()); err != nil {
 		return nil, err
 	}
 
@@ -274,9 +249,9 @@ func applyConfig(img v1.Image, spec *lane.PackSpec) (v1.Image, error) {
 	return img, nil
 }
 
-// writeOCILayout writes the main image and SBOM to an OCI layout
-// tar in the given output root.
-func writeOCILayout(img v1.Image, sbomImages []v1.Image, outputRoot *os.Root, outputID, imgDigest string) error {
+// writeOCILayout writes the main image to an OCI layout tar in the given
+// output root.
+func writeOCILayout(img v1.Image, outputRoot *os.Root, outputID, imgDigest string) error {
 	layoutDir, err := os.MkdirTemp("", "strike-pack-layout-")
 	if err != nil {
 		return fmt.Errorf("pack: temp dir: %w", err)
@@ -292,12 +267,6 @@ func writeOCILayout(img v1.Image, sbomImages []v1.Image, outputRoot *os.Root, ou
 	})); err != nil {
 		return fmt.Errorf("pack: append main image: %w", err)
 	}
-	for _, si := range sbomImages {
-		if err := lp.AppendImage(si); err != nil {
-			return fmt.Errorf("pack: append SBOM: %w", err)
-		}
-	}
-
 	if err := tarDirectoryToRoot(layoutDir, outputRoot, outputID); err != nil {
 		return fmt.Errorf("pack: tar layout: %w", err)
 	}

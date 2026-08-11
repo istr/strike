@@ -265,28 +265,6 @@ func TestFetchTrustRootRejectsTag(t *testing.T) {
 	}
 }
 
-func TestCopyImageReturnsPushedDescriptor(t *testing.T) {
-	host := localRegistry(t, true)
-	src := host + "/src:v1"
-	want := pushSubject(t, src)
-
-	dst := host + "/dst:v1"
-	got, err := registry.CopyImage(src, dst)
-	if err != nil {
-		t.Fatalf("CopyImage: %v", err)
-	}
-	if got.Digest != want.Digest {
-		t.Errorf("descriptor digest = %s, want %s", got.Digest, want.Digest)
-	}
-	dstRef, err := name.NewDigest(host + "/dst@" + want.Digest.String())
-	if err != nil {
-		t.Fatalf("dst digest ref: %v", err)
-	}
-	if _, err := remote.Head(dstRef); err != nil {
-		t.Errorf("copied manifest not at target: %v", err)
-	}
-}
-
 // pushBaseSBOMReferrer attaches one cosign-style SBOM attestation referrer of
 // subject under repo: a single bundle-typed layer carrying content, cosign's
 // predicate-type annotation, and an artifact type discoverable by the referrers

@@ -53,8 +53,11 @@ func TestDeploySpec_UnmarshalJSON_Discriminator(t *testing.T) {
 			input: `{
 				"method": {
 					"type": "registry",
-					"source": "src@sha256:` + strings.Repeat("b", 64) + `",
-					"target": "dst.io/app:latest"
+					"target": {
+						"host": "dst.io",
+						"trust": {"type": "certFingerprint", "fingerprint": "sha256:` + strings.Repeat("b", 64) + `"},
+						"name": "app"
+					}
 				},
 				"artifacts": {},
 				"target": {"type": "registry", "description": "prod"},
@@ -68,8 +71,11 @@ func TestDeploySpec_UnmarshalJSON_Discriminator(t *testing.T) {
 				if !ok {
 					t.Fatalf("Method type = %T, want DeployRegistry", m)
 				}
-				if r.Target != "dst.io/app:latest" {
-					t.Errorf("Target = %q, want dst.io/app:latest", r.Target)
+				if string(r.Target.Address.Authority()) != "dst.io" {
+					t.Errorf("Target.Address = %q, want dst.io", r.Target.Address.Authority())
+				}
+				if r.Target.Name != "app" {
+					t.Errorf("Target.Name = %q, want app", r.Target.Name)
 				}
 			},
 		},
@@ -122,8 +128,11 @@ func TestDeploySpec_RoundTrip(t *testing.T) {
 	original := `{
 		"method": {
 			"type": "registry",
-			"source": "src@sha256:` + strings.Repeat("d", 64) + `",
-			"target": "dst.io/app:latest"
+			"target": {
+				"host": "dst.io",
+				"trust": {"type": "certFingerprint", "fingerprint": "sha256:` + strings.Repeat("d", 64) + `"},
+				"name": "app"
+			}
 		},
 		"artifacts": {},
 		"target": {"type": "registry", "description": "test"},

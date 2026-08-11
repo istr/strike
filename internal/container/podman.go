@@ -208,34 +208,6 @@ func (e *podmanEngine) ImagePull(ctx context.Context, ref string) error {
 	return nil
 }
 
-// ImagePush pushes a local image to a remote registry.
-func (e *podmanEngine) ImagePush(ctx context.Context, name string) error {
-	u := e.base + "/images/" + url.PathEscape(name) + "/push"
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, nil)
-	if err != nil {
-		return err
-	}
-	// Auth from default keychain (podman uses $XDG_RUNTIME_DIR/containers/auth.json).
-	// Base64 of "{}" signals "use default credentials".
-	req.Header.Set("X-Registry-Auth", "e30=")
-	resp, err := e.client.Do(req)
-	if err != nil {
-		return fmt.Errorf("image push %s: %w", name, err)
-	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			log.Printf("WARN close response body: %v", err)
-		}
-	}()
-	if _, err := io.Copy(io.Discard, resp.Body); err != nil {
-		return err
-	}
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("image push %s: status %d", name, resp.StatusCode)
-	}
-	return nil
-}
-
 // ImageLoad loads an OCI tar archive into the local store.
 func (e *podmanEngine) ImageLoad(ctx context.Context, input io.Reader) (string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, e.base+"/images/load", input)

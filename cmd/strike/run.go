@@ -133,7 +133,7 @@ func (rc *runContext) runStep(stepID primitive.Identifier) error {
 	if err != nil {
 		return err
 	}
-	specHash, tag, err := rc.computeSpecHash(step, stepID, imageDigest, inputs)
+	specHash, err := rc.computeSpecHash(step, stepID, imageDigest, inputs)
 	if err != nil {
 		return err
 	}
@@ -151,7 +151,7 @@ func (rc *runContext) runStep(stepID primitive.Identifier) error {
 	if step.Pack != nil {
 		return rc.executePack(ctx, step, stepID, safeName, inputs)
 	}
-	return rc.executeContainerStep(ctx, step, stepID, safeName, tag, inputs)
+	return rc.executeContainerStep(ctx, step, stepID, safeName, inputs)
 }
 
 func (rc *runContext) executeDeploy(ctx context.Context, step *lane.Step, stepID primitive.Identifier, safeName string) error {
@@ -231,7 +231,7 @@ func (rc *runContext) imageFromRef(step *lane.Step, inputs stepInputs) (string, 
 	return inputs.handles[ref].ImageRef(), nil
 }
 
-func (rc *runContext) computeSpecHash(step *lane.Step, stepID primitive.Identifier, imageDigest primitive.Digest, inputs stepInputs) (primitive.Digest, string, error) {
+func (rc *runContext) computeSpecHash(step *lane.Step, stepID primitive.Identifier, imageDigest primitive.Digest, inputs stepInputs) (primitive.Digest, error) {
 	// Per ADR-027, an input is identified in the spec hash by the
 	// canonical triple (from, mount, subpath); mount is unique per step
 	// by disjointness, and subpath is "" when the whole producer output
@@ -248,10 +248,8 @@ func (rc *runContext) computeSpecHash(step *lane.Step, stepID primitive.Identifi
 	}
 
 	key := registry.SpecHash(step, imageDigest, inputHashes, map[string]primitive.Digest{})
-	sid := string(stepID)
-	tag := registry.Tag(rc.lane.Registry, sid, key)
 	rc.runtime.RecordSpecHash(stepID, key)
-	return key, tag, nil
+	return key, nil
 }
 
 func (rc *runContext) checkCache(ctx context.Context, step *lane.Step, stepID primitive.Identifier, safeName string, specHash primitive.Digest) (bool, error) {
@@ -440,7 +438,7 @@ func (rc *runContext) resolvePackInputPaths(ctx context.Context, step *lane.Step
 	return inputPaths, nil
 }
 
-func (rc *runContext) executeContainerStep(ctx context.Context, step *lane.Step, stepID primitive.Identifier, safeName, tag string, inputs stepInputs) error {
+func (rc *runContext) executeContainerStep(ctx context.Context, step *lane.Step, stepID primitive.Identifier, safeName string, inputs stepInputs) error {
 	secrets, err := lane.ResolveSecrets(step.Secrets, rc.lane.Secrets, rc.laneRoot)
 	if err != nil {
 		return fmt.Errorf("%s: secrets: %w", safeName, err)
@@ -509,7 +507,8 @@ func (rc *runContext) executeContainerStep(ctx context.Context, step *lane.Step,
 			return fmt.Errorf("%s: provenance: %w", safeName, err)
 		}
 	}
-	return rc.pushAndReport(ctx, step, safeName, tag)
+	log.Printf("OK     %s", safeName)
+	return nil
 }
 
 func (rc *runContext) wrapOutputs(ctx context.Context, step *lane.Step, stepID primitive.Identifier, safeName, containerID string) error {
@@ -821,22 +820,6 @@ func relWithinWorkdir(workdir, mount primitive.AbsPath) (string, bool) {
 		return rest, true
 	}
 	return "", false
-}
-
-func (rc *runContext) pushAndReport(ctx context.Context, step *lane.Step, safeName, tag string) error {
-	pushed := false
-	if step.Output != "" {
-		if err := rc.regClient.PushArtifact(ctx, tag); err != nil {
-			return fmt.Errorf("%s: push failed: %w", safeName, err)
-		}
-		pushed = true
-	}
-	if pushed {
-		log.Printf("OK     %s -> %s", safeName, tag)
-	} else {
-		log.Printf("OK     %s", safeName)
-	}
-	return nil
 }
 
 // createWorkdirVolume provisions an engine volume for the step's workdir.

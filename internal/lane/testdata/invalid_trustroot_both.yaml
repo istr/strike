@@ -1,6 +1,5 @@
 name: trustroot-both-lane
 id: trustroot-both-lane
-registry: localhost:5555/test
 secrets: {}
 resolver:
   host: "1.1.1.1:853"
@@ -64,8 +63,12 @@ steps:
     deploy:
       method:
         type: registry
-        source: docker.io/library/golang@sha256:abababababababababababababababababababababababababababababababab
-        target: registry.example.com/app:latest
+        target:
+          host: registry.example.com
+          trust:
+            type: certFingerprint
+            fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+          name: app
       recording:
         preState:
           required: false

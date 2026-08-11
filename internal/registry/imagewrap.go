@@ -55,7 +55,7 @@ func (c *Client) WrapImageOutputAsImage(ctx context.Context, root *os.Root, name
 // against the engine. Shared by WrapImageOutputAsImage (host file) and
 // WrapImageArchiveAsImage (engine archive stream).
 func (c *Client) wrapImageFromReader(ctx context.Context, r io.Reader, size int64, tag string, extra ...map[string]string) (primitive.Digest, int64, error) {
-	img, cleanup, err := extractMainImage(r)
+	img, cleanup, err := ExtractMainImage(r)
 	if err != nil {
 		return "", 0, fmt.Errorf("wrap image: %w", err)
 	}
@@ -225,11 +225,11 @@ func v1HashToDigest(h v1.Hash) primitive.Digest {
 	return primitive.Digest(h.String())
 }
 
-// extractMainImage reads an OCI layout tar from r and returns the first
+// ExtractMainImage reads an OCI layout tar from r and returns the first
 // image from the index. The returned cleanup function removes the temporary
 // directory backing the layout and must be called after the image is no
 // longer needed.
-func extractMainImage(r io.Reader) (v1.Image, func(), error) {
+func ExtractMainImage(r io.Reader) (v1.Image, func(), error) {
 	tmpDir, err := os.MkdirTemp("", "strike-wrap-load-")
 	if err != nil {
 		return nil, nil, err

@@ -1,6 +1,5 @@
 name: peers-https-unknown-trust-mode
 id: peers-https-unknown-trust-mode
-registry: localhost:5555/test
 secrets: {}
 resolver:
   host: "1.1.1.1:853"

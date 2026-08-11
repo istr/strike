@@ -1,4 +1,3 @@
-registry: localhost:5555/test
 steps:
   - id: build
     image: docker.io/library/golang@sha256:abababababababababababababababababababababababababababababababab

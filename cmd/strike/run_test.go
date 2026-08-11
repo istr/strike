@@ -45,7 +45,7 @@ func newTestRC(t *testing.T, engine *mockEngine) *runContext {
 	})
 	return &runContext{
 		ctx:       context.Background(),
-		lane:      &lane.Lane{Registry: "localhost:5555/test"},
+		lane:      &lane.Lane{},
 		dag:       &lane.DAG{},
 		stepIndex: map[primitive.Identifier]*lane.Step{},
 		regClient: &registry.Client{Engine: engine},
@@ -66,7 +66,6 @@ func TestBuildInputDelivery_Single(t *testing.T) {
 	rc := newTestRC(t, eng)
 
 	p := &lane.Lane{
-		Registry: "localhost:5555/test",
 		Steps: []lane.Step{
 			{
 				ID: "compile", Image: primitive.ImageRefPtr("img"), Args: []string{}, Env: map[string]string{},
@@ -119,7 +118,6 @@ func TestBuildInputDelivery_Multiple(t *testing.T) {
 	rc := newTestRC(t, eng)
 
 	p := &lane.Lane{
-		Registry: "localhost:5555/test",
 		Steps: []lane.Step{
 			{
 				ID: "s1", Image: primitive.ImageRefPtr("img"), Args: []string{}, Env: map[string]string{},
@@ -182,7 +180,6 @@ func TestBuildInputDelivery_MissingSubpath(t *testing.T) {
 	rc := newTestRC(t, eng)
 
 	p := &lane.Lane{
-		Registry: "localhost:5555/test",
 		Steps: []lane.Step{
 			{
 				ID: "src", Image: primitive.ImageRefPtr("img"), Args: []string{}, Env: map[string]string{},
@@ -234,7 +231,6 @@ func TestBuildInputDelivery_OutsideWorkdir_DirectoryMount(t *testing.T) {
 	rc := newTestRC(t, eng)
 
 	p := &lane.Lane{
-		Registry: "localhost:5555/test",
 		Steps: []lane.Step{
 			{
 				ID: "src", Image: primitive.ImageRefPtr("img"), Args: []string{}, Env: map[string]string{},
@@ -301,7 +297,6 @@ func TestBuildInputDelivery_NoWorkdir_Mounts(t *testing.T) {
 	rc := newTestRC(t, eng)
 
 	p := &lane.Lane{
-		Registry: "localhost:5555/test",
 		Steps: []lane.Step{
 			{
 				ID: "src", Image: primitive.ImageRefPtr("img"), Args: []string{}, Env: map[string]string{},
@@ -354,7 +349,6 @@ func TestBuildInputDelivery_SingleFileOutside_Rejected(t *testing.T) {
 	rc := newTestRC(t, &mockEngine{})
 
 	p := &lane.Lane{
-		Registry: "localhost:5555/test",
 		Steps: []lane.Step{
 			{
 				ID: "src", Image: primitive.ImageRefPtr("img"), Args: []string{}, Env: map[string]string{},
@@ -395,7 +389,6 @@ func TestBuildInputDelivery_ExportsProducerOnce(t *testing.T) {
 	rc := newTestRC(t, eng)
 
 	p := &lane.Lane{
-		Registry: "localhost:5555/test",
 		Steps: []lane.Step{
 			{
 				ID: "src", Image: primitive.ImageRefPtr("img"), Args: []string{}, Env: map[string]string{},
@@ -465,19 +458,16 @@ func TestComputeSpecHash_Deterministic(t *testing.T) {
 	if gatherErr != nil {
 		t.Fatal(gatherErr)
 	}
-	h1, tag1, err := rc.computeSpecHash(step, "step1", primitive.DigestFromHex("abc0000000000000000000000000000000000000000000000000000000000000"), inputs)
+	h1, err := rc.computeSpecHash(step, "step1", primitive.DigestFromHex("abc0000000000000000000000000000000000000000000000000000000000000"), inputs)
 	if err != nil {
 		t.Fatal(err)
 	}
-	h2, tag2, err := rc.computeSpecHash(step, "step1", primitive.DigestFromHex("abc0000000000000000000000000000000000000000000000000000000000000"), inputs)
+	h2, err := rc.computeSpecHash(step, "step1", primitive.DigestFromHex("abc0000000000000000000000000000000000000000000000000000000000000"), inputs)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if h1 != h2 {
 		t.Errorf("hashes differ: %s vs %s", h1, h2)
-	}
-	if tag1 != tag2 {
-		t.Errorf("tags differ: %s vs %s", tag1, tag2)
 	}
 	if !strings.HasPrefix(h1.String(), "sha256:") {
 		t.Errorf("hash should be a sha256 digest, got %q", h1)
@@ -492,13 +482,13 @@ func TestComputeSpecHash_ChangesWithImageDigest(t *testing.T) {
 	if gatherErr != nil {
 		t.Fatal(gatherErr)
 	}
-	h1, _, err := rc.computeSpecHash(step, "s", primitive.DigestFromHex("aaa0000000000000000000000000000000000000000000000000000000000000"), inputs)
+	h1, err := rc.computeSpecHash(step, "s", primitive.DigestFromHex("aaa0000000000000000000000000000000000000000000000000000000000000"), inputs)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Reset the record store to avoid accumulation from prior call.
 	rc.runtime = runtimeForSteps(t, "s")
-	h2, _, err := rc.computeSpecHash(step, "s", primitive.DigestFromHex("bbb0000000000000000000000000000000000000000000000000000000000000"), inputs)
+	h2, err := rc.computeSpecHash(step, "s", primitive.DigestFromHex("bbb0000000000000000000000000000000000000000000000000000000000000"), inputs)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -519,7 +509,7 @@ func TestComputeSpecHash_NoSources(t *testing.T) {
 	if gatherErr != nil {
 		t.Fatal(gatherErr)
 	}
-	h, _, err := rc.computeSpecHash(step, "build", primitive.DigestFromHex("0000000000000000000000000000000000000000000000000000000000000001"), inputs)
+	h, err := rc.computeSpecHash(step, "build", primitive.DigestFromHex("0000000000000000000000000000000000000000000000000000000000000001"), inputs)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -714,8 +704,7 @@ func TestResolveImageDigest_FromInspect(t *testing.T) {
 func TestResolveImageDigest_ImageFrom(t *testing.T) {
 	rc := newTestRC(t, &mockEngine{})
 	p := &lane.Lane{
-		ID:       "test-lane",
-		Registry: "localhost:5555/test",
+		ID: "test-lane",
 		Steps: []lane.Step{
 			{
 				ID: "pack", Image: primitive.ImageRefPtr("img"), Args: []string{}, Env: map[string]string{},
@@ -756,7 +745,6 @@ func TestResolveImageDigest_ImageFrom(t *testing.T) {
 func TestResolveImageDigest_ImageFromMissing(t *testing.T) {
 	rc := newTestRC(t, &mockEngine{})
 	p := &lane.Lane{
-		Registry: "localhost:5555/test",
 		Steps: []lane.Step{
 			{
 				ID: "pack", Image: primitive.ImageRefPtr("img"), Args: []string{}, Env: map[string]string{},
@@ -831,7 +819,6 @@ func TestResolvePackInputPaths(t *testing.T) {
 	rc := newTestRC(t, eng)
 
 	p := &lane.Lane{
-		Registry: "localhost:5555/test",
 		Steps: []lane.Step{
 			{
 				ID: "compile", Image: primitive.ImageRefPtr("img"), Args: []string{}, Env: map[string]string{},
@@ -880,46 +867,6 @@ func TestResolvePackInputPaths(t *testing.T) {
 	}
 	if !strings.HasSuffix(paths["/app"], "binary") {
 		t.Errorf("path should end in 'binary', got %q", paths["/app"])
-	}
-}
-
-// --------------------------------------------------------------------------.
-// pushAndReport
-// --------------------------------------------------------------------------.
-
-func TestPushAndReport_NoImage(t *testing.T) {
-	rc := newTestRC(t, &mockEngine{})
-	step := &lane.Step{
-		Outputs: []lane.FileOutput{{ID: "bin", Type: "file", Path: primitive.RelPathPtr("bin")}},
-	}
-	if err := rc.pushAndReport(context.Background(), step, "test", "tag"); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestPushAndReport_ImagePushError(t *testing.T) {
-	eng := &mockEngine{pushErr: fmt.Errorf("network down")}
-	rc := newTestRC(t, eng)
-	step := &lane.Step{
-		Output: "image",
-	}
-	err := rc.pushAndReport(context.Background(), step, "test", "tag")
-	if err == nil {
-		t.Fatal("expected error on push failure")
-	}
-	if !strings.Contains(err.Error(), "push failed") {
-		t.Errorf("error should mention 'push failed': %v", err)
-	}
-}
-
-func TestPushAndReport_ImagePushOK(t *testing.T) {
-	eng := &mockEngine{}
-	rc := newTestRC(t, eng)
-	step := &lane.Step{
-		Output: "image",
-	}
-	if err := rc.pushAndReport(context.Background(), step, "test", "tag"); err != nil {
-		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

@@ -14,11 +14,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
 	"net/netip"
 	"os"
 	"path/filepath"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
+	"github.com/google/go-containerregistry/pkg/v1/remote"
 
 	"github.com/istr/strike/internal/capsule"
 	"github.com/istr/strike/internal/clock"
@@ -344,7 +346,7 @@ func appendUnique[T comparable](s []T, v T) []T {
 // buildAttestation constructs the attestation struct for step 6 of Execute,
 // including observed-peer collection and peer-attribution wiring.
 func (d *Deployer) buildAttestation(
-	step *lane.Step, state *lane.Runtime,
+	step *lane.Step, state *lane.Runtime, push *attachTarget,
 	artifactDigests map[primitive.Identifier]record.Artifact,
 	provenance []provenance.Record,
 	started clock.Time, preDigest, postDigest primitive.Digest,
@@ -354,6 +356,14 @@ func (d *Deployer) buildAttestation(
 	observedPeers, peerAttribution, err := d.collectObservedPeers(step, declaredPeers, state)
 	if err != nil {
 		return nil, err
+	}
+	// The control-plane push connection is a Layer-V observation of the
+	// declared registry target: the identity verified on the one permitted
+	// dial enters the observed-peer set under the declared authority.
+	if push != nil {
+		if err := addObservedPeer(push.authority, nil, push.observed, observedPeers); err != nil {
+			return nil, err
+		}
 	}
 	return &Attestation{
 		Sealed: Sealed{
@@ -408,7 +418,7 @@ func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.Run
 
 	// 4. Execute deploy action. For registry deploys the returned attach
 	// target carries the pushed manifest descriptor; nil otherwise.
-	attach, execErr := d.executeMethod(ctx, spec, step.Peers)
+	attach, execErr := d.executeMethod(ctx, spec, step.Peers, state)
 	if execErr != nil {
 		return nil, fmt.Errorf("step %q: deploy action failed: %w", step.ID, execErr)
 	}
@@ -424,7 +434,7 @@ func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.Run
 	postDigest := StateDigest(postCaptures)
 
 	// 6. Build attestation.
-	att, obsErr := d.buildAttestation(step, state, artifactDigests, provenance, started, preDigest, postDigest)
+	att, obsErr := d.buildAttestation(step, state, attach, artifactDigests, provenance, started, preDigest, postDigest)
 	if obsErr != nil {
 		return nil, fmt.Errorf("step %q: %w", step.ID, obsErr)
 	}
@@ -450,7 +460,7 @@ func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.Run
 			{Statement: "sealed", Bundle: signed.Sealed.Bundle},
 			{Statement: "engine-context", Bundle: signed.EngineContext.Bundle},
 			{Statement: "informational", Bundle: signed.Informational.Bundle},
-		}); err != nil {
+		}, remote.WithTransport(attach.rt)); err != nil {
 			return nil, fmt.Errorf("step %q: attach statement bundles: %w", step.ID, err)
 		}
 	}
@@ -645,31 +655,28 @@ func (d *Deployer) captureOne(ctx context.Context, sc lane.Capture) (captureSnap
 
 // attachTarget identifies where the signed statement bundles are attached
 // after signing: the pushed manifest descriptor within the deploy target
-// repository (ADR-040 D3). Nil for deploy methods without a registry push.
+// repository (ADR-040 D3), the trust-anchored transport every referrer
+// write reuses, and the validated push-connection identity for
+// Sealed.ObservedPeers. Nil for deploy methods without a registry push.
 type attachTarget struct {
-	ref     string        // deploy target reference (repository selector)
-	subject v1.Descriptor // pushed manifest descriptor (the referrer subject)
+	subject   v1.Descriptor      // pushed manifest descriptor (the referrer subject)
+	rt        http.RoundTripper  // trust-anchored transport for referrer writes
+	observed  ObservedIdentity   // validated push-connection identity (Layer V)
+	ref       string             // deploy target repository (authority/name)
+	authority endpoint.Authority // declared target authority (ObservedPeers key)
 }
 
 // executeMethod dispatches to the appropriate deploy method. It returns a
 // non-nil attach target only for registry deploys.
-func (d *Deployer) executeMethod(ctx context.Context, spec lane.DeploySpec, peers []lane.Peer) (*attachTarget, error) {
+func (d *Deployer) executeMethod(ctx context.Context, spec lane.DeploySpec, peers []lane.Peer, state *lane.Runtime) (*attachTarget, error) {
 	switch m := spec.Method.(type) {
 	case lane.DeployRegistry:
-		return executeRegistryDeploy(m)
+		return d.executeRegistryDeploy(ctx, m, state)
 	case lane.DeployKubernetes:
 		return nil, d.executeKubernetesDeploy(ctx, m, peers)
 	default:
 		return nil, fmt.Errorf("unknown deploy method type %q", spec.Method.MethodType())
 	}
-}
-
-func executeRegistryDeploy(m lane.DeployRegistry) (*attachTarget, error) {
-	desc, err := registry.CopyImage(m.Source, m.Target)
-	if err != nil {
-		return nil, fmt.Errorf("registry deploy: %w", err)
-	}
-	return &attachTarget{ref: m.Target, subject: desc}, nil
 }
 
 func (d *Deployer) executeKubernetesDeploy(ctx context.Context, m lane.DeployKubernetes, peers []lane.Peer) error {

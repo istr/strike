@@ -1,14 +1,17 @@
 package deploy_test
 
 import (
+	"archive/tar"
 	"bytes"
 	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
@@ -18,7 +21,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -43,6 +45,7 @@ import (
 	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/provenance"
 	"github.com/istr/strike/internal/record"
+	"github.com/istr/strike/internal/registry/regtest"
 	"github.com/istr/strike/internal/testutil"
 	"github.com/istr/strike/internal/transport"
 )
@@ -401,33 +404,49 @@ func TestDeployerExecute(t *testing.T) {
 }
 
 func TestDeployerExecuteRegistryAttachesReferrers(t *testing.T) {
-	eng := newTLSTestEngine(t, containerMock(t, "v1.2.3"))
-
-	srv := httptest.NewServer(ggcrregistry.New(ggcrregistry.WithReferrersSupport(true)))
-	t.Cleanup(srv.Close)
-	u, err := url.Parse(srv.URL)
-	if err != nil {
-		t.Fatalf("parse server url: %v", err)
+	// The deploy path flattens the pushed payload for cataloging, so the
+	// layer must be a well-formed tar, not raw bytes.
+	var layerBuf bytes.Buffer
+	tw := tar.NewWriter(&layerBuf)
+	if hdrErr := tw.WriteHeader(&tar.Header{Name: "artifact", Mode: 0o644, Size: int64(len("payload"))}); hdrErr != nil {
+		t.Fatalf("layer tar header: %v", hdrErr)
 	}
-	host := "localhost:" + u.Port() // ggcr dials 127.0.0.1 via HTTPS; localhost via HTTP
-
-	src := host + "/src:v1"
+	if _, wErr := tw.Write([]byte("payload")); wErr != nil {
+		t.Fatalf("layer tar content: %v", wErr)
+	}
+	if closeErr := tw.Close(); closeErr != nil {
+		t.Fatalf("layer tar close: %v", closeErr)
+	}
 	img := mutate.MediaType(empty.Image, types.OCIManifestSchema1)
-	img, err = mutate.AppendLayers(img, static.NewLayer([]byte("artifact"), types.OCILayer))
+	img, err := mutate.AppendLayers(img, static.NewLayer(layerBuf.Bytes(), types.OCILayer))
 	if err != nil {
 		t.Fatalf("append layer: %v", err)
-	}
-	srcRef, err := name.ParseReference(src)
-	if err != nil {
-		t.Fatalf("parse src: %v", err)
-	}
-	if writeErr := remote.Write(srcRef, img); writeErr != nil {
-		t.Fatalf("seed source image: %v", writeErr)
 	}
 	imgDigest, err := img.Digest()
 	if err != nil {
 		t.Fatalf("digest: %v", err)
 	}
+	saved, err := regtest.LayoutTar(img)
+	if err != nil {
+		t.Fatalf("layout tar: %v", err)
+	}
+	eng := newTLSTestEngine(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/images/") && strings.HasSuffix(r.URL.Path, "/get") {
+			w.Header().Set("Content-Type", "application/x-tar")
+			if _, wErr := w.Write(saved); wErr != nil {
+				t.Errorf("write save tar: %v", wErr)
+			}
+			return
+		}
+		t.Errorf("unexpected engine call: %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+
+	srv := httptest.NewTLSServer(ggcrregistry.New(ggcrregistry.WithReferrersSupport(true)))
+	t.Cleanup(srv.Close)
+	authority := srv.Listener.Addr().String()
+	leafSum := sha256.Sum256(srv.Certificate().Raw)
+	leafFP := primitive.Digest("sha256:" + hex.EncodeToString(leafSum[:]))
 
 	state := newRuntime(t, "build", "deploy-prod")
 	if regErr := state.Register("build", "image", output.ImageHandle{
@@ -440,9 +459,13 @@ func TestDeployerExecuteRegistryAttachesReferrers(t *testing.T) {
 		ID: "deploy-prod",
 		Deploy: &lane.DeploySpec{
 			Method: lane.DeployRegistry{
-				Type:   "registry",
-				Source: src,
-				Target: host + "/app:v1",
+				Type: "registry",
+				Target: lane.DeployRegistryTarget{
+					Type:    "https",
+					Address: endpoint.MustParseAuthority(authority),
+					Trust:   endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: leafFP},
+					Name:    "app",
+				},
 			},
 			Artifacts: &lane.StepImageRef{Step: "build"},
 			Recording: lane.StateRecording{
@@ -467,15 +490,32 @@ func TestDeployerExecuteRegistryAttachesReferrers(t *testing.T) {
 		StepPorts:    ports,
 	}
 	deploy.SetProduceBundles(d, stubProduceBundles())
-	if _, execErr := d.Execute(context.Background(), step, state); execErr != nil {
+	att, execErr := d.Execute(context.Background(), step, state)
+	if execErr != nil {
 		t.Fatalf("Execute: %v", execErr)
 	}
 
-	subjectRef, err := name.NewDigest(host + "/app@" + imgDigest.String())
+	op, ok := att.Sealed.ObservedPeers[endpoint.Authority(authority)]
+	if !ok {
+		t.Fatalf("push target %q missing from Sealed.ObservedPeers", authority)
+	}
+	tlsID, ok := op.Identity.(deploy.ObservedTLS)
+	if !ok {
+		t.Fatalf("push identity = %T, want deploy.ObservedTLS", op.Identity)
+	}
+	if tlsID.ServerCertFingerprint != leafFP {
+		t.Errorf("push identity fingerprint = %s, want %s", tlsID.ServerCertFingerprint, leafFP)
+	}
+
+	rt := srv.Client().Transport
+	subjectRef, err := name.NewDigest(authority + "/app@" + imgDigest.String())
 	if err != nil {
 		t.Fatalf("subject digest ref: %v", err)
 	}
-	index, err := remote.Referrers(subjectRef)
+	if _, headErr := remote.Head(subjectRef, remote.WithTransport(rt)); headErr != nil {
+		t.Fatalf("pushed payload not at target: %v", headErr)
+	}
+	index, err := remote.Referrers(subjectRef, remote.WithTransport(rt))
 	if err != nil {
 		t.Fatalf("Referrers: %v", err)
 	}
@@ -483,33 +523,43 @@ func TestDeployerExecuteRegistryAttachesReferrers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("IndexManifest: %v", err)
 	}
-	if len(manifest.Manifests) != 3 {
-		t.Fatalf("referrers = %d, want 3", len(manifest.Manifests))
+	if len(manifest.Manifests) != 5 {
+		t.Fatalf("referrers = %d, want 5 (3 statement bundles, 2 SBOMs)", len(manifest.Manifests))
 	}
-	want := map[string]bool{"sealed": false, "engine-context": false, "informational": false}
+	wantStatements := map[string]bool{"sealed": false, "engine-context": false, "informational": false}
+	wantSBOM := map[string]bool{"application/vnd.cyclonedx+json": false, "application/spdx+json": false}
 	for _, desc := range manifest.Manifests {
-		dref, err := name.NewDigest(host + "/app@" + desc.Digest.String())
-		if err != nil {
-			t.Fatalf("referrer digest ref: %v", err)
-		}
-		rimg, err := remote.Image(dref)
-		if err != nil {
-			t.Fatalf("fetch referrer %s: %v", desc.Digest, err)
-		}
-		rimgMfst, err := rimg.Manifest()
-		if err != nil {
-			t.Fatalf("referrer manifest %s: %v", desc.Digest, err)
-		}
-		stmt := rimgMfst.Annotations["dev.strike.statement"]
-		if _, ok := want[stmt]; !ok {
-			t.Errorf("unexpected statement annotation %q", stmt)
+		if _, sbom := wantSBOM[string(desc.ArtifactType)]; sbom {
+			wantSBOM[string(desc.ArtifactType)] = true
 			continue
 		}
-		want[stmt] = true
+		dref, refErr := name.NewDigest(authority + "/app@" + desc.Digest.String())
+		if refErr != nil {
+			t.Fatalf("referrer digest ref: %v", refErr)
+		}
+		rimg, imgErr := remote.Image(dref, remote.WithTransport(rt))
+		if imgErr != nil {
+			t.Fatalf("fetch referrer %s: %v", desc.Digest, imgErr)
+		}
+		rimgMfst, mErr := rimg.Manifest()
+		if mErr != nil {
+			t.Fatalf("referrer manifest %s: %v", desc.Digest, mErr)
+		}
+		stmt := rimgMfst.Annotations["dev.strike.statement"]
+		if _, known := wantStatements[stmt]; !known {
+			t.Errorf("unexpected referrer: artifactType=%q statement=%q", desc.ArtifactType, stmt)
+			continue
+		}
+		wantStatements[stmt] = true
 	}
-	for stmt, ok := range want {
-		if !ok {
+	for stmt, seen := range wantStatements {
+		if !seen {
 			t.Errorf("missing referrer for statement %q", stmt)
+		}
+	}
+	for mt, seen := range wantSBOM {
+		if !seen {
+			t.Errorf("missing SBOM referrer %q", mt)
 		}
 	}
 }
@@ -1247,8 +1297,7 @@ func TestDeployerExecute_ObservedPeersPopulated(t *testing.T) {
 	}
 
 	p := &lane.Lane{
-		Name:     "test-observed",
-		Registry: "localhost:5555/test",
+		Name: "test-observed",
 		Steps: []lane.Step{
 			{
 				ID:      "build",
@@ -1400,8 +1449,7 @@ func TestDeployerExecute_ObservedPeers_HonorsSSHPort(t *testing.T) {
 	}
 
 	p := &lane.Lane{
-		Name:     "test-ssh-port",
-		Registry: "localhost:5555/test",
+		Name: "test-ssh-port",
 		Steps: []lane.Step{
 			{
 				ID:      "build",
@@ -1527,8 +1575,7 @@ func TestDeployerExecute_ObservedPeersConflictAborts(t *testing.T) {
 	}
 
 	p := &lane.Lane{
-		Name:     "test-conflict",
-		Registry: "localhost:5555/test",
+		Name: "test-conflict",
 		Steps: []lane.Step{
 			{
 				ID:      "step-a",

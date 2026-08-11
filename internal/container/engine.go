@@ -26,9 +26,6 @@ type Engine interface {
 	// ImagePull fetches an image from a remote registry.
 	ImagePull(ctx context.Context, ref string) error
 
-	// ImagePush pushes a local image to a remote registry.
-	ImagePush(ctx context.Context, name string) error
-
 	// ImageLoad loads an OCI tar archive into the local store.
 	// Returns the image ID.
 	ImageLoad(ctx context.Context, input io.Reader) (string, error)

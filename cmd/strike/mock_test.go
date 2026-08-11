@@ -16,7 +16,6 @@ type mockEngine struct {
 	loadErr        error
 	imageExistsErr error
 	pullErr        error
-	pushErr        error
 	pingErr        error
 	inspectErr     error
 	tagErr         error
@@ -38,8 +37,6 @@ func (m *mockEngine) ImageExists(_ context.Context, _ string) (bool, error) {
 }
 
 func (m *mockEngine) ImagePull(context.Context, string) error { return m.pullErr }
-
-func (m *mockEngine) ImagePush(context.Context, string) error { return m.pushErr }
 
 func (m *mockEngine) ImageLoad(_ context.Context, _ io.Reader) (string, error) {
 	return m.loadRV, m.loadErr

@@ -25,6 +25,14 @@ package primitive
 // resource name, an OCI tag component, and a DNS label.
 #Identifier: =~"^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$"
 
+// #OCIName is an OCI distribution-spec repository <name>: slash-separated
+// lowercase path components with dot, underscore, and dash separators
+// (github.com/opencontainers/distribution-spec, the <name> grammar). It
+// carries no registry authority, no tag, and no digest by construction: the
+// push destination pairs it with a declared endpoint, and the pushed digest
+// is the result of the push, bound in the attestation (ADR-051 D6).
+#OCIName: =~"^[a-z0-9]+((\\.|_|__|-+)[a-z0-9]+)*(/[a-z0-9]+((\\.|_|__|-+)[a-z0-9]+)*)*$"
+
 // #Base64 is standard padded base64 (the proto3-JSON form of a bytes field and
 // the SSH public-key body wire form).
 #Base64: =~"^[A-Za-z0-9+/]+={0,2}$"

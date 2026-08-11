@@ -75,7 +75,6 @@ func TestParse_ValidDeployOnly(t *testing.T) {
 	yaml := []byte(`
 name: deploy-only
 id: deploy-only
-registry: localhost:5555/test
 secrets: {}
 resolver:
   host: "1.1.1.1:853"
@@ -111,8 +110,12 @@ steps:
     deploy:
       method:
         type: registry
-        source: localhost:5555/test/image:latest
-        target: registry.example.com/app:latest
+        target:
+          host: registry.example.com
+          trust:
+            type: certFingerprint
+            fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+          name: app
       recording:
         preState:
           required: false
@@ -147,7 +150,6 @@ func TestParse_BaseSBOMSigners(t *testing.T) {
 	yaml := []byte(`
 name: sbom-signer-lane
 id: sbom-signer-lane
-registry: localhost:5555/test
 secrets: {}
 resolver:
   host: "1.1.1.1:853"
@@ -186,8 +188,12 @@ steps:
     deploy:
       method:
         type: registry
-        source: localhost:5555/test/image:latest
-        target: registry.example.com/app:latest
+        target:
+          host: registry.example.com
+          trust:
+            type: certFingerprint
+            fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+          name: app
       recording:
         preState:
           required: false
@@ -226,19 +232,6 @@ func TestParse_NonPinnedImageRejected(t *testing.T) {
 	_, _, _, err := lane.Parse(mustFilePath(t, "testdata/invalid_image_not_pinned.yaml"))
 	if err == nil {
 		t.Fatal("expected error for non-pinned image")
-	}
-	if !strings.Contains(err.Error(), "validation") {
-		t.Errorf("error should mention validation: %v", err)
-	}
-}
-
-// TestParse_InvalidRegistryRejected proves the registry pattern is anchored: a
-// value with a valid prefix but trailing garbage (accepted by the old unanchored
-// pattern) is now rejected.
-func TestParse_InvalidRegistryRejected(t *testing.T) {
-	_, _, _, err := lane.Parse(mustFilePath(t, "testdata/invalid_registry.yaml"))
-	if err == nil {
-		t.Fatal("expected error for malformed registry (trailing garbage)")
 	}
 	if !strings.Contains(err.Error(), "validation") {
 		t.Errorf("error should mention validation: %v", err)
@@ -441,7 +434,6 @@ func TestParse_DisjunctionErrorIsReadable(t *testing.T) {
 	// current branch. Adjust if the lane schema has shifted.
 	bad := []byte(`
 name: test
-registry: localhost:5555/test
 secrets: {}
 resolver:
   host: "1.1.1.1:853"
@@ -507,7 +499,6 @@ func TestParse_RelPathValidation(t *testing.T) {
 	tmpl := `
 name: test
 id: test
-registry: localhost:5555/test
 secrets: {}
 resolver:
   host: "1.1.1.1:853"
@@ -566,8 +557,12 @@ steps:
     deploy:
       method:
         type: registry
-        source: localhost:5555/test/image:latest
-        target: registry.example.com/app:latest
+        target:
+          host: registry.example.com
+          trust:
+            type: certFingerprint
+            fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+          name: app
       recording:
         preState:
           required: false

@@ -94,7 +94,6 @@ func extractDigestFromTar(data []byte) (string, error) {
 
 func (e *wrapEngine) ImageExists(_ context.Context, _ string) (bool, error) { return false, nil }
 func (e *wrapEngine) ImagePull(_ context.Context, _ string) error           { return nil }
-func (e *wrapEngine) ImagePush(_ context.Context, _ string) error           { return nil }
 
 func (e *wrapEngine) ImageSave(_ context.Context, _ string) (io.ReadCloser, error) {
 	return io.NopCloser(bytes.NewReader(nil)), nil

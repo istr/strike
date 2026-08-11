@@ -25,8 +25,7 @@ import (
 	// Stable identifier assigned at authoring time. Used by external
 	// verifiers to pair attestations against the same lane across runs.
 	// Distinct from `name`, which is human-display.
-	id:       primitive.#Identifier                                          @go(ID)
-	registry: =~"^[a-z0-9]([a-z0-9.-]*[a-z0-9])?(:[0-9]+)?(/[a-z0-9._-]+)*$" @go(Registry)
+	id: primitive.#Identifier @go(ID)
 	// NOTE: the exported JSON Schema for this map is open (patternProperties
 	// only), unlike artifacts (additionalProperties:false). strike validates
 	// CUE-natively in parse.go and rejects non-#Identifier keys in-process; an
@@ -301,10 +300,30 @@ import (
 #DeployRegistry: {
 	@go(DeployRegistry)
 	type: "registry" @go(Type,type=DeployMethodType)
-	// source and target are registry image references (the copy source and
-	// destination), not filesystem paths; they flow to registry.CopyImage.
-	source: string @go(Source)
-	target: string @go(Target)
+	// target is the push destination the control plane writes the resolved
+	// artifacts image to (ADR-051 D4/D6).
+	target: #DeployRegistryTarget @go(Target)
+}
+
+// DeployRegistryTarget is the registry push destination: the https authority
+// and server-trust anchor of the target registry plus the repository name the
+// payload is written under (ADR-051 D6). The field set restates the
+// endpoint.#TLS wire shape (type, host, trust) rather than embedding it:
+// gengotypes emits @go type overrides verbatim and #TLS carries bare
+// same-package overrides (type=Address, type=Trust), so an embedded
+// cross-package definition would emit unqualified type names into this
+// package; the restatement carries package-qualified overrides and produces
+// the identical wire shape and the identical flat Go struct. name is the OCI
+// distribution-spec repository name -- no tag, no digest: the pushed digest
+// is the result of the push, bound afterward in the attestation.
+#DeployRegistryTarget: {
+	@go(DeployRegistryTarget)
+	type: "https" @go(Type,type="github.com/istr/strike/contract/endpoint".CarriageType)
+	// host (left of @go) is the packed-authority wire grammar; the Go side is
+	// the Address concept in name and type; see endpoint.#TLS.host.
+	host:  endpoint.#Authority @go(Address,type="github.com/istr/strike/contract/endpoint".Address)
+	trust: endpoint.#Trust     @go(Trust,type="github.com/istr/strike/contract/endpoint".Trust)
+	name:  primitive.#OCIName  @go(Name)
 }
 
 // ---------------------------------------------------------------------------

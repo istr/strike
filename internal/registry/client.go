@@ -11,13 +11,9 @@ import (
 
 	"github.com/istr/strike/internal/closer"
 
-	"github.com/google/go-containerregistry/pkg/authn"
-	"github.com/google/go-containerregistry/pkg/crane"
-	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/empty"
 	"github.com/google/go-containerregistry/pkg/v1/layout"
-	"github.com/google/go-containerregistry/pkg/v1/remote"
 
 	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/primitive"
@@ -26,34 +22,6 @@ import (
 // Client wraps container engine operations for registry interaction.
 type Client struct {
 	Engine container.Engine
-}
-
-// PushArtifact pushes a local image to the registry.
-func (c *Client) PushArtifact(ctx context.Context, tag string) error {
-	return c.Engine.ImagePush(ctx, tag)
-}
-
-// CopyImage copies an image between registries using go-containerregistry
-// and returns the descriptor of the copied manifest. The source manifest is
-// described first (one HEAD request) and the copy is then performed against
-// that digest, so the returned descriptor identifies exactly the manifest
-// bytes that were copied: a mutable source tag cannot race the copy, and
-// referrers attached to the returned digest bind to the pushed content.
-func CopyImage(src, dst string) (v1.Descriptor, error) {
-	srcRef, err := name.ParseReference(src)
-	if err != nil {
-		return v1.Descriptor{}, fmt.Errorf("parse source %q: %w", src, err)
-	}
-	desc, err := remote.Head(srcRef, remote.WithAuthFromKeychain(authn.DefaultKeychain))
-	if err != nil {
-		return v1.Descriptor{}, fmt.Errorf("describe %s: %w", src, err)
-	}
-	pinned := srcRef.Context().Digest(desc.Digest.String()).String()
-	if err := crane.Copy(pinned, dst,
-		crane.WithAuthFromKeychain(authn.DefaultKeychain)); err != nil {
-		return v1.Descriptor{}, fmt.Errorf("copy %s -> %s: %w", pinned, dst, err)
-	}
-	return *desc, nil
 }
 
 // singleImageTar writes a single OCI image as a layout tar into an in-memory

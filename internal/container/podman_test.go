@@ -223,37 +223,6 @@ func TestImageTag(t *testing.T) {
 	}
 }
 
-func TestImagePush(t *testing.T) {
-	tests := []struct {
-		name       string
-		statusCode int
-		wantErr    bool
-	}{
-		{"success", http.StatusOK, false},
-		{"failure", http.StatusInternalServerError, true},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			eng := newTLSTestEngine(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if !strings.Contains(r.URL.Path, "/images/") || !strings.HasSuffix(r.URL.Path, "/push") {
-					t.Errorf("unexpected path: %s", r.URL.Path)
-				}
-				if r.Method != http.MethodPost {
-					t.Errorf("expected POST, got %s", r.Method)
-				}
-				if r.Header.Get("X-Registry-Auth") == "" {
-					t.Error("missing X-Registry-Auth header")
-				}
-				w.WriteHeader(tt.statusCode)
-			}))
-			err := eng.ImagePush(context.Background(), "test:latest")
-			if (err != nil) != tt.wantErr {
-				t.Fatalf("ImagePush() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
-}
-
 func TestContainerRun(t *testing.T) {
 	var capturedSpec map[string]any
 	step := 0

@@ -17,7 +17,6 @@ import (
 func TestParse_RejectsSourcesField(t *testing.T) {
 	yaml := `
 name: bad
-registry: localhost:5555/test
 secrets: {}
 resolver:
   host: "1.1.1.1:853"

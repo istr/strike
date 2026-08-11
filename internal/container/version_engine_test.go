@@ -16,7 +16,6 @@ type stubEngine struct {
 
 func (s *stubEngine) ImageExists(context.Context, string) (bool, error)    { return false, nil }
 func (s *stubEngine) ImagePull(context.Context, string) error              { return nil }
-func (s *stubEngine) ImagePush(context.Context, string) error              { return nil }
 func (s *stubEngine) ImageLoad(context.Context, io.Reader) (string, error) { return "", nil }
 func (s *stubEngine) ImageInspect(context.Context, string) (*container.ImageInfo, error) {
 	return nil, nil

@@ -74,13 +74,18 @@ func ArtifactImage(content []byte, artifactType string, subject v1.Descriptor) (
 // to the OCI referrers tag scheme on registries without it; no fallback
 // logic lives here. The config media type carries the artifact type so
 // registries and clients derive it per the OCI 1.1 rule (manifest
-// artifactType, else config media type).
-func AttachStatementBundles(ctx context.Context, target string, subject v1.Descriptor, bundles []StatementBundle) error {
+// artifactType, else config media type). Additional remote options -- for
+// example a trust-anchored transport -- apply to every write.
+func AttachStatementBundles(ctx context.Context, target string, subject v1.Descriptor, bundles []StatementBundle, opts ...remote.Option) error {
 	targetRef, err := name.ParseReference(target)
 	if err != nil {
 		return fmt.Errorf("parse target %q: %w", target, err)
 	}
 	repo := targetRef.Context()
+	writeOpts := append([]remote.Option{
+		remote.WithAuthFromKeychain(authn.DefaultKeychain),
+		remote.WithContext(ctx),
+	}, opts...)
 	for _, b := range bundles {
 		img, err := ArtifactImage(b.Bundle, SigstoreBundleMediaType, subject)
 		if err != nil {
@@ -104,9 +109,7 @@ func AttachStatementBundles(ctx context.Context, target string, subject v1.Descr
 		if err != nil {
 			return fmt.Errorf("referrer %s: digest: %w", b.Statement, err)
 		}
-		if err := remote.Write(repo.Digest(digest.String()), withSubject,
-			remote.WithAuthFromKeychain(authn.DefaultKeychain),
-			remote.WithContext(ctx)); err != nil {
+		if err := remote.Write(repo.Digest(digest.String()), withSubject, writeOpts...); err != nil {
 			return fmt.Errorf("referrer %s: push: %w", b.Statement, err)
 		}
 	}

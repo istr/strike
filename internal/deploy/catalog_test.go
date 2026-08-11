@@ -1,4 +1,4 @@
-package executor_test
+package deploy_test
 
 import (
 	"encoding/json"
@@ -7,7 +7,7 @@ import (
 	"testing/fstest"
 
 	"github.com/istr/strike/internal/clock"
-	"github.com/istr/strike/internal/executor"
+	"github.com/istr/strike/internal/deploy"
 )
 
 func TestGenerateImageSBOM(t *testing.T) {
@@ -29,9 +29,9 @@ func TestGenerateImageSBOM(t *testing.T) {
 	digest := "sha256:abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
 	buildTime := clock.Unix(1700000000, 0).UTC()
 
-	cdxDoc, spdxDoc, err := executor.GenerateImageSBOM(fsys, digest, buildTime)
+	cdxDoc, spdxDoc, err := deploy.GenerateImageSBOM(fsys, digest, buildTime)
 	if err != nil {
-		t.Fatalf("executor.GenerateImageSBOM: %v", err)
+		t.Fatalf("deploy.GenerateImageSBOM: %v", err)
 	}
 
 	t.Run("cdx_nonempty", func(t *testing.T) {
@@ -59,7 +59,7 @@ func TestGenerateImageSBOM(t *testing.T) {
 	})
 
 	t.Run("deterministic", func(t *testing.T) {
-		cdx2, spdx2, err := executor.GenerateImageSBOM(fsys, digest, buildTime)
+		cdx2, spdx2, err := deploy.GenerateImageSBOM(fsys, digest, buildTime)
 		if err != nil {
 			t.Fatalf("second generation: %v", err)
 		}

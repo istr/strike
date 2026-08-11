@@ -53,18 +53,6 @@ func SpecHash(
 	return primitive.DigestFromHex(hex.EncodeToString(h.Sum(nil)))
 }
 
-// Tag builds the registry tag from step name and spec hash.
-// The hash is truncated to 16 hex characters for OCI tag length constraints.
-// Format: registry:step-name-<first16hex>
-// Example: ghcr.io/istr/strike-cache:build-package-a3f9c2b1d4e7f801.
-func Tag(registry, stepID string, hash primitive.Digest) string {
-	short := hash.Hex()
-	if len(short) > 16 {
-		short = short[:16]
-	}
-	return fmt.Sprintf("%s:%s-%s", registry, stepID, short)
-}
-
 // wrapRepo is the repository portion of a wrapped image's local reference,
 // shared by WrapTag (tag form) and WrapDigest (digest form) so the RepoDigest
 // libpod records at ImageTag time matches the reference a consumer step is

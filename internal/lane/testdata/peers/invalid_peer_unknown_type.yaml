@@ -1,6 +1,5 @@
 name: peers-bad-type
 id: peers-bad-type
-registry: localhost:5555/test
 secrets: {}
 resolver:
   host: "1.1.1.1:853"

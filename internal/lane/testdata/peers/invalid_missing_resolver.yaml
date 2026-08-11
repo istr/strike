@@ -1,6 +1,5 @@
 name: peers-missing-resolver
 id: peers-missing-resolver
-registry: localhost:5555/test
 secrets: {}
 oidc:
   issuer: "https://idp.example.com"

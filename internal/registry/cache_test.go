@@ -70,27 +70,6 @@ func TestSpecHashPreservesArgOrder(t *testing.T) {
 // Tag.
 // --------------------------------------------------------------------------.
 
-func TestTag(t *testing.T) {
-	tests := []struct {
-		registry string
-		step     string
-		hash     primitive.Digest
-		want     string
-		name     string
-	}{
-		{"ghcr.io/cache", "build", primitive.DigestFromHex("abcdef0123456789abcdef012345678900000000000000000000000000000000"), "ghcr.io/cache:build-abcdef0123456789", "full hash"},
-		{"r.io/c", "pack", primitive.DigestFromHex("0123000000000000000000000000000000000000000000000000000000000000"), "r.io/c:pack-0123000000000000", "padded hash"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := registry.Tag(tt.registry, tt.step, tt.hash)
-			if got != tt.want {
-				t.Errorf("Tag() = %q, want %q", got, tt.want)
-			}
-		})
-	}
-}
-
 // --------------------------------------------------------------------------.
 // HashFile.
 // --------------------------------------------------------------------------.

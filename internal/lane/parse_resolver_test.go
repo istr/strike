@@ -48,7 +48,6 @@ func TestResolver_ValidIPv4(t *testing.T) {
 	yaml := []byte(`
 name: resolver-ipv4
 id: resolver-ipv4
-registry: localhost:5555/test
 secrets: {}
 resolver:
   host: "1.1.1.1"
@@ -95,8 +94,12 @@ steps:
     deploy:
       method:
         type: registry
-        source: localhost:5555/test/image:latest
-        target: registry.example.com/app:latest
+        target:
+          host: registry.example.com
+          trust:
+            type: certFingerprint
+            fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+          name: app
       recording:
         preState:
           required: false
@@ -130,7 +133,6 @@ func TestResolver_ValidIPv4WithPort(t *testing.T) {
 	yaml := []byte(`
 name: resolver-ipv4-port
 id: resolver-ipv4-port
-registry: localhost:5555/test
 secrets: {}
 resolver:
   host: "9.9.9.9:853"
@@ -177,8 +179,12 @@ steps:
     deploy:
       method:
         type: registry
-        source: localhost:5555/test/image:latest
-        target: registry.example.com/app:latest
+        target:
+          host: registry.example.com
+          trust:
+            type: certFingerprint
+            fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+          name: app
       recording:
         preState:
           required: false
