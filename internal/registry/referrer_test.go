@@ -271,26 +271,17 @@ func TestFetchTrustRootRejectsTag(t *testing.T) {
 // filter. Returns the referrer manifest digest.
 func pushBaseSBOMReferrer(t *testing.T, repo name.Repository, subject v1.Descriptor, predicateType string, content []byte) string {
 	t.Helper()
-	img, err := registry.ArtifactImage(content, registry.SigstoreBundleMediaType, subject)
+	img, err := registry.ArtifactImage(content, registry.SigstoreBundleMediaType, subject, map[string]string{
+		"dev.sigstore.bundle.predicateType": predicateType,
+	})
 	if err != nil {
 		t.Fatalf("artifact image: %v", err)
 	}
-	img = mutate.ConfigMediaType(img, types.MediaType(registry.SigstoreBundleMediaType))
-	annotated, ok := mutate.Annotations(img, map[string]string{
-		"dev.sigstore.bundle.predicateType": predicateType,
-	}).(v1.Image)
-	if !ok {
-		t.Fatal("annotate: unexpected type")
-	}
-	withSubject, ok := mutate.Subject(annotated, subject).(v1.Image)
-	if !ok {
-		t.Fatal("subject: unexpected type")
-	}
-	digest, err := withSubject.Digest()
+	digest, err := img.Digest()
 	if err != nil {
 		t.Fatalf("digest: %v", err)
 	}
-	if err := remote.Write(repo.Digest(digest.String()), withSubject); err != nil {
+	if err := remote.Write(repo.Digest(digest.String()), img); err != nil {
 		t.Fatalf("write referrer: %v", err)
 	}
 	return digest.String()

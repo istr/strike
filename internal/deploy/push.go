@@ -11,9 +11,7 @@ import (
 
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
-	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
-	"github.com/google/go-containerregistry/pkg/v1/types"
 
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/lane"
@@ -131,24 +129,15 @@ func pushSBOMReferrers(ctx context.Context, repo string, subject v1.Descriptor, 
 		{mediaType: "application/vnd.cyclonedx+json", content: cdxBytes},
 		{mediaType: "application/spdx+json", content: spdxBytes},
 	} {
-		art, artErr := registry.ArtifactImage(doc.content, doc.mediaType, subject)
+		art, artErr := registry.ArtifactImage(doc.content, doc.mediaType, subject, nil)
 		if artErr != nil {
 			return fmt.Errorf("sbom artifact: %w", artErr)
 		}
-		// The config media type carries the artifact type per the OCI 1.1
-		// fallback rule, and the subject is re-applied as the outermost
-		// wrapper (any wrapper added after Subject would erase it),
-		// mirroring AttachStatementBundles.
-		art = mutate.ConfigMediaType(art, types.MediaType(doc.mediaType))
-		withSubject, ok := mutate.Subject(art, subject).(v1.Image)
-		if !ok {
-			return fmt.Errorf("sbom artifact: unexpected type from mutate.Subject")
-		}
-		artDigest, dErr := withSubject.Digest()
+		artDigest, dErr := art.Digest()
 		if dErr != nil {
 			return fmt.Errorf("sbom artifact digest: %w", dErr)
 		}
-		if pushErr := pushByDigest(ctx, repo, artDigest.String(), withSubject, rt); pushErr != nil {
+		if pushErr := pushByDigest(ctx, repo, artDigest.String(), art, rt); pushErr != nil {
 			return fmt.Errorf("attach sbom: %w", pushErr)
 		}
 	}

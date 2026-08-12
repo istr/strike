@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"maps"
 
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
@@ -40,42 +41,47 @@ type StatementBundle struct {
 	Bundle    []byte
 }
 
-// ArtifactImage creates a single-layer OCI artifact image with subject
-// descriptor for OCI 1.1 referrer relationship.
-func ArtifactImage(content []byte, artifactType string, subject v1.Descriptor) (v1.Image, error) {
-	layer := static.NewLayer(content, types.MediaType(artifactType))
-
+// ArtifactImage builds a push-ready OCI 1.1 referrer of subject: a
+// single-layer artifact image whose layer media type and config media type
+// both carry artifactType, so a registry or client derives the artifact type
+// per the OCI 1.1 rule (manifest artifactType, else config media type). The
+// caller's annotations are merged over the reproducible created timestamp and
+// win on collision.
+//
+// The wrapper order is load-bearing. Layers are appended before the config
+// media type is set, because the config blob is recomputed from the appended
+// layers only while the config media type still denotes an image config.
+// Subject is applied last, because the manifest subject is always taken from
+// the outermost wrapper, so anything applied after it would erase it.
+func ArtifactImage(content []byte, artifactType string, subject v1.Descriptor, annotations map[string]string) (v1.Image, error) {
 	img := mutate.MediaType(empty.Image, types.OCIManifestSchema1)
-	annotated, ok := mutate.Annotations(img, map[string]string{
-		"org.opencontainers.image.created": "1970-01-01T00:00:00Z",
-	}).(v1.Image)
-	if !ok {
-		return nil, fmt.Errorf("unexpected type from mutate.Annotations")
-	}
-	img = annotated
-
-	var err error
-	img, err = mutate.AppendLayers(img, layer)
+	img, err := mutate.AppendLayers(img, static.NewLayer(content, types.MediaType(artifactType)))
 	if err != nil {
 		return nil, err
 	}
+	img = mutate.ConfigMediaType(img, types.MediaType(artifactType))
 
-	withSubject, ok := mutate.Subject(img, subject).(v1.Image)
+	ann := map[string]string{"org.opencontainers.image.created": "1970-01-01T00:00:00Z"}
+	maps.Copy(ann, annotations)
+	annotated, ok := mutate.Annotations(img, ann).(v1.Image)
+	if !ok {
+		return nil, fmt.Errorf("unexpected type from mutate.Annotations")
+	}
+
+	withSubject, ok := mutate.Subject(annotated, subject).(v1.Image)
 	if !ok {
 		return nil, fmt.Errorf("unexpected type from mutate.Subject")
 	}
-	img = withSubject
-	return img, nil
+	return withSubject, nil
 }
 
 // AttachStatementBundles pushes each bundle as an OCI 1.1 referrer of the
 // subject manifest within the repository of target, in the caller's order.
 // go-containerregistry talks to the registry's referrers API and falls back
 // to the OCI referrers tag scheme on registries without it; no fallback
-// logic lives here. The config media type carries the artifact type so
-// registries and clients derive it per the OCI 1.1 rule (manifest
-// artifactType, else config media type). Additional remote options -- for
-// example a trust-anchored transport -- apply to every write.
+// logic lives here. ArtifactImage owns the referrer wrapping, including how
+// the artifact type is carried. Additional remote options -- for example a
+// trust-anchored transport -- apply to every write.
 func AttachStatementBundles(ctx context.Context, target string, subject v1.Descriptor, bundles []StatementBundle, opts ...remote.Option) error {
 	targetRef, err := name.ParseReference(target)
 	if err != nil {
@@ -87,29 +93,17 @@ func AttachStatementBundles(ctx context.Context, target string, subject v1.Descr
 		remote.WithContext(ctx),
 	}, opts...)
 	for _, b := range bundles {
-		img, err := ArtifactImage(b.Bundle, SigstoreBundleMediaType, subject)
+		img, err := ArtifactImage(b.Bundle, SigstoreBundleMediaType, subject, map[string]string{
+			statementAnnotation: b.Statement,
+		})
 		if err != nil {
 			return fmt.Errorf("referrer %s: %w", b.Statement, err)
 		}
-		img = mutate.ConfigMediaType(img, types.MediaType(SigstoreBundleMediaType))
-		annotated, ok := mutate.Annotations(img, map[string]string{
-			statementAnnotation: b.Statement,
-		}).(v1.Image)
-		if !ok {
-			return fmt.Errorf("referrer %s: unexpected type from mutate.Annotations", b.Statement)
-		}
-		// Subject must be the outermost wrapper: compute() always overwrites
-		// manifest.Subject with i.subject, so any wrapper added after Subject
-		// would erase it. ConfigMediaType and Annotations are applied first.
-		withSubject, ok := mutate.Subject(annotated, subject).(v1.Image)
-		if !ok {
-			return fmt.Errorf("referrer %s: unexpected type from mutate.Subject", b.Statement)
-		}
-		digest, err := withSubject.Digest()
+		digest, err := img.Digest()
 		if err != nil {
 			return fmt.Errorf("referrer %s: digest: %w", b.Statement, err)
 		}
-		if err := remote.Write(repo.Digest(digest.String()), withSubject, writeOpts...); err != nil {
+		if err := remote.Write(repo.Digest(digest.String()), img, writeOpts...); err != nil {
 			return fmt.Errorf("referrer %s: push: %w", b.Statement, err)
 		}
 	}
