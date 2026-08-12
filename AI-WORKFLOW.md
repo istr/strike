@@ -216,6 +216,16 @@ candidates** section of the completion report (`AGENTS.md`), and the author
 turns those candidates into roadmap items. Why:
 `AI-ORCHESTRATION.md#the-follow-up-channel`.
 
+## Deviations from the dictated commit message
+
+When the instruction file includes an exact commit message template, the
+executor must append a **Deviations** paragraph to that dictated body whenever
+the completion report's Observations section documents any deviation from the
+before-snippets, gate findings, or anti-initiative clauses. Format the
+Deviations paragraph with one brief line per deviation. This clause keeps git
+log and the report synchronized: both then carry the same facts about what
+changed and why.
+
 ## Cluster by risk, not by finding order
 
 When a review produces many findings, group them by risk before sequencing.
