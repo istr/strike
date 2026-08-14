@@ -69,10 +69,10 @@ test:
 
 # Integration tests (auto-detects podman socket; set STRIKE_INTEGRATION=0 to skip).
 integration:
-	go test -race -v -count=1 ./test/integration/
+	go test -race -v -count=1 ./...
 
 vuln:
 	govulncheck ./...
 
 # Run all quality gates (CI entry point).
-check: lint test vuln build
+check: lint vuln test build
