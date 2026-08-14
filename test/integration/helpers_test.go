@@ -23,7 +23,7 @@ import (
 
 // Digest-pinned image references matching lane.yaml.
 const (
-	goImage    = "cgr.dev/chainguard/go@sha256:fa81487f6395a6fd69d9b4f424683f1f690b9ab55cf2603ed597b0415beafdb9"
+	goImage    = "cgr.dev/chainguard/go@sha256:0a0ba6cee2d535a4e9dcc63d4230be546d3c4c6631b23bc9989992711317649f"
 	staticBase = "cgr.dev/chainguard/static@sha256:2fdfacc8d61164aa9e20909dceec7cc28b9feb66580e8e1a65b9f2443c53b61b"
 )
 

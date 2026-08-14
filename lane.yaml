@@ -36,7 +36,7 @@ keyless:
 
 steps:
   - id: build-binary
-    image: cgr.dev/chainguard/go@sha256:fa81487f6395a6fd69d9b4f424683f1f690b9ab55cf2603ed597b0415beafdb9
+    image: cgr.dev/chainguard/go@sha256:0a0ba6cee2d535a4e9dcc63d4230be546d3c4c6631b23bc9989992711317649f
     args: [build, -C, /src, -trimpath, "-buildvcs=false", "-ldflags=-s -w", -o, /out/strike, ./cmd/strike]
     workdir: /out
     env:
