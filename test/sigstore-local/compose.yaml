@@ -35,6 +35,7 @@ services:
       - "3003:3003"
       - "3004:3004"
       - "6962:6962"
+      - "5443:5443"
     depends_on:
       keycloak:
         condition: service_started
@@ -166,3 +167,34 @@ services:
       - ct_storage:/data/ct:U
     networks:
       - sigstore
+
+  zot:
+    # OCI 1.1 registry, minimal build (no extensions, no web UI). HTTP-only
+    # behind Caddy. Serves the referrers API server-side: subject-bearing
+    # pushes return Oci-Subject, artifactType is derived from the config media
+    # type, and no OCI 1.0 fallback tag is created. Storage is the container's
+    # writable layer, so every bring-up starts from an empty registry.
+    image: ghcr.io/project-zot/zot-minimal-linux-amd64:v2.1.20@sha256:3cd7d694224f4d0a36b52cdc3eb66852ab01a6a68c53c8e5367a1984dc4dc2bb
+    volumes:
+      - ./zot/config.json:/etc/zot/config.json:ro
+    networks:
+      - sigstore
+
+  coredns:
+    # DoT resolver for the mandatory lane resolver field. Not behind Caddy:
+    # DNS-over-TLS is not HTTP, so CoreDNS terminates TLS itself under
+    # pki/resolver.crt -- a separate anchor from the Caddy internal root.
+    # Serves a synthetic root zone with no forwarder and no root hints, which
+    # is what lets the run-start NS . probe be answered with no egress.
+    image: docker.io/coredns/coredns:1.14.6@sha256:1ba6f47265602e2e50a9c4669e3a955e4298a0d30dc82f39293d4bf1a851e0ff
+    command:
+      - -conf
+      - /etc/coredns/Corefile
+    volumes:
+      - ./coredns/Corefile:/etc/coredns/Corefile:ro
+      - ./coredns/root.zone:/etc/coredns/root.zone:ro
+      - ./pki:/pki:ro
+    networks:
+      - sigstore
+    ports:
+      - "8853:853"

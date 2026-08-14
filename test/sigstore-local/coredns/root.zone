@@ -1,0 +1,5 @@
+$ORIGIN .
+$TTL 3600
+@	IN SOA	ns.strike.test. admin.strike.test. 2026081301 7200 3600 1209600 3600
+@	IN NS	ns.strike.test.
+ns.strike.test.		IN A	127.0.0.1

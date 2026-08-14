@@ -23,23 +23,37 @@ infrastructure -- not part of the strike binary.
 
 ## Endpoints
 
-Every service is TLS-terminated by Caddy under one internal root
-(`pki/caddy-root.crt`) and reached over HTTPS via sslip.io. There is no
-plaintext endpoint -- a strike keyless producer pins this root as its
-`#TLSTrust` `ca_bundle` for every endpoint:
+Every HTTPS service is TLS-terminated by Caddy under one internal root
+(`pki/caddy-root.crt`) and reached via sslip.io. There is no plaintext
+endpoint -- a strike keyless producer pins this root as its `#TLSTrust`
+`ca_bundle` for every endpoint:
 
 - Fulcio: `https://fulcio.127.0.0.1.sslip.io:5555`
 - Rekor v2: `https://rekor.127.0.0.1.sslip.io:3003`
 - TSA: `https://tsa.127.0.0.1.sslip.io:3004`
 - Issuer (Keycloak): `https://keycloak.127.0.0.1.sslip.io:8443/realms/sigstore`
+- Registry (zot): `https://registry.127.0.0.1.sslip.io:5443`
+
+The DoT resolver is the one exception to the single-anchor rule. DNS-over-TLS
+is not HTTP, so Caddy cannot front it; CoreDNS terminates TLS itself under
+`pki/resolver.crt`, and a lane pins that certificate as its resolver anchor:
+
+- Resolver (CoreDNS, DoT): `resolver.127.0.0.1.sslip.io:8853`
 
 ## Layout
 
 - `compose.yaml` -- the stack. witness and probe are non-default profiles; TSA
   runs by default (Rekor v2 Path 1 requires RFC3161 timestamps).
 - `caddy/Caddyfile` -- TLS terminator (internal CA) + reverse proxy to
-  Keycloak, Fulcio, Rekor, and TSA. Every service strike dials is reached over
-  HTTPS under the Caddy internal root; there is no plaintext endpoint.
+  Keycloak, Fulcio, Rekor, TSA, and the zot registry. Every HTTPS service
+  strike dials is reached under the Caddy internal root; there is no plaintext
+  endpoint.
+- `zot/config.json` -- the OCI 1.1 registry. Minimal build: no extensions, no
+  web UI. Referrers need no configuration and are served server-side. Storage
+  is ephemeral, so each bring-up starts from an empty registry.
+- `coredns/Corefile`, `coredns/root.zone` -- the DoT resolver. Serves a
+  synthetic root zone with no forwarder and no root hints, so the strike
+  run-start `NS .` pre-flight probe is answerable with no network egress.
 - `fulcio/config.yaml` -- OIDC issuer (canonical issuer, type email).
 - `keycloak/realm-export.json` -- realm `sigstore`, public client `sigstore`,
   direct access grant on, verified test user `tester` / `tester`,

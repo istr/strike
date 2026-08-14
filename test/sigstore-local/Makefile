@@ -7,7 +7,7 @@ CADDY_ROOT := pki/caddy-root.crt
 
 .PHONY: keys up down clean caddy-root check-issuer preflight token tsa-certchain rekor-pubkey ctlog-pubkey conformance
 
-keys: pki/rekor-ed25519.pem pki/rekor-ed25519-pub.pem pki/fulcio-root.crt pki/fulcio-root.key pki/ctfe.key pki/ctfe-pub.pem ## generate signing keys: rekor ed25519, the Fulcio fileca root, and the CT log (ctfe) key
+keys: pki/rekor-ed25519.pem pki/rekor-ed25519-pub.pem pki/fulcio-root.crt pki/fulcio-root.key pki/ctfe.key pki/ctfe-pub.pem pki/resolver.crt pki/resolver.key ## generate signing keys: rekor ed25519, the Fulcio fileca root, the CT log (ctfe) key, and the DoT resolver certificate
 
 pki/rekor-ed25519.pem:
 	openssl genpkey -algorithm ed25519 -out $@
@@ -109,6 +109,16 @@ pki/ctfe.key:
 
 pki/ctfe-pub.pem: pki/ctfe.key
 	openssl ec -in $< -pubout -out $@
+
+# Serving certificate for the CoreDNS DoT listener. Self-signed and pinned
+# directly by the lane as its resolver trust anchor -- it is not issued under
+# the Caddy internal root, because Caddy does not terminate DNS-over-TLS.
+pki/resolver.crt pki/resolver.key &:
+	openssl req -x509 -newkey rsa:2048 -nodes -days 365 \
+	  -keyout pki/resolver.key -out pki/resolver.crt \
+	  -subj "/CN=resolver.127.0.0.1.sslip.io" \
+	  -addext "subjectAltName=DNS:resolver.127.0.0.1.sslip.io,IP:127.0.0.1"
+	chmod 644 pki/resolver.crt pki/resolver.key
 
 ctlog-pubkey: pki/ctfe-pub.pem ## export the CT log (ctfe) public key (for trust-root assembly)
 

@@ -27,3 +27,8 @@ ct.127.0.0.1.sslip.io:6962 {
 	tls internal
 	reverse_proxy tesseract:6962
 }
+
+registry.127.0.0.1.sslip.io:5443 {
+	tls internal
+	reverse_proxy zot:5000
+}

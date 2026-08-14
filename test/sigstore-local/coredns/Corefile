@@ -1,0 +1,5 @@
+tls://.:853 {
+	tls /pki/resolver.crt /pki/resolver.key
+	file /etc/coredns/root.zone .
+	errors
+}
