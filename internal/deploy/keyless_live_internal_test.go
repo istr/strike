@@ -11,10 +11,8 @@ import (
 	"encoding/pem"
 	"fmt"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	protobundle "github.com/sigstore/protobuf-specs/gen/pb-go/bundle/v1"
@@ -27,6 +25,7 @@ import (
 	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/primitive"
+	"github.com/istr/strike/internal/testutil"
 )
 
 const (
@@ -53,51 +52,6 @@ func liveStatement(i int) ([]byte, string) {
 	return []byte(stmt), digest
 }
 
-// mintIDToken obtains an OIDC id_token from the harness Keycloak, mirroring
-// the harness Makefile token target: password grant for user tester with
-// client sigstore, TLS pinned to the exported caddy root. Any failure is
-// fatal with the opt-out hint -- the harness is a prerequisite, not a skip
-// condition.
-func mintIDToken(t *testing.T, caddyRoot string) string {
-	t.Helper()
-	trust := endpoint.CABundle{Type: "caBundle", Path: primitive.AbsPath(caddyRoot)}
-	client, err := httpClientFor(endpoint.HTTPS{Address: endpoint.MustParseURL(liveIssuer), Trust: trust})
-	if err != nil {
-		t.Fatalf("keycloak client: %v", err)
-	}
-	form := url.Values{
-		"grant_type": {"password"},
-		"client_id":  {"sigstore"},
-		"username":   {"tester"},
-		"password":   {"tester"},
-		"scope":      {"openid"},
-	}
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost,
-		liveIssuer+"/protocol/openid-connect/token", strings.NewReader(form.Encode()))
-	if err != nil {
-		t.Fatalf("keycloak token request: %v", err)
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	resp, err := client.Do(req)
-	if err != nil {
-		t.Fatalf("keycloak unreachable (%v); set STRIKE_INTEGRATION=0 to skip integration tests", err)
-	}
-	defer closeKeylessBody(resp)
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("keycloak token endpoint returned %d; set STRIKE_INTEGRATION=0 to skip integration tests", resp.StatusCode)
-	}
-	var body struct {
-		IDToken string `json:"id_token"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		t.Fatalf("keycloak token decode: %v", err)
-	}
-	if body.IDToken == "" {
-		t.Fatal("keycloak token response has no id_token")
-	}
-	return body.IDToken
-}
-
 // TestKeylessLive produces real bundles against the TLS-only local sigstore
 // harness and verifies them with sigstore-go against a trust root assembled
 // from harness materials. The OIDC id_token is minted in-test from the
@@ -112,10 +66,7 @@ func TestKeylessLive(t *testing.T) {
 	if os.Getenv("STRIKE_INTEGRATION") == "0" {
 		t.Skip("integration tests disabled (STRIKE_INTEGRATION=0)")
 	}
-	harness, err := filepath.Abs(filepath.Join("..", "..", "test", "sigstore-local"))
-	if err != nil {
-		t.Fatalf("resolve harness dir: %v", err)
-	}
+	harness := testutil.HarnessDir(t)
 	caddyRoot := filepath.Join(harness, "pki", "caddy-root.crt")
 	rekorPub := filepath.Join(harness, "pki", "rekor-ed25519-pub.pem")
 	tsaChain := filepath.Join(harness, "pki", "tsa-certchain.pem")
@@ -124,7 +75,7 @@ func TestKeylessLive(t *testing.T) {
 			t.Fatalf("harness material missing (run make up / rekor-pubkey / tsa-certchain): %v", statErr)
 		}
 	}
-	t.Setenv("SIGSTORE_ID_TOKEN", mintIDToken(t, caddyRoot))
+	t.Setenv("SIGSTORE_ID_TOKEN", testutil.MintIDToken(t, liveIssuer, caddyRoot))
 
 	trust := endpoint.CABundle{Type: "caBundle", Path: primitive.AbsPath(caddyRoot)}
 	eps := lane.KeylessEndpoints{
