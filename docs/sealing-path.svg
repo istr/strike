@@ -1,0 +1,135 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="990" height="1000" viewBox="0 0 990 1000" role="img" font-family="ui-sans-serif, system-ui, -apple-system, &#39;Segoe UI&#39;, sans-serif">
+  <title>Registry deploy sealing path</title>
+  <desc>Data flow across the engine, the control plane, and the registry on a registry deploy. Both image producers -- the committed step container and the in-process pack assembly -- converge on one wrap-and-load core that computes two produced identities: the manifest digest P, which the engine store is checked against and which the attestation records, and the config blob digest C, the round-trip-stable anchor the engine export is later verified against. A step a deploy seals bypasses the cache, because a cached handle would carry no C. The export is checked against C and against every layer diff_id before the push transport is built; the push produces a third digest E, which the registry serves and which becomes the in-toto subject of every published statement. The control plane attaches the signed statement bundles as OCI referrers of E over the same trust-anchored transport. An independent verifier, outside all three lanes, reads the evidence set from the referrers of E and dereferences E itself, hash-checking the received bytes (C3).</desc>
+  <defs>
+    <marker id="mt" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#0F6E56"></path></marker>
+    <marker id="mg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#6B6A64"></path></marker>
+  </defs>
+  <rect x="0" y="0" width="990" height="1000" fill="#FFFFFF"></rect>
+
+  <text x="40" y="38" font-size="18" font-weight="500" fill="#2C2C2A">Registry deploy sealing path</text>
+  <text x="40" y="58" font-size="12" fill="#5F5E5A">Every handoff checked; the seal names the pushed digest E, the record keeps the produced digest P (ADR-051 D4/D6/D10, ADR-046)</text>
+
+  <line x1="40" y1="82" x2="68" y2="82" stroke="#0F6E56" stroke-width="2"></line>
+  <text x="74" y="86" font-size="12" fill="#5F5E5A">verified handoff</text>
+  <rect x="190" y="75" width="14" height="14" rx="3" fill="#EEEDFE" stroke="#534AB7" stroke-width="0.75"></rect>
+  <text x="210" y="86" font-size="12" fill="#5F5E5A">produced manifest digest P</text>
+  <rect x="385" y="75" width="14" height="14" rx="3" fill="#E4F0EB" stroke="#0F6E56" stroke-width="0.75"></rect>
+  <text x="405" y="86" font-size="12" fill="#5F5E5A">produced config digest C</text>
+  <rect x="570" y="75" width="14" height="14" rx="3" fill="#FAECE7" stroke="#993C1D" stroke-width="0.75"></rect>
+  <text x="590" y="86" font-size="12" fill="#5F5E5A">pushed digest E</text>
+
+  <rect x="40" y="104" width="210" height="762" rx="12" fill="none" stroke="#B4B2A9" stroke-width="1" stroke-dasharray="5 4"></rect>
+  <text x="145" y="130" font-size="14" font-weight="500" fill="#444441" text-anchor="middle">Engine</text>
+  <text x="145" y="148" font-size="12" fill="#5F5E5A" text-anchor="middle">podman store</text>
+
+  <rect x="290" y="104" width="300" height="762" rx="12" fill="none" stroke="#B4B2A9" stroke-width="1" stroke-dasharray="5 4"></rect>
+  <text x="440" y="130" font-size="14" font-weight="500" fill="#444441" text-anchor="middle">Control plane</text>
+  <text x="440" y="148" font-size="12" fill="#5F5E5A" text-anchor="middle">assembles, verifies, seals, pushes</text>
+
+  <rect x="630" y="104" width="270" height="762" rx="12" fill="none" stroke="#B4B2A9" stroke-width="1" stroke-dasharray="5 4"></rect>
+  <text x="765" y="130" font-size="14" font-weight="500" fill="#444441" text-anchor="middle">Registry</text>
+  <text x="765" y="148" font-size="12" fill="#5F5E5A" text-anchor="middle">content-addressed</text>
+
+  <rect x="310" y="166" width="260" height="56" rx="8" fill="#F6F5EF" stroke="#8A8983" stroke-width="0.75"></rect>
+  <text x="440" y="183" font-size="14" font-weight="500" fill="#2C2C2A" text-anchor="middle" dominant-baseline="central">Cache bypass: NOCACHE</text>
+  <text x="440" y="199" font-size="11" fill="#5F5E5A" text-anchor="middle" dominant-baseline="central">a step a deploy seals is always produced:</text>
+  <text x="440" y="214" font-size="11" fill="#5F5E5A" text-anchor="middle" dominant-baseline="central">a cached handle would carry no C</text>
+
+  <path d="M440 222 V 228" fill="none" stroke="#6B6A64" stroke-width="1.5"></path>
+  <path d="M145 228 H 507" fill="none" stroke="#6B6A64" stroke-width="1.5"></path>
+  <path d="M145 228 V 242" fill="none" stroke="#6B6A64" stroke-width="1.5" marker-end="url(#mg)"></path>
+  <path d="M507 228 V 242" fill="none" stroke="#6B6A64" stroke-width="1.5" marker-end="url(#mg)"></path>
+
+  <rect x="60" y="244" width="170" height="52" rx="8" fill="#F6F5EF" stroke="#8A8983" stroke-width="0.75"></rect>
+  <text x="145" y="262" font-size="13" font-weight="500" fill="#2C2C2A" text-anchor="middle" dominant-baseline="central">Step container</text>
+  <text x="145" y="280" font-size="11" fill="#5F5E5A" text-anchor="middle" dominant-baseline="central">committed to an image</text>
+
+  <path d="M232 270 H 308" fill="none" stroke="#6B6A64" stroke-width="1.5" marker-end="url(#mg)"></path>
+  <text x="270" y="260" font-size="10" fill="#5F5E5A" text-anchor="middle" stroke="#FFFFFF" stroke-width="4" stroke-linejoin="round">commit + save</text>
+  <text x="270" y="260" font-size="10" fill="#5F5E5A" text-anchor="middle">commit + save</text>
+
+  <rect x="310" y="244" width="126" height="52" rx="8" fill="#F6F5EF" stroke="#8A8983" stroke-width="0.75"></rect>
+  <text x="373" y="262" font-size="13" font-weight="500" fill="#2C2C2A" text-anchor="middle" dominant-baseline="central">Committed image</text>
+  <text x="373" y="280" font-size="11" fill="#5F5E5A" text-anchor="middle" dominant-baseline="central">engine save stream</text>
+
+  <rect x="444" y="244" width="126" height="52" rx="8" fill="#F6F5EF" stroke="#8A8983" stroke-width="0.75"></rect>
+  <text x="507" y="262" font-size="13" font-weight="500" fill="#2C2C2A" text-anchor="middle" dominant-baseline="central">Pack assembly</text>
+  <text x="507" y="280" font-size="11" fill="#5F5E5A" text-anchor="middle" dominant-baseline="central">ggcr, in process</text>
+
+  <path d="M373 298 V 314" fill="none" stroke="#6B6A64" stroke-width="1.5" marker-end="url(#mg)"></path>
+  <path d="M507 298 V 314" fill="none" stroke="#6B6A64" stroke-width="1.5" marker-end="url(#mg)"></path>
+
+  <rect x="310" y="316" width="260" height="54" rx="8" fill="#F6F5EF" stroke="#8A8983" stroke-width="0.75"></rect>
+  <text x="440" y="334" font-size="14" font-weight="500" fill="#2C2C2A" text-anchor="middle" dominant-baseline="central">Wrap and load</text>
+  <text x="440" y="352" font-size="11" fill="#5F5E5A" text-anchor="middle" dominant-baseline="central">re-annotate, compute P and C, load</text>
+
+  <rect x="310" y="378" width="126" height="22" rx="4" fill="#EEEDFE" stroke="#534AB7" stroke-width="0.75"></rect>
+  <text x="373" y="389" font-size="11" fill="#3C3489" text-anchor="middle" dominant-baseline="central">manifest digest P</text>
+  <rect x="444" y="378" width="126" height="22" rx="4" fill="#E4F0EB" stroke="#0F6E56" stroke-width="0.75"></rect>
+  <text x="507" y="389" font-size="11" fill="#0A4A3A" text-anchor="middle" dominant-baseline="central">config digest C</text>
+
+  <path d="M308 389 H 145 V 414" fill="none" stroke="#0F6E56" stroke-width="1.5" marker-end="url(#mt)"></path>
+  <text x="207" y="380" font-size="11" fill="#0F6E56" text-anchor="middle" stroke="#FFFFFF" stroke-width="4" stroke-linejoin="round">load: digest checked</text>
+  <text x="207" y="380" font-size="11" fill="#0F6E56" text-anchor="middle">load: digest checked</text>
+
+  <rect x="60" y="416" width="170" height="50" rx="8" fill="#F6F5EF" stroke="#8A8983" stroke-width="0.75"></rect>
+  <text x="145" y="433" font-size="14" font-weight="500" fill="#2C2C2A" text-anchor="middle" dominant-baseline="central">Image store</text>
+  <text x="145" y="451" font-size="11" fill="#5F5E5A" text-anchor="middle" dominant-baseline="central">content under P</text>
+  <rect x="60" y="474" width="170" height="22" rx="4" fill="#EEEDFE" stroke="#534AB7" stroke-width="0.75"></rect>
+  <text x="145" y="485" font-size="11" fill="#3C3489" text-anchor="middle" dominant-baseline="central">manifest = P</text>
+
+  <path d="M145 500 V 538 H 308" fill="none" stroke="#0F6E56" stroke-width="1.5" marker-end="url(#mt)"></path>
+  <text x="226" y="527" font-size="11" fill="#0F6E56" text-anchor="middle" stroke="#FFFFFF" stroke-width="4" stroke-linejoin="round">export: checked on arrival</text>
+  <text x="226" y="527" font-size="11" fill="#0F6E56" text-anchor="middle">export: checked on arrival</text>
+  <text x="226" y="556" font-size="10" fill="#5F5E5A" text-anchor="middle" stroke="#FFFFFF" stroke-width="4" stroke-linejoin="round">re-encoded: E differs from P</text>
+  <text x="226" y="556" font-size="10" fill="#5F5E5A" text-anchor="middle">re-encoded: E differs from P</text>
+
+  <rect x="310" y="512" width="260" height="86" rx="8" fill="#F6F5EF" stroke="#8A8983" stroke-width="0.75"></rect>
+  <text x="440" y="530" font-size="14" font-weight="500" fill="#2C2C2A" text-anchor="middle" dominant-baseline="central">Deploy verifies export</text>
+  <text x="440" y="550" font-size="11" fill="#5F5E5A" text-anchor="middle" dominant-baseline="central">config digest == C</text>
+  <text x="440" y="566" font-size="11" fill="#5F5E5A" text-anchor="middle" dominant-baseline="central">diff_ids recomputed against that config</text>
+  <text x="440" y="582" font-size="11" fill="#5F5E5A" text-anchor="middle" dominant-baseline="central">fail closed on any mismatch</text>
+
+  <rect x="310" y="606" width="260" height="22" rx="4" fill="#FAECE7" stroke="#993C1D" stroke-width="0.75"></rect>
+  <text x="440" y="617" font-size="11" fill="#712B13" text-anchor="middle" dominant-baseline="central">computes pushed digest E</text>
+
+  <path d="M440 628 V 648" fill="none" stroke="#6B6A64" stroke-width="1.5" marker-end="url(#mg)"></path>
+
+  <rect x="310" y="650" width="260" height="50" rx="8" fill="#F6F5EF" stroke="#8A8983" stroke-width="0.75"></rect>
+  <text x="440" y="667" font-size="14" font-weight="500" fill="#2C2C2A" text-anchor="middle" dominant-baseline="central">Push: remote.Write</text>
+  <text x="440" y="685" font-size="11" fill="#5F5E5A" text-anchor="middle" dominant-baseline="central">trust-anchored dial</text>
+
+  <path d="M572 675 H 648" fill="none" stroke="#0F6E56" stroke-width="1.5" marker-end="url(#mt)"></path>
+
+  <rect x="650" y="650" width="230" height="50" rx="8" fill="#F6F5EF" stroke="#8A8983" stroke-width="0.75"></rect>
+  <text x="765" y="667" font-size="14" font-weight="500" fill="#2C2C2A" text-anchor="middle" dominant-baseline="central">repo@E</text>
+  <text x="765" y="685" font-size="11" fill="#5F5E5A" text-anchor="middle" dominant-baseline="central">payload as pushed</text>
+  <rect x="650" y="708" width="230" height="22" rx="4" fill="#FAECE7" stroke="#993C1D" stroke-width="0.75"></rect>
+  <text x="765" y="719" font-size="11" fill="#712B13" text-anchor="middle" dominant-baseline="central">referrers attach to E</text>
+  <rect x="650" y="736" width="230" height="22" rx="4" fill="#FAECE7" stroke="#993C1D" stroke-width="0.75"></rect>
+  <text x="765" y="747" font-size="11" fill="#712B13" text-anchor="middle" dominant-baseline="central">SBOM subject = E</text>
+
+  <path d="M440 702 V 716" fill="none" stroke="#6B6A64" stroke-width="1.5" marker-end="url(#mg)"></path>
+
+  <rect x="310" y="718" width="260" height="106" rx="8" fill="#F6F5EF" stroke="#8A8983" stroke-width="0.75"></rect>
+  <text x="440" y="736" font-size="14" font-weight="500" fill="#2C2C2A" text-anchor="middle" dominant-baseline="central">Sealed attestation</text>
+  <rect x="322" y="746" width="236" height="20" rx="4" fill="#FAECE7" stroke="#993C1D" stroke-width="0.75"></rect>
+  <text x="440" y="756" font-size="10" fill="#712B13" text-anchor="middle" dominant-baseline="central">subject: repository name @ E</text>
+  <rect x="322" y="770" width="236" height="20" rx="4" fill="#FAECE7" stroke="#993C1D" stroke-width="0.75"></rect>
+  <text x="440" y="780" font-size="10" fill="#712B13" text-anchor="middle" dominant-baseline="central">pushed: authority + repository + E</text>
+  <rect x="322" y="794" width="236" height="20" rx="4" fill="#EEEDFE" stroke="#534AB7" stroke-width="0.75"></rect>
+  <text x="440" y="804" font-size="10" fill="#3C3489" text-anchor="middle" dominant-baseline="central">artifacts[].digest = P -&gt; resolvedDeps</text>
+
+
+  <path d="M570 756 H 612 V 719 H 648" fill="none" stroke="#0F6E56" stroke-width="1.5" marker-end="url(#mt)"></path>
+
+  <rect x="630" y="896" width="270" height="80" rx="8" fill="#F6F5EF" stroke="#8A8983" stroke-width="0.75"></rect>
+  <text x="765" y="914" font-size="14" font-weight="500" fill="#2C2C2A" text-anchor="middle" dominant-baseline="central">Verifier</text>
+  <text x="765" y="934" font-size="11" fill="#5F5E5A" text-anchor="middle" dominant-baseline="central">independent of control plane and engine</text>
+  <text x="765" y="950" font-size="11" fill="#5F5E5A" text-anchor="middle" dominant-baseline="central">verifies bundle signature and log inclusion</text>
+  <text x="765" y="966" font-size="11" fill="#5F5E5A" text-anchor="middle" dominant-baseline="central">dereferences E, hash-checks the bytes (C3)</text>
+
+  <path d="M900 946 H 950 V 675 H 884" fill="none" stroke="#0F6E56" stroke-width="1.5" marker-end="url(#mt)"></path>
+  <path d="M900 916 H 925 V 719 H 884" fill="none" stroke="#0F6E56" stroke-width="1.5" marker-end="url(#mt)"></path>
+</svg>

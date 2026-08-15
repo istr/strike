@@ -42,7 +42,7 @@ func TestImageFromStep_RunsByDigestRef(t *testing.T) {
 	tag := registry.WrapTag(laneID, producerStep, primitive.DigestFromHex(
 		"0000000000000000000000000000000000000000000000000000000000000001"))
 
-	digest, _, wrapErr := regClient.WrapImageOutputAsImage(ctx, outRoot, "image.tar", tag, nil)
+	digest, _, _, wrapErr := regClient.WrapImageOutputAsImage(ctx, outRoot, "image.tar", tag, nil)
 	if wrapErr != nil {
 		t.Fatalf("wrap image output: %v", wrapErr)
 	}

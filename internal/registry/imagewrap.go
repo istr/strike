@@ -29,21 +29,21 @@ const ContentSizeAnnotation = "dev.strike.content-size"
 const OutputLayerAnnotation = "dev.strike.output.id"
 
 // WrapImageOutputAsImage loads an existing OCI tar into the engine's local
-// store, tags it, and returns the manifest digest and the tar file size.
-// The controller-computed manifest digest is verified against the engine.
-// root is the output directory; name is the relative tar path within it.
-// Optional extra annotations are merged into the manifest alongside the
-// standard created and content-size annotations.
-func (c *Client) WrapImageOutputAsImage(ctx context.Context, root *os.Root, name, tag string, extra ...map[string]string) (primitive.Digest, int64, error) {
+// store, tags it, and returns the manifest digest, the tar file size, and the
+// image-config blob digest. The controller-computed manifest digest is verified
+// against the engine. root is the output directory; name is the relative tar
+// path within it. Optional extra annotations are merged into the manifest
+// alongside the standard created and content-size annotations.
+func (c *Client) WrapImageOutputAsImage(ctx context.Context, root *os.Root, name, tag string, extra ...map[string]string) (primitive.Digest, int64, primitive.Digest, error) {
 	info, err := root.Stat(name)
 	if err != nil {
-		return "", 0, fmt.Errorf("wrap image stat: %w", err)
+		return "", 0, "", fmt.Errorf("wrap image stat: %w", err)
 	}
 	size := info.Size()
 
 	f, err := root.Open(name)
 	if err != nil {
-		return "", 0, fmt.Errorf("wrap image: %w", err)
+		return "", 0, "", fmt.Errorf("wrap image: %w", err)
 	}
 	defer closer.Warn(f, "wrap image")
 
@@ -52,12 +52,15 @@ func (c *Client) WrapImageOutputAsImage(ctx context.Context, root *os.Root, name
 
 // wrapImageFromReader loads an OCI-layout tar from r (size bytes), annotates
 // it, loads it into the engine, tags it, and verifies the controller digest
-// against the engine. Shared by WrapImageOutputAsImage (host file) and
-// WrapImageArchiveAsImage (engine archive stream).
-func (c *Client) wrapImageFromReader(ctx context.Context, r io.Reader, size int64, tag string, extra ...map[string]string) (primitive.Digest, int64, error) {
+// against the engine. It also returns the image-config blob digest: annotations
+// are manifest-level, so the config is the same blob the engine now stores, and
+// it is the anchor a later export is checked against (ADR-046, ADR-051 D4).
+// Shared by WrapImageOutputAsImage (host file) and WrapImageArchiveAsImage
+// (engine archive stream).
+func (c *Client) wrapImageFromReader(ctx context.Context, r io.Reader, size int64, tag string, extra ...map[string]string) (primitive.Digest, int64, primitive.Digest, error) {
 	img, cleanup, err := ExtractMainImage(r)
 	if err != nil {
-		return "", 0, fmt.Errorf("wrap image: %w", err)
+		return "", 0, "", fmt.Errorf("wrap image: %w", err)
 	}
 	defer cleanup()
 
@@ -72,39 +75,44 @@ func (c *Client) wrapImageFromReader(ctx context.Context, r io.Reader, size int6
 	}
 	annotated, ok := mutate.Annotations(img, ann).(v1.Image)
 	if !ok {
-		return "", 0, fmt.Errorf("wrap image: annotate: unexpected type")
+		return "", 0, "", fmt.Errorf("wrap image: annotate: unexpected type")
 	}
 	img = annotated
 
 	expectedDigest, err := img.Digest()
 	if err != nil {
-		return "", 0, fmt.Errorf("wrap image digest: %w", err)
+		return "", 0, "", fmt.Errorf("wrap image digest: %w", err)
+	}
+
+	configHash, err := img.ConfigName()
+	if err != nil {
+		return "", 0, "", fmt.Errorf("wrap image config digest: %w", err)
 	}
 
 	tarReader, err := singleImageTar(img, nil)
 	if err != nil {
-		return "", 0, fmt.Errorf("wrap image tar: %w", err)
+		return "", 0, "", fmt.Errorf("wrap image tar: %w", err)
 	}
 
 	id, err := c.Engine.ImageLoad(ctx, tarReader)
 	if err != nil {
-		return "", 0, fmt.Errorf("wrap image load: %w", err)
+		return "", 0, "", fmt.Errorf("wrap image load: %w", err)
 	}
 
 	if tagErr := c.Engine.ImageTag(ctx, id, tag); tagErr != nil {
-		return "", 0, fmt.Errorf("wrap image tag: %w", tagErr)
+		return "", 0, "", fmt.Errorf("wrap image tag: %w", tagErr)
 	}
 
 	engineDigest, err := c.InspectDigest(ctx, tag)
 	if err != nil {
-		return "", 0, fmt.Errorf("wrap image inspect: %w", err)
+		return "", 0, "", fmt.Errorf("wrap image inspect: %w", err)
 	}
 
 	controllerDigest := v1HashToDigest(expectedDigest)
 	if engineDigest != controllerDigest {
-		return "", 0, fmt.Errorf("wrap image: digest mismatch: controller=%s engine=%s", controllerDigest, engineDigest)
+		return "", 0, "", fmt.Errorf("wrap image: digest mismatch: controller=%s engine=%s", controllerDigest, engineDigest)
 	}
-	return engineDigest, size, nil
+	return engineDigest, size, v1HashToDigest(configHash), nil
 }
 
 // finalizeImage stamps the reproducible-created and content-size annotations

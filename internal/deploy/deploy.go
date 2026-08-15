@@ -360,9 +360,19 @@ func (d *Deployer) buildAttestation(
 	// The control-plane push connection is a Layer-V observation of the
 	// declared registry target: the identity verified on the one permitted
 	// dial enters the observed-peer set under the declared authority.
+	// The pushed record is the registry-dereferenceable identity of the
+	// artifact; the artifact records carry the produced identity the export was
+	// checked against. Both are sealed, and their divergence is the attested
+	// record of the engine's export re-encoding (ADR-051 D4/D6, ADR-046).
+	var pushed *PushedArtifact
 	if push != nil {
 		if err := addObservedPeer(push.authority, nil, push.observed, observedPeers); err != nil {
 			return nil, err
+		}
+		pushed = &PushedArtifact{
+			Registry:   push.authority,
+			Repository: push.repository,
+			Digest:     primitive.Digest(push.subject.Digest.String()),
 		}
 	}
 	return &Attestation{
@@ -370,6 +380,7 @@ func (d *Deployer) buildAttestation(
 			LaneID:        d.LaneID,
 			LaneDigest:    d.LaneDigest,
 			Artifacts:     artifactDigests,
+			Pushed:        pushed,
 			Resolver:      d.resolverRecord(),
 			Peers:         declaredPeers,
 			Engine:        engineConn,
@@ -659,11 +670,12 @@ func (d *Deployer) captureOne(ctx context.Context, sc lane.Capture) (captureSnap
 // write reuses, and the validated push-connection identity for
 // Sealed.ObservedPeers. Nil for deploy methods without a registry push.
 type attachTarget struct {
-	subject   v1.Descriptor      // pushed manifest descriptor (the referrer subject)
-	rt        http.RoundTripper  // trust-anchored transport for referrer writes
-	observed  ObservedIdentity   // validated push-connection identity (Layer V)
-	ref       string             // deploy target repository (authority/name)
-	authority endpoint.Authority // declared target authority (ObservedPeers key)
+	subject    v1.Descriptor      // pushed manifest descriptor (the referrer subject)
+	rt         http.RoundTripper  // trust-anchored transport for referrer writes
+	observed   ObservedIdentity   // validated push-connection identity (Layer V)
+	ref        string             // deploy target repository (authority/name)
+	authority  endpoint.Authority // declared target authority (ObservedPeers key)
+	repository primitive.OCIName  // declared target repository name (Sealed.Pushed)
 }
 
 // executeMethod dispatches to the appropriate deploy method. It returns a

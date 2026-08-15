@@ -426,6 +426,10 @@ func TestDeployerExecuteRegistryAttachesReferrers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("digest: %v", err)
 	}
+	configHash, err := img.ConfigName()
+	if err != nil {
+		t.Fatalf("config digest: %v", err)
+	}
 	saved, err := regtest.LayoutTar(img)
 	if err != nil {
 		t.Fatalf("layout tar: %v", err)
@@ -450,7 +454,8 @@ func TestDeployerExecuteRegistryAttachesReferrers(t *testing.T) {
 
 	state := newRuntime(t, "build", "deploy-prod")
 	if regErr := state.Register("build", "image", output.ImageHandle{
-		Ref: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
+		Ref:          "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
+		ConfigDigest: primitive.Digest(configHash.String()),
 	}); regErr != nil {
 		t.Fatal(regErr)
 	}
@@ -505,6 +510,19 @@ func TestDeployerExecuteRegistryAttachesReferrers(t *testing.T) {
 	}
 	if tlsID.ServerCertFingerprint != leafFP {
 		t.Errorf("push identity fingerprint = %s, want %s", tlsID.ServerCertFingerprint, leafFP)
+	}
+	if att.Sealed.Pushed == nil {
+		t.Fatal("Sealed.Pushed is nil after a registry deploy")
+	}
+	if att.Sealed.Pushed.Digest.String() != imgDigest.String() {
+		t.Errorf("Sealed.Pushed.Digest = %s, want the pushed manifest digest %s",
+			att.Sealed.Pushed.Digest, imgDigest)
+	}
+	if string(att.Sealed.Pushed.Repository) != "app" {
+		t.Errorf("Sealed.Pushed.Repository = %q, want \"app\"", att.Sealed.Pushed.Repository)
+	}
+	if att.Sealed.Pushed.Registry != endpoint.Authority(authority) {
+		t.Errorf("Sealed.Pushed.Registry = %q, want %q", att.Sealed.Pushed.Registry, authority)
 	}
 
 	rt := srv.Client().Transport
@@ -561,6 +579,93 @@ func TestDeployerExecuteRegistryAttachesReferrers(t *testing.T) {
 		if !seen {
 			t.Errorf("missing SBOM referrer %q", mt)
 		}
+	}
+}
+
+// TestDeployerExecuteRegistryRejectsUnverifiedExport proves the fail-closed
+// export check: a deploy whose engine export does not match the produced config
+// digest aborts before the transport is built, so nothing is pushed and nothing
+// is signed (ADR-051 D4).
+func TestDeployerExecuteRegistryRejectsUnverifiedExport(t *testing.T) {
+	var layerBuf bytes.Buffer
+	tw := tar.NewWriter(&layerBuf)
+	if hdrErr := tw.WriteHeader(&tar.Header{Name: "artifact", Mode: 0o644, Size: int64(len("payload"))}); hdrErr != nil {
+		t.Fatalf("layer tar header: %v", hdrErr)
+	}
+	if _, wErr := tw.Write([]byte("payload")); wErr != nil {
+		t.Fatalf("layer tar content: %v", wErr)
+	}
+	if closeErr := tw.Close(); closeErr != nil {
+		t.Fatalf("layer tar close: %v", closeErr)
+	}
+	img := mutate.MediaType(empty.Image, types.OCIManifestSchema1)
+	img, err := mutate.AppendLayers(img, static.NewLayer(layerBuf.Bytes(), types.OCILayer))
+	if err != nil {
+		t.Fatalf("append layer: %v", err)
+	}
+	saved, err := regtest.LayoutTar(img)
+	if err != nil {
+		t.Fatalf("layout tar: %v", err)
+	}
+	eng := newTLSTestEngine(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/images/") && strings.HasSuffix(r.URL.Path, "/get") {
+			w.Header().Set("Content-Type", "application/x-tar")
+			if _, wErr := w.Write(saved); wErr != nil {
+				t.Errorf("write save tar: %v", wErr)
+			}
+			return
+		}
+		t.Errorf("unexpected engine call: %s %s", r.Method, r.URL.Path)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+
+	// A well-formed digest that is not this image's config digest.
+	const wrongConfig = "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+	state := newRuntime(t, "build", "deploy-prod")
+	if regErr := state.Register("build", "image", output.ImageHandle{
+		Ref:          "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
+		ConfigDigest: wrongConfig,
+	}); regErr != nil {
+		t.Fatal(regErr)
+	}
+
+	step := &lane.Step{
+		ID: "deploy-prod",
+		Deploy: &lane.DeploySpec{
+			Method: lane.DeployRegistry{
+				Type: "registry",
+				Target: lane.DeployRegistryTarget{
+					Type:    "https",
+					Address: endpoint.MustParseAuthority("localhost:5000"),
+					Trust: endpoint.Fingerprint{
+						Type:        "certFingerprint",
+						Fingerprint: "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+					},
+					Name: "app",
+				},
+			},
+			Artifacts: &lane.StepImageRef{Step: "build"},
+			Recording: lane.StateRecording{
+				PreState:  lane.CaptureSet{Captures: []lane.Capture{}},
+				PostState: lane.CaptureSet{Captures: []lane.Capture{}},
+			},
+		},
+	}
+
+	d := &deploy.Deployer{
+		Engine:       eng,
+		LaneDigest:   "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+		ArtifactRefs: map[string]lane.OutputRef{"image": {Step: "build", Output: "image"}},
+		LaneID:       "test-lane",
+		StepID:       "deploy-prod",
+	}
+	deploy.SetProduceBundles(d, stubProduceBundles())
+	att, execErr := d.Execute(context.Background(), step, state)
+	if execErr == nil {
+		t.Fatalf("Execute succeeded on an unverified export, got attestation %+v", att)
+	}
+	if !strings.Contains(execErr.Error(), "does not match the produced config digest") {
+		t.Errorf("Execute error = %v, want it to report the config digest mismatch", execErr)
 	}
 }
 

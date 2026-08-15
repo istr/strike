@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"log"
 	"net"
 	"net/http"
 	"sync"
@@ -56,11 +55,15 @@ func (d *Deployer) executeRegistryDeploy(ctx context.Context, m lane.DeployRegis
 	}
 	defer cleanup()
 
+	if verifyErr := verifyExportedImage(img, ih.ConfigDigest); verifyErr != nil {
+		return nil, fmt.Errorf("registry deploy: %w", verifyErr)
+	}
+
 	rt, obs, err := newRegistryTransport(m.Target)
 	if err != nil {
 		return nil, fmt.Errorf("registry deploy: %w", err)
 	}
-	subject, err := payloadDescriptor(img, ih)
+	subject, err := payloadDescriptor(img)
 	if err != nil {
 		return nil, fmt.Errorf("registry deploy: %w", err)
 	}
@@ -79,19 +82,64 @@ func (d *Deployer) executeRegistryDeploy(ctx context.Context, m lane.DeployRegis
 		return nil, fmt.Errorf("registry deploy: no validated push connection observed")
 	}
 	return &attachTarget{
-		subject:   subject,
-		rt:        rt,
-		observed:  ObservedTLS{Type: "https", ServerCertFingerprint: id.LeafFingerprint},
-		ref:       repo,
-		authority: m.Target.Address.Authority(),
+		subject:    subject,
+		rt:         rt,
+		observed:   ObservedTLS{Type: "https", ServerCertFingerprint: id.LeafFingerprint},
+		ref:        repo,
+		authority:  m.Target.Address.Authority(),
+		repository: m.Target.Name,
 	}, nil
 }
 
+// verifyExportedImage checks an engine-exported image against the content
+// identity the control plane computed when it produced that image. The engine
+// re-encodes layer blobs on export, so the produced manifest digest does not
+// survive the round trip; the config blob does (ADR-046). The config commits to
+// rootfs.diff_ids and each diff_id is the hash of its layer's uncompressed
+// content, so checking the config digest and then recomputing every layer's
+// diff_id against that config binds all exported bytes to an anchor the control
+// plane holds. This is what makes the engine a checked courier rather than an
+// unexamined witness on the sealing path (ADR-051 D4).
+func verifyExportedImage(img v1.Image, produced primitive.Digest) error {
+	if produced == "" {
+		return fmt.Errorf("artifact carries no produced config digest; the deploy artifact must be produced in this run")
+	}
+	configHash, err := img.ConfigName()
+	if err != nil {
+		return fmt.Errorf("exported config digest: %w", err)
+	}
+	if configHash.String() != produced.String() {
+		return fmt.Errorf("exported config digest %s does not match the produced config digest %s", configHash, produced)
+	}
+	cfg, err := img.ConfigFile()
+	if err != nil {
+		return fmt.Errorf("exported config file: %w", err)
+	}
+	layers, err := img.Layers()
+	if err != nil {
+		return fmt.Errorf("exported layers: %w", err)
+	}
+	if len(layers) != len(cfg.RootFS.DiffIDs) {
+		return fmt.Errorf("exported image has %d layers, its config declares %d diff ids", len(layers), len(cfg.RootFS.DiffIDs))
+	}
+	for i, l := range layers {
+		diffID, diffErr := l.DiffID()
+		if diffErr != nil {
+			return fmt.Errorf("exported layer %d diff id: %w", i, diffErr)
+		}
+		if diffID != cfg.RootFS.DiffIDs[i] {
+			return fmt.Errorf("exported layer %d content hashes to %s, its config declares %s", i, diffID, cfg.RootFS.DiffIDs[i])
+		}
+	}
+	return nil
+}
+
 // payloadDescriptor computes the pushed-subject descriptor of the exported
-// image. The engine save re-encodes on export; the pushed subject is the
-// exported manifest digest, the sealed artifact record keeps the produced
-// digest. A divergence is recorded, not reacted to (ADR-016).
-func payloadDescriptor(img v1.Image, ih output.ImageHandle) (v1.Descriptor, error) {
+// image. The engine save re-encodes on export, so this digest differs from the
+// produced manifest digest by construction; both enter the attestation, the
+// pushed one as sealed.pushed and the produced one as the artifact record
+// (ADR-051 D4/D6).
+func payloadDescriptor(img v1.Image) (v1.Descriptor, error) {
 	digest, err := img.Digest()
 	if err != nil {
 		return v1.Descriptor{}, fmt.Errorf("payload digest: %w", err)
@@ -103,9 +151,6 @@ func payloadDescriptor(img v1.Image, ih output.ImageHandle) (v1.Descriptor, erro
 	mediaType, err := img.MediaType()
 	if err != nil {
 		return v1.Descriptor{}, fmt.Errorf("payload media type: %w", err)
-	}
-	if produced, digErr := output.ManifestDigest(ih); digErr == nil && produced.String() != digest.String() {
-		log.Printf("INFO   registry deploy: exported digest %s differs from produced digest %s", digest, produced)
 	}
 	return v1.Descriptor{MediaType: mediaType, Digest: digest, Size: size}, nil
 }

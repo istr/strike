@@ -103,6 +103,11 @@ import (
 	} @go(ObservedPeers,type=map[endpoint.Authority]ObservedPeer)
 	resolver: #ResolverRecord
 	engine?:  endpoint.#Engine
+
+	// pushed mirrors sealed.pushed: the registry address of the artifact this
+	// statement's subject names, so a verifier holding only the statement can
+	// dereference it.
+	pushed?: #PushedArtifact @go(Pushed,optional=nillable)
 }
 
 // #ProvenanceOIDC is the declared signing identity carried into the sealed

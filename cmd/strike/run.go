@@ -252,9 +252,30 @@ func (rc *runContext) computeSpecHash(step *lane.Step, stepID primitive.Identifi
 	return key, nil
 }
 
+// sealsArtifact reports whether a deploy step names this step's image as its
+// artifact. Such a step is always produced, never restored from cache: the
+// deploy path checks the engine export against the produced content identity
+// before it signs or pushes (ADR-051 D4), and a cache hit rebuilds the handle
+// from the engine store, which holds no control-plane-computed anchor to check
+// against. Producing the artifact is cheap next to sealing one that cannot be
+// checked.
+func (rc *runContext) sealsArtifact(stepID primitive.Identifier) bool {
+	for _, s := range rc.stepIndex {
+		if s.Deploy != nil && s.Deploy.Artifacts != nil && s.Deploy.Artifacts.Step == stepID {
+			return true
+		}
+	}
+	return false
+}
+
 func (rc *runContext) checkCache(ctx context.Context, step *lane.Step, stepID primitive.Identifier, safeName string, specHash primitive.Digest) (bool, error) {
 	if step.ForceRun {
 		log.Printf("FORCED %s", safeName)
+		return false, nil
+	}
+
+	if rc.sealsArtifact(stepID) {
+		log.Printf("NOCACHE %s (deploy artifact)", safeName)
 		return false, nil
 	}
 
@@ -323,6 +344,10 @@ func (rc *runContext) registerCachedOutputs(ctx context.Context, step *lane.Step
 			}
 		}
 	}
+	// The cached image handle carries no produced config digest: a cache hit
+	// restores the handle from the engine store, which holds no
+	// control-plane-computed anchor. That is sound only because a step whose
+	// image a deploy seals never reaches this path (see checkCache).
 	if step.Output != "" {
 		handle := output.ImageHandle{Ref: imageRef}
 		if regErr := rc.runtime.Register(stepID, "", handle); regErr != nil {
@@ -371,7 +396,7 @@ func (rc *runContext) executePack(ctx context.Context, step *lane.Step, stepID p
 	// pulls by; result.Digest is the pre-annotation cross-validation anchor.
 	specHash := rc.runtime.SpecHash(stepID)
 	tag := registry.WrapTag(rc.lane.ID, stepID, specHash)
-	digest, _, wrapErr := rc.regClient.WrapImageOutputAsImage(ctx, outRoot, outputID, tag, nil)
+	digest, _, configDigest, wrapErr := rc.regClient.WrapImageOutputAsImage(ctx, outRoot, outputID, tag, nil)
 	if wrapErr != nil {
 		return fmt.Errorf("%s: wrap image: %w", safeName, wrapErr)
 	}
@@ -383,7 +408,8 @@ func (rc *runContext) executePack(ctx context.Context, step *lane.Step, stepID p
 	}
 
 	handle := output.ImageHandle{
-		Ref: registry.WrapDigest(rc.lane.ID, stepID, digest),
+		Ref:          registry.WrapDigest(rc.lane.ID, stepID, digest),
+		ConfigDigest: configDigest,
 	}
 	if regErr := rc.runtime.Register(stepID, "", handle); regErr != nil {
 		return fmt.Errorf("%s: register artifact: %w", safeName, regErr)
@@ -594,13 +620,14 @@ func (rc *runContext) wrapImageOutput(ctx context.Context, _ *lane.Step, stepID 
 	}
 	defer closer.Warn(stream, "committed image save stream")
 
-	digest, _, err := rc.regClient.WrapImageArchiveAsImage(ctx, stream, tag)
+	digest, _, configDigest, err := rc.regClient.WrapImageArchiveAsImage(ctx, stream, tag)
 	if err != nil {
 		return fmt.Errorf("%s: normalize image output: %w", safeName, err)
 	}
 
 	handle := output.ImageHandle{
-		Ref: registry.WrapDigest(rc.lane.ID, stepID, digest),
+		Ref:          registry.WrapDigest(rc.lane.ID, stepID, digest),
+		ConfigDigest: configDigest,
 	}
 	if regErr := rc.runtime.Register(stepID, "", handle); regErr != nil {
 		return fmt.Errorf("%s: register output: %w", safeName, regErr)

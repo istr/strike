@@ -71,12 +71,22 @@ import (
 	// computed by CP at parse time (hash and parse read the same bytes).
 	laneDigest: primitive.#Digest
 
-	// artifacts maps artifact names to their signed provenance records.
-	// Each artifact's digest is consumer-dereferenceable from the registry
-	// (C3 sealed boundary).
+	// artifacts maps artifact names to their signed provenance records. Each
+	// digest is the content identity the control plane produced and verified
+	// the engine export against; it is a local identity, not a registry
+	// address. The consumer-dereferenceable identity (C3 sealed boundary) is
+	// the pushed record below.
 	artifacts: {
 		[ID=primitive.#Identifier]: record.#Artifact
 	} @go(Artifacts,type=map[primitive.Identifier]record.Artifact)
+
+	// pushed is the artifact as the registry serves it: the manifest digest
+	// remote.Write produced, under the declared target authority and
+	// repository. A consumer dereferences by this digest and checks
+	// hash(received) against it, which is the C3 sealed boundary. Present for a
+	// registry deploy only, and singular by construction: exactly one artifact
+	// is pushed (ADR-051 D4/D6/D9).
+	pushed?: #PushedArtifact @go(Pushed,optional=nillable)
 
 	// resolver records the DoT resolver's observed TLS identity, matched
 	// against the declared anchor at the pre-flight handshake.
@@ -102,6 +112,28 @@ import (
 	observedPeers?: {
 		[Endpoint=endpoint.#Authority]: #ObservedPeer
 	} @go(ObservedPeers,type=map[endpoint.Authority]ObservedPeer)
+}
+
+// ---------------------------------------------------------------------------
+// Published artifact identity (sealed.pushed)
+// ---------------------------------------------------------------------------
+
+// #PushedArtifact addresses the artifact in the registry the control plane
+// wrote it to. The three parts are kept apart rather than joined into one
+// reference string so each carries its own grammar: the authority is the
+// dialed endpoint, the repository is the distribution-spec name, and the digest
+// is the manifest digest the push produced.
+#PushedArtifact: {
+	// registry is the authority the control plane dialed and validated; the
+	// same key appears in sealed.observedPeers with the observed identity.
+	registry: endpoint.#Authority
+
+	// repository is the distribution-spec repository name the payload was
+	// written under.
+	repository: primitive.#OCIName
+
+	// digest is the manifest digest the registry serves the artifact under.
+	digest: primitive.#Digest
 }
 
 // ---------------------------------------------------------------------------

@@ -51,6 +51,14 @@ delegated addressing or unbound declaration is attack surface and liability.
 
 ## Decision
 
+The sealing path these decisions define is drawn in
+[sealing-path.svg](sealing-path.svg): the two produced identities kept apart --
+the manifest digest the engine store is checked against and the artifact record
+keeps, and the config blob digest the engine export is verified against
+(ADR-046) -- the pushed digest as the sealed subject, and an independent
+verifier reading the evidence set from that digest's referrers. The diagram
+tracks the implementation; where the two disagree, this ADR governs.
+
 ### D1 -- Deploy is the sole sealing point; build and pack are pure producers
 
 A build step runs a container and produces a content-addressed payload; its

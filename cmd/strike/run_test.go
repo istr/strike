@@ -655,6 +655,34 @@ func TestCheckCache_ForceRunBypass(t *testing.T) {
 	}
 }
 
+func TestCheckCache_DeployArtifactBypass(t *testing.T) {
+	eng := &mockEngine{
+		inspectRV: &container.ImageInfo{
+			Digest: testFullDigest,
+			Annotations: map[string]string{
+				"dev.strike.content-size": "42",
+			},
+		},
+	}
+	rc := newTestRC(t, eng)
+	step := &lane.Step{ID: "step1"}
+	rc.stepIndex["step1"] = step
+	rc.stepIndex["deploy"] = &lane.Step{
+		ID: "deploy",
+		Deploy: &lane.DeploySpec{
+			Artifacts: &lane.StepImageRef{Step: "step1"},
+		},
+	}
+
+	hit, err := rc.checkCache(context.Background(), step, "step1", "step1", primitive.DigestFromHex("abc0000000000000000000000000000000000000000000000000000000000000"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if hit {
+		t.Error("expected cache miss for a step whose image a deploy seals")
+	}
+}
+
 func TestCheckCache_EngineError(t *testing.T) {
 	eng := &mockEngine{inspectErr: fmt.Errorf("engine unavailable")}
 	rc := newTestRC(t, eng)

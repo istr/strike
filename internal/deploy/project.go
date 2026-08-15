@@ -42,9 +42,17 @@ const (
 func projectStatements(att *Attestation, oidc lane.OIDCConfig, resolvedDeps []ResourceDescriptor) (
 	SLSAProvenanceStatement, EngineContextStatement, InformationalStatement, error,
 ) {
-	subject, err := projectSubject(att.Sealed.Artifacts)
+	subject, err := projectSubject(att.Sealed.Artifacts, att.Sealed.Pushed)
 	if err != nil {
 		return SLSAProvenanceStatement{}, EngineContextStatement{}, InformationalStatement{}, err
+	}
+	deps := resolvedDeps
+	if att.Sealed.Pushed != nil {
+		produced, prodErr := projectProducedArtifacts(att.Sealed.Artifacts)
+		if prodErr != nil {
+			return SLSAProvenanceStatement{}, EngineContextStatement{}, InformationalStatement{}, prodErr
+		}
+		deps = append(produced, resolvedDeps...)
 	}
 
 	slsa := SLSAProvenanceStatement{
@@ -62,8 +70,9 @@ func projectStatements(att *Attestation, oidc lane.OIDCConfig, resolvedDeps []Re
 					ObservedPeers: att.Sealed.ObservedPeers,
 					Resolver:      att.Sealed.Resolver,
 					Engine:        att.Sealed.Engine,
+					Pushed:        att.Sealed.Pushed,
 				},
-				ResolvedDependencies: resolvedDeps,
+				ResolvedDependencies: deps,
 			},
 			RunDetails: SLSARunDetails{Builder: SLSABuilder{ID: strikeBuilderID}},
 		},
@@ -94,12 +103,24 @@ func projectStatements(att *Attestation, oidc lane.OIDCConfig, resolvedDeps []Re
 	return slsa, engineCtx, info, nil
 }
 
-// projectSubject builds the in-toto subject list from the sealed artifacts.
-// Each artifact's manifest digest (a "sha256:<hex>" string) becomes a DigestSet
-// subject. The list is sorted by name: the sealed statement must be
-// reproducible (byte-identical inputs -> byte-identical output), and Go map
-// iteration order is not stable.
-func projectSubject(artifacts map[primitive.Identifier]record.Artifact) ([]Subject, error) {
+// projectSubject builds the in-toto subject list. Where the deploy pushed, the
+// subject is the artifact as the registry serves it -- one subject, named by
+// the repository and carrying the pushed manifest digest -- so a verifier
+// dereferences the published artifact and hash-checks it (ADR-051 D4). The
+// produced identities are not the subject there: the engine re-encodes on
+// export, so a produced manifest digest names bytes no registry serves
+// (ADR-046); they project as resolved dependencies instead. Without a push the
+// artifacts are the subject. The list is sorted by name: the sealed statement
+// must be reproducible (byte-identical inputs -> byte-identical output), and Go
+// map iteration order is not stable.
+func projectSubject(artifacts map[primitive.Identifier]record.Artifact, pushed *PushedArtifact) ([]Subject, error) {
+	if pushed != nil {
+		d, err := primitive.ParseDigest(pushed.Digest)
+		if err != nil {
+			return nil, fmt.Errorf("pushed subject: %w", err)
+		}
+		return []Subject{{Name: string(pushed.Repository), Digest: &DigestSet{SHA256: d.Hex()}}}, nil
+	}
 	subjects := make([]Subject, 0, len(artifacts))
 	for name, art := range artifacts {
 		d, err := primitive.ParseDigest(art.Digest)
@@ -110,4 +131,21 @@ func projectSubject(artifacts map[primitive.Identifier]record.Artifact) ([]Subje
 	}
 	sort.Slice(subjects, func(i, j int) bool { return subjects[i].Name < subjects[j].Name })
 	return subjects, nil
+}
+
+// projectProducedArtifacts renders the deploy's artifacts as in-toto resolved
+// dependencies: the content identity the control plane produced and checked the
+// engine export against, distinct from the pushed subject the registry serves.
+// Sorted by name, for the same reproducibility reason as projectSubject.
+func projectProducedArtifacts(artifacts map[primitive.Identifier]record.Artifact) ([]ResourceDescriptor, error) {
+	deps := make([]ResourceDescriptor, 0, len(artifacts))
+	for name, art := range artifacts {
+		d, err := primitive.ParseDigest(art.Digest)
+		if err != nil {
+			return nil, fmt.Errorf("resolved dependency %q: %w", name, err)
+		}
+		deps = append(deps, ResourceDescriptor{Name: string(name), Digest: &DigestSet{SHA256: d.Hex()}})
+	}
+	sort.Slice(deps, func(i, j int) bool { return deps[i].Name < deps[j].Name })
+	return deps, nil
 }

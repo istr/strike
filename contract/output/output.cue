@@ -14,6 +14,16 @@ import "github.com/istr/strike/contract/primitive"
 #ImageHandle: {
 	@go(ImageHandle)
 	imageRef: string @go(Ref)
+
+	// configDigest is the OCI image-config blob digest of the produced image:
+	// the round-trip-stable content anchor. A container engine re-encodes layer
+	// blobs on export, so the manifest digest imageRef carries does not survive
+	// the round trip, while the config blob does (ADR-046). The config commits
+	// to rootfs.diff_ids and those commit to the uncompressed layer content, so
+	// this one value is enough to check an engine export against the bytes the
+	// control plane produced. The deploy path performs that check before it
+	// signs or pushes (ADR-051 D4).
+	configDigest: primitive.#Digest @go(ConfigDigest)
 }
 
 // #FileHandle is a file or directory output: a single layer of the image,

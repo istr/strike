@@ -261,8 +261,10 @@ func newLiveRunContext(ctx context.Context, t *testing.T, engine container.Engin
 
 // pushedSubjectDigest recomputes the digest the deploy path pushed under: the
 // engine re-encodes on export, so the pushed subject is the exported manifest
-// digest, not the produced one. The divergence is reported, not reacted to
-// (ADR-016), and this is where it gets live engine data.
+// digest, not the produced one. Both identities are sealed -- the exported one
+// as Sealed.pushed, the produced one as the artifact record -- so the
+// divergence is an attested record (ADR-051 D4/D6, ADR-046). This recomputes
+// the exported digest from live engine data so the test can address it.
 func pushedSubjectDigest(ctx context.Context, t *testing.T, engine container.Engine, rc *runContext) v1.Hash {
 	t.Helper()
 	handle, err := rc.runtime.Resolve(lane.OutputRef{Step: "pack", Output: ""})

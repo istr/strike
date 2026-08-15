@@ -133,7 +133,8 @@ fields: {
 	observedPeers: {provenance: "cpObserved", hardenedByDeclaration: true, internal: "sealed.observedPeers", published: "slsa-provenance", rationale: "CP-validated peer identity, dialed and verified per the lane spec (front-observed)"}
 
 	// ---- V: CP-sealed artifact outputs (cpSealed) ----
-	artifactDigest: {provenance: "cpSealed", internal: "sealed.artifacts[].digest", published: "slsa-provenance", rationale: "published artifact digest, consumer-dereferenceable by D (C3); -> subject / resolvedDependencies"}
+	pushedArtifact: {provenance: "cpSealed", internal: "sealed.pushed", published: "slsa-provenance", rationale: "CP-computed manifest digest of the bytes CP wrote to the registry, plus the address they are served from; consumer-dereferenceable by D (C3); -> subject"}
+	artifactDigest: {provenance: "cpSealed", internal: "sealed.artifacts[].digest", published: "slsa-provenance", rationale: "produced content identity CP verified the engine export against; a local identity, not a registry address; -> resolvedDependencies"}
 	artifactSBOM: {provenance: "cpSealed", internal: "sealed.artifacts[].sbom", published: "slsa-provenance", rationale: "SBOM produced in-process from bytes CP holds; document also emitted as its own OCI referrer"}
 
 	// ---- E: engine chain assertion (engineChainAssertion) ----

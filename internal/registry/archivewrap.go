@@ -162,12 +162,13 @@ func FirstRegularFile(r io.Reader) (io.Reader, int64, error) {
 
 // WrapImageArchiveAsImage pulls the single OCI-layout tar file out of an
 // engine container-archive stream and loads it as an image (the image
-// output type under the engine flow). It reuses the image-load core shared
+// output type under the engine flow), returning the manifest digest, the tar
+// size, and the image-config blob digest. It reuses the image-load core shared
 // with WrapImageOutputAsImage.
-func (c *Client) WrapImageArchiveAsImage(ctx context.Context, r io.Reader, tag string, extra ...map[string]string) (primitive.Digest, int64, error) {
+func (c *Client) WrapImageArchiveAsImage(ctx context.Context, r io.Reader, tag string, extra ...map[string]string) (primitive.Digest, int64, primitive.Digest, error) {
 	inner, size, err := FirstRegularFile(r)
 	if err != nil {
-		return "", 0, fmt.Errorf("image output: %w", err)
+		return "", 0, "", fmt.Errorf("image output: %w", err)
 	}
 	return c.wrapImageFromReader(ctx, inner, size, tag, extra...)
 }

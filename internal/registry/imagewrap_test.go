@@ -137,12 +137,15 @@ func TestWrapImageOutputAsImage_LoadsExistingTar(t *testing.T) {
 	eng := &wrapEngine{}
 	client := &registry.Client{Engine: eng}
 	tag := "localhost/strike/test-lane/img-step:hash"
-	digest, size, err := client.WrapImageOutputAsImage(context.Background(), root, "image.tar", tag)
+	digest, size, configDigest, err := client.WrapImageOutputAsImage(context.Background(), root, "image.tar", tag)
 	if err != nil {
 		t.Fatalf("WrapImageOutputAsImage: %v", err)
 	}
 	if digest == "" {
 		t.Fatal("expected non-zero digest")
+	}
+	if configDigest == "" {
+		t.Error("expected a non-zero config digest")
 	}
 	if size <= 0 {
 		t.Errorf("size should be positive, got %d", size)
