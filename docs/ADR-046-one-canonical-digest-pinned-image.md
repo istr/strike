@@ -222,3 +222,35 @@ step, so the compiler already provides structurally what the linter enforced by
 discipline. Removing the tool follows the code-is-liability principle: a gate
 that protects a deleted API and blocks its replacement is pure liability. This
 changes tooling, not behavior; goldens and attestations are unchanged.
+
+## Amendment -- the round trip re-encodes on export, not on load
+
+The output-key vocabulary amendment above grounds the advisory status of the
+layer-descriptor annotation in the claim that a container runtime "strips
+descriptor annotations and re-compresses blobs on load". Measured against
+rootless Podman 5.4.2, with the controller-side layers written by
+go-containerregistry v0.21.7, the direction is wrong; the conclusion is not.
+
+- **The load is byte-exact.** The wrap paths verify the controller-computed
+  manifest digest against the engine-stored digest (this ADR's own Context,
+  third bullet), and the manifest digest commits to every layer blob and
+  every annotation. A load that stripped or re-encoded anything would fail
+  that check.
+- **The export re-encodes.** The engine image export returns layer blobs
+  re-compressed by the engine's own encoder: the same uncompressed content as
+  a different gzip stream, so the blob digest and size change and the
+  manifest digest changes with them. Layer-descriptor annotations are
+  dropped; manifest-level annotations survive. The re-encoding is
+  deterministic and reproducible for a given engine version, but it is a
+  function of the engine, not of the content.
+- **The invariants hold.** The config blob and the `rootfs.diff_ids` survive
+  the load/save round trip unchanged in every measurement. The `diff_id`
+  remains the only per-layer key stable across the round trip, exactly as
+  the vocabulary amendment concludes.
+
+**Supersedes, in the amendment above:** "strips descriptor annotations and
+re-compresses blobs on load" is read as "strips descriptor annotations and
+re-compresses blobs on save/export". The selection rule is unchanged -- the
+consumer selects by `diff_id`, never by the annotation -- and holds for a
+sharper reason: the produced manifest digest itself does not survive the
+export either.
