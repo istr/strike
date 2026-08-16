@@ -30,7 +30,18 @@ func flattenImageToFS(img v1.Image) (fs.FS, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read flattened image: %w", err)
 	}
+	return fsFromTarBuffer(buf, "")
+}
 
+// fsFromTarBuffer builds the immutable in-memory fs.FS over one tar buffer,
+// shared by the whole-image flatten (empty contentPrefix) and the region
+// catalog over a single output layer (ADR-051 D9). A non-empty contentPrefix
+// re-roots the producer-side layer convention (lane.OutputContentPrefix) at
+// the fs root: a directory output's tree loses its prefix, a single-file
+// output whose entry name equals the prefix sits at its basename, and
+// entries outside the prefix are skipped. Symlinks, hardlinks, and devices
+// are not materialized. Files expose io.ReaderAt over the shared buffer.
+func fsFromTarBuffer(buf []byte, contentPrefix string) (fs.FS, error) {
 	dirs := make(map[string]*memDir)
 	dirs["."] = &memDir{name: "."}
 
@@ -47,6 +58,10 @@ func flattenImageToFS(img v1.Image) (fs.FS, error) {
 
 		clean := path.Clean(strings.TrimPrefix(hdr.Name, "./"))
 		if clean == "." {
+			continue
+		}
+		clean, keep := stripContentPrefix(clean, contentPrefix, hdr.Typeflag)
+		if !keep {
 			continue
 		}
 
@@ -88,6 +103,27 @@ func flattenImageToFS(img v1.Image) (fs.FS, error) {
 	}
 
 	return &memFS{dirs: dirs}, nil
+}
+
+// stripContentPrefix re-roots one entry name for fsFromTarBuffer. With an
+// empty prefix every entry keeps its name. With a prefix, the prefix
+// directory entry itself is dropped, an entry equal to the prefix that is a
+// regular file (a single-file output) maps to its basename, entries under
+// prefix/ lose the prefix, and anything else is outside the region.
+func stripContentPrefix(clean, prefix string, typeflag byte) (string, bool) {
+	if prefix == "" {
+		return clean, true
+	}
+	if clean == prefix {
+		if typeflag == tar.TypeDir {
+			return "", false
+		}
+		return path.Base(clean), true
+	}
+	if rest, ok := strings.CutPrefix(clean, prefix+"/"); ok {
+		return rest, true
+	}
+	return "", false
 }
 
 // ensureParents creates directory entries for all ancestors of p.

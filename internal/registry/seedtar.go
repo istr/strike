@@ -34,7 +34,7 @@ import (
 // entries, zeroed mtime and ownership, preserved file modes, verbatim
 // (contained) symlinks.
 func SeedTarFromImage(tarBytes []byte, layerDiffID, inImagePath, destPrefix string) ([]byte, error) {
-	layerBytes, err := layerFromOCITar(tarBytes, layerDiffID)
+	layerBytes, err := OutputLayer(tarBytes, layerDiffID)
 	if err != nil {
 		return nil, err
 	}
@@ -65,7 +65,7 @@ func SeedTarFromImage(tarBytes []byte, layerDiffID, inImagePath, destPrefix stri
 // is enforced by the same rules SeedTarFromImage relies on, plus the locality
 // check in writeCanonicalTar.
 func PackTarFromImage(tarBytes []byte, layerDiffID, inImagePath, destPath string, fileMode int64) ([]byte, error) {
-	layerBytes, err := layerFromOCITar(tarBytes, layerDiffID)
+	layerBytes, err := OutputLayer(tarBytes, layerDiffID)
 	if err != nil {
 		return nil, err
 	}
@@ -133,7 +133,7 @@ func withImpliedDirs(entries []canonicalEntry) []canonicalEntry {
 //
 // The bytes are not copied; only headers and symlink targets are inspected.
 func ValidateImageMount(tarBytes []byte, layerDiffID, inImagePath string) (MountKind, error) {
-	layerBytes, err := layerFromOCITar(tarBytes, layerDiffID)
+	layerBytes, err := OutputLayer(tarBytes, layerDiffID)
 	if err != nil {
 		return MountKindMissing, err
 	}
@@ -148,7 +148,7 @@ func ValidateImageMount(tarBytes []byte, layerDiffID, inImagePath string) (Mount
 	return kind, nil
 }
 
-// layerFromOCITar returns the uncompressed content of the layer identified by
+// OutputLayer returns the uncompressed content of the layer identified by
 // layerDiffID, checked against that identity before it is returned. The image
 // config maps the diff_id to a blob descriptor, but the config is the engine's
 // own account of its store; the content hash is therefore recomputed here and
@@ -158,7 +158,9 @@ func ValidateImageMount(tarBytes []byte, layerDiffID, inImagePath string) (Mount
 // here, fail-closed. This makes the export handoff a checked courier on the
 // consumer side exactly as it is on the sealing path (ADR-051 D4), and it
 // needs no anchor beyond the one the output handle already carries.
-func layerFromOCITar(tarBytes []byte, layerDiffID string) ([]byte, error) {
+// Consumers: the pack-input and seed paths in this package, and the deploy
+// region catalog (ADR-051 D9).
+func OutputLayer(tarBytes []byte, layerDiffID string) ([]byte, error) {
 	img, err := ImageFromOCITar(tarBytes)
 	if err != nil {
 		return nil, err

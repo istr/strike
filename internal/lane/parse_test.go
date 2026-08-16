@@ -60,14 +60,14 @@ func TestParse_ValidMinimal(t *testing.T) {
 	if p.Name != "minimal-lane" {
 		t.Errorf("name = %q, want minimal-lane", p.Name)
 	}
-	if len(p.Steps) != 1 {
-		t.Fatalf("step count = %d, want 1", len(p.Steps))
+	if len(p.Steps) != 2 {
+		t.Fatalf("step count = %d, want 2", len(p.Steps))
 	}
-	if p.Steps[0].ID != "deploy" {
-		t.Errorf("step name = %q, want deploy", p.Steps[0].ID)
+	if p.Steps[1].ID != "deploy" {
+		t.Errorf("step name = %q, want deploy", p.Steps[1].ID)
 	}
-	if p.Steps[0].Deploy == nil {
-		t.Error("step[0].Deploy is nil, want non-nil")
+	if p.Steps[1].Deploy == nil {
+		t.Error("step[1].Deploy is nil, want non-nil")
 	}
 }
 

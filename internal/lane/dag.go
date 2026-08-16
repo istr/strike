@@ -63,8 +63,10 @@ func (d *DAG) buildAdjacency(p *Lane) {
 				d.addEdge(s.ID, f.From.Step)
 			}
 		}
-		if s.Deploy != nil && s.Deploy.Artifacts != nil {
-			d.addEdge(s.ID, s.Deploy.Artifacts.Step)
+		if s.Deploy != nil {
+			for _, ref := range s.Deploy.Artifacts {
+				d.addEdge(s.ID, ref.Step)
+			}
 		}
 	}
 }

@@ -76,7 +76,8 @@ steps:
             fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
           name: golden
       artifacts:
-        step: pack
+        app:
+          step: pack
       recording:
         preState:
           required: false

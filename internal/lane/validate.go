@@ -2,7 +2,9 @@ package lane
 
 import (
 	"fmt"
+	"maps"
 	"net/netip"
+	"slices"
 	"sort"
 	"strings"
 
@@ -122,25 +124,113 @@ func validatePackFileRefs(p *Lane, index map[primitive.Identifier]*Step) error {
 	return nil
 }
 
-// validateDeployArtifactRefs checks that a step's deploy artifact, when
-// present, references a known step that produces an image (ADR-051 D6/D9).
+// validateDeployArtifactRefs checks a step's deploy artifacts map (ADR-051
+// D9): every entry references a known step and, per arm, an existing output
+// -- the producing step's image output when output is absent, a declared
+// file or directory output when present -- no two entries reference the
+// same output, and the registry-method structural rules hold. Kubernetes
+// cardinality and containment are settled by the kubernetes rewiring, not
+// here.
 func validateDeployArtifactRefs(p *Lane, index map[primitive.Identifier]*Step) error {
 	for _, s := range p.Steps {
-		if s.Deploy == nil || s.Deploy.Artifacts == nil {
+		if s.Deploy == nil {
 			continue
 		}
-		ref := s.Deploy.Artifacts
-		fromStep, ok := index[ref.Step]
-		if !ok {
-			return fmt.Errorf(
-				"step %q: deploy artifact references unknown step %q", s.ID, ref.Step)
+		if err := validateArtifactEntries(&s, index); err != nil {
+			return err
 		}
-		if fromStep.Output == "" {
-			return fmt.Errorf(
-				"step %q: deploy artifact: step %q declares no image output", s.ID, ref.Step)
+		if _, ok := s.Deploy.Method.(DeployRegistry); ok {
+			if err := validateRegistryArtifacts(&s, index); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
+}
+
+// validateArtifactEntries checks reference integrity and uniqueness of one
+// step's artifacts entries, in sorted name order for deterministic errors.
+// The uniqueness key reuses the dotted step.output encoding: #Identifier
+// excludes '.', so an image arm's "step." cannot collide with a region key.
+func validateArtifactEntries(s *Step, index map[primitive.Identifier]*Step) error {
+	seen := map[string]primitive.Identifier{}
+	for _, name := range slices.Sorted(maps.Keys(s.Deploy.Artifacts)) {
+		ref := s.Deploy.Artifacts[name]
+		fromStep, ok := index[ref.Step]
+		if !ok {
+			return fmt.Errorf(
+				"step %q: deploy artifact %q references unknown step %q", s.ID, name, ref.Step)
+		}
+		key := string(ref.Step) + "."
+		if ref.Output == nil {
+			if fromStep.Output == "" {
+				return fmt.Errorf(
+					"step %q: deploy artifact %q: step %q declares no image output", s.ID, name, ref.Step)
+			}
+		} else {
+			if findOutput(fromStep, *ref.Output) == nil {
+				return fmt.Errorf(
+					"step %q: deploy artifact %q: output %q not found in step %q", s.ID, name, *ref.Output, ref.Step)
+			}
+			key += string(*ref.Output)
+		}
+		if prev, dup := seen[key]; dup {
+			return fmt.Errorf(
+				"step %q: deploy artifacts %q and %q reference the same output of step %q", s.ID, prev, name, ref.Step)
+		}
+		seen[key] = name
+	}
+	return nil
+}
+
+// validateRegistryArtifacts enforces the registry-method structure (ADR-051
+// D9): a non-empty map, exactly one image arm (the pushed subject), every
+// region packed into the pushed pack image, and no regions on a build-image
+// push -- containment in a build image is not verifiable from the lane.
+func validateRegistryArtifacts(s *Step, index map[primitive.Identifier]*Step) error {
+	if len(s.Deploy.Artifacts) == 0 {
+		return fmt.Errorf("step %q: registry deploy requires a non-empty artifacts map", s.ID)
+	}
+	var imageArm primitive.Identifier
+	images := 0
+	for _, name := range slices.Sorted(maps.Keys(s.Deploy.Artifacts)) {
+		if s.Deploy.Artifacts[name].Output == nil {
+			images++
+			imageArm = s.Deploy.Artifacts[name].Step
+		}
+	}
+	if images != 1 {
+		return fmt.Errorf(
+			"step %q: registry deploy requires exactly one image-arm artifacts entry, got %d", s.ID, images)
+	}
+	pushStep := index[imageArm]
+	for _, name := range slices.Sorted(maps.Keys(s.Deploy.Artifacts)) {
+		ref := s.Deploy.Artifacts[name]
+		if ref.Output == nil {
+			continue
+		}
+		if pushStep.Pack == nil {
+			return fmt.Errorf(
+				"step %q: deploy artifact %q: file or directory regions require the pushed image %q to be a pack step; containment in a build image is not verifiable", s.ID, name, imageArm)
+		}
+		if !packCovers(pushStep, ref) {
+			return fmt.Errorf(
+				"step %q: deploy artifact %q: output %s.%s is not packed into the pushed image %q", s.ID, name, ref.Step, *ref.Output, imageArm)
+		}
+	}
+	return nil
+}
+
+// packCovers reports whether the pushed pack step consumes the region's
+// output through pack.files, which is what makes the region's bytes part of
+// the pushed payload by construction (ADR-051 D9).
+func packCovers(pushStep *Step, ref ArtifactRef) bool {
+	for _, f := range pushStep.Pack.Files {
+		if f.From.Step == ref.Step && f.From.Output == *ref.Output {
+			return true
+		}
+	}
+	return false
 }
 
 // findOutput returns a pointer to the FileOutput with the given name,

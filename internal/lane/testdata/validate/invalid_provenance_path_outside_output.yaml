@@ -45,6 +45,14 @@ steps:
     provenance:
       type: git
       path: other/provenance.json
+  - id: bundle
+    image: docker.io/library/golang@sha256:abababababababababababababababababababababababababababababababab
+    args: ["go", "build"]
+    workdir: /out
+    env: {}
+    inputs: []
+    secrets: []
+    output: image
   - id: deploy
     deploy:
       method:
@@ -55,6 +63,9 @@ steps:
             type: certFingerprint
             fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
           name: app
+      artifacts:
+        app:
+          step: bundle
       recording:
         preState:
           required: false

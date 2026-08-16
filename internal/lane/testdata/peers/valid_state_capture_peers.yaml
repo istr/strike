@@ -47,7 +47,8 @@ steps:
         namespace: default
         strategy: apply
       artifacts:
-        step: build
+        app:
+          step: build
       recording:
         preState:
           required: false

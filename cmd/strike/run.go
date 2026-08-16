@@ -155,12 +155,6 @@ func (rc *runContext) runStep(stepID primitive.Identifier) error {
 func (rc *runContext) executeDeploy(ctx context.Context, step *lane.Step, stepID primitive.Identifier, safeName string) error {
 	log.Printf("DEPLOY %s", safeName)
 
-	artifactRefs := make(map[string]lane.OutputRef)
-	if step.Deploy.Artifacts != nil {
-		imgStep := step.Deploy.Artifacts.Step
-		artifactRefs[string(imgStep)] = lane.OutputRef{Step: imgStep}
-	}
-
 	d := &deploy.Deployer{
 		Engine:          rc.engine,
 		EngineID:        rc.engineID,
@@ -169,7 +163,8 @@ func (rc *runContext) executeDeploy(ctx context.Context, step *lane.Step, stepID
 		OIDC:            rc.lane.OIDC,
 		Keyless:         rc.lane.Keyless,
 		BaseSBOMSigners: rc.lane.BaseSBOMSigners,
-		ArtifactRefs:    artifactRefs,
+		ArtifactRefs:    step.Deploy.Artifacts,
+		Lane:            rc.lane,
 		LaneID:          rc.lane.ID,
 		LaneDigest:      rc.laneDigest,
 		CA:              rc.ca,
@@ -250,17 +245,23 @@ func (rc *runContext) computeSpecHash(step *lane.Step, stepID primitive.Identifi
 	return key, nil
 }
 
-// sealsArtifact reports whether a deploy step names this step's image as its
-// artifact. Such a step is always produced, never restored from cache: the
-// deploy path checks the engine export against the produced content identity
-// before it signs or pushes (ADR-051 D4), and a cache hit rebuilds the handle
-// from the engine store, which holds no control-plane-computed anchor to check
-// against. Producing the artifact is cheap next to sealing one that cannot be
-// checked.
+// sealsArtifact reports whether any deploy step names an output of this step
+// among its artifacts (image arm or region, ADR-051 D9). Such a step is
+// always produced, never restored from cache: the deploy path checks the
+// engine export against the produced content identity -- the config digest
+// for the image arm, the layer diff_id for a region -- before it signs or
+// pushes (ADR-051 D4), and a cache hit rebuilds the handle from the engine
+// store, which holds no control-plane-computed anchor to check against.
+// Producing the artifact is cheap next to sealing one that cannot be checked.
 func (rc *runContext) sealsArtifact(stepID primitive.Identifier) bool {
 	for _, s := range rc.stepIndex {
-		if s.Deploy != nil && s.Deploy.Artifacts != nil && s.Deploy.Artifacts.Step == stepID {
-			return true
+		if s.Deploy == nil {
+			continue
+		}
+		for _, ref := range s.Deploy.Artifacts {
+			if ref.Step == stepID {
+				return true
+			}
 		}
 	}
 	return false
@@ -345,7 +346,8 @@ func (rc *runContext) registerCachedOutputs(ctx context.Context, step *lane.Step
 	// The cached image handle carries no produced config digest: a cache hit
 	// restores the handle from the engine store, which holds no
 	// control-plane-computed anchor. That is sound only because a step whose
-	// image a deploy seals never reaches this path (see checkCache).
+	// output any deploy artifact names never reaches this path (see
+	// checkCache).
 	if step.Output != "" {
 		handle := output.ImageHandle{Ref: imageRef}
 		if regErr := rc.runtime.Register(stepID, "", handle); regErr != nil {

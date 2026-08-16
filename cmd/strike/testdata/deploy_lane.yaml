@@ -67,7 +67,8 @@ steps:
         namespace: default
         strategy: apply
       artifacts:
-        step: pack
+        app:
+          step: pack
       recording:
         preState:
           required: false

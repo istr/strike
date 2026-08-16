@@ -329,7 +329,7 @@ func TestDeployerExecute(t *testing.T) {
 	eng := newTLSTestEngine(t, containerMock(t, "v1.2.3"))
 
 	state := newRuntime(t, "build", "deploy-prod")
-	if err := state.Register("build", "image", output.ImageHandle{
+	if err := state.Register("build", "", output.ImageHandle{
 		Ref: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
 	}); err != nil {
 		t.Fatal(err)
@@ -345,7 +345,7 @@ func TestDeployerExecute(t *testing.T) {
 				Strategy:   "apply",
 				Kubeconfig: kubeconfigPtr(testKubeconfig(t)),
 			},
-			Artifacts: &lane.StepImageRef{Step: "build"},
+			Artifacts: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
 			Recording: lane.StateRecording{
 				PreState: lane.CaptureSet{
 					Captures: []lane.Capture{{
@@ -373,7 +373,7 @@ func TestDeployerExecute(t *testing.T) {
 	d := &deploy.Deployer{
 		Engine:       eng,
 		LaneDigest:   "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-		ArtifactRefs: map[string]lane.OutputRef{"image": {Step: "build", Output: "image"}},
+		ArtifactRefs: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
 		LaneID:       "test-lane",
 		CA:           ca,
 		UpstreamLook: look,
@@ -430,6 +430,11 @@ func TestDeployerExecuteRegistryAttachesReferrers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("config digest: %v", err)
 	}
+	lockJSON := []byte(`{"lockfileVersion":3,"packages":{"node_modules/left-pad":{"version":"1.3.0"}}}`)
+	webTar, regionDiff, err := regtest.BuildLayeredImageTar("dist", map[string][]byte{"dist/package-lock.json": lockJSON})
+	if err != nil {
+		t.Fatalf("region producer tar: %v", err)
+	}
 	saved, err := regtest.LayoutTar(img)
 	if err != nil {
 		t.Fatalf("layout tar: %v", err)
@@ -437,7 +442,11 @@ func TestDeployerExecuteRegistryAttachesReferrers(t *testing.T) {
 	eng := newTLSTestEngine(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(r.URL.Path, "/images/") && strings.HasSuffix(r.URL.Path, "/get") {
 			w.Header().Set("Content-Type", "application/x-tar")
-			if _, wErr := w.Write(saved); wErr != nil {
+			body := saved
+			if strings.Contains(r.URL.Path, "def456") {
+				body = webTar
+			}
+			if _, wErr := w.Write(body); wErr != nil {
 				t.Errorf("write save tar: %v", wErr)
 			}
 			return
@@ -452,13 +461,21 @@ func TestDeployerExecuteRegistryAttachesReferrers(t *testing.T) {
 	leafSum := sha256.Sum256(srv.Certificate().Raw)
 	leafFP := primitive.Digest("sha256:" + hex.EncodeToString(leafSum[:]))
 
-	state := newRuntime(t, "build", "deploy-prod")
-	if regErr := state.Register("build", "image", output.ImageHandle{
+	state := newRuntime(t, "build", "web", "deploy-prod")
+	if regErr := state.Register("build", "", output.ImageHandle{
 		Ref:          "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
 		ConfigDigest: primitive.Digest(configHash.String()),
 	}); regErr != nil {
 		t.Fatal(regErr)
 	}
+	if regErr := state.Register("web", "dist", output.FileHandle{
+		Ref:         "localhost/test/web@sha256:def4560000000000000000000000000000000000000000000000000000000000",
+		OutputID:    "dist",
+		LayerDiffID: regionDiff,
+	}); regErr != nil {
+		t.Fatal(regErr)
+	}
+	distOut := primitive.Identifier("dist")
 
 	step := &lane.Step{
 		ID: "deploy-prod",
@@ -472,7 +489,10 @@ func TestDeployerExecuteRegistryAttachesReferrers(t *testing.T) {
 					Name:    "app",
 				},
 			},
-			Artifacts: &lane.StepImageRef{Step: "build"},
+			Artifacts: map[primitive.Identifier]lane.ArtifactRef{
+				"image": {Step: "build"},
+				"web":   {Step: "web", Output: &distOut},
+			},
 			Recording: lane.StateRecording{
 				PreState:  lane.CaptureSet{Captures: []lane.Capture{}},
 				PostState: lane.CaptureSet{Captures: []lane.Capture{}},
@@ -484,9 +504,13 @@ func TestDeployerExecuteRegistryAttachesReferrers(t *testing.T) {
 		"capture:deploy-prod:version", "deploy-prod")
 
 	d := &deploy.Deployer{
-		Engine:       eng,
-		LaneDigest:   "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-		ArtifactRefs: map[string]lane.OutputRef{"image": {Step: "build", Output: "image"}},
+		Engine:     eng,
+		LaneDigest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+		Lane:       &lane.Lane{Steps: []lane.Step{{ID: "web", Outputs: []lane.FileOutput{{ID: "dist"}}}}},
+		ArtifactRefs: map[primitive.Identifier]lane.ArtifactRef{
+			"image": {Step: "build"},
+			"web":   {Step: "web", Output: &distOut},
+		},
 		LaneID:       "test-lane",
 		CA:           ca,
 		UpstreamLook: look,
@@ -541,14 +565,28 @@ func TestDeployerExecuteRegistryAttachesReferrers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("IndexManifest: %v", err)
 	}
-	if len(manifest.Manifests) != 5 {
-		t.Fatalf("referrers = %d, want 5 (3 statement bundles, 2 SBOMs)", len(manifest.Manifests))
+	if len(manifest.Manifests) != 7 {
+		t.Fatalf("referrers = %d, want 7 (3 statement bundles, 2 image SBOMs, 2 region SBOMs)", len(manifest.Manifests))
 	}
 	wantStatements := map[string]bool{"sealed": false, "engine-context": false, "informational": false}
-	wantSBOM := map[string]bool{"application/vnd.cyclonedx+json": false, "application/spdx+json": false}
+	wantSBOM := map[string]int{"application/vnd.cyclonedx+json": 0, "application/spdx+json": 0}
+	sbomArtifacts := map[string]bool{}
 	for _, desc := range manifest.Manifests {
 		if _, sbom := wantSBOM[string(desc.ArtifactType)]; sbom {
-			wantSBOM[string(desc.ArtifactType)] = true
+			wantSBOM[string(desc.ArtifactType)]++
+			sref, srefErr := name.NewDigest(authority + "/app@" + desc.Digest.String())
+			if srefErr != nil {
+				t.Fatalf("sbom referrer digest ref: %v", srefErr)
+			}
+			simg, simgErr := remote.Image(sref, remote.WithTransport(rt))
+			if simgErr != nil {
+				t.Fatalf("fetch sbom referrer %s: %v", desc.Digest, simgErr)
+			}
+			smfst, smErr := simg.Manifest()
+			if smErr != nil {
+				t.Fatalf("sbom referrer manifest %s: %v", desc.Digest, smErr)
+			}
+			sbomArtifacts[smfst.Annotations["dev.strike.artifact"]] = true
 			continue
 		}
 		dref, refErr := name.NewDigest(authority + "/app@" + desc.Digest.String())
@@ -575,10 +613,39 @@ func TestDeployerExecuteRegistryAttachesReferrers(t *testing.T) {
 			t.Errorf("missing referrer for statement %q", stmt)
 		}
 	}
-	for mt, seen := range wantSBOM {
-		if !seen {
-			t.Errorf("missing SBOM referrer %q", mt)
+	for mt, count := range wantSBOM {
+		if count != 2 {
+			t.Errorf("SBOM referrers for %q = %d, want 2 (image + region)", mt, count)
 		}
+	}
+	for _, want := range []string{"image", "web"} {
+		if !sbomArtifacts[want] {
+			t.Errorf("no SBOM referrer annotated dev.strike.artifact=%q", want)
+		}
+	}
+
+	webArt, ok := att.Sealed.Artifacts["web"]
+	if !ok {
+		t.Fatal("Sealed.Artifacts missing region entry \"web\"")
+	}
+	if webArt.Digest != primitive.Digest(regionDiff) {
+		t.Errorf("region digest = %s, want the layer diff_id %s", webArt.Digest, regionDiff)
+	}
+	if webArt.SBOM == nil {
+		t.Fatal("region record carries no SBOM set")
+	}
+	if _, pErr := primitive.ParseDigest(webArt.SBOM.CycloneDX); pErr != nil {
+		t.Errorf("region cyclonedx digest: %v", pErr)
+	}
+	if _, pErr := primitive.ParseDigest(webArt.SBOM.SPDX); pErr != nil {
+		t.Errorf("region spdx digest: %v", pErr)
+	}
+	imgArt, ok := att.Sealed.Artifacts["image"]
+	if !ok {
+		t.Fatal("Sealed.Artifacts missing image entry \"image\"")
+	}
+	if imgArt.SBOM == nil {
+		t.Error("image record carries no SBOM set")
 	}
 }
 
@@ -622,7 +689,7 @@ func TestDeployerExecuteRegistryRejectsUnverifiedExport(t *testing.T) {
 	// A well-formed digest that is not this image's config digest.
 	const wrongConfig = "sha256:1111111111111111111111111111111111111111111111111111111111111111"
 	state := newRuntime(t, "build", "deploy-prod")
-	if regErr := state.Register("build", "image", output.ImageHandle{
+	if regErr := state.Register("build", "", output.ImageHandle{
 		Ref:          "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
 		ConfigDigest: wrongConfig,
 	}); regErr != nil {
@@ -644,7 +711,7 @@ func TestDeployerExecuteRegistryRejectsUnverifiedExport(t *testing.T) {
 					Name: "app",
 				},
 			},
-			Artifacts: &lane.StepImageRef{Step: "build"},
+			Artifacts: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
 			Recording: lane.StateRecording{
 				PreState:  lane.CaptureSet{Captures: []lane.Capture{}},
 				PostState: lane.CaptureSet{Captures: []lane.Capture{}},
@@ -655,7 +722,7 @@ func TestDeployerExecuteRegistryRejectsUnverifiedExport(t *testing.T) {
 	d := &deploy.Deployer{
 		Engine:       eng,
 		LaneDigest:   "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-		ArtifactRefs: map[string]lane.OutputRef{"image": {Step: "build", Output: "image"}},
+		ArtifactRefs: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
 		LaneID:       "test-lane",
 		StepID:       "deploy-prod",
 	}
@@ -677,14 +744,14 @@ func TestDeployerExecute_MissingArtifact(t *testing.T) {
 		ID: "deploy-prod",
 		Deploy: &lane.DeploySpec{
 			Method:    lane.DeployKubernetes{Type: "kubernetes", Image: "img@sha256:0000000000000000000000000000000000000000000000000000000000000000"},
-			Artifacts: &lane.StepImageRef{Step: "build"},
+			Artifacts: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
 			Recording: lane.StateRecording{},
 		},
 	}
 
 	d := &deploy.Deployer{
 		Engine:       eng,
-		ArtifactRefs: map[string]lane.OutputRef{"image": {Step: "build", Output: "image"}},
+		ArtifactRefs: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
 		LaneID:       "test-lane",
 	}
 	deploy.SetProduceBundles(d, stubProduceBundles())
@@ -744,7 +811,7 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 	}
 
 	state := newRuntime(t, "build", "deploy-prod")
-	if err := state.Register("build", "image", output.ImageHandle{
+	if err := state.Register("build", "", output.ImageHandle{
 		Ref: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
 	}); err != nil {
 		t.Fatal(err)
@@ -760,7 +827,7 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 				Strategy:   "apply",
 				Kubeconfig: kubeconfigPtr(testKubeconfig(t)),
 			},
-			Artifacts: &lane.StepImageRef{Step: "build"},
+			Artifacts: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
 			Recording: lane.StateRecording{
 				PreState: lane.CaptureSet{
 					Captures: []lane.Capture{{
@@ -788,7 +855,7 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 	d := &deploy.Deployer{
 		Engine: eng, EngineID: eng.Identity(),
 		LaneDigest:   "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-		ArtifactRefs: map[string]lane.OutputRef{"image": {Step: "build", Output: "image"}},
+		ArtifactRefs: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
 		LaneID:       "test-lane",
 		CA:           ca,
 		UpstreamLook: look,
@@ -845,7 +912,7 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 func TestEngineRecord_NilEngineID(t *testing.T) {
 	eng := newTLSTestEngine(t, containerMock(t, "v1.0"))
 	state := newRuntime(t, "build", "deploy-nil-engine")
-	if err := state.Register("build", "image", output.ImageHandle{
+	if err := state.Register("build", "", output.ImageHandle{
 		Ref: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
 	}); err != nil {
 		t.Fatal(err)
@@ -861,7 +928,7 @@ func TestEngineRecord_NilEngineID(t *testing.T) {
 				Strategy:   "apply",
 				Kubeconfig: kubeconfigPtr(testKubeconfig(t)),
 			},
-			Artifacts: &lane.StepImageRef{Step: "build"},
+			Artifacts: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
 			Recording: lane.StateRecording{},
 		},
 	}
@@ -872,7 +939,7 @@ func TestEngineRecord_NilEngineID(t *testing.T) {
 	d := &deploy.Deployer{
 		Engine: eng, EngineID: nil,
 		LaneDigest:   "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-		ArtifactRefs: map[string]lane.OutputRef{"image": {Step: "build", Output: "image"}},
+		ArtifactRefs: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
 		LaneID:       "test-lane",
 		CA:           ca,
 		UpstreamLook: look,
@@ -906,7 +973,7 @@ func TestEngineRecord_WithRuntime(t *testing.T) {
 
 	eng := newTLSTestEngine(t, containerMock(t, "v1.0"))
 	state := newRuntime(t, "build", "deploy-runtime")
-	if err := state.Register("build", "image", output.ImageHandle{
+	if err := state.Register("build", "", output.ImageHandle{
 		Ref: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
 	}); err != nil {
 		t.Fatal(err)
@@ -922,7 +989,7 @@ func TestEngineRecord_WithRuntime(t *testing.T) {
 				Strategy:   "apply",
 				Kubeconfig: kubeconfigPtr(testKubeconfig(t)),
 			},
-			Artifacts: &lane.StepImageRef{Step: "build"},
+			Artifacts: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
 			Recording: lane.StateRecording{},
 		},
 	}
@@ -932,7 +999,7 @@ func TestEngineRecord_WithRuntime(t *testing.T) {
 	d := &deploy.Deployer{
 		Engine: eng, EngineID: id,
 		LaneDigest:   "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-		ArtifactRefs: map[string]lane.OutputRef{"image": {Step: "build", Output: "image"}},
+		ArtifactRefs: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
 		LaneID:       "test-lane",
 		CA:           ca,
 		UpstreamLook: look,
@@ -981,7 +1048,7 @@ func TestEngineRecord_WithoutRuntime(t *testing.T) {
 
 	eng := newTLSTestEngine(t, containerMock(t, "v1.0"))
 	state := newRuntime(t, "build", "deploy-no-runtime")
-	if err := state.Register("build", "image", output.ImageHandle{
+	if err := state.Register("build", "", output.ImageHandle{
 		Ref: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
 	}); err != nil {
 		t.Fatal(err)
@@ -997,7 +1064,7 @@ func TestEngineRecord_WithoutRuntime(t *testing.T) {
 				Strategy:   "apply",
 				Kubeconfig: kubeconfigPtr(testKubeconfig(t)),
 			},
-			Artifacts: &lane.StepImageRef{Step: "build"},
+			Artifacts: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
 			Recording: lane.StateRecording{},
 		},
 	}
@@ -1007,7 +1074,7 @@ func TestEngineRecord_WithoutRuntime(t *testing.T) {
 	d := &deploy.Deployer{
 		Engine: eng, EngineID: id,
 		LaneDigest:   "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-		ArtifactRefs: map[string]lane.OutputRef{"image": {Step: "build", Output: "image"}},
+		ArtifactRefs: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
 		LaneID:       "test-lane",
 		CA:           ca,
 		UpstreamLook: look,
@@ -1051,7 +1118,7 @@ func TestResolverRecord_Populated(t *testing.T) {
 
 	eng := newTLSTestEngine(t, containerMock(t, "v1.0"))
 	state := newRuntime(t, "build", "deploy-resolver")
-	if err := state.Register("build", "image", output.ImageHandle{
+	if err := state.Register("build", "", output.ImageHandle{
 		Ref: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
 	}); err != nil {
 		t.Fatal(err)
@@ -1067,7 +1134,7 @@ func TestResolverRecord_Populated(t *testing.T) {
 				Strategy:   "apply",
 				Kubeconfig: kubeconfigPtr(testKubeconfig(t)),
 			},
-			Artifacts: &lane.StepImageRef{Step: "build"},
+			Artifacts: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
 			Recording: lane.StateRecording{},
 		},
 	}
@@ -1081,7 +1148,7 @@ func TestResolverRecord_Populated(t *testing.T) {
 			Declared: endpoint.TLS{Type: "https", Address: endpoint.MustParseAuthority("1.1.1.1:853"), Trust: endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}},
 			Observed: rid,
 		},
-		ArtifactRefs: map[string]lane.OutputRef{"image": {Step: "build", Output: "image"}},
+		ArtifactRefs: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
 		LaneID:       "test-lane",
 		CA:           ca,
 		UpstreamLook: look,
@@ -1214,7 +1281,7 @@ func TestDeployerExecute_KeylessBundles(t *testing.T) {
 	eng := newTLSTestEngine(t, containerMock(t, "v1.2.3"))
 
 	state := newRuntime(t, "build", "deploy-prod")
-	if err := state.Register("build", "image", output.ImageHandle{
+	if err := state.Register("build", "", output.ImageHandle{
 		Ref: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
 	}); err != nil {
 		t.Fatal(err)
@@ -1228,7 +1295,7 @@ func TestDeployerExecute_KeylessBundles(t *testing.T) {
 		Engine:       eng,
 		EngineID:     eng.Identity(),
 		LaneDigest:   "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-		ArtifactRefs: map[string]lane.OutputRef{"image": {Step: "build", Output: "image"}},
+		ArtifactRefs: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
 		LaneID:       "test-lane",
 		CA:           ca,
 		UpstreamLook: look,
@@ -1273,7 +1340,7 @@ func TestDeployerExecute_KeylessFailureIsFatal(t *testing.T) {
 	eng := newTLSTestEngine(t, containerMock(t, "v1.2.3"))
 
 	state := newRuntime(t, "build", "deploy-prod")
-	if err := state.Register("build", "image", output.ImageHandle{
+	if err := state.Register("build", "", output.ImageHandle{
 		Ref: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
 	}); err != nil {
 		t.Fatal(err)
@@ -1286,7 +1353,7 @@ func TestDeployerExecute_KeylessFailureIsFatal(t *testing.T) {
 	d := &deploy.Deployer{
 		Engine:       eng,
 		LaneDigest:   "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-		ArtifactRefs: map[string]lane.OutputRef{"image": {Step: "build", Output: "image"}},
+		ArtifactRefs: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
 		LaneID:       "test-lane",
 		CA:           ca,
 		UpstreamLook: look,
@@ -1321,7 +1388,7 @@ func deployStep(t *testing.T) *lane.Step {
 				Strategy:   "apply",
 				Kubeconfig: kubeconfigPtr(testKubeconfig(t)),
 			},
-			Artifacts: &lane.StepImageRef{Step: "build"},
+			Artifacts: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
 			Recording: lane.StateRecording{
 				PreState: lane.CaptureSet{
 					Captures: []lane.Capture{{
@@ -1424,7 +1491,7 @@ func TestDeployerExecute_ObservedPeersPopulated(t *testing.T) {
 						Strategy:   "apply",
 						Kubeconfig: kubeconfigPtr(testKubeconfig(t)),
 					},
-					Artifacts: &lane.StepImageRef{Step: "build"},
+					Artifacts: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
 					Recording: lane.StateRecording{},
 				},
 			},
@@ -1440,7 +1507,7 @@ func TestDeployerExecute_ObservedPeersPopulated(t *testing.T) {
 	}
 
 	state := lane.NewRuntime(dag)
-	if regErr := state.Register("build", "image", output.ImageHandle{
+	if regErr := state.Register("build", "", output.ImageHandle{
 		Ref: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
 	}); regErr != nil {
 		t.Fatal(regErr)
@@ -1481,7 +1548,7 @@ func TestDeployerExecute_ObservedPeersPopulated(t *testing.T) {
 	d := &deploy.Deployer{
 		Engine:       eng,
 		LaneDigest:   "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-		ArtifactRefs: map[string]lane.OutputRef{"image": {Step: "build", Output: "image"}},
+		ArtifactRefs: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
 		LaneID:       "test-lane",
 		DAG:          dag,
 		CA:           ca,
@@ -1576,7 +1643,7 @@ func TestDeployerExecute_ObservedPeers_HonorsSSHPort(t *testing.T) {
 						Strategy:   "apply",
 						Kubeconfig: kubeconfigPtr(testKubeconfig(t)),
 					},
-					Artifacts: &lane.StepImageRef{Step: "build"},
+					Artifacts: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
 					Recording: lane.StateRecording{},
 				},
 			},
@@ -1592,7 +1659,7 @@ func TestDeployerExecute_ObservedPeers_HonorsSSHPort(t *testing.T) {
 	}
 
 	state := lane.NewRuntime(dag)
-	if regErr := state.Register("build", "image", output.ImageHandle{
+	if regErr := state.Register("build", "", output.ImageHandle{
 		Ref: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
 	}); regErr != nil {
 		t.Fatal(regErr)
@@ -1626,7 +1693,7 @@ func TestDeployerExecute_ObservedPeers_HonorsSSHPort(t *testing.T) {
 	d := &deploy.Deployer{
 		Engine:       eng,
 		LaneDigest:   "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-		ArtifactRefs: map[string]lane.OutputRef{"image": {Step: "build", Output: "image"}},
+		ArtifactRefs: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
 		LaneID:       "test-lane",
 		DAG:          dag,
 		CA:           ca,
@@ -1714,7 +1781,7 @@ func TestDeployerExecute_ObservedPeersConflictAborts(t *testing.T) {
 						Strategy:   "apply",
 						Kubeconfig: kubeconfigPtr(testKubeconfig(t)),
 					},
-					Artifacts: &lane.StepImageRef{Step: "step-b"},
+					Artifacts: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "step-b"}},
 					Recording: lane.StateRecording{},
 				},
 				Inputs: []lane.InputRef{{From: lane.OutputRef{Step: "step-a", Output: "out"}, Mount: "/in/a"}},
@@ -1731,7 +1798,7 @@ func TestDeployerExecute_ObservedPeersConflictAborts(t *testing.T) {
 	}
 
 	state := lane.NewRuntime(dag)
-	if regErr := state.Register("step-b", "out", output.ImageHandle{
+	if regErr := state.Register("step-b", "", output.ImageHandle{
 		Ref: "localhost/test/step-b@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
 	}); regErr != nil {
 		t.Fatal(regErr)
@@ -1772,7 +1839,7 @@ func TestDeployerExecute_ObservedPeersConflictAborts(t *testing.T) {
 	step := index["deploy-conflict"]
 	d := &deploy.Deployer{
 		Engine:       eng,
-		ArtifactRefs: map[string]lane.OutputRef{"image": {Step: "step-b", Output: "out"}},
+		ArtifactRefs: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "step-b"}},
 		LaneID:       "test-lane",
 		DAG:          dag,
 		CA:           ca,

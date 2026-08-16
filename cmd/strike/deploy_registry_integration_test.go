@@ -113,7 +113,8 @@ steps:
             path: __CADDY_ROOT__
           name: __REPO__
       artifacts:
-        step: pack
+        app:
+          step: pack
       recording:
         preState:
           required: false

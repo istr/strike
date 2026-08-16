@@ -168,15 +168,20 @@ import (
 }
 
 // ---------------------------------------------------------------------------
-// Image references
+// Artifact references
 // ---------------------------------------------------------------------------
 
-// StepImageRef references a step's image output by step alone: the image is
-// addressed by step, never by an output name (ADR-046). It is the deploy
-// artifact of a registry deploy -- the single produced image (ADR-051 D6/D9).
-#StepImageRef: {
-	@go(StepImageRef)
-	step: primitive.#Identifier @go(Step)
+// ArtifactRef names one region of the deployed payload in the deploy
+// artifacts map (ADR-051 D9): the producing step's whole image when output is
+// absent (the image is addressed by step, never by an output name, ADR-046),
+// or the step's named file or directory output. For a registry deploy exactly
+// one entry is the image arm -- the pushed subject the signature covers --
+// and the file and directory entries are SBOM subjects only, cataloged but
+// not pushed.
+#ArtifactRef: {
+	@go(ArtifactRef)
+	step:    primitive.#Identifier @go(Step)
+	output?: primitive.#Identifier @go(Output,optional=nillable)
 }
 
 // ---------------------------------------------------------------------------
@@ -271,9 +276,14 @@ import (
 
 #DeploySpec: {
 	@go(DeploySpec)
-	method:     #DeployMethod   @go(Method)
-	artifacts?: #StepImageRef   @go(Artifacts,optional=nillable)
-	recording:  #StateRecording @go(Recording)
+	method: #DeployMethod @go(Method)
+	// artifacts is the SBOM decomposition of the deployed payload: a map
+	// from artifact name to the region it names (ADR-051 D9). Naming a
+	// region includes it in the SBOM set; omitting it excludes it.
+	artifacts?: {
+		[Name=primitive.#Identifier]: #ArtifactRef
+	} @go(Artifacts,type=map["github.com/istr/strike/contract/primitive".Identifier]ArtifactRef)
+	recording: #StateRecording @go(Recording)
 }
 
 #DeployStrategy: *"apply" | "replace" | "rollout"

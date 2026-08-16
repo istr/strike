@@ -50,7 +50,8 @@ steps:
             fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
           name: app
       artifacts:
-        step: build
+        app:
+          step: build
       recording:
         preState:
           required: false

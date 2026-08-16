@@ -673,7 +673,7 @@ func TestCheckCache_DeployArtifactBypass(t *testing.T) {
 	rc.stepIndex["deploy"] = &lane.Step{
 		ID: "deploy",
 		Deploy: &lane.DeploySpec{
-			Artifacts: &lane.StepImageRef{Step: "step1"},
+			Artifacts: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "step1"}},
 		},
 	}
 

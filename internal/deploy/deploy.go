@@ -193,10 +193,11 @@ type Deployer struct {
 	Engine          container.Engine
 	StepPorts       map[string]capsule.HostPorts // unit name -> host ports
 	DAG             *lane.DAG
+	Lane            *lane.Lane // full lane, for region output-declaration lookup (ADR-051 D9)
 	EngineID        *container.EngineIdentity
 	CA              *transport.EphemeralCA
 	UpstreamLook    capsule.UpstreamLookupFunc
-	ArtifactRefs    map[string]lane.OutputRef                                                                   // pre-resolved: artifact name -> producer output reference
+	ArtifactRefs    map[primitive.Identifier]lane.ArtifactRef                                                   // deploy artifacts map: name -> image arm or region (ADR-051 D9)
 	produceBundles  func(ctx context.Context, eps lane.KeylessEndpoints, statements [][]byte) ([][]byte, error) // test seam; nil selects the real keyless chain
 	Keyless         lane.Keyless                                                                                // lane-declared keyless config (ADR-040 D2, ADR-041); .Endpoints dials Fulcio, Rekor v2, TSA; .TrustRoot/.TrustRootRef carry the verify anchor
 	LaneID          primitive.Identifier
@@ -373,6 +374,15 @@ func (d *Deployer) buildAttestation(
 			Registry:   push.authority,
 			Repository: push.repository,
 			Digest:     primitive.Digest(push.subject.Digest.String()),
+		}
+		for name, set := range push.sboms {
+			art, ok := artifactDigests[name]
+			if !ok {
+				return nil, fmt.Errorf("sbom set for unknown artifact %q", name)
+			}
+			s := set
+			art.SBOM = &s
+			artifactDigests[name] = art
 		}
 	}
 	return &Attestation{
@@ -551,24 +561,49 @@ func (d *Deployer) signStatements(ctx context.Context, att *Attestation, stepID 
 	}, nil
 }
 
-// resolveArtifactDigests resolves all artifact references to their provenance records.
-// refs maps artifact name -> producer output reference (pre-resolved by the caller from DAG edges).
-func resolveArtifactDigests(stepID primitive.Identifier, refs map[string]lane.OutputRef, state *lane.Runtime) (map[primitive.Identifier]record.Artifact, error) {
+// resolveArtifactDigests resolves every deploy artifacts entry to its
+// provenance record, per arm (ADR-051 D9): an image arm carries the produced
+// manifest digest, a file or directory region its layer's uncompressed-
+// content digest (diff_id) -- both control-plane-computed on the produce
+// path. SBOM digests are folded in later from the registry push.
+func resolveArtifactDigests(stepID primitive.Identifier, refs map[primitive.Identifier]lane.ArtifactRef, state *lane.Runtime) (map[primitive.Identifier]record.Artifact, error) {
 	artifacts := make(map[primitive.Identifier]record.Artifact, len(refs))
 	for artName, ref := range refs {
-		handle, resolveErr := state.Resolve(ref)
+		out := primitive.Identifier("")
+		if ref.Output != nil {
+			out = *ref.Output
+		}
+		handle, resolveErr := state.Resolve(lane.OutputRef{Step: ref.Step, Output: out})
 		if resolveErr != nil {
 			return nil, fmt.Errorf("step %q: artifact %q: %w", stepID, artName, resolveErr)
 		}
-		digest, digestErr := output.ManifestDigest(handle)
+		digest, digestErr := artifactDigest(handle, ref)
 		if digestErr != nil {
 			return nil, fmt.Errorf("step %q: artifact %q: %w", stepID, artName, digestErr)
 		}
-		artifacts[primitive.Identifier(artName)] = record.Artifact{
+		artifacts[artName] = record.Artifact{
 			Digest: digest,
 		}
 	}
 	return artifacts, nil
+}
+
+// artifactDigest returns the arm-appropriate content identity of a resolved
+// artifact handle: the manifest digest for an image arm, the layer diff_id
+// for a file or directory region (ADR-051 D9, ADR-046).
+func artifactDigest(handle output.Handle, ref lane.ArtifactRef) (primitive.Digest, error) {
+	if ref.Output == nil {
+		if _, ok := handle.(output.ImageHandle); !ok {
+			return "", fmt.Errorf("image-arm artifact resolved to a %s output", handle.HandleKind())
+		}
+		return output.ManifestDigest(handle)
+	}
+	fh, ok := handle.(output.FileHandle)
+	if !ok {
+		return "", fmt.Errorf("region artifact resolved to a %s output", handle.HandleKind())
+	}
+	diffID := primitive.Digest(fh.LayerDiffID)
+	return primitive.ParseDigest(diffID)
 }
 
 // recordAttestation marshals and records the attestation in lane state.
@@ -670,12 +705,13 @@ func (d *Deployer) captureOne(ctx context.Context, sc lane.Capture) (captureSnap
 // write reuses, and the validated push-connection identity for
 // Sealed.ObservedPeers. Nil for deploy methods without a registry push.
 type attachTarget struct {
-	subject    v1.Descriptor      // pushed manifest descriptor (the referrer subject)
-	rt         http.RoundTripper  // trust-anchored transport for referrer writes
-	observed   ObservedIdentity   // validated push-connection identity (Layer V)
-	ref        string             // deploy target repository (authority/name)
-	authority  endpoint.Authority // declared target authority (ObservedPeers key)
-	repository primitive.OCIName  // declared target repository name (Sealed.Pushed)
+	subject    v1.Descriptor                           // pushed manifest descriptor (the referrer subject)
+	rt         http.RoundTripper                       // trust-anchored transport for referrer writes
+	observed   ObservedIdentity                        // validated push-connection identity (Layer V)
+	sboms      map[primitive.Identifier]record.SBOMSet // per-artifact SBOM document digests (ADR-051 D9)
+	ref        string                                  // deploy target repository (authority/name)
+	authority  endpoint.Authority                      // declared target authority (ObservedPeers key)
+	repository primitive.OCIName                       // declared target repository name (Sealed.Pushed)
 }
 
 // executeMethod dispatches to the appropriate deploy method. It returns a
