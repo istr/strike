@@ -2,7 +2,6 @@ package integration_test
 
 import (
 	"context"
-	"os"
 	"strings"
 	"testing"
 
@@ -24,8 +23,7 @@ func TestPackPipeline(t *testing.T) {
 	binPath := buildTestBinary(t, engine)
 
 	// 2. Pack: assemble OCI image.
-	result, outRoot, _ := packTestImage(t, binPath)
-	defer testutil.CloseLog(t, outRoot, "pack pipeline outRoot")
+	result := packTestImage(t, binPath)
 
 	t.Logf("image digest: %s", result.Digest)
 
@@ -36,7 +34,7 @@ func TestPackPipeline(t *testing.T) {
 
 	// 4. Load into local store.
 	regClient := &registry.Client{Engine: engine}
-	digest, err := loadOCITar(ctx, regClient, outRoot, "image.tar")
+	digest, err := loadOCITar(ctx, regClient, result.LayoutTar)
 	if err != nil {
 		t.Fatalf("load OCI tar: %v", err)
 	}
@@ -56,13 +54,6 @@ func TestPackPipeline(t *testing.T) {
 	}
 
 	// 6. Verify determinism: pack again, same digest.
-	outDir2 := t.TempDir()
-	outRoot2, openErr := os.OpenRoot(outDir2)
-	if openErr != nil {
-		t.Fatalf("open root 2: %v", openErr)
-	}
-	defer testutil.CloseLog(t, outRoot2, "pack pipeline outRoot2")
-
 	result2, err := executor.Pack(executor.PackOpts{
 		Spec: &lane.PackSpec{
 			Base: primitive.ImageRef(staticBase),
@@ -75,8 +66,6 @@ func TestPackPipeline(t *testing.T) {
 			},
 		},
 		InputPaths: map[string]string{"/app": binPath},
-		OutputRoot: outRoot2,
-		OutputName: "image.tar",
 	})
 	if err != nil {
 		t.Fatalf("pack (second run): %v", err)

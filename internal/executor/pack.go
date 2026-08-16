@@ -15,8 +15,6 @@ import (
 	"github.com/istr/strike/internal/closer"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
-	"github.com/google/go-containerregistry/pkg/v1/empty"
-	"github.com/google/go-containerregistry/pkg/v1/layout"
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
@@ -26,19 +24,22 @@ import (
 
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/primitive"
+	"github.com/istr/strike/internal/registry"
 )
 
 // PackOpts is everything pack needs; callers in main.go assemble this.
 type PackOpts struct {
 	InputPaths map[string]string
 	Spec       *lane.PackSpec
-	OutputRoot *os.Root // root-scoped output directory
-	OutputName string   // filename within OutputRoot
 }
 
-// PackResult holds the outputs of a successful pack operation.
+// PackResult holds the outputs of a successful pack operation. LayoutTar is
+// the assembled image serialized as an OCI layout tar, held in memory and
+// handed straight to the engine load; a pack output never becomes a file on
+// the controller host (ADR-035).
 type PackResult struct {
-	Digest primitive.Digest // "sha256:..." manifest digest of the main image
+	Digest    primitive.Digest // "sha256:..." manifest digest of the main image
+	LayoutTar []byte
 }
 
 // AssembleResult holds the outputs of the pure image assembly step.
@@ -104,11 +105,12 @@ func AssembleImage(base v1.Image, spec *lane.PackSpec, inputPaths map[string]str
 	}, nil
 }
 
-// Pack assembles an OCI image from the given options and writes the result
-// as an OCI layout tar. A pack output is an unsigned intermediate: signing,
-// SBOM generation, and publication happen once, at deploy (ADR-051 D1/D3).
+// Pack assembles an OCI image from the given options and returns the result
+// as an OCI layout tar in memory. A pack output is an unsigned intermediate:
+// signing, SBOM generation, and publication happen once, at deploy
+// (ADR-051 D1/D3).
 //
-// Pack is the orchestrator: it handles I/O (pull, write) and delegates to
+// Pack is the orchestrator: it handles I/O (pull, serialize) and delegates to
 // the pure AssembleImage for the security-critical computation.
 func Pack(opts PackOpts) (*PackResult, error) {
 	// 1. Pull and verify the base image (network I/O)
@@ -123,13 +125,16 @@ func Pack(opts PackOpts) (*PackResult, error) {
 		return nil, fmt.Errorf("pack: %w", err)
 	}
 
-	// 3. Write OCI layout (filesystem I/O).
-	if err := writeOCILayout(assembled.Image, opts.OutputRoot, opts.OutputName, assembled.Digest.String()); err != nil {
-		return nil, err
+	// 3. Serialize as an OCI layout tar, in memory.
+	layoutTar, err := registry.OCITarFromImage(assembled.Image, map[string]string{
+		"org.opencontainers.image.ref.name": assembled.Digest.String(),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("pack: %w", err)
 	}
 
 	manifestDigest := primitive.Digest(assembled.Digest.String())
-	return &PackResult{Digest: manifestDigest}, nil
+	return &PackResult{LayoutTar: layoutTar, Digest: manifestDigest}, nil
 }
 
 // addFileLayers appends a layer for each file entry, returning the updated
@@ -247,30 +252,6 @@ func applyConfig(img v1.Image, spec *lane.PackSpec) (v1.Image, error) {
 		return nil, fmt.Errorf("pack: apply config: %w", err)
 	}
 	return img, nil
-}
-
-// writeOCILayout writes the main image to an OCI layout tar in the given
-// output root.
-func writeOCILayout(img v1.Image, outputRoot *os.Root, outputID, imgDigest string) error {
-	layoutDir, err := os.MkdirTemp("", "strike-pack-layout-")
-	if err != nil {
-		return fmt.Errorf("pack: temp dir: %w", err)
-	}
-	defer closer.Remove(layoutDir, "pack layout")
-
-	lp, err := layout.Write(layoutDir, empty.Index)
-	if err != nil {
-		return fmt.Errorf("pack: write layout: %w", err)
-	}
-	if err := lp.AppendImage(img, layout.WithAnnotations(map[string]string{
-		"org.opencontainers.image.ref.name": imgDigest,
-	})); err != nil {
-		return fmt.Errorf("pack: append main image: %w", err)
-	}
-	if err := tarDirectoryToRoot(layoutDir, outputRoot, outputID); err != nil {
-		return fmt.Errorf("pack: tar layout: %w", err)
-	}
-	return nil
 }
 
 // pullVerified pulls a remote image by digest-pinned reference.
@@ -477,71 +458,4 @@ func appendEnv(env []string, key, value string) []string {
 		}
 	}
 	return append(env, entry)
-}
-
-// tarDirectoryToRoot tars a directory and writes the output through outputRoot.
-func tarDirectoryToRoot(srcDir string, outputRoot *os.Root, outputID string) (err error) {
-	f, err := outputRoot.Create(outputID)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if cerr := f.Close(); cerr != nil && err == nil {
-			err = cerr
-		}
-	}()
-
-	tw := tar.NewWriter(f)
-	defer func() {
-		if cerr := tw.Close(); cerr != nil && err == nil {
-			err = cerr
-		}
-	}()
-
-	srcRoot, rootErr := os.OpenRoot(srcDir)
-	if rootErr != nil {
-		return rootErr
-	}
-	defer closer.Warn(srcRoot, "pack tar source root")
-
-	return fs.WalkDir(srcRoot.FS(), ".", tarWalkFunc(srcRoot, tw))
-}
-
-// tarWalkFunc returns a WalkDir callback that writes each entry to tw.
-func tarWalkFunc(root *os.Root, tw *tar.Writer) fs.WalkDirFunc {
-	return func(path string, d fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if path == "." {
-			return nil
-		}
-		return tarEntry(tw, root, path, d)
-	}
-}
-
-// tarEntry writes a single file or directory entry to the tar writer.
-func tarEntry(tw *tar.Writer, root *os.Root, rel string, d fs.DirEntry) error {
-	info, err := d.Info()
-	if err != nil {
-		return err
-	}
-	header, err := tar.FileInfoHeader(info, "")
-	if err != nil {
-		return err
-	}
-	header.Name = rel
-	if err = tw.WriteHeader(header); err != nil {
-		return err
-	}
-	if d.IsDir() {
-		return nil
-	}
-	f, openErr := root.Open(rel)
-	if openErr != nil {
-		return openErr
-	}
-	_, cpErr := io.Copy(tw, f)
-	closer.Warn(f, "pack tar entry")
-	return cpErr
 }

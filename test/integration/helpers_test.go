@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -93,14 +92,9 @@ func buildTestBinary(t *testing.T, engine container.Engine) string {
 }
 
 // packTestImage assembles an OCI image from a binary and returns
-// the pack result and the root-scoped output directory.
-func packTestImage(t *testing.T, binPath string) (*executor.PackResult, *os.Root, string) {
+// the pack result.
+func packTestImage(t *testing.T, binPath string) *executor.PackResult {
 	t.Helper()
-	outDir := t.TempDir()
-	outRoot, err := os.OpenRoot(outDir)
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	result, packErr := executor.Pack(executor.PackOpts{
 		Spec: &lane.PackSpec{
@@ -114,31 +108,18 @@ func packTestImage(t *testing.T, binPath string) (*executor.PackResult, *os.Root
 			},
 		},
 		InputPaths: map[string]string{"/app": binPath},
-		OutputRoot: outRoot,
-		OutputName: "image.tar",
 	})
 	if packErr != nil {
-		closer.Warn(outRoot, "packTestImage error cleanup")
 		t.Fatalf("pack: %v", packErr)
 	}
-	return result, outRoot, outDir
+	return result
 }
 
 // loadOCITar loads the main image from an OCI tar archive into the local
 // container store and returns the manifest digest. Reimplemented here
 // using only exported registry functions so that production code does not
 // carry test-only helpers.
-func loadOCITar(ctx context.Context, c *registry.Client, root *os.Root, relPath string) (primitive.Digest, error) {
-	f, err := root.Open(relPath)
-	if err != nil {
-		return "", err
-	}
-	data, err := io.ReadAll(f)
-	closer.Warn(f, "loadOCITar")
-	if err != nil {
-		return "", err
-	}
-
+func loadOCITar(ctx context.Context, c *registry.Client, data []byte) (primitive.Digest, error) {
 	tmpDir, err := os.MkdirTemp("", "strike-load-")
 	if err != nil {
 		return "", err

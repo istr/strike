@@ -12,7 +12,7 @@ import (
 
 // TestImageFromStep_RunsByDigestRef exercises the imageFromStep base-image
 // path end to end against the real engine: a step packs an image output, the
-// producer wraps it via WrapImageOutputAsImage (which re-annotates and so
+// producer wraps it via WrapImageTarAsImage (which re-annotates and so
 // stores it under a manifest digest distinct from the assembled digest), and a
 // downstream step runs a container whose base is that producer image addressed
 // by registry.WrapDigest -- exactly what resolveImageDigest hands the
@@ -33,8 +33,7 @@ func TestImageFromStep_RunsByDigestRef(t *testing.T) {
 
 	// 1. Produce an image output the way executePack does: pack, then wrap.
 	binPath := buildTestBinary(t, engine)
-	_, outRoot, _ := packTestImage(t, binPath)
-	defer testutil.CloseLog(t, outRoot, "imageFrom outRoot")
+	result := packTestImage(t, binPath)
 
 	const laneID = "imagefrom-itest"
 	const producerStep = "workspace"
@@ -42,7 +41,7 @@ func TestImageFromStep_RunsByDigestRef(t *testing.T) {
 	tag := registry.WrapTag(laneID, producerStep, primitive.DigestFromHex(
 		"0000000000000000000000000000000000000000000000000000000000000001"))
 
-	digest, _, _, wrapErr := regClient.WrapImageOutputAsImage(ctx, outRoot, "image.tar", tag, nil)
+	digest, _, _, wrapErr := regClient.WrapImageTarAsImage(ctx, result.LayoutTar, tag, nil)
 	if wrapErr != nil {
 		t.Fatalf("wrap image output: %v", wrapErr)
 	}
@@ -55,7 +54,7 @@ func TestImageFromStep_RunsByDigestRef(t *testing.T) {
 
 	// Deterministic invariant: the digest the handle carries must equal the
 	// manifest digest the engine actually stored under the producer tag.
-	// WrapImageOutputAsImage re-annotates the assembled image before loading it,
+	// WrapImageTarAsImage re-annotates the assembled image before loading it,
 	// so the engine-stored digest differs from the assembled (pack) digest; a
 	// handle built from the assembled digest would point at a manifest the engine
 	// never stored. This compares against ImageInspect(tag).Digest and so does

@@ -1,13 +1,11 @@
 package integration_test
 
 import (
-	"io"
 	"os"
 	"testing"
 
 	"github.com/google/go-containerregistry/pkg/v1/layout"
 
-	"github.com/istr/strike/internal/closer"
 	"github.com/istr/strike/internal/executor"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/primitive"
@@ -26,13 +24,6 @@ func TestPackLayoutPayloadOnly(t *testing.T) {
 
 	binPath := buildTestBinary(t, engine)
 
-	outDir := t.TempDir()
-	outRoot, err := os.OpenRoot(outDir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer testutil.CloseLog(t, outRoot, "pack layout test outRoot")
-
 	result, err := executor.Pack(executor.PackOpts{
 		Spec: &lane.PackSpec{
 			Base: primitive.ImageRef(staticBase),
@@ -45,8 +36,6 @@ func TestPackLayoutPayloadOnly(t *testing.T) {
 			},
 		},
 		InputPaths: map[string]string{"/app": binPath},
-		OutputRoot: outRoot,
-		OutputName: "image.tar",
 	})
 	if err != nil {
 		t.Fatalf("pack: %v", err)
@@ -55,15 +44,7 @@ func TestPackLayoutPayloadOnly(t *testing.T) {
 	t.Logf("image digest: %s", imgDigest)
 
 	// Extract the OCI layout tar and inspect its contents.
-	tarFile, err := outRoot.Open("image.tar")
-	if err != nil {
-		t.Fatalf("open image.tar: %v", err)
-	}
-	tarData, err := io.ReadAll(tarFile)
-	closer.Warn(tarFile, "pack layout test tar")
-	if err != nil {
-		t.Fatalf("read image.tar: %v", err)
-	}
+	tarData := result.LayoutTar
 
 	layoutDir := t.TempDir()
 	layoutRoot, err := os.OpenRoot(layoutDir)

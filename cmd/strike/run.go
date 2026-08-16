@@ -369,34 +369,25 @@ func (rc *runContext) executePack(ctx context.Context, step *lane.Step, stepID p
 		return err
 	}
 
-	outRoot, err := os.OpenRoot(outDir)
-	if err != nil {
-		return fmt.Errorf("%s: open output dir: %w", safeName, err)
-	}
-	defer closer.Warn(outRoot, "step output root")
-
 	if step.Output == "" {
 		return fmt.Errorf("%s: pack output requires an image output", safeName)
 	}
-	outputID := string(stepID)
 	result, err := executor.Pack(executor.PackOpts{
 		Spec:       step.Pack,
 		InputPaths: inputPaths,
-		OutputRoot: outRoot,
-		OutputName: outputID,
 	})
 	if err != nil {
 		return fmt.Errorf("%s: pack failed: %w", safeName, err)
 	}
 
-	// WrapImageOutputAsImage re-annotates the assembled image (reproducible
-	// created stamp, content-size) before loading it, so the engine stores it
-	// under a manifest digest distinct from result.Digest. The handle must
-	// carry the engine-stored digest -- it is what a consumer (imageFromStep)
-	// pulls by; result.Digest is the pre-annotation cross-validation anchor.
+	// The wrap re-annotates the assembled image (reproducible created stamp,
+	// content-size) before loading it, so the engine stores it under a
+	// manifest digest distinct from result.Digest. The handle must carry the
+	// engine-stored digest -- it is what a consumer (imageFromStep) pulls by;
+	// result.Digest is the pre-annotation cross-validation anchor.
 	specHash := rc.runtime.SpecHash(stepID)
 	tag := registry.WrapTag(rc.lane.ID, stepID, specHash)
-	digest, _, configDigest, wrapErr := rc.regClient.WrapImageOutputAsImage(ctx, outRoot, outputID, tag, nil)
+	digest, _, configDigest, wrapErr := rc.regClient.WrapImageTarAsImage(ctx, result.LayoutTar, tag, nil)
 	if wrapErr != nil {
 		return fmt.Errorf("%s: wrap image: %w", safeName, wrapErr)
 	}

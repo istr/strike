@@ -1,10 +1,10 @@
 package registry
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
-	"os"
 	"strconv"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
@@ -12,7 +12,6 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	"github.com/google/go-containerregistry/pkg/v1/types"
 
-	"github.com/istr/strike/internal/closer"
 	"github.com/istr/strike/internal/primitive"
 )
 
@@ -27,40 +26,17 @@ const ContentSizeAnnotation = "dev.strike.content-size"
 // in the handle.
 const OutputLayerAnnotation = "dev.strike.output.id"
 
-// WrapImageOutputAsImage loads an existing OCI tar into the engine's local
-// store, tags it, and returns the manifest digest, the tar file size, and the
-// image-config blob digest. The controller-computed manifest digest is verified
-// against the engine. root is the output directory; name is the relative tar
-// path within it. Optional extra annotations are merged into the manifest
-// alongside the standard created and content-size annotations.
-func (c *Client) WrapImageOutputAsImage(ctx context.Context, root *os.Root, name, tag string, extra ...map[string]string) (primitive.Digest, int64, primitive.Digest, error) {
-	info, err := root.Stat(name)
-	if err != nil {
-		return "", 0, "", fmt.Errorf("wrap image stat: %w", err)
-	}
-	size := info.Size()
-
-	f, err := root.Open(name)
-	if err != nil {
-		return "", 0, "", fmt.Errorf("wrap image: %w", err)
-	}
-	defer closer.Warn(f, "wrap image")
-
-	return c.wrapImageFromReader(ctx, f, size, tag, extra...)
-}
-
-// wrapImageFromReader loads an OCI-layout tar from r (size bytes), annotates
-// it, loads it into the engine, tags it, and verifies the controller digest
-// against the engine. It also returns the image-config blob digest: annotations
-// are manifest-level, so the config is the same blob the engine now stores, and
-// it is the anchor a later export is checked against (ADR-046, ADR-051 D4).
-// Shared by WrapImageOutputAsImage (host file) and WrapImageArchiveAsImage
-// (engine archive stream).
-func (c *Client) wrapImageFromReader(ctx context.Context, r io.Reader, size int64, tag string, extra ...map[string]string) (primitive.Digest, int64, primitive.Digest, error) {
-	tarBytes, err := io.ReadAll(r)
-	if err != nil {
-		return "", 0, "", fmt.Errorf("wrap image: read layout: %w", err)
-	}
+// WrapImageTarAsImage annotates an OCI-layout tar, loads it into the engine's
+// local store, tags it, and returns the manifest digest, the tar size, and the
+// image-config blob digest. The controller-computed manifest digest is
+// verified against the engine. Optional extra annotations are merged into the
+// manifest alongside the standard created and content-size annotations.
+//
+// The config digest is returned because annotations are manifest-level, so the
+// config is the same blob the engine now stores, and it is the anchor a later
+// export is checked against (ADR-046, ADR-051 D4).
+func (c *Client) WrapImageTarAsImage(ctx context.Context, tarBytes []byte, tag string, extra ...map[string]string) (primitive.Digest, int64, primitive.Digest, error) {
+	size := int64(len(tarBytes))
 	img, err := ImageFromOCITar(tarBytes)
 	if err != nil {
 		return "", 0, "", fmt.Errorf("wrap image: %w", err)
@@ -91,12 +67,12 @@ func (c *Client) wrapImageFromReader(ctx context.Context, r io.Reader, size int6
 		return "", 0, "", fmt.Errorf("wrap image config digest: %w", err)
 	}
 
-	tarReader, err := singleImageTar(img, nil)
+	loadTar, err := OCITarFromImage(img, nil)
 	if err != nil {
 		return "", 0, "", fmt.Errorf("wrap image tar: %w", err)
 	}
 
-	id, err := c.Engine.ImageLoad(ctx, tarReader)
+	id, err := c.Engine.ImageLoad(ctx, bytes.NewReader(loadTar))
 	if err != nil {
 		return "", 0, "", fmt.Errorf("wrap image load: %w", err)
 	}
@@ -137,12 +113,12 @@ func (c *Client) finalizeImage(ctx context.Context, img v1.Image, tag string, si
 		return "", fmt.Errorf("compute digest: %w", err)
 	}
 
-	r, err := singleImageTar(img, nil)
+	loadTar, err := OCITarFromImage(img, nil)
 	if err != nil {
 		return "", fmt.Errorf("write image tar: %w", err)
 	}
 
-	id, err := c.Engine.ImageLoad(ctx, r)
+	id, err := c.Engine.ImageLoad(ctx, bytes.NewReader(loadTar))
 	if err != nil {
 		return "", fmt.Errorf("image load: %w", err)
 	}

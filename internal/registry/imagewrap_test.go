@@ -5,7 +5,6 @@ import (
 	"context"
 	"io"
 	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/istr/strike/internal/closer"
@@ -120,26 +119,20 @@ func (e *wrapEngine) VolumeCreate(_ context.Context, _ string) error            
 func (e *wrapEngine) SeedVolumes(_ context.Context, _ []container.VolumeSeed) error { return nil }
 func (e *wrapEngine) VolumeRemove(_ context.Context, _ string) error                { return nil }
 
-func TestWrapImageOutputAsImage_LoadsExistingTar(t *testing.T) {
+func TestWrapImageTarAsImage_LoadsTar(t *testing.T) {
 	// Build a minimal valid OCI image tar via regtest, then use it as input
-	// to WrapImageOutputAsImage.
+	// to WrapImageTarAsImage.
 	tarBytes, _, err := regtest.BuildImageTar("src.txt", []byte("source"))
 	if err != nil {
 		t.Fatalf("BuildImageTar: %v", err)
 	}
 
-	dir := t.TempDir()
-	if writeErr := os.WriteFile(filepath.Join(dir, "image.tar"), tarBytes, 0o600); writeErr != nil {
-		t.Fatal(writeErr)
-	}
-
-	root := mustOpenRoot(t, dir)
 	eng := &wrapEngine{}
 	client := &registry.Client{Engine: eng}
 	tag := "localhost/strike/test-lane/img-step:hash"
-	digest, size, configDigest, err := client.WrapImageOutputAsImage(context.Background(), root, "image.tar", tag)
+	digest, size, configDigest, err := client.WrapImageTarAsImage(context.Background(), tarBytes, tag)
 	if err != nil {
-		t.Fatalf("WrapImageOutputAsImage: %v", err)
+		t.Fatalf("WrapImageTarAsImage: %v", err)
 	}
 	if digest == "" {
 		t.Fatal("expected non-zero digest")
