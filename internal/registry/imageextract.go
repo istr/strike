@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -14,7 +15,8 @@ import (
 	"github.com/istr/strike/internal/closer"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
-	"github.com/google/go-containerregistry/pkg/v1/layout"
+	"github.com/google/go-containerregistry/pkg/v1/partial"
+	"github.com/google/go-containerregistry/pkg/v1/types"
 
 	"github.com/istr/strike/internal/container"
 )
@@ -33,6 +35,106 @@ func SaveImage(ctx context.Context, engine container.Engine, tag string) ([]byte
 	return data, nil
 }
 
+// ImageFromOCITar assembles an OCI image from an OCI-layout tar, such as the
+// archive an engine image export returns, holding every blob in memory. No
+// payload reaches the controller host filesystem (ADR-035). The layout must
+// hold exactly one image (ADR-046).
+func ImageFromOCITar(tarBytes []byte) (v1.Image, error) {
+	blobs, indexBytes, err := readOCITarBlobs(tarBytes)
+	if err != nil {
+		return nil, err
+	}
+
+	var idx v1.IndexManifest
+	if uErr := json.Unmarshal(indexBytes, &idx); uErr != nil {
+		return nil, fmt.Errorf("parse index.json: %w", uErr)
+	}
+	if len(idx.Manifests) != 1 {
+		return nil, fmt.Errorf("expected single image in layout, found %d", len(idx.Manifests))
+	}
+
+	raw, err := blobFor(blobs, idx.Manifests[0].Digest, "manifest")
+	if err != nil {
+		return nil, err
+	}
+	var manifest v1.Manifest
+	if uErr := json.Unmarshal(raw, &manifest); uErr != nil {
+		return nil, fmt.Errorf("parse manifest: %w", uErr)
+	}
+	config, err := blobFor(blobs, manifest.Config.Digest, "config")
+	if err != nil {
+		return nil, err
+	}
+
+	return partial.CompressedToImage(&memImage{
+		manifest: manifest,
+		raw:      raw,
+		config:   config,
+		blobs:    blobs,
+	})
+}
+
+// blobFor returns the layout blob a descriptor digest addresses. what names
+// the blob's role for the error message.
+func blobFor(blobs map[string][]byte, h v1.Hash, what string) ([]byte, error) {
+	key := fmt.Sprintf("blobs/%s/%s", h.Algorithm, h.Hex)
+	data, ok := blobs[key]
+	if !ok {
+		return nil, fmt.Errorf("%s blob %q not found", what, key)
+	}
+	return data, nil
+}
+
+// memImage is an OCI image whose blobs are held in memory. It implements
+// partial.CompressedImageCore; partial supplies the rest of v1.Image,
+// including the diff_id, which it derives by decompressing the layer.
+type memImage struct {
+	manifest v1.Manifest
+	blobs    map[string][]byte
+	raw      []byte
+	config   []byte
+}
+
+func (i *memImage) RawManifest() ([]byte, error) { return i.raw, nil }
+
+func (i *memImage) RawConfigFile() ([]byte, error) { return i.config, nil }
+
+func (i *memImage) MediaType() (types.MediaType, error) { return i.manifest.MediaType, nil }
+
+// LayerByDigest returns the layer blob a manifest descriptor addresses.
+func (i *memImage) LayerByDigest(h v1.Hash) (partial.CompressedLayer, error) {
+	for _, desc := range i.manifest.Layers {
+		if desc.Digest != h {
+			continue
+		}
+		blob, err := blobFor(i.blobs, h, "layer")
+		if err != nil {
+			return nil, err
+		}
+		return &memLayer{desc: desc, blob: blob}, nil
+	}
+	return nil, fmt.Errorf("layer %s not listed in manifest", h)
+}
+
+// memLayer is one in-memory layer blob, exposed as a compressed layer. It
+// deliberately carries no DiffID method: partial.CompressedToLayer delegates
+// to one when the layer provides it, and a DiffID here would report the
+// compressed digest where the uncompressed content hash is meant.
+type memLayer struct {
+	desc v1.Descriptor
+	blob []byte
+}
+
+func (l *memLayer) Digest() (v1.Hash, error) { return l.desc.Digest, nil }
+
+func (l *memLayer) Compressed() (io.ReadCloser, error) {
+	return io.NopCloser(bytes.NewReader(l.blob)), nil
+}
+
+func (l *memLayer) Size() (int64, error) { return int64(len(l.blob)), nil }
+
+func (l *memLayer) MediaType() (types.MediaType, error) { return l.desc.MediaType, nil }
+
 // LayerDiffIDs returns the image's layer uncompressed-content digests (the
 // config rootfs.diff_ids) in canonical layer order. tarBytes is an OCI-layout
 // archive from SaveImage. The diff_id is the per-layer key stable across an
@@ -40,40 +142,9 @@ func SaveImage(ctx context.Context, engine container.Engine, tag string) ([]byte
 // LayerDiffID from this ordered list, bound to step.Outputs by the canonical
 // layer ordering the producer assembles.
 func LayerDiffIDs(tarBytes []byte) ([]string, error) {
-	dir, err := os.MkdirTemp("", "strike-diffids-")
+	img, err := ImageFromOCITar(tarBytes)
 	if err != nil {
-		return nil, fmt.Errorf("diff ids: create temp dir: %w", err)
-	}
-	defer closer.Remove(dir, "diff ids layout")
-
-	root, rootErr := os.OpenRoot(dir)
-	if rootErr != nil {
-		return nil, fmt.Errorf("diff ids: open temp root: %w", rootErr)
-	}
-	defer closer.Warn(root, "diff ids layout root")
-
-	if exErr := extractTar(bytes.NewReader(tarBytes), root); exErr != nil {
-		return nil, fmt.Errorf("diff ids: unpack layout: %w", exErr)
-	}
-
-	lp, err := layout.FromPath(dir)
-	if err != nil {
-		return nil, fmt.Errorf("diff ids: open layout: %w", err)
-	}
-	idx, err := lp.ImageIndex()
-	if err != nil {
-		return nil, fmt.Errorf("diff ids: read index: %w", err)
-	}
-	im, err := idx.IndexManifest()
-	if err != nil {
-		return nil, fmt.Errorf("diff ids: read manifest: %w", err)
-	}
-	if len(im.Manifests) != 1 {
-		return nil, fmt.Errorf("diff ids: expected single image in layout, found %d", len(im.Manifests))
-	}
-	img, err := idx.Image(im.Manifests[0].Digest)
-	if err != nil {
-		return nil, fmt.Errorf("diff ids: open image: %w", err)
+		return nil, fmt.Errorf("diff ids: %w", err)
 	}
 	cfg, err := img.ConfigFile()
 	if err != nil {
@@ -87,33 +158,16 @@ func LayerDiffIDs(tarBytes []byte) ([]string, error) {
 }
 
 // ExtractLayer extracts the content of the identified layer from an OCI image
-// tar into destDir. layerDiffID is matched against the image config's
-// rootfs.diff_ids -- the uncompressed-content digest is the only per-layer key
-// stable across an engine load/save round-trip. Non-regular, non-directory
-// entries (symlinks, devices, etc.) are rejected. Path traversal attempts are
+// tar into destDir. The layer is selected and content-checked by
+// layerFromOCITar, so an engine export that does not match what the control
+// plane produced fails closed before a byte is written. Layer tars are user
+// content and may carry contained symlinks. Path traversal attempts are
 // rejected via os.Root (kernel-enforced) and filepath.IsLocal (defensive
 // pre-check).
 func ExtractLayer(tarBytes []byte, layerDiffID, destDir string) error {
-	// Extract OCI layout tar to temp dir; must stay alive until layer read.
-	tmpDir, err := os.MkdirTemp(filepath.Dir(destDir), "strike-extract-")
+	content, err := layerFromOCITar(tarBytes, layerDiffID)
 	if err != nil {
-		return fmt.Errorf("extract: create temp dir: %w", err)
-	}
-	defer closer.Remove(tmpDir, "extract layout")
-
-	tmpRoot, rootErr := os.OpenRoot(tmpDir)
-	if rootErr != nil {
-		return fmt.Errorf("extract: open temp root: %w", rootErr)
-	}
-	defer closer.Warn(tmpRoot, "extract layout root")
-
-	if extractErr := extractTar(bytes.NewReader(tarBytes), tmpRoot); extractErr != nil {
-		return fmt.Errorf("extract: unpack layout: %w", extractErr)
-	}
-
-	layer, layerErr := openLayer(tmpDir, layerDiffID)
-	if layerErr != nil {
-		return layerErr
+		return fmt.Errorf("extract: %w", err)
 	}
 
 	root, err := os.OpenRoot(destDir)
@@ -126,64 +180,14 @@ func ExtractLayer(tarBytes []byte, layerDiffID, destDir string) error {
 		}
 	}()
 
-	return extractLayer(layer, root)
-}
-
-// openLayer reads an OCI layout directory and returns the layer whose
-// uncompressed-content digest (diff_id) equals layerDiffID. The diff_id is the
-// only per-layer key stable across an engine load/save round-trip, which
-// strips descriptor annotations and re-compresses blobs (ADR-046).
-func openLayer(layoutDir, layerDiffID string) (v1.Layer, error) {
-	lp, err := layout.FromPath(layoutDir)
-	if err != nil {
-		return nil, fmt.Errorf("extract: open layout: %w", err)
-	}
-
-	idx, err := lp.ImageIndex()
-	if err != nil {
-		return nil, fmt.Errorf("extract: read index: %w", err)
-	}
-
-	manifest, err := idx.IndexManifest()
-	if err != nil {
-		return nil, fmt.Errorf("extract: read manifest: %w", err)
-	}
-	if len(manifest.Manifests) != 1 {
-		return nil, fmt.Errorf("expected single image in layout, found %d", len(manifest.Manifests))
-	}
-
-	img, err := idx.Image(manifest.Manifests[0].Digest)
-	if err != nil {
-		return nil, fmt.Errorf("extract: open image: %w", err)
-	}
-
-	diffID, err := v1.NewHash(layerDiffID)
-	if err != nil {
-		return nil, fmt.Errorf("extract: parse layer diff id %q: %w", layerDiffID, err)
-	}
-	layer, err := img.LayerByDiffID(diffID)
-	if err != nil {
-		return nil, fmt.Errorf("extract: output layer %q not found in step image: %w", layerDiffID, err)
-	}
-	return layer, nil
-}
-
-// extractLayer extracts an uncompressed OCI layer tar into root. Layer tars
-// are user content and may carry contained symlinks.
-func extractLayer(layer v1.Layer, root *os.Root) error {
-	rc, err := layer.Uncompressed()
-	if err != nil {
-		return fmt.Errorf("uncompress layer: %w", err)
-	}
-	defer closer.Warn(rc, "extract layer")
-	return extractTarStream(rc, root, true)
+	return extractTarStream(bytes.NewReader(content), root)
 }
 
 // extractTarStream extracts a tar stream into root. Every entry path must be
 // local (filepath.IsLocal). Directories and regular files preserve their tar
-// mode. Symlinks are created verbatim when allowSymlinks is true and rejected
-// otherwise; os.Root never follows them. Any other entry type is rejected.
-func extractTarStream(r io.Reader, root *os.Root, allowSymlinks bool) error {
+// mode. Symlinks are created verbatim; os.Root never follows them. Any other
+// entry type is rejected.
+func extractTarStream(r io.Reader, root *os.Root) error {
 	tr := tar.NewReader(r)
 	for {
 		hdr, nextErr := tr.Next()
@@ -198,15 +202,14 @@ func extractTarStream(r io.Reader, root *os.Root, allowSymlinks bool) error {
 			return fmt.Errorf("tar entry %q is not a local path", hdr.Name)
 		}
 
-		if entryErr := extractEntry(root, hdr, tr, allowSymlinks); entryErr != nil {
+		if entryErr := extractEntry(root, hdr, tr); entryErr != nil {
 			return entryErr
 		}
 	}
 }
 
-// extractEntry writes a single tar entry into root. Symlinks are honored only
-// when allowSymlinks is true; otherwise a symlink entry is rejected.
-func extractEntry(root *os.Root, hdr *tar.Header, tr io.Reader, allowSymlinks bool) error {
+// extractEntry writes a single tar entry into root.
+func extractEntry(root *os.Root, hdr *tar.Header, tr io.Reader) error {
 	mode := hdr.FileInfo().Mode().Perm()
 	// Tar directory entries carry a trailing separator, which os.Root
 	// rejects since the go1.26.5 trailing-slash traversal fix (GO-2026-4970).
@@ -222,9 +225,6 @@ func extractEntry(root *os.Root, hdr *tar.Header, tr io.Reader, allowSymlinks bo
 			return err
 		}
 	case tar.TypeSymlink:
-		if !allowSymlinks {
-			return fmt.Errorf("tar entry %q is a symlink, which is not allowed here", hdr.Name)
-		}
 		if err := extractSymlink(root, name, hdr.Linkname); err != nil {
 			return err
 		}

@@ -52,13 +52,6 @@ func singleImageTar(img v1.Image, annotations map[string]string) (io.Reader, err
 	return &buf, nil
 }
 
-// extractTar extracts an OCI layout tar into the given root-scoped directory.
-// Layout tars carry only directories and regular files; symlinks and any
-// other entry type are rejected.
-func extractTar(r io.Reader, root *os.Root) error {
-	return extractTarStream(r, root, false)
-}
-
 // tarDirectory writes the contents of dir as a tar archive to w.
 func tarDirectory(dir string, w io.Writer) error {
 	root, err := os.OpenRoot(dir)

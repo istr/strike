@@ -1,7 +1,6 @@
 package deploy
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"net"
@@ -49,11 +48,10 @@ func (d *Deployer) executeRegistryDeploy(ctx context.Context, m lane.DeployRegis
 	if err != nil {
 		return nil, fmt.Errorf("registry deploy: %w", err)
 	}
-	img, cleanup, err := registry.ExtractMainImage(bytes.NewReader(tarBytes))
+	img, err := registry.ImageFromOCITar(tarBytes)
 	if err != nil {
 		return nil, fmt.Errorf("registry deploy: %w", err)
 	}
-	defer cleanup()
 
 	if verifyErr := verifyExportedImage(img, ih.ConfigDigest); verifyErr != nil {
 		return nil, fmt.Errorf("registry deploy: %w", verifyErr)

@@ -235,7 +235,7 @@ func LayoutTar(img v1.Image, annotations ...map[string]string) ([]byte, error) {
 
 // ExtractTar extracts an OCI layout tar (directories and regular files) into
 // root. It is a STANDALONE test utility built on the standard library, NOT a
-// wrapper around the production registry.extractTar -- production extraction
+// wrapper around any production extraction helper -- production extraction
 // stays covered by the ExtractSingleLayer tests. Replaces the former
 // registry.ExtractTarForTest, whose only use is unpacking a layout tar to
 // inspect it (e.g. to recover a manifest digest).

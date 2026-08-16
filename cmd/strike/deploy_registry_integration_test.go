@@ -6,7 +6,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -279,11 +278,10 @@ func pushedSubjectDigest(ctx context.Context, t *testing.T, engine container.Eng
 	if saveErr != nil {
 		t.Fatalf("save packed image: %v", saveErr)
 	}
-	img, cleanup, extractErr := registry.ExtractMainImage(bytes.NewReader(tarBytes))
+	img, extractErr := registry.ImageFromOCITar(tarBytes)
 	if extractErr != nil {
-		t.Fatalf("extract packed image: %v", extractErr)
+		t.Fatalf("read packed image: %v", extractErr)
 	}
-	defer cleanup()
 	exported, digestErr := img.Digest()
 	if digestErr != nil {
 		t.Fatalf("exported digest: %v", digestErr)

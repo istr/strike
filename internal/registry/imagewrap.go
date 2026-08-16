@@ -9,7 +9,6 @@ import (
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/empty"
-	"github.com/google/go-containerregistry/pkg/v1/layout"
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	"github.com/google/go-containerregistry/pkg/v1/types"
 
@@ -58,11 +57,14 @@ func (c *Client) WrapImageOutputAsImage(ctx context.Context, root *os.Root, name
 // Shared by WrapImageOutputAsImage (host file) and WrapImageArchiveAsImage
 // (engine archive stream).
 func (c *Client) wrapImageFromReader(ctx context.Context, r io.Reader, size int64, tag string, extra ...map[string]string) (primitive.Digest, int64, primitive.Digest, error) {
-	img, cleanup, err := ExtractMainImage(r)
+	tarBytes, err := io.ReadAll(r)
+	if err != nil {
+		return "", 0, "", fmt.Errorf("wrap image: read layout: %w", err)
+	}
+	img, err := ImageFromOCITar(tarBytes)
 	if err != nil {
 		return "", 0, "", fmt.Errorf("wrap image: %w", err)
 	}
-	defer cleanup()
 
 	ann := map[string]string{
 		"org.opencontainers.image.created": "1970-01-01T00:00:00Z",
@@ -231,59 +233,4 @@ func (c *Client) WrapOutputsAsImage(ctx context.Context, outs []OutputArchive, t
 // String form is trusted directly.
 func v1HashToDigest(h v1.Hash) primitive.Digest {
 	return primitive.Digest(h.String())
-}
-
-// ExtractMainImage reads an OCI layout tar from r and returns the first
-// image from the index. The returned cleanup function removes the temporary
-// directory backing the layout and must be called after the image is no
-// longer needed.
-func ExtractMainImage(r io.Reader) (v1.Image, func(), error) {
-	tmpDir, err := os.MkdirTemp("", "strike-wrap-load-")
-	if err != nil {
-		return nil, nil, err
-	}
-	cleanup := func() { closer.Remove(tmpDir, "wrap image load") }
-
-	tmpRoot, rootErr := os.OpenRoot(tmpDir)
-	if rootErr != nil {
-		cleanup()
-		return nil, nil, rootErr
-	}
-	defer closer.Warn(tmpRoot, "wrap image load root")
-
-	if extractErr := extractTar(r, tmpRoot); extractErr != nil {
-		cleanup()
-		return nil, nil, fmt.Errorf("extract layout: %w", extractErr)
-	}
-
-	lp, err := layout.FromPath(tmpDir)
-	if err != nil {
-		cleanup()
-		return nil, nil, fmt.Errorf("open layout: %w", err)
-	}
-
-	idx, err := lp.ImageIndex()
-	if err != nil {
-		cleanup()
-		return nil, nil, fmt.Errorf("read index: %w", err)
-	}
-
-	manifest, err := idx.IndexManifest()
-	if err != nil {
-		cleanup()
-		return nil, nil, fmt.Errorf("read manifest: %w", err)
-	}
-
-	if len(manifest.Manifests) == 0 {
-		cleanup()
-		return nil, nil, fmt.Errorf("empty image index")
-	}
-
-	desc := manifest.Manifests[0]
-	img, imgErr := idx.Image(desc.Digest)
-	if imgErr != nil {
-		cleanup()
-		return nil, nil, imgErr
-	}
-	return img, cleanup, nil
 }

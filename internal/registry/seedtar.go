@@ -3,8 +3,6 @@ package registry
 import (
 	"archive/tar"
 	"bytes"
-	"compress/gzip"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -87,48 +85,52 @@ func ValidateImageMount(tarBytes []byte, layerDiffID, inImagePath string) (Mount
 	return kind, nil
 }
 
-// findLayer returns the descriptor of the layer whose uncompressed-content
-// digest (diff_id) equals layerDiffID, and whether it was found. The diff_id
-// is the only stable per-layer key across an engine load/save round-trip:
-// runtimes strip descriptor annotations and re-compress blobs, but never alter
-// uncompressed content. manifest.Layers[i] is positionally aligned with
-// diffIDs[i] (the image config rootfs.diff_ids), so the match on diffIDs[i]
-// selects manifest.Layers[i].
-func findLayer(layers []v1.Descriptor, diffIDs []v1.Hash, layerDiffID string) (v1.Descriptor, bool) {
-	for i, id := range diffIDs {
-		if i >= len(layers) {
-			break
-		}
-		if id.String() == layerDiffID {
-			return layers[i], true
-		}
-	}
-	return v1.Descriptor{}, false
-}
-
+// layerFromOCITar returns the uncompressed content of the layer identified by
+// layerDiffID, checked against that identity before it is returned. The image
+// config maps the diff_id to a blob descriptor, but the config is the engine's
+// own account of its store; the content hash is therefore recomputed here and
+// compared against layerDiffID, which the control plane computed from the
+// layer it assembled, before the engine ever saw it. An engine whose export
+// is internally consistent but does not match the produced bytes is caught
+// here, fail-closed. This makes the export handoff a checked courier on the
+// consumer side exactly as it is on the sealing path (ADR-051 D4), and it
+// needs no anchor beyond the one the output handle already carries.
 func layerFromOCITar(tarBytes []byte, layerDiffID string) ([]byte, error) {
-	blobs, indexBytes, err := readOCITarBlobs(tarBytes)
+	img, err := ImageFromOCITar(tarBytes)
 	if err != nil {
 		return nil, err
 	}
 
-	manifest, config, err := resolveImageManifest(blobs, indexBytes)
+	want, err := v1.NewHash(layerDiffID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parse layer diff id %q: %w", layerDiffID, err)
 	}
 
-	desc, found := findLayer(manifest.Layers, config.RootFS.DiffIDs, layerDiffID)
-	if !found {
-		return nil, fmt.Errorf("output layer %q not found in step image", layerDiffID)
+	layer, err := img.LayerByDiffID(want)
+	if err != nil {
+		return nil, fmt.Errorf("output layer %q not found in step image: %w", layerDiffID, err)
 	}
 
-	layerPath := fmt.Sprintf("blobs/%s/%s", desc.Digest.Algorithm, desc.Digest.Hex)
-	layerBlob, ok := blobs[layerPath]
-	if !ok {
-		return nil, fmt.Errorf("layer blob %q not found", layerPath)
+	rc, err := layer.Uncompressed()
+	if err != nil {
+		return nil, fmt.Errorf("uncompress layer %q: %w", layerDiffID, err)
+	}
+	content, readErr := io.ReadAll(rc)
+	if closeErr := rc.Close(); closeErr != nil {
+		return nil, fmt.Errorf("close layer %q: %w", layerDiffID, closeErr)
+	}
+	if readErr != nil {
+		return nil, fmt.Errorf("read layer %q: %w", layerDiffID, readErr)
 	}
 
-	return decompressIfGzip(layerBlob)
+	got, _, err := v1.SHA256(bytes.NewReader(content))
+	if err != nil {
+		return nil, fmt.Errorf("hash layer %q: %w", layerDiffID, err)
+	}
+	if got != want {
+		return nil, fmt.Errorf("exported layer content hashes to %s, the produced output declares %s", got, want)
+	}
+	return content, nil
 }
 
 // readOCITarBlobs reads an OCI-layout tar and returns its blob contents keyed
@@ -166,64 +168,6 @@ func readOCITarBlobs(tarBytes []byte) (map[string][]byte, []byte, error) {
 		return nil, nil, fmt.Errorf("index.json not found in OCI tar")
 	}
 	return blobs, indexBytes, nil
-}
-
-// resolveImageManifest selects the single image from the layout index and
-// returns its parsed manifest and config. The single-image-in-layout
-// invariant (ADR-046) is enforced here.
-func resolveImageManifest(blobs map[string][]byte, indexBytes []byte) (v1.Manifest, v1.ConfigFile, error) {
-	var idx v1.IndexManifest
-	if err := json.Unmarshal(indexBytes, &idx); err != nil {
-		return v1.Manifest{}, v1.ConfigFile{}, fmt.Errorf("parse index.json: %w", err)
-	}
-	if len(idx.Manifests) != 1 {
-		return v1.Manifest{}, v1.ConfigFile{}, fmt.Errorf("expected single image in layout, found %d", len(idx.Manifests))
-	}
-
-	manifestPath := fmt.Sprintf("blobs/%s/%s", idx.Manifests[0].Digest.Algorithm, idx.Manifests[0].Digest.Hex)
-	manifestBytes, ok := blobs[manifestPath]
-	if !ok {
-		return v1.Manifest{}, v1.ConfigFile{}, fmt.Errorf("manifest blob %q not found", manifestPath)
-	}
-	var manifest v1.Manifest
-	if err := json.Unmarshal(manifestBytes, &manifest); err != nil {
-		return v1.Manifest{}, v1.ConfigFile{}, fmt.Errorf("parse manifest: %w", err)
-	}
-
-	configPath := fmt.Sprintf("blobs/%s/%s", manifest.Config.Digest.Algorithm, manifest.Config.Digest.Hex)
-	configBytes, ok := blobs[configPath]
-	if !ok {
-		return v1.Manifest{}, v1.ConfigFile{}, fmt.Errorf("config blob %q not found", configPath)
-	}
-	var config v1.ConfigFile
-	if err := json.Unmarshal(configBytes, &config); err != nil {
-		return v1.Manifest{}, v1.ConfigFile{}, fmt.Errorf("parse config: %w", err)
-	}
-	return manifest, config, nil
-}
-
-// decompressIfGzip attempts gzip decompression; if the data is not gzipped,
-// it returns the raw bytes (an uncompressed layer).
-func decompressIfGzip(data []byte) ([]byte, error) {
-	if !isGzip(data) {
-		return data, nil
-	}
-	gz, err := gzip.NewReader(bytes.NewReader(data))
-	if err != nil {
-		return nil, fmt.Errorf("open gzip: %w", err)
-	}
-	out, readErr := io.ReadAll(gz)
-	if closeErr := gz.Close(); closeErr != nil {
-		return nil, fmt.Errorf("close gzip: %w", closeErr)
-	}
-	if readErr != nil {
-		return nil, fmt.Errorf("decompress layer: %w", readErr)
-	}
-	return out, nil
-}
-
-func isGzip(data []byte) bool {
-	return len(data) >= 2 && data[0] == 0x1f && data[1] == 0x8b
 }
 
 // MountKind is the resolved shape of a selected producer subtree. The zero
