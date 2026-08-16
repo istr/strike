@@ -102,6 +102,10 @@ linters:
           msg: "use transport.DialVerified or transport.DialUnixSocket (CODE-STYLE.md#controlplane-egress-dials)"
         - pattern: 'net\.Dialer'
           msg: "use transport.DialVerified or transport.DialUnixSocket (CODE-STYLE.md#controlplane-egress-dials)"
+        # Build payload never transits the controller filesystem: OCI layouts
+        # and step content are assembled and read in memory (ADR-035).
+        - pattern: 'os\.(MkdirTemp|CreateTemp|TempDir|WriteFile|OpenFile|MkdirAll|Mkdir|Create)\b'
+          msg: "no host scratch and no host file write -- assemble and read in memory (ADR-035)"
     depguard:
       rules:
         all:
@@ -158,6 +162,20 @@ linters:
         linters:
           - forbidigo
         text: "net\\.Dial|net\\.Dialer"
+      # Test files and test scaffolding legitimately write to a t.TempDir()
+      # root; the host-payload rule governs production code.
+      - path: _test\.go
+        linters:
+          - forbidigo
+        text: "no host scratch"
+      - path: internal/testutil
+        linters:
+          - forbidigo
+        text: "no host scratch"
+      - path: internal/registry/regtest
+        linters:
+          - forbidigo
+        text: "no host scratch"
 
 issues:
   max-issues-per-linter: 0

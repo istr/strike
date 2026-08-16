@@ -4,13 +4,11 @@ import (
 	"archive/tar"
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"log"
 	"os"
 	"path"
-	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -358,13 +356,7 @@ func (rc *runContext) registerCachedOutputs(ctx context.Context, step *lane.Step
 }
 
 func (rc *runContext) executePack(ctx context.Context, step *lane.Step, stepID primitive.Identifier, safeName string, inputs stepInputs) error {
-	outDir, err := os.MkdirTemp("", "strike-"+string(stepID)+"-")
-	if err != nil {
-		return fmt.Errorf("%s: create temp dir: %w", safeName, err)
-	}
-	defer removeStrikeScratch(outDir)
-
-	inputPaths, err := rc.resolvePackInputPaths(ctx, step, outDir, safeName, inputs)
+	inputTars, err := rc.resolvePackInputs(ctx, step, safeName, inputs)
 	if err != nil {
 		return err
 	}
@@ -373,8 +365,8 @@ func (rc *runContext) executePack(ctx context.Context, step *lane.Step, stepID p
 		return fmt.Errorf("%s: pack output requires an image output", safeName)
 	}
 	result, err := executor.Pack(executor.PackOpts{
-		Spec:       step.Pack,
-		InputPaths: inputPaths,
+		Spec:      step.Pack,
+		InputTars: inputTars,
 	})
 	if err != nil {
 		return fmt.Errorf("%s: pack failed: %w", safeName, err)
@@ -408,18 +400,12 @@ func (rc *runContext) executePack(ctx context.Context, step *lane.Step, stepID p
 	return nil
 }
 
-func (rc *runContext) resolvePackInputPaths(ctx context.Context, step *lane.Step, scratchDir, safeName string, inputs stepInputs) (map[string]string, error) {
-	inputPaths := make(map[string]string)
-
-	scratchRoot, rootErr := os.OpenRoot(scratchDir)
-	if rootErr != nil {
-		return nil, fmt.Errorf("%s: open scratch root: %w", safeName, rootErr)
-	}
-	defer closer.Warn(scratchRoot, "scratch root")
-	if mkErr := scratchRoot.Mkdir("inputs", 0o750); mkErr != nil && !errors.Is(mkErr, os.ErrExist) {
-		return nil, fmt.Errorf("%s: create inputs dir: %w", safeName, mkErr)
-	}
-	inputsRoot := filepath.Join(scratchDir, "inputs")
+// resolvePackInputs builds one canonical content tar per pack file, selecting
+// each producer output's layer in memory. The producer image is exported at
+// most once per reference across all pack files of the step.
+func (rc *runContext) resolvePackInputs(ctx context.Context, step *lane.Step, safeName string, inputs stepInputs) (map[string][]byte, error) {
+	inputTars := make(map[string][]byte)
+	exported := make(map[string][]byte)
 
 	for f := range rc.lane.PackFiles(step.ID) {
 		fromStep := f.From.Step
@@ -431,28 +417,26 @@ func (rc *runContext) resolvePackInputPaths(ctx context.Context, step *lane.Step
 		if !ok {
 			return nil, fmt.Errorf("%s: pack input %s.%s: not a file output", safeName, fromStep, fromOutput)
 		}
-		packDigest, digestErr := output.ManifestDigest(fh)
-		if digestErr != nil {
-			return nil, fmt.Errorf("%s: pack input %s.%s digest: %w", safeName, fromStep, fromOutput, digestErr)
-		}
 
-		dedupDir := string(packDigest.Hex()[:16]) + "-" + string(fh.OutputID)
-		inputDir := filepath.Join(inputsRoot, dedupDir)
-		if mkErr := scratchRoot.Mkdir(filepath.Join("inputs", dedupDir), 0o750); mkErr == nil {
-			tarBytes, saveErr := registry.SaveImage(ctx, rc.engine, fh.Ref)
+		tarBytes, cached := exported[fh.Ref]
+		if !cached {
+			saved, saveErr := registry.SaveImage(ctx, rc.engine, fh.Ref)
 			if saveErr != nil {
 				return nil, fmt.Errorf("%s: pack input %s save: %w", safeName, f.Dest, saveErr)
 			}
-			if extractErr := registry.ExtractLayer(tarBytes, fh.LayerDiffID, inputDir); extractErr != nil {
-				return nil, fmt.Errorf("%s: pack input %s extract: %w", safeName, f.Dest, extractErr)
-			}
-		} else if !errors.Is(mkErr, os.ErrExist) {
-			return nil, fmt.Errorf("%s: pack input mkdir: %w", safeName, mkErr)
+			exported[fh.Ref] = saved
+			tarBytes = saved
 		}
 
-		inputPaths[f.Dest.String()] = filepath.Join(inputDir, lane.OutputContentPrefix(*out))
+		dest := f.Dest.String()
+		packTar, buildErr := registry.PackTarFromImage(
+			tarBytes, fh.LayerDiffID, lane.OutputContentPrefix(*out), dest[1:], f.Mode)
+		if buildErr != nil {
+			return nil, fmt.Errorf("%s: pack input %s: %w", safeName, f.Dest, buildErr)
+		}
+		inputTars[dest] = packTar
 	}
-	return inputPaths, nil
+	return inputTars, nil
 }
 
 func (rc *runContext) executeContainerStep(ctx context.Context, step *lane.Step, stepID primitive.Identifier, safeName string, inputs stepInputs) error {
@@ -780,7 +764,7 @@ func singleFileOutsideErr(inp lane.InputRef) error {
 //     the mountpoint basename.
 //
 // The layer must end rooted at OutputContentPrefix so the consumer
-// (buildInputDelivery) and pack (resolvePackInputPaths) find content at
+// (buildInputDelivery) and pack (resolvePackInputs) find content at
 // <OutputContentPrefix>/... .
 //
 //   - path-bearing directory: strip the subdir basename podman prepended, then

@@ -52,6 +52,69 @@ func SeedTarFromImage(tarBytes []byte, layerDiffID, inImagePath, destPrefix stri
 	return writeCanonicalTar(entries)
 }
 
+// PackTarFromImage selects a content subtree from a producer image and returns
+// a canonical tar rooted at destPath, ready to become one layer of a packed
+// image. It differs from SeedTarFromImage in two ways, both because a pack tar
+// becomes part of an image rootfs rather than being seeded into an existing
+// volume: every directory an entry name implies carries its own entry, and a
+// single regular file selected at destPath takes fileMode from the pack
+// declaration instead of the mode the producer wrote. A directory tree keeps
+// the producer's modes throughout.
+//
+// destPath is the in-image destination without its leading slash. Containment
+// is enforced by the same rules SeedTarFromImage relies on, plus the locality
+// check in writeCanonicalTar.
+func PackTarFromImage(tarBytes []byte, layerDiffID, inImagePath, destPath string, fileMode int64) ([]byte, error) {
+	layerBytes, err := layerFromOCITar(tarBytes, layerDiffID)
+	if err != nil {
+		return nil, err
+	}
+
+	entries, matched, err := collectSeedEntries(bytes.NewReader(layerBytes), inImagePath, destPath)
+	if err != nil {
+		return nil, err
+	}
+	if !matched {
+		return nil, fmt.Errorf("subpath %q not found in producer content", inImagePath)
+	}
+
+	for i := range entries {
+		if entries[i].typeflag == tar.TypeReg && entries[i].name == destPath {
+			entries[i].mode = fileMode
+		}
+	}
+	entries = withImpliedDirs(entries)
+
+	sort.Slice(entries, func(i, j int) bool { return entries[i].name < entries[j].name })
+
+	return writeCanonicalTar(entries)
+}
+
+// withImpliedDirs returns entries plus a directory entry for every parent
+// directory an entry name implies and that is not already present. Content
+// seeded into a volume can rely on the volume root existing; a layer cannot,
+// so the directories leading to a pack layer's content must be in the layer.
+func withImpliedDirs(entries []canonicalEntry) []canonicalEntry {
+	present := make(map[string]bool, len(entries))
+	for _, e := range entries {
+		present[e.name] = true
+	}
+	for _, e := range entries {
+		for dir := path.Dir(e.name); dir != "." && dir != "/"; dir = path.Dir(dir) {
+			if present[dir] {
+				continue
+			}
+			present[dir] = true
+			entries = append(entries, canonicalEntry{
+				name:     dir,
+				mode:     0o755,
+				typeflag: tar.TypeDir,
+			})
+		}
+	}
+	return entries
+}
+
 // ValidateImageMount inspects a producer image's selected subtree for the
 // outside-workdir mount path (ADR-036), without emitting a tar. tarBytes is
 // the OCI-layout archive from SaveImage; layerDiffID identifies the content

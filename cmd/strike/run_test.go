@@ -1,8 +1,11 @@
 package main
 
 import (
+	"archive/tar"
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"testing"
@@ -839,10 +842,10 @@ func TestImageFromRef(t *testing.T) {
 }
 
 // --------------------------------------------------------------------------.
-// resolvePackInputPaths
+// resolvePackInputs
 // --------------------------------------------------------------------------.
 
-func TestResolvePackInputPaths(t *testing.T) {
+func TestResolvePackInputs(t *testing.T) {
 	eng := &mockEngine{}
 	rc := newTestRC(t, eng)
 
@@ -885,16 +888,28 @@ func TestResolvePackInputPaths(t *testing.T) {
 	if gatherErr != nil {
 		t.Fatalf("gatherInputs: %v", gatherErr)
 	}
-	scratchDir := t.TempDir()
-	paths, pathErr := rc.resolvePackInputPaths(context.Background(), rc.stepIndex["pack"], scratchDir, "test", inputs)
-	if pathErr != nil {
-		t.Fatal(pathErr)
+	tars, tarErr := rc.resolvePackInputs(context.Background(), rc.stepIndex["pack"], "test", inputs)
+	if tarErr != nil {
+		t.Fatal(tarErr)
 	}
-	if _, ok := paths["/app"]; !ok {
-		t.Fatal("expected '/app' in paths")
+	packTar, ok := tars["/app"]
+	if !ok {
+		t.Fatal("expected '/app' in tars")
 	}
-	if !strings.HasSuffix(paths["/app"], "binary") {
-		t.Errorf("path should end in 'binary', got %q", paths["/app"])
+	tr := tar.NewReader(bytes.NewReader(packTar))
+	hdr, nextErr := tr.Next()
+	if nextErr != nil {
+		t.Fatalf("read pack tar: %v", nextErr)
+	}
+	if hdr.Name != "app" || hdr.Typeflag != tar.TypeReg {
+		t.Errorf("entry = %q (type %d), want regular file %q", hdr.Name, hdr.Typeflag, "app")
+	}
+	content, readErr := io.ReadAll(tr)
+	if readErr != nil {
+		t.Fatalf("read pack tar content: %v", readErr)
+	}
+	if string(content) != "bin" {
+		t.Errorf("content = %q, want %q", content, "bin")
 	}
 }
 

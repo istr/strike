@@ -3,16 +3,10 @@
 package executor
 
 import (
-	"archive/tar"
 	"bytes"
 	"fmt"
 	"io"
-	"io/fs"
-	"os"
-	"path/filepath"
 	"sort"
-
-	"github.com/istr/strike/internal/closer"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
@@ -28,9 +22,12 @@ import (
 )
 
 // PackOpts is everything pack needs; callers in main.go assemble this.
+// InputTars maps each pack file's destination to the canonical content tar
+// the caller resolved for it; a pack input never becomes a host path
+// (ADR-035, ADR-036).
 type PackOpts struct {
-	InputPaths map[string]string
-	Spec       *lane.PackSpec
+	InputTars map[string][]byte
+	Spec      *lane.PackSpec
 }
 
 // PackResult holds the outputs of a successful pack operation. LayoutTar is
@@ -54,13 +51,16 @@ type AssembleResult struct {
 
 // AssembleImage is the pure computational core of OCI image construction.
 // It takes an already-resolved base image and applies layers, config,
-// and annotations -- no network I/O, no filesystem writes.
+// and annotations -- no network I/O, no filesystem access at all.
 //
 // This function defines the cross-validation surface for a Rust verifier:
-// given identical (base, spec, inputPaths), the output Digest must match.
-func AssembleImage(base v1.Image, spec *lane.PackSpec, inputPaths map[string]string) (*AssembleResult, error) {
+// given identical (base, spec, inputTars), the output Digest must match.
+// inputTars carries each pack file's content as a canonical tar, so the
+// surface is tar canonicalization plus OCI assembly, and never a second
+// implementation's reading of a host filesystem.
+func AssembleImage(base v1.Image, spec *lane.PackSpec, inputTars map[string][]byte) (*AssembleResult, error) {
 	// 1. Add file layers
-	img, err := addFileLayers(base, spec.Files, inputPaths)
+	img, err := addFileLayers(base, spec.Files, inputTars)
 	if err != nil {
 		return nil, err
 	}
@@ -120,7 +120,7 @@ func Pack(opts PackOpts) (*PackResult, error) {
 	}
 
 	// 2. Assemble image -- pure computation, no I/O
-	assembled, err := AssembleImage(base, opts.Spec, opts.InputPaths)
+	assembled, err := AssembleImage(base, opts.Spec, opts.InputTars)
 	if err != nil {
 		return nil, fmt.Errorf("pack: %w", err)
 	}
@@ -137,70 +137,28 @@ func Pack(opts PackOpts) (*PackResult, error) {
 	return &PackResult{LayoutTar: layoutTar, Digest: manifestDigest}, nil
 }
 
-// addFileLayers appends a layer for each file entry, returning the updated
-// image. When the host path is a directory, a dirLayer is created instead of
-// a fileLayer; the directory tree is mirrored at dest in the container image.
-func addFileLayers(img v1.Image, files []lane.PackFile, inputPaths map[string]string) (v1.Image, error) {
+// addFileLayers appends one layer per file entry, each built from the
+// canonical content tar the caller resolved for that destination. The tar is
+// already re-rooted, mode-normalized, and containment-checked
+// (registry.PackTarFromImage), so assembly does no interpretation of its own.
+func addFileLayers(img v1.Image, files []lane.PackFile, inputTars map[string][]byte) (v1.Image, error) {
 	for _, f := range files {
 		dest := f.Dest.String()
-		hostPath, ok := inputPaths[dest]
+		content, ok := inputTars[dest]
 		if !ok {
-			return nil, fmt.Errorf("pack: file dest %q: host path not resolved", dest)
+			return nil, fmt.Errorf("pack: file dest %q: content not resolved", dest)
 		}
-		info, err := os.Lstat(hostPath)
+		opener := func() (io.ReadCloser, error) {
+			return io.NopCloser(bytes.NewReader(content)), nil
+		}
+		layer, err := tarball.LayerFromOpener(opener, tarball.WithMediaType(types.OCILayer))
 		if err != nil {
-			return nil, fmt.Errorf("pack: stat %q: %w", dest, err)
+			return nil, fmt.Errorf("pack: layer for %q: %w", dest, err)
 		}
-		switch {
-		case info.IsDir():
-			img, err = appendDirLayer(img, hostPath, dest)
-		case info.Mode().IsRegular():
-			img, err = appendRegularFileLayer(img, hostPath, dest, f.Mode)
-		default:
-			return nil, fmt.Errorf("pack: %q: unsupported file type %v", dest, info.Mode().Type())
-		}
+		img, err = mutate.AppendLayers(img, layer)
 		if err != nil {
-			return nil, fmt.Errorf("pack: %w", err)
+			return nil, fmt.Errorf("pack: append layer for %q: %w", dest, err)
 		}
-	}
-	return img, nil
-}
-
-// appendDirLayer creates a directory layer from hostPath and appends it to img.
-func appendDirLayer(img v1.Image, hostPath, dest string) (v1.Image, error) {
-	dirRoot, err := os.OpenRoot(hostPath)
-	if err != nil {
-		return nil, fmt.Errorf("open dir %q: %w", dest, err)
-	}
-	layer, layerErr := dirLayer(dirRoot, dest)
-	closer.Warn(dirRoot, "pack dir root")
-	if layerErr != nil {
-		return nil, fmt.Errorf("add %q: %w", dest, layerErr)
-	}
-	img, err = mutate.AppendLayers(img, layer)
-	if err != nil {
-		return nil, fmt.Errorf("append layer: %w", err)
-	}
-	return img, nil
-}
-
-// appendRegularFileLayer creates a single-file layer and appends it to img.
-func appendRegularFileLayer(img v1.Image, hostPath, dest string, mode int64) (v1.Image, error) {
-	if mode < 0 || mode > 0o7777 {
-		return nil, fmt.Errorf("file %q: invalid mode %#o", dest, mode)
-	}
-	fileRoot, err := os.OpenRoot(filepath.Dir(hostPath))
-	if err != nil {
-		return nil, fmt.Errorf("open file dir %q: %w", dest, err)
-	}
-	layer, layerErr := fileLayer(fileRoot, filepath.Base(hostPath), dest, fs.FileMode(mode))
-	closer.Warn(fileRoot, "pack file root")
-	if layerErr != nil {
-		return nil, fmt.Errorf("add %q: %w", dest, layerErr)
-	}
-	img, err = mutate.AppendLayers(img, layer)
-	if err != nil {
-		return nil, fmt.Errorf("append layer: %w", err)
 	}
 	return img, nil
 }
@@ -281,171 +239,6 @@ func pullVerified(ref primitive.ImageRef) (v1.Image, error) {
 	}
 
 	return img, nil
-}
-
-// buildTarLayer creates a single-file OCI layer from in-memory content.
-func buildTarLayer(content []byte, destPath string, mode fs.FileMode, uid, gid int) (v1.Layer, error) {
-	var buf bytes.Buffer
-	tw := tar.NewWriter(&buf)
-
-	for _, dir := range parentDirs(destPath) {
-		if err := tw.WriteHeader(&tar.Header{
-			Typeflag: tar.TypeDir,
-			Name:     dir + "/",
-			Mode:     0o755,
-		}); err != nil {
-			return nil, err
-		}
-	}
-
-	if err := tw.WriteHeader(&tar.Header{
-		Typeflag: tar.TypeReg,
-		Name:     destPath[1:], // strip leading /
-		Size:     int64(len(content)),
-		Mode:     int64(mode),
-		Uid:      uid,
-		Gid:      gid,
-	}); err != nil {
-		return nil, err
-	}
-	if _, err := tw.Write(content); err != nil {
-		return nil, err
-	}
-	if err := tw.Close(); err != nil {
-		return nil, err
-	}
-
-	opener := func() (io.ReadCloser, error) {
-		return io.NopCloser(bytes.NewReader(buf.Bytes())), nil
-	}
-	return tarball.LayerFromOpener(opener, tarball.WithMediaType(types.OCILayer))
-}
-
-// fileLayer reads a file from a root-scoped directory and creates an OCI layer.
-func fileLayer(root *os.Root, name, destPath string, mode fs.FileMode) (v1.Layer, error) {
-	f, err := root.Open(name)
-	if err != nil {
-		return nil, err
-	}
-	data, err := io.ReadAll(f)
-	closer.Warn(f, "pack file layer")
-	if err != nil {
-		return nil, err
-	}
-	return buildTarLayer(data, destPath, mode, 0, 0)
-}
-
-// dirLayer reads a directory recursively via *os.Root and creates an OCI layer
-// that mirrors the directory tree at destPath in the container. File modes
-// are preserved; ownership is normalized to 0:0; mtimes are zeroed for
-// determinism. Symlinks are rejected (pre-beta strict policy).
-func dirLayer(root *os.Root, destPath string) (v1.Layer, error) {
-	var buf bytes.Buffer
-	tw := tar.NewWriter(&buf)
-
-	dest := filepath.Clean(destPath[1:]) // strip leading /
-
-	// Emit the root directory entry for dest.
-	if err := tw.WriteHeader(&tar.Header{
-		Typeflag: tar.TypeDir,
-		Name:     dest + "/",
-		Mode:     0o755,
-	}); err != nil {
-		return nil, err
-	}
-
-	if err := fs.WalkDir(root.FS(), ".", dirWalkFunc(root, tw, dest)); err != nil {
-		return nil, err
-	}
-	if err := tw.Close(); err != nil {
-		return nil, err
-	}
-
-	opener := func() (io.ReadCloser, error) {
-		return io.NopCloser(bytes.NewReader(buf.Bytes())), nil
-	}
-	return tarball.LayerFromOpener(opener, tarball.WithMediaType(types.OCILayer))
-}
-
-// dirWalkFunc returns a WalkDir callback that writes each entry under
-// root into a tar at the given dest prefix.
-func dirWalkFunc(root *os.Root, tw *tar.Writer, dest string) fs.WalkDirFunc {
-	return func(path string, d fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if path == "." {
-			return nil
-		}
-		if d.Type()&fs.ModeSymlink != 0 {
-			target, linkErr := root.Readlink(path)
-			if linkErr != nil {
-				return fmt.Errorf("read symlink %q: %w", path, linkErr)
-			}
-			if lane.SymlinkEscapes(path, target) {
-				return fmt.Errorf("symlink %q escapes packed tree (target %q)", path, target)
-			}
-			return tw.WriteHeader(&tar.Header{
-				Typeflag: tar.TypeSymlink,
-				Name:     filepath.Join(dest, path),
-				Linkname: target,
-				Mode:     0o777,
-				// Uid, Gid, ModTime intentionally zero for determinism.
-			})
-		}
-		return writeDirEntry(tw, root, path, d, filepath.Join(dest, path))
-	}
-}
-
-// writeDirEntry writes a single directory or file entry to the tar writer.
-func writeDirEntry(tw *tar.Writer, root *os.Root, relPath string, d fs.DirEntry, tarName string) error {
-	info, err := d.Info()
-	if err != nil {
-		return err
-	}
-	hdr := &tar.Header{
-		Name: tarName,
-		Mode: int64(info.Mode().Perm()),
-		// Uid, Gid, ModTime intentionally zero for determinism.
-	}
-	switch {
-	case d.IsDir():
-		hdr.Typeflag = tar.TypeDir
-		hdr.Name += "/"
-	case info.Mode().IsRegular():
-		hdr.Typeflag = tar.TypeReg
-		hdr.Size = info.Size()
-	default:
-		return fmt.Errorf("unsupported file type %v at %q", info.Mode().Type(), tarName)
-	}
-	if err = tw.WriteHeader(hdr); err != nil {
-		return err
-	}
-	if d.IsDir() {
-		return nil
-	}
-	f, err := root.Open(relPath)
-	if err != nil {
-		return err
-	}
-	defer closer.Warn(f, "pack walk file")
-	_, err = io.Copy(tw, f)
-	return err
-}
-
-// parentDirs returns all parent directory paths for an absolute path.
-// e.g. "/usr/bin/strike" -> ["usr", "usr/bin"].
-func parentDirs(absPath string) []string {
-	clean := filepath.Clean(absPath[1:]) // strip leading /
-	dir := filepath.Dir(clean)
-	if dir == "." {
-		return nil
-	}
-	var dirs []string
-	for d := dir; d != "."; d = filepath.Dir(d) {
-		dirs = append([]string{d}, dirs...)
-	}
-	return dirs
 }
 
 // appendEnv adds or replaces an environment variable in a list of KEY=VALUE strings.

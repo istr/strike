@@ -1,11 +1,14 @@
 package executor_test
 
 import (
+	"archive/tar"
+	"bytes"
 	"encoding/json"
 	"flag"
 	"io/fs"
-	"os"
+	"path"
 	"path/filepath"
+	"sort"
 	"testing"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
@@ -16,7 +19,6 @@ import (
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/registry"
-	"github.com/istr/strike/internal/testutil"
 	"github.com/istr/strike/test/crossval"
 )
 
@@ -31,35 +33,64 @@ func toDigestMap(m map[string]string) map[string]primitive.Digest {
 	return out
 }
 
-// writeVectorFiles writes vector file entries to a temp dir and returns
-// inputPaths keyed by Dest (matching the contract of addFileLayers).
-func writeVectorFiles(t *testing.T, specFiles []lane.PackFile, vecFiles map[string]assembleFileEntry) map[string]string {
+// canonicalFileTar builds the canonical content tar for a single regular
+// file landing at dest: the parent directories of dest, then the file at
+// dest without its leading slash, ownership and mtime zero, entries
+// name-sorted -- the shape registry.PackTarFromImage emits for a
+// single-file selection.
+func canonicalFileTar(t *testing.T, dest string, content []byte, mode int64) []byte {
+	t.Helper()
+	name := dest[1:]
+	names := []string{name}
+	for d := path.Dir(name); d != "."; d = path.Dir(d) {
+		names = append(names, d)
+	}
+	sort.Strings(names)
+
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+	for _, n := range names {
+		// Uid, Gid, ModTime intentionally zero for determinism.
+		hdr := &tar.Header{Name: n + "/", Mode: 0o755, Typeflag: tar.TypeDir}
+		if n == name {
+			hdr = &tar.Header{Name: n, Mode: mode, Typeflag: tar.TypeReg, Size: int64(len(content))}
+		}
+		if err := tw.WriteHeader(hdr); err != nil {
+			t.Fatalf("write tar header %s: %v", n, err)
+		}
+		if hdr.Typeflag == tar.TypeReg {
+			if _, err := tw.Write(content); err != nil {
+				t.Fatalf("write tar content %s: %v", n, err)
+			}
+		}
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatalf("close tar: %v", err)
+	}
+	return buf.Bytes()
+}
+
+// vectorInputTars builds one canonical content tar per vector file entry,
+// keyed by Dest (matching the contract of addFileLayers).
+func vectorInputTars(t *testing.T, specFiles []lane.PackFile, vecFiles map[string]assembleFileEntry) map[string][]byte {
 	t.Helper()
 	fromToDest := make(map[string]string, len(specFiles))
 	for _, pf := range specFiles {
 		fromToDest[string(pf.From.Step)+"."+string(pf.From.Output)] = pf.Dest.String()
 	}
-	tmp := t.TempDir()
-	inputPaths := make(map[string]string, len(vecFiles))
+	inputTars := make(map[string][]byte, len(vecFiles))
 	for ref, f := range vecFiles {
 		content := decodeBase64(t, f.ContentBase64)
-		hostPath := filepath.Join(tmp, filepath.Base(ref))
-		if err := os.WriteFile(hostPath, content, 0o600); err != nil {
-			t.Fatalf("write test file %s: %v", ref, err)
-		}
 		if f.Mode < 0 || f.Mode > 0o7777 {
 			t.Fatalf("test file %s: invalid mode %d", ref, f.Mode)
-		}
-		if err := os.Chmod(hostPath, os.FileMode(f.Mode&0o7777)); err != nil {
-			t.Fatalf("chmod test file %s: %v", ref, err)
 		}
 		dest, ok := fromToDest[ref]
 		if !ok {
 			t.Fatalf("vector file %q not found in spec.Files", ref)
 		}
-		inputPaths[dest] = hostPath
+		inputTars[dest] = canonicalFileTar(t, dest, content, int64(f.Mode))
 	}
-	return inputPaths
+	return inputTars
 }
 
 // --------------------------------------------------------------------------.
@@ -79,9 +110,9 @@ func TestAssembleImage_Golden(t *testing.T) {
 		t.Fatalf("unmarshal spec: %v", err)
 	}
 
-	inputPaths := writeVectorFiles(t, spec.Files, vec.Inputs.Files)
+	inputTars := vectorInputTars(t, spec.Files, vec.Inputs.Files)
 
-	result, err := executor.AssembleImage(empty.Image, &spec, inputPaths)
+	result, err := executor.AssembleImage(empty.Image, &spec, inputTars)
 	if err != nil {
 		t.Fatalf("AssembleImage: %v", err)
 	}
@@ -183,16 +214,12 @@ func TestSpecHash_Golden(t *testing.T) {
 // produce the same manifest digest -- the fundamental reproducibility
 // property that cross-validation depends on.
 func TestAssembleImage_Deterministic(t *testing.T) {
-	tmp := t.TempDir()
-	binPath := filepath.Join(tmp, "app")
-	testutil.WriteTestBinary(t, binPath, []byte("binary-content"))
-
 	spec := &lane.PackSpec{
 		Files: []lane.PackFile{
 			{From: lane.OutputRef{Step: "step", Output: "out"}, Dest: "/app", Mode: 0o755},
 		},
 	}
-	inputs := map[string]string{"/app": binPath}
+	inputs := map[string][]byte{"/app": canonicalFileTar(t, "/app", []byte("binary-content"), 0o755)}
 
 	r1, err := executor.AssembleImage(empty.Image, spec, inputs)
 	if err != nil {
@@ -211,16 +238,12 @@ func TestAssembleImage_Deterministic(t *testing.T) {
 // TestAssembleImage_WithMutatedBase verifies assembly produces a DIFFERENT
 // digest with a different base -- catching accidental base-image independence.
 func TestAssembleImage_WithMutatedBase(t *testing.T) {
-	tmp := t.TempDir()
-	binPath := filepath.Join(tmp, "app")
-	testutil.WriteTestBinary(t, binPath, []byte("binary"))
-
 	spec := &lane.PackSpec{
 		Files: []lane.PackFile{
 			{From: lane.OutputRef{Step: "step", Output: "out"}, Dest: "/app", Mode: 0o755},
 		},
 	}
-	inputs := map[string]string{"/app": binPath}
+	inputs := map[string][]byte{"/app": canonicalFileTar(t, "/app", []byte("binary"), 0o755)}
 
 	r1, err := executor.AssembleImage(empty.Image, spec, inputs)
 	if err != nil {

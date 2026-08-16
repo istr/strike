@@ -2,9 +2,6 @@ package main
 
 import (
 	"context"
-	"log"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/istr/strike/internal/primitive"
@@ -23,23 +20,6 @@ func sanitizeForLog(s string) string {
 		}
 	}
 	return b.String()
-}
-
-// removeStrikeScratch deletes a per-step scratch directory.
-// It guards against accidental removal of unrelated paths by
-// verifying the path begins with the expected strike-tempdir
-// prefix; the guard doubles as a sanitization point for
-// gosec's taint analysis.
-func removeStrikeScratch(outDir string) {
-	expectedPrefix := filepath.Join(os.TempDir(), "strike-")
-	cleaned := filepath.Clean(outDir)
-	if !strings.HasPrefix(cleaned, expectedPrefix) {
-		log.Printf("WARN refuse to remove non-strike path %s", sanitizeForLog(outDir))
-		return
-	}
-	if err := os.RemoveAll(cleaned); err != nil {
-		log.Printf("WARN cleanup %s: %v", sanitizeForLog(cleaned), err)
-	}
 }
 
 func resolveDigest(ctx context.Context, client *registry.Client, imageRef primitive.ImageRef) (primitive.Digest, error) {

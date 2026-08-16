@@ -1,9 +1,11 @@
 package integration_test
 
 import (
+	"archive/tar"
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -91,6 +93,43 @@ func buildTestBinary(t *testing.T, engine container.Engine) string {
 	return binPath
 }
 
+// packInputTars reads the built binary and returns the canonical content
+// tar map the test pack spec expects: the binary landing at /app with mode
+// 0o755, the shape registry.PackTarFromImage emits for a single-file
+// selection. The binary is read through os.Root, scoped to its directory.
+func packInputTars(t *testing.T, binPath string) map[string][]byte {
+	t.Helper()
+	root, rootErr := os.OpenRoot(filepath.Dir(binPath))
+	if rootErr != nil {
+		t.Fatalf("open binary root: %v", rootErr)
+	}
+	defer closer.Warn(root, "packInputTars root")
+	f, openErr := root.Open(filepath.Base(binPath))
+	if openErr != nil {
+		t.Fatalf("open binary: %v", openErr)
+	}
+	content, readErr := io.ReadAll(f)
+	closer.Warn(f, "packInputTars binary")
+	if readErr != nil {
+		t.Fatalf("read binary: %v", readErr)
+	}
+
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+	// Uid, Gid, ModTime intentionally zero for determinism.
+	hdr := &tar.Header{Name: "app", Mode: 0o755, Typeflag: tar.TypeReg, Size: int64(len(content))}
+	if hdrErr := tw.WriteHeader(hdr); hdrErr != nil {
+		t.Fatalf("write tar header: %v", hdrErr)
+	}
+	if _, wErr := tw.Write(content); wErr != nil {
+		t.Fatalf("write tar content: %v", wErr)
+	}
+	if cErr := tw.Close(); cErr != nil {
+		t.Fatalf("close tar: %v", cErr)
+	}
+	return map[string][]byte{"/app": buf.Bytes()}
+}
+
 // packTestImage assembles an OCI image from a binary and returns
 // the pack result.
 func packTestImage(t *testing.T, binPath string) *executor.PackResult {
@@ -107,7 +146,7 @@ func packTestImage(t *testing.T, binPath string) *executor.PackResult {
 				User:       primitive.UserSpecPtr("65534:65534"),
 			},
 		},
-		InputPaths: map[string]string{"/app": binPath},
+		InputTars: packInputTars(t, binPath),
 	})
 	if packErr != nil {
 		t.Fatalf("pack: %v", packErr)

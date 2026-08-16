@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"path"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -108,11 +109,18 @@ func collectArchiveEntries(r io.Reader, stripPrefix, destPrefix string) ([]canon
 }
 
 // writeCanonicalTar writes the collected entries as a tar archive with
-// zeroed ownership and mtime for determinism.
+// zeroed ownership and mtime for determinism. Every entry name must be a
+// local path: these bytes become an OCI layer or a volume seed, so a name
+// that climbs out of its own tree would escape the tree it is meant to
+// describe. This is the single writer behind every canonical tar strike
+// produces, on the producer side and the consumer side alike.
 func writeCanonicalTar(entries []canonicalEntry) ([]byte, error) {
 	var buf bytes.Buffer
 	tw := tar.NewWriter(&buf)
 	for _, e := range entries {
+		if !filepath.IsLocal(e.name) {
+			return nil, fmt.Errorf("tar entry %q is not a local path", e.name)
+		}
 		hdr := &tar.Header{Name: e.name, Mode: e.mode, Typeflag: e.typeflag}
 		// Uid, Gid, ModTime intentionally zero for determinism.
 		switch e.typeflag {

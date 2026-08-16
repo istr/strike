@@ -35,7 +35,7 @@ func TestPackLayoutPayloadOnly(t *testing.T) {
 				User:       primitive.UserSpecPtr("65534:65534"),
 			},
 		},
-		InputPaths: map[string]string{"/app": binPath},
+		InputTars: packInputTars(t, binPath),
 	})
 	if err != nil {
 		t.Fatalf("pack: %v", err)
