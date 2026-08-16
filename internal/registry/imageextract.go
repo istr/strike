@@ -1,16 +1,11 @@
 package registry
 
 import (
-	"archive/tar"
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
-	"log"
-	"os"
-	"path/filepath"
 
 	"github.com/istr/strike/internal/closer"
 
@@ -155,116 +150,4 @@ func LayerDiffIDs(tarBytes []byte) ([]string, error) {
 		ids[i] = h.String()
 	}
 	return ids, nil
-}
-
-// ExtractLayer extracts the content of the identified layer from an OCI image
-// tar into destDir. The layer is selected and content-checked by
-// layerFromOCITar, so an engine export that does not match what the control
-// plane produced fails closed before a byte is written. Layer tars are user
-// content and may carry contained symlinks. Path traversal attempts are
-// rejected via os.Root (kernel-enforced) and filepath.IsLocal (defensive
-// pre-check).
-func ExtractLayer(tarBytes []byte, layerDiffID, destDir string) error {
-	content, err := layerFromOCITar(tarBytes, layerDiffID)
-	if err != nil {
-		return fmt.Errorf("extract: %w", err)
-	}
-
-	root, err := os.OpenRoot(destDir)
-	if err != nil {
-		return fmt.Errorf("open extraction root: %w", err)
-	}
-	defer func() {
-		if cerr := root.Close(); cerr != nil {
-			log.Printf("WARN close extraction root: %v", cerr)
-		}
-	}()
-
-	return extractTarStream(bytes.NewReader(content), root)
-}
-
-// extractTarStream extracts a tar stream into root. Every entry path must be
-// local (filepath.IsLocal). Directories and regular files preserve their tar
-// mode. Symlinks are created verbatim; os.Root never follows them. Any other
-// entry type is rejected.
-func extractTarStream(r io.Reader, root *os.Root) error {
-	tr := tar.NewReader(r)
-	for {
-		hdr, nextErr := tr.Next()
-		if errors.Is(nextErr, io.EOF) {
-			return nil
-		}
-		if nextErr != nil {
-			return fmt.Errorf("extract: read header: %w", nextErr)
-		}
-
-		if !filepath.IsLocal(hdr.Name) {
-			return fmt.Errorf("tar entry %q is not a local path", hdr.Name)
-		}
-
-		if entryErr := extractEntry(root, hdr, tr); entryErr != nil {
-			return entryErr
-		}
-	}
-}
-
-// extractEntry writes a single tar entry into root.
-func extractEntry(root *os.Root, hdr *tar.Header, tr io.Reader) error {
-	mode := hdr.FileInfo().Mode().Perm()
-	// Tar directory entries carry a trailing separator, which os.Root
-	// rejects since the go1.26.5 trailing-slash traversal fix (GO-2026-4970).
-	name := filepath.Clean(hdr.Name)
-
-	switch hdr.Typeflag {
-	case tar.TypeDir:
-		if err := root.MkdirAll(name, mode); err != nil {
-			return fmt.Errorf("mkdir %s: %w", name, err)
-		}
-	case tar.TypeReg:
-		if err := extractRegularFile(root, name, tr, hdr.Size, mode); err != nil {
-			return err
-		}
-	case tar.TypeSymlink:
-		if err := extractSymlink(root, name, hdr.Linkname); err != nil {
-			return err
-		}
-	default:
-		return fmt.Errorf("tar entry %q has unsupported type %d", hdr.Name, hdr.Typeflag)
-	}
-	return nil
-}
-
-// extractSymlink creates a symlink entry within root. The link is created,
-// never followed: os.Root.Symlink confines the link's location to root and
-// refuses to traverse it for later writes, and the target is stored verbatim
-// without inspection. Containment of the target is not decided here -- a link
-// valid in the full artifact must survive extraction so a whole-artifact
-// mount works. Whether the target stays inside a given consuming mount is
-// decided per mountpoint at mount construction (validateMountSymlinks).
-func extractSymlink(root *os.Root, name, target string) error {
-	if err := root.MkdirAll(filepath.Dir(name), 0o755); err != nil {
-		return fmt.Errorf("mkdir parent %s: %w", name, err)
-	}
-	if err := root.Symlink(target, name); err != nil {
-		return fmt.Errorf("symlink %s: %w", name, err)
-	}
-	return nil
-}
-
-// extractRegularFile writes a regular file entry into root.
-func extractRegularFile(root *os.Root, name string, r io.Reader, size int64, mode os.FileMode) error {
-	if err := root.MkdirAll(filepath.Dir(name), 0o755); err != nil {
-		return fmt.Errorf("mkdir parent %s: %w", name, err)
-	}
-	f, err := root.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode)
-	if err != nil {
-		return fmt.Errorf("create %s: %w", name, err)
-	}
-	if _, cpErr := io.CopyN(f, r, size); cpErr != nil {
-		return errors.Join(fmt.Errorf("write %s: %w", name, cpErr), f.Close())
-	}
-	if err := f.Close(); err != nil {
-		return fmt.Errorf("close %s: %w", name, err)
-	}
-	return nil
 }

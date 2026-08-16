@@ -117,7 +117,7 @@ func BuildMultiFileImageTar(files map[string][]byte) ([]byte, error) {
 // content layer carrying the given files, stamped with outputID under
 // registry.OutputLayerAnnotation. It returns the layout tar and the layer's
 // uncompressed-content digest (diff_id) -- the stable engine-level selection
-// key (ADR-046), which the consumer passes to ExtractLayer/SeedTarFromImage.
+// key (ADR-046), which the consumer passes to SeedTarFromImage.
 func BuildLayeredImageTar(outputID string, files map[string][]byte) ([]byte, string, error) {
 	var buf bytes.Buffer
 	tw := tar.NewWriter(&buf)

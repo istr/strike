@@ -156,8 +156,30 @@ func TestRegistryDeployLive_Integration(t *testing.T) {
 	lanePath := writeFixtureLane(t, caddyRoot, resolverCert, repo)
 
 	rc := newLiveRunContext(ctx, t, engine, lanePath)
+
+	// ADR-035: a lane run puts no payload on the controller filesystem. Point
+	// the process temp directory at an empty directory of our own for the
+	// duration of the run -- every host scratch mechanism resolves through it,
+	// including one reached from a dependency rather than from strike. This
+	// observes residue, not transient writes; the forbidigo rule is what rules
+	// those out structurally.
+	scratchWatch := t.TempDir()
+	t.Setenv("TMPDIR", scratchWatch)
+
 	if runErr := rc.runtime.Run(rc.runStep); runErr != nil {
 		t.Fatalf("lane run: %v", runErr)
+	}
+
+	residue, readErr := os.ReadDir(scratchWatch)
+	if readErr != nil {
+		t.Fatalf("read controller temp directory: %v", readErr)
+	}
+	if len(residue) != 0 {
+		names := make([]string, 0, len(residue))
+		for _, e := range residue {
+			names = append(names, e.Name())
+		}
+		t.Errorf("lane run left %d entries on the controller filesystem: %v", len(residue), names)
 	}
 
 	subject := pushedSubjectDigest(ctx, t, engine, rc)

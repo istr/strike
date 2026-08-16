@@ -4,9 +4,8 @@ import (
 	"archive/tar"
 	"bytes"
 	"context"
+	"errors"
 	"io"
-	"os"
-	"path/filepath"
 	"sort"
 	"testing"
 
@@ -255,23 +254,41 @@ func TestWrapArchiveAsImage_LeadingSlashEntriesAreKept(t *testing.T) {
 		t.Fatal("engine received no image load")
 	}
 
-	dest := filepath.Join(t.TempDir(), "out")
-	if mkErr := os.MkdirAll(dest, 0o750); mkErr != nil {
-		t.Fatalf("mkdir: %v", mkErr)
+	seed, seedErr := registry.SeedTarFromImage(eng.loadBodies[0], result.LayerDiffIDs["layer"], "", "")
+	if seedErr != nil {
+		t.Fatalf("seed tar: %v", seedErr)
 	}
-	if extractErr := registry.ExtractLayer(eng.loadBodies[0], result.LayerDiffIDs["layer"], dest); extractErr != nil {
-		t.Fatalf("extract: %v", extractErr)
-	}
+	got := tarFileContents(t, seed)
 	for rel, want := range map[string]string{
 		"layer/lib/a.js": "alpha",
 		"layer/top.txt":  "beta",
 	} {
-		got, readErr := os.ReadFile(filepath.Clean(filepath.Join(dest, rel)))
+		if got[rel] != want {
+			t.Errorf("%s = %q, want %q", rel, got[rel], want)
+		}
+	}
+}
+
+// tarFileContents returns the regular-file entries of a tar keyed by name.
+func tarFileContents(t *testing.T, data []byte) map[string]string {
+	t.Helper()
+	out := make(map[string]string)
+	tr := tar.NewReader(bytes.NewReader(data))
+	for {
+		hdr, err := tr.Next()
+		if errors.Is(err, io.EOF) {
+			return out
+		}
+		if err != nil {
+			t.Fatalf("read tar: %v", err)
+		}
+		if hdr.Typeflag != tar.TypeReg {
+			continue
+		}
+		content, readErr := io.ReadAll(tr)
 		if readErr != nil {
-			t.Fatalf("read %s: %v", rel, readErr)
+			t.Fatalf("read tar entry %s: %v", hdr.Name, readErr)
 		}
-		if string(got) != want {
-			t.Errorf("%s = %q, want %q", rel, got, want)
-		}
+		out[hdr.Name] = string(content)
 	}
 }

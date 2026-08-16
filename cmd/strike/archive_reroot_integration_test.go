@@ -4,9 +4,9 @@ import (
 	"archive/tar"
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
+	"io"
 	"testing"
 
 	"github.com/istr/strike/internal/clock"
@@ -120,9 +120,21 @@ func TestWholeWorkdirOutput_Integration(t *testing.T) {
 	if saveErr != nil {
 		t.Fatalf("save image: %v", saveErr)
 	}
-	destDir := t.TempDir()
-	if extractErr := registry.ExtractLayer(saved, result.LayerDiffIDs[out.ID], destDir); extractErr != nil {
-		t.Fatalf("extract: %v", extractErr)
+	seed, seedErr := registry.SeedTarFromImage(saved, result.LayerDiffIDs[out.ID], "", "")
+	if seedErr != nil {
+		t.Fatalf("seed tar: %v", seedErr)
+	}
+	names := make(map[string]bool)
+	tr := tar.NewReader(bytes.NewReader(seed))
+	for {
+		hdr, nextErr := tr.Next()
+		if errors.Is(nextErr, io.EOF) {
+			break
+		}
+		if nextErr != nil {
+			t.Fatalf("read seed tar: %v", nextErr)
+		}
+		names[hdr.Name] = true
 	}
 
 	// The whole workdir must be re-rooted under the output name ("node-modules").
@@ -131,9 +143,8 @@ func TestWholeWorkdirOutput_Integration(t *testing.T) {
 		"node-modules/package.json",
 	}
 	for _, want := range wantFiles {
-		full := filepath.Join(destDir, want)
-		if _, statErr := os.Stat(full); statErr != nil {
-			t.Errorf("expected file %s not found: %v", want, statErr)
+		if !names[want] {
+			t.Errorf("expected entry %s not found in the producer layer", want)
 		}
 	}
 }
