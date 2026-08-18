@@ -13,8 +13,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/istr/strike/internal/bundle"
 	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/wire"
 )
 
 // ambientIDToken reads the OIDC identity token from the environment
@@ -87,7 +87,7 @@ func produceKeylessBundles(ctx context.Context, eps lane.KeylessEndpoints, idTok
 		if err != nil {
 			return nil, fmt.Errorf("keyless: statement %d: %w", i, err)
 		}
-		pae := bundle.PAEEncode(bundle.PayloadType, stmt)
+		pae := wire.PAEEncode(wire.PayloadType, stmt)
 		paeDigest := sha256.Sum256(pae)
 		tle, err := rekorSubmitKeyless(ctx, eps.Rekor, paeDigest[:], sig, leafDER)
 		if err != nil {

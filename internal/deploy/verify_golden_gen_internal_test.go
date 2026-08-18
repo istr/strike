@@ -20,6 +20,7 @@ import (
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/record"
+	"github.com/istr/strike/internal/wire"
 )
 
 // TestVerifyGoldenGenerate is the env-gated generator for the keyless
@@ -156,11 +157,11 @@ func goldenTrustedRoot(ctx context.Context, t *testing.T, fulcioEp endpoint.HTTP
 	if block == nil {
 		t.Fatalf("rekor public key is not PEM")
 	}
-	edPub, err := parseEd25519PKIX(block.Bytes)
+	edPub, err := wire.ParseEd25519PKIX(block.Bytes)
 	if err != nil {
 		t.Fatalf("parse rekor public key: %v", err)
 	}
-	logID := sha256LogID(liveRekorOrigin, edPub)
+	logID := wire.NoteKeyID(liveRekorOrigin, edPub)
 
 	chainPEM, err := os.ReadFile(filepath.Clean(tsaChainPath))
 	if err != nil {
@@ -195,7 +196,7 @@ func goldenTrustedRoot(ctx context.Context, t *testing.T, fulcioEp endpoint.HTTP
 	}
 	// RFC6962 CT log id is sha256(DER SubjectPublicKeyInfo), i.e. the PEM body
 	// of an openssl `ec -pubout` PUBLIC KEY block. This differs from the Rekor
-	// v2 C2SP signed-note key id computed by sha256LogID above.
+	// v2 C2SP signed-note key id computed by wire.NoteKeyID.
 	ctLogID := sha256.Sum256(ctfeBlock.Bytes)
 
 	tr := &trustrootpb.TrustedRoot{

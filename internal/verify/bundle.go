@@ -6,7 +6,7 @@ import (
 	protobundle "github.com/sigstore/protobuf-specs/gen/pb-go/bundle/v1"
 	"google.golang.org/protobuf/encoding/protojson"
 
-	"github.com/istr/strike/internal/bundle"
+	"github.com/istr/strike/internal/wire"
 )
 
 // ParseBundle validates the strict shape of a sigstore v0.3 bundle and
@@ -18,7 +18,7 @@ func ParseBundle(jsonBytes []byte) (*ParsedBundle, error) {
 	if err := protojson.Unmarshal(jsonBytes, &pb); err != nil {
 		return nil, fmt.Errorf("%w: unmarshal: %w", ErrBundleShape, err)
 	}
-	if pb.GetMediaType() != bundle.MediaType {
+	if pb.GetMediaType() != wire.MediaType {
 		return nil, fmt.Errorf("%w: media type %q", ErrBundleShape, pb.GetMediaType())
 	}
 	env := pb.GetDsseEnvelope()

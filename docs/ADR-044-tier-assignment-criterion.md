@@ -227,3 +227,32 @@ may take a downward edge to it.
 `internal/endpoint`) with `mayDependOn: [primitive]`, grants `concept` to
 transport/services/orchestration/entry, and adds the concept row to the header
 tier table.
+
+## Amendment 2026-08-18 -- the role-neutral package is renamed to internal/wire
+
+Status: Accepted (item-0129). Append-only: this block renames a package the
+Consequences bullets above name, without editing them in place; every clause of
+the original Decision, Consequences, and Principles, and all three tier
+amendments, stands unchanged.
+
+The role-neutral package those bullets call `internal/bundle` is now
+`internal/wire`. Only the name changes. The tier the second Consequences bullet
+derives is unaffected -- the package still imports nothing internal and is
+therefore still **foundation** -- and the `verify` bullet's foundation-tier
+dependency is the same package under its new name.
+
+The rename corrects a misnaming this ADR's own prose already diagnosed. The
+bullet describes the extracted members as wire-format primitives, but the
+package was named after one of them, the sigstore bundle media type, while the
+DSSE pre-authentication encoding and the in-toto payload type are not bundles.
+The name also collided with two upstream `bundle` namespaces that several files
+import alongside it.
+
+The package charter is widened at the same time, without touching the tier
+criterion: it holds every construction strike's producer and its verifier must
+reproduce byte for byte. That now also covers the Rekor v2 C2SP signed-note key
+identity and the PKIX Ed25519 public-key parse, each of which previously existed
+twice -- once in the verifier's production path, once as a producer-side test
+helper. That is the same defect the Context above records for the DSSE encoder:
+a two-role contract homed in a role package. Under the domain-owner tiebreak
+they are owned by neither role and live in the role-neutral package.

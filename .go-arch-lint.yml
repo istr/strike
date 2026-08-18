@@ -37,12 +37,12 @@ components:
     in: contract
   foundation:
     in:
-      - internal/bundle
       - internal/clock
       - internal/closer
       - internal/egress
       - internal/probe
       - internal/schema
+      - internal/wire
   primitive:
     in: internal/primitive
   transport:

@@ -199,9 +199,9 @@ attestation); `trustlayers`; and `crossval`. Runtime embed in
 (gitignored; never hand-edit). See `docs/CUE-WORKFLOW.md` and
 `docs/SPEC-PACKAGE-LAYERING.md`.
 
-Go packages under `internal/`: bundle, capsule, clock, closer, container,
-copier, deploy, egress, endpoint, executor, front, lane, mediator, primitive,
-probe, registry, resolver, schema, testutil, transport, verify. All container
+Go packages under `internal/`: capsule, clock, closer, container, copier,
+deploy, egress, endpoint, executor, front, lane, mediator, primitive, probe,
+registry, resolver, schema, testutil, transport, verify, wire. All container
 operations go through `container.Engine` (`internal/container`). Signing uses
 ECDSA P-256 in `internal/executor` (`crypto/rand`, never `math/rand`).
 

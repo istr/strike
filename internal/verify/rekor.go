@@ -15,8 +15,8 @@ import (
 	"golang.org/x/mod/sumdb/note"
 	"google.golang.org/protobuf/encoding/protojson"
 
-	"github.com/istr/strike/internal/bundle"
 	"github.com/istr/strike/internal/clock"
+	"github.com/istr/strike/internal/wire"
 )
 
 // Inclusion verifies the Rekor v2 transparency-log inclusion of the bundle's
@@ -43,7 +43,7 @@ func Inclusion(pb *ParsedBundle, tm *TrustedMaterial, leaf *x509.Certificate) er
 	if hr == nil {
 		return fmt.Errorf("%w: not a hashedrekord_v002 entry", ErrInclusion)
 	}
-	pae := bundle.PAEEncode(pb.Envelope.GetPayloadType(), pb.Envelope.GetPayload())
+	pae := wire.PAEEncode(pb.Envelope.GetPayloadType(), pb.Envelope.GetPayload())
 	paeDigest := sha256.Sum256(pae)
 	if hr.GetData().GetAlgorithm() != commonpb.HashAlgorithm_SHA2_256 ||
 		!bytes.Equal(hr.GetData().GetDigest(), paeDigest[:]) {
@@ -100,10 +100,9 @@ func verifyCheckpoint(envelope string, logID []byte, treeSize int64, rootHash []
 	if !found {
 		return fmt.Errorf("checkpoint has no origin line")
 	}
-	// Bind origin to the trusted key: the canonical signed-note key ID is
-	// sha256(origin + "\n" + 0x01 + pub) and must equal the trusted log ID.
-	canonical := sha256.Sum256(append([]byte(origin+"\n\x01"), pub...))
-	if !bytes.Equal(canonical[:], logID) {
+	// Bind origin to the trusted key: the canonical signed-note key id must
+	// equal the trusted log ID.
+	if !bytes.Equal(wire.NoteKeyID(origin, pub), logID) {
 		return fmt.Errorf("checkpoint origin does not match the trusted log key")
 	}
 	// Verify the signature with the canonical signed-note implementation.

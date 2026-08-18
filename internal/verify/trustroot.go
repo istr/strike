@@ -9,6 +9,8 @@ import (
 
 	trustrootpb "github.com/sigstore/protobuf-specs/gen/pb-go/trustroot/v1"
 	"google.golang.org/protobuf/encoding/protojson"
+
+	"github.com/istr/strike/internal/wire"
 )
 
 // ParseTrustedRoot parses a sigstore TrustedRoot JSON document into the pools
@@ -47,13 +49,9 @@ func ParseTrustedRoot(jsonBytes []byte) (*TrustedMaterial, error) {
 		}
 	}
 	for _, tl := range tr.GetTlogs() {
-		pub, err := x509.ParsePKIXPublicKey(tl.GetPublicKey().GetRawBytes())
+		ed, err := wire.ParseEd25519PKIX(tl.GetPublicKey().GetRawBytes())
 		if err != nil {
 			return nil, fmt.Errorf("%w: tlog key: %w", ErrTrustedRoot, err)
-		}
-		ed, ok := pub.(ed25519.PublicKey)
-		if !ok {
-			return nil, fmt.Errorf("%w: tlog key is not Ed25519", ErrTrustedRoot)
 		}
 		tm.rekorKeys[hex.EncodeToString(tl.GetLogId().GetKeyId())] = ed
 	}

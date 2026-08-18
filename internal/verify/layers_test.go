@@ -22,9 +22,9 @@ import (
 	trustrootpb "github.com/sigstore/protobuf-specs/gen/pb-go/trustroot/v1"
 	"google.golang.org/protobuf/encoding/protojson"
 
-	"github.com/istr/strike/internal/bundle"
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/verify"
+	"github.com/istr/strike/internal/wire"
 )
 
 const (
@@ -40,14 +40,14 @@ var oidIssuerV2 = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 57264, 1, 8}
 // wire shape without any production export.
 func signStatementInline(t *testing.T, stmt []byte, key *ecdsa.PrivateKey) (*protodsse.Envelope, []byte) {
 	t.Helper()
-	pae := bundle.PAEEncode(bundle.PayloadType, stmt)
+	pae := wire.PAEEncode(wire.PayloadType, stmt)
 	digest := sha256.Sum256(pae)
 	sig, err := ecdsa.SignASN1(rand.Reader, key, digest[:])
 	if err != nil {
 		t.Fatalf("sign: %v", err)
 	}
 	return &protodsse.Envelope{
-		PayloadType: bundle.PayloadType,
+		PayloadType: wire.PayloadType,
 		Payload:     stmt,
 		Signatures:  []*protodsse.Signature{{Sig: sig}},
 	}, sig
@@ -58,7 +58,7 @@ func signStatementInline(t *testing.T, stmt []byte, key *ecdsa.PrivateKey) (*pro
 // verify; the timestamp covers its bytes).
 func signedEnvelopeWithSig(sig []byte) *protodsse.Envelope {
 	return &protodsse.Envelope{
-		PayloadType: bundle.PayloadType,
+		PayloadType: wire.PayloadType,
 		Payload:     []byte("{}"),
 		Signatures:  []*protodsse.Signature{{Sig: sig}},
 	}
@@ -249,7 +249,7 @@ func TestParseTrustedRoot(t *testing.T) {
 func validBundle(t *testing.T, mutate func(*protobundle.Bundle)) []byte {
 	t.Helper()
 	pb := &protobundle.Bundle{
-		MediaType: bundle.MediaType,
+		MediaType: wire.MediaType,
 		VerificationMaterial: &protobundle.VerificationMaterial{
 			Content: &protobundle.VerificationMaterial_Certificate{
 				Certificate: &commonpb.X509Certificate{RawBytes: []byte("leaf-der")},
@@ -281,7 +281,7 @@ func TestParseBundle(t *testing.T) {
 	if string(pb.LeafDER) != "leaf-der" || string(pb.RFC3161) != "token" || pb.TLE.GetLogIndex() != 7 {
 		t.Fatalf("ParseBundle extracted wrong content: %+v", pb)
 	}
-	if pb.Envelope.GetPayloadType() != bundle.PayloadType {
+	if pb.Envelope.GetPayloadType() != wire.PayloadType {
 		t.Fatalf("envelope payload type = %q", pb.Envelope.GetPayloadType())
 	}
 

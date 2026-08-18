@@ -13,7 +13,7 @@ import (
 	protorekor "github.com/sigstore/protobuf-specs/gen/pb-go/rekor/v1"
 	"google.golang.org/protobuf/encoding/protojson"
 
-	"github.com/istr/strike/internal/bundle"
+	"github.com/istr/strike/internal/wire"
 )
 
 // signStatementKeyless signs one projected in-toto statement with an ephemeral
@@ -26,14 +26,14 @@ func signStatementKeyless(statementJSON []byte, key *ecdsa.PrivateKey) (*protods
 	if key == nil {
 		return nil, nil, errors.New("keyless: signing key is required")
 	}
-	pae := bundle.PAEEncode(bundle.PayloadType, statementJSON)
+	pae := wire.PAEEncode(wire.PayloadType, statementJSON)
 	digest := sha256.Sum256(pae)
 	sig, err := ecdsa.SignASN1(rand.Reader, key, digest[:])
 	if err != nil {
 		return nil, nil, fmt.Errorf("keyless: sign dsse: %w", err)
 	}
 	env := &protodsse.Envelope{
-		PayloadType: bundle.PayloadType,
+		PayloadType: wire.PayloadType,
 		Payload:     statementJSON,
 		Signatures:  []*protodsse.Signature{{Sig: sig}},
 	}
@@ -54,7 +54,7 @@ func assembleKeylessBundle(env *protodsse.Envelope, leafCertDER []byte, tle *pro
 		return nil, errors.New("keyless: envelope, leaf cert, tlog entry, and timestamp are all required")
 	}
 	pb := &protobundle.Bundle{
-		MediaType: bundle.MediaType,
+		MediaType: wire.MediaType,
 		VerificationMaterial: &protobundle.VerificationMaterial{
 			Content: &protobundle.VerificationMaterial_Certificate{
 				Certificate: &protocommon.X509Certificate{RawBytes: leafCertDER},

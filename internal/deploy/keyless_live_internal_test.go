@@ -3,8 +3,6 @@ package deploy
 import (
 	"context"
 	"crypto"
-	"crypto/ed25519"
-	"crypto/sha256"
 	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
@@ -26,6 +24,7 @@ import (
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/testutil"
+	"github.com/istr/strike/internal/wire"
 )
 
 const (
@@ -203,11 +202,11 @@ func liveTrustRoot(ctx context.Context, t *testing.T, fulcioEp endpoint.HTTPS, r
 	if block == nil {
 		t.Fatalf("rekor public key is not PEM")
 	}
-	edKey, err := parseEd25519PKIX(block.Bytes)
+	edKey, err := wire.ParseEd25519PKIX(block.Bytes)
 	if err != nil {
 		t.Fatalf("parse rekor public key: %v", err)
 	}
-	logID := sha256LogID(liveRekorOrigin, edKey)
+	logID := wire.NoteKeyID(liveRekorOrigin, edKey)
 	tlog := &root.TransparencyLog{
 		BaseURL:             liveRekorBaseURL,
 		ID:                  logID,
@@ -258,25 +257,4 @@ func liveTrustRoot(ctx context.Context, t *testing.T, fulcioEp endpoint.HTTPS, r
 		t.Fatalf("NewTrustedRoot: %v", err)
 	}
 	return tr
-}
-
-// sha256LogID computes the Rekor v2 log ID: the non-truncated C2SP
-// signed-note key ID -- SHA-256 over origin, newline, the Ed25519
-// algorithm byte (0x01), and the raw public key (rekor-tiles pkg/note).
-func sha256LogID(origin string, pub ed25519.PublicKey) []byte {
-	sum := sha256.Sum256(append([]byte(origin+"\n\x01"), pub...))
-	return sum[:]
-}
-
-// parseEd25519PKIX extracts an Ed25519 public key from PKIX/SPKI DER.
-func parseEd25519PKIX(der []byte) (ed25519.PublicKey, error) {
-	pub, err := x509.ParsePKIXPublicKey(der)
-	if err != nil {
-		return nil, err
-	}
-	ed, ok := pub.(ed25519.PublicKey)
-	if !ok {
-		return nil, fmt.Errorf("public key is %T, want ed25519", pub)
-	}
-	return ed, nil
 }

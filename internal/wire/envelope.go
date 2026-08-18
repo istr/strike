@@ -1,10 +1,4 @@
-// Package bundle holds the DSSE / in-toto wire-format primitives shared by the
-// producer (internal/deploy) and the consumer (internal/verify): the PAE
-// encoding both sides must agree on byte-for-byte, the in-toto payload type,
-// and the sigstore bundle media type. It is a contract owned by neither role
-// package; per ADR-044 a two-role contract lives in a role-neutral package at
-// the tier its dependencies dictate, here foundation (bytes/strconv only).
-package bundle
+package wire
 
 import (
 	"bytes"
