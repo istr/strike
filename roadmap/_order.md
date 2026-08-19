@@ -43,7 +43,6 @@ for queries; this file is the cross-arc truth for *what runs next*. IDs only
 - item-0006
 - item-0007
 - item-0008
-- item-0009
 - item-0010
 - item-0011
 - item-0012
