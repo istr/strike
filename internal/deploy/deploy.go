@@ -512,7 +512,7 @@ func (d *Deployer) signStatements(ctx context.Context, att *Attestation, stepID 
 	if err != nil {
 		return nil, err
 	}
-	slsa, engineCtx, info, err := projectStatements(att, d.OIDC, baseSBOMDeps)
+	slsa, engineCtx, info, err := ProjectStatements(att, d.OIDC, baseSBOMDeps)
 	if err != nil {
 		return nil, fmt.Errorf("step %q: project statements: %w", stepID, err)
 	}
@@ -544,7 +544,7 @@ func (d *Deployer) signStatements(ctx context.Context, att *Attestation, stepID 
 				stepID, subject, d.OIDC.Identity)
 		}
 		produce = func(ctx context.Context, eps lane.KeylessEndpoints, stmts [][]byte) ([][]byte, error) {
-			return produceKeylessBundles(ctx, eps, token, stmts)
+			return ProduceKeylessBundles(ctx, eps, token, stmts)
 		}
 	}
 	bundles, err := produce(ctx, d.Keyless.Endpoints, statements)

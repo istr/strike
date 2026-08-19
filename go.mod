@@ -114,4 +114,7 @@ require (
 	k8s.io/klog/v2 v2.140.0 // indirect
 )
 
-tool cuelang.org/go/cmd/cue
+tool (
+	cuelang.org/go/cmd/cue
+	github.com/istr/strike/tools/gengolden
+)

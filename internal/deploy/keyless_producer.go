@@ -57,7 +57,7 @@ func subjectFromIDToken(idToken string) (string, error) {
 	return "", errors.New("keyless: token has neither email nor sub claim")
 }
 
-// produceKeylessBundles runs the keyless chain for a set of projected
+// ProduceKeylessBundles runs the keyless chain for a set of projected
 // in-toto statements: one ephemeral P-256 key and one Fulcio certificate
 // for the set, then per statement DSSE sign -> RFC3161 timestamp ->
 // Rekor v2 inclusion -> sigstore v0.3 bundle. Every failure is fatal
@@ -65,7 +65,7 @@ func subjectFromIDToken(idToken string) (string, error) {
 // certificate, a timestamp, or an inclusion proof yields an error, never a
 // partial bundle. Returned bundles are positionally aligned with
 // statements.
-func produceKeylessBundles(ctx context.Context, eps lane.KeylessEndpoints, idToken string, statements [][]byte) ([][]byte, error) {
+func ProduceKeylessBundles(ctx context.Context, eps lane.KeylessEndpoints, idToken string, statements [][]byte) ([][]byte, error) {
 	if len(statements) == 0 {
 		return nil, errors.New("keyless: no statements")
 	}

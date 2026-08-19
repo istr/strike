@@ -14,9 +14,6 @@ func NewCaptureSnap(name, image string, output []byte) CaptureSnap {
 	return captureSnap{name: name, image: image, output: output}
 }
 
-// ProjectStatements exposes projectStatements for the external test package.
-var ProjectStatements = projectStatements
-
 // SignStatementKeyless exposes signStatementKeyless for the external test package.
 var SignStatementKeyless = signStatementKeyless
 

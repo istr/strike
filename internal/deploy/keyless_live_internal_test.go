@@ -95,9 +95,9 @@ func TestKeylessLive(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	bundles, err := produceKeylessBundles(ctx, eps, token, statements)
+	bundles, err := ProduceKeylessBundles(ctx, eps, token, statements)
 	if err != nil {
-		t.Fatalf("produceKeylessBundles: %v", err)
+		t.Fatalf("ProduceKeylessBundles: %v", err)
 	}
 	if len(bundles) != len(statements) {
 		t.Fatalf("got %d bundles, want %d", len(bundles), len(statements))
@@ -149,7 +149,7 @@ func TestKeylessLive(t *testing.T) {
 func liveTrustRoot(ctx context.Context, t *testing.T, fulcioEp endpoint.HTTPS, rekorPubPath, tsaChainPath string) *root.TrustedRoot {
 	t.Helper()
 
-	client, err := httpClientFor(fulcioEp)
+	client, err := HTTPClientFor(fulcioEp)
 	if err != nil {
 		t.Fatalf("fulcio client: %v", err)
 	}

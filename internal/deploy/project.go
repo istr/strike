@@ -21,7 +21,7 @@ const (
 	strikeBuilderID     = "https://istr.dev/strike"
 )
 
-// projectStatements projects the internal collect-model Attestation into the
+// ProjectStatements projects the internal collect-model Attestation into the
 // three output in-toto statements (ADR-040 D3, Fork A; the collect-model is not
 // mutated). The layer boundary is physical:
 //
@@ -39,7 +39,7 @@ const (
 //
 // oidc is the lane-declared signing identity (ADR-040 D5); only issuer and
 // identity are carried (the strike verify cross-check targets).
-func projectStatements(att *Attestation, oidc lane.OIDCConfig, resolvedDeps []ResourceDescriptor) (
+func ProjectStatements(att *Attestation, oidc lane.OIDCConfig, resolvedDeps []ResourceDescriptor) (
 	SLSAProvenanceStatement, EngineContextStatement, InformationalStatement, error,
 ) {
 	subject, err := projectSubject(att.Sealed.Artifacts, att.Sealed.Pushed)

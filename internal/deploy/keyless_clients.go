@@ -37,11 +37,11 @@ const keylessHTTPTimeout = 30 * clock.Second
 // keylessResponseLimit caps how much of an endpoint response is read.
 const keylessResponseLimit = 1 << 20
 
-// httpClientFor returns an HTTP client whose TLS configuration enforces the
+// HTTPClientFor returns an HTTP client whose TLS configuration enforces the
 // endpoint's declared trust anchor. The #KeylessEndpoints schema admits only
 // https:// URLs, so every keyless connection is TLS with declared trust;
 // there is no plaintext branch.
-func httpClientFor(ep endpoint.HTTPS) (*http.Client, error) {
+func HTTPClientFor(ep endpoint.HTTPS) (*http.Client, error) {
 	cfg, err := transport.BuildTLSConfig(ep.Trust)
 	if err != nil {
 		return nil, fmt.Errorf("keyless: %w", err)
@@ -64,7 +64,7 @@ func closeKeylessBody(resp *http.Response) {
 // response body. Any status not in wantStatus is an error carrying the
 // (truncated) response body.
 func postKeyless(ctx context.Context, ep endpoint.HTTPS, path, contentType string, body []byte, header http.Header, wantStatus ...int) ([]byte, error) {
-	client, err := httpClientFor(ep)
+	client, err := HTTPClientFor(ep)
 	if err != nil {
 		return nil, err
 	}
