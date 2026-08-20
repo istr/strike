@@ -88,6 +88,10 @@ func (m *mockEngine) ContainerRemove(_ context.Context, _ string) error         
 func (m *mockEngine) VolumeCreate(_ context.Context, _ string) error                { return nil }
 func (m *mockEngine) SeedVolumes(_ context.Context, _ []container.VolumeSeed) error { return nil }
 func (m *mockEngine) VolumeRemove(_ context.Context, _ string) error                { return nil }
+func (m *mockEngine) ContainerList(context.Context, string) ([]container.Summary, error) {
+	return nil, nil
+}
+func (m *mockEngine) ContainerStart(context.Context, string) error { return nil }
 
 // buildTestDAG runs lane.IndexSteps and lane.Build on p and fails the test on
 // error, returning the DAG and its step index.

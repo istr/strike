@@ -94,6 +94,15 @@ type Engine interface {
 	// Info fetches runtime metadata from the engine. Call after Ping.
 	// Failures are non-fatal: Identity().Runtime will be nil.
 	Info(ctx context.Context) error
+
+	// ContainerList returns the containers carrying label, stopped ones included.
+	// The label is a "key=value" selector. An empty result is not an
+	// error: it reports that this engine holds no such container.
+	ContainerList(ctx context.Context, label string) ([]Summary, error)
+
+	// ContainerStart starts an existing container by id. A container that is
+	// already running is not an error, so the call is safe to repeat.
+	ContainerStart(ctx context.Context, id string) error
 }
 
 // ImageInfo holds metadata from image inspection.
@@ -103,6 +112,17 @@ type ImageInfo struct {
 	Digest      primitive.Digest
 	RepoDigests []string
 	Size        int64
+}
+
+// Summary reports one container as the engine sees it. Every field
+// is an engine self-report, not a validated strike input: Image is the
+// reference the container was created from, and State is the engine's run
+// state, one of "created", "running", "paused", "exited".
+type Summary struct {
+	ID    string
+	Image string
+	State string
+	Names []string
 }
 
 // RunOpts configures a container execution.

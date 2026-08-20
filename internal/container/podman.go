@@ -534,6 +534,72 @@ func (e *podmanEngine) containerLogs(ctx context.Context, id string, stdout, std
 	return demuxLogStream(resp.Body, stdout, stderr)
 }
 
+// ContainerList returns the containers carrying label, stopped ones included.
+func (e *podmanEngine) ContainerList(ctx context.Context, label string) ([]Summary, error) {
+	filters, err := json.Marshal(map[string][]string{"label": {label}})
+	if err != nil {
+		return nil, fmt.Errorf("container list %s: encode filter: %w", label, err)
+	}
+	u := e.base + "/containers/json?all=true&filters=" + url.QueryEscape(string(filters))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := e.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("container list %s: %w", label, err)
+	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.Printf("WARN close response body: %v", err)
+		}
+	}()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("container list %s: status %d", label, resp.StatusCode)
+	}
+	var raw []struct {
+		ID    string   `json:"Id"`
+		Image string   `json:"Image"`
+		State string   `json:"State"`
+		Names []string `json:"Names"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+		return nil, fmt.Errorf("container list %s: decode: %w", label, err)
+	}
+	out := make([]Summary, len(raw))
+	for i, c := range raw {
+		out[i] = Summary{Names: c.Names, ID: c.ID, Image: c.Image, State: c.State}
+	}
+	return out, nil
+}
+
+// ContainerStart starts an existing container by id. Status 304 means the
+// container was already running, which the contract treats as success.
+func (e *podmanEngine) ContainerStart(ctx context.Context, id string) error {
+	u := e.base + "/containers/" + url.PathEscape(id) + "/start"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := e.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("container start %s: %w", id, err)
+	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.Printf("WARN close response body: %v", err)
+		}
+	}()
+	if resp.StatusCode == http.StatusNoContent || resp.StatusCode == http.StatusNotModified {
+		return nil
+	}
+	body, readErr := io.ReadAll(resp.Body)
+	if readErr != nil {
+		return fmt.Errorf("container start %s: status %d: (body read failed)", id, resp.StatusCode)
+	}
+	return fmt.Errorf("container start %s: status %d: %s", id, resp.StatusCode, body)
+}
+
 func (e *podmanEngine) containerRemove(ctx context.Context, id string) error {
 	u := e.base + "/containers/" + id + "?force=true&v=true"
 	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, u, nil)
