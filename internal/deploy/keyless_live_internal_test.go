@@ -56,8 +56,12 @@ func liveStatement(i int) ([]byte, string) {
 // from harness materials. The OIDC id_token is minted in-test from the
 // harness Keycloak, so no token env is needed. Bring-up:
 //
-//	cd test/sigstore-local && make up && make rekor-pubkey && make tsa-certchain
+//	cd test/sigstore-local && make up && make rekor-pubkey
 //	go test ./internal/deploy -run TestKeylessLive -v
+//
+// A harness whose containers exist but are stopped is restarted by the test
+// itself, and the timestamp certificate chain is re-exported with it.
+// Creating the harness stays an operator action.
 //
 // The harness is a prerequisite: the test runs by default and fails fast
 // when it is down; set STRIKE_INTEGRATION=0 to skip.
@@ -66,6 +70,7 @@ func TestKeylessLive(t *testing.T) {
 		t.Skip("integration tests disabled (STRIKE_INTEGRATION=0)")
 	}
 	harness := testutil.HarnessDir(t)
+	testutil.RequireHarness(t, testutil.RequireEngine(t), harness)
 	caddyRoot := filepath.Join(harness, "pki", "caddy-root.crt")
 	rekorPub := filepath.Join(harness, "pki", "rekor-ed25519-pub.pem")
 	tsaChain := filepath.Join(harness, "pki", "tsa-certchain.pem")

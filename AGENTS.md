@@ -226,6 +226,12 @@ Environment: `CONTAINER_HOST` (engine address, `unix://` or `tcp://`),
 the engine is always up and reachable through `CONTAINER_HOST`; check
 availability only through that socket.
 
+Two integration tests additionally need the local sigstore harness under
+`test/sigstore-local`. A harness that exists but is stopped is restarted by
+the tests themselves; creating one is an operator action
+(`make -C test/sigstore-local up`). Detail:
+`docs/DEVELOPMENT.md#25-integration-tests`.
+
 **After every code change**, run `make lint` and fix all findings before
 moving on -- do not batch lint fixes at the end. Run this gate before any
 build step.

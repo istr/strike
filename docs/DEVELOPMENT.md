@@ -292,6 +292,24 @@ A plain `go test ./...` runs the integration tests; without an engine they
 fail fast with the opt-out hint, and `STRIKE_INTEGRATION=0 go test ./...`
 skips them.
 
+Two of them -- the live keyless test in `internal/deploy` and the
+registry-deploy test in `cmd/strike` -- additionally need the local sigstore
+harness under `test/sigstore-local`. Both call
+`testutil.RequireHarness(t, engine, harnessDir)`, which restarts harness
+containers that exist but are stopped, waits for the issuer, the transparency
+log and the CT log to answer, and re-exports the timestamp authority's
+certificate chain. That last step is not optional: the authority signs with an
+in-memory key and mints a fresh certificate on every start, so a chain
+exported before a restart no longer verifies what is produced after it.
+
+Recovery is not creation. The harness is created by an operator with
+`make -C test/sigstore-local up`, and a container set whose image digests no
+longer match `compose.yaml` is reported rather than started -- starting it
+would run an image the declaration no longer names. A cold start is therefore
+needed on a fresh clone, after `down` or `clean`, after a container has been
+removed by hand, and after any structural edit to `compose.yaml`. Bind-mount
+contents, everything under `pki/` included, are picked up by a plain restart.
+
 ### 2.6 Fuzz testing
 
 Add fuzz tests for all input parsers and validators:

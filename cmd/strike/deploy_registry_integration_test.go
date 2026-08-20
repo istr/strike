@@ -131,8 +131,12 @@ steps:
 
 // TestRegistryDeployLive_Integration is the end-to-end sealing test. Bring-up:
 //
-//	cd test/sigstore-local && make up && make rekor-pubkey && make tsa-certchain
+//	cd test/sigstore-local && make up && make rekor-pubkey
 //	go test ./cmd/strike -run TestRegistryDeployLive_Integration -v
+//
+// A harness whose containers exist but are stopped is restarted by the test
+// itself, and the timestamp certificate chain is re-exported with it.
+// Creating the harness stays an operator action.
 //
 // The harness is a prerequisite: the test runs by default and fails fast when
 // it is down; set STRIKE_INTEGRATION=0 to skip. The repository name carries a
@@ -144,6 +148,7 @@ func TestRegistryDeployLive_Integration(t *testing.T) {
 	ctx := context.Background()
 
 	harness := testutil.HarnessDir(t)
+	testutil.RequireHarness(t, engine, harness)
 	caddyRoot := filepath.Join(harness, "pki", "caddy-root.crt")
 	resolverCert := filepath.Join(harness, "pki", "resolver.crt")
 	for _, f := range []string{caddyRoot, resolverCert} {
