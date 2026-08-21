@@ -20,7 +20,6 @@ contract/
   endpoint/     package endpoint     host/address, TLS trust, HTTPS + engine identity
   output/       package output       runtime output handles
   provenance/   package provenance   source-fetch provenance records
-  target/       package target       deploy destination
   record/       package record       artifact and SBOM provenance records
   lane/         package lane         operator-authored input wire format
   attest/       package attest       deploy attestation contract + published predicates
@@ -38,9 +37,9 @@ the same DAG (`.go-arch-lint.yml`).
 
 - **primitive** -- the leaf vocabulary: content-addressed digests, identifiers,
   hashes, and the other irreducible scalar constraints. Depends on nothing.
-- **concept tier** -- `endpoint`, `output`, `provenance`, `target`, `record`:
-  composed value types that each depend only on `primitive`. The names are
-  destuttered against their package (`output.#Handle`, `target.#Deploy`,
+- **concept tier** -- `endpoint`, `output`, `provenance`, `record`: composed
+  value types that each depend only on `primitive`. The names are destuttered
+  against their package (`endpoint.#Address`, `output.#Handle`,
   `provenance.#Git`, `record.#Artifact`), so a qualified call site reads without
   repetition.
 - **lane** -- the operator-authored input wire format: the `#Lane` tree, network
@@ -54,16 +53,23 @@ the same DAG (`.go-arch-lint.yml`).
 ## Generated vs hand-written Go
 
 `make generate` runs `cue exp gengotypes` over `primitive`, `endpoint`,
-`output`, `provenance`, `target`, `record`, and `lane`, landing generated Go in
-`internal/<pkg>/<pkg>.gen.go` (gitignored, never hand-edited). The `@go`
-annotations in those packages name the Go field and type for each definition.
+`output`, `provenance`, `record`, `lane`, and `attest`. Every package but
+`attest` lands in `internal/<pkg>/<pkg>.gen.go`; `attest` lands in
+`internal/deploy/attest.gen.go` as `package deploy`, because its Go home is
+the hand-written deploy package. All of them are gitignored and never
+hand-edited. The `@go` annotations in those packages name the Go field and type
+for each definition.
 
-`attest`, `trustlayers`, and `crossval` are not generated. `attest` carries no
-`@go` redirects: its Go types are hand-written in `internal/deploy` and the CUE
-is runtime-validation only. This is deliberate -- the attestation types include
-discriminated unions (the observed-peer and engine-connection identities) whose
-dispatching `UnmarshalJSON` gengotypes cannot emit -- and it lets the attest CUE
-package `import` the lane and concept packages freely.
+`trustlayers` and `crossval` are not generated and project into no Go types:
+`trustlayers` is exported as JSON data (`contract/trust-layers.json`) and
+`crossval` is embedded for runtime validation of the cross-validation vectors.
+
+Hand-written Go sits beside the generated types wherever a disjunction is
+annotated `@go(-)`. gengotypes emits the concrete arms but no Go interface and
+no dispatching `UnmarshalJSON`, so that sum-type machinery is written by hand
+in the consuming package -- `output.#Handle`, `provenance.#Record`,
+`endpoint.#Trust`, `endpoint.#Engine`, `lane.#Peer`, `lane.#DeployMethod`, and
+`attest.#ObservedIdentity`.
 
 ## One CUE package per directory
 
@@ -76,7 +82,7 @@ inward-only dependency rule.
 
 ## Exported contract
 
-For consumers without a CUE runtime, `make specs` exports JSON Schema --
+For consumers without a CUE runtime, `make generate` exports JSON Schema --
 `contract/lane.schema.json` (lane input) and `contract/attestation.schema.json`
 (deploy attestation), plus `contract/trust-layers.json`. These are the
 cross-implementation contract a secondary verifier builds against.

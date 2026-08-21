@@ -191,19 +191,21 @@ auditable; do not refactor it into a framework.
 
 CUE contracts (single source of truth) live under `contract/`, one CUE
 package per directory: `primitive` (scalar vocabulary); the concept tier
-`endpoint`/`output`/`provenance`/`target`/`record` (composed value types
-depending only on `primitive`); `lane` (input wire); `attest` (deploy
-attestation); `trustlayers`; and `crossval`. Runtime embed in
-`contract/embed.go`. Generated Go types land in
-`internal/{lane,primitive,endpoint,output,provenance,target,record}/*.gen.go`
-(gitignored; never hand-edit). See `docs/CUE-WORKFLOW.md` and
+`endpoint`/`output`/`provenance`/`record` (composed value types depending
+only on `primitive`); `lane` (input wire); `attest` (deploy attestation);
+`trustlayers`; and `crossval`. Runtime embed in `contract/embed.go`.
+Generated Go types land in
+`internal/{lane,primitive,endpoint,output,provenance,record}/*.gen.go`, with
+`attest` generating into `internal/deploy/attest.gen.go` (all gitignored;
+never hand-edit). See `docs/CUE-WORKFLOW.md` and
 `docs/SPEC-PACKAGE-LAYERING.md`.
 
 Go packages under `internal/`: capsule, clock, closer, container, copier,
-deploy, egress, endpoint, executor, front, lane, mediator, primitive, probe,
-registry, resolver, schema, testutil, transport, verify, wire. All container
-operations go through `container.Engine` (`internal/container`). Signing uses
-ECDSA P-256 in `internal/executor` (`crypto/rand`, never `math/rand`).
+deploy, egress, endpoint, executor, front, lane, mediator, output, primitive,
+probe, provenance, registry, resolver, schema, testutil, transport, verify,
+wire. All container operations go through `container.Engine`
+(`internal/container`). Signing uses ECDSA P-256 in `internal/executor`
+(`crypto/rand`, never `math/rand`).
 
 Do not create new `internal/` packages without asking (see "Stop and ask").
 Never create `pkg/`, `util/`, `common/`, `helper/`, `models/`, `types/`, or
@@ -213,7 +215,6 @@ Never create `pkg/`, `util/`, `common/`, `helper/`, `models/`, `types/`, or
 
 ```sh
 make generate   # cue export -> JSON Schema, then gengotypes -> internal/*/*.gen.go
-make specs      # CUE -> JSON Schema only
 make golden     # update golden fixtures (never run in a way that masks regressions)
 make check      # lint + test + vuln + build -- the one pre-commit gate
 ```

@@ -20,14 +20,13 @@ validates against it at runtime.
 | `endpoint`    | Host/address, TLS-trust, HTTPS-endpoint, and engine-connection identity types |
 | `output`      | Runtime output handles |
 | `provenance`  | Source-fetch provenance records (git, tarball, OCI, URL) |
-| `target`      | Deploy destination |
 | `record`      | Artifact and SBOM provenance records |
 | `lane`        | Operator-authored input wire format: the `#Lane` tree, network peers, trust-root replica |
 | `attest`      | Deploy attestation collect-model (`#Attestation`), published predicates, and the sigstore `#Bundle` |
 | `trustlayers` | Trust-layer classification map (governance data) |
 | `crossval`    | Cross-validation vector schema |
 
-`endpoint`, `output`, `provenance`, `target`, and `record` are the concept tier:
+`endpoint`, `output`, `provenance`, and `record` are the concept tier:
 composed value types that depend only on `primitive`. See
 `../docs/SPEC-PACKAGE-LAYERING.md` for the package layout and dependency
 direction, and `../docs/ADR-048-contract-type-semantics.md` for the type
@@ -47,7 +46,7 @@ In short: `attest/attestation.cue` is what strike builds and validates internall
 For consumers that don't have a CUE runtime, schemas can be exported:
 
 ```bash
-make specs    # exports JSON Schema to contract/
+make generate    # exports JSON Schema to contract/, then the Go types
 ```
 
 This produces:

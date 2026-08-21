@@ -255,7 +255,7 @@ Exclude from coverage measurement:
   generate`, gitignored): `internal/lane/lane.gen.go`,
   `internal/primitive/primitive.gen.go`, `internal/endpoint/endpoint.gen.go`,
   `internal/output/output.gen.go`, `internal/provenance/provenance.gen.go`,
-  `internal/target/target.gen.go`, `internal/record/record.gen.go`.
+  `internal/record/record.gen.go`, `internal/deploy/attest.gen.go`.
 
 Focus coverage investment on:
 - All error return paths (what happens when podman fails, when the registry is

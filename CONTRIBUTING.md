@@ -161,8 +161,8 @@ Format: `<type>(<optional scope>): <description>`
 2. Create a branch from `main`.
 3. **If your change introduces or modifies data structures that cross
    package boundaries, start with the CUE schema.** Add or update types
-   in `contract/**/*.cue`, run `make specs` to validate, then open an issue or
-   draft MR to discuss the schema before writing Go code. Schema changes
+   in `contract/**/*.cue`, run `make generate` to validate, then open an issue
+   or draft MR to discuss the schema before writing Go code. Schema changes
    are architectural decisions and will be reviewed carefully.
 4. Make your changes. Keep diffs small and focused.
 5. Write commit messages following the Conventional Commits format above.
