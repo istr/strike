@@ -162,6 +162,9 @@ services:
       - --roots_pem_file=/pki/fulcio-root.crt
       - --ext_key_usages=CodeSigning
       - --http_endpoint=0.0.0.0:6962
+    environment:
+      - OTEL_TRACES_EXPORTER=none
+      - OTEL_METRICS_EXPORTER=none
     volumes:
       - ./pki:/pki:ro
       - ct_storage:/data/ct:U
