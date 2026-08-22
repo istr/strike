@@ -729,10 +729,11 @@ by location via `forbidigo`, makes the invariant immune to which dial
 function is used and which functions the detector happens to model.
 
 `DialUnixSocket` validates the path before dialing: `EvalSymlinks`,
-`ModeSocket` check, and owner-uid match. `DialTCP` requires the host
-part to be an IP literal (callers must resolve via the capsule's DoT
-resolver first; hostnames are rejected to prevent DNS-based SSRF).
-Error strings omit filesystem paths (AGENTS.md error-message rules).
+`ModeSocket` check, and owner-uid match. `DialTCP` takes a resolved
+`netip.AddrPort`, so a hostname cannot reach it at all; callers resolve
+through the capsule's DoT resolver first, which is what keeps DNS-based
+SSRF out of the dial path. Error strings omit filesystem paths
+(AGENTS.md error-message rules).
 
 **Enforced by.** `forbidigo` rules in `.golangci.yml`; the chokepoint
 file (`internal/transport/dial.go`) is exempted via `exclusions.rules`.

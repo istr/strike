@@ -287,21 +287,17 @@ func DialUnixSocket(ctx context.Context, path string) (*net.UnixConn, error) {
 	return uc, nil
 }
 
-// DialTCP opens a TCP connection to addr (host:port). The host
-// part must be an IP literal (IPv4 or IPv6); hostnames are
-// rejected because callers are expected to have resolved them
-// already via the capsule's DoT resolver. This prevents
-// accidental DNS-based routing outside the resolver allowlist.
-func DialTCP(ctx context.Context, addr string) (net.Conn, error) {
-	host, _, err := net.SplitHostPort(addr)
-	if err != nil {
-		return nil, fmt.Errorf("transport: invalid tcp address: %w", err)
-	}
-	if !isIPLiteral(host) {
-		return nil, errors.New("transport: tcp dial requires an IP literal, not a hostname")
+// DialTCP opens a TCP connection to dst, a resolved IP address and
+// port. A name cannot be passed: callers resolve through the
+// capsule's DoT resolver first, so no DNS-based routing happens
+// outside the resolver allowlist. The parameter type is what
+// enforces that, so there is no hostname case to reject here.
+func DialTCP(ctx context.Context, dst netip.AddrPort) (net.Conn, error) {
+	if !dst.IsValid() || dst.Port() == 0 {
+		return nil, errors.New("transport: tcp dial requires a resolved address and port")
 	}
 	var d net.Dialer
-	conn, err := d.DialContext(ctx, "tcp", addr)
+	conn, err := d.DialContext(ctx, "tcp", dst.String())
 	if err != nil {
 		return nil, fmt.Errorf("transport: dial tcp: %w", err)
 	}

@@ -328,6 +328,21 @@ func TestNew_CanonicalizesPeerHosts(t *testing.T) {
 	}
 }
 
+func TestNew_RejectsOutOfRangePort(t *testing.T) {
+	ca := newTestCA(t)
+	bad := primitive.Port(70000)
+	peers := []mediator.PeerTrust{
+		{
+			Address: endpoint.Address{Host: "example.com", Port: &bad},
+			Trust:   endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:aaa"},
+		},
+	}
+	_, err := mediator.New("step", peers, ca, unreachableLookup())
+	if err == nil || !strings.Contains(err.Error(), "out of range") {
+		t.Fatalf("expected out-of-range port error, got: %v", err)
+	}
+}
+
 func TestServe_AllowedSNI_EndToEnd(t *testing.T) {
 	ca := newTestCA(t)
 	sni := "test-peer.example"

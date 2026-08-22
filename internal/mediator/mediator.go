@@ -39,11 +39,26 @@ type PeerTrust struct {
 	Address endpoint.Address
 }
 
+// defaultUpstreamPort is the port the mediator dials when a declared peer
+// carries no explicit port.
+const defaultUpstreamPort uint16 = 443
+
+// peerEntry is one declared peer in the form the connection path needs it:
+// the trust anchor, the declared address with its port defaulted so it is
+// never absent, and that same port in the type the dialer takes. Both the
+// defaulting and the conversion happen once, at construction, so a connection
+// carries no default handling of its own.
+type peerEntry struct {
+	trust   endpoint.Trust
+	address endpoint.Address
+	port    uint16
+}
+
 // UpstreamLookupFunc resolves a name to addresses via the lane's
 // allowlisted DoT resolver. Identical signature to
-// resolver.UpstreamFunc and capsule.UpstreamLookupFunc; the capsule
-// passes the same closure to all three. The function must be safe for
-// concurrent use.
+// capsule.UpstreamLookupFunc, which is the type the capsule converts
+// from when it hands the same closure to the mediator and to each ssh
+// forwarder. The function must be safe for concurrent use.
 type UpstreamLookupFunc func(ctx context.Context, name string) ([]netip.Addr, error)
 
 // Decision is the mediator's policy outcome for a connection.
@@ -72,7 +87,7 @@ var ErrMediatorClosed = errors.New("mediator: closed")
 
 // Mediator is a per-step TLS proxy.
 type Mediator struct {
-	peers        map[string]PeerTrust // canonical SNI -> peer (trust + declared address)
+	peers        map[string]peerEntry // canonical SNI -> peer (trust, declared address, dial port)
 	ca           *transport.EphemeralCA
 	upstreamLook UpstreamLookupFunc
 	stepID       string
@@ -86,8 +101,9 @@ type Mediator struct {
 //   - stepID identifies the step in ConnectionRecord and logs.
 //   - peers enumerates the (SNI, trust) pairs the step may reach.
 //     Entries are canonicalized (lowercase host, trailing dot
-//     stripped, port suffix removed). An empty peers slice yields
-//     a mediator that denies every SNI.
+//     stripped); a peer that declares no port is dialed on
+//     defaultUpstreamPort. An empty peers slice yields a mediator
+//     that denies every SNI.
 //   - ca is the ephemeral CA whose GetCertificate is wrapped with
 //     the SNI-allowlist gate. May be shared across mediators in
 //     the same lane run.
@@ -104,7 +120,7 @@ func New(stepID string, peers []PeerTrust, ca *transport.EphemeralCA, upstreamLo
 		return nil, errors.New("mediator: upstreamLook must not be nil")
 	}
 
-	peerMap := make(map[string]PeerTrust, len(peers))
+	peerMap := make(map[string]peerEntry, len(peers))
 	for _, p := range peers {
 		c, err := canonicalize(p.Address.Host.String())
 		if err != nil {
@@ -113,7 +129,16 @@ func New(stepID string, peers []PeerTrust, ca *transport.EphemeralCA, upstreamLo
 		if _, dup := peerMap[c]; dup {
 			return nil, fmt.Errorf("mediator: duplicate peer %q", c)
 		}
-		peerMap[c] = p
+		addr := p.Address
+		if addr.Port == nil {
+			def := primitive.Port(defaultUpstreamPort)
+			addr.Port = &def
+		}
+		n := *addr.Port
+		if n < 1 || n > 65535 {
+			return nil, fmt.Errorf("mediator: peer %q port %d out of range 1..65535", c, n)
+		}
+		peerMap[c] = peerEntry{trust: p.Trust, address: addr, port: uint16(n)}
 	}
 
 	return &Mediator{
@@ -276,7 +301,7 @@ func (m *Mediator) getCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate,
 	return m.ca.GetCertificate(hello)
 }
 
-func (m *Mediator) dialUpstream(ctx context.Context, sni string, peer PeerTrust) (*tls.Conn, *transport.ConnectionIdentity, []netip.Addr, error) {
+func (m *Mediator) dialUpstream(ctx context.Context, sni string, pe peerEntry) (*tls.Conn, *transport.ConnectionIdentity, []netip.Addr, error) {
 	addrs, err := m.upstreamLook(ctx, sni)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("upstream lookup %q: %w", sni, err)
@@ -285,18 +310,13 @@ func (m *Mediator) dialUpstream(ctx context.Context, sni string, peer PeerTrust)
 		return nil, nil, nil, fmt.Errorf("upstream lookup %q: no addresses", sni)
 	}
 
-	port := peer.Address.Port
-	if port == nil {
-		def := primitive.Port(443)
-		port = &def
-	}
-	target := net.JoinHostPort(addrs[0].String(), fmt.Sprintf("%d", *port))
-	raw, err := transport.DialTCP(ctx, target)
+	dst := netip.AddrPortFrom(addrs[0], pe.port)
+	raw, err := transport.DialTCP(ctx, dst)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("upstream dial %s: %w", target, err)
+		return nil, nil, nil, fmt.Errorf("upstream dial %s: %w", dst, err)
 	}
 
-	tlsConfig, configErr := transport.BuildTLSConfig(peer.Trust)
+	tlsConfig, configErr := transport.BuildTLSConfig(pe.trust)
 	if configErr != nil {
 		closer.Warn(raw, "mediator: upstream raw (config error)")
 		return nil, nil, nil, fmt.Errorf("upstream tls config for %s: %w", sni, configErr)
@@ -309,7 +329,7 @@ func (m *Mediator) dialUpstream(ctx context.Context, sni string, peer PeerTrust)
 		return nil, nil, nil, fmt.Errorf("upstream handshake %s: %w", sni, hsErr)
 	}
 
-	identity := transport.CaptureIdentity(upstream.ConnectionState(), endpoint.Address{Host: primitive.Host(sni), Port: port})
+	identity := transport.CaptureIdentity(upstream.ConnectionState(), endpoint.Address{Host: primitive.Host(sni), Port: pe.address.Port})
 	return upstream, &identity, addrs, nil
 }
 

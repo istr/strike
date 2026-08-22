@@ -14,6 +14,7 @@ import (
 	"io"
 	"math/big"
 	"net"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strings"
@@ -552,26 +553,26 @@ func TestDialTCP(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		addr    string
+		dst     netip.AddrPort
 		wantErr string
 	}{
 		{
-			name: "valid IP literal",
-			addr: ln.Addr().String(),
+			name: "resolved address and port",
+			dst:  netip.MustParseAddrPort(ln.Addr().String()),
 		},
 		{
-			name:    "hostname rejected",
-			addr:    "example.com:443",
-			wantErr: "requires an IP literal",
+			name:    "zero value rejected",
+			dst:     netip.AddrPort{},
+			wantErr: "requires a resolved address and port",
 		},
 		{
-			name:    "missing port",
-			addr:    "127.0.0.1",
-			wantErr: "invalid tcp address",
+			name:    "zero port rejected",
+			dst:     netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), 0),
+			wantErr: "requires a resolved address and port",
 		},
 		{
 			name:    "connection refused",
-			addr:    "127.0.0.1:1",
+			dst:     netip.MustParseAddrPort("127.0.0.1:1"),
 			wantErr: "dial tcp",
 		},
 	}
@@ -579,7 +580,7 @@ func TestDialTCP(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := context.Background()
-			conn, dialErr := transport.DialTCP(ctx, tt.addr)
+			conn, dialErr := transport.DialTCP(ctx, tt.dst)
 			if tt.wantErr != "" {
 				if dialErr == nil {
 					t.Fatalf("expected error containing %q, got nil", tt.wantErr)

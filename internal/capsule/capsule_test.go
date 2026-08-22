@@ -461,7 +461,7 @@ func parseAAnswers(t *testing.T, raw []byte) (dnsmessage.RCode, []netip.Addr) {
 // startTestUpstreamTLS spins up a TLS echo server with a self-signed cert
 // valid for the given SNI. Returns the cert fingerprint, listener address,
 // and a cleanup function.
-func startTestUpstreamTLS(t *testing.T, sni string) (fingerprint primitive.Digest, addr string, cleanup func()) {
+func startTestUpstreamTLS(t *testing.T, sni string) (fingerprint primitive.Digest, addr netip.AddrPort, cleanup func()) {
 	t.Helper()
 
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -533,7 +533,7 @@ func startTestUpstreamTLS(t *testing.T, sni string) (fingerprint primitive.Diges
 		closer.Warn(tlsLn, "test upstream listener")
 		wg.Wait()
 	}
-	return fingerprint, ln.Addr().String(), cleanup
+	return fingerprint, netip.MustParseAddrPort(ln.Addr().String()), cleanup
 }
 
 func TestCapsule_ResolverSynthesizesStepAddr(t *testing.T) {
@@ -586,19 +586,15 @@ func TestCapsule_DNSThenConnect_EndToEnd(t *testing.T) {
 	fp, upAddr, upCleanup := startTestUpstreamTLS(t, sni)
 	defer upCleanup()
 
-	// Parse upstream address to get the IP for the lookup function.
-	upHost, _, splitErr := net.SplitHostPort(upAddr)
-	if splitErr != nil {
-		t.Fatalf("SplitHostPort: %v", splitErr)
-	}
-	upIP := netip.MustParseAddr(upHost)
+	upIP := upAddr.Addr()
 
-	// The mediator hard-codes upstream port 443. Bind a TCP forwarder
-	// on upIP:443 that proxies to the real test upstream.
+	// A peer that declares no port is dialed on the mediator's default
+	// (443). Bind a TCP forwarder on upIP:443 that proxies to the real
+	// test upstream.
 	lc := net.ListenConfig{}
-	fwdLn, fwdErr := lc.Listen(context.Background(), "tcp", net.JoinHostPort(upHost, "443"))
+	fwdLn, fwdErr := lc.Listen(context.Background(), "tcp", netip.AddrPortFrom(upIP, 443).String())
 	if fwdErr != nil {
-		t.Skipf("cannot bind %s:443: %v", upHost, fwdErr)
+		t.Skipf("cannot bind %s:443: %v", upIP, fwdErr)
 	}
 	defer closer.Warn(fwdLn, "test forwarder listener")
 
@@ -616,7 +612,7 @@ func TestCapsule_DNSThenConnect_EndToEnd(t *testing.T) {
 				defer fwdWg.Done()
 				defer closer.Warn(c, "test forwarder conn")
 				d := &net.Dialer{}
-				upstream, dialErr := d.DialContext(context.Background(), "tcp", upAddr)
+				upstream, dialErr := d.DialContext(context.Background(), "tcp", upAddr.String())
 				if dialErr != nil {
 					return
 				}
