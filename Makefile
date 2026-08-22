@@ -38,18 +38,15 @@ lint-typeflow:
 	cd tools/linttypeflow && go build -o $(CURDIR)/.build/linttypeflow .
 	$(CURDIR)/.build/linttypeflow ./...
 
-lint-ascii:
-	@! grep -rPn '[^\x00-\x7F]' --include='*.md' --include='*.go' --include='*.cue' \
-		--include='*.svg' --exclude='*_test.go' . \
-		&& echo "ascii-only: ok" \
-		|| { echo "non-ASCII found in source files (see above)"; exit 1; }
-
-lint-adr-index:
-	@for f in docs/ADR-[0-9]*.md; do \
-		b=$$(basename "$$f"); \
-		grep -q "$$b" docs/ADR-INDEX.md \
-			|| { echo "ADR on disk but missing from ADR-INDEX.md: $$b"; exit 1; }; \
-	done; echo "adr-index: ok"
+# Gate for the two tree-wide source checks that need no Go type information:
+# printable-ASCII source and ADR-index coverage. Both are go/analysis analyzers
+# rather than plain commands, so they are adoptable by golangci-lint as a module
+# plugin; this target is the direct invocation and is retired when that
+# adoption lands.
+.PHONY: lint-docs
+lint-docs:
+	cd tools/lintdocs && go build -o $(CURDIR)/.build/lintdocs .
+	$(CURDIR)/.build/lintdocs ./...
 
 .PHONY: lint-arch
 lint-arch:
@@ -61,7 +58,7 @@ lint-ci:
 lint-cue-fmt:
 	go tool cue fmt --check --files contract
 
-lint: lint-ci lint-typeconv lint-arch lint-ascii lint-adr-index lint-cue-fmt
+lint: lint-ci lint-typeconv lint-arch lint-docs lint-cue-fmt
 
 test:
 	go test -race -coverprofile=coverage.out -covermode=atomic ./...

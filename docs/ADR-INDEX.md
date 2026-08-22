@@ -27,7 +27,7 @@ The "By principle" view below is a collected aggregation of those
 self-tags, not an independent record. It can be regenerated mechanically;
 at minimum, every instruction that completes an ADR verifies, in its
 acceptance criteria, that this index reflects that ADR's `## Principles`
-section. A CI guard (`make lint-adr-index`) fails when an ADR file is not
+section. A CI guard (`make lint-docs`) fails when an ADR file is not
 referenced here at all.
 
 ## By number
