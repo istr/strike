@@ -1,6 +1,7 @@
 package verify_test
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -55,15 +56,27 @@ func strikeVerifier(t *testing.T) *verify.Verifier {
 }
 
 // sigstoreAccepts runs the bundle through sigstore-go as the differential
-// oracle. The verifier/policy construction mirrors
-// keyless_live_internal_test.go. Returns nil on accept.
+// oracle, against the golden trust root. Returns nil on accept.
 func sigstoreAccepts(t *testing.T, bundleJSON []byte) error {
 	t.Helper()
 	tr, err := root.NewTrustedRootFromPath(filepath.Join(goldenDir(t), "trusted_root.json"))
 	if err != nil {
 		t.Fatalf("sigstore trusted root: %v", err)
 	}
-	verifier, err := sgverify.NewVerifier(tr, sgverify.WithTransparencyLog(1), sgverify.WithSignedTimestamps(1))
+	return sigstoreVerdict(t, tr, bundleJSON)
+}
+
+// sigstoreVerdict runs one bundle through sigstore-go against tr, enforcing an
+// inclusion proof, a signed timestamp, and the SCT embedded in the Fulcio leaf.
+// The verifier/policy construction mirrors keyless_live_internal_test.go.
+// Returns nil on accept.
+func sigstoreVerdict(t *testing.T, tr *root.TrustedRoot, bundleJSON []byte) error {
+	t.Helper()
+	verifier, err := sgverify.NewVerifier(tr,
+		sgverify.WithTransparencyLog(1),
+		sgverify.WithSignedTimestamps(1),
+		sgverify.WithSignedCertificateTimestamps(1),
+	)
 	if err != nil {
 		t.Fatalf("sigstore NewVerifier: %v", err)
 	}
@@ -159,6 +172,37 @@ func TestGoldenTamperMatrix(t *testing.T) {
 		wrong := verify.New(goldenMaterial(t), goldenIdentity, "https://evil.example")
 		if _, err := wrong.Verify(golden); err == nil {
 			t.Error("strike accepted a bundle under the wrong issuer")
+		}
+	})
+
+	// Trust-root mutation: dropping the CT log must make sigstore-go reject the
+	// same golden it otherwise accepts. Removing the entry at the JSON level
+	// leaves every other anchor byte-identical, so a rejection can only come
+	// from the SCT check. Without this case, SCT enforcement could stop and
+	// every test would stay green.
+	t.Run("no-ctlogs", func(t *testing.T) {
+		raw, err := os.ReadFile(filepath.Clean(filepath.Join(goldenDir(t), "trusted_root.json")))
+		if err != nil {
+			t.Fatalf("read trusted_root.json: %v", err)
+		}
+		var doc map[string]json.RawMessage
+		if unmarshalErr := json.Unmarshal(raw, &doc); unmarshalErr != nil {
+			t.Fatalf("unmarshal trusted root: %v", unmarshalErr)
+		}
+		if _, ok := doc["ctlogs"]; !ok {
+			t.Fatal("golden trusted root carries no ctlogs entry")
+		}
+		delete(doc, "ctlogs")
+		stripped, err := json.Marshal(doc)
+		if err != nil {
+			t.Fatalf("marshal stripped trusted root: %v", err)
+		}
+		tr, err := root.NewTrustedRootFromJSON(stripped)
+		if err != nil {
+			t.Fatalf("stripped trusted root: %v", err)
+		}
+		if verifyErr := sigstoreVerdict(t, tr, golden); verifyErr == nil {
+			t.Error("sigstore-go accepted a bundle whose CT log is not in the trust root")
 		}
 	})
 }

@@ -3,6 +3,7 @@ package deploy
 import (
 	"context"
 	"crypto"
+	"crypto/sha256"
 	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
@@ -36,6 +37,10 @@ const (
 	// host even though the producer dials the sslip.io endpoint.
 	liveRekorOrigin  = "rekor.localhost"
 	liveRekorBaseURL = "https://" + liveRekorOrigin
+	// liveCTBaseURL mirrors the harness CT route. Nothing dials it: the SCT is
+	// embedded in the Fulcio leaf and checked offline against the log key. The
+	// field exists so the assembled trust root matches the generated one.
+	liveCTBaseURL = "https://ct.127.0.0.1.sslip.io:6962/strike-ct"
 )
 
 // liveStatement builds a minimal in-toto statement with a distinct subject
@@ -56,7 +61,7 @@ func liveStatement(i int) ([]byte, string) {
 // from harness materials. The OIDC id_token is minted in-test from the
 // harness Keycloak, so no token env is needed. Bring-up:
 //
-//	cd test/sigstore-local && make up && make rekor-pubkey
+//	cd test/sigstore-local && make up && make rekor-pubkey && make ctlog-pubkey
 //	go test ./internal/deploy -run TestKeylessLive -v
 //
 // A harness whose containers exist but are stopped is restarted by the test
@@ -74,9 +79,10 @@ func TestKeylessLive(t *testing.T) {
 	caddyRoot := filepath.Join(harness, "pki", "caddy-root.crt")
 	rekorPub := filepath.Join(harness, "pki", "rekor-ed25519-pub.pem")
 	tsaChain := filepath.Join(harness, "pki", "tsa-certchain.pem")
-	for _, f := range []string{caddyRoot, rekorPub, tsaChain} {
+	ctfePub := filepath.Join(harness, "pki", "ctfe-pub.pem")
+	for _, f := range []string{caddyRoot, rekorPub, tsaChain, ctfePub} {
 		if _, statErr := os.Stat(f); statErr != nil {
-			t.Fatalf("harness material missing (run make up / rekor-pubkey / tsa-certchain): %v", statErr)
+			t.Fatalf("harness material missing (run make up / rekor-pubkey / tsa-certchain / ctlog-pubkey): %v", statErr)
 		}
 	}
 	t.Setenv("SIGSTORE_ID_TOKEN", testutil.MintIDToken(t, liveIssuer, caddyRoot))
@@ -108,7 +114,7 @@ func TestKeylessLive(t *testing.T) {
 		t.Fatalf("got %d bundles, want %d", len(bundles), len(statements))
 	}
 
-	tr := liveTrustRoot(ctx, t, eps.Fulcio, rekorPub, tsaChain)
+	tr := liveTrustRoot(ctx, t, eps.Fulcio, rekorPub, tsaChain, ctfePub)
 	certID, err := verify.NewShortCertificateIdentity(liveIssuer, "", liveIdentity, "")
 	if err != nil {
 		t.Fatalf("NewShortCertificateIdentity: %v", err)
@@ -116,6 +122,7 @@ func TestKeylessLive(t *testing.T) {
 	verifier, err := verify.NewVerifier(tr,
 		verify.WithTransparencyLog(1),
 		verify.WithSignedTimestamps(1),
+		verify.WithSignedCertificateTimestamps(1),
 	)
 	if err != nil {
 		t.Fatalf("NewVerifier: %v", err)
@@ -145,13 +152,16 @@ func TestKeylessLive(t *testing.T) {
 
 // liveTrustRoot assembles a sigstore-go trust root from harness materials:
 // the Fulcio root via GET /api/v2/trustBundle over the pinned TLS client,
-// the exported Rekor log public key, and the fetched TSA certificate chain.
+// the exported Rekor log public key, the fetched TSA certificate chain, and
+// the exported CT log public key.
 // R1 spike caveats applied: the trust root BaseURL hostname must equal the
 // checkpoint origin; Ed25519 SignatureHashFunc is crypto.Hash(0) (pure, no
 // prehash); the log ID is the non-truncated C2SP signed-note key ID,
 // sha256(origin + "\n" + 0x01 + raw ed25519 pubkey) -- NOT the sha256 of the
-// PKIX DER (confirmed by the R3 spike, prefix 1e050d3e).
-func liveTrustRoot(ctx context.Context, t *testing.T, fulcioEp endpoint.HTTPS, rekorPubPath, tsaChainPath string) *root.TrustedRoot {
+// PKIX DER (confirmed by the R3 spike, prefix 1e050d3e). The CT log ID is the
+// other derivation -- RFC6962 sha256(DER SubjectPublicKeyInfo) -- which is the
+// value the SCT embedded in the Fulcio leaf names.
+func liveTrustRoot(ctx context.Context, t *testing.T, fulcioEp endpoint.HTTPS, rekorPubPath, tsaChainPath, ctfePubPath string) *root.TrustedRoot {
 	t.Helper()
 
 	client, err := HTTPClientFor(fulcioEp)
@@ -252,9 +262,32 @@ func liveTrustRoot(ctx context.Context, t *testing.T, fulcioEp endpoint.HTTPS, r
 		ValidityPeriodEnd:   tsaRoot.NotAfter,
 	}
 
+	ctfePEM, err := os.ReadFile(filepath.Clean(ctfePubPath))
+	if err != nil {
+		t.Fatalf("read ct log public key: %v", err)
+	}
+	ctfeBlock, _ := pem.Decode(ctfePEM)
+	if ctfeBlock == nil {
+		t.Fatalf("ct log public key is not PEM")
+	}
+	ctfeKey, err := x509.ParsePKIXPublicKey(ctfeBlock.Bytes)
+	if err != nil {
+		t.Fatalf("parse ct log public key: %v", err)
+	}
+	ctLogID := sha256.Sum256(ctfeBlock.Bytes)
+	ctLog := &root.TransparencyLog{
+		BaseURL:             liveCTBaseURL,
+		ID:                  ctLogID[:],
+		ValidityPeriodStart: clock.Unix(0, 0),
+		ValidityPeriodEnd:   clock.Unix(1<<40, 0),
+		HashFunc:            crypto.SHA256,
+		PublicKey:           ctfeKey,
+		SignatureHashFunc:   crypto.SHA256,
+	}
+
 	tr, err := root.NewTrustedRoot(root.TrustedRootMediaType01,
 		[]root.CertificateAuthority{fulcioCA},
-		nil,
+		map[string]*root.TransparencyLog{hex.EncodeToString(ctLogID[:]): ctLog},
 		[]root.TimestampingAuthority{tsaAuthority},
 		map[string]*root.TransparencyLog{hex.EncodeToString(logID): tlog},
 	)
