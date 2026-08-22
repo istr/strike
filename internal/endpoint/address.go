@@ -1,9 +1,10 @@
 // Package endpoint provides wire projections for the endpoint Address concept
 // (ADR-048). Address itself is generated from contract/endpoint/address.cue;
-// this file contains the hand-written behavior. The two convolute wire forms --
-// a packed "host:port" authority and an "https://host:port/path" URL -- are
-// projected here, not encoded in the type. Authority() and URL() round-trip
-// the strings ParseAuthority and ParseURL accept.
+// this file contains the hand-written behavior. The three convolute wire forms
+// -- a packed "host:port" authority, an "https://host:port/path" URL, and a
+// bracket-delimited "[host]:port" host-port pair -- are projected here, not
+// encoded in the type. Authority() and URL() round-trip the strings
+// ParseAuthority and ParseURL accept; BracketedHostPort() is render-only.
 package endpoint
 
 import (
@@ -99,6 +100,20 @@ func (a Address) URL() string {
 		s += p
 	}
 	return s
+}
+
+// BracketedHostPort returns the host and port packed with the host enclosed in
+// square brackets: the bare host when no port is set, and "[host]:port" when
+// one is. A path, if present, is not included. The brackets are the delimiter
+// the OpenSSH host grammar requires around a host carrying an explicit port;
+// Authority packs the same pair without them.
+func (a Address) BracketedHostPort() string {
+	h := string(a.Host)
+	if a.Port == nil {
+		return h
+	}
+	p := int(*a.Port)
+	return "[" + h + "]:" + strconv.Itoa(p)
 }
 
 // parsePort parses a decimal port string into the 1..65535 range.

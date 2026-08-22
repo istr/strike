@@ -126,6 +126,43 @@ func TestAuthorityRoundTrip(t *testing.T) {
 	}
 }
 
+func TestBracketedHostPort(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"bare host", "git.example.com", "git.example.com"},
+		{"host with port", "git.example.com:2222", "[git.example.com]:2222"},
+		{"ipv4 bare", "1.2.3.4", "1.2.3.4"},
+		{"ipv4 with port", "1.2.3.4:443", "[1.2.3.4]:443"},
+		{"min port", "h:1", "[h]:1"},
+		{"max port", "h:65535", "[h]:65535"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			a, err := endpoint.ParseAuthority(tc.in)
+			if err != nil {
+				t.Fatalf("ParseAuthority(%q): %v", tc.in, err)
+			}
+			if got := a.BracketedHostPort(); got != tc.want {
+				t.Errorf("BracketedHostPort() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestBracketedHostPortIgnoresPath(t *testing.T) {
+	a, err := endpoint.ParseURL("https://rekor.example:5555/api/v2")
+	if err != nil {
+		t.Fatalf("ParseURL: %v", err)
+	}
+	const want = "[rekor.example]:5555"
+	if got := a.BracketedHostPort(); got != want {
+		t.Errorf("BracketedHostPort() = %q, want %q", got, want)
+	}
+}
+
 func TestURLRoundTrip(t *testing.T) {
 	for _, s := range []string{
 		"https://fulcio.example",

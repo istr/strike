@@ -106,7 +106,7 @@ func New(stepID string, peers []PeerTrust, ca *transport.EphemeralCA, upstreamLo
 
 	peerMap := make(map[string]PeerTrust, len(peers))
 	for _, p := range peers {
-		c, err := canonicalize(string(p.Address.Host))
+		c, err := canonicalize(p.Address.Host.String())
 		if err != nil {
 			return nil, fmt.Errorf("mediator: invalid peer host %q: %w", p.Address.Host, err)
 		}

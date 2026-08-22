@@ -22,17 +22,13 @@ import (
 
 const strikePrefix = "github.com/istr/strike/"
 
-// allow lists conversion sites intentionally left untyped, with the reason.
-// An entry exempts conversions whose enclosing call has the given callee name
-// in the given package. Remove an entry when its conversion is typed away; an
-// empty allowlist means the tree is exhaustively type-clean.
-var allow = []struct{ pkg, callee, reason string }{
-	{
-		pkg:    "github.com/istr/strike/internal/mediator",
-		callee: "canonicalize",
-		reason: "peer host canonicalization is typed when the resolver path is reworked",
-	},
-}
+// allow lists conversion sites intentionally left untyped. Every entry carries
+// the reason and the roadmap item that owns the cleanup; a deferral without an
+// owner is a defect of the change that adds it. An entry exempts conversions
+// whose enclosing call has the given callee name in the given package. Remove
+// an entry when its conversion is typed away; the empty list below means the
+// tree is exhaustively type-clean.
+var allow = []struct{ pkg, callee, reason string }{}
 
 // Analyzer reports a strike named-type conversion used directly as a call
 // argument, outside the type's own package and the central allowlist.

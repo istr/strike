@@ -4,7 +4,6 @@ import (
 	"archive/tar"
 	"bytes"
 	"sort"
-	"strconv"
 	"strings"
 
 	"golang.org/x/crypto/ssh"
@@ -25,7 +24,7 @@ func RenderKnownHosts(peers []lane.Peer, frontKey ssh.PublicKey) []byte {
 	var hosts []string
 	for _, p := range peers {
 		if sp, ok := p.(endpoint.SSH); ok {
-			hosts = append(hosts, formatHost(sp.Address))
+			hosts = append(hosts, sp.Address.BracketedHostPort())
 		}
 	}
 	if len(hosts) == 0 {
@@ -42,15 +41,6 @@ func RenderKnownHosts(peers []lane.Peer, frontKey ssh.PublicKey) []byte {
 		buf.WriteByte('\n')
 	}
 	return buf.Bytes()
-}
-
-func formatHost(a endpoint.Address) string {
-	h := string(a.Host)
-	if a.Port == nil {
-		return h
-	}
-	p := int(*a.Port)
-	return "[" + h + "]:" + strconv.Itoa(p)
 }
 
 // SSHTrustContent returns the per-step SSH trust volume content: known_hosts

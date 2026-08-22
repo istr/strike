@@ -149,7 +149,7 @@ func DialVerified(ctx context.Context, addr endpoint.Address, trust endpoint.Tru
 	if err != nil {
 		return nil, err
 	}
-	host := string(addr.Host)
+	host := addr.Host.String()
 	if !isIPLiteral(host) {
 		config.ServerName = host
 	}
