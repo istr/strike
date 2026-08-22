@@ -5,7 +5,6 @@ Items not listed here are unscheduled. `rank` orders items *within* an arc
 for queries; this file is the cross-arc truth for *what runs next*. IDs only
 -- titles live in the item files (single source).
 
-- item-0087
 - item-0088
 - item-0086
 - item-0095
