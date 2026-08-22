@@ -10,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 
 	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/primitive"
@@ -276,18 +275,23 @@ func New() (Engine, error) {
 }
 
 // NewFromAddress creates an Engine connected to a specific address.
-// Supports "unix:///path/to/socket" and "tcp://host:port".
+// Supports "unix:///path/to/socket" and "https://host:port". The address is
+// parsed once here; every consumer below receives the parsed value.
 func NewFromAddress(addr string) (Engine, error) {
+	parsed, err := parseEngineAddress(addr)
+	if err != nil {
+		return nil, fmt.Errorf("container engine: %w", err)
+	}
 	tlsCfg := LoadTLSConfig()
-	client, err := newHTTPClient(addr, tlsCfg)
+	client, err := newHTTPClient(parsed, tlsCfg)
 	if err != nil {
 		return nil, fmt.Errorf("container engine %s: %w", addr, err)
 	}
 	return &podmanEngine{
 		client: client,
-		base:   apiBase(addr),
+		base:   apiBase(parsed),
 		tlsCfg: tlsCfg,
-		isUnix: strings.HasPrefix(addr, "unix://"),
+		isUnix: parsed.Unix,
 	}, nil
 }
 

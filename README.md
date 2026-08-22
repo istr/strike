@@ -189,7 +189,7 @@ contract/
 internal/
   container/
     engine.go                     Engine interface, types, socket detection
-    transport.go                  Unix socket and TCP HTTP transport
+    transport.go                  Unix socket and HTTPS transport
     podman.go                     Podman libpod REST API implementation
   lane/
     cue_types_lane_gen.go         Generated Go types (generated, not in git)

@@ -178,8 +178,8 @@ func TestContainerName(t *testing.T) {
 }
 
 func TestEngineAddress(t *testing.T) {
-	t.Setenv("CONTAINER_HOST", "tcp://example.test:1234")
-	if got := engineAddress(); got != "tcp://example.test:1234" {
+	t.Setenv("CONTAINER_HOST", "https://example.test:1234")
+	if got := engineAddress(); got != "https://example.test:1234" {
 		t.Errorf("engineAddress = %q, want the set address", got)
 	}
 	t.Setenv("CONTAINER_HOST", "")

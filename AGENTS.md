@@ -219,7 +219,7 @@ make golden     # update golden fixtures (never run in a way that masks regressi
 make check      # lint + test + vuln + build -- the one pre-commit gate
 ```
 
-Environment: `CONTAINER_HOST` (engine address, `unix://` or `tcp://`),
+Environment: `CONTAINER_HOST` (engine address, `unix://` or `https://`),
 `CONTAINER_TLS_CERT` / `CONTAINER_TLS_KEY` (client mTLS for TCP),
 `CONTAINER_TLS_CA` (pin CA; system store if unset), `SOURCE_DATE_EPOCH`
 (reproducible builds), `STRIKE_AUDIT` (request audit to stderr),

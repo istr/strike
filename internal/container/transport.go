@@ -2,6 +2,7 @@ package container
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -10,38 +11,81 @@ import (
 	"strings"
 
 	"github.com/istr/strike/internal/clock"
+	"github.com/istr/strike/internal/endpoint"
+	"github.com/istr/strike/internal/primitive"
 	nettransport "github.com/istr/strike/internal/transport"
 )
 
-// newHTTPClient creates an HTTP client for the given address.
+// apiPath is the libpod API prefix every engine request is built on. It is
+// the path component of the base URL, stated once and projected into both
+// forms below.
+const apiPath = "/v5.0.0/libpod"
+
+// engineAddress is the parsed engine address. Two forms are admitted, and
+// they are the two the engine connection identity already distinguishes: a
+// unix socket, whose access control is the socket file's own, and an https
+// authority, whose transport is TLS because the grammar says so rather than
+// because a caller remembered to ask for it. Socket carries the first form,
+// Network the second, and Unix says which one is set.
+type engineAddress struct {
+	Network endpoint.Address
+	Socket  primitive.AbsPath
+	Unix    bool
+}
+
+// parseEngineAddress parses the raw engine address into its admitted forms.
+// It is the only place the raw string is inspected: every consumer below
+// takes the parsed value, so the scheme is discriminated once and the forms
+// it yields are the ones the endpoint and primitive packages already model.
+// A plaintext network address has no representation here at all, which is
+// what makes the TLS requirement structural rather than a runtime check.
+func parseEngineAddress(addr string) (engineAddress, error) {
+	if sock, ok := strings.CutPrefix(addr, "unix://"); ok {
+		socket := primitive.NewAbsPath(sock)
+		if err := socket.Validate(); err != nil {
+			return engineAddress{}, fmt.Errorf("engine socket path: %w", err)
+		}
+		return engineAddress{Socket: socket, Unix: true}, nil
+	}
+	if strings.HasPrefix(addr, "https://") {
+		network, err := endpoint.ParseURL(addr)
+		if err != nil {
+			return engineAddress{}, err
+		}
+		if network.Path != nil {
+			return engineAddress{}, errors.New("engine address must not carry a path")
+		}
+		return engineAddress{Network: network}, nil
+	}
+	return engineAddress{}, fmt.Errorf(
+		"unsupported address scheme: %q (supported: unix://, https://)", addr)
+}
+
+// newHTTPClient creates an HTTP client for the parsed engine address.
 //
-// Unix sockets use plain HTTP (kernel-enforced access control).
-// TCP always uses TLS. If an explicit CA is configured, only that CA is
-// trusted (pinned mode). Otherwise the system CA store is used.
-// mTLS is used when client cert and key are provided.
-func newHTTPClient(addr string, tlsCfg TLSConfig) (*http.Client, error) {
+// A unix socket uses plain HTTP over the socket -- access control is the
+// socket file's own and the request never reaches a network. Everything else
+// is https: if an explicit CA is configured, only that CA is trusted (pinned
+// mode), otherwise the system CA store is used. mTLS is used when client cert
+// and key are provided.
+func newHTTPClient(addr engineAddress, tlsCfg TLSConfig) (*http.Client, error) {
 	transport := &http.Transport{
 		DisableCompression: true,
 		MaxIdleConns:       10,
 		IdleConnTimeout:    30 * clock.Second,
 	}
 
-	switch {
-	case strings.HasPrefix(addr, "unix://"):
-		sockPath := strings.TrimPrefix(addr, "unix://")
+	if addr.Unix {
+		sockPath := addr.Socket.String()
 		transport.DialContext = func(ctx context.Context, _, _ string) (net.Conn, error) {
 			return nettransport.DialUnixSocket(ctx, sockPath)
 		}
-
-	case strings.HasPrefix(addr, "tcp://"):
+	} else {
 		tc, err := tlsCfg.Build()
 		if err != nil {
 			return nil, fmt.Errorf("engine TLS: %w", err)
 		}
 		transport.TLSClientConfig = tc
-
-	default:
-		return nil, fmt.Errorf("unsupported address scheme: %q (supported: unix://, tcp://)", addr)
 	}
 
 	var rt http.RoundTripper = transport
@@ -52,15 +96,18 @@ func newHTTPClient(addr string, tlsCfg TLSConfig) (*http.Client, error) {
 	return &http.Client{Transport: rt}, nil
 }
 
-// apiBase returns the HTTP base URL for API requests.
-// Unix sockets use http:// (kernel routes by socket path, scheme is
-// irrelevant to the kernel). TCP always uses https://.
-func apiBase(addr string) string {
-	if strings.HasPrefix(addr, "unix://") {
-		return "http://d/v5.0.0/libpod"
+// apiBase returns the HTTP base URL for API requests. A unix socket uses
+// http:// because the kernel routes by socket path and the scheme is
+// irrelevant to it; that request never leaves the host. The network base is
+// projected from the parsed address rather than assembled from pieces.
+func apiBase(addr engineAddress) string {
+	if addr.Unix {
+		return "http://d" + apiPath
 	}
-	host := strings.TrimPrefix(addr, "tcp://")
-	return "https://" + host + "/v5.0.0/libpod"
+	a := addr.Network
+	p := primitive.NewAbsPath(apiPath)
+	a.Path = &p
+	return a.URL()
 }
 
 // auditTransport wraps an http.RoundTripper and logs every request for

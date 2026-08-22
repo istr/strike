@@ -432,19 +432,16 @@ func TestDetectSocket(t *testing.T) {
 	tests := []struct {
 		name          string
 		containerHost string
-		wantPrefix    string
 		wantErr       bool
 	}{
 		{
-			"tcp without CA uses system store",
-			"tcp://ci-host:8080",
-			"tcp://",
+			"https without CA uses system store",
+			"https://ci-host:8080",
 			false,
 		},
 		{
 			"explicit unix socket",
 			"unix:///custom/podman.sock",
-			"unix://",
 			false,
 		},
 	}
@@ -535,7 +532,7 @@ func TestTCPWithoutCAUsesSystemStore(t *testing.T) {
 	t.Setenv("CONTAINER_TLS_CERT", "")
 	t.Setenv("CONTAINER_TLS_KEY", "")
 
-	eng, err := container.NewFromAddress("tcp://127.0.0.1:9999")
+	eng, err := container.NewFromAddress("https://127.0.0.1:9999")
 	if err != nil {
 		t.Fatalf("NewFromAddress should succeed with system store fallback, got: %v", err)
 	}
@@ -813,7 +810,7 @@ func TestDetectSocket_XDGRuntime(t *testing.T) {
 }
 
 func TestDetectSocket_ContainerHostOverride(t *testing.T) {
-	t.Setenv("CONTAINER_HOST", "tcp://custom-host:9999")
+	t.Setenv("CONTAINER_HOST", "https://custom-host:9999")
 	t.Setenv("CONTAINER_TLS_CA", "")
 	t.Setenv("CONTAINER_TLS_CERT", "")
 	t.Setenv("CONTAINER_TLS_KEY", "")

@@ -212,22 +212,12 @@ Unit tests must not require podman, kubectl, or any external binary.
 **Approach: httptest mock servers**
 
 Container operations are tested against `httptest` mock servers that simulate
-the podman libpod REST API. Use `container.NewFromAddress` with `tcp://`
-pointing to the test server. See `internal/container/podman_test.go` for
-examples.
-
-```go
-func newTestEngine(t *testing.T, handler http.Handler) container.Engine {
-    t.Helper()
-    srv := httptest.NewServer(handler)
-    t.Cleanup(srv.Close)
-    eng, err := container.NewFromAddress("tcp://" + srv.Listener.Addr().String())
-    if err != nil {
-        t.Fatal(err)
-    }
-    return eng
-}
-```
+the podman libpod REST API. The engine address grammar admits only `unix://`
+and `https://`, so a mock engine is an httptest server started with TLS whose
+`srv.URL` is passed straight to `container.NewFromAddress`; there is no
+plaintext fallback. The ephemeral-PKI helpers `newTLSTestEngine` and
+`newMTLSTestEngine` in `internal/container/testpki_test.go` are the pattern to
+copy.
 
 Since strike has zero `os/exec` usage, there is no need for
 `TestHelperProcess` patterns or subprocess mocking.

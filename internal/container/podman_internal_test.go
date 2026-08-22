@@ -185,3 +185,47 @@ func TestBuildSpecGenerator_NoImageVolumes(t *testing.T) {
 		t.Error("image_volumes present when none set (omitempty broken)")
 	}
 }
+
+func TestParseEngineAddress(t *testing.T) {
+	tests := []struct {
+		name     string
+		addr     string
+		wantSock string
+		wantBase string
+		wantErr  bool
+	}{
+		{name: "unix socket", addr: "unix:///run/podman.sock", wantSock: "/run/podman.sock", wantBase: "http://d/v5.0.0/libpod"},
+		{name: "unix socket not absolute", addr: "unix://run/podman.sock", wantErr: true},
+		{name: "unix socket not canonical", addr: "unix:///run/../run/podman.sock", wantErr: true},
+		{name: "unix socket empty", addr: "unix://", wantErr: true},
+		{name: "https host and port", addr: "https://engine.example:2376", wantBase: "https://engine.example:2376/v5.0.0/libpod"},
+		{name: "https host only", addr: "https://engine.example", wantBase: "https://engine.example/v5.0.0/libpod"},
+		{name: "https with path", addr: "https://engine.example:2376/sub", wantErr: true},
+		{name: "https empty host", addr: "https://", wantErr: true},
+		{name: "https port out of range", addr: "https://engine.example:70000", wantErr: true},
+		{name: "https port not numeric", addr: "https://engine.example:http", wantErr: true},
+		{name: "tcp scheme no longer admitted", addr: "tcp://engine.example:2376", wantErr: true},
+		{name: "plaintext http rejected", addr: "http://engine.example:2376", wantErr: true},
+		{name: "no scheme", addr: "/run/podman.sock", wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := parseEngineAddress(tt.addr)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("parseEngineAddress(%q) error = %v, wantErr %v", tt.addr, err, tt.wantErr)
+			}
+			if tt.wantErr {
+				return
+			}
+			if got.Unix != (tt.wantSock != "") {
+				t.Errorf("Unix = %v, want %v", got.Unix, tt.wantSock != "")
+			}
+			if got.Socket.String() != tt.wantSock {
+				t.Errorf("Socket = %q, want %q", got.Socket, tt.wantSock)
+			}
+			if base := apiBase(got); base != tt.wantBase {
+				t.Errorf("apiBase = %q, want %q", base, tt.wantBase)
+			}
+		})
+	}
+}

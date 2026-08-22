@@ -172,7 +172,7 @@ func newTLSTestEngine(t *testing.T, handler http.Handler) container.Engine {
 	t.Setenv("CONTAINER_TLS_CERT", "")
 	t.Setenv("CONTAINER_TLS_KEY", "")
 
-	addr := strings.Replace(srv.URL, "https://", "tcp://", 1)
+	addr := srv.URL
 	eng, engErr := container.NewFromAddress(addr)
 	if engErr != nil {
 		t.Fatalf("NewFromAddress(%s): %v", addr, engErr)

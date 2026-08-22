@@ -14,7 +14,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/istr/strike/internal/clock"
@@ -174,7 +173,7 @@ func newTLSTestEngine(t *testing.T, handler http.Handler) container.Engine {
 	t.Setenv("CONTAINER_TLS_CERT", "")
 	t.Setenv("CONTAINER_TLS_KEY", "")
 
-	addr := strings.Replace(srv.URL, "https://", "tcp://", 1)
+	addr := srv.URL
 	eng, err := container.NewFromAddress(addr)
 	if err != nil {
 		t.Fatalf("NewFromAddress(%s): %v", addr, err)
@@ -207,7 +206,7 @@ func newMTLSTestEngine(t *testing.T, handler http.Handler) container.Engine {
 	t.Setenv("CONTAINER_TLS_CERT", filepath.Join(dir, "client.crt"))
 	t.Setenv("CONTAINER_TLS_KEY", filepath.Join(dir, "client.key"))
 
-	addr := strings.Replace(srv.URL, "https://", "tcp://", 1)
+	addr := srv.URL
 	eng, err := container.NewFromAddress(addr)
 	if err != nil {
 		t.Fatalf("NewFromAddress(%s): %v", addr, err)
