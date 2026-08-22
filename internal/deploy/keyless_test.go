@@ -101,7 +101,10 @@ func TestKeylessCrossval(t *testing.T) {
 		t.Fatalf("bundle.NewBundle: %v", err)
 	}
 
-	// 8. Verify with sigstore-go: transparency log + signed timestamps.
+	// 8. Verify with sigstore-go: transparency log + signed timestamps. No SCT
+	// requirement: the virtual sigstore has a CT log key but issues leaves with
+	// no embedded signed certificate timestamp, so a threshold of one could
+	// never be met. The paths that run against a real CT log do require it.
 	certID, err := verify.NewShortCertificateIdentity(issuer, "", identity, "")
 	if err != nil {
 		t.Fatalf("NewShortCertificateIdentity: %v", err)

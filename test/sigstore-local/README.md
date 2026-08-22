@@ -219,5 +219,6 @@ identity `tester@strike.localhost`, and trust = the CA bundle
 `pki/caddy-root.crt`. The placeholder fixtures (example.com) are untouched; only
 lane.yaml couples. Instruction 5 (verify) must keep the trust root
 parametrizable: the ephemeral harness root for local, the public Sigstore TUF
-root in production. The Fulcio ephemeralca signing root rotates per restart and
-is re-exported each `up`; the Caddy IdP-TLS root does not.
+root in production. The Fulcio fileca root under `pki/` persists across
+restarts, as does the Caddy IdP-TLS root; only the TSA certificate and the
+per-signing Fulcio leaf rotate.

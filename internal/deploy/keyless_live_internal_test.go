@@ -61,7 +61,7 @@ func liveStatement(i int) ([]byte, string) {
 // from harness materials. The OIDC id_token is minted in-test from the
 // harness Keycloak, so no token env is needed. Bring-up:
 //
-//	cd test/sigstore-local && make up && make rekor-pubkey && make ctlog-pubkey
+//	cd test/sigstore-local && make up
 //	go test ./internal/deploy -run TestKeylessLive -v
 //
 // A harness whose containers exist but are stopped is restarted by the test
@@ -154,13 +154,15 @@ func TestKeylessLive(t *testing.T) {
 // the Fulcio root via GET /api/v2/trustBundle over the pinned TLS client,
 // the exported Rekor log public key, the fetched TSA certificate chain, and
 // the exported CT log public key.
-// R1 spike caveats applied: the trust root BaseURL hostname must equal the
-// checkpoint origin; Ed25519 SignatureHashFunc is crypto.Hash(0) (pure, no
-// prehash); the log ID is the non-truncated C2SP signed-note key ID,
-// sha256(origin + "\n" + 0x01 + raw ed25519 pubkey) -- NOT the sha256 of the
-// PKIX DER (confirmed by the R3 spike, prefix 1e050d3e). The CT log ID is the
-// other derivation -- RFC6962 sha256(DER SubjectPublicKeyInfo) -- which is the
-// value the SCT embedded in the Fulcio leaf names.
+// Caveats: the trust root BaseURL hostname must equal the checkpoint origin;
+// Ed25519 SignatureHashFunc is crypto.Hash(0) (pure, no prehash); the log ID
+// is the non-truncated C2SP signed-note key ID, sha256(origin + "\n" + 0x01 +
+// raw ed25519 pubkey) -- NOT the sha256 of the PKIX DER (prefix 1e050d3e).
+// The CT log ID is the other derivation -- RFC6962 sha256(DER
+// SubjectPublicKeyInfo) -- which is the value the SCT embedded in the Fulcio
+// leaf names. Both log entries carry a lower validity bound only, matching the
+// generated trust root, where the log keys have no end date and sigstore-go
+// leaves the field zero.
 func liveTrustRoot(ctx context.Context, t *testing.T, fulcioEp endpoint.HTTPS, rekorPubPath, tsaChainPath, ctfePubPath string) *root.TrustedRoot {
 	t.Helper()
 
@@ -226,7 +228,6 @@ func liveTrustRoot(ctx context.Context, t *testing.T, fulcioEp endpoint.HTTPS, r
 		BaseURL:             liveRekorBaseURL,
 		ID:                  logID,
 		ValidityPeriodStart: clock.Unix(0, 0),
-		ValidityPeriodEnd:   clock.Unix(1<<40, 0),
 		HashFunc:            crypto.SHA256,
 		PublicKey:           edKey,
 		SignatureHashFunc:   crypto.Hash(0),
@@ -279,7 +280,6 @@ func liveTrustRoot(ctx context.Context, t *testing.T, fulcioEp endpoint.HTTPS, r
 		BaseURL:             liveCTBaseURL,
 		ID:                  ctLogID[:],
 		ValidityPeriodStart: clock.Unix(0, 0),
-		ValidityPeriodEnd:   clock.Unix(1<<40, 0),
 		HashFunc:            crypto.SHA256,
 		PublicKey:           ctfeKey,
 		SignatureHashFunc:   crypto.SHA256,

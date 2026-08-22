@@ -131,7 +131,7 @@ steps:
 
 // TestRegistryDeployLive_Integration is the end-to-end sealing test. Bring-up:
 //
-//	cd test/sigstore-local && make up && make rekor-pubkey
+//	cd test/sigstore-local && make up
 //	go test ./cmd/strike -run TestRegistryDeployLive_Integration -v
 //
 // A harness whose containers exist but are stopped is restarted by the test

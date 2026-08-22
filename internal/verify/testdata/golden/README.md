@@ -11,7 +11,7 @@ Regeneration is a deliberate act, not part of any test run or build gate. Bring
 the local sigstore harness up, then run the generator from anywhere in the
 module:
 
-    cd test/sigstore-local && make up && make rekor-pubkey && make tsa-certchain && make ctlog-pubkey
+    cd test/sigstore-local && make up && make tsa-certchain
     cd - && go tool gengolden
 
 The generator contacts the harness, produces three real statement bundles and
@@ -29,10 +29,13 @@ regeneration** -- including a change to nothing but a comment. There is no such
 thing as an editorial edit to this file, and the failure mode is a lane-digest
 mismatch in a test that needs no harness at all.
 
-A cold-started harness mints fresh Fulcio and TSA certificate authorities, so
-`trusted_root.json` is re-keyed even when nothing in strike changed. Only the
-Rekor Ed25519 key persists. Do not gate on `trusted_root.json` being
-byte-identical; gate on the five files verifying together.
+The timestamp authority signs with an in-memory key and self-signs a fresh
+certificate on every start, so `trusted_root.json` changes whenever the harness
+is restarted, even when nothing in strike changed. The other anchors persist:
+Fulcio runs against a file-based root under `pki/`, and the CT log and Rekor
+keys sit beside it, all reused until `make clean` removes them. Do not gate on
+`trusted_root.json` being byte-identical; gate on the five files verifying
+together.
 
 ## Commit shape
 
