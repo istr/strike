@@ -14,11 +14,13 @@
 //   - conversion: every type conversion involving a strike-defined named type,
 //     with syntactic context (call-arg, return, assign, map-index, binop, ...)
 //   - roundtrip-nested: T(string(x)) / string(T(s)) directly nested
-//   - roundtrip-local: v := string(x) ... T(v) (and inverse) within one function
+//   - roundtrip-local: v := string(x) or v := x.String() ... T(v) (and inverse)
+//     within one function
 //   - param-string-typed-in-body: func has a plain-string(ish) param that the
 //     body converts to a strike named type (typing starts too late)
-//   - param-detyped-in-body: func has a strike-typed param that the body
-//     converts back to a basic type (typing breaks too early)
+//   - param-detyped-in-body: func has a strike-typed param that the body takes
+//     back to a basic type, by conversion or through the String() boundary
+//     (typing breaks too early)
 //   - param-string-scalar-name: plain-string param whose name suggests a
 //     scalar semantic (host, digest, id, ...) -- raw candidates, unfiltered
 //   - result-string-scalar: func result is plain string but a return statement
@@ -842,14 +844,8 @@ func (c *collector) analyzeFuncDecl(pkg *packages.Package, fd *ast.FuncDecl, fn 
 				}
 			}
 		case *ast.CallExpr:
-			target, arg, ok := asConversion(info, node)
+			target, arg, ok := asDetyping(info, node)
 			if !ok {
-				// Not a conversion, but a String() boundary call closes a
-				// roundtrip just as one does. The param classes below stay
-				// conversion-only: they are about signature shape, not flow.
-				if bt, barg, isBoundary := asBoundaryCall(info, node); isBoundary {
-					c.analyzeRoundtripLocal(pkg, node, barg, bt, fn, locals)
-				}
 				return true
 			}
 			src := info.TypeOf(arg)
@@ -868,7 +864,8 @@ func (c *collector) analyzeFuncDecl(pkg *packages.Package, fd *ast.FuncDecl, fn 
 					}
 				}
 			}
-			// param-detyped-in-body: strike-typed param converted to basic
+			// param-detyped-in-body: strike-typed param taken back to a basic
+			// type, by conversion or through the String() boundary
 			if strikeNamed(src) != nil && strikeNamed(target) == nil {
 				for _, p := range typedParams {
 					if usesObj(info, arg, p.obj) {
@@ -877,7 +874,7 @@ func (c *collector) analyzeFuncDecl(pkg *packages.Package, fd *ast.FuncDecl, fn 
 							Kind: "param-detyped-in-body", Pos: pos, Pkg: pkg.PkgPath,
 							Func: fn.name, FuncSig: fn.sig,
 							From: p.name + " " + typeStr(src), To: typeStr(target),
-							Detail:  "conversion at " + cpos,
+							Detail:  "detyped at " + cpos,
 							Snippet: c.render(node), IsGen: isGen, IsTest: isTest,
 						})
 					}

@@ -196,6 +196,16 @@ func TestCollectBoundaryFacts(t *testing.T) {
 		}
 	}
 
+	detypedParam := map[string]bool{}
+	for _, f := range facts {
+		if f.Kind == "param-detyped-in-body" {
+			detypedParam[f.Func] = true
+		}
+	}
+	if !detypedParam["roundtripViaBoundary"] {
+		t.Errorf("a typed param detyped through the String boundary should be recorded, got %v", detypedParam)
+	}
+
 	bypass := map[string]bool{}
 	for _, f := range facts {
 		if f.Kind == "detype-bypasses-stringer" {
