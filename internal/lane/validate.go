@@ -282,7 +282,7 @@ func validateProvenancePaths(p *Lane) error {
 				found = true
 				break
 			}
-			prefix := string(*out.Path) + "/"
+			prefix := out.Path.String() + "/"
 			if provPath == *out.Path || provPath.HasPrefix(prefix) {
 				found = true
 				break

@@ -12,6 +12,14 @@ func roundtripLocal(d Digest) Digest {
 	return Digest(s)
 }
 
+// roundtripViaBoundary detypes through the sanctioned String boundary instead
+// of a conversion and retypes the result anyway. The value is just as untyped
+// in between, so this is the same roundtrip-local defect.
+func roundtripViaBoundary(d Digest) Digest {
+	s := d.String()
+	return Digest(s)
+}
+
 // resultStringScalar returns a typed value as a plain string, which is the
 // result-string-scalar class.
 func resultStringScalar(d Digest) string {

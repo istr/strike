@@ -38,7 +38,7 @@ func TestParseAuthority(t *testing.T) {
 			if err != nil {
 				t.Fatalf("ParseAuthority(%q): %v", tc.in, err)
 			}
-			if string(got.Host) != tc.wantHost {
+			if got.Host.String() != tc.wantHost {
 				t.Errorf("host = %q, want %q", got.Host, tc.wantHost)
 			}
 			if tc.wantPort == 0 {
@@ -91,7 +91,7 @@ func TestParseURL(t *testing.T) {
 			if err != nil {
 				t.Fatalf("ParseURL(%q): %v", tc.in, err)
 			}
-			if string(got.Host) != tc.wantHost {
+			if got.Host.String() != tc.wantHost {
 				t.Errorf("host = %q, want %q", got.Host, tc.wantHost)
 			}
 			if tc.wantPort == 0 {
@@ -105,7 +105,7 @@ func TestParseURL(t *testing.T) {
 				if got.Path != nil {
 					t.Errorf("path = %q, want nil", *got.Path)
 				}
-			} else if got.Path == nil || string(*got.Path) != tc.wantPath {
+			} else if got.Path == nil || got.Path.String() != tc.wantPath {
 				t.Errorf("path = %v, want %q", got.Path, tc.wantPath)
 			}
 		})

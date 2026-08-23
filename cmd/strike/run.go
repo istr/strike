@@ -234,7 +234,7 @@ func (rc *runContext) computeSpecHash(step *lane.Step, stepID primitive.Identifi
 		from := inp.From.Ref()
 		subpath := ""
 		if inp.Subpath != nil {
-			subpath = string(*inp.Subpath)
+			subpath = inp.Subpath.String()
 		}
 		key := from + "|" + inp.Mount.String() + "|" + subpath
 		inputHashes[key] = inputs.specHashes[inp.From.Step]
@@ -811,7 +811,7 @@ func inputContentPath(inp lane.InputRef, out *lane.FileOutput) string {
 	if inp.Subpath == nil {
 		return base
 	}
-	sub := string(*inp.Subpath)
+	sub := inp.Subpath.String()
 	return path.Join(base, sub)
 }
 

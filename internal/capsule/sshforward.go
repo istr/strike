@@ -78,7 +78,7 @@ func newSSHForwarder(stepID string, t SSHTarget, upstreamLook UpstreamLookupFunc
 	}
 	return &sshForwarder{
 		stepID:       stepID,
-		host:         string(t.Host),
+		host:         t.Host.String(),
 		port:         port,
 		upstreamLook: upstreamLook,
 	}, nil

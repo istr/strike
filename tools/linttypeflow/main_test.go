@@ -184,6 +184,18 @@ func TestCollectBoundaryFacts(t *testing.T) {
 		}
 	}
 
+	roundtrip := map[string]bool{}
+	for _, f := range facts {
+		if f.Kind == "roundtrip-local" {
+			roundtrip[f.Func] = true
+		}
+	}
+	for _, fn := range []string{"roundtripLocal", "roundtripViaBoundary"} {
+		if !roundtrip[fn] {
+			t.Errorf("%s leaves the type and comes back, expected a roundtrip-local fact, got %v", fn, roundtrip)
+		}
+	}
+
 	bypass := map[string]bool{}
 	for _, f := range facts {
 		if f.Kind == "detype-bypasses-stringer" {

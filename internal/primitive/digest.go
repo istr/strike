@@ -14,7 +14,7 @@ import (
 // from outside the schema-validated lane (engine inspect, image-ref
 // extraction); inside the pipeline a Digest is already constrained by #Digest.
 func ParseDigest(d Digest) (Digest, error) {
-	s := string(d)
+	s := d.String()
 	if s == "" {
 		return "", nil
 	}

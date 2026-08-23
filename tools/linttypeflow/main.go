@@ -454,6 +454,45 @@ func asConversion(info *types.Info, call *ast.CallExpr) (types.Type, ast.Expr, b
 	return tv.Type, call.Args[0], true
 }
 
+// asBoundaryCall returns (string, x) if call is x.String() on a type that owns
+// the boundary method. Such a call takes the value out of its named type
+// exactly as string(x) does.
+func asBoundaryCall(info *types.Info, call *ast.CallExpr) (types.Type, ast.Expr, bool) {
+	if len(call.Args) != 0 {
+		return nil, nil, false
+	}
+	sel, ok := ast.Unparen(call.Fun).(*ast.SelectorExpr)
+	if !ok || sel.Sel.Name != boundaryMethod {
+		return nil, nil, false
+	}
+	if !hasStringBoundary(info.TypeOf(sel.X)) {
+		return nil, nil, false
+	}
+	return types.Typ[types.String], sel.X, true
+}
+
+// asDetyping returns the target type and source expression of a step that
+// moves a value across the named-type boundary in either direction: a type
+// conversion, or the String() boundary call. Detecting a roundtrip through
+// conversions alone would go blind the moment a detyping is rewritten to the
+// sanctioned boundary call, which leaves the value just as untyped.
+func asDetyping(info *types.Info, call *ast.CallExpr) (types.Type, ast.Expr, bool) {
+	if target, arg, ok := asConversion(info, call); ok {
+		return target, arg, true
+	}
+	return asBoundaryCall(info, call)
+}
+
+// localConv is a local variable holding the result of a detyping or retyping
+// step: the type the value had before the step, the type it took, and where
+// the step sits, so a later step in the same body can be paired against it.
+type localConv struct {
+	obj  types.Object
+	from types.Type
+	to   types.Type
+	pos  token.Pos
+}
+
 type funcCtx struct {
 	name string
 	sig  string
@@ -773,12 +812,6 @@ func (c *collector) analyzeFuncDecl(pkg *packages.Package, fd *ast.FuncDecl, fn 
 	}
 
 	// scan body for conversions touching params, and local roundtrips
-	type localConv struct {
-		obj  types.Object // variable holding the conversion result
-		from types.Type
-		to   types.Type
-		pos  token.Pos
-	}
 	var locals []localConv
 
 	ast.Inspect(fd.Body, func(n ast.Node) bool {
@@ -792,7 +825,7 @@ func (c *collector) analyzeFuncDecl(pkg *packages.Package, fd *ast.FuncDecl, fn 
 				if !ok {
 					continue
 				}
-				target, arg, ok := asConversion(info, call)
+				target, arg, ok := asDetyping(info, call)
 				if !ok {
 					continue
 				}
@@ -811,6 +844,12 @@ func (c *collector) analyzeFuncDecl(pkg *packages.Package, fd *ast.FuncDecl, fn 
 		case *ast.CallExpr:
 			target, arg, ok := asConversion(info, node)
 			if !ok {
+				// Not a conversion, but a String() boundary call closes a
+				// roundtrip just as one does. The param classes below stay
+				// conversion-only: they are about signature shape, not flow.
+				if bt, barg, isBoundary := asBoundaryCall(info, node); isBoundary {
+					c.analyzeRoundtripLocal(pkg, node, barg, bt, fn, locals)
+				}
 				return true
 			}
 			src := info.TypeOf(arg)
@@ -844,25 +883,7 @@ func (c *collector) analyzeFuncDecl(pkg *packages.Package, fd *ast.FuncDecl, fn 
 					}
 				}
 			}
-			// roundtrip-local: conversion whose arg uses a local holding a prior conversion
-			for _, lc := range locals {
-				if node.Pos() > lc.pos && usesObj(info, arg, lc.obj) {
-					wasDetype := strikeNamed(lc.from) != nil && strikeNamed(lc.to) == nil
-					isRetype := strikeNamed(target) != nil
-					wasRetype := strikeNamed(lc.to) != nil
-					isDetype := strikeNamed(target) == nil && strikeNamed(src) != nil
-					if (wasDetype && isRetype) || (wasRetype && isDetype) {
-						cpos, _, _ := c.relPos(node.Pos())
-						c.emit(Fact{
-							Kind: "roundtrip-local", Pos: cpos, Pkg: pkg.PkgPath,
-							Func: fn.name,
-							From: typeStr(lc.from), To: typeStr(target),
-							Detail:  fmt.Sprintf("via local %q (%s)", lc.obj.Name(), typeStr(lc.to)),
-							Snippet: c.render(node), IsGen: isGen, IsTest: isTest,
-						})
-					}
-				}
-			}
+			c.analyzeRoundtripLocal(pkg, node, arg, target, fn, locals)
 		case *ast.ReturnStmt:
 			// result-string-scalar: returning string(strikeTyped) from a func
 			for _, res := range node.Results {
@@ -888,6 +909,35 @@ func (c *collector) analyzeFuncDecl(pkg *packages.Package, fd *ast.FuncDecl, fn 
 		}
 		return true
 	})
+}
+
+// analyzeRoundtripLocal records a step whose argument is a local holding an
+// earlier step in the opposite direction: the value left its named type and
+// came back, or came back and left again, both halves inside one body.
+func (c *collector) analyzeRoundtripLocal(pkg *packages.Package, node *ast.CallExpr,
+	arg ast.Expr, target types.Type, fn funcCtx, locals []localConv,
+) {
+	info := pkg.TypesInfo
+	src := info.TypeOf(arg)
+	for _, lc := range locals {
+		if node.Pos() <= lc.pos || !usesObj(info, arg, lc.obj) {
+			continue
+		}
+		wasDetype := strikeNamed(lc.from) != nil && strikeNamed(lc.to) == nil
+		isRetype := strikeNamed(target) != nil
+		wasRetype := strikeNamed(lc.to) != nil
+		isDetype := strikeNamed(target) == nil && strikeNamed(src) != nil
+		if (wasDetype && isRetype) || (wasRetype && isDetype) {
+			cpos, isGen, isTest := c.relPos(node.Pos())
+			c.emit(Fact{
+				Kind: "roundtrip-local", Pos: cpos, Pkg: pkg.PkgPath,
+				Func: fn.name,
+				From: typeStr(lc.from), To: typeStr(target),
+				Detail:  fmt.Sprintf("via local %q (%s)", lc.obj.Name(), typeStr(lc.to)),
+				Snippet: c.render(node), IsGen: isGen, IsTest: isTest,
+			})
+		}
+	}
 }
 
 func isPlainStringSliceOrMap(t types.Type) bool {

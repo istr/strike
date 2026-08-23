@@ -92,7 +92,7 @@ func New(stepID string, allowlist []primitive.Host, synthAddr netip.Addr) (*Reso
 
 	set := make(map[string]struct{}, len(allowlist))
 	for _, h := range allowlist {
-		hs := string(h)
+		hs := h.String()
 		c, err := canonicalize(hs)
 		if err != nil {
 			return nil, fmt.Errorf("resolver: invalid allowlist entry %q: %w", h, err)
