@@ -86,6 +86,7 @@ referenced here at all.
 | 050 | [Build-toolchain: the cue CLI as a go.mod tool dependency](ADR-050-cue-cli-as-go-tool-dependency.md) | Accepted | Code is liability; Meaning is single-sourced; CUE first |
 | 051 | [Deploy is the sealing point -- a signed, SBOM'd subject over the deployed payload](ADR-051-deploy-as-sealing-point.md) | Accepted | Runtime is attested; Digest-pinned references; Reproducibility; Identity is asymmetric; Enforcement is structural; Code is liability |
 | 052 | [Execution is completely lock-free](ADR-052-execution-is-completely-lock-free.md) | Accepted | Enforcement is structural; Code is liability; Peers are declared; Runtime is attested |
+| 053 | [Trust-anchor validity is bound to an authenticated time](ADR-053-trust-anchor-validity-authenticated-time.md) | Accepted | Runtime is attested; Enforcement is structural; Observation over declaration |
 
 ## By principle
 
@@ -128,7 +129,7 @@ ADR-006, ADR-014, ADR-016, ADR-018.
 
 ADR-012, ADR-013, ADR-014, ADR-016, ADR-019, ADR-028, ADR-030,
 ADR-033, ADR-037, ADR-038, ADR-040, ADR-041, ADR-042, ADR-043, ADR-045,
-ADR-051, ADR-052.
+ADR-051, ADR-052, ADR-053.
 
 ### Peers are declared
 
@@ -165,7 +166,7 @@ ADR-032, ADR-034.
 
 ADR-005, ADR-006, ADR-022, ADR-024, ADR-025, ADR-028, ADR-029,
 ADR-031, ADR-033, ADR-034, ADR-035, ADR-036, ADR-037, ADR-038, ADR-041, ADR-043,
-ADR-044, ADR-045, ADR-046, ADR-048, ADR-049, ADR-051, ADR-052.
+ADR-044, ADR-045, ADR-046, ADR-048, ADR-049, ADR-051, ADR-052, ADR-053.
 
 ### Meaning is single-sourced
 
@@ -173,7 +174,7 @@ ADR-044, ADR-047, ADR-048, ADR-049.
 
 ### Observation over declaration
 
-ADR-028, ADR-030, ADR-037, ADR-039, ADR-041.
+ADR-028, ADR-030, ADR-037, ADR-039, ADR-041, ADR-053.
 
 ## Format
 
