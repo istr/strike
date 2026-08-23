@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/closer"
 	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/primitive"
@@ -341,10 +342,30 @@ func (e *podmanEngine) ImageSave(ctx context.Context, tag string) (io.ReadCloser
 	return resp.Body, nil
 }
 
+// removeAfterFailureTimeout bounds a cleanup removal. The engine client
+// carries no timeout of its own, so a removal issued against an
+// unresponsive engine would otherwise block without limit.
+const removeAfterFailureTimeout = 30 * clock.Second
+
+// removeAfterFailure force-removes a container the engine created but
+// could not carry to a clean exit. It runs on a context detached from
+// the caller's: the usual reason a run fails is that the caller's
+// deadline expired, and a removal issued on that context would fail
+// before it reached the engine. The error is logged, not returned --
+// the failure that triggered the removal is the one the caller needs.
+func (e *podmanEngine) removeAfterFailure(ctx context.Context, id string) {
+	rmCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), removeAfterFailureTimeout)
+	defer cancel()
+	if err := e.containerRemove(rmCtx, id); err != nil {
+		log.Printf("WARN container remove after failure: %v", err)
+	}
+}
+
 // runContainer creates, optionally seeds, starts, streams logs from, and
-// waits for a container. It does not remove the container. It returns the
-// container id (valid for cleanup even when a post-create step errors) and
-// the exit code. ContainerRun and ContainerRunHeld share this body.
+// waits for a container. It does not remove a container that reached a
+// clean exit. It returns the container id and the exit code; on a
+// post-create error it removes the container and returns an empty id.
+// ContainerRun and ContainerRunHeld share this body.
 func (e *podmanEngine) runContainer(ctx context.Context, opts RunOpts, seeds []Seed) (string, int, error) {
 	id, err := e.containerCreate(ctx, opts)
 	if err != nil {
@@ -352,15 +373,17 @@ func (e *podmanEngine) runContainer(ctx context.Context, opts RunOpts, seeds []S
 	}
 	// Seed input content into the created (not yet started) container's
 	// writable volume before start. The container has not run, so nothing
-	// observes a partial seed; a failed PUT aborts before start with the id
-	// returned for cleanup. See ADR-036 seed delivery.
+	// observes a partial seed; a failed PUT aborts before start and the
+	// container is removed here. See ADR-036 seed delivery.
 	for _, s := range seeds {
 		if putErr := e.containerArchivePut(ctx, id, s.Path, s.Tar); putErr != nil {
-			return id, -1, fmt.Errorf("container seed %q: %w", s.Path, putErr)
+			e.removeAfterFailure(ctx, id)
+			return "", -1, fmt.Errorf("container seed %q: %w", s.Path, putErr)
 		}
 	}
 	if startErr := e.containerStart(ctx, id); startErr != nil {
-		return id, -1, fmt.Errorf("container start: %w", startErr)
+		e.removeAfterFailure(ctx, id)
+		return "", -1, fmt.Errorf("container start: %w", startErr)
 	}
 	done := make(chan error, 1)
 	go func() {
@@ -368,7 +391,11 @@ func (e *podmanEngine) runContainer(ctx context.Context, opts RunOpts, seeds []S
 	}()
 	exitCode, err := e.containerWait(ctx, id)
 	if err != nil {
-		return id, -1, fmt.Errorf("container wait: %w", err)
+		// A deadline aborts the wait request, not the container. The
+		// removal endpoint forces, so a container still running is
+		// killed rather than skipped.
+		e.removeAfterFailure(ctx, id)
+		return "", -1, fmt.Errorf("container wait: %w", err)
 	}
 	if logErr := <-done; logErr != nil {
 		log.Printf("WARN log streaming: %v", logErr)
@@ -390,10 +417,12 @@ func (e *podmanEngine) ContainerRun(ctx context.Context, opts RunOpts) (int, err
 	return exitCode, nil
 }
 
-// ContainerRunHeld runs the container without removing it, returning its id.
-// Auto-removal is forced off (overriding opts.Remove) so the stopped
-// container survives for extraction by the caller. seeds are extracted into
-// the container before start (ADR-036 input delivery); pass nil for none.
+// ContainerRunHeld runs the container and does not remove one that reached a
+// clean exit, returning its id; on a post-create error the container is
+// removed and the id is empty. Auto-removal is forced off (overriding
+// opts.Remove) so the stopped container survives for extraction by the
+// caller. seeds are extracted into the container before start (ADR-036 input
+// delivery); pass nil for none.
 func (e *podmanEngine) ContainerRunHeld(ctx context.Context, opts RunOpts, seeds []Seed) (string, int, error) {
 	opts.Remove = false
 	return e.runContainer(ctx, opts, seeds)

@@ -248,6 +248,11 @@ func newLiveRunContext(ctx context.Context, t *testing.T, engine container.Engin
 	}
 	t.Cleanup(func() { testutil.CloseLog(t, ft, "front") })
 
+	stepPorts, portsErr := allocateMediatedPorts(p)
+	if portsErr != nil {
+		t.Fatalf("allocate mediated ports: %v", portsErr)
+	}
+
 	rc := &runContext{
 		ctx:        ctx,
 		engine:     engine,
@@ -263,7 +268,7 @@ func newLiveRunContext(ctx context.Context, t *testing.T, engine container.Engin
 			return transport.LookupHost(ctx, p.Resolver, host)
 		}),
 		runtime:    lane.NewRuntime(dag),
-		stepPorts:  allocateMediatedPorts(p),
+		stepPorts:  stepPorts,
 		capsules:   map[primitive.Identifier]*capsule.NetworkCapsule{},
 		laneRoot:   laneRoot,
 		resolverID: resolverID,

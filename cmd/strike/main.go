@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log"
 	"net/netip"
@@ -85,7 +86,9 @@ func main() {
 	case "run":
 		ctx := context.Background()
 		engine := initEngine(ctx)
-		cmdRun(ctx, laneFile, engine)
+		if err := cmdRun(ctx, laneFile, engine); err != nil {
+			log.Fatalf("error: %v", err)
+		}
 	default:
 		log.Print(usage)
 		os.Exit(1)
@@ -196,27 +199,43 @@ func cmdDAG(path string) {
 	log.Print(tree.String())
 }
 
-func cmdRun(ctx context.Context, path string, engine container.Engine) {
+// cmdRun executes a lane and returns the aggregated failure, if any. It
+// returns rather than exiting so that the teardown it defers -- capsule
+// stop, trust-volume removal, front and CA close -- runs on every path,
+// including a failed run. The caller turns the error into the exit code.
+func cmdRun(ctx context.Context, path string, engine container.Engine) error {
 	fp, p, laneDigest, idx, dag, err := validateLane(path)
 	if err != nil {
-		log.Fatalf("error: %v", err)
+		return err
 	}
 
-	resolverID := probeResolver(ctx, p)
+	resolverID, err := probeResolver(ctx, p)
+	if err != nil {
+		return err
+	}
 	laneDir := filepath.Dir(fp.String())
 	laneRoot, err := os.OpenRoot(laneDir)
 	if err != nil {
-		log.Fatalf("error: open lane root: %v", err)
+		return fmt.Errorf("open lane root: %w", err)
 	}
 	defer closer.Warn(laneRoot, "lane root")
 
-	ca, caCleanup := initLaneCA(p)
+	ca, caCleanup, caErr := initLaneCA(p)
+	if caErr != nil {
+		return caErr
+	}
 	defer caCleanup()
 
-	ft, frontCleanup := initFront(ctx)
+	ft, frontCleanup, frontErr := initFront(ctx)
+	if frontErr != nil {
+		return frontErr
+	}
 	defer frontCleanup()
 
-	stepPorts := allocateMediatedPorts(p)
+	stepPorts, portsErr := allocateMediatedPorts(p)
+	if portsErr != nil {
+		return portsErr
+	}
 
 	upstreamLook := capsule.UpstreamLookupFunc(func(ctx context.Context, name string) ([]netip.Addr, error) {
 		return transport.LookupHost(ctx, p.Resolver, name)
@@ -243,13 +262,13 @@ func cmdRun(ctx context.Context, path string, engine container.Engine) {
 	}
 
 	if capsErr := rc.buildCapsules(ctx); capsErr != nil {
-		log.Fatalf("error: %v", capsErr)
+		return capsErr
 	}
 	defer rc.stopCapsules()
 
 	trust, trustErr := rc.planTrustVolumes(ctx, ca.PublicCertPEM())
 	if trustErr != nil {
-		log.Fatalf("error: %v", trustErr)
+		return trustErr
 	}
 	defer rc.removeTrustVolumes(context.Background(), trust)
 	rc.trust = trust
@@ -275,13 +294,11 @@ func cmdRun(ctx context.Context, path string, engine container.Engine) {
 	// same control-character guard as every other lane-derived log.
 	stateJSON, err := rc.runtime.JSON()
 	if err != nil {
-		log.Fatalf("error: marshal lane state: %v", err)
+		return fmt.Errorf("marshal lane state: %w", err)
 	}
 	log.Printf("STATE  %s", sanitizeForLog(string(stateJSON)))
 
-	if runErr != nil {
-		log.Fatalf("error: %v", runErr)
-	}
+	return runErr
 }
 
 // probeResolver runs the pre-flight resolver probe. lane.Parse is a pure
@@ -291,46 +308,43 @@ func cmdRun(ctx context.Context, path string, engine container.Engine) {
 // a reachable DoT resolver", for the rationale. The probe also captures
 // the resolver's observed TLS identity, recorded in the deploy attestation
 // per ADR-030.
-func probeResolver(ctx context.Context, p *lane.Lane) transport.ConnectionIdentity {
+func probeResolver(ctx context.Context, p *lane.Lane) (transport.ConnectionIdentity, error) {
 	probeCtx, probeCancel := context.WithTimeout(ctx, 5*clock.Second)
 	resolverID, probeErr := transport.ProbeResolver(probeCtx, p.Resolver)
 	probeCancel()
-	if probeErr != nil {
-		log.Fatalf("error: %v", probeErr)
-	}
-	return resolverID
+	return resolverID, probeErr
 }
 
 // initLaneCA creates the lane-wide ephemeral CA. The returned cleanup
 // function closes the CA.
-func initLaneCA(p *lane.Lane) (*transport.EphemeralCA, func()) {
+func initLaneCA(p *lane.Lane) (*transport.EphemeralCA, func(), error) {
 	ca, caErr := transport.New(p.ID)
 	if caErr != nil {
-		log.Fatalf("error: ephemeral CA: %v", caErr)
+		return nil, nil, fmt.Errorf("ephemeral CA: %w", caErr)
 	}
 	// Hand the cleanup closure the value as an io.Closer, not the concrete
 	// *transport.EphemeralCA: closer.Warn is polymorphic over io.Closer, and
 	// holding the interface keeps the foundation closer from acquiring a
 	// call-graph edge onto transport under deepScan (ADR-044).
 	var c io.Closer = ca
-	return ca, func() { closer.Warn(c, "ephemeral CA") }
+	return ca, func() { closer.Warn(c, "ephemeral CA") }, nil
 }
 
 // initFront starts the lane-run control-plane front (ADR-038 D2) on a host-
 // loopback listener. In this skeleton the front owns only its listener and
 // lifecycle; it does not yet terminate SSH or route by token (ADR-038, the
 // terminating SSH server and token routing). The returned cleanup closes it.
-func initFront(ctx context.Context) (*front.Front, func()) {
+func initFront(ctx context.Context) (*front.Front, func(), error) {
 	ft, ftErr := front.New(ctx)
 	if ftErr != nil {
-		log.Fatalf("error: front: %v", ftErr)
+		return nil, nil, fmt.Errorf("front: %w", ftErr)
 	}
 	log.Printf("FRONT  bound @ %s", ft.Addr())
 	// io.Closer, not the concrete *front.Front, for the same reason as the CA
 	// cleanup in initLaneCA: keep the foundation closer free of a deepScan
 	// call-graph edge onto services (ADR-044).
 	var c io.Closer = ft
-	return ft, func() { closer.Warn(c, "front") }
+	return ft, func() { closer.Warn(c, "front") }, nil
 }
 
 // allocateMediatedPorts pre-allocates a host-port block for every
@@ -339,7 +353,7 @@ func initFront(ctx context.Context) (*front.Front, func()) {
 // state-capture container (keyed "capture:<stepID>:<captureID>" to
 // stay collision-free across parallel deploy steps). Pack steps launch
 // no step container and are skipped.
-func allocateMediatedPorts(p *lane.Lane) map[string]capsule.HostPorts {
+func allocateMediatedPorts(p *lane.Lane) (map[string]capsule.HostPorts, error) {
 	var reqs []capsule.StepPortReq
 	for i := range p.Steps {
 		s := &p.Steps[i]
@@ -360,9 +374,9 @@ func allocateMediatedPorts(p *lane.Lane) map[string]capsule.HostPorts {
 	}
 	ports, err := capsule.AllocatePorts(reqs)
 	if err != nil {
-		log.Fatalf("error: %v", err)
+		return nil, err
 	}
-	return ports
+	return ports, nil
 }
 
 // captureKey is the stepPorts map key for a state-capture container.

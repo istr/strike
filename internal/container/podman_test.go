@@ -13,6 +13,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/primitive"
 )
@@ -934,5 +935,62 @@ func TestAuditLogging(t *testing.T) {
 
 	if !strings.Contains(buf.String(), "AUDIT") {
 		t.Errorf("expected AUDIT line in log output, got: %q", buf.String())
+	}
+}
+
+func TestContainerRun_WaitAbortedForcesRemove(t *testing.T) {
+	removed := make(chan string, 4)
+
+	eng := newTLSTestEngine(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		p := r.URL.Path
+		switch {
+		case strings.HasSuffix(p, "/containers/create"):
+			writeJSON(t, w, map[string]string{"Id": "stuck-container"})
+
+		case strings.HasSuffix(p, "/start"):
+			w.WriteHeader(http.StatusNoContent)
+
+		case strings.HasSuffix(p, "/logs"), strings.HasSuffix(p, "/wait"):
+			// Hold the request open until its own context is cancelled,
+			// which is what an expired step deadline does to a wait.
+			<-r.Context().Done()
+
+		case r.Method == http.MethodDelete && strings.Contains(p, "/containers/"):
+			removed <- p
+			w.WriteHeader(http.StatusNoContent)
+
+		default:
+			w.WriteHeader(http.StatusOK)
+		}
+	}))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 300*clock.Millisecond)
+	defer cancel()
+
+	exitCode, err := eng.ContainerRun(ctx, container.RunOpts{
+		Image:  "test@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+		Stdout: io.Discard,
+		Stderr: io.Discard,
+		Remove: true,
+	})
+	if err == nil {
+		t.Fatal("expected an error when the wait is aborted")
+	}
+	if exitCode != -1 {
+		t.Errorf("exitCode = %d, want -1", exitCode)
+	}
+
+	// The removal must arrive even though ctx is already expired: it is
+	// issued on a detached context. A removal on the expired context
+	// would never reach the handler.
+	deadline, deadlineCancel := context.WithTimeout(context.Background(), 5*clock.Second)
+	defer deadlineCancel()
+	select {
+	case p := <-removed:
+		if !strings.Contains(p, "stuck-container") {
+			t.Errorf("removed path = %q, want it to name stuck-container", p)
+		}
+	case <-deadline.Done():
+		t.Fatal("no container removal reached the engine after the wait was aborted")
 	}
 }

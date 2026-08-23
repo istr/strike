@@ -47,9 +47,11 @@ type Engine interface {
 	// and waits for a container but does NOT remove it. Seeds are tar streams
 	// the engine extracts into the container before start (ADR-036 input
 	// delivery); pass nil for none. Auto-removal is forced off so the stopped
-	// container survives for extraction. Returns the container id (valid for
-	// cleanup even on a post-create error) and the exit code. The caller owns
-	// removal (ContainerRemove) and extraction (ContainerArchive).
+	// container survives for extraction. Returns the container id and the exit
+	// code. A non-empty id always names a container that exists: on a
+	// post-create error the engine removes the container itself and returns an
+	// empty id. The caller owns removal (ContainerRemove) and extraction
+	// (ContainerArchive) of a container it was handed.
 	ContainerRunHeld(ctx context.Context, opts RunOpts, seeds []Seed) (string, int, error)
 
 	// ContainerArchive returns a tar stream of path from the container's

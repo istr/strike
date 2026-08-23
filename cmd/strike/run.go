@@ -493,7 +493,11 @@ func (rc *runContext) executeContainerStep(ctx context.Context, step *lane.Step,
 	containerID, execErr := run.Execute(ctx)
 	if containerID != "" {
 		defer func() {
-			if rmErr := rc.engine.ContainerRemove(ctx, containerID); rmErr != nil {
+			// Detached from ctx with its own bound: the step deadline is
+			// precisely what this removal has to outlive.
+			rmCtx, rmCancel := context.WithTimeout(context.WithoutCancel(ctx), 30*clock.Second)
+			defer rmCancel()
+			if rmErr := rc.engine.ContainerRemove(rmCtx, containerID); rmErr != nil {
 				log.Printf("WARN   %s: container remove: %v", safeName, rmErr)
 			}
 		}()

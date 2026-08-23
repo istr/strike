@@ -112,11 +112,6 @@ func TestMediator_HarnessHTTPS_INTEGRATION(t *testing.T) {
 		t.Fatalf("write: %v", wErr)
 	}
 	resp, err := io.ReadAll(clientConn)
-	// Close the client side before waiting for Serve: the mediator
-	// proxies until both directions have drained, and the
-	// client-to-upstream direction drains only when this conn
-	// closes. Cancelling the Serve context does not interrupt an
-	// in-flight proxied connection.
 	closer.Warn(clientConn, "integration client conn")
 	if err != nil {
 		t.Fatalf("read: %v", err)

@@ -16,6 +16,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"io"
 	"math/big"
 	"net"
 	"net/http"
@@ -24,6 +25,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/google/go-containerregistry/pkg/name"
@@ -1856,4 +1858,233 @@ func TestDeployerExecute_ObservedPeersConflictAborts(t *testing.T) {
 	if !strings.Contains(execErr.Error(), "conflicting validated identities") {
 		t.Errorf("error = %q, want 'conflicting validated identities'", execErr.Error())
 	}
+}
+
+// TestDeployExecute_StepTimeoutWithMediatedConnection drives a capture
+// unit whose container never exits, holds a mediated connection open
+// through that unit's capsule, and lets the step deadline expire. The
+// deadline must surface as an error within a bound: capsule stop may
+// not wait for the connection to close on its own, and the container
+// the engine created must be removed.
+func TestDeployExecute_StepTimeoutWithMediatedConnection(t *testing.T) {
+	peerSNI := "capture-peer.example"
+	fp, upAddr, upCleanup := deployTestUpstream(t, peerSNI)
+	defer upCleanup()
+
+	_, upPort, splitErr := net.SplitHostPort(upAddr)
+	if splitErr != nil {
+		t.Fatalf("SplitHostPort(%q): %v", upAddr, splitErr)
+	}
+
+	waiting := make(chan struct{}, 1)
+	removed := make(chan string, 4)
+
+	eng := newTLSTestEngine(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		p := r.URL.Path
+		switch {
+		case strings.HasSuffix(p, "/containers/create"):
+			writeJSON(t, w, map[string]string{"Id": "capture-container"})
+
+		case strings.HasSuffix(p, "/start"):
+			w.WriteHeader(http.StatusNoContent)
+
+		case strings.HasSuffix(p, "/wait"):
+			select {
+			case waiting <- struct{}{}:
+			default:
+			}
+			<-r.Context().Done()
+
+		case strings.HasSuffix(p, "/logs"):
+			<-r.Context().Done()
+
+		case r.Method == http.MethodDelete && strings.Contains(p, "/containers/"):
+			removed <- p
+			w.WriteHeader(http.StatusNoContent)
+
+		default:
+			w.WriteHeader(http.StatusOK)
+		}
+	}))
+
+	captureKey := "capture:timeout-step:probe"
+	ca, look, caVolume, ports := deployCapsuleFields(t, captureKey, "timeout-step")
+
+	peer := endpoint.TLS{
+		Type:    "https",
+		Address: endpoint.MustParseAuthority(peerSNI + ":" + upPort),
+		Trust:   endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: fp},
+	}
+
+	// Required: true is load-bearing. With a non-required pre-state set,
+	// Execute logs the capture failure and carries on into artifact
+	// resolution, which dereferences the runtime state this test does not
+	// build. Required makes the deadline the return value.
+	step := &lane.Step{
+		ID: "timeout-step",
+		Deploy: &lane.DeploySpec{
+			Method: lane.DeployKubernetes{
+				Type:  "kubernetes",
+				Image: "img@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+			},
+			Recording: lane.StateRecording{
+				PreState: lane.CaptureSet{
+					Required: true,
+					Captures: []lane.Capture{{
+						ID:      "probe",
+						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+						Command: []string{"cat", "/version"},
+						Peers:   []lane.Peer{peer},
+					}},
+				},
+			},
+		},
+	}
+
+	d := &deploy.Deployer{
+		Engine:       eng,
+		LaneDigest:   "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+		LaneID:       "timeout-lane",
+		CA:           ca,
+		UpstreamLook: look,
+		CAVolume:     caVolume,
+		StepID:       "timeout-step",
+		StepPorts:    ports,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*clock.Second)
+	defer cancel()
+
+	done := make(chan error, 1)
+	go func() {
+		_, execErr := d.Execute(ctx, step, nil)
+		done <- execErr
+	}()
+
+	// Once the container's wait is in flight, open a mediated connection
+	// through that unit's capsule and leave it open. This is the state in
+	// which the deadline used to hang the lane inside capsule stop.
+	startDeadline, startCancel := context.WithTimeout(context.Background(), 5*clock.Second)
+	defer startCancel()
+	select {
+	case <-waiting:
+	case <-startDeadline.Done():
+		t.Fatal("the capture container's wait never reached the engine")
+	}
+
+	mediatorAddr := netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), ports[captureKey].Mediator).String()
+	pool := x509.NewCertPool()
+	if !pool.AppendCertsFromPEM(ca.PublicCertPEM()) {
+		t.Fatal("append CA cert to pool")
+	}
+	dialer := &net.Dialer{}
+	raw, dialErr := dialer.DialContext(ctx, "tcp", mediatorAddr)
+	if dialErr != nil {
+		t.Fatalf("dial capsule mediator at %s: %v", mediatorAddr, dialErr)
+	}
+	held := tls.Client(raw, &tls.Config{
+		RootCAs:    pool,
+		ServerName: peerSNI,
+		MinVersion: tls.VersionTLS13,
+	})
+	if hsErr := held.HandshakeContext(ctx); hsErr != nil {
+		testutil.CloseLog(t, raw, "held raw conn")
+		t.Fatalf("handshake through capsule mediator: %v", hsErr)
+	}
+	defer testutil.CloseLog(t, held, "held mediated conn")
+	if _, wErr := held.Write([]byte("hold this open")); wErr != nil {
+		t.Fatalf("write through mediator: %v", wErr)
+	}
+
+	execDeadline, execCancel := context.WithTimeout(context.Background(), 20*clock.Second)
+	defer execCancel()
+	select {
+	case execErr := <-done:
+		if execErr == nil {
+			t.Fatal("expected Execute to fail on the step deadline")
+		}
+	case <-execDeadline.Done():
+		t.Fatal("Execute did not return after the step deadline expired -- capsule stop blocked")
+	}
+
+	rmDeadline, rmCancel := context.WithTimeout(context.Background(), 5*clock.Second)
+	defer rmCancel()
+	select {
+	case p := <-removed:
+		if !strings.Contains(p, "capture-container") {
+			t.Errorf("removed path = %q, want it to name capture-container", p)
+		}
+	case <-rmDeadline.Done():
+		t.Fatal("the capture container was not removed after the deadline")
+	}
+}
+
+// deployTestUpstream starts a TLS echo server with a self-signed cert
+// valid for sni and returns its cert fingerprint and address. Kept local
+// to this package: the mediator package has an equivalent for its own
+// tests, and a little copying beats a shared test dependency across two
+// packages.
+func deployTestUpstream(t *testing.T, sni string) (fingerprint primitive.Digest, addr string, cleanup func()) {
+	t.Helper()
+
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("generate upstream key: %v", err)
+	}
+	serial, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
+	if err != nil {
+		t.Fatalf("generate serial: %v", err)
+	}
+	now := clock.Wall()
+	template := &x509.Certificate{
+		SerialNumber: serial,
+		Subject:      pkix.Name{CommonName: sni},
+		NotBefore:    now.Add(-clock.Minute),
+		NotAfter:     now.Add(clock.Hour),
+		KeyUsage:     x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		DNSNames:     []string{sni},
+	}
+	certDER, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+	if err != nil {
+		t.Fatalf("create upstream cert: %v", err)
+	}
+	sum := sha256.Sum256(certDER)
+	fingerprint = primitive.DigestFromHex(hex.EncodeToString(sum[:]))
+
+	lc := net.ListenConfig{}
+	ln, err := lc.Listen(context.Background(), "tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen upstream: %v", err)
+	}
+	tlsLn := tls.NewListener(ln, &tls.Config{
+		Certificates: []tls.Certificate{{Certificate: [][]byte{certDER}, PrivateKey: key}},
+		MinVersion:   tls.VersionTLS13,
+	})
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for {
+			conn, acceptErr := tlsLn.Accept()
+			if acceptErr != nil {
+				return
+			}
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				defer testutil.CloseLog(t, conn, "deploy test upstream conn")
+				if _, cpErr := io.Copy(conn, conn); cpErr != nil {
+					return
+				}
+			}()
+		}
+	}()
+
+	cleanup = func() {
+		testutil.CloseLog(t, tlsLn, "deploy test upstream listener")
+		wg.Wait()
+	}
+	return fingerprint, ln.Addr().String(), cleanup
 }

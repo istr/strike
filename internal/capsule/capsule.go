@@ -365,18 +365,26 @@ func (c *NetworkCapsule) Start(ctx context.Context) error {
 // after Stop.
 func (c *NetworkCapsule) Stop() error {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	if c.state == stateStopped {
+		c.mu.Unlock()
 		return nil
 	}
 	if c.state == stateNew {
 		c.state = stateStopped
+		c.mu.Unlock()
 		return nil
 	}
+	// Claim the transition, then release: the serve-group wait below is
+	// unbounded until its workers observe cancellation, and a lock held
+	// across it turns one blocked connection into a blocked lifecycle.
+	// The listener and group fields are written only by Start and are
+	// fixed once the state is started.
+	c.state = stateStopped
+	cancel, group := c.serveCancel, c.serveGroup
+	c.mu.Unlock()
 
-	c.serveCancel()
-	serveErr := c.serveGroup.Wait()
+	cancel()
+	serveErr := group.Wait()
 
 	var firstErr error
 	if err := c.resolverUDP.Close(); err != nil {
@@ -392,7 +400,6 @@ func (c *NetworkCapsule) Stop() error {
 		firstErr = fmt.Errorf("capsule: serve: %w", serveErr)
 	}
 
-	c.state = stateStopped
 	return firstErr
 }
 

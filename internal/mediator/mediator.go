@@ -177,8 +177,9 @@ func (m *Mediator) Records() []ConnectionRecord {
 }
 
 // Close marks the mediator closed. Subsequent Serve returns
-// ErrMediatorClosed. In-flight connections are not interrupted;
-// cancel the Serve context to stop them. Idempotent.
+// ErrMediatorClosed. It does not stop a running Serve: cancelling the
+// Serve context does that, and cancellation also closes every
+// in-flight proxied connection. Idempotent.
 func (m *Mediator) Close() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -339,7 +340,17 @@ func (m *Mediator) appendRecord(rec ConnectionRecord) {
 	m.mu.Unlock()
 }
 
-func proxyBidirectional(_ context.Context, a, b *tls.Conn) error {
+// proxyBidirectional copies between the two connections until both
+// directions have drained or ctx is done. Cancellation closes both
+// connections, which unblocks the copies: a join can only wait on a
+// worker that cancellation can stop (ADR-052 D2).
+func proxyBidirectional(ctx context.Context, a, b *tls.Conn) error {
+	stop := context.AfterFunc(ctx, func() {
+		closer.Warn(a, "mediator: proxy client (cancelled)")
+		closer.Warn(b, "mediator: proxy upstream (cancelled)")
+	})
+	defer stop()
+
 	var g errgroup.Group
 	g.Go(func() error {
 		_, copyErr := io.Copy(b, a)
@@ -357,6 +368,12 @@ func proxyBidirectional(_ context.Context, a, b *tls.Conn) error {
 	})
 	err := g.Wait()
 	if err != nil && (errors.Is(err, io.EOF) || errors.Is(err, net.ErrClosed)) {
+		return nil
+	}
+	if ctx.Err() != nil {
+		// The copies were interrupted on purpose. A TLS conn does not
+		// always report a closed transport as net.ErrClosed, so the
+		// filter above cannot be relied on to catch this case.
 		return nil
 	}
 	return err

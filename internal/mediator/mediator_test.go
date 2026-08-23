@@ -851,3 +851,70 @@ func TestClose_BeforeServe_ServeReturnsError(t *testing.T) {
 		t.Errorf("Serve = %v, want ErrMediatorClosed", serveErr)
 	}
 }
+
+func TestServe_CancelInterruptsInFlightProxy(t *testing.T) {
+	ca := newTestCA(t)
+	sni := "inflight.example"
+
+	fp, upAddr, cleanup := testUpstream(t, sni)
+	defer cleanup()
+
+	_, upPort, splitErr := net.SplitHostPort(upAddr)
+	if splitErr != nil {
+		t.Fatalf("SplitHostPort(%q): %v", upAddr, splitErr)
+	}
+
+	peers := []mediator.PeerTrust{
+		{Address: endpoint.MustParseAuthority(sni + ":" + upPort), Trust: endpoint.Fingerprint{
+			Type:        "certFingerprint",
+			Fingerprint: fp,
+		}},
+	}
+	lookup := func(_ context.Context, _ string) ([]netip.Addr, error) {
+		return []netip.Addr{netip.MustParseAddr("127.0.0.1")}, nil
+	}
+
+	m, err := mediator.New("inflight-step", peers, ca, lookup)
+	if err != nil {
+		t.Fatalf("mediator.New: %v", err)
+	}
+
+	lc := net.ListenConfig{}
+	ln, err := lc.Listen(context.Background(), "tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer closer.Warn(ln, "test inflight listener")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	served := make(chan error, 1)
+	go func() { served <- m.Serve(ctx, ln) }()
+
+	conn := dialThroughMediator(t, ln.Addr().String(), sni, ca)
+	defer closer.Warn(conn, "test inflight client conn")
+
+	// Complete a round trip so both proxy directions are established,
+	// then leave the client connected: the client-to-upstream copy can
+	// only end by cancellation from here.
+	msg := []byte("still connected")
+	if _, writeErr := conn.Write(msg); writeErr != nil {
+		t.Fatalf("write: %v", writeErr)
+	}
+	buf := make([]byte, len(msg))
+	if _, readErr := io.ReadFull(conn, buf); readErr != nil {
+		t.Fatalf("read: %v", readErr)
+	}
+
+	cancel()
+
+	deadline, deadlineCancel := context.WithTimeout(context.Background(), 5*clock.Second)
+	defer deadlineCancel()
+	select {
+	case serveErr := <-served:
+		if serveErr != nil {
+			t.Errorf("Serve returned error: %v", serveErr)
+		}
+	case <-deadline.Done():
+		t.Fatal("Serve did not return within 5s of cancel with a proxied connection open")
+	}
+}
