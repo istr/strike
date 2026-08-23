@@ -7,8 +7,9 @@
 // that data. The gate needs a buildable tree, so it aborts when the package
 // loader reports any error.
 //
-// The survey records these fact kinds; the gate covers only roundtrip-local
-// and result-string-scalar, the near-zero-false-positive classes:
+// The survey records these fact kinds; the gate covers roundtrip-local,
+// result-string-scalar and detype-bypasses-stringer, the near-zero-false-
+// positive classes:
 //
 //   - conversion: every type conversion involving a strike-defined named type,
 //     with syntactic context (call-arg, return, assign, map-index, binop, ...)
@@ -22,12 +23,22 @@
 //     scalar semantic (host, digest, id, ...) -- raw candidates, unfiltered
 //   - result-string-scalar: func result is plain string but a return statement
 //     returns a detyped strike value
+//   - detype-bypasses-stringer: string(x) where the type of x owns a String()
+//     boundary method, outside that type's own methods -- the call site should
+//     read x.String()
 //   - map-string-key: every map type literal with a plain string key
 //   - map-index-typed-source: index into a string-keyed map where the key
 //     expression is built from strike-typed values
 //   - retype-from-stringop: conversion to a strike named type whose argument
 //     is a function call (Sprintf, TrimSuffix, ...) -- grammar rebuilt outside
 //     the owning type
+//
+// A String() string method that detypes its own receiver is the sanctioned
+// boundary where a named scalar becomes a plain string; ADR-049 (3) carves out
+// that one method name and no other. The survey still records it as a
+// result-string-scalar fact, flagged isboundary, and the gate drops it the way
+// it drops generated code. Every other detyping of a type that owns such a
+// boundary is a bypass and gates.
 package main
 
 import (
@@ -62,6 +73,9 @@ type Fact struct {
 	Snippet string `json:"snippet,omitempty"`
 	IsGen   bool   `json:"isgen,omitempty"`
 	IsTest  bool   `json:"istest,omitempty"`
+	// IsBoundary marks a sanctioned stringification method detyping its own
+	// receiver. The survey keeps the fact; the gate drops it.
+	IsBoundary bool `json:"isboundary,omitempty"`
 }
 
 var scalarName = regexp.MustCompile(`(?i)(host|port|digest|path|id$|ids$|name$|ref|refs$|authority|image|commit|sha|hash|url|uri|addr|fingerprint|issuer|subject|user|tag|duration|timestamp|secret)`)
@@ -93,9 +107,17 @@ var allow = []allowEntry{}
 // gatingKinds are the near-zero-false-positive classes the gate enforces. The
 // survey still records every kind; only these fail the build.
 var gatingKinds = map[string]bool{
-	"roundtrip-local":      true,
-	"result-string-scalar": true,
+	"roundtrip-local":          true,
+	"result-string-scalar":     true,
+	"detype-bypasses-stringer": true,
 }
+
+// boundaryMethod is the single method name allowed to hand a named scalar out
+// as a plain string. ADR-049 (3) carves out exactly one name -- fmt.Stringer
+// is a foreign interface and the value it produces is a message, not program
+// state -- so this is a constant rather than a set. The method must also be
+// declared as () string on the type it renders; see isBoundarySig.
+const boundaryMethod = "String"
 
 func allowed(allow []allowEntry, pkg, fn, kind string) bool {
 	for _, a := range allow {
@@ -108,11 +130,12 @@ func allowed(allow []allowEntry, pkg, fn, kind string) bool {
 
 // gateFindings keeps the covered classes that must fail the build: it drops
 // non-gating kinds, drops generated files (regenerated from CUE, not hand
-// fixable), and drops allowlisted sites.
+// fixable), drops sanctioned stringification boundaries, and drops allowlisted
+// sites.
 func gateFindings(facts []Fact, allow []allowEntry) []Fact {
 	var out []Fact
 	for _, f := range facts {
-		if !gatingKinds[f.Kind] || f.IsGen {
+		if !gatingKinds[f.Kind] || f.IsGen || f.IsBoundary {
 			continue
 		}
 		if allowed(allow, f.Pkg, f.Func, f.Kind) {
@@ -124,9 +147,13 @@ func gateFindings(facts []Fact, allow []allowEntry) []Fact {
 }
 
 func gateMessage(f Fact) string {
-	if f.Kind == "result-string-scalar" {
+	switch f.Kind {
+	case "result-string-scalar":
 		return fmt.Sprintf("%s: %s: %s returned as plain string in %s; return the named type or convert at the call boundary",
 			f.Pos, f.Kind, f.From, f.Func)
+	case "detype-bypasses-stringer":
+		return fmt.Sprintf("%s: %s: %s owns a String() boundary but %s detypes it with %s; call the String() method instead",
+			f.Pos, f.Kind, f.From, f.Func, f.Detail)
 	}
 	return fmt.Sprintf("%s: %s: %s detyped to %s and retyped in %s (%s); keep the value typed end to end",
 		f.Pos, f.Kind, f.From, f.To, f.Func, f.Detail)
@@ -270,6 +297,86 @@ func isScalarStrike(t types.Type) bool {
 	return ok
 }
 
+// isBoundarySig reports whether sig has the nullary string-returning shape
+// fmt.Stringer requires.
+func isBoundarySig(sig *types.Signature) bool {
+	if sig == nil || sig.Variadic() || sig.Params().Len() != 0 || sig.Results().Len() != 1 {
+		return false
+	}
+	return isPlainString(sig.Results().At(0).Type())
+}
+
+// hasStringBoundary reports whether t is a strike named type owning a
+// String() string method: the sanctioned way to render it as a plain string,
+// and therefore the reason a bare string(x) elsewhere is a bypass.
+func hasStringBoundary(t types.Type) bool {
+	n := strikeNamed(t)
+	if n == nil {
+		return false
+	}
+	obj, _, _ := types.LookupFieldOrMethod(n, true, n.Obj().Pkg(), boundaryMethod)
+	fn, ok := obj.(*types.Func)
+	if !ok {
+		return false
+	}
+	sig, ok := fn.Type().(*types.Signature)
+	return ok && isBoundarySig(sig)
+}
+
+// sameNamed reports whether a and b are the same strike named type, which is
+// how a method is recognized as belonging to the type it detypes.
+func sameNamed(a, b types.Type) bool {
+	na, nb := strikeNamed(a), strikeNamed(b)
+	return na != nil && nb != nil && na.Obj() == nb.Obj()
+}
+
+// bypassesStringer reports whether a conversion from src to target hands out
+// a value whose type owns a String() boundary, from outside that type's own
+// methods. recv is the receiver type of the enclosing method, nil for a plain
+// func: a type owns its representation, so converting inside its own methods
+// is not a bypass, but every other site must go through the boundary.
+func bypassesStringer(target, src, recv types.Type) bool {
+	return isPlainString(target) && hasStringBoundary(src) && !sameNamed(recv, src)
+}
+
+// boundaryRecv returns the receiver object of fd when fd is the sanctioned
+// stringification method on a strike named type: String declared as () string.
+// It returns nil for everything else, including a package-level func of the
+// same name and a method with an unnamed receiver, so those keep gating.
+func boundaryRecv(info *types.Info, fd *ast.FuncDecl) types.Object {
+	if fd.Recv == nil || len(fd.Recv.List) != 1 || fd.Name.Name != boundaryMethod {
+		return nil
+	}
+	names := fd.Recv.List[0].Names
+	if len(names) != 1 {
+		return nil
+	}
+	recv := info.Defs[names[0]]
+	if recv == nil || strikeNamed(recv.Type()) == nil {
+		return nil
+	}
+	fn, ok := info.Defs[fd.Name].(*types.Func)
+	if !ok {
+		return nil
+	}
+	sig, ok := fn.Type().(*types.Signature)
+	if !ok || !isBoundarySig(sig) {
+		return nil
+	}
+	return recv
+}
+
+// isRecvIdent reports whether expr is exactly the receiver identifier. A
+// boundary method may only detype itself: string(d) is sanctioned, but
+// string(c.cfg.Host) is a leak wearing a Stringer's clothes.
+func isRecvIdent(info *types.Info, expr ast.Expr, recv types.Object) bool {
+	if recv == nil {
+		return false
+	}
+	id, ok := ast.Unparen(expr).(*ast.Ident)
+	return ok && info.Uses[id] == recv
+}
+
 func isPlainString(t types.Type) bool {
 	if t == nil {
 		return false
@@ -351,6 +458,10 @@ type funcCtx struct {
 	name string
 	sig  string
 	decl *ast.FuncDecl
+	// recv is the receiver type of the enclosing method, nil for a plain
+	// func. A type owns its own representation, so a conversion inside one of
+	// its methods is not a boundary bypass.
+	recv types.Type
 }
 
 func (c *collector) walkFile(pkg *packages.Package, file *ast.File) {
@@ -366,10 +477,12 @@ func (c *collector) walkFile(pkg *packages.Package, file *ast.File) {
 		stack = append(stack, n)
 		if fd, ok := n.(*ast.FuncDecl); ok {
 			name := fd.Name.Name
+			var recv types.Type
 			if fd.Recv != nil && len(fd.Recv.List) > 0 {
 				name = c.render(fd.Recv.List[0].Type) + "." + name
+				recv = pkg.TypesInfo.TypeOf(fd.Recv.List[0].Type)
 			}
-			fn = funcCtx{name: name, sig: c.render(fd.Type), decl: fd}
+			fn = funcCtx{name: name, sig: c.render(fd.Type), decl: fd, recv: recv}
 			c.analyzeFuncDecl(pkg, fd, fn)
 		}
 		switch node := n.(type) {
@@ -459,6 +572,19 @@ func enclosingStmt(stack []ast.Node) ast.Node {
 	return stack[len(stack)-1]
 }
 
+// convSite is one type conversion plus the provenance every fact emitted for
+// it shares, so the per-kind analyzers below take one value instead of the
+// same six arguments each.
+type convSite struct {
+	call   *ast.CallExpr
+	arg    ast.Expr
+	target types.Type
+	src    types.Type
+	pos    string
+	isGen  bool
+	isTest bool
+}
+
 func (c *collector) analyzeCall(pkg *packages.Package, call *ast.CallExpr, stack []ast.Node, fn funcCtx) {
 	info := pkg.TypesInfo
 	target, arg, ok := asConversion(info, call)
@@ -466,8 +592,7 @@ func (c *collector) analyzeCall(pkg *packages.Package, call *ast.CallExpr, stack
 		return
 	}
 	src := info.TypeOf(arg)
-	tNamed, sNamed := strikeNamed(target), strikeNamed(src)
-	if tNamed == nil && sNamed == nil {
+	if strikeNamed(target) == nil && strikeNamed(src) == nil {
 		return
 	}
 	pos, isGen, isTest := c.relPos(call.Pos())
@@ -478,40 +603,70 @@ func (c *collector) analyzeCall(pkg *packages.Package, call *ast.CallExpr, stack
 		Snippet: c.render(enclosingStmt(stack)), IsGen: isGen, IsTest: isTest,
 	})
 
-	// roundtrip-nested: the argument is itself a conversion
-	if inner, ok := ast.Unparen(arg).(*ast.CallExpr); ok {
-		if innerTarget, innerArg, ok2 := asConversion(info, inner); ok2 {
-			innerSrc := info.TypeOf(innerArg)
-			if strikeNamed(innerSrc) != nil || strikeNamed(innerTarget) != nil ||
-				tNamed != nil || sNamed != nil {
-				c.emit(Fact{
-					Kind: "roundtrip-nested", Pos: pos, Pkg: pkg.PkgPath, Func: fn.name,
-					From: typeStr(innerSrc), To: typeStr(target),
-					Detail:  fmt.Sprintf("via %s", typeStr(innerTarget)),
-					Snippet: c.render(call), IsGen: isGen, IsTest: isTest,
-				})
-			}
-		}
+	// detype-bypasses-stringer: a plain-string conversion of a value whose type
+	// owns a String() boundary, made outside that type's own methods.
+	if bypassesStringer(target, src, fn.recv) {
+		c.emit(Fact{
+			Kind: "detype-bypasses-stringer", Pos: pos, Pkg: pkg.PkgPath, Func: fn.name,
+			From: typeStr(src), To: typeStr(target), Context: ctx,
+			Detail:  c.render(call),
+			Snippet: c.render(enclosingStmt(stack)), IsGen: isGen, IsTest: isTest,
+		})
 	}
 
-	// retype-from-stringop: conversion TO a strike scalar whose arg is a call
-	if tNamed != nil && isScalarStrike(target) {
-		if inner, ok := ast.Unparen(arg).(*ast.CallExpr); ok {
-			if _, _, isConv := asConversion(info, inner); !isConv {
-				c.emit(Fact{
-					Kind: "retype-from-stringop", Pos: pos, Pkg: pkg.PkgPath, Func: fn.name,
-					From: c.calleeFQN(info, inner), To: typeStr(target),
-					Snippet: c.render(call), IsGen: isGen, IsTest: isTest,
-				})
-			}
-		}
-		if _, ok := ast.Unparen(arg).(*ast.BinaryExpr); ok {
+	cv := convSite{call: call, arg: arg, target: target, src: src, pos: pos, isGen: isGen, isTest: isTest}
+	c.analyzeRoundtripNested(pkg, cv, fn)
+	c.analyzeRetypeFromStringop(pkg, cv, fn)
+}
+
+// analyzeRoundtripNested records T(string(x)) / string(T(s)) written as one
+// directly nested pair of conversions.
+func (c *collector) analyzeRoundtripNested(pkg *packages.Package, cv convSite, fn funcCtx) {
+	info := pkg.TypesInfo
+	inner, ok := ast.Unparen(cv.arg).(*ast.CallExpr)
+	if !ok {
+		return
+	}
+	innerTarget, innerArg, ok := asConversion(info, inner)
+	if !ok {
+		return
+	}
+	innerSrc := info.TypeOf(innerArg)
+	if strikeNamed(innerSrc) == nil && strikeNamed(innerTarget) == nil &&
+		strikeNamed(cv.target) == nil && strikeNamed(cv.src) == nil {
+		return
+	}
+	c.emit(Fact{
+		Kind: "roundtrip-nested", Pos: cv.pos, Pkg: pkg.PkgPath, Func: fn.name,
+		From: typeStr(innerSrc), To: typeStr(cv.target),
+		Detail:  fmt.Sprintf("via %s", typeStr(innerTarget)),
+		Snippet: c.render(cv.call), IsGen: cv.isGen, IsTest: cv.isTest,
+	})
+}
+
+// analyzeRetypeFromStringop records a conversion to a strike scalar whose
+// argument is a string built somewhere else -- a call result or a
+// concatenation -- which rebuilds the type's grammar outside the owning type.
+func (c *collector) analyzeRetypeFromStringop(pkg *packages.Package, cv convSite, fn funcCtx) {
+	info := pkg.TypesInfo
+	if !isScalarStrike(cv.target) {
+		return
+	}
+	if inner, ok := ast.Unparen(cv.arg).(*ast.CallExpr); ok {
+		if _, _, isConv := asConversion(info, inner); !isConv {
 			c.emit(Fact{
-				Kind: "retype-from-stringop", Pos: pos, Pkg: pkg.PkgPath, Func: fn.name,
-				From: "string-concat", To: typeStr(target),
-				Snippet: c.render(call), IsGen: isGen, IsTest: isTest,
+				Kind: "retype-from-stringop", Pos: cv.pos, Pkg: pkg.PkgPath, Func: fn.name,
+				From: c.calleeFQN(info, inner), To: typeStr(cv.target),
+				Snippet: c.render(cv.call), IsGen: cv.isGen, IsTest: cv.isTest,
 			})
 		}
+	}
+	if _, ok := ast.Unparen(cv.arg).(*ast.BinaryExpr); ok {
+		c.emit(Fact{
+			Kind: "retype-from-stringop", Pos: cv.pos, Pkg: pkg.PkgPath, Func: fn.name,
+			From: "string-concat", To: typeStr(cv.target),
+			Snippet: c.render(cv.call), IsGen: cv.isGen, IsTest: cv.isTest,
+		})
 	}
 }
 
@@ -583,6 +738,7 @@ func (c *collector) analyzeFuncDecl(pkg *packages.Package, fd *ast.FuncDecl, fn 
 		return
 	}
 	pos, isGen, isTest := c.relPos(fd.Pos())
+	boundary := boundaryRecv(info, fd)
 
 	type param struct {
 		obj  types.Object
@@ -725,6 +881,7 @@ func (c *collector) analyzeFuncDecl(pkg *packages.Package, fd *ast.FuncDecl, fn 
 						Func: fn.name, FuncSig: fn.sig,
 						From: typeStr(info.TypeOf(arg)), To: "string",
 						Snippet: c.render(node), IsGen: isGen, IsTest: isTest,
+						IsBoundary: isRecvIdent(info, arg, boundary),
 					})
 				}
 			}

@@ -107,6 +107,17 @@ func TestGateFindings(t *testing.T) {
 	}
 }
 
+func TestGateFindingsBoundary(t *testing.T) {
+	facts := []Fact{
+		{Kind: "result-string-scalar", Pos: "a.go:1", Pkg: "p", Func: "Digest.String", IsBoundary: true},
+		{Kind: "result-string-scalar", Pos: "a.go:2", Pkg: "p", Func: "String"},
+	}
+	got := gateFindings(facts, nil)
+	if len(got) != 1 || got[0].Func != "String" {
+		t.Fatalf("boundary should be dropped and the helper kept, got %+v", got)
+	}
+}
+
 func TestGateFindingsAllowlist(t *testing.T) {
 	facts := []Fact{
 		{Kind: "roundtrip-local", Pos: "a.go:1", Pkg: "p", Func: "F"},
@@ -132,12 +143,62 @@ func TestCollectFlowFacts(t *testing.T) {
 	for _, f := range facts {
 		kinds[f.Kind]++
 	}
-	for _, want := range []string{"roundtrip-local", "result-string-scalar"} {
+	for _, want := range []string{"roundtrip-local", "result-string-scalar", "detype-bypasses-stringer"} {
 		if kinds[want] == 0 {
 			t.Errorf("expected at least one %s fact, got kinds %v", want, kinds)
 		}
 	}
-	if got := gateFindings(facts, allow); len(got) < 2 {
-		t.Errorf("gate should flag both covered classes on the fixture, got %d: %+v", len(got), got)
+	if got := gateFindings(facts, allow); len(got) < 3 {
+		t.Errorf("gate should flag all covered classes on the fixture, got %d: %+v", len(got), got)
+	}
+}
+
+// TestCollectBoundaryFacts pins which stringification sites the fixture
+// sanctions and which it keeps gated: only a stdlib boundary method detyping
+// its own receiver is exempt, and only its own type's methods may convert it.
+func TestCollectBoundaryFacts(t *testing.T) {
+	dir, err := filepath.Abs("testdata/flowcase")
+	if err != nil {
+		t.Fatal(err)
+	}
+	facts, err := collect(dir, []string{"./..."})
+	if err != nil {
+		t.Fatalf("collect: %v", err)
+	}
+	boundary := map[string]bool{}
+	for _, f := range facts {
+		if f.Kind == "result-string-scalar" {
+			boundary[f.Func] = f.IsBoundary
+		}
+	}
+	if !boundary["Digest.String"] {
+		t.Errorf("Digest.String detypes its own receiver and should be a boundary, got %v", boundary)
+	}
+	for _, fn := range []string{"Wrapper.String", "String", "resultStringScalar"} {
+		if _, ok := boundary[fn]; !ok {
+			t.Errorf("expected a result-string-scalar fact for %s, got %v", fn, boundary)
+			continue
+		}
+		if boundary[fn] {
+			t.Errorf("%s does not detype its own receiver and must not be a boundary", fn)
+		}
+	}
+
+	bypass := map[string]bool{}
+	for _, f := range facts {
+		if f.Kind == "detype-bypasses-stringer" {
+			bypass[f.Func] = true
+		}
+	}
+	if !bypass["bypassStringer"] {
+		t.Errorf("bypassStringer converts a Digest at a call site and should be flagged, got %v", bypass)
+	}
+	if bypass["Digest.Hex"] {
+		t.Errorf("Digest.Hex converts inside the owning type and must not be flagged")
+	}
+	for _, f := range gateFindings(facts, allow) {
+		if f.IsBoundary {
+			t.Errorf("gate leaked a boundary finding: %+v", f)
+		}
 	}
 }

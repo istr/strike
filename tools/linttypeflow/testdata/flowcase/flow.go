@@ -22,3 +22,35 @@ func resultStringScalar(d Digest) string {
 func clean(d Digest) Digest {
 	return d
 }
+
+// String is the sanctioned Digest-to-string boundary: it detypes its own
+// receiver, so the survey records the fact as a boundary and the gate drops it.
+func (d Digest) String() string {
+	return string(d)
+}
+
+// Hex detypes the receiver inside one of its own type's methods, which the
+// type owns and the gate therefore allows.
+func (d Digest) Hex() string {
+	return string(d)[7:]
+}
+
+// Wrapper renders a Digest it does not own.
+type Wrapper struct{ d Digest }
+
+// String has the boundary shape but detypes a foreign value rather than its
+// own receiver, so it stays gated.
+func (w Wrapper) String() string {
+	return string(w.d)
+}
+
+// String is a package-level helper, not a method, so it stays gated too.
+func String(d Digest) string {
+	return string(d)
+}
+
+// bypassStringer detypes a Digest at a call site instead of calling
+// d.String(), which is the detype-bypasses-stringer class.
+func bypassStringer(d Digest) int {
+	return len(string(d))
+}
