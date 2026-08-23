@@ -6,7 +6,7 @@ for queries; this file is the cross-arc truth for *what runs next*. IDs only
 -- titles live in the item files (single source).
 
 - item-0136
-- item-0119
+- item-0011
 - item-0111
 - item-0112
 - item-0049
@@ -38,5 +38,4 @@ for queries; this file is the cross-arc truth for *what runs next*. IDs only
 - item-0006
 - item-0007
 - item-0008
-- item-0011
 - item-0062
