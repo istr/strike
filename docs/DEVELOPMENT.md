@@ -282,10 +282,11 @@ A plain `go test ./...` runs the integration tests; without an engine they
 fail fast with the opt-out hint, and `STRIKE_INTEGRATION=0 go test ./...`
 skips them.
 
-Two of them -- the live keyless test in `internal/deploy` and the
-registry-deploy test in `cmd/strike` -- additionally need the local sigstore
-harness under `test/sigstore-local`. Both call
-`testutil.RequireHarness(t, engine, harnessDir)`, which restarts harness
+Five of them additionally need the local sigstore harness under
+`test/sigstore-local`: the live keyless test in `internal/deploy`, the
+registry-deploy test in `cmd/strike`, the two DoT tests in
+`internal/transport`, and the mediated-peer test in `internal/mediator`. Each
+calls `testutil.RequireHarness(t, engine, harnessDir)`, which restarts harness
 containers that exist but are stopped, waits for the issuer, the transparency
 log and the CT log to answer, and re-exports the timestamp authority's
 certificate chain. That last step is not optional: the authority signs with an
@@ -297,8 +298,19 @@ Recovery is not creation. The harness is created by an operator with
 longer match `compose.yaml` is reported rather than started -- starting it
 would run an image the declaration no longer names. A cold start is therefore
 needed on a fresh clone, after `down` or `clean`, after a container has been
-removed by hand, and after any structural edit to `compose.yaml`. Bind-mount
-contents, everything under `pki/` included, are picked up by a plain restart.
+removed by hand, and after any structural edit to `compose.yaml`.
+
+Bind-mount contents divide into two cases that behave differently. The four
+directory mounts, all of them `pki/`, are picked up live. The seven
+single-file mounts -- the two CoreDNS configs, the Caddyfile, the Fulcio and
+zot configs, the Keycloak realm export, and the exported Caddy root that Fulcio
+trusts -- bind the inode rather than the directory entry. A write that replaces
+the file instead of truncating it in place is therefore invisible to the
+running container for as long as it keeps running, with no log line anywhere,
+because the service sees an unchanged file rather than a failed reload. Most
+editing tools and `git checkout` replace the file, so this is the common case
+and not an exotic one. Stop and start the container to re-bind the mount to the
+current file.
 
 ### 2.6 Fuzz testing
 

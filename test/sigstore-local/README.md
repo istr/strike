@@ -53,7 +53,12 @@ is not HTTP, so Caddy cannot front it; CoreDNS terminates TLS itself under
   is ephemeral, so each bring-up starts from an empty registry.
 - `coredns/Corefile`, `coredns/root.zone` -- the DoT resolver. Serves a
   synthetic root zone with no forwarder and no root hints, so the strike
-  run-start `NS .` pre-flight probe is answerable with no network egress.
+  run-start `NS .` pre-flight probe is answerable with no network egress. The
+  zone also carries an A record for the registry host, which is what lets a
+  mediated peer be resolved without leaving the harness. CoreDNS re-reads the
+  zone within a minute of a write that increases the SOA serial, but only a
+  write that keeps the file's inode; see the bind-mount note in
+  `docs/DEVELOPMENT.md` section 2.5 before editing either file.
 - `fulcio/config.yaml` -- OIDC issuer (canonical issuer, type email).
 - `keycloak/realm-export.json` -- realm `sigstore`, public client `sigstore`,
   direct access grant on, verified test user `tester` / `tester`,
