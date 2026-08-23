@@ -2,6 +2,7 @@ package verify
 
 import (
 	"bytes"
+	"crypto/ed25519"
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
@@ -26,8 +27,12 @@ import (
 //   - the RFC6962 inclusion proof recomputes the carried root;
 //   - the Ed25519-signed C2SP checkpoint commits to that root and tree size,
 //     under the log key the trusted root names, with the note origin bound to
-//     that key by the canonical signed-note key ID.
-func Inclusion(pb *ParsedBundle, tm *TrustedMaterial, leaf *x509.Certificate) error {
+//     that key by the canonical signed-note key ID;
+//   - that log key was inside the validity window the trusted root declares
+//     for it at the trusted time (ADR-053). Rekor v2 signs no time of its own,
+//     so the RFC3161 trusted time is the authenticated reference; the
+//     unsigned integratedTime never decides key validity.
+func Inclusion(pb *ParsedBundle, tm *TrustedMaterial, leaf *x509.Certificate, trustedTime clock.Time) error {
 	tle := pb.TLE
 	body := tle.GetCanonicalizedBody()
 	if len(body) == 0 {
@@ -69,9 +74,10 @@ func Inclusion(pb *ParsedBundle, tm *TrustedMaterial, leaf *x509.Certificate) er
 		return fmt.Errorf("%w: recomputed root does not match the proof root", ErrInclusion)
 	}
 
-	// 3. The checkpoint signs that root, under the trusted log key.
-	if err := verifyCheckpoint(ip.GetCheckpoint().GetEnvelope(), tle.GetLogId().GetKeyId(),
-		ip.GetTreeSize(), ip.GetRootHash(), tm); err != nil {
+	// 3. The checkpoint signs that root, under a trusted log key that was
+	// valid at the trusted time.
+	if err := checkpointUnderTrustedKey(tm, ip.GetCheckpoint().GetEnvelope(), tle.GetLogId().GetKeyId(),
+		ip.GetTreeSize(), ip.GetRootHash(), trustedTime); err != nil {
 		return fmt.Errorf("%w: %w", ErrInclusion, err)
 	}
 
@@ -86,16 +92,30 @@ func Inclusion(pb *ParsedBundle, tm *TrustedMaterial, leaf *x509.Certificate) er
 	return nil
 }
 
-// verifyCheckpoint verifies a C2SP signed-note checkpoint with the canonical
-// note implementation, then confirms it commits to the expected tree size and
-// root. The trusted log key is selected by the entry's log ID; the note origin
-// is bound to that key by the canonical signed-note key ID before the note is
-// opened, so a spoofed origin cannot select a different verifier.
-func verifyCheckpoint(envelope string, logID []byte, treeSize int64, rootHash []byte, tm *TrustedMaterial) error {
-	pub, ok := tm.rekorKeys[hex.EncodeToString(logID)]
+// checkpointUnderTrustedKey selects the log key the trusted root names for
+// logID, requires it to be inside the validity window the trusted root declares
+// for it at the trusted time (ADR-053), and verifies the checkpoint under it.
+// Selection and verification are one step because a checkpoint says nothing
+// except under the key the trusted root vouches for at that time.
+func checkpointUnderTrustedKey(tm *TrustedMaterial, envelope string, logID []byte,
+	treeSize int64, rootHash []byte, trustedTime clock.Time,
+) error {
+	key, ok := tm.rekorKeys[hex.EncodeToString(logID)]
 	if !ok {
 		return fmt.Errorf("no trusted log key for log ID %s", hex.EncodeToString(logID))
 	}
+	if !withinWindow(trustedTime, key.validFrom, key.validTo) {
+		return fmt.Errorf("log key outside its declared validity at the trusted time")
+	}
+	return verifyCheckpoint(envelope, logID, treeSize, rootHash, key.pub)
+}
+
+// verifyCheckpoint verifies a C2SP signed-note checkpoint with the canonical
+// note implementation, then confirms it commits to the expected tree size and
+// root. The caller has already selected pub as the trusted key for logID; the
+// note origin is bound to that key by the canonical signed-note key ID before
+// the note is opened, so a spoofed origin cannot select a different verifier.
+func verifyCheckpoint(envelope string, logID []byte, treeSize int64, rootHash []byte, pub ed25519.PublicKey) error {
 	origin, _, found := strings.Cut(envelope, "\n")
 	if !found {
 		return fmt.Errorf("checkpoint has no origin line")

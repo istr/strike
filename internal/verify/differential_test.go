@@ -1,7 +1,13 @@
 package verify_test
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -204,7 +210,103 @@ func TestGoldenTamperMatrix(t *testing.T) {
 		if verifyErr := sigstoreVerdict(t, tr, golden); verifyErr == nil {
 			t.Error("sigstore-go accepted a bundle whose CT log is not in the trust root")
 		}
+		// strike fails earlier and harder: a trust root carrying no CT log is
+		// not usable material at all, so the rejection is at the trusted-root
+		// layer rather than at verification time.
+		if _, parseErr := verify.ParseTrustedRoot(stripped); !errors.Is(parseErr, verify.ErrTrustedRoot) {
+			t.Errorf("strike accepted a trust root with no CT log: %v", parseErr)
+		}
 	})
+}
+
+// mutatedTrustRoot applies fn to the golden trust root's single ctlogs entry
+// and returns the re-encoded document. Every other anchor stays byte-identical
+// and every signature in the bundle stays intact, so a rejection downstream can
+// only come from the SCT layer.
+func mutatedTrustRoot(t *testing.T, fn func(map[string]any)) []byte {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Clean(filepath.Join(goldenDir(t), "trusted_root.json")))
+	if err != nil {
+		t.Fatalf("read trusted_root.json: %v", err)
+	}
+	var doc map[string]any
+	if unmarshalErr := json.Unmarshal(raw, &doc); unmarshalErr != nil {
+		t.Fatalf("unmarshal trusted root: %v", unmarshalErr)
+	}
+	ctlogs, ok := doc["ctlogs"].([]any)
+	if !ok || len(ctlogs) != 1 {
+		t.Fatal("golden trusted root does not carry exactly one ctlogs entry")
+	}
+	entry, ok := ctlogs[0].(map[string]any)
+	if !ok {
+		t.Fatal("ctlogs entry is not an object")
+	}
+	fn(entry)
+	out, err := json.Marshal(doc)
+	if err != nil {
+		t.Fatalf("marshal mutated trust root: %v", err)
+	}
+	return out
+}
+
+// freshP256SPKI returns the DER SubjectPublicKeyInfo of a throwaway P-256 key,
+// used as a CT log key the golden SCT was never signed with.
+func freshP256SPKI(t *testing.T) []byte {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	der, err := x509.MarshalPKIXPublicKey(&key.PublicKey)
+	if err != nil {
+		t.Fatalf("marshal key: %v", err)
+	}
+	return der
+}
+
+// TestGoldenCTMutations changes one field of the golden trust root's CT entry
+// at a time and requires strike to reject the golden bundle it otherwise
+// accepts. Without these cases the SCT layer could stop enforcing and every
+// other test would stay green.
+func TestGoldenCTMutations(t *testing.T) {
+	golden := readGolden(t, "sealed")
+	cases := []struct {
+		mutate func(map[string]any)
+		name   string
+	}{
+		{func(e map[string]any) {
+			e["logId"] = map[string]any{"keyId": base64.StdEncoding.EncodeToString(make([]byte, 32))}
+		}, "unknown-log-id"},
+		{func(e map[string]any) {
+			pk, ok := e["publicKey"].(map[string]any)
+			if !ok {
+				t.Fatal("ctlogs entry carries no publicKey object")
+			}
+			pk["rawBytes"] = base64.StdEncoding.EncodeToString(freshP256SPKI(t))
+		}, "key-did-not-sign-the-sct"},
+		{func(e map[string]any) {
+			pk, ok := e["publicKey"].(map[string]any)
+			if !ok {
+				t.Fatal("ctlogs entry carries no publicKey object")
+			}
+			pk["validFor"] = map[string]any{
+				"start": "2000-01-01T00:00:00Z",
+				"end":   "2000-01-02T00:00:00Z",
+			}
+		}, "window-excludes-the-sct"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tm, err := verify.ParseTrustedRoot(mutatedTrustRoot(t, tc.mutate))
+			if err != nil {
+				t.Fatalf("ParseTrustedRoot: %v", err)
+			}
+			_, verifyErr := verify.New(tm, goldenIdentity, goldenIssuer).Verify(golden)
+			if !errors.Is(verifyErr, verify.ErrSCT) {
+				t.Errorf("got %v, want ErrSCT", verifyErr)
+			}
+		})
+	}
 }
 
 // flip inverts the first byte of b in place (no-op on empty input).

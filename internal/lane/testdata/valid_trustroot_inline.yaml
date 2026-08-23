@@ -42,6 +42,16 @@ keyless:
             start: "2026-06-11T20:41:45Z"
         logId:
           keyId: "Bu9Vz7GDxLLBUJlFtQ2LGizupTzCtkOYsHxhm8erpEs="
+    ctlogs:
+      - baseUrl: "https://ct.127.0.0.1.sslip.io:6962/strike-ct"
+        hashAlgorithm: "SHA2_256"
+        publicKey:
+          rawBytes: "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE2Ax9aBQz5CCXhaLgdoe9Yh+x2OyvjeoV6tFO8azR5kuOVrwfeWpXBHlxmQPYdzN8LdH1PN3Mo4Xtl4WxgpOzAQ=="
+          keyDetails: "PKIX_ECDSA_P256_SHA_256"
+          validFor:
+            start: "2026-06-11T20:41:45Z"
+        logId:
+          keyId: "9QENU9fonYZ6Y8SaD/Z+waoxia8/aQEDvv62R5c9DXE="
     certificateAuthorities:
       - uri: "https://fulcio.127.0.0.1.sslip.io:5555"
         certChain:

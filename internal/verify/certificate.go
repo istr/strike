@@ -19,32 +19,39 @@ var (
 // Leaf parses the leaf, verifies its chain to the Fulcio roots in tm at
 // the trusted time (never the wall clock -- the leaf is short-lived and
 // already expired by verification time), and checks that it binds exactly the
-// expected SAN identity and OIDC issuer. Returns the parsed leaf: its key
-// verifies the DSSE signature.
-func Leaf(leafDER []byte, tm *TrustedMaterial, trustedTime clock.Time, identity, issuer string) (*x509.Certificate, error) {
+// expected SAN identity and OIDC issuer. Returns the parsed leaf, whose key
+// verifies the DSSE signature, and the certificate that issued it, whose
+// SubjectPublicKeyInfo the SCT layer hashes into the precertificate it
+// reconstructs. The issuer is taken from the chain just verified rather than
+// looked up again, so both layers rest on one chain build.
+func Leaf(leafDER []byte, tm *TrustedMaterial, trustedTime clock.Time, identity, issuer string) (*x509.Certificate, *x509.Certificate, error) {
 	leaf, err := x509.ParseCertificate(leafDER)
 	if err != nil {
-		return nil, fmt.Errorf("%w: parse: %w", ErrLeafChain, err)
+		return nil, nil, fmt.Errorf("%w: parse: %w", ErrLeafChain, err)
 	}
-	if _, vErr := leaf.Verify(x509.VerifyOptions{
+	chains, vErr := leaf.Verify(x509.VerifyOptions{
 		Roots:         tm.fulcioRoots,
 		Intermediates: tm.fulcioIntermediates,
 		CurrentTime:   trustedTime,
 		KeyUsages:     []x509.ExtKeyUsage{x509.ExtKeyUsageCodeSigning},
-	}); vErr != nil {
-		return nil, fmt.Errorf("%w: %w", ErrLeafChain, vErr)
+	})
+	if vErr != nil {
+		return nil, nil, fmt.Errorf("%w: %w", ErrLeafChain, vErr)
+	}
+	if len(chains) == 0 || len(chains[0]) < 2 {
+		return nil, nil, fmt.Errorf("%w: verified chain carries no issuer", ErrLeafChain)
 	}
 	if !matchesIdentity(leaf, identity) {
-		return nil, fmt.Errorf("%w: SAN does not carry %q", ErrIdentity, identity)
+		return nil, nil, fmt.Errorf("%w: SAN does not carry %q", ErrIdentity, identity)
 	}
 	gotIssuer, err := certIssuer(leaf)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrIdentity, err)
+		return nil, nil, fmt.Errorf("%w: %w", ErrIdentity, err)
 	}
 	if gotIssuer != issuer {
-		return nil, fmt.Errorf("%w: issuer %q != %q", ErrIdentity, gotIssuer, issuer)
+		return nil, nil, fmt.Errorf("%w: issuer %q != %q", ErrIdentity, gotIssuer, issuer)
 	}
-	return leaf, nil
+	return leaf, chains[0][1], nil
 }
 
 func matchesIdentity(leaf *x509.Certificate, identity string) bool {

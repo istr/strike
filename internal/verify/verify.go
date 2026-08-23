@@ -12,12 +12,15 @@
 package verify
 
 import (
+	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/x509"
 	"errors"
 
 	protodsse "github.com/sigstore/protobuf-specs/gen/pb-go/dsse"
 	protorekor "github.com/sigstore/protobuf-specs/gen/pb-go/rekor/v1"
+
+	"github.com/istr/strike/internal/clock"
 )
 
 // Sentinel errors. Every verification failure is or wraps one of these: a
@@ -29,6 +32,7 @@ var (
 	ErrSignature   = errors.New("verify: DSSE signature")
 	ErrLeafChain   = errors.New("verify: leaf certificate chain")
 	ErrIdentity    = errors.New("verify: certificate identity")
+	ErrSCT         = errors.New("verify: embedded signed certificate timestamp")
 	ErrTrustedTime = errors.New("verify: trusted timestamp")
 	ErrInclusion   = errors.New("verify: transparency-log inclusion")
 )
@@ -45,8 +49,36 @@ type TrustedMaterial struct {
 	// token so its CMS signature can be verified against the trusted root.
 	tsaLeaf *x509.Certificate
 	// rekorKeys maps the hex-encoded non-truncated C2SP signed-note key ID to
-	// the log's Ed25519 public key. Consumed by the inclusion layer (5a-ii).
-	rekorKeys map[string]ed25519.PublicKey
+	// the log's Ed25519 public key and the window the trusted root declares
+	// for it. Consumed by the inclusion layer.
+	rekorKeys map[string]rekorKey
+	// ctKeys maps the hex-encoded RFC 6962 log ID -- sha256 over the DER
+	// SubjectPublicKeyInfo, which is not the C2SP derivation used above -- to
+	// the log's ECDSA P-256 key and its window. Consumed by the SCT layer.
+	ctKeys map[string]ctKey
+}
+
+// rekorKey is a Rekor v2 transparency-log key with the validity window the
+// trusted root declares for it.
+type rekorKey struct {
+	validFrom clock.Time
+	validTo   clock.Time
+	pub       ed25519.PublicKey
+}
+
+// ctKey is a certificate-transparency log key with the validity window the
+// trusted root declares for it.
+type ctKey struct {
+	validFrom clock.Time
+	validTo   clock.Time
+	pub       *ecdsa.PublicKey
+}
+
+// withinWindow reports whether t falls inside [from, to]. A zero bound is one
+// the trusted root omitted and constrains nothing; a bound it declared always
+// constrains (ADR-053 D1).
+func withinWindow(t, from, to clock.Time) bool {
+	return (from.IsZero() || !t.Before(from)) && (to.IsZero() || !t.After(to))
 }
 
 // ParsedBundle is the strict-shape-validated content of a sigstore v0.3
@@ -77,9 +109,9 @@ func New(tm *TrustedMaterial, identity, issuer string) *Verifier {
 // Verify checks a sigstore v0.3 bundle end to end and returns the verified
 // in-toto statement payload. The order is fail-closed and total: strict
 // bundle shape, RFC3161 trusted time, Fulcio leaf chain and bound identity at
-// that time, DSSE signature, and Rekor v2 transparency-log inclusion. A
-// returned payload has passed every layer; any failure returns a layer
-// sentinel and no payload.
+// that time, the certificate-transparency proof embedded in that leaf, the
+// DSSE signature, and Rekor v2 transparency-log inclusion. A returned payload
+// has passed every layer; any failure returns a layer sentinel and no payload.
 func (v *Verifier) Verify(bundleJSON []byte) ([]byte, error) {
 	pb, err := ParseBundle(bundleJSON)
 	if err != nil {
@@ -89,15 +121,18 @@ func (v *Verifier) Verify(bundleJSON []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	leaf, err := Leaf(pb.LeafDER, v.tm, trustedTime, v.identity, v.issuer)
+	leaf, ca, err := Leaf(pb.LeafDER, v.tm, trustedTime, v.identity, v.issuer)
 	if err != nil {
+		return nil, err
+	}
+	if err = SCT(leaf, ca, v.tm); err != nil {
 		return nil, err
 	}
 	payload, err := DSSE(pb, leaf)
 	if err != nil {
 		return nil, err
 	}
-	if err := Inclusion(pb, v.tm, leaf); err != nil {
+	if err := Inclusion(pb, v.tm, leaf, trustedTime); err != nil {
 		return nil, err
 	}
 	return payload, nil

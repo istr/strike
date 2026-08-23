@@ -11,7 +11,7 @@ import (
 // NewTestTrustedMaterial builds TrustedMaterial directly from parsed certs
 // and a rekor key, for the self-contained layer tests. Production always goes
 // through ParseTrustedRoot.
-func NewTestTrustedMaterial(fulcioRoot, tsaRoot, tsaLeaf *x509.Certificate, logID string, rekorKey ed25519.PublicKey) *TrustedMaterial {
+func NewTestTrustedMaterial(fulcioRoot, tsaRoot, tsaLeaf *x509.Certificate, logID string, rekorPub ed25519.PublicKey) *TrustedMaterial {
 	fr := x509.NewCertPool()
 	fr.AddCert(fulcioRoot)
 	tr := x509.NewCertPool()
@@ -22,7 +22,7 @@ func NewTestTrustedMaterial(fulcioRoot, tsaRoot, tsaLeaf *x509.Certificate, logI
 		tsaRoots:            tr,
 		tsaIntermediates:    x509.NewCertPool(),
 		tsaLeaf:             tsaLeaf,
-		rekorKeys:           map[string]ed25519.PublicKey{logID: rekorKey},
+		rekorKeys:           map[string]rekorKey{logID: {pub: rekorPub}},
 	}
 }
 

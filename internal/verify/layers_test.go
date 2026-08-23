@@ -203,6 +203,13 @@ func (p *testPKI) trustedRootJSON(t *testing.T) []byte {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Any P-256 SPKI serves as the CT log key here: this trust root is parsed,
+	// never used to verify an SCT. The CA key is reused so the fixture needs
+	// no further material.
+	ctDER, err := x509.MarshalPKIXPublicKey(p.fulcioRoot.PublicKey)
+	if err != nil {
+		t.Fatal(err)
+	}
 	tr := &trustrootpb.TrustedRoot{
 		MediaType: "application/vnd.dev.sigstore.trustedroot+json;version=0.1",
 		CertificateAuthorities: []*trustrootpb.CertificateAuthority{
@@ -219,6 +226,12 @@ func (p *testPKI) trustedRootJSON(t *testing.T) []byte {
 			{
 				PublicKey: &commonpb.PublicKey{RawBytes: rekorDER},
 				LogId:     &commonpb.LogId{KeyId: []byte("test-log-id")},
+			},
+		},
+		Ctlogs: []*trustrootpb.TransparencyLogInstance{
+			{
+				PublicKey: &commonpb.PublicKey{RawBytes: ctDER},
+				LogId:     &commonpb.LogId{KeyId: []byte("test-ct-log-id")},
 			},
 		},
 	}
@@ -330,20 +343,30 @@ func TestLeafAndDSSE(t *testing.T) {
 	p := newTestPKI(t)
 	tm := p.material(t)
 
-	leaf, err := verify.Leaf(p.leaf.Raw, tm, p.now, testIdentity, testIssuer)
+	leaf, ca, err := verify.Leaf(p.leaf.Raw, tm, p.now, testIdentity, testIssuer)
 	if err != nil {
 		t.Fatalf("Leaf (happy): %v", err)
 	}
+	if !ca.Equal(p.fulcioRoot) {
+		t.Fatalf("Leaf returned %v as issuer, want the Fulcio root", ca.Subject)
+	}
+
+	// A leaf with no embedded SCT fails the SCT layer closed. This PKI mints
+	// an ordinary certificate, so it carries none; only the harness goldens
+	// carry a real one.
+	if gotErr := verify.SCT(leaf, ca, tm); !errors.Is(gotErr, verify.ErrSCT) {
+		t.Fatalf("leaf without SCT: got %v, want ErrSCT", gotErr)
+	}
 
 	// Wrong identity and wrong issuer must fail.
-	if _, gotErr := verify.Leaf(p.leaf.Raw, tm, p.now, "attacker@evil", testIssuer); !errors.Is(gotErr, verify.ErrIdentity) {
+	if _, _, gotErr := verify.Leaf(p.leaf.Raw, tm, p.now, "attacker@evil", testIssuer); !errors.Is(gotErr, verify.ErrIdentity) {
 		t.Fatalf("wrong identity: got %v, want ErrIdentity", gotErr)
 	}
-	if _, gotErr := verify.Leaf(p.leaf.Raw, tm, p.now, testIdentity, "https://evil"); !errors.Is(gotErr, verify.ErrIdentity) {
+	if _, _, gotErr := verify.Leaf(p.leaf.Raw, tm, p.now, testIdentity, "https://evil"); !errors.Is(gotErr, verify.ErrIdentity) {
 		t.Fatalf("wrong issuer: got %v, want ErrIdentity", gotErr)
 	}
 	// Outside validity must fail on the chain.
-	if _, gotErr := verify.Leaf(p.leaf.Raw, tm, p.now.Add(clock.Hour), testIdentity, testIssuer); !errors.Is(gotErr, verify.ErrLeafChain) {
+	if _, _, gotErr := verify.Leaf(p.leaf.Raw, tm, p.now.Add(clock.Hour), testIdentity, testIssuer); !errors.Is(gotErr, verify.ErrLeafChain) {
 		t.Fatalf("expired: got %v, want ErrLeafChain", gotErr)
 	}
 
