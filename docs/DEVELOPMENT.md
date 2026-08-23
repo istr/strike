@@ -455,14 +455,27 @@ Package-level doc goes in the package clause comment or a `doc.go` file.
 
 ### 3.8 Concurrency
 
-- `lane.State` holds one write-once record per step and carries no central
-  lock: each step owns its record, and a successor reads a predecessor's
-  record only after that step has completed.
-- Use `errgroup.WithContext` for bounded parallel operations.
-- Run `go test -race ./...` in CI -- always, no exceptions.
-- Prefer per-owner write-once records over a shared lock-guarded map; reach
-  for `sync.Map` only if profiling later shows contention.
-- Do not use `init()` functions.
+Execution is completely lock-free (ADR-052): production code -- `cmd/`
+and `internal/`, excluding `*_test.go` and `*.gen.go` -- declares no
+mutual-exclusion primitive. `sync.Mutex`, `sync.RWMutex`, `sync.Map`,
+`sync.Cond`, and `sync.Once` (including `OnceFunc`, `OnceValue`,
+`OnceValues`) are banned. Shared state is coordinated only by:
+
+- Single ownership: exactly one goroutine writes a value; readers
+  obtain it after a join or a publication.
+- Write-once publication through `sync/atomic`: the DAG walk publishes
+  one record per step via `atomic.Pointer`; first-wins captures
+  publish by compare-and-swap.
+- Ownership transfer through channels: a collection has one owning
+  collector goroutine, fed by producers its serve group joins.
+- Completion joins through `sync.WaitGroup` or
+  `golang.org/x/sync/errgroup`: a join waits only on work its owner
+  spawned, and every blocking call a worker makes is bound to its
+  context so that cancellation is an unblocking event.
+
+Run `go test -race ./...` in CI -- always, no exceptions. `-race` is
+necessary but is not the certificate: the structural gate is zero
+banned declarations (ADR-052 D7). Do not use `init()` functions.
 
 ## 4. golangci-lint configuration
 
