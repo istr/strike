@@ -30,13 +30,14 @@ import argparse
 import difflib
 import email.utils
 import hashlib
+import heapq
 import os
 import re
 import sys
 
 REQUIRED_FIELDS = ["id", "status", "arcs", "rank", "title", "goal",
                    "acceptance_intent"]
-OPTIONAL_FIELDS = ["links", "execution_profile"]
+OPTIONAL_FIELDS = ["depends_on", "links", "execution_profile"]
 FIELD_ORDER = REQUIRED_FIELDS + OPTIONAL_FIELDS
 QUOTED_SCALARS = {"rank", "title", "goal", "acceptance_intent"}
 STATUSES = ["proposed", "ratified", "done"]
@@ -132,6 +133,17 @@ def validate_meta(meta):
         raise ValueError("arcs must be a non-empty list")
     if not ID_RE.match(meta["id"]):
         raise ValueError("id must look like item-NNNN")
+    deps = meta.get("depends_on", [])
+    if deps:
+        if not isinstance(deps, list):
+            raise ValueError("depends_on must be a list of item ids")
+        for d in deps:
+            if not ID_RE.match(d):
+                raise ValueError("depends_on entry %r must look like item-NNNN" % d)
+            if d == meta["id"]:
+                raise ValueError("an item cannot depend on itself")
+        if len(set(deps)) != len(deps):
+            raise ValueError("depends_on has duplicate entries")
 
 
 def _is_ascii(text):
@@ -237,6 +249,135 @@ def write_order(root, ids):
 
 
 # --------------------------------------------------------------------------
+# dependency graph
+# --------------------------------------------------------------------------
+#
+# Edges are stored one-way, in `depends_on` on the dependent item: "these must
+# be done before I can start". There is deliberately no `blocks:` field -- a
+# two-sided edge list in a hand-editable markdown store is a sync bug waiting to
+# happen, so dependents are always derived here. `links` stays the non-blocking
+# pointer field; only `depends_on` carries the constraint a query may trust.
+
+def deps_of(meta):
+    return list(meta.get("depends_on", []))
+
+
+def deps_map(items):
+    return dict((mid, deps_of(m)) for mid, (m, _, _) in items.items())
+
+
+def reverse_deps(items):
+    """Derived index: {id: [ids that depend on it]}, in stable id order."""
+    rev = dict((mid, []) for mid in items)
+    for mid in sorted(items):
+        for d in deps_of(items[mid][0]):
+            rev.setdefault(d, []).append(mid)
+    return rev
+
+
+def is_satisfied(items, dep_id):
+    """A blocker counts as satisfied only once it is actually done."""
+    return dep_id in items and items[dep_id][0]["status"] == "done"
+
+
+def pending_deps(items, mid):
+    return [d for d in deps_of(items[mid][0]) if not is_satisfied(items, d)]
+
+
+def find_cycles(dmap):
+    """Return a list of cycles, each as the id list in traversal order."""
+    WHITE, GREY, BLACK = 0, 1, 2
+    color = dict((mid, WHITE) for mid in dmap)
+    cycles = []
+    seen = set()
+    for start in sorted(dmap):
+        if color[start] != WHITE:
+            continue
+        # Iterative DFS: the store can hold a long chain and a recursive walk
+        # would be one more thing to reason about at review time.
+        color[start] = GREY
+        path = [start]
+        stack = [(start, iter(dmap.get(start, [])))]
+        while stack:
+            node, it = stack[-1]
+            nxt = next(it, None)
+            if nxt is None:
+                color[node] = BLACK
+                path.pop()
+                stack.pop()
+                continue
+            if nxt not in dmap:              # dangling; reported separately
+                continue
+            if color[nxt] == GREY:
+                cyc = path[path.index(nxt):] + [nxt]
+                key = tuple(sorted(set(cyc)))
+                if key not in seen:
+                    seen.add(key)
+                    cycles.append(cyc)
+            elif color[nxt] == WHITE:
+                color[nxt] = GREY
+                path.append(nxt)
+                stack.append((nxt, iter(dmap.get(nxt, []))))
+    return cycles
+
+
+def would_cycle(dmap, mid, new_deps):
+    """True if giving `mid` these deps closes a loop back onto itself."""
+    probe = dict(dmap)
+    probe[mid] = list(new_deps)
+    for cyc in find_cycles(probe):
+        if mid in cyc:
+            return True
+    return False
+
+
+def transitive_deps(dmap, mid):
+    """Blockers of blockers, depth-first, cycle-safe."""
+    seen, out = set(), []
+    stack = list(reversed(dmap.get(mid, [])))
+    while stack:
+        node = stack.pop()
+        if node in seen:
+            continue
+        seen.add(node)
+        out.append(node)
+        stack.extend(reversed(dmap.get(node, [])))
+    return out
+
+
+def topo_order(ids, dmap):
+    """Stable dependency-legal re-sort of `ids`.
+
+    Kahn's algorithm keyed on the item's CURRENT position, so an already-legal
+    sequence comes back byte-identical and only the items that must move do.
+    A from-scratch topological sort would shuffle unrelated items and throw away
+    the human ordering judgement that is not expressible as an edge.
+
+    Returns (ordered_ids, stuck_ids); stuck_ids is non-empty only when a cycle
+    among scheduled items makes a full ordering impossible.
+    """
+    pos = dict((mid, i) for i, mid in enumerate(ids))
+    indeg, dependents = {}, dict((mid, []) for mid in ids)
+    for mid in ids:
+        blockers = [b for b in dmap.get(mid, []) if b in pos]
+        indeg[mid] = len(blockers)
+        for b in blockers:
+            dependents[b].append(mid)
+    heap = [(pos[m], m) for m in ids if indeg[m] == 0]
+    heapq.heapify(heap)
+    out = []
+    while heap:
+        _, mid = heapq.heappop(heap)
+        out.append(mid)
+        for dep in dependents[mid]:
+            indeg[dep] -= 1
+            if indeg[dep] == 0:
+                heapq.heappush(heap, (pos[dep], dep))
+    stuck = [m for m in ids if m not in set(out)]
+    return out + stuck, stuck
+
+
+# --------------------------------------------------------------------------
 # commands
 # --------------------------------------------------------------------------
 
@@ -266,6 +407,12 @@ def cmd_new(args):
         "goal": args.goal,
         "acceptance_intent": args.acceptance,
     }
+    if args.deps:
+        wanted = _split_commas(args.deps)
+        for d in wanted:
+            if d not in items:
+                sys.exit("error: dependency %s does not exist" % d)
+        meta["depends_on"] = wanted
     if args.links:
         meta["links"] = _split_commas(args.links)
     if args.cls or args.reasoning:
@@ -331,11 +478,174 @@ def cmd_arcs(args):
         print("(no open arcs)" if not args.all else "(no arcs)")
 
 
+def _label(items, mid):
+    if mid not in items:
+        return "%s  [MISSING]" % mid
+    m = items[mid][0]
+    return "%s  [%-8s] %s" % (mid, m["status"], m["title"])
+
+
+def _deps_show(items, args):
+    if args.id not in items:
+        sys.exit("error: %s not found" % args.id)
+    dmap = deps_map(items)
+    rev = reverse_deps(items)
+    m = items[args.id][0]
+    print(_label(items, args.id))
+    blockers = transitive_deps(dmap, args.id) if args.transitive \
+        else deps_of(m)
+    if blockers:
+        print("  depends on%s:" % (" (transitive)" if args.transitive else ""))
+        for d in blockers:
+            mark = "SATISFIED" if is_satisfied(items, d) else "PENDING  "
+            print("    %s  %s" % (mark, _label(items, d)))
+    else:
+        print("  depends on: (nothing)")
+    if rev.get(args.id):
+        print("  blocks:")
+        for d in rev[args.id]:
+            print("    %s" % _label(items, d))
+    else:
+        print("  blocks: (nothing)")
+    pend = [d for d in transitive_deps(dmap, args.id)
+            if not is_satisfied(items, d)]
+    if m["status"] == "done":
+        print("  state: DONE")
+    elif pend:
+        print("  state: BLOCKED (%d pending blocker(s), transitively)" % len(pend))
+    else:
+        print("  state: READY (no pending blockers)")
+
+
+def _deps_ready(items, order_ids):
+    dmap = deps_map(items)
+    rows = []
+    for mid in sorted(items):
+        m = items[mid][0]
+        if m["status"] != "ratified":
+            continue
+        if any(not is_satisfied(items, d) for d in transitive_deps(dmap, mid)):
+            continue
+        pos = order_ids.index(mid) + 1 if mid in order_ids else None
+        rows.append((pos if pos is not None else 10 ** 6, pos, mid))
+    for _, pos, mid in sorted(rows):
+        where = "#%-3d" % pos if pos else "----"
+        print("%s %s" % (where, _label(items, mid)))
+    if not rows:
+        print("(nothing ratified is unblocked)")
+
+
+def _deps_blocked(items):
+    dmap = deps_map(items)
+    any_row = False
+    for mid in sorted(items):
+        m = items[mid][0]
+        if m["status"] == "done":
+            continue
+        pend = [d for d in transitive_deps(dmap, mid) if not is_satisfied(items, d)]
+        if not pend:
+            continue
+        any_row = True
+        print(_label(items, mid))
+        for d in pend:
+            direct = "direct  " if d in deps_of(m) else "indirect"
+            print("    waits on %s  %s" % (direct, _label(items, d)))
+    if not any_row:
+        print("(nothing is blocked)")
+
+
+def _deps_check(items, order_ids):
+    """Report every way the edge set and the execution order disagree."""
+    dmap = deps_map(items)
+    pos = dict((mid, i) for i, mid in enumerate(order_ids))
+    problems = []
+    for mid in sorted(items):
+        m = items[mid][0]
+        for d in deps_of(m):
+            if d not in items:
+                problems.append(("dangling", "%s depends on %s, which does not "
+                                             "exist" % (mid, d)))
+                continue
+            dm = items[d][0]
+            if m["status"] == "ratified" and dm["status"] == "proposed":
+                problems.append(("status-inversion",
+                                 "%s is ratified but blocker %s is still proposed"
+                                 % (mid, d)))
+            if m["status"] == "done" and dm["status"] != "done":
+                problems.append(("status-inversion",
+                                 "%s is done but blocker %s is %s"
+                                 % (mid, d, dm["status"])))
+            if mid in pos:
+                if d in pos:
+                    if pos[d] > pos[mid]:
+                        problems.append(("order",
+                                         "%s is scheduled at #%d, before its blocker "
+                                         "%s at #%d" % (mid, pos[mid] + 1, d,
+                                                        pos[d] + 1)))
+                elif dm["status"] != "done":
+                    problems.append(("order",
+                                     "%s is scheduled at #%d but blocker %s is "
+                                     "%s and unscheduled"
+                                     % (mid, pos[mid] + 1, d, dm["status"])))
+    for cyc in find_cycles(dmap):
+        problems.append(("cycle", " -> ".join(cyc)))
+    if not problems:
+        print("dependency check: clean (%d items, %d edges)"
+              % (len(items), sum(len(v) for v in dmap.values())))
+        return 0
+    last = None
+    for kind, msg in sorted(problems):
+        if kind != last:
+            print("%s:" % kind)
+            last = kind
+        print("  %s" % msg)
+    print("\n%d problem(s)." % len(problems))
+    return 1
+
+
+def _deps_dot(items):
+    print("digraph roadmap {")
+    print('  rankdir=LR; node [shape=box, fontname="monospace"];')
+    for mid in sorted(items):
+        m = items[mid][0]
+        if m["status"] == "done":
+            continue
+        print('  "%s" [label="%s\\n%s"];'
+              % (mid, mid, m["title"].replace('"', "'")[:40]))
+    for mid in sorted(items):
+        if items[mid][0]["status"] == "done":
+            continue
+        for d in deps_of(items[mid][0]):
+            style = ' [style=dashed]' if is_satisfied(items, d) else ""
+            print('  "%s" -> "%s"%s;' % (d, mid, style))
+    print("}")
+
+
+def cmd_deps(args):
+    items = load_all(args.root)
+    order_ids = read_order(args.root)
+    if args.check:
+        sys.exit(_deps_check(items, order_ids))
+    if args.dot:
+        _deps_dot(items)
+    elif args.ready:
+        _deps_ready(items, order_ids)
+    elif args.blocked:
+        _deps_blocked(items)
+    elif args.id:
+        _deps_show(items, args)
+    else:
+        sys.exit("error: pass an item id, or one of --ready/--blocked/--check/--dot")
+
+
 def cmd_order(args):
     items = load_all(args.root)
     ids = read_order(args.root)
     if not ids:
         print("(execution order is empty)")
+        return
+    if args.topo:
+        _order_topo(items, ids)
         return
     for pos, mid in enumerate(ids, 1):
         if mid in items:
@@ -343,6 +653,39 @@ def cmd_order(args):
             print("%2d. %s  [%s]  %s" % (pos, mid, m["status"], m["title"]))
         else:
             print("%2d. %s  [MISSING item file]" % (pos, mid))
+
+
+def _order_topo(items, ids):
+    """Print a dependency-legal re-sort as a diff. Never writes.
+
+    The operator gate is the point: this proposes, the human applies (with
+    'reorder'), and the ratifying commit stays the single handover.
+    """
+    proposed, stuck = topo_order(ids, deps_map(items))
+    if stuck:
+        print("warning: cycle among scheduled items; these could not be ordered "
+              "and were left in place: %s" % ", ".join(stuck))
+    if proposed == ids:
+        if stuck:
+            print("nothing can be moved automatically: break the cycle first "
+                  "('update ID --remove-dep ...'), then re-run.")
+        else:
+            print("execution order is already dependency-legal (%d items); "
+                  "nothing to move." % len(ids))
+        return
+    diff = difflib.unified_diff(ids, proposed, fromfile="_order.md (current)",
+                                tofile="_order.md (topo)", lineterm="", n=2)
+    for line in diff:
+        print(line)
+    moved = [mid for mid in ids if ids.index(mid) != proposed.index(mid)]
+    print("\n%d item(s) would move. This is a proposal only -- nothing was "
+          "written." % len(moved))
+    first = moved[0]
+    at = proposed.index(first)
+    hint = ("reorder %s --to-position 1" % first) if at == 0 else \
+           ("reorder %s --after %s" % (first, proposed[at - 1]))
+    hint_more = "" if len(moved) == 1 else " (and %d more)" % (len(moved) - 1)
+    print("Apply it with 'reorder', e.g. %s%s." % (hint, hint_more))
 
 
 def cmd_next(args):
@@ -361,6 +704,16 @@ def cmd_next(args):
                 ep = m["execution_profile"]
                 print("  execution_profile: class=%s reasoning=%s (advisory)"
                       % (ep.get("class", "?"), ep.get("reasoning", "?")))
+            pend = [d for d in transitive_deps(deps_map(items), mid)
+                    if not is_satisfied(items, d)]
+            if pend:
+                # Without this, 'next' can confidently hand out an item that
+                # cannot actually be started.
+                print("  BLOCKED BY:        %s" % ", ".join(pend))
+                print("\nThis item is not runnable yet. 'deps --ready' lists what "
+                      "is, and 'order --topo' proposes a legal order.")
+                return
+            print("  blockers:          none pending")
             print("\nAuthor the byte-exact instruction ephemerally against the "
                   "current pin -- do not store it back here.")
             return
@@ -407,6 +760,28 @@ def cmd_update(args):
         m["goal"] = args.goal
     if args.acceptance:
         m["acceptance_intent"] = args.acceptance
+    if args.add_dep or args.remove_dep:
+        items = load_all(args.root)
+        deps = deps_of(m)
+        for d in _split_commas(args.add_dep or ""):
+            if d == args.id:
+                sys.exit("error: an item cannot depend on itself")
+            if d not in items:
+                sys.exit("error: dependency %s does not exist" % d)
+            if d not in deps:
+                deps.append(d)
+        for d in _split_commas(args.remove_dep or ""):
+            if d in deps:
+                deps.remove(d)
+        # A cycle is never a legitimate intermediate state, so it is refused at
+        # write time rather than merely reported later by 'deps --check'.
+        if would_cycle(deps_map(items), args.id, deps):
+            sys.exit("error: that dependency would create a cycle. Run "
+                     "'deps %s --transitive' to see the chain." % args.id)
+        if deps:
+            m["depends_on"] = deps
+        elif "depends_on" in m:
+            del m["depends_on"]
     links = m.get("links", [])
     for l in _split_commas(args.add_link or ""):
         if l not in links:
@@ -493,6 +868,21 @@ def cmd_reorder(args):
     if args.remove:
         write_order(args.root, ids)
         print("removed %s from the execution order" % args.id)
+        return
+    if args.after_deps:
+        # Earliest legal slot: right after the last-scheduled blocker. Blockers
+        # that are already done impose no constraint.
+        blockers = [d for d in transitive_deps(deps_map(items), args.id)
+                    if d in ids and not is_satisfied(items, d)]
+        if not blockers:
+            print("note: %s has no scheduled pending blockers; appending." % args.id)
+            ids.append(args.id)
+        else:
+            anchor = max(blockers, key=lambda d: ids.index(d))
+            ids.insert(ids.index(anchor) + 1, args.id)
+            print("placed after last pending blocker %s" % anchor)
+        write_order(args.root, ids)
+        print("execution order updated; %s placed" % args.id)
         return
     if args.before:
         if args.before not in ids:
@@ -710,6 +1100,7 @@ def build_parser():
     n.add_argument("--goal", required=True, help="one-line end state")
     n.add_argument("--acceptance", required=True, help="acceptance intent (not greps)")
     n.add_argument("--rank")
+    n.add_argument("--deps", help="comma-separated item ids that must be done first")
     n.add_argument("--links")
     n.add_argument("--class", dest="cls", help="execution_profile class (advisory)")
     n.add_argument("--reasoning", help="execution_profile reasoning depth (advisory)")
@@ -730,7 +1121,22 @@ def build_parser():
     ar.add_argument("--sort", choices=["name", "open"], default="name")
     ar.set_defaults(func=cmd_arcs)
 
+    dp = sub.add_parser("deps", help="query the dependency graph / validate it")
+    dp.add_argument("id", nargs="?", help="show one item's blockers and dependents")
+    dp.add_argument("--transitive", action="store_true",
+                    help="with ID: walk blockers of blockers")
+    dp.add_argument("--ready", action="store_true",
+                    help="ratified items whose blockers are all done")
+    dp.add_argument("--blocked", action="store_true",
+                    help="open items with at least one pending blocker")
+    dp.add_argument("--check", action="store_true",
+                    help="validate edges vs order; exits non-zero on problems")
+    dp.add_argument("--dot", action="store_true", help="graphviz emit (open subgraph)")
+    dp.set_defaults(func=cmd_deps)
+
     o = sub.add_parser("order", help="show the global execution order")
+    o.add_argument("--topo", action="store_true",
+                   help="propose a dependency-legal re-sort as a diff (writes nothing)")
     o.set_defaults(func=cmd_order)
 
     nx = sub.add_parser("next", help="show the top ratified item to execute")
@@ -753,6 +1159,9 @@ def build_parser():
     up.add_argument("--acceptance")
     up.add_argument("--add-link", dest="add_link")
     up.add_argument("--remove-link", dest="remove_link")
+    up.add_argument("--add-dep", dest="add_dep",
+                    help="comma-separated blockers to add (cycles refused)")
+    up.add_argument("--remove-dep", dest="remove_dep")
     up.add_argument("--class", dest="cls")
     up.add_argument("--reasoning")
     up.set_defaults(func=cmd_update)
@@ -780,6 +1189,9 @@ def build_parser():
     ro.add_argument("--before")
     ro.add_argument("--after")
     ro.add_argument("--to-position", type=int, dest="to_position")
+    ro.add_argument("--after-deps", action="store_true", dest="after_deps",
+                    help="place at the earliest legal slot: just after the "
+                         "last-scheduled pending blocker")
     ro.add_argument("--remove", action="store_true", help="unschedule (drop from order)")
     ro.set_defaults(func=cmd_reorder)
 

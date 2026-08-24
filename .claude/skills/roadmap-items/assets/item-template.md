@@ -6,6 +6,7 @@ rank: "0010"
 title: "one-line label"
 goal: "one-line drift-invariant end state"
 acceptance_intent: "what must become true -- the intent, not byte-exact greps"
+depends_on: []
 links: []
 execution_profile: { class: smallest, reasoning: none }
 ---

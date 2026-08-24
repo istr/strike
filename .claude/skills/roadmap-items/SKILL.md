@@ -89,13 +89,14 @@ rank: "0030"                  # numeric-sparse, zero-padded; orders WITHIN an ar
 title: "..."                  # one line
 goal: "..."                   # one-line end state, drift-invariant
 acceptance_intent: "..."      # the INTENT of acceptance, never byte-exact greps
+depends_on: [item-0031]       # optional; hard blockers, must be done first
 links: [ADR-046]   # pointers, never copies
 execution_profile: { class: smallest, reasoning: none }   # optional, advisory
 ---
 Short drift-invariant notes: rationale, open questions. No byte-exact snippets.
 ```
 
-Two ordering axes, deliberately distinct:
+Three ordering inputs, deliberately distinct:
 
 - **`rank`** orders items *within* an arc. It answers "what is open in arc X, by
   rank". Numeric-sparse and zero-padded (`"0010"`, `"0020"`, ...), so you insert by
@@ -104,9 +105,15 @@ Two ordering axes, deliberately distinct:
   IDs in run order. It answers "what runs next". Because items can carry several
   arcs, arcs are treated as tags and this one global list decides sequence; that
   keeps "what's next" unambiguous and models arc-crossing moves cleanly.
+- **`depends_on`** is the only *hard* constraint: "these items must be `done`
+  before I can start". `rank` and `_order.md` are both chosen preferences and
+  neither can express it, so without this field the blocking facts live in the
+  planner's head and get re-derived on every reprioritization.
 
-Keep the two coherent in your head: an item can sit high in its arc by `rank` yet
-late in global execution order, and that is fine.
+Keep them coherent in your head: an item can sit high in its arc by `rank` yet
+late in global execution order, and that is fine. What is *not* fine is an item
+scheduled before its own blocker -- and that is exactly what `deps --check`
+catches for you instead of a re-read of the whole store.
 
 ## Status gate: proposed -> ratified -> done
 
@@ -142,18 +149,24 @@ chosen invocation as `roadmap.py`.
 
 | Intent | Command |
 | --- | --- |
-| Create a proposed item | `new --title T --arcs a,b --goal G --acceptance A [--rank R] [--links ...] [--class C] [--reasoning R]` |
+| Create a proposed item | `new --title T --arcs a,b --goal G --acceptance A [--rank R] [--deps ...] [--links ...] [--class C] [--reasoning R]` |
 | Query items (active by default) | `list [--status ...] [--arc ...] [--all] [--sort rank\|id]` |
 | List arcs that still have open items | `arcs [--all] [--sort name\|open]` |
 | Show the execution order | `order` |
+| Propose a dependency-legal order | `order --topo` (prints a diff, writes nothing) |
 | What runs next | `next` |
+| One item's blockers and dependents | `deps ID [--transitive]` |
+| What is actually runnable now | `deps --ready` |
+| What is waiting, and on what | `deps --blocked` |
+| Validate the graph (CI-usable) | `deps --check` (exits non-zero on problems) |
+| Graphviz emit of the open subgraph | `deps --dot` |
 | Print one item verbatim | `show ID` |
 | Advance status | `set-status ID ratified` |
-| Edit fields | `update ID [--title ...] [--goal ...] [--acceptance ...] [--add-link ...] [--remove-link ...]` |
+| Edit fields | `update ID [--title ...] [--goal ...] [--acceptance ...] [--add-link ...] [--remove-link ...] [--add-dep ...] [--remove-dep ...]` |
 | Reprioritize within an arc | `rank ID --to 0035` or `rank ID --between ID_A ID_B` |
 | Re-space an arc's ranks | `rescale ARC [--step 10]` |
 | Change arc membership | `restructure ID --arcs a,b` / `--add-arc x` / `--remove-arc y` |
-| Place in execution order | `reorder ID [--before ID] [--after ID] [--to-position N] [--remove]` |
+| Place in execution order | `reorder ID [--before ID] [--after ID] [--to-position N] [--after-deps] [--remove]` |
 | Retire a ratified item | `done ID --summary "..."` |
 | Emit a `git am` patch (new items) | `emit-patch ID [ID ...] [-m MSG] [-o FILE]` |
 | Emit a `git am` patch (edits/moves) | `emit-patch --baseline DIR [-m MSG] [-o FILE]` |
@@ -184,6 +197,37 @@ roadmap.py rank item-0042 --between item-0030 item-0040
 If two neighbours are adjacent (no integer gap), the command stops and tells you
 to `rescale <arc>` first -- an explicit, operator-visible re-spacing, never a
 silent cascade.
+
+Record a blocking constraint once, then stop re-deriving it. `depends_on` holds
+hard blockers ("must be `done` before I can start"); `links` stays the
+non-blocking pointer field, so a query can trust the edge:
+
+```
+roadmap.py update item-0042 --add-dep item-0031
+roadmap.py deps item-0042            # blockers + derived dependents + READY/BLOCKED
+roadmap.py deps --ready              # ratified items with every blocker done
+roadmap.py deps --check              # dangling / cycles / order violations / inversions
+```
+
+The edge is stored one-way, on the dependent item -- there is no `blocks:` field,
+because a two-sided edge list in a hand-editable markdown store is a sync bug
+waiting to happen. Dependents are derived. A dependency that would close a cycle
+is refused at write time, not merely reported later.
+
+After a reprioritization, ask whether the order is still legal and let the script
+propose the repair instead of re-reading every item:
+
+```
+roadmap.py order --topo              # prints a diff; writes nothing
+roadmap.py reorder item-0042 --after-deps    # earliest legal slot for one item
+```
+
+`order --topo` is a **stable** topological sort keyed on current position: an
+already-legal order comes back unchanged and only the items that must move do,
+so the human ordering judgement that is not expressible as an edge survives. It
+writes nothing on purpose -- the operator applies it, and that commit stays the
+single handover. `deps --check` exits non-zero, so it is the natural CI check on
+a roadmap PR.
 
 Ask what to execute next, get the planning context, then author the byte-exact
 instruction ephemerally (do **not** write it back into the item):
