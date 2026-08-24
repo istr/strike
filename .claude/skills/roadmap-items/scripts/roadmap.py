@@ -304,6 +304,33 @@ def cmd_list(args):
         print("(no matching items)")
 
 
+def cmd_arcs(args):
+    # An arc is open while it still holds a non-done item. Arcs are tags, not
+    # files, so the arc set is derived from item membership rather than stored;
+    # that keeps the store single-source and makes a retired arc disappear on
+    # its own once its last item moves to completed/.
+    items = load_all(args.root)
+    counts = {}
+    for _, (m, _, _) in items.items():
+        for arc in m["arcs"]:
+            tally = counts.setdefault(arc, dict((s, 0) for s in STATUSES))
+            tally[m["status"]] += 1
+    rows = []
+    for arc in sorted(counts):
+        tally = counts[arc]
+        open_n = sum(tally[s] for s in STATUSES if s != "done")
+        if open_n == 0 and not args.all:
+            continue
+        rows.append((arc, tally, open_n))
+    if args.sort == "open":
+        rows.sort(key=lambda r: (-r[2], r[0]))
+    for arc, tally, open_n in rows:
+        print("%-28s open=%-3d (proposed=%d ratified=%d)  done=%d"
+              % (arc, open_n, tally["proposed"], tally["ratified"], tally["done"]))
+    if not rows:
+        print("(no open arcs)" if not args.all else "(no arcs)")
+
+
 def cmd_order(args):
     items = load_all(args.root)
     ids = read_order(args.root)
@@ -696,6 +723,12 @@ def build_parser():
                    help="include done/archived items (default: active only)")
     l.add_argument("--sort", choices=["rank", "id"], default="rank")
     l.set_defaults(func=cmd_list)
+
+    ar = sub.add_parser("arcs", help="list arcs that still have open items")
+    ar.add_argument("--all", action="store_true",
+                    help="include arcs whose items are all done")
+    ar.add_argument("--sort", choices=["name", "open"], default="name")
+    ar.set_defaults(func=cmd_arcs)
 
     o = sub.add_parser("order", help="show the global execution order")
     o.set_defaults(func=cmd_order)

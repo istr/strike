@@ -144,6 +144,7 @@ chosen invocation as `roadmap.py`.
 | --- | --- |
 | Create a proposed item | `new --title T --arcs a,b --goal G --acceptance A [--rank R] [--links ...] [--class C] [--reasoning R]` |
 | Query items (active by default) | `list [--status ...] [--arc ...] [--all] [--sort rank\|id]` |
+| List arcs that still have open items | `arcs [--all] [--sort name\|open]` |
 | Show the execution order | `order` |
 | What runs next | `next` |
 | Print one item verbatim | `show ID` |
