@@ -393,3 +393,12 @@ to ride that same instruction):
 - Blueprint tool: `audittypeflow` (main.go + go.mod), operator-retained;
   evolution path is item-0073.
 - Anchor for every code claim: `ebf8960e3d7e421a07588d3238ef5957c9d32c47`.
+
+## 12. Corrections
+
+- 2026-08-25, at `dc83c97cc58f48c76502bd7a14fba0d98731da8f`: the item-0052
+  entry in section 10 is wrong about item-0079. R-03's consumer set, as
+  enumerated by both lanes, is confined to the output contract fields, the
+  generated output types, the handle interface and their in-process readers;
+  item-0079 owns R-19, R-23, R-37 and R-41, which are path typing and share
+  no site with R-03. Only item-0078 depends on R-03 landing first.
