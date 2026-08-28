@@ -19,17 +19,13 @@ func TestDeploySpec_UnmarshalJSON_Discriminator(t *testing.T) {
 		wantErr string
 	}{
 		{
+			// The kubernetes method is suspended (ADR-054) but keeps its
+			// discriminator, its disjunction arm and this dispatch, so a lane
+			// declaring it still parses and is rejected at validation instead.
 			name: "kubernetes",
 			input: `{
-				"method": {
-					"type": "kubernetes",
-					"image": "img@sha256:` + strings.Repeat("a", 64) + `",
-					"namespace": "production",
-					"strategy": "apply",
-					"kubeconfig": "/etc/kubeconfig"
-				},
+				"method": {"type": "kubernetes"},
 				"artifacts": {},
-				"target": {"type": "kubernetes", "description": "prod"},
 				"attestation": {
 					"preState": {"required": false, "capture": []},
 					"postState": {"required": false, "capture": []}
@@ -40,11 +36,8 @@ func TestDeploySpec_UnmarshalJSON_Discriminator(t *testing.T) {
 				if !ok {
 					t.Fatalf("Method type = %T, want DeployKubernetes", m)
 				}
-				if k.Namespace != "production" {
-					t.Errorf("Namespace = %q, want production", k.Namespace)
-				}
-				if k.Strategy != "apply" {
-					t.Errorf("Strategy = %q, want apply", k.Strategy)
+				if k.MethodType() != "kubernetes" {
+					t.Errorf("MethodType = %q, want kubernetes", k.MethodType())
 				}
 			},
 		},

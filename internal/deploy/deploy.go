@@ -16,8 +16,6 @@ import (
 	"log"
 	"net/http"
 	"net/netip"
-	"os"
-	"path/filepath"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
@@ -30,7 +28,6 @@ import (
 	"github.com/istr/strike/internal/mediator"
 	"github.com/istr/strike/internal/output"
 	"github.com/istr/strike/internal/primitive"
-	"github.com/istr/strike/internal/probe"
 	"github.com/istr/strike/internal/provenance"
 	"github.com/istr/strike/internal/record"
 	"github.com/istr/strike/internal/registry"
@@ -716,73 +713,13 @@ type attachTarget struct {
 
 // executeMethod dispatches to the appropriate deploy method. It returns a
 // non-nil attach target only for registry deploys.
-func (d *Deployer) executeMethod(ctx context.Context, spec lane.DeploySpec, peers []lane.Peer, state *lane.Runtime) (*attachTarget, error) {
+func (d *Deployer) executeMethod(ctx context.Context, spec lane.DeploySpec, _ []lane.Peer, state *lane.Runtime) (*attachTarget, error) {
 	switch m := spec.Method.(type) {
 	case lane.DeployRegistry:
 		return d.executeRegistryDeploy(ctx, m, state)
-	case lane.DeployKubernetes:
-		return nil, d.executeKubernetesDeploy(ctx, m, peers)
 	default:
-		return nil, fmt.Errorf("unknown deploy method type %q", spec.Method.MethodType())
+		return nil, fmt.Errorf("deploy method %q has no execution path", spec.Method.MethodType())
 	}
-}
-
-func (d *Deployer) executeKubernetesDeploy(ctx context.Context, m lane.DeployKubernetes, peers []lane.Peer) error {
-	if m.Image == "" {
-		return fmt.Errorf("kubernetes deploy: image required (digest-pinned kubectl image)")
-	}
-
-	explicit := ""
-	if m.Kubeconfig != nil {
-		explicit = *m.Kubeconfig
-	}
-	kubeconfig, err := ResolveKubeconfig(explicit)
-	if err != nil {
-		return fmt.Errorf("kubernetes deploy: %w", err)
-	}
-
-	kubectlArgs := []string{string(m.Strategy.KubectlVerb()), "-f", "-"}
-	if m.Namespace != "" {
-		kubectlArgs = append(kubectlArgs, "-n", m.Namespace)
-	}
-
-	mounts := []container.Mount{
-		{Source: kubeconfig, Target: "/root/.kube/config", ReadOnly: true},
-	}
-
-	sid := string(d.StepID)
-	caps, err := d.startUnitCapsule(ctx, sid, peers)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		d.ownRecords = append(d.ownRecords, caps.Records())
-		if stopErr := caps.Stop(); stopErr != nil {
-			log.Printf("WARN   deploy %s: capsule stop: %v", d.StepID, stopErr)
-		}
-	}()
-
-	if err = setupSSHEnv(peers); err != nil {
-		return err
-	}
-
-	opts := HardenedRunOpts()
-	opts.Image = m.Image
-	opts.Cmd = kubectlArgs
-	opts.Mounts = mounts
-	opts.Stdin = os.Stdin
-	opts.Stdout = os.Stdout
-	opts.Stderr = os.Stderr
-	d.applyCapsule(&opts, caps)
-
-	exitCode, err := d.Engine.ContainerRun(ctx, opts)
-	if err != nil {
-		return fmt.Errorf("kubernetes deploy: %w", err)
-	}
-	if exitCode != 0 {
-		return fmt.Errorf("kubernetes deploy: exit code %d", exitCode)
-	}
-	return nil
 }
 
 // setupSSHEnv rejects deploy units that declare SSH peers. Deploy-path SSH
@@ -803,32 +740,6 @@ func setupSSHEnv(peers []lane.Peer) error {
 func sha256Sum(data []byte) []byte {
 	h := sha256.Sum256(data)
 	return h[:]
-}
-
-// ResolveKubeconfig returns the host path to the kubeconfig file.
-// Priority: explicit override, $KUBECONFIG, default path.
-func ResolveKubeconfig(override string) (string, error) {
-	if override != "" {
-		if _, err := os.Stat(override); err != nil {
-			return "", fmt.Errorf("kubeconfig %q: %w", override, err)
-		}
-		return override, nil
-	}
-	if env := os.Getenv("KUBECONFIG"); env != "" {
-		if _, err := probe.Stat(env); err != nil {
-			return "", fmt.Errorf("$KUBECONFIG %q: %w", env, err)
-		}
-		return env, nil
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("resolve home dir: %w", err)
-	}
-	path := filepath.Join(home, ".kube", "config")
-	if _, err := os.Stat(path); err != nil {
-		return "", fmt.Errorf("default kubeconfig %q: %w", path, err)
-	}
-	return path, nil
 }
 
 // engineRecords returns the sealed engine connection facts (CP-observed)

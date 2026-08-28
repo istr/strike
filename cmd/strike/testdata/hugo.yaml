@@ -130,10 +130,13 @@ steps:
   - id: deploy
     deploy:
       method:
-        type: kubernetes
-        image: docker.io/library/alpine@sha256:1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a
-        namespace: default
-        strategy: apply
+        type: registry
+        target:
+          host: registry.example.com
+          trust:
+            type: certFingerprint
+            fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+          name: hugo/site
       artifacts:
         app:
           step: pack-site

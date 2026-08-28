@@ -60,8 +60,9 @@ never trusts the engine's self-reported digests -- it independently verifies
 all artifacts after retrieval.
 
 **os/exec is prohibited.** The hard invariant: the controller process never
-spawns subprocesses. State capture, kubectl, HTTP probes, and all other
-external operations run inside containers via the Engine API.
+spawns subprocesses. State capture, HTTP probes, and other workload operations
+run inside containers via the Engine API; acts the controller must be able to
+attest as its own, such as the registry push, are API calls it makes directly.
 
 ## Trust boundaries
 

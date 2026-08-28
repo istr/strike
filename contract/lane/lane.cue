@@ -286,25 +286,20 @@ import (
 	recording: #StateRecording @go(Recording)
 }
 
-#DeployStrategy: *"apply" | "replace" | "rollout"
-
 #DeployMethod: (#DeployKubernetes | #DeployRegistry) @go(-)
 
 // #DeployMethodType is the deploy method discriminator vocabulary.
 #DeployMethodType: "kubernetes" | "registry"
 
+// #DeployKubernetes carries its discriminator and nothing else. The method is
+// a control-plane act against the cluster API (ADR-054); the fields of the
+// removed container implementation described a kubectl runner, a host-side
+// credential file and a set of kubectl subcommands, none of which the rebuilt
+// method takes. A lane that declares this method is rejected at validation
+// until the method exists.
 #DeployKubernetes: {
 	@go(DeployKubernetes)
-	type:      "kubernetes"        @go(Type,type=DeployMethodType)
-	image:     primitive.#ImageRef @go(Image)
-	namespace: string              @go(Namespace)
-	strategy:  #DeployStrategy     @go(Strategy)
-	// kubeconfig is a host-side path to a kubeconfig file, resolved by
-	// ResolveKubeconfig (explicit value, then $KUBECONFIG, then the
-	// default). It is intentionally unconstrained: host paths may be
-	// relative or contain "..", and are not the forward-slash container
-	// paths that #AbsPath / #RelPath model.
-	kubeconfig?: string @go(Kubeconfig,optional=nillable)
+	type: "kubernetes" @go(Type,type=DeployMethodType)
 }
 
 #DeployRegistry: {

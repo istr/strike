@@ -1,5 +1,5 @@
-name: deploy-test
-id: deploy-test
+name: kubernetes-not-implemented
+id: kubernetes-not-implemented
 secrets: {}
 resolver:
   host: "1.1.1.1:853"
@@ -31,30 +31,10 @@ keyless:
         type: certFingerprint
         fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 steps:
-  - id: compile
+  - id: build
     image: docker.io/library/golang@sha256:abababababababababababababababababababababababababababababababab
-    args: [go, build, -o, /out/binary]
+    args: ["go", "build"]
     workdir: /out
-    env:
-      CGO_ENABLED: "0"
-    inputs: []
-    secrets: []
-    outputs:
-      - id: binary
-        type: file
-        path: binary
-  - id: pack
-    pack:
-      base: docker.io/library/static@sha256:cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd
-      files:
-        - from:
-            step: compile
-            output: binary
-          dest: /app
-          mode: 0o755
-      config:
-        entrypoint: [/app]
-    args: []
     env: {}
     inputs: []
     secrets: []
@@ -62,16 +42,10 @@ steps:
   - id: deploy
     deploy:
       method:
-        type: registry
-        target:
-          host: registry.example.com
-          trust:
-            type: certFingerprint
-            fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
-          name: deploy-test/app
+        type: kubernetes
       artifacts:
         app:
-          step: pack
+          step: build
       recording:
         preState:
           required: false

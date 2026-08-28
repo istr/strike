@@ -42,7 +42,6 @@ import (
 	"github.com/istr/strike/internal/deploy"
 	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/lane"
-	"github.com/istr/strike/internal/mediator"
 	"github.com/istr/strike/internal/output"
 	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/provenance"
@@ -56,20 +55,6 @@ const (
 	connTypeTLS  = "tls"
 	connTypeMTLS = "mtls"
 )
-
-// testKubeconfig writes a throwaway kubeconfig file and returns its path,
-// for tests that exercise a kubernetes deploy method purely as a
-// container-running vehicle and do not care about its contents.
-func testKubeconfig(t *testing.T) string {
-	t.Helper()
-	path := filepath.Join(t.TempDir(), "kubeconfig")
-	if err := os.WriteFile(path, []byte("test"), 0o600); err != nil {
-		t.Fatalf("write kubeconfig: %v", err)
-	}
-	return path
-}
-
-func kubeconfigPtr(path string) *string { return &path }
 
 // deployCapsuleFields populates the capsule-related Deployer fields needed
 // by tests that exercise captureOne or method execution. portKeys lists
@@ -99,6 +84,87 @@ func deployCapsuleFields(t *testing.T, portKeys ...string) (ca *transport.Epheme
 		}
 	}
 	return ca, look, caVolume, ports
+}
+
+// registryDeployFixture is the shared setup for the tests that must run a
+// deploy through executeMethod: a single-layer pushable image, an engine that
+// serves it as a layout tar, and a live registry the control plane may write
+// to under a pinned leaf fingerprint. Callers supply their own captures.
+type registryDeployFixture struct {
+	engine container.Engine
+	method lane.DeployRegistry
+	handle output.ImageHandle
+}
+
+// newRegistryDeployFixture builds the fixture. The image is minimal but
+// well-formed: the deploy path flattens the pushed payload for cataloging, so
+// the layer must be a real tar.
+func newRegistryDeployFixture(t *testing.T) registryDeployFixture {
+	t.Helper()
+
+	var layerBuf bytes.Buffer
+	tw := tar.NewWriter(&layerBuf)
+	if hdrErr := tw.WriteHeader(&tar.Header{Name: "artifact", Mode: 0o644, Size: int64(len("payload"))}); hdrErr != nil {
+		t.Fatalf("layer tar header: %v", hdrErr)
+	}
+	if _, wErr := tw.Write([]byte("payload")); wErr != nil {
+		t.Fatalf("layer tar content: %v", wErr)
+	}
+	if closeErr := tw.Close(); closeErr != nil {
+		t.Fatalf("layer tar close: %v", closeErr)
+	}
+	img := mutate.MediaType(empty.Image, types.OCIManifestSchema1)
+	img, err := mutate.AppendLayers(img, static.NewLayer(layerBuf.Bytes(), types.OCILayer))
+	if err != nil {
+		t.Fatalf("append layer: %v", err)
+	}
+	configHash, err := img.ConfigName()
+	if err != nil {
+		t.Fatalf("config digest: %v", err)
+	}
+	saved, err := regtest.LayoutTar(img)
+	if err != nil {
+		t.Fatalf("layout tar: %v", err)
+	}
+
+	// The converted tests keep their capture declarations, and captures run
+	// containers through this same engine, so everything that is not the
+	// image export falls through to the container lifecycle mock.
+	lifecycle := containerMock(t, "v1.2.3")
+	eng := newTLSTestEngine(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/images/") && strings.HasSuffix(r.URL.Path, "/get") {
+			w.Header().Set("Content-Type", "application/x-tar")
+			if _, wErr := w.Write(saved); wErr != nil {
+				t.Errorf("write save tar: %v", wErr)
+			}
+			return
+		}
+		lifecycle(w, r)
+	}))
+
+	srv := httptest.NewTLSServer(ggcrregistry.New(ggcrregistry.WithReferrersSupport(true)))
+	t.Cleanup(srv.Close)
+	leafSum := sha256.Sum256(srv.Certificate().Raw)
+
+	return registryDeployFixture{
+		engine: eng,
+		method: lane.DeployRegistry{
+			Type: "registry",
+			Target: lane.DeployRegistryTarget{
+				Type:    "https",
+				Address: endpoint.MustParseAuthority(srv.Listener.Addr().String()),
+				Trust: endpoint.Fingerprint{
+					Type:        "certFingerprint",
+					Fingerprint: primitive.Digest("sha256:" + hex.EncodeToString(leafSum[:])),
+				},
+				Name: "app",
+			},
+		},
+		handle: output.ImageHandle{
+			Ref:          "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
+			ConfigDigest: primitive.Digest(configHash.String()),
+		},
+	}
 }
 
 func newTLSTestEngine(t *testing.T, handler http.Handler) container.Engine {
@@ -223,89 +289,6 @@ func TestAttestationJSON(t *testing.T) {
 	}
 }
 
-func TestResolveKubeconfig_ExplicitExists(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "kubeconfig")
-	if err := os.WriteFile(path, []byte("test"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	got, err := deploy.ResolveKubeconfig(path)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if got != path {
-		t.Fatalf("got %q, want %q", got, path)
-	}
-}
-
-func TestResolveKubeconfig_ExplicitMissing(t *testing.T) {
-	_, err := deploy.ResolveKubeconfig("/nonexistent/kubeconfig")
-	if err == nil {
-		t.Fatal("expected error for missing explicit path")
-	}
-}
-
-func TestResolveKubeconfig_EnvSet(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "kubeconfig")
-	if err := os.WriteFile(path, []byte("test"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("KUBECONFIG", path)
-
-	got, err := deploy.ResolveKubeconfig("")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if got != path {
-		t.Fatalf("got %q, want %q", got, path)
-	}
-}
-
-func TestResolveKubeconfig_EnvMissing(t *testing.T) {
-	t.Setenv("KUBECONFIG", "/nonexistent/kubeconfig")
-
-	_, err := deploy.ResolveKubeconfig("")
-	if err == nil {
-		t.Fatal("expected error for missing $KUBECONFIG path")
-	}
-}
-
-func TestResolveKubeconfig_DefaultExists(t *testing.T) {
-	dir := t.TempDir()
-	kubeDir := filepath.Join(dir, ".kube")
-	if err := os.MkdirAll(kubeDir, 0o750); err != nil {
-		t.Fatal(err)
-	}
-	path := filepath.Join(kubeDir, "config")
-	if err := os.WriteFile(path, []byte("test"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	t.Setenv("KUBECONFIG", "")
-	t.Setenv("HOME", dir)
-
-	got, err := deploy.ResolveKubeconfig("")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if got != path {
-		t.Fatalf("got %q, want %q", got, path)
-	}
-}
-
-func TestResolveKubeconfig_NoneFound(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("KUBECONFIG", "")
-	t.Setenv("HOME", dir)
-
-	_, err := deploy.ResolveKubeconfig("")
-	if err == nil {
-		t.Fatal("expected error when no kubeconfig found")
-	}
-}
-
 // containerMock returns an HTTP handler that simulates podman container
 // lifecycle (create, start, logs, wait, delete) for state capture tests.
 func containerMock(t *testing.T, stdout string) http.HandlerFunc {
@@ -328,25 +311,17 @@ func containerMock(t *testing.T, stdout string) http.HandlerFunc {
 }
 
 func TestDeployerExecute(t *testing.T) {
-	eng := newTLSTestEngine(t, containerMock(t, "v1.2.3"))
+	fx := newRegistryDeployFixture(t)
 
 	state := newRuntime(t, "build", "deploy-prod")
-	if err := state.Register("build", "", output.ImageHandle{
-		Ref: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
-	}); err != nil {
+	if err := state.Register("build", "", fx.handle); err != nil {
 		t.Fatal(err)
 	}
 
 	step := &lane.Step{
 		ID: "deploy-prod",
 		Deploy: &lane.DeploySpec{
-			Method: lane.DeployKubernetes{
-				Type:       "kubernetes",
-				Image:      "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
-				Namespace:  "default",
-				Strategy:   "apply",
-				Kubeconfig: kubeconfigPtr(testKubeconfig(t)),
-			},
+			Method:    fx.method,
 			Artifacts: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
 			Recording: lane.StateRecording{
 				PreState: lane.CaptureSet{
@@ -373,7 +348,7 @@ func TestDeployerExecute(t *testing.T) {
 		"capture:deploy-prod:version", "deploy-prod")
 
 	d := &deploy.Deployer{
-		Engine:       eng,
+		Engine:       fx.engine,
 		LaneDigest:   "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
 		ArtifactRefs: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
 		LaneID:       "test-lane",
@@ -745,7 +720,7 @@ func TestDeployerExecute_MissingArtifact(t *testing.T) {
 	step := &lane.Step{
 		ID: "deploy-prod",
 		Deploy: &lane.DeploySpec{
-			Method:    lane.DeployKubernetes{Type: "kubernetes", Image: "img@sha256:0000000000000000000000000000000000000000000000000000000000000000"},
+			Method:    deploy.DeployRegistryForTest(),
 			Artifacts: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
 			Recording: lane.StateRecording{},
 		},
@@ -766,7 +741,7 @@ func TestDeployerExecute_MissingArtifact(t *testing.T) {
 func TestRunStepDispatchesDeploy(t *testing.T) {
 	step := &lane.Step{
 		Deploy: &lane.DeploySpec{
-			Method: lane.DeployKubernetes{Type: "kubernetes", Image: "img@sha256:0000000000000000000000000000000000000000000000000000000000000000"},
+			Method: deploy.DeployRegistryForTest(),
 		},
 	}
 	if step.Deploy == nil {
@@ -805,30 +780,22 @@ func TestHardenedRunOpts(t *testing.T) {
 }
 
 func TestAttestationContainsEngineRecord(t *testing.T) {
-	eng := newTLSTestEngine(t, containerMock(t, "v1.2.3"))
+	fx := newRegistryDeployFixture(t)
 
 	// Ping to populate identity
-	if err := eng.Ping(context.Background()); err != nil {
+	if err := fx.engine.Ping(context.Background()); err != nil {
 		t.Fatalf("Ping: %v", err)
 	}
 
 	state := newRuntime(t, "build", "deploy-prod")
-	if err := state.Register("build", "", output.ImageHandle{
-		Ref: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
-	}); err != nil {
+	if err := state.Register("build", "", fx.handle); err != nil {
 		t.Fatal(err)
 	}
 
 	step := &lane.Step{
 		ID: "deploy-prod",
 		Deploy: &lane.DeploySpec{
-			Method: lane.DeployKubernetes{
-				Type:       "kubernetes",
-				Image:      "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
-				Namespace:  "default",
-				Strategy:   "apply",
-				Kubeconfig: kubeconfigPtr(testKubeconfig(t)),
-			},
+			Method:    fx.method,
 			Artifacts: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
 			Recording: lane.StateRecording{
 				PreState: lane.CaptureSet{
@@ -855,7 +822,7 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 		"capture:deploy-prod:version", "deploy-prod")
 
 	d := &deploy.Deployer{
-		Engine: eng, EngineID: eng.Identity(),
+		Engine: fx.engine, EngineID: fx.engine.Identity(),
 		LaneDigest:   "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
 		ArtifactRefs: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
 		LaneID:       "test-lane",
@@ -908,276 +875,6 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 }
 
 // --------------------------------------------------------------------------.
-// engineRecord tests.
-// --------------------------------------------------------------------------.
-
-func TestEngineRecord_NilEngineID(t *testing.T) {
-	eng := newTLSTestEngine(t, containerMock(t, "v1.0"))
-	state := newRuntime(t, "build", "deploy-nil-engine")
-	if err := state.Register("build", "", output.ImageHandle{
-		Ref: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
-	}); err != nil {
-		t.Fatal(err)
-	}
-
-	step := &lane.Step{
-		ID: "deploy-nil-engine",
-		Deploy: &lane.DeploySpec{
-			Method: lane.DeployKubernetes{
-				Type:       "kubernetes",
-				Image:      "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
-				Namespace:  "default",
-				Strategy:   "apply",
-				Kubeconfig: kubeconfigPtr(testKubeconfig(t)),
-			},
-			Artifacts: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
-			Recording: lane.StateRecording{},
-		},
-	}
-
-	ca, look, caPath, ports := deployCapsuleFields(t, "deploy-nil-engine")
-
-	// EngineID is nil -- engineRecord should return nil.
-	d := &deploy.Deployer{
-		Engine: eng, EngineID: nil,
-		LaneDigest:   "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-		ArtifactRefs: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
-		LaneID:       "test-lane",
-		CA:           ca,
-		UpstreamLook: look,
-		CAVolume:     caPath,
-		StepID:       "deploy-nil-engine",
-		StepPorts:    ports,
-	}
-	deploy.SetProduceBundles(d, stubProduceBundles())
-	att, err := d.Execute(context.Background(), step, state)
-	if err != nil {
-		t.Fatalf("Execute: %v", err)
-	}
-	if att.Sealed.Engine != nil {
-		t.Error("expected nil Engine record when EngineID is nil")
-	}
-}
-
-func TestEngineRecord_WithRuntime(t *testing.T) {
-	id := &container.EngineIdentity{
-		Connection: container.ConnectionInfo{
-			Type:                  connTypeMTLS,
-			CATrustType:           "pinned",
-			ServerCertFingerprint: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-			ClientCertFingerprint: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-		},
-		Runtime: &container.RuntimeInfo{
-			Version:  "5.2.1",
-			Rootless: true,
-		},
-	}
-
-	eng := newTLSTestEngine(t, containerMock(t, "v1.0"))
-	state := newRuntime(t, "build", "deploy-runtime")
-	if err := state.Register("build", "", output.ImageHandle{
-		Ref: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
-	}); err != nil {
-		t.Fatal(err)
-	}
-
-	step := &lane.Step{
-		ID: "deploy-runtime",
-		Deploy: &lane.DeploySpec{
-			Method: lane.DeployKubernetes{
-				Type:       "kubernetes",
-				Image:      "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
-				Namespace:  "default",
-				Strategy:   "apply",
-				Kubeconfig: kubeconfigPtr(testKubeconfig(t)),
-			},
-			Artifacts: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
-			Recording: lane.StateRecording{},
-		},
-	}
-
-	ca, look, caPath, ports := deployCapsuleFields(t, "deploy-runtime")
-
-	d := &deploy.Deployer{
-		Engine: eng, EngineID: id,
-		LaneDigest:   "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-		ArtifactRefs: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
-		LaneID:       "test-lane",
-		CA:           ca,
-		UpstreamLook: look,
-		CAVolume:     caPath,
-		StepID:       "deploy-runtime",
-		StepPorts:    ports,
-	}
-	deploy.SetProduceBundles(d, stubProduceBundles())
-	att, err := d.Execute(context.Background(), step, state)
-	if err != nil {
-		t.Fatalf("Execute: %v", err)
-	}
-	if att.Sealed.Engine == nil {
-		t.Fatal("expected non-nil Engine connection record")
-	}
-	if att.Sealed.Engine.ConnectionType() != connTypeMTLS {
-		t.Errorf("ConnectionType = %q, want mtls", att.Sealed.Engine.ConnectionType())
-	}
-	mtlsConn, ok := att.Sealed.Engine.(endpoint.EngineMTLS)
-	if !ok {
-		t.Fatalf("Engine type = %T, want endpoint.EngineMTLS", att.Sealed.Engine)
-	}
-	if mtlsConn.ServerCertFingerprint != "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" {
-		t.Errorf("ServerCertFingerprint = %q, want sha256:aaaa...", mtlsConn.ServerCertFingerprint)
-	}
-	if mtlsConn.ClientCertFingerprint != "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" {
-		t.Errorf("ClientCertFingerprint = %q, want sha256:bbbb...", mtlsConn.ClientCertFingerprint)
-	}
-	if att.Informational.EngineMetadata == nil {
-		t.Fatal("expected non-nil EngineMetadata")
-	}
-	if att.Informational.EngineMetadata.Version != "5.2.1" {
-		t.Errorf("EngineMetadata.Version = %q, want 5.2.1", att.Informational.EngineMetadata.Version)
-	}
-	if att.Informational.EngineMetadata.Rootless == nil || !*att.Informational.EngineMetadata.Rootless {
-		t.Error("expected Rootless=true")
-	}
-}
-
-func TestEngineRecord_WithoutRuntime(t *testing.T) {
-	id := &container.EngineIdentity{
-		Connection: container.ConnectionInfo{
-			Type: "unix",
-		},
-	}
-
-	eng := newTLSTestEngine(t, containerMock(t, "v1.0"))
-	state := newRuntime(t, "build", "deploy-no-runtime")
-	if err := state.Register("build", "", output.ImageHandle{
-		Ref: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
-	}); err != nil {
-		t.Fatal(err)
-	}
-
-	step := &lane.Step{
-		ID: "deploy-no-runtime",
-		Deploy: &lane.DeploySpec{
-			Method: lane.DeployKubernetes{
-				Type:       "kubernetes",
-				Image:      "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
-				Namespace:  "default",
-				Strategy:   "apply",
-				Kubeconfig: kubeconfigPtr(testKubeconfig(t)),
-			},
-			Artifacts: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
-			Recording: lane.StateRecording{},
-		},
-	}
-
-	ca, look, caPath, ports := deployCapsuleFields(t, "deploy-no-runtime")
-
-	d := &deploy.Deployer{
-		Engine: eng, EngineID: id,
-		LaneDigest:   "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-		ArtifactRefs: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
-		LaneID:       "test-lane",
-		CA:           ca,
-		UpstreamLook: look,
-		CAVolume:     caPath,
-		StepID:       "deploy-no-runtime",
-		StepPorts:    ports,
-	}
-	deploy.SetProduceBundles(d, stubProduceBundles())
-	att, err := d.Execute(context.Background(), step, state)
-	if err != nil {
-		t.Fatalf("Execute: %v", err)
-	}
-	if att.Sealed.Engine == nil {
-		t.Fatal("expected non-nil Engine connection record")
-	}
-	if att.Sealed.Engine.ConnectionType() != "unix" {
-		t.Errorf("ConnectionType = %q, want unix", att.Sealed.Engine.ConnectionType())
-	}
-	if att.Informational.EngineMetadata == nil {
-		t.Fatal("expected non-nil EngineMetadata")
-	}
-	if att.Informational.EngineMetadata.Rootless != nil {
-		t.Error("expected nil Rootless when Runtime is nil")
-	}
-	if att.Informational.EngineMetadata.Version != "" {
-		t.Errorf("Version = %q, want empty", att.Informational.EngineMetadata.Version)
-	}
-}
-
-// resolverRecord tests.
-// --------------------------------------------------------------------------.
-
-func TestResolverRecord_Populated(t *testing.T) {
-	rid := transport.ConnectionIdentity{
-		LeafFingerprint: "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-		TLSVersion:      0x0304, // TLS 1.3
-		CipherSuite:     0x1301, // TLS_AES_128_GCM_SHA256
-		ServerName:      "",
-		PeerAddress:     endpoint.MustParseAuthority("1.1.1.1:853"),
-	}
-
-	eng := newTLSTestEngine(t, containerMock(t, "v1.0"))
-	state := newRuntime(t, "build", "deploy-resolver")
-	if err := state.Register("build", "", output.ImageHandle{
-		Ref: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
-	}); err != nil {
-		t.Fatal(err)
-	}
-
-	step := &lane.Step{
-		ID: "deploy-resolver",
-		Deploy: &lane.DeploySpec{
-			Method: lane.DeployKubernetes{
-				Type:       "kubernetes",
-				Image:      "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
-				Namespace:  "default",
-				Strategy:   "apply",
-				Kubeconfig: kubeconfigPtr(testKubeconfig(t)),
-			},
-			Artifacts: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
-			Recording: lane.StateRecording{},
-		},
-	}
-
-	ca, look, caPath, ports := deployCapsuleFields(t, "deploy-resolver")
-
-	d := &deploy.Deployer{
-		Engine:     eng,
-		LaneDigest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-		Resolver: deploy.ResolverProbe{
-			Declared: endpoint.TLS{Type: "https", Address: endpoint.MustParseAuthority("1.1.1.1:853"), Trust: endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}},
-			Observed: rid,
-		},
-		ArtifactRefs: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
-		LaneID:       "test-lane",
-		CA:           ca,
-		UpstreamLook: look,
-		CAVolume:     caPath,
-		StepID:       "deploy-resolver",
-		StepPorts:    ports,
-	}
-	deploy.SetProduceBundles(d, stubProduceBundles())
-	att, err := d.Execute(context.Background(), step, state)
-	if err != nil {
-		t.Fatalf("Execute: %v", err)
-	}
-	if att.Sealed.Resolver.Host != "1.1.1.1:853" {
-		t.Errorf("Host = %q, want 1.1.1.1:853", att.Sealed.Resolver.Host)
-	}
-	if att.Sealed.Resolver.ServerCertFingerprint != rid.LeafFingerprint.String() {
-		t.Errorf("ServerCertFingerprint = %q, want %q", att.Sealed.Resolver.ServerCertFingerprint, rid.LeafFingerprint)
-	}
-	if att.Sealed.Resolver.TLSVersion != "TLS 1.3" {
-		t.Errorf("TLSVersion = %q, want TLS 1.3", att.Sealed.Resolver.TLSVersion)
-	}
-	if att.Sealed.Resolver.CipherSuite == "" {
-		t.Error("expected non-empty CipherSuite")
-	}
-}
-
-// --------------------------------------------------------------------------.
 // Execute edge cases.
 // --------------------------------------------------------------------------.
 
@@ -1220,13 +917,7 @@ func TestDeployerExecute_RequiredPreStateFails(t *testing.T) {
 	step := &lane.Step{
 		ID: "deploy-fail-pre",
 		Deploy: &lane.DeploySpec{
-			Method: lane.DeployKubernetes{
-				Type:       "kubernetes",
-				Image:      "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
-				Namespace:  "default",
-				Strategy:   "apply",
-				Kubeconfig: kubeconfigPtr(testKubeconfig(t)),
-			},
+			Method: deploy.DeployRegistryForTest(),
 			Recording: lane.StateRecording{
 				PreState: lane.CaptureSet{
 					Required: true,
@@ -1280,22 +971,20 @@ func stubProduceBundles() func(context.Context, lane.KeylessEndpoints, [][]byte)
 }
 
 func TestDeployerExecute_KeylessBundles(t *testing.T) {
-	eng := newTLSTestEngine(t, containerMock(t, "v1.2.3"))
+	fx := newRegistryDeployFixture(t)
 
 	state := newRuntime(t, "build", "deploy-prod")
-	if err := state.Register("build", "", output.ImageHandle{
-		Ref: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
-	}); err != nil {
+	if err := state.Register("build", "", fx.handle); err != nil {
 		t.Fatal(err)
 	}
 
 	ca, look, caPath, ports := deployCapsuleFields(t,
 		"capture:deploy-prod:version", "deploy-prod")
 
-	step := deployStep(t)
+	step := deployStep(t, fx.method)
 	d := &deploy.Deployer{
-		Engine:       eng,
-		EngineID:     eng.Identity(),
+		Engine:       fx.engine,
+		EngineID:     fx.engine.Identity(),
 		LaneDigest:   "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
 		ArtifactRefs: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
 		LaneID:       "test-lane",
@@ -1339,21 +1028,19 @@ func TestDeployerExecute_KeylessBundles(t *testing.T) {
 }
 
 func TestDeployerExecute_KeylessFailureIsFatal(t *testing.T) {
-	eng := newTLSTestEngine(t, containerMock(t, "v1.2.3"))
+	fx := newRegistryDeployFixture(t)
 
 	state := newRuntime(t, "build", "deploy-prod")
-	if err := state.Register("build", "", output.ImageHandle{
-		Ref: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
-	}); err != nil {
+	if err := state.Register("build", "", fx.handle); err != nil {
 		t.Fatal(err)
 	}
 
 	ca, look, caPath, ports := deployCapsuleFields(t,
 		"capture:deploy-prod:version", "deploy-prod")
 
-	step := deployStep(t)
+	step := deployStep(t, fx.method)
 	d := &deploy.Deployer{
-		Engine:       eng,
+		Engine:       fx.engine,
 		LaneDigest:   "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
 		ArtifactRefs: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
 		LaneID:       "test-lane",
@@ -1377,19 +1064,14 @@ func TestDeployerExecute_KeylessFailureIsFatal(t *testing.T) {
 	}
 }
 
-// deployStep returns a minimal deploy step for Rekor tests.
-func deployStep(t *testing.T) *lane.Step {
+// deployStep returns a minimal deploy step for Rekor tests, on the deploy
+// method the caller supplies.
+func deployStep(t *testing.T, method lane.DeployMethod) *lane.Step {
 	t.Helper()
 	return &lane.Step{
 		ID: "deploy-prod",
 		Deploy: &lane.DeploySpec{
-			Method: lane.DeployKubernetes{
-				Type:       "kubernetes",
-				Image:      "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
-				Namespace:  "default",
-				Strategy:   "apply",
-				Kubeconfig: kubeconfigPtr(testKubeconfig(t)),
-			},
+			Method:    method,
 			Artifacts: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
 			Recording: lane.StateRecording{
 				PreState: lane.CaptureSet{
@@ -1442,421 +1124,6 @@ func TestUnmarshalDeploySpec_UnknownType(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "unknown deploy method") {
 		t.Errorf("unexpected error: %v", err)
-	}
-}
-
-// --------------------------------------------------------------------------.
-// Observed peer wiring tests.
-// --------------------------------------------------------------------------.
-
-func TestDeployerExecute_ObservedPeersPopulated(t *testing.T) {
-	eng := newTLSTestEngine(t, containerMock(t, "v1.0"))
-
-	// Build a lane with a "build" predecessor that has peers, and a deploy step.
-	buildPeer := endpoint.TLS{
-		Type:    "https",
-		Address: endpoint.MustParseAuthority("api.example.com:443"),
-		Trust: endpoint.Fingerprint{
-			Type:        "certFingerprint",
-			Fingerprint: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-		},
-	}
-	buildSSHPeer := endpoint.SSH{
-		Type:    "ssh",
-		Address: endpoint.MustParseAuthority("git.example.com"),
-		KnownHosts: []endpoint.HostKey{{
-			KeyType: "ssh-ed25519",
-			Key:     "AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl",
-		}},
-	}
-
-	p := &lane.Lane{
-		Name: "test-observed",
-		Steps: []lane.Step{
-			{
-				ID:      "build",
-				Image:   primitive.ImageRefPtr("alpine:3.20"),
-				Args:    []string{"echo", "ok"},
-				Env:     map[string]string{},
-				Inputs:  []lane.InputRef{},
-				Secrets: []lane.SecretRef{},
-				Output:  "image",
-				Peers:   []lane.Peer{buildPeer, buildSSHPeer},
-			},
-			{
-				ID: "deploy-prod",
-				Deploy: &lane.DeploySpec{
-					Method: lane.DeployKubernetes{
-						Type:       "kubernetes",
-						Image:      "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
-						Namespace:  "default",
-						Strategy:   "apply",
-						Kubeconfig: kubeconfigPtr(testKubeconfig(t)),
-					},
-					Artifacts: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
-					Recording: lane.StateRecording{},
-				},
-			},
-		},
-	}
-	index, buildErr := lane.IndexSteps(p)
-	if buildErr != nil {
-		t.Fatalf("IndexSteps: %v", buildErr)
-	}
-	dag, buildErr := lane.Build(p, index)
-	if buildErr != nil {
-		t.Fatalf("Build: %v", buildErr)
-	}
-
-	state := lane.NewRuntime(dag)
-	if regErr := state.Register("build", "", output.ImageHandle{
-		Ref: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
-	}); regErr != nil {
-		t.Fatal(regErr)
-	}
-
-	ca, look, caPath, ports := deployCapsuleFields(t, "deploy-prod")
-
-	// Inject synthetic network records for the "build" step.
-	tlsFP := primitive.DigestFromHex(strings.Repeat("b", 64))
-	sshFP := primitive.DigestFromHex(strings.Repeat("c", 64))
-	networkRecords := map[string]capsule.Records{
-		"build": {
-			Connections: []mediator.ConnectionRecord{{
-				Decision: mediator.DecisionAllowed,
-				SNI:      "api.example.com",
-				Upstream: &transport.ConnectionIdentity{
-					LeafFingerprint: tlsFP,
-					PeerAddress:     endpoint.MustParseAuthority("api.example.com:443"),
-				},
-				Resolved: []netip.Addr{netip.MustParseAddr("93.184.216.34")},
-			}},
-			SSH: []capsule.SSHConnectionRecord{{
-				Decision:           mediator.DecisionAllowed,
-				Host:               "git.example.com",
-				Port:               22,
-				HostKeyFingerprint: sshFP,
-				HostKeyAlgo:        "ssh-ed25519",
-				Resolved:           []netip.Addr{netip.MustParseAddr("192.0.2.1")},
-			}},
-		},
-	}
-	for netStep, recs := range networkRecords {
-		stepID := primitive.Identifier(netStep)
-		state.RecordNetwork(stepID, recs)
-	}
-
-	step := index["deploy-prod"]
-	d := &deploy.Deployer{
-		Engine:       eng,
-		LaneDigest:   "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-		ArtifactRefs: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
-		LaneID:       "test-lane",
-		DAG:          dag,
-		CA:           ca,
-		UpstreamLook: look,
-		CAVolume:     caPath,
-		StepID:       "deploy-prod",
-		StepPorts:    ports,
-	}
-	deploy.SetProduceBundles(d, stubProduceBundles())
-	att, err := d.Execute(context.Background(), step, state)
-	if err != nil {
-		t.Fatalf("Execute: %v", err)
-	}
-
-	// Assert observed_peers has two entries.
-	if len(att.Sealed.ObservedPeers) != 2 {
-		t.Fatalf("ObservedPeers count = %d, want 2", len(att.Sealed.ObservedPeers))
-	}
-
-	tlsObs, ok := att.Sealed.ObservedPeers["api.example.com:443"]
-	if !ok {
-		t.Fatal("missing observed peer api.example.com:443")
-	}
-	tlsID, ok := tlsObs.Identity.(deploy.ObservedTLS)
-	if !ok {
-		t.Fatalf("identity type = %T, want ObservedTLS", tlsObs.Identity)
-	}
-	if tlsID.ServerCertFingerprint != tlsFP {
-		t.Errorf("TLS fingerprint = %q, want %q", tlsID.ServerCertFingerprint, tlsFP)
-	}
-	if len(tlsObs.Resolved) == 0 {
-		t.Error("expected non-empty Resolved for TLS peer")
-	}
-
-	sshObs, ok := att.Sealed.ObservedPeers["git.example.com:22"]
-	if !ok {
-		t.Fatal("missing observed peer git.example.com:22")
-	}
-	sshID, ok := sshObs.Identity.(deploy.ObservedSSH)
-	if !ok {
-		t.Fatalf("identity type = %T, want ObservedSSH", sshObs.Identity)
-	}
-	if sshID.HostKeyFingerprint != sshFP {
-		t.Errorf("SSH fingerprint = %q, want %q", sshID.HostKeyFingerprint, sshFP)
-	}
-	if sshID.HostKeyAlgo != "ssh-ed25519" {
-		t.Errorf("SSH algo = %q, want ssh-ed25519", sshID.HostKeyAlgo)
-	}
-
-	// Assert peer_attribution.
-	buildAttr, ok := att.EngineDependent.PeerAttribution["build"]
-	if !ok {
-		t.Fatal("missing peer_attribution for build")
-	}
-	if len(buildAttr) != 2 {
-		t.Fatalf("build attribution count = %d, want 2", len(buildAttr))
-	}
-}
-
-func TestDeployerExecute_ObservedPeers_HonorsSSHPort(t *testing.T) {
-	eng := newTLSTestEngine(t, containerMock(t, "v1.0"))
-
-	buildSSHPeer := endpoint.SSH{
-		Type:    "ssh",
-		Address: endpoint.MustParseAuthority("sshhost.com:222"),
-		KnownHosts: []endpoint.HostKey{{
-			KeyType: "ssh-ed25519",
-			Key:     "AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl",
-		}},
-	}
-
-	p := &lane.Lane{
-		Name: "test-ssh-port",
-		Steps: []lane.Step{
-			{
-				ID:      "build",
-				Image:   primitive.ImageRefPtr("alpine:3.20"),
-				Args:    []string{"echo", "ok"},
-				Env:     map[string]string{},
-				Inputs:  []lane.InputRef{},
-				Secrets: []lane.SecretRef{},
-				Output:  "image",
-				Peers:   []lane.Peer{buildSSHPeer},
-			},
-			{
-				ID: "deploy-prod",
-				Deploy: &lane.DeploySpec{
-					Method: lane.DeployKubernetes{
-						Type:       "kubernetes",
-						Image:      "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
-						Namespace:  "default",
-						Strategy:   "apply",
-						Kubeconfig: kubeconfigPtr(testKubeconfig(t)),
-					},
-					Artifacts: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
-					Recording: lane.StateRecording{},
-				},
-			},
-		},
-	}
-	index, buildErr := lane.IndexSteps(p)
-	if buildErr != nil {
-		t.Fatalf("IndexSteps: %v", buildErr)
-	}
-	dag, buildErr := lane.Build(p, index)
-	if buildErr != nil {
-		t.Fatalf("Build: %v", buildErr)
-	}
-
-	state := lane.NewRuntime(dag)
-	if regErr := state.Register("build", "", output.ImageHandle{
-		Ref: "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
-	}); regErr != nil {
-		t.Fatal(regErr)
-	}
-
-	ca, look, caPath, ports := deployCapsuleFields(t, "deploy-prod")
-
-	// The declared port (222) must survive into the observed-peer key; before
-	// the port-drop fix, deploy.go's SSH key derivation already used
-	// s.Port directly, so this pins that behavior against regression as the
-	// TLS-side key derivation changes from string re-parsing to Address.Authority().
-	sshFP := primitive.DigestFromHex(strings.Repeat("d", 64))
-	networkRecords := map[string]capsule.Records{
-		"build": {
-			SSH: []capsule.SSHConnectionRecord{{
-				Decision:           mediator.DecisionAllowed,
-				Host:               "sshhost.com",
-				Port:               222,
-				HostKeyFingerprint: sshFP,
-				HostKeyAlgo:        "ssh-ed25519",
-				Resolved:           []netip.Addr{netip.MustParseAddr("192.0.2.9")},
-			}},
-		},
-	}
-	for netStep, recs := range networkRecords {
-		stepID := primitive.Identifier(netStep)
-		state.RecordNetwork(stepID, recs)
-	}
-
-	step := index["deploy-prod"]
-	d := &deploy.Deployer{
-		Engine:       eng,
-		LaneDigest:   "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-		ArtifactRefs: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
-		LaneID:       "test-lane",
-		DAG:          dag,
-		CA:           ca,
-		UpstreamLook: look,
-		CAVolume:     caPath,
-		StepID:       "deploy-prod",
-		StepPorts:    ports,
-	}
-	deploy.SetProduceBundles(d, stubProduceBundles())
-	att, err := d.Execute(context.Background(), step, state)
-	if err != nil {
-		t.Fatalf("Execute: %v", err)
-	}
-
-	if _, wrongPort := att.Sealed.ObservedPeers["sshhost.com:22"]; wrongPort {
-		t.Error("observed peer recorded under default port 22, want declared port 222")
-	}
-	obs, ok := att.Sealed.ObservedPeers["sshhost.com:222"]
-	if !ok {
-		t.Fatalf("missing observed peer sshhost.com:222; got %v", att.Sealed.ObservedPeers)
-	}
-	sshID, ok := obs.Identity.(deploy.ObservedSSH)
-	if !ok {
-		t.Fatalf("identity type = %T, want ObservedSSH", obs.Identity)
-	}
-	if sshID.HostKeyFingerprint != sshFP {
-		t.Errorf("HostKeyFingerprint = %q, want %q", sshID.HostKeyFingerprint, sshFP)
-	}
-}
-
-func TestDeployerExecute_ObservedPeersConflictAborts(t *testing.T) {
-	eng := newTLSTestEngine(t, containerMock(t, "v1.0"))
-
-	// Two predecessor steps whose records report the same host:port with
-	// different TLS fingerprints.
-	peerA := endpoint.TLS{
-		Type:    "https",
-		Address: endpoint.MustParseAuthority("api.example.com:443"),
-		Trust: endpoint.Fingerprint{
-			Type:        "certFingerprint",
-			Fingerprint: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-		},
-	}
-	peerB := endpoint.TLS{
-		Type:    "https",
-		Address: endpoint.MustParseAuthority("api.example.com:443"),
-		Trust: endpoint.Fingerprint{
-			Type:        "certFingerprint",
-			Fingerprint: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-		},
-	}
-
-	p := &lane.Lane{
-		Name: "test-conflict",
-		Steps: []lane.Step{
-			{
-				ID:      "step-a",
-				Image:   primitive.ImageRefPtr("alpine:3.20"),
-				Args:    []string{"echo", "ok"},
-				Env:     map[string]string{},
-				Inputs:  []lane.InputRef{},
-				Secrets: []lane.SecretRef{},
-				Outputs: []lane.FileOutput{
-					{ID: "out", Type: "file", Path: primitive.RelPathPtr("a")},
-				},
-				Peers: []lane.Peer{peerA},
-			},
-			{
-				ID:      "step-b",
-				Image:   primitive.ImageRefPtr("alpine:3.20"),
-				Args:    []string{"echo", "ok"},
-				Env:     map[string]string{},
-				Inputs:  []lane.InputRef{},
-				Secrets: []lane.SecretRef{},
-				Output:  "image",
-				Peers:   []lane.Peer{peerB},
-			},
-			{
-				ID: "deploy-conflict",
-				Deploy: &lane.DeploySpec{
-					Method: lane.DeployKubernetes{
-						Type:       "kubernetes",
-						Image:      "runner@sha256:0000000000000000000000000000000000000000000000000000000000000000",
-						Namespace:  "default",
-						Strategy:   "apply",
-						Kubeconfig: kubeconfigPtr(testKubeconfig(t)),
-					},
-					Artifacts: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "step-b"}},
-					Recording: lane.StateRecording{},
-				},
-				Inputs: []lane.InputRef{{From: lane.OutputRef{Step: "step-a", Output: "out"}, Mount: "/in/a"}},
-			},
-		},
-	}
-	index, buildErr := lane.IndexSteps(p)
-	if buildErr != nil {
-		t.Fatalf("IndexSteps: %v", buildErr)
-	}
-	dag, buildErr := lane.Build(p, index)
-	if buildErr != nil {
-		t.Fatalf("Build: %v", buildErr)
-	}
-
-	state := lane.NewRuntime(dag)
-	if regErr := state.Register("step-b", "", output.ImageHandle{
-		Ref: "localhost/test/step-b@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
-	}); regErr != nil {
-		t.Fatal(regErr)
-	}
-
-	ca, look, caPath, ports := deployCapsuleFields(t, "deploy-conflict")
-
-	// Same host:port, different fingerprints -> conflict.
-	networkRecords := map[string]capsule.Records{
-		"step-a": {
-			Connections: []mediator.ConnectionRecord{{
-				Decision: mediator.DecisionAllowed,
-				SNI:      "api.example.com",
-				Upstream: &transport.ConnectionIdentity{
-					LeafFingerprint: "sha256:1111111111111111111111111111111111111111111111111111111111111111",
-					PeerAddress:     endpoint.MustParseAuthority("api.example.com:443"),
-				},
-				Resolved: []netip.Addr{netip.MustParseAddr("93.184.216.34")},
-			}},
-		},
-		"step-b": {
-			Connections: []mediator.ConnectionRecord{{
-				Decision: mediator.DecisionAllowed,
-				SNI:      "api.example.com",
-				Upstream: &transport.ConnectionIdentity{
-					LeafFingerprint: "sha256:2222222222222222222222222222222222222222222222222222222222222222",
-					PeerAddress:     endpoint.MustParseAuthority("api.example.com:443"),
-				},
-				Resolved: []netip.Addr{netip.MustParseAddr("93.184.216.34")},
-			}},
-		},
-	}
-	for netStep, recs := range networkRecords {
-		stepID := primitive.Identifier(netStep)
-		state.RecordNetwork(stepID, recs)
-	}
-
-	step := index["deploy-conflict"]
-	d := &deploy.Deployer{
-		Engine:       eng,
-		ArtifactRefs: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "step-b"}},
-		LaneID:       "test-lane",
-		DAG:          dag,
-		CA:           ca,
-		UpstreamLook: look,
-		CAVolume:     caPath,
-		StepID:       "deploy-conflict",
-		StepPorts:    ports,
-	}
-	deploy.SetProduceBundles(d, stubProduceBundles())
-	_, execErr := d.Execute(context.Background(), step, state)
-	if execErr == nil {
-		t.Fatal("expected error for conflicting observed peer identities")
-	}
-	if !strings.Contains(execErr.Error(), "conflicting validated identities") {
-		t.Errorf("error = %q, want 'conflicting validated identities'", execErr.Error())
 	}
 }
 
@@ -1923,10 +1190,7 @@ func TestDeployExecute_StepTimeoutWithMediatedConnection(t *testing.T) {
 	step := &lane.Step{
 		ID: "timeout-step",
 		Deploy: &lane.DeploySpec{
-			Method: lane.DeployKubernetes{
-				Type:  "kubernetes",
-				Image: "img@sha256:0000000000000000000000000000000000000000000000000000000000000000",
-			},
+			Method: deploy.DeployRegistryForTest(),
 			Recording: lane.StateRecording{
 				PreState: lane.CaptureSet{
 					Required: true,

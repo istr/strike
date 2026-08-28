@@ -24,6 +24,9 @@ func ValidateLane(p *Lane, index map[primitive.Identifier]*Step) error {
 	if err := validateDeployPresence(p); err != nil {
 		return err
 	}
+	if err := validateDeployMethodImplemented(p); err != nil {
+		return err
+	}
 	if err := validateResolver(p); err != nil {
 		return err
 	}
@@ -517,6 +520,25 @@ func validateDeployPresence(p *Lane) error {
 		}
 	}
 	return fmt.Errorf("lane %q: no deploy step; a lane must declare at least one deploy step", p.Name)
+}
+
+// validateDeployMethodImplemented rejects a declared deploy method that has no
+// execution path. The kubernetes method is a control-plane act against the
+// cluster API (ADR-054); its container-based implementation was removed and the
+// replacement is not built. Rejecting here rather than at run time means the
+// author learns it from `strike validate`, and the method keeps its schema arm
+// and its dispatch so the rebuild reuses both unchanged.
+func validateDeployMethodImplemented(p *Lane) error {
+	for _, s := range p.Steps {
+		if s.Deploy == nil {
+			continue
+		}
+		if _, ok := s.Deploy.Method.(DeployKubernetes); ok {
+			return fmt.Errorf(
+				"step %q: kubernetes deploy method is not yet implemented (ADR-054)", s.ID)
+		}
+	}
+	return nil
 }
 
 // validateResolver enforces the IP-literal constraint on the

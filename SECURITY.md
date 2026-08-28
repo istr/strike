@@ -128,8 +128,9 @@ The highest-risk categories for a CI/CD executor like strike:
 
 **A03 Injection** -- The primary risk. strike communicates with the container
 engine via REST API over a Unix socket. There are zero `exec.Command` calls
-and zero `os/exec` imports in the entire codebase. State capture, kubectl,
-and HTTP probes all run inside containers via the Engine API. Lane definitions
+and zero `os/exec` imports in the entire codebase. State capture and HTTP
+probes run inside containers via the Engine API; registry pushes and other
+control-plane acts are API calls the controller makes itself. Lane definitions
 cannot inject shell metacharacters because there is no shell and no subprocess
 spawning.
 
