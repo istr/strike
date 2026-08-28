@@ -17,6 +17,14 @@ digest). Names the transport-deploy family as a deferred successor grounded
 in [ADR-038](ADR-038-protocol-mediated-ssh.md) D1. Makes breaking lane-schema
 changes; acceptable pre-beta, no migration.
 
+> **Amended by [ADR-054](ADR-054-kubernetes-deploy-via-cluster-api.md):**
+> the kubernetes method of D5 is a control-plane act against the cluster API,
+> not a container that runs kubectl. Sourcing the manifests from `artifacts` is
+> necessary for the payload but does not move the apply itself out of Layer E,
+> because the engine still materializes the mount and performs the act. The
+> container implementation is removed and the method is rejected at lane
+> validation until it is rebuilt; the D9 kubernetes cardinality stays open.
+
 ## Context
 
 The build/pack/deploy field structure predates the V/E clarity that
