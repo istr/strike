@@ -436,7 +436,7 @@ func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.Run
 
 	// 4. Execute deploy action. For registry deploys the returned attach
 	// target carries the pushed manifest descriptor; nil otherwise.
-	attach, execErr := d.executeMethod(ctx, spec, step.Peers, state)
+	attach, execErr := d.executeMethod(ctx, spec, state)
 	if execErr != nil {
 		return nil, fmt.Errorf("step %q: deploy action failed: %w", step.ID, execErr)
 	}
@@ -713,7 +713,7 @@ type attachTarget struct {
 
 // executeMethod dispatches to the appropriate deploy method. It returns a
 // non-nil attach target only for registry deploys.
-func (d *Deployer) executeMethod(ctx context.Context, spec lane.DeploySpec, _ []lane.Peer, state *lane.Runtime) (*attachTarget, error) {
+func (d *Deployer) executeMethod(ctx context.Context, spec lane.DeploySpec, state *lane.Runtime) (*attachTarget, error) {
 	switch m := spec.Method.(type) {
 	case lane.DeployRegistry:
 		return d.executeRegistryDeploy(ctx, m, state)
