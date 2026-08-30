@@ -1,5 +1,21 @@
 # ADR-016: State-Drift Recording, Not Detection or Action
 
+> **Amended by [ADR-051](ADR-051-deploy-as-sealing-point.md):**
+> the `target.id` half of the pairing identity named below is removed (D10).
+> An operator-assigned label has no verifiable value: an offline verifier
+> authenticates the signed envelope over the label but has no oracle for
+> whether it denotes a real destination. The pairing surface an independent
+> consumer uses is `laneId` and `laneDigest` together with the dialed
+> endpoint -- `sealed.observedPeers` for every deploy, and `sealed.pushed`
+> (registry authority, repository, manifest digest) for a registry deploy.
+> The lane identifiers scope a pair to one lane definition; the dialed
+> endpoint names the destination the pair brackets. Recording is unchanged.
+
+> **Amended by [ADR-042](ADR-042-field-naming-camelcase.md):**
+> the snake_case field names below (`lane_id`, `pre_state_digest`,
+> `post_state_digest`) predate the camelCase convention and no longer match
+> the wire, which carries `laneId`, `preStateDigest`, and `postStateDigest`.
+
 ## Status
 
 Accepted.
