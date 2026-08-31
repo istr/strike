@@ -17,6 +17,30 @@ the single source of truth) by naming the two registers a contract carries, and
 extends [ADR-042](ADR-042-field-naming-camelcase.md) from field naming to the
 naming of types and the packages that hold them.
 
+> **Superseded in part by [ADR-044](ADR-044-tier-assignment-criterion.md):**
+> its two amendments of 2026-06-26 -- the primitive tier and the
+> concept tier -- realize the tiering this ADR specifies and displace
+> the placement wording here. Authoritative there:
+> `internal/primitive` is not a foundation package but its own
+> zero-dependency component, distinguished from foundation by kind
+> and importing nothing internal, not even contract; the concept tier
+> sits between primitive and transport -- not "between foundation and
+> transport" as the Status sentence, section (5), and the
+> `.go-arch-lint.yml` Consequences bullet place it -- with
+> `concept.mayDependOn` exactly `[primitive]`, never foundation
+> utilities, so section (5)'s "concept and transport can share the
+> floor" claim does not hold; and the tier diagram's single nested
+> chain (primitive folded into foundation, each level reaching
+> everything beneath it) is not the enforced relation, whose edges
+> are the explicit mayDependOn grants (foundation may import contract
+> only; concept may import primitive only). Where this ADR's lattice
+> prose or diagram and the ADR-044 amendments disagree, the ADR-044
+> amendments and the `.go-arch-lint.yml` enforcement they specify
+> govern. Everything else -- naming by role, the define/specify
+> registers, representation-neutral concepts with in-package
+> Parse/String, and the kind test at the tier boundaries -- stands
+> unchanged.
+
 ## Context
 
 The contract is a set of CUE files. It is normative: it states what must be true,
