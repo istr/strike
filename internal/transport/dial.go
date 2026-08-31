@@ -296,10 +296,9 @@ func DialUnixSocket(ctx context.Context, path string) (*net.UnixConn, error) {
 // capsule's DoT resolver first, so no DNS-based routing happens
 // outside the resolver allowlist. The parameter type is what
 // enforces that, so there is no hostname case to reject here.
+// DialResolved is the only caller and rejects an invalid address or a
+// zero port before calling, so dst is already known good here.
 func dialTCP(ctx context.Context, dst netip.AddrPort) (net.Conn, error) {
-	if !dst.IsValid() || dst.Port() == 0 {
-		return nil, errors.New("transport: tcp dial requires a resolved address and port")
-	}
 	var d net.Dialer
 	conn, err := d.DialContext(ctx, "tcp", dst.String())
 	if err != nil {

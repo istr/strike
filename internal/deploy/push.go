@@ -369,6 +369,9 @@ func newRegistryTransport(target lane.DeployRegistryTarget, dialer *transport.Di
 	if target.Trust == nil {
 		return nil, nil, fmt.Errorf("registry target: trust required")
 	}
+	if dialer == nil {
+		return nil, nil, fmt.Errorf("registry target: dialer required")
+	}
 	dialAddr := target.Address
 	if dialAddr.Port == nil {
 		port := primitive.Port(443)

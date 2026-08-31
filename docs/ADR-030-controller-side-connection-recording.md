@@ -247,3 +247,20 @@ record stays informational.
 - **Observation over declaration.** The recorded resolver identity is the
   one observed at the handshake; a declared `resolver.trust` anchor is the
   thing checked against that observation, not a substitute for it.
+
+## Amendment 2026-08-31 -- the DoT dial is renamed, the capture is unchanged
+
+The functions this ADR names on the DoT path no longer exist under those
+names. `transport.DialVerified` is now `transport.DialResolved`, which takes
+an already-resolved `netip.AddrPort` as its destination and the verification
+name as a separate parameter. `transport.LookupHost` and
+`transport.ProbeResolver` are now the `LookupHost` and `Probe` methods of
+`transport.Dialer`, and `dotResolver` is a method on that same type. The
+change gave the resolved-and-verified dial one owner in `internal/transport`,
+so that no name can reach a dialer as routing information (item-0130).
+
+The decision is unaffected, and so is its implementation clause. The
+resolver's observed identity is still captured from a TLS connection the
+controller establishes itself, still once per lane run, and still as a
+`transport.ConnectionIdentity`; section 1 and the first Implementation bullet
+hold as written, over the new names.

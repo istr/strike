@@ -702,8 +702,9 @@ fixture remains inline.
 ## Control-plane egress dials go through `internal/transport` `controlplane-egress-dials`
 
 **Rule.** Every outbound `net.Dial*` or `net.Dialer` call in non-test code
-goes through a validated helper in `internal/transport`: `DialVerified` for
-TLS-over-TCP, `DialTCP` for raw TCP to a resolved IP, `DialUnixSocket` for
+goes through a validated helper in `internal/transport`: `DialResolved` for
+TLS to a resolved address, `Dialer.DialPeer` when the caller holds a name and
+the lane's declared resolver must resolve it, `DialUnixSocket` for
 Unix-domain sockets. Raw `net.Dial`,
 `net.DialUnix`, `net.DialTCP`, `net.DialTimeout`, and `net.Dialer`
 construction are forbidden by `forbidigo` outside the chokepoint.
@@ -729,11 +730,13 @@ by location via `forbidigo`, makes the invariant immune to which dial
 function is used and which functions the detector happens to model.
 
 `DialUnixSocket` validates the path before dialing: `EvalSymlinks`,
-`ModeSocket` check, and owner-uid match. `DialTCP` takes a resolved
-`netip.AddrPort`, so a hostname cannot reach it at all; callers resolve
-through the capsule's DoT resolver first, which is what keeps DNS-based
-SSRF out of the dial path. Error strings omit filesystem paths
-(AGENTS.md error-message rules).
+`ModeSocket` check, and owner-uid match. `DialResolved` takes a resolved
+`netip.AddrPort` as its destination and the verification name as a separate
+parameter, so a hostname cannot reach the dial at all; a caller holding a
+name resolves it through the lane's declared DoT resolver first, which
+`Dialer.DialPeer` does, and that is what keeps DNS-based SSRF out of the
+dial path. Error strings omit filesystem paths (AGENTS.md error-message
+rules).
 
 **Enforced by.** `forbidigo` rules in `.golangci.yml`; the chokepoint
 file (`internal/transport/dial.go`) is exempted via `exclusions.rules`.

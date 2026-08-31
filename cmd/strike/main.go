@@ -208,7 +208,7 @@ func cmdRun(ctx context.Context, path string, engine container.Engine) error {
 		return err
 	}
 
-	dialer, resolverID, err := probeResolver(ctx, p)
+	dialer, resolverID, err := initDialer(ctx, p)
 	if err != nil {
 		return err
 	}
@@ -296,7 +296,7 @@ func cmdRun(ctx context.Context, path string, engine container.Engine) error {
 	return runErr
 }
 
-// probeResolver builds the lane's dialer and runs the pre-flight resolver
+// initDialer builds the lane's dialer and runs the pre-flight resolver
 // probe on it. The dialer is the run's single owner of the resolved-and-
 // verified dial, so what the probe verifies is the path every later lane
 // dial takes; it is returned for the run context to carry.
@@ -307,7 +307,7 @@ func cmdRun(ctx context.Context, path string, engine container.Engine) error {
 // requirement: a reachable DoT resolver", for the rationale. The probe also
 // captures the resolver's observed TLS identity, recorded in the deploy
 // attestation per ADR-030.
-func probeResolver(ctx context.Context, p *lane.Lane) (*transport.Dialer, transport.ConnectionIdentity, error) {
+func initDialer(ctx context.Context, p *lane.Lane) (*transport.Dialer, transport.ConnectionIdentity, error) {
 	dialer, err := transport.NewDialer(p.Resolver)
 	if err != nil {
 		return nil, transport.ConnectionIdentity{}, err

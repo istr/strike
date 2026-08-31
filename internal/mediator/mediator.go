@@ -9,7 +9,7 @@
 //
 // Architectural decisions: see docs/ADR-028-step-container-egress-mediation.md,
 // "Component 2: Controller-side mediation" (per-step mediator instance,
-// SNI-preserving upstream dial / split TLS).
+// terminate-and-re-originate upstream dial / split TLS).
 package mediator
 
 import (
@@ -125,14 +125,15 @@ func New(stepID string, peers []PeerTrust, ca *transport.EphemeralCA, dialer *tr
 		if _, dup := peerMap[c]; dup {
 			return nil, fmt.Errorf("mediator: duplicate peer %q", c)
 		}
-		n := primitive.Port(defaultUpstreamPort)
+		port := defaultUpstreamPort
 		if p.Address.Port != nil {
-			n = *p.Address.Port
+			n := *p.Address.Port
+			if n < 1 || n > 65535 {
+				return nil, fmt.Errorf("mediator: peer %q port %d out of range 1..65535", c, n)
+			}
+			port = uint16(n)
 		}
-		if n < 1 || n > 65535 {
-			return nil, fmt.Errorf("mediator: peer %q port %d out of range 1..65535", c, n)
-		}
-		peerMap[c] = peerEntry{trust: p.Trust, name: primitive.Host(c), port: uint16(n)}
+		peerMap[c] = peerEntry{trust: p.Trust, name: primitive.Host(c), port: port}
 	}
 
 	return &Mediator{
@@ -297,11 +298,14 @@ func (m *Mediator) getCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate,
 }
 
 func (m *Mediator) dialUpstream(ctx context.Context, sni string, pe peerEntry) (*tls.Conn, *transport.ConnectionIdentity, []netip.Addr, error) {
-	// The name resolved and verified here is the matched peer's declared
-	// host, not the container-supplied SNI string: a peer-map hit proves the
-	// two canonicalize to the same value, and the declaration is the lane's
-	// own program state. The SNI the container sent is forwarded unchanged
-	// (ADR-028, SNI-preserving upstream dial) and recorded as SNI.
+	// The name resolved, sent as SNI and verified against upstream is the
+	// matched peer's declared host, not the container-supplied SNI string.
+	// A peer-map hit proves the two canonicalize to the same value, so this
+	// is a question of which value is program state rather than a change of
+	// what reaches the wire: the declaration is the lane's own, the SNI is
+	// input. The container's SNI is recorded on the connection record as the
+	// observation it is, and is used in error text so an operator sees the
+	// name the container asked for.
 	addrs, err := m.dialer.LookupHost(ctx, pe.name.String())
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("upstream lookup %q: %w", sni, err)

@@ -132,3 +132,17 @@ of a generated union (`container.ConnectionInfo`). Collapsing it is item-0092.
 - **Code is liability** -- the rules delete more than they add: three dead path
   methods, two duplicate containment predicates, two redundant scheme
   inspections, one packed-string round trip.
+
+## Amendment 2026-08-31 -- rule (4)'s worked site is renamed and closed
+
+The rule (4) entry in Consequences names `transport.DialTCP` and
+`transport.DialVerified`. Neither exists now. item-0088 retyped `DialTCP`
+from a packed string to `netip.AddrPort`, closing the entry as written;
+item-0130 then replaced `DialVerified` with `transport.DialResolved` and
+unexported `DialTCP` into it, so the resolved destination and the
+verification name are two parameters of one function and the foreign call,
+`net.Dialer.DialContext`, sits one frame deeper.
+
+Rule (4) itself is unaffected. The conversion is still owned at the foreign
+call rather than at a judged boundary; `DialResolved` is where that call now
+sits. The entry records where the tree stood when this ADR was written.
