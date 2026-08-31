@@ -311,3 +311,32 @@ expose the plane.
   fact (Layer V) or the engine merely asserted it (Layer E) is what sets the
   layer it occupies; an unobserved engine assertion never rises to a verified
   fact.
+
+## Amendment 2026-08-31 -- the D2 soft-spot clause named a mode that does not exist
+
+D2's residual-soft-spot clause names "the `system_ca` / `system`
+trust opt-ins" and grounds their weakness in the OS trust store.
+Verified against the tree, the pair conflates two axes, and neither
+half survives as written:
+
+- On the lane-peer axis, `system_ca` does not exist. The peer trust
+  vocabulary is closed at `certFingerprint | caBundle` and the mode
+  is rejected by name; ADR-021's system-CA deferral is in force (its
+  dated deferral-verified note carries the evidence). There is no
+  peer-axis system-trust opt-in to be a soft spot.
+- On the engine transport, `system` trust is real -- ADR-012 records
+  the mode (`pinned`/`system`) -- but it is not an opt-in: it is the
+  unpinned **default**, what an operator gets by leaving the CA
+  pinning unset on a TCP engine. The soft spot is therefore wider
+  than the clause admits: on an unpinned TCP engine the OS trust
+  store decides who counts as the engine that D4 trusts and that
+  reads step secrets (ADR-006, a Layer-E member under D1).
+
+**Supersedes, in D2 above:** "the `system_ca` / `system` trust
+opt-ins" is read as "the engine transport's `system` trust mode
+(ADR-012), the unpinned default on a TCP engine".
+
+That engine TLS defaults to system trust rather than failing closed
+on an unpinned TCP engine is decided by no ADR: ADR-012 records the
+mode; nothing ratifies the default. This amendment records the gap;
+it does not decide it.

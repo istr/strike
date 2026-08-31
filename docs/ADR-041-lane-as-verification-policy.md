@@ -173,3 +173,21 @@ explicit override.
 - Code is liability -- lane_digest is raw bytes with no canonicalization
   machinery, and the verifier reuses the existing core rather than growing a
   parallel path.
+
+## Amendment 2026-08-31 -- the peer-egress contrast clause named a mode that does not exist
+
+The registry-reachability consequence contrasts the verify tool's
+posture with "the lane's peer egress, where the system CA is an
+explicit opt-in". No such opt-in exists: the peer trust vocabulary
+is closed at `certFingerprint | caBundle`, `system_ca` is rejected
+by name, and ADR-021's system-CA deferral is in force (its dated
+deferral-verified note carries the evidence). The distinction the
+clause draws is right and stands -- the registry is not trust-bearing
+for the verdict, so system-CA transport there weakens nothing --
+only the stated reason for the contrast was wrong, and the corrected
+reason is stronger.
+
+**Supersedes, in the Consequences above:** "where the system CA is
+an explicit opt-in" is read as "where the system CA is not available
+at all: every peer requires an explicit fingerprint or CA bundle
+(ADR-007, ADR-021)".
