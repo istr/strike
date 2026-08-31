@@ -65,7 +65,7 @@ referenced here at all.
 | 018 | [Cryptographic test material is ephemeral](ADR-018-ephemeral-test-material.md)                | Accepted | Secrets are typed; Code is liability; Digest-pinned references |
 | 019 | [SBOMs as OCI 1.1 referrer artifacts](ADR-019-sbom-as-oci-referrer.md)                        | Accepted; superseded in part by ADR-040 | Runtime is attested; Digest-pinned references; Identity is asymmetric; Code is liability |
 | 020 | [Storage driver selection and host environment plumbing](ADR-020-storage-driver-and-host-plumbing.md) | Accepted | No root; Code is liability; Digest-pinned references |
-| 021 | [Deferred extensions](ADR-021-deferred-extensions.md)                                         | Accepted | Code is liability; Digest-pinned references      |
+| 021 | [Deferred extensions](ADR-021-deferred-extensions.md)                                         | Accepted; amended by ADR-026, ADR-040, ADR-043 | Code is liability; Digest-pinned references      |
 | 022 | [Network opt-in as a typed peer list](ADR-022-network-opt-in-as-peer-list.md)                 | Accepted; superseded in part by ADR-054; amended by ADR-028, ADR-029, ADR-033 | Peers are declared; Identity is asymmetric; CUE first; No root; Enforcement is structural |
 | 023 | [Pointer arguments require justification](ADR-023-pointer-arguments-require-justification.md)  | Accepted; amended by ADR-043 | Code is liability                                |
 | 024 | [SSH peer server-trust enforcement](ADR-024-ssh-peer-server-trust-enforcement.md)              | Superseded by ADR-038 | Peers are declared; Identity is asymmetric; No root; Code is liability; Enforcement is structural |

@@ -29,6 +29,19 @@ under which it would be revisited.
 
 ### System CA opt-in for HTTPS peers
 
+> **Deferral verified (2026-08-31):** still deferred, and now
+> checkably so. The trust vocabulary is closed at two members --
+> `#TrustType: "certFingerprint" | "caBundle"` in
+> `contract/endpoint/trust.cue` -- and `system_ca` is rejected by
+> name: `internal/lane/testdata/peers/invalid_https_unknown_trust_type.yaml`
+> carries it as the whole-lane negative fixture, and the peer and
+> keyless unmarshal tests assert "unknown trust type" for it. Prose
+> elsewhere that names a system mode on the peer axis (ADR-037 D2,
+> ADR-041) conflates this un-implemented opt-in with the
+> engine-transport trust mode ADR-012 records (`pinned`/`system`),
+> which is a controller-to-engine concern, not a lane peer. The
+> "Revisit when" trigger below has not fired.
+
 **What.** A lane field that opts into using the host's system
 trust store for an HTTPS peer, instead of requiring an explicit
 CA bundle or cert fingerprint per ADR-007.
@@ -111,6 +124,17 @@ controller.
 
 ### Distributed cache / shared state across runners
 
+> **Amended by [ADR-026](ADR-026-containers-as-sole-inter-step-storage.md):**
+> partially resolved. The basic cross-machine pattern exists: an
+> explicit per-step publish to an operator-configured registry, with
+> remote-cache tags, decided there under "Cross-machine persistence".
+> What this item holds open narrows accordingly to what ADR-026
+> itself defers -- "multi-machine cache federation beyond the basic
+> push/pull pattern", trust model included. One composition question
+> is unstated by any ADR: ADR-051 D4 removes the engine push ("the
+> engine never pushes"), and how the cache-publish path relates to
+> that removal is recorded nowhere.
+
 **What.** A cache layer that allows multiple strike runners to
 share spec-hash-keyed artifacts without re-running steps.
 
@@ -127,6 +151,18 @@ attempting it now would produce a generic cache that fits no
 specific case well.
 
 ### Cosign keyless signing (Fulcio + OIDC)
+
+> **Amended by [ADR-040](ADR-040-control-plane-sbom-and-keyless-attestation.md)
+> and [ADR-043](ADR-043-retire-keyed-image-signing-and-rekor-v1.md):**
+> resolved -- the trigger fired and the dedicated records exist.
+> ADR-040 adopts keyless signing as the deploy model (OIDC to Fulcio
+> to DSSE to Rekor v2, RFC3161-timestamped), with the lane-level
+> `#OIDCConfig` realizing exactly the asymmetric-identity shape this
+> item predicted via ADR-007. ADR-043 then retires the keyed model
+> entirely, so the resolution went further than the deferral
+> imagined: not "supporting both", but keyed signing removed. The
+> premise sentence below, "Strike currently signs with
+> operator-supplied ECDSA keys (per ADR-008)", is historical.
 
 **What.** Signing without a long-lived private key, using a
 short-lived certificate from Fulcio bound to an OIDC identity.
