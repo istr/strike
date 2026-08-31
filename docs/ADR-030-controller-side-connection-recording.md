@@ -14,6 +14,29 @@ identity, informational) and
 [ADR-029](ADR-029-peers-are-container-egress.md) (peers are
 container-egress contracts only).
 
+> **Superseded in part by [ADR-051](ADR-051-deploy-as-sealing-point.md):**
+> the OCI *push* half of this decision -- case 3's push reasoning, the
+> "OCI push" table row, and the implementation bullet's "no registry
+> record, no registry trust declaration" as applied to the push --
+> rested on a premise ADR-051 D4 removed: the engine performed the
+> push, so the connection was not observable and a pushed image was
+> an engine-asserted fact. The control plane now owns the push and
+> dials the registry itself ("the engine never pushes"), and the
+> deploy attestation records it: the push destination and the
+> resulting pushed digest enter `Sealed.ObservedPeers` (ADR-051 D10),
+> `sealed.pushed` is a pairing surface (ADR-016 as amended by
+> ADR-051), and the push-connection identity is captured first-wins
+> (ADR-052 D5). The destination is declared as a method field
+> (ADR-051 D6; ADR-054 D3 reads that shape as an address plus a
+> server-trust anchor). The governing rule of this ADR -- an identity
+> is recorded when and only when it participates in the trust chain
+> -- stands and is what produces the new outcome: with the controller
+> as the dialing party, the destination identity participates in the
+> claim the deploy seals (where the artifact was pushed), while
+> artifact *integrity* remains content trust anchored in the digest.
+> The OCI *pull* is unchanged: the engine still performs it by digest
+> (ADR-040 D4), so the pull row and its reasoning stand as written.
+
 ## Context
 
 strike makes several kinds of external network connection. Some are
