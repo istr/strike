@@ -4,6 +4,29 @@
 
 Accepted.
 
+> **Superseded in part by [ADR-042](ADR-042-field-naming-camelcase.md):**
+> the Decision clause "Go types are generated from CUE, not
+> hand-written" holds as the default, not as an absolute. The deploy
+> attestation's predicate types are hand-mirrored and stay
+> hand-written (ADR-042 Consequences), an arrangement
+> [ADR-047](ADR-047-spec-package-layering.md) grounded in the
+> generator's one-CUE-package-to-one-Go-package constraint: the
+> attest package is hand-written and validated against CUE at
+> runtime, not gengotypes-generated (its section 3), and the
+> transport subset of the base vocabulary stays `@go(-)`
+> hand-written in `internal/transport` (its section 6). ADR-047's
+> layering is itself superseded by
+> [ADR-048](ADR-048-contract-type-semantics.md); the hand-written
+> arrangement continues under it, narrowed once: the ADR-048
+> amendment single-sources the artifact and SBOM record package back
+> to generation (`@go` redirects; the hand-written structs are
+> deleted). The decision this ADR makes survives the exception: for
+> the hand-written types, CUE remains the single source through
+> runtime validation against the same schemas -- the property the
+> clause exists to protect, and one this ADR's own Decision already
+> exercises on attestation JSON. Everywhere else, generation remains
+> the rule.
+
 ## Context
 
 Internal data contracts in a Go-only codebase typically live in

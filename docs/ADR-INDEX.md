@@ -48,7 +48,7 @@ referenced here at all.
 | 001 | [Container engine via REST API, not subprocess execution](ADR-001-engine-via-api-not-exec.md) | Accepted | No exec; No shell; Code is liability             |
 | 002 | [No shell in the execution path](ADR-002-no-shell-in-execution-path.md)                       | Accepted | No shell; Code is liability                      |
 | 003 | [Rootless end-to-end execution](ADR-003-rootless-end-to-end.md)                               | Accepted | No root; No exec                                 |
-| 004 | [CUE schemas as the single source of truth](ADR-004-cue-as-single-source-of-truth.md)         | Accepted | CUE first; Code is liability                     |
+| 004 | [CUE schemas as the single source of truth](ADR-004-cue-as-single-source-of-truth.md)         | Accepted; superseded in part by ADR-042 | CUE first; Code is liability                     |
 | 005 | [Hardened container profile, not lane-configurable](ADR-005-hardened-container-profile-non-configurable.md) | Accepted | No root; Code is liability; Peers are declared; Enforcement is structural |
 | 006 | [Secrets are a typed primitive, not a string](ADR-006-secrets-as-typed-primitive.md)          | Accepted | Secrets are typed; Code is liability; Enforcement is structural |
 | 007 | [Asymmetric identity for client auth and server trust](ADR-007-asymmetric-identity.md)        | Accepted | Identity is asymmetric; Peers are declared       |
