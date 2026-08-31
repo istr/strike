@@ -123,3 +123,50 @@ per output statement.
   log entries are content-addressed)
 - Identity is asymmetric (signing key in DSSE signatures vs. Rekor
   public key for SET verification, kept distinct)
+
+## Amendment 2026-08-31 -- composing the ADR-040 and ADR-043 partial supersessions
+
+The two revision notes this ADR carries were written at different
+times and compose into a contradiction when read together. This
+amendment records the composition; it adds no new decision.
+
+**Payload type.** The "Superseded in part" section above (written for
+ADR-040 D3) states that `application/vnd.strike.attestation+json`
+"remains only on the internal collect-model envelope
+(`SignAttestation`)". The later ADR-043 note retires that envelope.
+Composed: the strike-specific payload type is fully retired -- no
+emitted document carries it. Every projected output statement carries
+`application/vnd.in-toto+json` (ADR-040 D3). **Supersedes, in the
+section above:** "remains only on the internal collect-model
+envelope" is read as historical; nothing remains.
+
+**Rekor submission-failure semantics.** Three Decision clauses -- SET
+verification as a mandatory hard error, transient-failure fail-open,
+and the 100 KB skip-with-warning -- governed the Rekor v1 REST client
+and are retired with it: ADR-043 names "SET verification, and
+response parsing" among the removed surface, and the retained-set
+lists in both notes (DSSE shape, PAE, rekor-field exclusion) do not
+include them. The word "Rekor" in the section above's retention
+sentence is read the same way: what is retained is the rekor-field
+exclusion rule, not the v1 submission mechanism or its failure
+handling.
+
+No accepted ADR ratifies submission-failure semantics for the Rekor
+v2 path, and the v1 clauses do not transfer by substitution. The
+discriminator object has no v2 counterpart: Rekor v2 signs no time
+(ADR-053), the receipt being a signed checkpoint plus an inclusion
+proof, so the analogous check is a verification set whose mandatory
+extent is undecided. And the fail-open premise is inverted: v1
+treated the rekor proof as strippable optional metadata ("can be
+stripped ... This is a feature"), while the keyless chain makes Rekor
+inclusion a `strike verify` requirement (ADR-040), makes zero bundles
+a verification failure with every present statement required valid
+(ADR-041), and makes the RFC3161 trusted time load-bearing for
+anchor-window evaluation (ADR-053) -- a producer that fail-opened on
+log or TSA unavailability would emit bundles its own verifier
+rejects. Open, undecided by any ADR: the per-dependency posture
+(Rekor v2 and the TSA, each), the mandatory verification set for the
+v2 receipt, partial failure across the several statements of one
+deploy, and any size limit. Until a decision record exists, the v1
+posture is not carried forward silently. This amendment records the
+gap; it does not decide it.
