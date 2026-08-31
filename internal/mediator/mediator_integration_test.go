@@ -6,7 +6,6 @@ import (
 	"crypto/x509"
 	"io"
 	"net"
-	"net/netip"
 	"path/filepath"
 	"testing"
 
@@ -41,16 +40,16 @@ func TestMediator_HarnessHTTPS_INTEGRATION(t *testing.T) {
 	resolverCert := primitive.AbsPath(filepath.Join(harness, "pki", "resolver.crt"))
 	caddyRoot := primitive.AbsPath(filepath.Join(harness, "pki", "caddy-root.crt"))
 
-	dotDecl := endpoint.TLS{
+	dialer, err := transport.NewDialer(endpoint.TLS{
 		Type:    "https",
 		Address: endpoint.MustParseAuthority("127.0.0.1:8853"),
 		Trust: endpoint.CABundle{
 			Type: "caBundle",
 			Path: resolverCert,
 		},
-	}
-	upstream := func(ctx context.Context, name string) ([]netip.Addr, error) {
-		return transport.LookupHost(ctx, dotDecl, name)
+	})
+	if err != nil {
+		t.Fatalf("transport.NewDialer: %v", err)
 	}
 
 	ca, err := transport.New("integration-lane")
@@ -69,7 +68,7 @@ func TestMediator_HarnessHTTPS_INTEGRATION(t *testing.T) {
 		},
 	}
 
-	m, err := mediator.New("integration-step", peers, ca, upstream)
+	m, err := mediator.New("integration-step", peers, ca, dialer)
 	if err != nil {
 		t.Fatalf("mediator.New: %v", err)
 	}

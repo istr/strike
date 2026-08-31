@@ -60,7 +60,7 @@ const (
 // by tests that exercise captureOne or method execution. portKeys lists
 // every StepPorts key the test's step will look up (capture keys and/or
 // the step name itself).
-func deployCapsuleFields(t *testing.T, portKeys ...string) (ca *transport.EphemeralCA, look capsule.UpstreamLookupFunc, caVolume string, ports map[string]capsule.HostPorts) {
+func deployCapsuleFields(t *testing.T, portKeys ...string) (ca *transport.EphemeralCA, dialer *transport.Dialer, caVolume string, ports map[string]capsule.HostPorts) {
 	t.Helper()
 	var err error
 	ca, err = transport.New("deploy-test")
@@ -71,9 +71,7 @@ func deployCapsuleFields(t *testing.T, portKeys ...string) (ca *transport.Epheme
 
 	caVolume = "strike-ca-test"
 
-	look = func(_ context.Context, _ string) ([]netip.Addr, error) {
-		return []netip.Addr{netip.MustParseAddr("127.0.0.1")}, nil
-	}
+	dialer = testutil.StartDoTResolver(t, netip.MustParseAddr("127.0.0.1"))
 
 	ports = make(map[string]capsule.HostPorts, len(portKeys))
 	base := uint16(16000)
@@ -83,7 +81,7 @@ func deployCapsuleFields(t *testing.T, portKeys ...string) (ca *transport.Epheme
 			Mediator: base + uint16(i)*2 + 1,
 		}
 	}
-	return ca, look, caVolume, ports
+	return ca, dialer, caVolume, ports
 }
 
 // registryDeployFixture is the shared setup for the tests that must run a
@@ -344,7 +342,7 @@ func TestDeployerExecute(t *testing.T) {
 		},
 	}
 
-	ca, look, caPath, ports := deployCapsuleFields(t,
+	ca, dialer, caPath, ports := deployCapsuleFields(t,
 		"capture:deploy-prod:version", "deploy-prod")
 
 	d := &deploy.Deployer{
@@ -353,7 +351,7 @@ func TestDeployerExecute(t *testing.T) {
 		ArtifactRefs: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
 		LaneID:       "test-lane",
 		CA:           ca,
-		UpstreamLook: look,
+		Dialer:       dialer,
 		CAVolume:     caPath,
 		StepID:       "deploy-prod",
 		StepPorts:    ports,
@@ -477,7 +475,7 @@ func TestDeployerExecuteRegistryAttachesReferrers(t *testing.T) {
 		},
 	}
 
-	ca, look, caPath, ports := deployCapsuleFields(t,
+	ca, dialer, caPath, ports := deployCapsuleFields(t,
 		"capture:deploy-prod:version", "deploy-prod")
 
 	d := &deploy.Deployer{
@@ -488,12 +486,12 @@ func TestDeployerExecuteRegistryAttachesReferrers(t *testing.T) {
 			"image": {Step: "build"},
 			"web":   {Step: "web", Output: &distOut},
 		},
-		LaneID:       "test-lane",
-		CA:           ca,
-		UpstreamLook: look,
-		CAVolume:     caPath,
-		StepID:       "deploy-prod",
-		StepPorts:    ports,
+		LaneID:    "test-lane",
+		CA:        ca,
+		Dialer:    dialer,
+		CAVolume:  caPath,
+		StepID:    "deploy-prod",
+		StepPorts: ports,
 	}
 	deploy.SetProduceBundles(d, stubProduceBundles())
 	att, execErr := d.Execute(context.Background(), step, state)
@@ -818,7 +816,7 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 		},
 	}
 
-	ca, look, caPath, ports := deployCapsuleFields(t,
+	ca, dialer, caPath, ports := deployCapsuleFields(t,
 		"capture:deploy-prod:version", "deploy-prod")
 
 	d := &deploy.Deployer{
@@ -827,7 +825,7 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 		ArtifactRefs: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
 		LaneID:       "test-lane",
 		CA:           ca,
-		UpstreamLook: look,
+		Dialer:       dialer,
 		CAVolume:     caPath,
 		StepID:       "deploy-prod",
 		StepPorts:    ports,
@@ -931,17 +929,17 @@ func TestDeployerExecute_RequiredPreStateFails(t *testing.T) {
 		},
 	}
 
-	ca, look, caPath, ports := deployCapsuleFields(t,
+	ca, dialer, caPath, ports := deployCapsuleFields(t,
 		"capture:deploy-fail-pre:version", "deploy-fail-pre")
 
 	d := &deploy.Deployer{
-		Engine:       eng,
-		LaneID:       "test-lane",
-		CA:           ca,
-		UpstreamLook: look,
-		CAVolume:     caPath,
-		StepID:       "deploy-fail-pre",
-		StepPorts:    ports,
+		Engine:    eng,
+		LaneID:    "test-lane",
+		CA:        ca,
+		Dialer:    dialer,
+		CAVolume:  caPath,
+		StepID:    "deploy-fail-pre",
+		StepPorts: ports,
 	}
 	deploy.SetProduceBundles(d, stubProduceBundles())
 	_, err := d.Execute(context.Background(), step, state)
@@ -978,7 +976,7 @@ func TestDeployerExecute_KeylessBundles(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ca, look, caPath, ports := deployCapsuleFields(t,
+	ca, dialer, caPath, ports := deployCapsuleFields(t,
 		"capture:deploy-prod:version", "deploy-prod")
 
 	step := deployStep(t, fx.method)
@@ -989,7 +987,7 @@ func TestDeployerExecute_KeylessBundles(t *testing.T) {
 		ArtifactRefs: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
 		LaneID:       "test-lane",
 		CA:           ca,
-		UpstreamLook: look,
+		Dialer:       dialer,
 		CAVolume:     caPath,
 		StepID:       "deploy-prod",
 		StepPorts:    ports,
@@ -1035,7 +1033,7 @@ func TestDeployerExecute_KeylessFailureIsFatal(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ca, look, caPath, ports := deployCapsuleFields(t,
+	ca, dialer, caPath, ports := deployCapsuleFields(t,
 		"capture:deploy-prod:version", "deploy-prod")
 
 	step := deployStep(t, fx.method)
@@ -1045,7 +1043,7 @@ func TestDeployerExecute_KeylessFailureIsFatal(t *testing.T) {
 		ArtifactRefs: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
 		LaneID:       "test-lane",
 		CA:           ca,
-		UpstreamLook: look,
+		Dialer:       dialer,
 		CAVolume:     caPath,
 		StepID:       "deploy-prod",
 		StepPorts:    ports,
@@ -1175,7 +1173,7 @@ func TestDeployExecute_StepTimeoutWithMediatedConnection(t *testing.T) {
 	}))
 
 	captureKey := "capture:timeout-step:probe"
-	ca, look, caVolume, ports := deployCapsuleFields(t, captureKey, "timeout-step")
+	ca, dialer, caVolume, ports := deployCapsuleFields(t, captureKey, "timeout-step")
 
 	peer := endpoint.TLS{
 		Type:    "https",
@@ -1206,14 +1204,14 @@ func TestDeployExecute_StepTimeoutWithMediatedConnection(t *testing.T) {
 	}
 
 	d := &deploy.Deployer{
-		Engine:       eng,
-		LaneDigest:   "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-		LaneID:       "timeout-lane",
-		CA:           ca,
-		UpstreamLook: look,
-		CAVolume:     caVolume,
-		StepID:       "timeout-step",
-		StepPorts:    ports,
+		Engine:     eng,
+		LaneDigest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+		LaneID:     "timeout-lane",
+		CA:         ca,
+		Dialer:     dialer,
+		CAVolume:   caVolume,
+		StepID:     "timeout-step",
+		StepPorts:  ports,
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*clock.Second)
@@ -1241,8 +1239,8 @@ func TestDeployExecute_StepTimeoutWithMediatedConnection(t *testing.T) {
 	if !pool.AppendCertsFromPEM(ca.PublicCertPEM()) {
 		t.Fatal("append CA cert to pool")
 	}
-	dialer := &net.Dialer{}
-	raw, dialErr := dialer.DialContext(ctx, "tcp", mediatorAddr)
+	var clientDialer net.Dialer
+	raw, dialErr := clientDialer.DialContext(ctx, "tcp", mediatorAddr)
 	if dialErr != nil {
 		t.Fatalf("dial capsule mediator at %s: %v", mediatorAddr, dialErr)
 	}

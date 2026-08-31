@@ -3,7 +3,6 @@ package executor_test
 import (
 	"archive/tar"
 	"bytes"
-	"context"
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/json"
@@ -21,6 +20,7 @@ import (
 	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/executor"
 	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/testutil"
 	"github.com/istr/strike/internal/transport"
 	"github.com/istr/strike/test/crossval"
 )
@@ -217,12 +217,10 @@ func TestSSHTrustContent_with_ssh_peers(t *testing.T) {
 			t.Logf("ca close: %v", err)
 		}
 	})
-	lookup := func(_ context.Context, _ string) ([]netip.Addr, error) {
-		return []netip.Addr{netip.MustParseAddr("93.184.216.34")}, nil
-	}
 	hp := capsule.HostPorts{Resolver: 5353, Mediator: 5354}
 	targets := []capsule.SSHTarget{{Host: "git.example.com", HostKeys: []string{authLine}}}
-	caps, capsErr := capsule.New("trust-step", hp, nil, targets, 40000, ca, lookup)
+	caps, capsErr := capsule.New("trust-step", hp, nil, targets, 40000, ca,
+		testutil.StartDoTResolver(t, netip.MustParseAddr("93.184.216.34")))
 	if capsErr != nil {
 		t.Fatalf("capsule.New: %v", capsErr)
 	}

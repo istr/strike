@@ -24,6 +24,7 @@ import (
 	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/mediator"
 	"github.com/istr/strike/internal/primitive"
+	"github.com/istr/strike/internal/testutil"
 	"github.com/istr/strike/internal/transport"
 )
 
@@ -164,34 +165,38 @@ func startTCPForwarder(t *testing.T, listenAddr, upstreamAddr string) {
 	})
 }
 
-// failingLookup returns an UpstreamLookupFunc that always errors.
-func failingLookup(msg string) mediator.UpstreamLookupFunc {
-	return func(_ context.Context, _ string) ([]netip.Addr, error) {
-		return nil, errors.New(msg)
+// unreachableDialer returns a Dialer whose declared DoT resolver has no
+// listener, so every lookup through it fails. Tests that never reach the
+// upstream, and the lookup-failure test, use it.
+func unreachableDialer(t *testing.T) *transport.Dialer {
+	t.Helper()
+	d, err := transport.NewDialer(endpoint.TLS{
+		Type:    "https",
+		Address: endpoint.MustParseAuthority("127.0.0.1:1"),
+		Trust: endpoint.Fingerprint{
+			Type:        "certFingerprint",
+			Fingerprint: primitive.DigestFromHex(strings.Repeat("0", 64)),
+		},
+	})
+	if err != nil {
+		t.Fatalf("transport.NewDialer: %v", err)
 	}
+	return d
 }
 
-// emptyLookup returns an UpstreamLookupFunc that returns zero addresses.
-func emptyLookup() mediator.UpstreamLookupFunc {
-	return func(_ context.Context, _ string) ([]netip.Addr, error) {
-		return nil, nil
-	}
-}
-
-// unreachableLookup returns an UpstreamLookupFunc that returns
-// 127.0.0.1 (the upstream port 443 will not have a listener).
-func unreachableLookup() mediator.UpstreamLookupFunc {
-	return func(_ context.Context, _ string) ([]netip.Addr, error) {
-		return []netip.Addr{netip.MustParseAddr("127.0.0.1")}, nil
-	}
+// resolvingDialer returns a Dialer backed by a hermetic DoT resolver that
+// answers every peer with answer.
+func resolvingDialer(t *testing.T, answer string) *transport.Dialer {
+	t.Helper()
+	return testutil.StartDoTResolver(t, netip.MustParseAddr(answer))
 }
 
 // startMediator constructs a mediator and starts Serve in a
 // goroutine. Returns the mediator and the listener address.
-func startMediator(t *testing.T, stepID string, peers []mediator.PeerTrust, ca *transport.EphemeralCA, lookup mediator.UpstreamLookupFunc) (*mediator.Mediator, string, context.CancelFunc) {
+func startMediator(t *testing.T, stepID string, peers []mediator.PeerTrust, ca *transport.EphemeralCA, dialer *transport.Dialer) (*mediator.Mediator, string, context.CancelFunc) {
 	t.Helper()
 
-	m, err := mediator.New(stepID, peers, ca, lookup)
+	m, err := mediator.New(stepID, peers, ca, dialer)
 	if err != nil {
 		t.Fatalf("mediator.New: %v", err)
 	}
@@ -275,30 +280,30 @@ func waitForRecords(ctx context.Context, m *mediator.Mediator, n int) []mediator
 
 func TestNew_RejectsEmptyStepID(t *testing.T) {
 	ca := newTestCA(t)
-	_, err := mediator.New("", nil, ca, unreachableLookup())
+	_, err := mediator.New("", nil, ca, unreachableDialer(t))
 	if err == nil || !strings.Contains(err.Error(), "stepID") {
 		t.Fatalf("expected stepID error, got: %v", err)
 	}
 }
 
 func TestNew_RejectsNilCA(t *testing.T) {
-	_, err := mediator.New("step", nil, nil, unreachableLookup())
+	_, err := mediator.New("step", nil, nil, unreachableDialer(t))
 	if err == nil || !strings.Contains(err.Error(), "ca") {
 		t.Fatalf("expected ca error, got: %v", err)
 	}
 }
 
-func TestNew_RejectsNilUpstreamLookup(t *testing.T) {
+func TestNew_RejectsNilDialer(t *testing.T) {
 	ca := newTestCA(t)
 	_, err := mediator.New("step", nil, ca, nil)
-	if err == nil || !strings.Contains(err.Error(), "upstreamLook") {
-		t.Fatalf("expected upstreamLook error, got: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "dialer") {
+		t.Fatalf("expected dialer error, got: %v", err)
 	}
 }
 
 func TestNew_EmptyPeersIsValid(t *testing.T) {
 	ca := newTestCA(t)
-	_, err := mediator.New("step", nil, ca, unreachableLookup())
+	_, err := mediator.New("step", nil, ca, unreachableDialer(t))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -310,7 +315,7 @@ func TestNew_RejectsDuplicatePeer(t *testing.T) {
 		{Address: endpoint.MustParseAuthority("example.com"), Trust: endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:aaa"}},
 		{Address: endpoint.MustParseAuthority("example.com"), Trust: endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:bbb"}},
 	}
-	_, err := mediator.New("step", peers, ca, unreachableLookup())
+	_, err := mediator.New("step", peers, ca, unreachableDialer(t))
 	if err == nil || !strings.Contains(err.Error(), "duplicate") {
 		t.Fatalf("expected duplicate error, got: %v", err)
 	}
@@ -322,7 +327,7 @@ func TestNew_CanonicalizesPeerHosts(t *testing.T) {
 		{Address: endpoint.MustParseAuthority("Example.COM"), Trust: endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:aaa"}},
 		{Address: endpoint.MustParseAuthority("example.com."), Trust: endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:bbb"}},
 	}
-	_, err := mediator.New("step", peers, ca, unreachableLookup())
+	_, err := mediator.New("step", peers, ca, unreachableDialer(t))
 	if err == nil || !strings.Contains(err.Error(), "duplicate") {
 		t.Fatalf("expected duplicate error from canonicalization, got: %v", err)
 	}
@@ -337,7 +342,7 @@ func TestNew_RejectsOutOfRangePort(t *testing.T) {
 			Trust:   endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:aaa"},
 		},
 	}
-	_, err := mediator.New("step", peers, ca, unreachableLookup())
+	_, err := mediator.New("step", peers, ca, unreachableDialer(t))
 	if err == nil || !strings.Contains(err.Error(), "out of range") {
 		t.Fatalf("expected out-of-range port error, got: %v", err)
 	}
@@ -363,11 +368,7 @@ func TestServe_AllowedSNI_EndToEnd(t *testing.T) {
 		}},
 	}
 
-	lookup := func(_ context.Context, _ string) ([]netip.Addr, error) {
-		return []netip.Addr{netip.MustParseAddr("127.0.0.2")}, nil
-	}
-
-	m, mAddr, _ := startMediator(t, "e2e-step", peers, ca, lookup)
+	m, mAddr, _ := startMediator(t, "e2e-step", peers, ca, resolvingDialer(t, "127.0.0.2"))
 	conn := dialThroughMediator(t, mAddr, sni, ca)
 	defer closer.Warn(conn, "test client conn")
 
@@ -424,11 +425,7 @@ func TestServe_HonorsDeclaredPort(t *testing.T) {
 		}},
 	}
 
-	lookup := func(_ context.Context, _ string) ([]netip.Addr, error) {
-		return []netip.Addr{netip.MustParseAddr("127.0.0.3")}, nil
-	}
-
-	m, mAddr, _ := startMediator(t, "declared-port-step", peers, ca, lookup)
+	m, mAddr, _ := startMediator(t, "declared-port-step", peers, ca, resolvingDialer(t, "127.0.0.3"))
 	conn := dialThroughMediator(t, mAddr, sni, ca)
 	defer closer.Warn(conn, "test declared-port client conn")
 
@@ -475,7 +472,7 @@ func TestServe_BareHostDefaultsPort443(t *testing.T) {
 		}},
 	}
 
-	m, mAddr, _ := startMediator(t, "barehost-step", peers, ca, unreachableLookup())
+	m, mAddr, _ := startMediator(t, "barehost-step", peers, ca, resolvingDialer(t, "127.0.0.1"))
 
 	conn := dialThroughMediator(t, mAddr, sni, ca)
 	defer closer.Warn(conn, "test barehost client conn")
@@ -509,7 +506,7 @@ func TestServe_DeniedSNI_HandshakeFails(t *testing.T) {
 		}},
 	}
 
-	m, mAddr, _ := startMediator(t, "denied-step", peers, ca, unreachableLookup())
+	m, mAddr, _ := startMediator(t, "denied-step", peers, ca, unreachableDialer(t))
 
 	pool := x509.NewCertPool()
 	if !pool.AppendCertsFromPEM(ca.PublicCertPEM()) {
@@ -566,7 +563,7 @@ func TestServe_EmptySNI_Denied(t *testing.T) {
 		}},
 	}
 
-	_, mAddr, _ := startMediator(t, "emptysni-step", peers, ca, unreachableLookup())
+	_, mAddr, _ := startMediator(t, "emptysni-step", peers, ca, unreachableDialer(t))
 
 	d := &net.Dialer{}
 	raw, err := d.DialContext(context.Background(), "tcp", mAddr)
@@ -588,7 +585,7 @@ func TestServe_UpstreamLookupError(t *testing.T) {
 		}},
 	}
 
-	m, mAddr, _ := startMediator(t, "lookup-err-step", peers, ca, failingLookup("injected lookup failure"))
+	m, mAddr, _ := startMediator(t, "lookup-err-step", peers, ca, unreachableDialer(t))
 
 	conn := dialThroughMediator(t, mAddr, sni, ca)
 	defer closer.Warn(conn, "test lookup-err client")
@@ -607,49 +604,13 @@ func TestServe_UpstreamLookupError(t *testing.T) {
 	recs := waitForRecords(pollCtx, m, 1)
 	found := false
 	for _, r := range recs {
-		if r.SNI == sni && r.Decision == mediator.DecisionError && strings.Contains(r.Err, "injected lookup failure") {
+		if r.SNI == sni && r.Decision == mediator.DecisionError && strings.Contains(r.Err, "upstream lookup") {
 			found = true
 			break
 		}
 	}
 	if !found {
 		t.Errorf("no error record for lookup failure; records: %+v", recs)
-	}
-}
-
-func TestServe_UpstreamNoAddresses(t *testing.T) {
-	ca := newTestCA(t)
-	sni := "no-addrs.example"
-
-	peers := []mediator.PeerTrust{
-		{Address: endpoint.MustParseAuthority(sni), Trust: endpoint.Fingerprint{
-			Type: "certFingerprint", Fingerprint: "sha256:aaa",
-		}},
-	}
-
-	m, mAddr, _ := startMediator(t, "no-addrs-step", peers, ca, emptyLookup())
-
-	conn := dialThroughMediator(t, mAddr, sni, ca)
-	defer closer.Warn(conn, "test no-addrs client")
-
-	buf := make([]byte, 1)
-	_, readErr := conn.Read(buf)
-	if readErr == nil {
-		t.Fatal("expected read error after empty address list")
-	}
-
-	pollCtx, pollCancel := context.WithTimeout(context.Background(), 2*clock.Second)
-	defer pollCancel()
-	recs := waitForRecords(pollCtx, m, 1)
-	found := false
-	for _, r := range recs {
-		if r.SNI == sni && r.Decision == mediator.DecisionError && strings.Contains(r.Err, "no addresses") {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Errorf("no error record for no-addresses; records: %+v", recs)
 	}
 }
 
@@ -665,7 +626,7 @@ func TestServe_UpstreamDialFails(t *testing.T) {
 		}},
 	}
 
-	m, mAddr, _ := startMediator(t, "dial-fail-step", peers, ca, unreachableLookup())
+	m, mAddr, _ := startMediator(t, "dial-fail-step", peers, ca, resolvingDialer(t, "127.0.0.1"))
 
 	conn := dialThroughMediator(t, mAddr, sni, ca)
 	defer closer.Warn(conn, "test dial-fail client")
@@ -712,7 +673,7 @@ func TestServe_UpstreamHandshakeFails(t *testing.T) {
 		}},
 	}
 
-	m, mAddr, _ := startMediator(t, "hs-fail-step", peers, ca, unreachableLookup())
+	m, mAddr, _ := startMediator(t, "hs-fail-step", peers, ca, resolvingDialer(t, "127.0.0.1"))
 
 	conn := dialThroughMediator(t, mAddr, sni, ca)
 	defer closer.Warn(conn, "test hs-fail client")
@@ -750,7 +711,7 @@ func TestServe_ConcurrentConnections(t *testing.T) {
 		}},
 	}
 
-	m, mAddr, _ := startMediator(t, "concurrent-step", peers, ca, unreachableLookup())
+	m, mAddr, _ := startMediator(t, "concurrent-step", peers, ca, resolvingDialer(t, "127.0.0.1"))
 
 	const n = 20
 	var wg sync.WaitGroup
@@ -775,7 +736,7 @@ func TestServe_ConcurrentConnections(t *testing.T) {
 func TestServe_ContextCancellation(t *testing.T) {
 	ca := newTestCA(t)
 
-	m, err := mediator.New("cancel-step", nil, ca, unreachableLookup())
+	m, err := mediator.New("cancel-step", nil, ca, unreachableDialer(t))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -807,7 +768,7 @@ func TestServe_ContextCancellation(t *testing.T) {
 
 func TestServe_NilListener(t *testing.T) {
 	ca := newTestCA(t)
-	m, err := mediator.New("nil-ln-step", nil, ca, unreachableLookup())
+	m, err := mediator.New("nil-ln-step", nil, ca, unreachableDialer(t))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -818,7 +779,7 @@ func TestServe_NilListener(t *testing.T) {
 
 func TestClose_Idempotent(t *testing.T) {
 	ca := newTestCA(t)
-	m, err := mediator.New("close-step", nil, ca, unreachableLookup())
+	m, err := mediator.New("close-step", nil, ca, unreachableDialer(t))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -831,7 +792,7 @@ func TestClose_Idempotent(t *testing.T) {
 
 func TestClose_BeforeServe_ServeReturnsError(t *testing.T) {
 	ca := newTestCA(t)
-	m, err := mediator.New("close-first-step", nil, ca, unreachableLookup())
+	m, err := mediator.New("close-first-step", nil, ca, unreachableDialer(t))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -870,11 +831,7 @@ func TestServe_CancelInterruptsInFlightProxy(t *testing.T) {
 			Fingerprint: fp,
 		}},
 	}
-	lookup := func(_ context.Context, _ string) ([]netip.Addr, error) {
-		return []netip.Addr{netip.MustParseAddr("127.0.0.1")}, nil
-	}
-
-	m, err := mediator.New("inflight-step", peers, ca, lookup)
+	m, err := mediator.New("inflight-step", peers, ca, resolvingDialer(t, "127.0.0.1"))
 	if err != nil {
 		t.Fatalf("mediator.New: %v", err)
 	}

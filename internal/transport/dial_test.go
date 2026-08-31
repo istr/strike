@@ -142,7 +142,7 @@ func testCAAndServerCert(t *testing.T, hosts ...string) (*tls.Certificate, []byt
 // startTLSServer launches a TLS listener on 127.0.0.1 that
 // accepts connections and keeps them open until the test ends.
 // The test only exercises the handshake; payload is not relevant.
-func startTLSServer(t *testing.T, config *tls.Config) endpoint.Address {
+func startTLSServer(t *testing.T, config *tls.Config) netip.AddrPort {
 	t.Helper()
 	ln, err := tls.Listen("tcp", "127.0.0.1:0", config)
 	if err != nil {
@@ -170,12 +170,12 @@ func startTLSServer(t *testing.T, config *tls.Config) endpoint.Address {
 			go drainConn(conn)
 		}
 	}()
-	return endpoint.MustParseAuthority(ln.Addr().String())
+	return netip.MustParseAddrPort(ln.Addr().String())
 }
 
-func TestDialVerified_FingerprintMatch(t *testing.T) {
+func TestDialResolved_FingerprintMatch(t *testing.T) {
 	cert, fingerprint := testCertPair(t, "127.0.0.1")
-	addr := startTLSServer(t, &tls.Config{
+	dst := startTLSServer(t, &tls.Config{
 		Certificates: []tls.Certificate{*cert},
 		MinVersion:   tls.VersionTLS13,
 	})
@@ -185,9 +185,9 @@ func TestDialVerified_FingerprintMatch(t *testing.T) {
 		Type:        "certFingerprint",
 		Fingerprint: fingerprint,
 	}
-	conn, err := transport.DialVerified(ctx, addr, trust)
+	conn, err := transport.DialResolved(ctx, dst, "127.0.0.1", trust)
 	if err != nil {
-		t.Fatalf("DialVerified: %v", err)
+		t.Fatalf("DialResolved: %v", err)
 	}
 	defer closer.Warn(conn.Conn(), "test verified conn")
 	id := conn.Identity()
@@ -197,14 +197,61 @@ func TestDialVerified_FingerprintMatch(t *testing.T) {
 	if id.TLSVersion != tls.VersionTLS13 {
 		t.Errorf("Identity.TLSVersion = 0x%x, want 0x%x (TLS 1.3)", id.TLSVersion, tls.VersionTLS13)
 	}
-	if id.PeerAddress.Authority() != addr.Authority() {
-		t.Errorf("Identity.PeerAddress = %q, want %q", id.PeerAddress.Authority(), addr.Authority())
+	if got := string(id.PeerAddress.Authority()); got != dst.String() {
+		t.Errorf("Identity.PeerAddress = %q, want %q", got, dst)
 	}
 }
 
-func TestDialVerified_FingerprintMismatch(t *testing.T) {
+// TestDialResolved_RejectsUnusableArguments pins that routing and identity
+// are both required and are both checked before any packet is sent: an
+// address that is not resolved cannot be dialed, and an empty verification
+// name is an error rather than a silent downgrade to an unverified peer.
+func TestDialResolved_RejectsUnusableArguments(t *testing.T) {
+	trust := endpoint.Fingerprint{
+		Type:        "certFingerprint",
+		Fingerprint: primitive.DigestFromHex(strings.Repeat("0", 64)),
+	}
+	tests := []struct {
+		name       string
+		serverName primitive.Host
+		dst        netip.AddrPort
+		wantErr    string
+	}{
+		{
+			name:       "zero address",
+			dst:        netip.AddrPort{},
+			serverName: "peer.example",
+			wantErr:    "requires a resolved address and port",
+		},
+		{
+			name:       "zero port",
+			dst:        netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), 0),
+			serverName: "peer.example",
+			wantErr:    "requires a resolved address and port",
+		},
+		{
+			name:       "empty verification name",
+			dst:        netip.MustParseAddrPort("127.0.0.1:443"),
+			serverName: "",
+			wantErr:    "requires a verification name",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := transport.DialResolved(context.Background(), tt.dst, tt.serverName, trust)
+			if err == nil {
+				t.Fatalf("expected error containing %q, got nil", tt.wantErr)
+			}
+			if !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("error %q does not contain %q", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestDialResolved_FingerprintMismatch(t *testing.T) {
 	cert, _ := testCertPair(t, "127.0.0.1")
-	addr := startTLSServer(t, &tls.Config{
+	dst := startTLSServer(t, &tls.Config{
 		Certificates: []tls.Certificate{*cert},
 		MinVersion:   tls.VersionTLS13,
 	})
@@ -214,7 +261,7 @@ func TestDialVerified_FingerprintMismatch(t *testing.T) {
 		Type:        "certFingerprint",
 		Fingerprint: primitive.DigestFromHex(strings.Repeat("0", 64)),
 	}
-	_, err := transport.DialVerified(ctx, addr, trust)
+	_, err := transport.DialResolved(ctx, dst, "127.0.0.1", trust)
 	if err == nil {
 		t.Fatal("expected fingerprint mismatch error, got nil")
 	}
@@ -223,28 +270,22 @@ func TestDialVerified_FingerprintMismatch(t *testing.T) {
 	}
 }
 
-func TestDialVerified_CABundleValid(t *testing.T) {
+func TestDialResolved_CABundleValid(t *testing.T) {
 	serverCert, caPEM := testCAAndServerCert(t, "127.0.0.1")
-	addr := startTLSServer(t, &tls.Config{
+	dst := startTLSServer(t, &tls.Config{
 		Certificates: []tls.Certificate{*serverCert},
 		MinVersion:   tls.VersionTLS13,
 	})
-
-	dir := t.TempDir()
-	caPath := filepath.Join(dir, "ca.pem")
-	if err := os.WriteFile(caPath, caPEM, 0o600); err != nil {
-		t.Fatal(err)
-	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
 	defer cancel()
 	trust := endpoint.CABundle{
 		Type: "caBundle",
-		Path: primitive.AbsPath(caPath),
+		Path: writeCABundle(t, "ca.pem", caPEM),
 	}
-	conn, err := transport.DialVerified(ctx, addr, trust)
+	conn, err := transport.DialResolved(ctx, dst, "127.0.0.1", trust)
 	if err != nil {
-		t.Fatalf("DialVerified: %v", err)
+		t.Fatalf("DialResolved: %v", err)
 	}
 	defer closer.Warn(conn.Conn(), "test verified conn")
 	id := conn.Identity()
@@ -256,33 +297,53 @@ func TestDialVerified_CABundleValid(t *testing.T) {
 	}
 }
 
-func TestDialVerified_CABundleWrongCA(t *testing.T) {
+func TestDialResolved_CABundleWrongCA(t *testing.T) {
 	serverCert, _ := testCAAndServerCert(t, "127.0.0.1")
-	addr := startTLSServer(t, &tls.Config{
+	dst := startTLSServer(t, &tls.Config{
 		Certificates: []tls.Certificate{*serverCert},
 		MinVersion:   tls.VersionTLS13,
 	})
 
 	_, caPEMB := testCAAndServerCert(t, "127.0.0.1")
-	dir := t.TempDir()
-	caPath := filepath.Join(dir, "wrong-ca.pem")
-	if err := os.WriteFile(caPath, caPEMB, 0o600); err != nil {
-		t.Fatal(err)
-	}
-
 	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
 	defer cancel()
 	trust := endpoint.CABundle{
 		Type: "caBundle",
-		Path: primitive.AbsPath(caPath),
+		Path: writeCABundle(t, "wrong-ca.pem", caPEMB),
 	}
-	_, err := transport.DialVerified(ctx, addr, trust)
+	_, err := transport.DialResolved(ctx, dst, "127.0.0.1", trust)
 	if err == nil {
 		t.Fatal("expected CA verification error, got nil")
 	}
 }
 
-func TestDialVerified_TLS12Accepted(t *testing.T) {
+// TestDialResolved_CABundleWrongName pins that the verification name is
+// enforced and not merely sent: the presented chain validates against the
+// declared bundle, but it carries no SAN for the name the caller asked for,
+// and the handshake fails.
+func TestDialResolved_CABundleWrongName(t *testing.T) {
+	serverCert, caPEM := testCAAndServerCert(t, "other.example")
+	dst := startTLSServer(t, &tls.Config{
+		Certificates: []tls.Certificate{*serverCert},
+		MinVersion:   tls.VersionTLS13,
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
+	defer cancel()
+	trust := endpoint.CABundle{
+		Type: "caBundle",
+		Path: writeCABundle(t, "ca.pem", caPEM),
+	}
+	_, err := transport.DialResolved(ctx, dst, "asked-for.example", trust)
+	if err == nil {
+		t.Fatal("expected certificate-name error, got nil")
+	}
+	if !strings.Contains(err.Error(), "asked-for.example") {
+		t.Errorf("error %q must name the requested identity", err)
+	}
+}
+
+func TestDialResolved_TLS12Accepted(t *testing.T) {
 	cert, fingerprint := testCertPair(t, "127.0.0.1")
 	// A TLS 1.2-only server must handshake successfully now that
 	// the floor is 1.2.
@@ -291,16 +352,16 @@ func TestDialVerified_TLS12Accepted(t *testing.T) {
 		MinVersion:   tls.VersionTLS12,
 	}
 	serverCfg.MaxVersion = tls.VersionTLS12
-	addr := startTLSServer(t, serverCfg)
+	dst := startTLSServer(t, serverCfg)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
 	defer cancel()
 	trust := endpoint.Fingerprint{
 		Type:        "certFingerprint",
 		Fingerprint: fingerprint,
 	}
-	conn, err := transport.DialVerified(ctx, addr, trust)
+	conn, err := transport.DialResolved(ctx, dst, "127.0.0.1", trust)
 	if err != nil {
-		t.Fatalf("DialVerified: %v", err)
+		t.Fatalf("DialResolved: %v", err)
 	}
 	defer closer.Warn(conn.Conn(), "test verified conn")
 	if conn.Identity().TLSVersion != tls.VersionTLS12 {
@@ -308,7 +369,7 @@ func TestDialVerified_TLS12Accepted(t *testing.T) {
 	}
 }
 
-func TestDialVerified_TLS11Rejected(t *testing.T) {
+func TestDialResolved_TLS11Rejected(t *testing.T) {
 	cert, fingerprint := testCertPair(t, "127.0.0.1")
 	// A TLS 1.1-only server must be rejected: below the floor.
 	serverCfg := &tls.Config{
@@ -316,17 +377,28 @@ func TestDialVerified_TLS11Rejected(t *testing.T) {
 	}
 	serverCfg.MinVersion = tls.VersionTLS10
 	serverCfg.MaxVersion = tls.VersionTLS11
-	addr := startTLSServer(t, serverCfg)
+	dst := startTLSServer(t, serverCfg)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
 	defer cancel()
 	trust := endpoint.Fingerprint{
 		Type:        "certFingerprint",
 		Fingerprint: fingerprint,
 	}
-	_, err := transport.DialVerified(ctx, addr, trust)
+	_, err := transport.DialResolved(ctx, dst, "127.0.0.1", trust)
 	if err == nil {
 		t.Fatal("expected handshake failure due to TLS version, got nil")
 	}
+}
+
+// writeCABundle writes a PEM bundle into the test's temp dir and returns
+// its path as the declared trust anchor takes it.
+func writeCABundle(t *testing.T, name string, pemBytes []byte) primitive.AbsPath {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), name)
+	if err := os.WriteFile(path, pemBytes, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return primitive.AbsPath(path)
 }
 
 type fakeTrust struct{}
@@ -340,100 +412,63 @@ func TestBuildTLSConfig_UnknownTrust(t *testing.T) {
 	}
 }
 
-func TestDialVerified_SNIForFQDN(t *testing.T) {
-	cert, fingerprint := testCertPair(t, "localhost")
-	sniChan := make(chan string, 1)
-	serverConfig := &tls.Config{
-		Certificates: []tls.Certificate{*cert},
-		MinVersion:   tls.VersionTLS13,
-		MaxVersion:   tls.VersionTLS13,
-		GetConfigForClient: func(info *tls.ClientHelloInfo) (*tls.Config, error) {
-			sniChan <- info.ServerName
-			return nil, nil
-		},
+// TestDialResolved_VerificationNameForms pins both shapes a declared peer
+// takes under chain verification, where an empty ServerName would abort the
+// handshake outright. A hostname is sent in the SNI extension; an address
+// literal is suppressed per RFC 6066. Either way the name is the reference
+// identifier the presented certificate is verified against, so a cert whose
+// only SAN is the matching DNS name or IP address is accepted.
+func TestDialResolved_VerificationNameForms(t *testing.T) {
+	tests := []struct {
+		name       string
+		san        string
+		serverName primitive.Host
+		wantSNI    string
+	}{
+		{name: "hostname is sent as SNI", san: "localhost", serverName: "localhost", wantSNI: "localhost"},
+		{name: "address literal is suppressed", san: "127.0.0.1", serverName: "127.0.0.1", wantSNI: ""},
 	}
-	ln, err := tls.Listen("tcp", "127.0.0.1:0", serverConfig)
-	if err != nil {
-		t.Fatalf("listen: %v", err)
-	}
-	var mu sync.Mutex
-	var sniConns []net.Conn
-	t.Cleanup(func() {
-		closer.Warn(ln, "test TLS listener")
-		mu.Lock()
-		defer mu.Unlock()
-		for _, c := range sniConns {
-			closer.Warn(c, "test TLS accepted conn")
-		}
-	})
-	go func() {
-		for {
-			conn, acceptErr := ln.Accept()
-			if acceptErr != nil {
-				return
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			serverCert, caPEM := testCAAndServerCert(t, tt.san)
+			sniChan := make(chan string, 1)
+			dst := startTLSServer(t, &tls.Config{
+				Certificates: []tls.Certificate{*serverCert},
+				MinVersion:   tls.VersionTLS13,
+				MaxVersion:   tls.VersionTLS13,
+				GetConfigForClient: func(info *tls.ClientHelloInfo) (*tls.Config, error) {
+					sniChan <- info.ServerName
+					return nil, nil
+				},
+			})
+
+			ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
+			defer cancel()
+			trust := endpoint.CABundle{
+				Type: "caBundle",
+				Path: writeCABundle(t, "ca.pem", caPEM),
 			}
-			mu.Lock()
-			sniConns = append(sniConns, conn)
-			mu.Unlock()
-			go drainConn(conn)
-		}
-	}()
+			conn, err := transport.DialResolved(ctx, dst, tt.serverName, trust)
+			if err != nil {
+				t.Fatalf("DialResolved: %v", err)
+			}
+			defer closer.Warn(conn.Conn(), "test verified conn")
 
-	tcpAddr, ok := ln.Addr().(*net.TCPAddr)
-	if !ok {
-		t.Fatalf("listener address %v is not a *net.TCPAddr", ln.Addr())
-	}
-	port := primitive.Port(tcpAddr.Port)
-	addr := endpoint.Address{Host: "localhost", Port: &port}
+			sniCtx, sniCancel := context.WithTimeout(context.Background(), 2*clock.Second)
+			defer sniCancel()
+			select {
+			case sni := <-sniChan:
+				if sni != tt.wantSNI {
+					t.Errorf("server saw SNI = %q, want %q", sni, tt.wantSNI)
+				}
+			case <-sniCtx.Done():
+				t.Fatal("timeout waiting for the ClientHello")
+			}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
-	defer cancel()
-	trust := endpoint.Fingerprint{
-		Type:        "certFingerprint",
-		Fingerprint: fingerprint,
-	}
-	conn, err := transport.DialVerified(ctx, addr, trust)
-	if err != nil {
-		t.Fatalf("DialVerified: %v", err)
-	}
-	defer closer.Warn(conn.Conn(), "test verified conn")
-
-	sniCtx, sniCancel := context.WithTimeout(context.Background(), 2*clock.Second)
-	defer sniCancel()
-	select {
-	case sni := <-sniChan:
-		if sni != "localhost" {
-			t.Errorf("server saw SNI = %q, want %q", sni, "localhost")
-		}
-	case <-sniCtx.Done():
-		t.Fatal("timeout waiting for SNI")
-	}
-
-	if conn.Identity().ServerName != "localhost" {
-		t.Errorf("Identity.ServerName = %q, want %q", conn.Identity().ServerName, "localhost")
-	}
-}
-
-func TestDialVerified_NoSNIForIPLiteral(t *testing.T) {
-	cert, fingerprint := testCertPair(t, "127.0.0.1")
-	addr := startTLSServer(t, &tls.Config{
-		Certificates: []tls.Certificate{*cert},
-		MinVersion:   tls.VersionTLS13,
-		MaxVersion:   tls.VersionTLS13,
-	})
-	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
-	defer cancel()
-	trust := endpoint.Fingerprint{
-		Type:        "certFingerprint",
-		Fingerprint: fingerprint,
-	}
-	conn, err := transport.DialVerified(ctx, addr, trust)
-	if err != nil {
-		t.Fatalf("DialVerified: %v", err)
-	}
-	defer closer.Warn(conn.Conn(), "test verified conn")
-	if conn.Identity().ServerName != "" {
-		t.Errorf("ServerName = %q, want empty (IP literal addr)", conn.Identity().ServerName)
+			if got := conn.Identity().ServerName; got != tt.wantSNI {
+				t.Errorf("Identity.ServerName = %q, want %q", got, tt.wantSNI)
+			}
+		})
 	}
 }
 
@@ -529,71 +564,6 @@ func TestDialUnixSocket(t *testing.T) {
 			if string(got) != string(want) {
 				t.Errorf("got %q, want %q", got, want)
 			}
-		})
-	}
-}
-
-func TestDialTCP(t *testing.T) {
-	// Start a TCP listener for the success case.
-	var lc net.ListenConfig
-	ln, err := lc.Listen(context.Background(), "tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("listen: %v", err)
-	}
-	t.Cleanup(func() { closer.Warn(ln, "test tcp listener") })
-	go func() {
-		for {
-			c, acceptErr := ln.Accept()
-			if acceptErr != nil {
-				return
-			}
-			closer.Warn(c, "test tcp accepted")
-		}
-	}()
-
-	tests := []struct {
-		name    string
-		dst     netip.AddrPort
-		wantErr string
-	}{
-		{
-			name: "resolved address and port",
-			dst:  netip.MustParseAddrPort(ln.Addr().String()),
-		},
-		{
-			name:    "zero value rejected",
-			dst:     netip.AddrPort{},
-			wantErr: "requires a resolved address and port",
-		},
-		{
-			name:    "zero port rejected",
-			dst:     netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), 0),
-			wantErr: "requires a resolved address and port",
-		},
-		{
-			name:    "connection refused",
-			dst:     netip.MustParseAddrPort("127.0.0.1:1"),
-			wantErr: "dial tcp",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ctx := context.Background()
-			conn, dialErr := transport.DialTCP(ctx, tt.dst)
-			if tt.wantErr != "" {
-				if dialErr == nil {
-					t.Fatalf("expected error containing %q, got nil", tt.wantErr)
-				}
-				if !strings.Contains(dialErr.Error(), tt.wantErr) {
-					t.Fatalf("error %q does not contain %q", dialErr, tt.wantErr)
-				}
-				return
-			}
-			if dialErr != nil {
-				t.Fatalf("DialTCP: %v", dialErr)
-			}
-			closer.Warn(conn, "test tcp conn")
 		})
 	}
 }

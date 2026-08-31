@@ -68,7 +68,7 @@ func (d *Deployer) executeRegistryDeploy(ctx context.Context, m lane.DeployRegis
 		return nil, fmt.Errorf("registry deploy: %w", verifyErr)
 	}
 
-	rt, obs, err := newRegistryTransport(m.Target)
+	rt, obs, err := newRegistryTransport(m.Target, d.Dialer)
 	if err != nil {
 		return nil, fmt.Errorf("registry deploy: %w", err)
 	}
@@ -352,13 +352,14 @@ func (t httpsOnlyTransport) RoundTrip(req *http.Request) (*http.Response, error)
 // newRegistryTransport builds the trust-anchored round tripper every write
 // to the declared registry target dials through: the payload push, the SBOM
 // referrers, and the statement-bundle referrers. Enforcement is structural
-// (ADR-051 D4): the TLS dial verifies the declared endpoint.Trust anchor, a
-// dial to any address other than the declared authority is rejected -- a
-// redirect off the target therefore fails instead of being followed -- and a
-// plaintext dial is rejected outright. The identity observed on the verified
-// handshake with the one permitted host is captured for
-// Sealed.ObservedPeers: the final dialed host is the attested host.
-func newRegistryTransport(target lane.DeployRegistryTarget) (http.RoundTripper, *pushIdentityCapture, error) {
+// (ADR-051 D4): the declared target name is resolved through the lane's own
+// DoT resolver and the TLS dial verifies the declared endpoint.Trust anchor
+// against that name, a dial to any address other than the declared authority
+// is rejected -- a redirect off the target therefore fails instead of being
+// followed -- and a plaintext dial is rejected outright. The identity
+// observed on the verified handshake with the one permitted host is captured
+// for Sealed.ObservedPeers: the final dialed host is the attested host.
+func newRegistryTransport(target lane.DeployRegistryTarget, dialer *transport.Dialer) (http.RoundTripper, *pushIdentityCapture, error) {
 	if target.Address.Host == "" {
 		return nil, nil, fmt.Errorf("registry target: host required")
 	}
@@ -380,7 +381,7 @@ func newRegistryTransport(target lane.DeployRegistryTarget) (http.RoundTripper, 
 			if addr != expected {
 				return nil, fmt.Errorf("registry push: dial %q outside the declared target %q rejected", addr, expected)
 			}
-			vc, dialErr := transport.DialVerified(ctx, dialAddr, target.Trust)
+			vc, dialErr := dialer.DialPeer(ctx, dialAddr.Host, *dialAddr.Port, target.Trust)
 			if dialErr != nil {
 				return nil, dialErr
 			}

@@ -12,6 +12,7 @@ import (
 	"github.com/istr/strike/internal/closer"
 	"github.com/istr/strike/internal/mediator"
 	"github.com/istr/strike/internal/primitive"
+	"github.com/istr/strike/internal/transport"
 )
 
 // defaultSSHPort is the upstream port the capsule dials when an SSH
@@ -50,24 +51,26 @@ type SSHConnectionRecord struct {
 
 // sshForwarder holds the per-SSH-peer state the capsule needs to dial that
 // peer on behalf of the front (ADR-038 D5): the resolved upstream host and
-// port, the lane DoT lookup, the live outbound clients, and the connection
-// records. It no longer relays raw TCP -- the front terminates SSH and the
-// capsule re-originates via BridgePeer. (Name retained pending the naming
+// port, the lane dialer it resolves the peer through, the live outbound
+// clients, and the connection records. It no longer relays raw TCP -- the
+// front terminates SSH and the capsule re-originates via BridgePeer. Only
+// the resolve half of the dialer is used: the SSH hop is verified by
+// known-hosts pinning, not by TLS. (Name retained pending the naming
 // consistency pass.)
 type sshForwarder struct {
-	upstreamLook UpstreamLookupFunc
-	stepID       string
-	host         string
-	clients      map[*ssh.Client]struct{}
-	records      []SSHConnectionRecord
-	mu           sync.Mutex
-	port         uint16
+	dialer  *transport.Dialer
+	stepID  string
+	host    string
+	clients map[*ssh.Client]struct{}
+	records []SSHConnectionRecord
+	mu      sync.Mutex
+	port    uint16
 }
 
 // newSSHForwarder constructs a forwarder for one SSH target.
-func newSSHForwarder(stepID string, t SSHTarget, upstreamLook UpstreamLookupFunc) (*sshForwarder, error) {
-	if upstreamLook == nil {
-		return nil, errors.New("capsule: sshforward upstreamLook must not be nil")
+func newSSHForwarder(stepID string, t SSHTarget, dialer *transport.Dialer) (*sshForwarder, error) {
+	if dialer == nil {
+		return nil, errors.New("capsule: sshforward dialer must not be nil")
 	}
 	if t.Host == "" {
 		return nil, fmt.Errorf("capsule: sshforward empty host in %q", t.Host)
@@ -77,10 +80,10 @@ func newSSHForwarder(stepID string, t SSHTarget, upstreamLook UpstreamLookupFunc
 		port = defaultSSHPort
 	}
 	return &sshForwarder{
-		stepID:       stepID,
-		host:         t.Host.String(),
-		port:         port,
-		upstreamLook: upstreamLook,
+		stepID: stepID,
+		host:   t.Host.String(),
+		port:   port,
+		dialer: dialer,
 	}, nil
 }
 

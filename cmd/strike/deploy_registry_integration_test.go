@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/netip"
 	"os"
 	"path/filepath"
 	"strings"
@@ -222,8 +221,13 @@ func newLiveRunContext(ctx context.Context, t *testing.T, engine container.Engin
 		t.Fatalf("validate fixture lane: %v", err)
 	}
 
+	dialer, dialerErr := transport.NewDialer(p.Resolver)
+	if dialerErr != nil {
+		t.Fatalf("transport.NewDialer: %v", dialerErr)
+	}
+
 	probeCtx, probeCancel := context.WithTimeout(ctx, 5*clock.Second)
-	resolverID, probeErr := transport.ProbeResolver(probeCtx, p.Resolver)
+	resolverID, probeErr := dialer.Probe(probeCtx)
 	probeCancel()
 	if probeErr != nil {
 		t.Fatalf("resolver probe failed (%v); set STRIKE_INTEGRATION=0 to skip integration tests", probeErr)
@@ -264,9 +268,7 @@ func newLiveRunContext(ctx context.Context, t *testing.T, engine container.Engin
 		engineID:   engine.Identity(),
 		ca:         ca,
 		front:      ft,
-		upstreamLook: capsule.UpstreamLookupFunc(func(ctx context.Context, host string) ([]netip.Addr, error) {
-			return transport.LookupHost(ctx, p.Resolver, host)
-		}),
+		dialer:     dialer,
 		runtime:    lane.NewRuntime(dag),
 		stepPorts:  stepPorts,
 		capsules:   map[primitive.Identifier]*capsule.NetworkCapsule{},

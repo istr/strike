@@ -50,8 +50,8 @@ type ConnectionIdentity struct {
 	// SNI must not be an IP literal).
 	ServerName string
 
-	// PeerAddress is the address the connection was established
-	// to, as passed to DialVerified.
+	// PeerAddress is the verified identity and port the connection
+	// was established to, as recorded by DialResolved.
 	PeerAddress endpoint.Address
 
 	// PeerCertificates is the certificate chain presented by
@@ -130,45 +130,49 @@ func BuildTLSConfig(trust endpoint.Trust) (*tls.Config, error) {
 	return config, nil
 }
 
-// DialVerified opens a verified TLS connection to addr (minimum
-// TLS 1.2, 1.3 preferred) and verifies
-// the peer per trust. Returns a VerifiedConn with captured
-// identity. The address format is host:port; IPv6 hosts must be
-// bracketed (e.g. "[2606:4700:4700::1111]:853").
+// DialResolved opens a verified TLS connection to an already-resolved
+// address and verifies the presented certificate against serverName.
 //
-// SNI is set automatically: if the host part of addr parses as
-// an IP literal, no SNI is sent (RFC 6066 forbids IP-literal
-// SNI). If it is an FQDN, SNI is set to the host. Callers do
-// not control SNI directly; the address is the single source
-// of routing information.
+// Routing and identity are two parameters, not one. A name cannot be
+// passed as the destination: the parameter type is what enforces that,
+// so no DNS-based routing decision can be taken here and none can be
+// taken by the standard library on this path either. Callers that hold
+// a name resolve it through the lane's declared resolver first --
+// Dialer.DialPeer does exactly that and is the usual entry point.
 //
-// The context governs the dial timeout; pass a context with
-// deadline if a timeout is desired.
-func DialVerified(ctx context.Context, addr endpoint.Address, trust endpoint.Trust) (*VerifiedConn, error) {
+// serverName is required. It is sent as the SNI extension when it is a
+// hostname and suppressed when it is an address literal (RFC 6066), and
+// it is the reference identifier the certificate is verified against in
+// both cases. An empty serverName is an error rather than a silent
+// downgrade to an unverified name.
+//
+// The context governs the dial timeout; pass a context with a deadline
+// if a timeout is desired.
+func DialResolved(ctx context.Context, dst netip.AddrPort, serverName primitive.Host, trust endpoint.Trust) (*VerifiedConn, error) {
+	if !dst.IsValid() || dst.Port() == 0 {
+		return nil, errors.New("transport: dial requires a resolved address and port")
+	}
+	if serverName == "" {
+		return nil, errors.New("transport: dial requires a verification name")
+	}
 	config, err := BuildTLSConfig(trust)
 	if err != nil {
 		return nil, err
 	}
-	host := addr.Host.String()
-	if !isIPLiteral(host) {
-		config.ServerName = host
-	}
+	config.ServerName = serverName.String()
 
-	dialer := &tls.Dialer{
-		NetDialer: &net.Dialer{},
-		Config:    config,
-	}
-	authority := string(addr.Authority())
-	nc, err := dialer.DialContext(ctx, "tcp", authority)
+	raw, err := dialTCP(ctx, dst)
 	if err != nil {
-		return nil, fmt.Errorf("transport: dial %s: %w", authority, err)
+		return nil, err
 	}
-	conn, ok := nc.(*tls.Conn)
-	if !ok {
-		closer.Warn(nc, "transport: non-TLS conn cleanup")
-		return nil, fmt.Errorf("transport: dialer returned non-TLS connection %T", nc)
+	conn := tls.Client(raw, config)
+	if hsErr := conn.HandshakeContext(ctx); hsErr != nil {
+		closer.Warn(raw, "transport: raw conn (handshake error)")
+		return nil, fmt.Errorf("transport: handshake %s: %w", serverName, hsErr)
 	}
 
+	port := primitive.Port(dst.Port())
+	addr := endpoint.Address{Host: serverName, Port: &port}
 	identity := CaptureIdentity(conn.ConnectionState(), addr)
 	return &VerifiedConn{conn: conn, identity: identity}, nil
 }
@@ -287,12 +291,12 @@ func DialUnixSocket(ctx context.Context, path string) (*net.UnixConn, error) {
 	return uc, nil
 }
 
-// DialTCP opens a TCP connection to dst, a resolved IP address and
+// dialTCP opens a TCP connection to dst, a resolved IP address and
 // port. A name cannot be passed: callers resolve through the
 // capsule's DoT resolver first, so no DNS-based routing happens
 // outside the resolver allowlist. The parameter type is what
 // enforces that, so there is no hostname case to reject here.
-func DialTCP(ctx context.Context, dst netip.AddrPort) (net.Conn, error) {
+func dialTCP(ctx context.Context, dst netip.AddrPort) (net.Conn, error) {
 	if !dst.IsValid() || dst.Port() == 0 {
 		return nil, errors.New("transport: tcp dial requires a resolved address and port")
 	}
@@ -302,13 +306,4 @@ func DialTCP(ctx context.Context, dst netip.AddrPort) (net.Conn, error) {
 		return nil, fmt.Errorf("transport: dial tcp: %w", err)
 	}
 	return conn, nil
-}
-
-// isIPLiteral reports whether host parses as an IP address
-// (IPv4 or IPv6). Used to decide whether to set SNI: RFC 6066
-// forbids IP literals in SNI, so IP-literal hosts result in
-// an empty ServerName.
-func isIPLiteral(host string) bool {
-	_, err := netip.ParseAddr(host)
-	return err == nil
 }

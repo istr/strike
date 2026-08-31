@@ -7,8 +7,6 @@ import (
 	"net"
 	"net/netip"
 	"sync"
-
-	"github.com/istr/strike/internal/endpoint"
 )
 
 // identityCapture collects the ConnectionIdentity observed by a
@@ -38,8 +36,29 @@ func (c *identityCapture) get() (ConnectionIdentity, bool) {
 	return c.id, c.set
 }
 
+// dialResolver opens the verified TLS connection to the declared DoT
+// endpoint. The declared host is an address literal -- lane validation
+// rejects an FQDN, because the resolver is the lane's own resolution
+// authority -- so it is both the routing destination and the identity the
+// certificate is verified against, and no name is resolved to reach the
+// resolver. A host that does not parse is an error rather than a fallback:
+// it means the value reached the dialer without validation.
+func (d *Dialer) dialResolver(ctx context.Context) (*VerifiedConn, error) {
+	host := d.resolver.Address.Host
+	addr, err := netip.ParseAddr(host.String())
+	if err != nil {
+		return nil, fmt.Errorf("transport: resolver host %q is not an address literal: %w", host, err)
+	}
+	p := d.resolver.Address.Port
+	if p == nil || *p < 1 || *p > 65535 {
+		return nil, fmt.Errorf("transport: resolver %s: a port in 1..65535 is required", d.resolver.Address.Authority())
+	}
+	dialPort := uint16(*p)
+	return DialResolved(ctx, netip.AddrPortFrom(addr, dialPort), host, d.resolver.Trust)
+}
+
 // dotResolver builds a net.Resolver whose dial path goes
-// through the declared DoT endpoint via DialVerified. The
+// through the declared DoT endpoint via DialResolved. The
 // PreferGo flag forces Go's in-process resolver, which is the
 // only path that honours the custom Dial; the libc-backed path
 // would ignore it.
@@ -50,84 +69,17 @@ func (c *identityCapture) get() (ConnectionIdentity, bool) {
 // (RFC 7858); the TLS connection satisfies both network types
 // from the resolver's perspective because the wire format (DNS
 // length-prefixed messages) is the same.
-func dotResolver(decl endpoint.TLS) *net.Resolver {
+func (d *Dialer) dotResolver() *net.Resolver {
 	return &net.Resolver{
 		PreferGo: true,
 		Dial: func(ctx context.Context, _, _ string) (net.Conn, error) {
-			vc, err := DialVerified(ctx, decl.Address, decl.Trust)
+			vc, err := d.dialResolver(ctx)
 			if err != nil {
 				return nil, err
 			}
 			return vc.Conn(), nil
 		},
 	}
-}
-
-// LookupHost resolves a hostname to its A and AAAA addresses via
-// the declared DoT resolver. Stateless: each call opens a fresh
-// TLS connection. Returns the addresses the resolver answered
-// with, in the order received.
-//
-// PR-17 introduces this function as the building block for the
-// pre-flight ProbeResolver; PR-19 will consume it from the
-// allowlist resolver for every authorized per-step DNS query.
-func LookupHost(ctx context.Context, decl endpoint.TLS, name string) ([]netip.Addr, error) {
-	addrs, err := dotResolver(decl).LookupNetIP(ctx, "ip", name)
-	if err != nil {
-		clearMisleadingServerField(err)
-		return nil, fmt.Errorf("transport: lookup %q via %s: %w", name, decl.Address.Authority(), err)
-	}
-	return addrs, nil
-}
-
-// ProbeResolver performs a one-shot DNS-over-TLS roundtrip against
-// the declared resolver, used as a pre-flight check at strike run
-// start, and returns the ConnectionIdentity observed at the TLS
-// handshake. The probe target is an NS query on "." (the root
-// zone), which every standards-compliant DoT resolver answers; this
-// avoids encoding any provider-specific sanity name.
-//
-// The probe verifies, in one round trip:
-//   - the resolver's TLS endpoint is reachable on the declared port
-//   - the declared trust anchor (fingerprint or CA bundle) matches
-//     the certificate the resolver presents at this moment
-//   - the resolver responds to DNS queries over the established
-//     TLS connection
-//
-// The returned identity is the observed resolver identity from this
-// handshake. Per ADR-030 it is recorded in the deploy attestation:
-// DNS has no content anchor, so the resolver's channel identity is
-// part of the trust chain. The trust anchor was already enforced by
-// DialVerified during this same handshake; the returned identity is
-// what that verified handshake observed.
-//
-// Probe placement: see docs/ADR-028-step-container-egress-mediation.md,
-// "Operational requirement: a reachable DoT resolver". The probe runs
-// at strike run time, after lane.Parse, not in lane.Parse, because
-// probe outcome is an environmental property and lane.Parse must
-// stay an offline check of input properties.
-func ProbeResolver(ctx context.Context, decl endpoint.TLS) (ConnectionIdentity, error) {
-	var ic identityCapture
-	r := &net.Resolver{
-		PreferGo: true,
-		Dial: func(ctx context.Context, _, _ string) (net.Conn, error) {
-			conn, err := DialVerified(ctx, decl.Address, decl.Trust)
-			if err != nil {
-				return nil, err
-			}
-			ic.record(conn.Identity())
-			return conn.Conn(), nil
-		},
-	}
-	if _, err := r.LookupNS(ctx, "."); err != nil {
-		clearMisleadingServerField(err)
-		return ConnectionIdentity{}, fmt.Errorf("transport: resolver probe via %s: %w", decl.Address.Authority(), err)
-	}
-	id, ok := ic.get()
-	if !ok {
-		return ConnectionIdentity{}, fmt.Errorf("transport: resolver probe via %s: no TLS identity captured", decl.Address.Authority())
-	}
-	return id, nil
 }
 
 // clearMisleadingServerField clears net.DNSError.Server on any

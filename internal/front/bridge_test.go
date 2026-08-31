@@ -20,6 +20,7 @@ import (
 	"github.com/istr/strike/internal/capsule"
 	"github.com/istr/strike/internal/front"
 	"github.com/istr/strike/internal/primitive"
+	"github.com/istr/strike/internal/testutil"
 	"github.com/istr/strike/internal/transport"
 )
 
@@ -221,9 +222,11 @@ func bridgeTestCA(t *testing.T) *transport.EphemeralCA {
 	return ca
 }
 
-// loopbackLookup resolves any name to 127.0.0.1.
-func loopbackLookup(_ context.Context, _ string) ([]netip.Addr, error) {
-	return []netip.Addr{netip.MustParseAddr("127.0.0.1")}, nil
+// loopbackDialer returns a Dialer whose hermetic DoT resolver answers every
+// name with 127.0.0.1.
+func loopbackDialer(t *testing.T) *transport.Dialer {
+	t.Helper()
+	return testutil.StartDoTResolver(t, netip.MustParseAddr("127.0.0.1"))
 }
 
 // dialFrontSSH connects to the front as an SSH client, sends the STRIKE_PEER
@@ -334,7 +337,7 @@ func TestBridge_EndToEnd(t *testing.T) {
 		Port:     upstream.port(),
 	}}
 
-	caps, capsErr := capsule.New("bridge-step", hp, nil, targets, 40000, ca, loopbackLookup)
+	caps, capsErr := capsule.New("bridge-step", hp, nil, targets, 40000, ca, loopbackDialer(t))
 	if capsErr != nil {
 		t.Fatalf("capsule.New: %v", capsErr)
 	}
@@ -410,7 +413,7 @@ func TestBridge_WrongToken_Refused(t *testing.T) {
 		HostKeys: []string{upstream.hostKeyLine()},
 		Port:     upstream.port(),
 	}}
-	caps, capsErr := capsule.New("wrong-tok", hp, nil, targets, 40000, ca, loopbackLookup)
+	caps, capsErr := capsule.New("wrong-tok", hp, nil, targets, 40000, ca, loopbackDialer(t))
 	if capsErr != nil {
 		t.Fatal(capsErr)
 	}
@@ -488,7 +491,7 @@ func TestBridge_InboundCloseUnblocksHandler(t *testing.T) {
 		HostKeys: []string{upstream.hostKeyLine()},
 		Port:     upstream.port(),
 	}}
-	caps, capsErr := capsule.New("inbound-close", hp, nil, targets, 40000, ca, loopbackLookup)
+	caps, capsErr := capsule.New("inbound-close", hp, nil, targets, 40000, ca, loopbackDialer(t))
 	if capsErr != nil {
 		t.Fatal(capsErr)
 	}
@@ -582,7 +585,7 @@ func TestBridge_DisallowedCommand_Refused(t *testing.T) {
 		HostKeys: []string{upstream.hostKeyLine()},
 		Port:     upstream.port(),
 	}}
-	caps, capsErr := capsule.New("bad-cmd", hp, nil, targets, 40000, ca, loopbackLookup)
+	caps, capsErr := capsule.New("bad-cmd", hp, nil, targets, 40000, ca, loopbackDialer(t))
 	if capsErr != nil {
 		t.Fatal(capsErr)
 	}

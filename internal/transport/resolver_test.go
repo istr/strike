@@ -18,7 +18,6 @@ import (
 	"github.com/istr/strike/internal/closer"
 	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/primitive"
-	"github.com/istr/strike/internal/transport"
 )
 
 // startDNSTLSServer launches a TLS listener that speaks DNS-over-TLS:
@@ -153,7 +152,7 @@ func servfailHandler() func(*dnsmessage.Message) *dnsmessage.Message {
 	}
 }
 
-func TestLookupHost_HappyPath(t *testing.T) {
+func TestDialerLookupHost_HappyPath(t *testing.T) {
 	cert, fingerprint := testCertPair(t, "127.0.0.1")
 	addr := startDNSTLSServer(t, cert, aRecordHandler("example.com.", [4]byte{93, 184, 216, 34}))
 	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
@@ -166,7 +165,7 @@ func TestLookupHost_HappyPath(t *testing.T) {
 			Fingerprint: fingerprint,
 		},
 	}
-	addrs, err := transport.LookupHost(ctx, decl, "example.com")
+	addrs, err := mustDialer(t, decl).LookupHost(ctx, "example.com")
 	if err != nil {
 		t.Fatalf("LookupHost: %v", err)
 	}
@@ -178,7 +177,7 @@ func TestLookupHost_HappyPath(t *testing.T) {
 	}
 }
 
-func TestLookupHost_FingerprintMismatch(t *testing.T) {
+func TestDialerLookupHost_FingerprintMismatch(t *testing.T) {
 	cert, _ := testCertPair(t, "127.0.0.1")
 	addr := startDNSTLSServer(t, cert, aRecordHandler("example.com.", [4]byte{93, 184, 216, 34}))
 	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
@@ -191,7 +190,7 @@ func TestLookupHost_FingerprintMismatch(t *testing.T) {
 			Fingerprint: primitive.DigestFromHex(strings.Repeat("0", 64)),
 		},
 	}
-	addrs, err := transport.LookupHost(ctx, decl, "example.com")
+	addrs, err := mustDialer(t, decl).LookupHost(ctx, "example.com")
 	if err == nil {
 		t.Fatal("expected error for fingerprint mismatch, got nil")
 	}
@@ -200,7 +199,7 @@ func TestLookupHost_FingerprintMismatch(t *testing.T) {
 	}
 }
 
-func TestLookupHost_ServerUnreachable(t *testing.T) {
+func TestDialerLookupHost_ServerUnreachable(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*clock.Second)
 	defer cancel()
 	decl := endpoint.TLS{
@@ -211,13 +210,13 @@ func TestLookupHost_ServerUnreachable(t *testing.T) {
 			Fingerprint: primitive.DigestFromHex(strings.Repeat("a", 64)),
 		},
 	}
-	_, err := transport.LookupHost(ctx, decl, "example.com")
+	_, err := mustDialer(t, decl).LookupHost(ctx, "example.com")
 	if err == nil {
 		t.Fatal("expected error for unreachable server, got nil")
 	}
 }
 
-func TestProbeResolver_HappyPath(t *testing.T) {
+func TestDialerProbe_HappyPath(t *testing.T) {
 	cert, fingerprint := testCertPair(t, "127.0.0.1")
 	addr := startDNSTLSServer(t, cert, nsRootHandler())
 	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
@@ -230,9 +229,9 @@ func TestProbeResolver_HappyPath(t *testing.T) {
 			Fingerprint: fingerprint,
 		},
 	}
-	id, err := transport.ProbeResolver(ctx, decl)
+	id, err := mustDialer(t, decl).Probe(ctx)
 	if err != nil {
-		t.Fatalf("ProbeResolver: %v", err)
+		t.Fatalf("Probe: %v", err)
 	}
 	if id.LeafFingerprint == "" {
 		t.Error("expected non-empty leaf fingerprint from probe handshake")
@@ -242,11 +241,11 @@ func TestProbeResolver_HappyPath(t *testing.T) {
 	}
 }
 
-// TestProbeResolver_FingerprintMismatch pins the V-property gate: the run-start
+// TestDialerProbe_FingerprintMismatch pins the V-property gate: the run-start
 // probe rejects a resolver whose observed leaf diverges from the declared
 // certFingerprint anchor, which cmd/strike turns into a fatal abort before any
 // attestation is sealed.
-func TestProbeResolver_FingerprintMismatch(t *testing.T) {
+func TestDialerProbe_FingerprintMismatch(t *testing.T) {
 	cert, _ := testCertPair(t, "127.0.0.1")
 	addr := startDNSTLSServer(t, cert, nsRootHandler())
 	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
@@ -259,15 +258,15 @@ func TestProbeResolver_FingerprintMismatch(t *testing.T) {
 			Fingerprint: primitive.DigestFromHex(strings.Repeat("0", 64)),
 		},
 	}
-	if _, err := transport.ProbeResolver(ctx, decl); err == nil {
+	if _, err := mustDialer(t, decl).Probe(ctx); err == nil {
 		t.Fatal("expected error for fingerprint mismatch, got nil")
 	}
 }
 
-// TestProbeResolver_CABundleMismatch is the caBundle arm of the same V-property
+// TestDialerProbe_CABundleMismatch is the caBundle arm of the same V-property
 // gate: a resolver whose leaf is not certified by the declared CA bundle is
 // rejected at the probe before any attestation is sealed.
-func TestProbeResolver_CABundleMismatch(t *testing.T) {
+func TestDialerProbe_CABundleMismatch(t *testing.T) {
 	serverCert, _ := testCAAndServerCert(t, "127.0.0.1")
 	addr := startDNSTLSServer(t, serverCert, nsRootHandler())
 
@@ -287,12 +286,12 @@ func TestProbeResolver_CABundleMismatch(t *testing.T) {
 			Path: primitive.AbsPath(caPath),
 		},
 	}
-	if _, err := transport.ProbeResolver(ctx, decl); err == nil {
+	if _, err := mustDialer(t, decl).Probe(ctx); err == nil {
 		t.Fatal("expected error for CA bundle mismatch, got nil")
 	}
 }
 
-func TestProbeResolver_NoResponse(t *testing.T) {
+func TestDialerProbe_NoResponse(t *testing.T) {
 	cert, fingerprint := testCertPair(t, "127.0.0.1")
 	addr := startDNSTLSServer(t, cert, servfailHandler())
 	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
@@ -305,18 +304,18 @@ func TestProbeResolver_NoResponse(t *testing.T) {
 			Fingerprint: fingerprint,
 		},
 	}
-	if _, err := transport.ProbeResolver(ctx, decl); err == nil {
+	if _, err := mustDialer(t, decl).Probe(ctx); err == nil {
 		t.Fatal("expected error for SERVFAIL response, got nil")
 	}
 }
 
-// TestProbeResolver_ErrorChainHasNoSystemResolverReference
+// TestDialerProbe_ErrorChainHasNoSystemResolverReference
 // asserts that net.DNSError.Server has been cleared in the
 // returned error chain. Without this clearing, Go's stdlib
 // populates Server from /etc/resolv.conf even though the
 // query went through our custom Dial, producing operator-
 // confusing output. See clearMisleadingServerField.
-func TestProbeResolver_ErrorChainHasNoSystemResolverReference(t *testing.T) {
+func TestDialerProbe_ErrorChainHasNoSystemResolverReference(t *testing.T) {
 	// Use any guaranteed-failing dial target. A non-listening
 	// localhost port is the most reliable: no network access,
 	// no test-server setup, fast and deterministic failure.
@@ -331,7 +330,7 @@ func TestProbeResolver_ErrorChainHasNoSystemResolverReference(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*clock.Second)
 	defer cancel()
 
-	_, err := transport.ProbeResolver(ctx, decl)
+	_, err := mustDialer(t, decl).Probe(ctx)
 	if err == nil {
 		t.Fatal("expected error from unreachable resolver")
 	}

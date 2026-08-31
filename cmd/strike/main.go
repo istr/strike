@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"net/netip"
 	"os"
 	"path/filepath"
 	"strings"
@@ -209,7 +208,7 @@ func cmdRun(ctx context.Context, path string, engine container.Engine) error {
 		return err
 	}
 
-	resolverID, err := probeResolver(ctx, p)
+	dialer, resolverID, err := probeResolver(ctx, p)
 	if err != nil {
 		return err
 	}
@@ -237,28 +236,24 @@ func cmdRun(ctx context.Context, path string, engine container.Engine) error {
 		return portsErr
 	}
 
-	upstreamLook := capsule.UpstreamLookupFunc(func(ctx context.Context, name string) ([]netip.Addr, error) {
-		return transport.LookupHost(ctx, p.Resolver, name)
-	})
-
 	rc := &runContext{
-		ctx:          ctx,
-		engine:       engine,
-		lane:         p,
-		laneDigest:   laneDigest,
-		dag:          dag,
-		stepIndex:    idx,
-		regClient:    &registry.Client{Engine: engine},
-		engineID:     engine.Identity(),
-		ca:           ca,
-		front:        ft,
-		upstreamLook: upstreamLook,
-		runtime:      lane.NewRuntime(dag),
-		stepPorts:    stepPorts,
-		capsules:     map[primitive.Identifier]*capsule.NetworkCapsule{},
-		laneRoot:     laneRoot,
-		resolverID:   resolverID,
-		laneDir:      laneDir,
+		ctx:        ctx,
+		engine:     engine,
+		lane:       p,
+		laneDigest: laneDigest,
+		dag:        dag,
+		stepIndex:  idx,
+		regClient:  &registry.Client{Engine: engine},
+		engineID:   engine.Identity(),
+		ca:         ca,
+		front:      ft,
+		dialer:     dialer,
+		runtime:    lane.NewRuntime(dag),
+		stepPorts:  stepPorts,
+		capsules:   map[primitive.Identifier]*capsule.NetworkCapsule{},
+		laneRoot:   laneRoot,
+		resolverID: resolverID,
+		laneDir:    laneDir,
 	}
 
 	if capsErr := rc.buildCapsules(ctx); capsErr != nil {
@@ -301,18 +296,26 @@ func cmdRun(ctx context.Context, path string, engine container.Engine) error {
 	return runErr
 }
 
-// probeResolver runs the pre-flight resolver probe. lane.Parse is a pure
-// offline check; resolver reachability is an environmental property and
-// therefore lives here, at run start, not in Parse. See
-// docs/ADR-028-step-container-egress-mediation.md, "Operational requirement:
-// a reachable DoT resolver", for the rationale. The probe also captures
-// the resolver's observed TLS identity, recorded in the deploy attestation
-// per ADR-030.
-func probeResolver(ctx context.Context, p *lane.Lane) (transport.ConnectionIdentity, error) {
+// probeResolver builds the lane's dialer and runs the pre-flight resolver
+// probe on it. The dialer is the run's single owner of the resolved-and-
+// verified dial, so what the probe verifies is the path every later lane
+// dial takes; it is returned for the run context to carry.
+//
+// lane.Parse is a pure offline check; resolver reachability is an
+// environmental property and therefore lives here, at run start, not in
+// Parse. See docs/ADR-028-step-container-egress-mediation.md, "Operational
+// requirement: a reachable DoT resolver", for the rationale. The probe also
+// captures the resolver's observed TLS identity, recorded in the deploy
+// attestation per ADR-030.
+func probeResolver(ctx context.Context, p *lane.Lane) (*transport.Dialer, transport.ConnectionIdentity, error) {
+	dialer, err := transport.NewDialer(p.Resolver)
+	if err != nil {
+		return nil, transport.ConnectionIdentity{}, err
+	}
 	probeCtx, probeCancel := context.WithTimeout(ctx, 5*clock.Second)
-	resolverID, probeErr := transport.ProbeResolver(probeCtx, p.Resolver)
+	resolverID, probeErr := dialer.Probe(probeCtx)
 	probeCancel()
-	return resolverID, probeErr
+	return dialer, resolverID, probeErr
 }
 
 // initLaneCA creates the lane-wide ephemeral CA. The returned cleanup

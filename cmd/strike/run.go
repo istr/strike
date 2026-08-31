@@ -30,24 +30,24 @@ import (
 
 // runContext bundles everything needed to execute steps.
 type runContext struct {
-	ctx          context.Context
-	engine       container.Engine
-	runtime      *lane.Runtime // per-step record store and fire-at-zero scheduler
-	regClient    *registry.Client
-	engineID     *container.EngineIdentity
-	ca           *transport.EphemeralCA
-	front        *front.Front
-	upstreamLook capsule.UpstreamLookupFunc
-	lane         *lane.Lane
-	laneDigest   primitive.Digest
-	dag          *lane.DAG
-	stepIndex    map[primitive.Identifier]*lane.Step
-	stepPorts    map[string]capsule.HostPorts                     // mediated step name -> host ports
-	capsules     map[primitive.Identifier]*capsule.NetworkCapsule // run-step name -> pre-built capsule
-	laneRoot     *os.Root
-	trust        trustVolumes
-	laneDir      string
-	resolverID   transport.ConnectionIdentity
+	ctx        context.Context
+	engine     container.Engine
+	runtime    *lane.Runtime // per-step record store and fire-at-zero scheduler
+	regClient  *registry.Client
+	engineID   *container.EngineIdentity
+	ca         *transport.EphemeralCA
+	front      *front.Front
+	dialer     *transport.Dialer
+	lane       *lane.Lane
+	laneDigest primitive.Digest
+	dag        *lane.DAG
+	stepIndex  map[primitive.Identifier]*lane.Step
+	stepPorts  map[string]capsule.HostPorts                     // mediated step name -> host ports
+	capsules   map[primitive.Identifier]*capsule.NetworkCapsule // run-step name -> pre-built capsule
+	laneRoot   *os.Root
+	trust      trustVolumes
+	laneDir    string
+	resolverID transport.ConnectionIdentity
 }
 
 // stepInputs carries a step's direct-predecessor data, resolved once before
@@ -168,7 +168,7 @@ func (rc *runContext) executeDeploy(ctx context.Context, step *lane.Step, stepID
 		LaneID:          rc.lane.ID,
 		LaneDigest:      rc.laneDigest,
 		CA:              rc.ca,
-		UpstreamLook:    rc.upstreamLook,
+		Dialer:          rc.dialer,
 		CAVolume:        rc.trust.ca,
 		StepID:          stepID,
 		StepPorts:       rc.stepPorts,
@@ -1004,7 +1004,7 @@ func (rc *runContext) startCapsule(ctx context.Context, name, safeName string, p
 	}
 	sshTargets := sshTargetsOf(peers)
 
-	caps, capsErr := capsule.New(name, ports, peerTrusts, sshTargets, rc.front.Addr().Port(), rc.ca, rc.upstreamLook)
+	caps, capsErr := capsule.New(name, ports, peerTrusts, sshTargets, rc.front.Addr().Port(), rc.ca, rc.dialer)
 	if capsErr != nil {
 		return nil, fmt.Errorf("%s: construct capsule: %w", safeName, capsErr)
 	}

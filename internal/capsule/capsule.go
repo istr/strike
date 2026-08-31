@@ -58,12 +58,6 @@ const (
 // shared loopback never collides.
 var loopbackV4 = netip.AddrFrom4([4]byte{127, 0, 0, 1})
 
-// UpstreamLookupFunc resolves a name to addresses via the lane's
-// declared DoT resolver. Identical signature to
-// mediator.UpstreamLookupFunc; the mediator uses this to resolve
-// and dial real upstreams.
-type UpstreamLookupFunc func(ctx context.Context, name string) ([]netip.Addr, error)
-
 // Records aggregates the per-step records the capsule collects for
 // attestation: DNS queries, mediated TLS connections, and SSH forward
 // attempts. Wiring these into the signed deploy attestation envelope
@@ -126,8 +120,8 @@ const (
 //   - ca is the lane-wide ephemeral CA, shared across all
 //     capsules in the lane run. Not owned; the caller manages
 //     CA.Close.
-//   - upstreamLook resolves names via the lane's DoT resolver.
-//     Must be non-nil and concurrency-safe.
+//   - dialer resolves and dials declared peers via the lane's DoT
+//     resolver. Must be non-nil.
 func New(
 	stepID string,
 	hostPorts HostPorts,
@@ -135,9 +129,9 @@ func New(
 	sshTargets []SSHTarget,
 	frontHostPort uint16,
 	ca *transport.EphemeralCA,
-	upstreamLook UpstreamLookupFunc,
+	dialer *transport.Dialer,
 ) (*NetworkCapsule, error) {
-	if err := validateNewArgs(stepID, sshTargets, frontHostPort, ca, upstreamLook); err != nil {
+	if err := validateNewArgs(stepID, sshTargets, frontHostPort, ca, dialer); err != nil {
 		return nil, err
 	}
 
@@ -153,7 +147,7 @@ func New(
 	if err != nil {
 		return nil, fmt.Errorf("capsule: resolver: %w", err)
 	}
-	med, err := mediator.New(stepID, peers, ca, mediator.UpstreamLookupFunc(upstreamLook))
+	med, err := mediator.New(stepID, peers, ca, dialer)
 	if err != nil {
 		return nil, fmt.Errorf("capsule: mediator: %w", err)
 	}
@@ -162,7 +156,7 @@ func New(
 	sshTokens := make([]string, len(sshTargets))
 	sshPins := make([][]ssh.PublicKey, len(sshTargets))
 	for k, t := range sshTargets {
-		fwd, fErr := newSSHForwarder(stepID, t, upstreamLook)
+		fwd, fErr := newSSHForwarder(stepID, t, dialer)
 		if fErr != nil {
 			return nil, fmt.Errorf("capsule: ssh forwarder: %w", fErr)
 		}
@@ -196,15 +190,15 @@ func New(
 	}, nil
 }
 
-func validateNewArgs(stepID string, sshTargets []SSHTarget, frontHostPort uint16, ca *transport.EphemeralCA, upstreamLook UpstreamLookupFunc) error {
+func validateNewArgs(stepID string, sshTargets []SSHTarget, frontHostPort uint16, ca *transport.EphemeralCA, dialer *transport.Dialer) error {
 	if stepID == "" {
 		return errors.New("capsule: stepID must not be empty")
 	}
 	if ca == nil {
 		return errors.New("capsule: ca must not be nil")
 	}
-	if upstreamLook == nil {
-		return errors.New("capsule: upstreamLook must not be nil")
+	if dialer == nil {
+		return errors.New("capsule: dialer must not be nil")
 	}
 	if len(sshTargets) > 0 && frontHostPort == 0 {
 		return errors.New("capsule: ssh targets require a front host port")
@@ -494,7 +488,7 @@ func (c *NetworkCapsule) BridgePeer(ctx context.Context, channel ssh.Channel, to
 	fwd := c.sshForwards[k]
 
 	rec := SSHConnectionRecord{Time: clock.Wall(), Host: fwd.host, Port: fwd.port}
-	addrs, lErr := fwd.upstreamLook(ctx, fwd.host)
+	addrs, lErr := fwd.dialer.LookupHost(ctx, fwd.host)
 	if lErr != nil || len(addrs) == 0 {
 		rec.Decision = mediator.DecisionError
 		if lErr != nil {

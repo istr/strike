@@ -148,7 +148,7 @@ func (d *Deployer) startUnitCapsule(ctx context.Context, name string, peers []la
 			targets = append(targets, sshTarget(sp, keys))
 		}
 	}
-	caps, err := capsule.New(name, ports, trusts, targets, 0, d.CA, d.UpstreamLook)
+	caps, err := capsule.New(name, ports, trusts, targets, 0, d.CA, d.Dialer)
 	if err != nil {
 		return nil, fmt.Errorf("deploy %q: construct capsule: %w", name, err)
 	}
@@ -193,7 +193,7 @@ type Deployer struct {
 	Lane            *lane.Lane // full lane, for region output-declaration lookup (ADR-051 D9)
 	EngineID        *container.EngineIdentity
 	CA              *transport.EphemeralCA
-	UpstreamLook    capsule.UpstreamLookupFunc
+	Dialer          *transport.Dialer
 	ArtifactRefs    map[primitive.Identifier]lane.ArtifactRef                                                   // deploy artifacts map: name -> image arm or region (ADR-051 D9)
 	produceBundles  func(ctx context.Context, eps lane.KeylessEndpoints, statements [][]byte) ([][]byte, error) // test seam; nil selects the real keyless chain
 	Keyless         lane.Keyless                                                                                // lane-declared keyless config (ADR-040 D2, ADR-041); .Endpoints dials Fulcio, Rekor v2, TSA; .TrustRoot/.TrustRootRef carry the verify anchor
