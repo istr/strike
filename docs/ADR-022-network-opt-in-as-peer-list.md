@@ -21,6 +21,24 @@ realises the "Peers are declared" principle from ADR-007.
 > longer reflects the runtime; the typed-peer-list contract this ADR
 > establishes stands unchanged.
 
+> **Superseded in part by [ADR-054](ADR-054-kubernetes-deploy-via-cluster-api.md):**
+> the Decision clause "A Kubernetes deploy that needs to reach an API
+> server must declare it as an HTTPS peer with the appropriate trust
+> anchor" is displaced. Under
+> [ADR-029](ADR-029-peers-are-container-egress.md) a peer is
+> exclusively a container-egress contract, and ADR-054 D1/D3 make the
+> kubernetes apply a control-plane act against the cluster API: the
+> API server is declared as a field of the method -- an address plus
+> a server-trust anchor, the ADR-051 D6 shape -- and not as an entry
+> in the step's peer list; the client credential is a separate
+> declaration (ADR-007), never one field and never one file. Pre- and
+> post-state capture containers are unaffected: they keep declaring
+> their egress as typed peers. The deploy-paths parenthetical
+> "(Kubernetes, custom)" is likewise historical: the custom method is
+> removed (ADR-051 D5) and the kubernetes method is suspended pending
+> its Layer-V rebuild (ADR-054 D2). The typed peer-list contract for
+> container egress stands unchanged.
+
 ## Context
 
 ADR-005 set the per-step security profile and described the network
