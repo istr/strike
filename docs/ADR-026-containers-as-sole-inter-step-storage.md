@@ -19,6 +19,44 @@ Accepted.
 > single-image storage model (one step image holding all outputs as named
 > layers) and extends the digest-only pull to the consumer/input side.
 
+> **Superseded in part by [ADR-051](ADR-051-deploy-as-sealing-point.md) (D1, D4):**
+> the cross-machine half of this ADR is displaced; what remains is a
+> single-machine cache. ADR-051 D1 makes deploy the sole publish
+> point ("Signing, SBOM generation, push, and attestation happen
+> once, at deploy"); D4 removes the engine push and the lane-wide
+> registry target ("the engine never pushes"; "a push target is a
+> per-deploy property, not a lane constant"). Verified against the
+> tree: the engine interface carries no image push (the pull for base
+> images remains), and the lane contract has no per-step `publish`
+> field -- the "Cross-machine persistence" section was never
+> implemented as written; the implemented variant was a lane-wide
+> registry field with an automatic push-and-report on the run path,
+> and the ADR-051 D4 change removed that surface in full, recording
+> the rejected alternative: keeping a step-output push contradicts
+> deploy as the sole publish point (D1). Displaced with it: the
+> "Cross-machine persistence" section, the remote tag form of "Tag
+> scheme and digest references" (`registry.Tag` is gone; cache
+> addressing is `WrapTag`/`WrapDigest` on
+> `localhost/strike/<lane>/<step>`, resolved against the engine's
+> local store only), the Consequences bullet "Cross-machine sharing
+> requires an explicit operator decision", and the cross-machine
+> clauses under "What is explicitly excluded". The principle clause
+> "an OCI registry provides optional cross-machine and long-term
+> persistence" describes capability that is currently unbuilt -- the
+> deploy publishes the deploy subject, not intermediate step images
+> -- and the verbatim copy this ADR's Scope places in
+> DESIGN-PRINCIPLES.md carries the same unbuilt clause. The
+> "multi-machine cache federation" deferral widens accordingly: with
+> no basic push/pull pattern beneath it, cross-machine cache sharing
+> is deferred in full (tracked on ADR-021's distributed-cache item).
+> If ever built, D4 prefigures the shape: a control-plane-owned push
+> over the anchored transport with a registry-qualified counterpart
+> to the local tag forms (the building blocks exist in
+> `internal/deploy/push.go`); the engine-mediated path is foreclosed.
+> The local storage model -- one canonical step image, the engine
+> store as cache, digest-pinned execution and consumption (ADR-045,
+> ADR-046) -- stands unchanged.
+
 ## Scope
 
 This ADR concerns the storage layer between steps in a strike

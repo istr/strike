@@ -124,16 +124,19 @@ controller.
 
 ### Distributed cache / shared state across runners
 
-> **Amended by [ADR-026](ADR-026-containers-as-sole-inter-step-storage.md):**
-> partially resolved. The basic cross-machine pattern exists: an
-> explicit per-step publish to an operator-configured registry, with
-> remote-cache tags, decided there under "Cross-machine persistence".
-> What this item holds open narrows accordingly to what ADR-026
-> itself defers -- "multi-machine cache federation beyond the basic
-> push/pull pattern", trust model included. One composition question
-> is unstated by any ADR: ADR-051 D4 removes the engine push ("the
-> engine never pushes"), and how the cache-publish path relates to
-> that removal is recorded nowhere.
+> **Amended by [ADR-051](ADR-051-deploy-as-sealing-point.md):** still
+> deferred -- and the option space narrowed. ADR-026 decided a basic
+> cross-machine pattern (per-step publish, remote-cache tags), but it
+> was never implemented as written and the implemented variant fell
+> with ADR-051 D4; ADR-051 D1 makes deploy the sole publish point, so
+> intermediate step images are not published at all and the cache is
+> structurally single-machine today (see the disposition note on
+> ADR-026). The engine-mediated path is foreclosed. If a concrete
+> multi-runner case appears, the direction is prefigured by ADR-051
+> D4: a control-plane-owned push over the anchored transport with a
+> registry-qualified counterpart to the local tag forms. The trust
+> model between runners remains the unresolved design question this
+> item names.
 
 **What.** A cache layer that allows multiple strike runners to
 share spec-hash-keyed artifacts without re-running steps.
