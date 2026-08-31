@@ -2,7 +2,19 @@
 
 ## Status
 
-Accepted.
+Superseded by [ADR-038](ADR-038-protocol-mediated-ssh.md). The
+delivery mechanism decided here -- the host agent reached through a
+proxy socket bind-mounted into the container -- is removed: the
+front reaches the host ssh-agent directly, the socket is never
+forwarded into the container, `SSH_AUTH_SOCK` is absent there, and
+the fail-fast on a missing agent inverts (ADR-038 D3). This
+eliminates the in-container signing oracle that forwarding created
+(ADR-038 Context problem 3; the ADR-037 D5 worked example). The
+posture this ADR grounds in ADR-007 stands unchanged: client
+identity is exercised by a credential-holding authority and the
+container never holds key material; the "What is explicitly
+excluded" section remains in force and is restated by ADR-038
+("container-held private keys of any kind").
 
 ## Scope
 

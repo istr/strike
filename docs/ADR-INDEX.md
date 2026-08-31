@@ -57,8 +57,8 @@ referenced here at all.
 | 021 | [Deferred extensions](ADR-021-deferred-extensions.md)                                         | Accepted | Code is liability; Digest-pinned references      |
 | 022 | [Network opt-in as a typed peer list](ADR-022-network-opt-in-as-peer-list.md)                 | Accepted | Peers are declared; Identity is asymmetric; CUE first; No root; Enforcement is structural |
 | 023 | [Pointer arguments require justification](ADR-023-pointer-arguments-require-justification.md)  | Accepted | Code is liability                                |
-| 024 | [SSH peer server-trust enforcement](ADR-024-ssh-peer-server-trust-enforcement.md)              | Accepted | Peers are declared; Identity is asymmetric; No root; Code is liability; Enforcement is structural |
-| 025 | [SSH peer client-identity enforcement](ADR-025-ssh-peer-client-identity-enforcement.md)        | Accepted | Identity is asymmetric; No root; Code is liability; Peers are declared; Enforcement is structural |
+| 024 | [SSH peer server-trust enforcement](ADR-024-ssh-peer-server-trust-enforcement.md)              | Superseded by ADR-038 | Peers are declared; Identity is asymmetric; No root; Code is liability; Enforcement is structural |
+| 025 | [SSH peer client-identity enforcement](ADR-025-ssh-peer-client-identity-enforcement.md)        | Superseded by ADR-038 | Identity is asymmetric; No root; Code is liability; Peers are declared; Enforcement is structural |
 | 026 | [Containers as sole inter-step storage object](ADR-026-containers-as-sole-inter-step-storage.md) | Accepted | Containers are the only storage; Code is liability; Digest-pinned references; Reproducibility |
 | 027 | [Subpath selection on inputs](ADR-027-input-subpath-selection.md) | Accepted | Code is liability; CUE first; Digest-pinned references; Reproducibility |
 | 028 | [Step-Container Egress Mediation](ADR-028-step-container-egress-mediation.md) | Accepted | No root; Peers are declared; Identity is asymmetric; Enforcement is structural; Runtime is attested; Code is liability; Observation over declaration |

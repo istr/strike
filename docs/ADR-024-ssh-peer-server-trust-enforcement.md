@@ -2,7 +2,19 @@
 
 ## Status
 
-Accepted.
+Superseded by [ADR-038](ADR-038-protocol-mediated-ssh.md). The
+enforcement mechanism decided here -- the real peer's host keys
+rendered to a scratch file, bind-mounted into the container, and
+activated through a `GIT_SSH_COMMAND` override -- is replaced by the
+control-plane front: the container trusts a single ephemeral
+per-lane-run front host key via a synthetic `known_hosts`, and the
+declared `#SSHPeer.known_hosts` anchor is validated controller-side
+by the front's upstream SSH client (ADR-038 D3). The real peer's
+`known_hosts` no longer reaches the container. What this ADR fixed
+survives in that form: the typed `known_hosts` entries remain the
+server-trust anchor (the ADR-022 schema is unchanged), and the
+byte-deterministic OpenSSH rendering defined here remains in force
+as a cross-validation boundary (ADR-017, as amended by ADR-043).
 
 ## Scope
 

@@ -21,6 +21,22 @@ but does not supersede [ADR-005](ADR-005-per-step-security-profile.md),
 > per-peer raw-TCP forwards, and the `--network=none`/`--network=bridge`
 > modes are removed.
 
+> **Superseded in part by [ADR-038](ADR-038-protocol-mediated-ssh.md):**
+> the SSH mediation pattern under Component 2 -- the raw TCP forward,
+> the container's SSH client validating a mounted real-peer
+> known_hosts, the agent proxy into the container -- is replaced by
+> the run-level control-plane front: SSH framing is terminated at the
+> front, only allowlisted protocols over SSH run, and server-trust
+> validation and agent access both move controller-side (ADR-038
+> D1-D6). The preceding note's "SSH through per-peer raw-TCP
+> forwards" therefore describes the superseded ADR-033 mechanism.
+> ADR-038 D4 also relaxes this ADR's per-step DNS restriction to lane
+> level: a container can resolve any lane peer's hostname but reach
+> only the (step, peer) pairs whose capability tokens it holds. The
+> HTTPS trust rules, the DoT-resolver requirement, and the
+> no-escape-hatch posture stand; their hosting moves to the front
+> (ADR-038 Scope).
+
 ## Context
 
 [ADR-022](ADR-022-network-opt-in-as-peer-list.md) replaced the

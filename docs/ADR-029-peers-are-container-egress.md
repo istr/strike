@@ -7,6 +7,15 @@ Accepted. Refines [ADR-022](ADR-022-network-opt-in-as-peer-list.md)
 [ADR-028](ADR-028-step-container-egress-mediation.md) (which already
 routes container-initiated OCI traffic as HTTPS).
 
+> **Amended by [ADR-038](ADR-038-protocol-mediated-ssh.md):** the SSH
+> mechanism named in the Decision ("known_hosts + agent proxy")
+> describes the superseded ADR-024/ADR-025 handling. SSH peers are
+> now protocol-mediated through the control-plane front: server trust
+> is validated controller-side against the declared anchor, and no
+> agent socket exists in the container. The decision of this ADR --
+> peers are container-egress contracts over exactly two protocols,
+> with the OCI peer type removed -- stands unchanged.
+
 ## Context
 
 ADR-022 introduced a typed peer list with three variants: HTTPS,

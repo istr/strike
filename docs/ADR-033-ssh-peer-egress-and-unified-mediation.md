@@ -11,6 +11,20 @@ roadmap, and ratifies D27 and D28. Builds on
 (SSH server trust), and [ADR-025](ADR-025-ssh-agent-proxy.md) (SSH
 client identity).
 
+> **Superseded in part by [ADR-038](ADR-038-protocol-mediated-ssh.md):**
+> the SSH egress mechanism of D27 -- the raw-TCP splice, the per-peer
+> host-port mux, and the injected per-`Host` `Port` blocks -- is
+> replaced by the run-level front with in-band capability-token demux
+> over a single inbound endpoint. The per-step capsule of D28 is
+> restructured: the container-facing listener and the crypto endpoint
+> lift to the front, while the per-step policy context (declared
+> peers, anchors, allowlist) is retained (ADR-038 D2, D5). D28's
+> capsule-everywhere posture -- no `--network=none`/`bridge` modes,
+> uniform mediation for every step container -- stands. The
+> Consequences bullet extending this mediation to the deploy paths is
+> qualified by [ADR-051](ADR-051-deploy-as-sealing-point.md) D5: the
+> deploy path rejects SSH peers until the ADR-038 front lands.
+
 ## Context
 
 ADR-028 specified three mediation components and two patterns: TLS
