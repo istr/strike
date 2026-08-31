@@ -4,3 +4,6 @@ $TTL 3600
 @	IN NS	ns.strike.test.
 ns.strike.test.		IN A	127.0.0.1
 registry.127.0.0.1.sslip.io.	IN A	127.0.0.1
+fulcio.127.0.0.1.sslip.io.	IN A	127.0.0.1
+rekor.127.0.0.1.sslip.io.	IN A	127.0.0.1
+tsa.127.0.0.1.sslip.io.	IN A	127.0.0.1

@@ -19,7 +19,36 @@ import (
 	"github.com/istr/strike/internal/transport"
 )
 
-// harnessHTTPTimeout bounds one Keycloak token round trip.
+// harnessResolverAuthority is the DoT endpoint the local integration harness
+// publishes on the host loopback. It is an address literal because a resolver
+// is the resolution authority and cannot resolve its own name.
+const harnessResolverAuthority = "127.0.0.1:8853"
+
+// HarnessDialer returns a dialer that resolves through the harness DoT
+// resolver, pinned to the certificate that resolver presents. A caller that
+// reaches a harness endpoint by name needs one: every outbound control-plane
+// dial resolves through a declared resolver, so a caller that carries no lane
+// supplies the harness resolver explicitly instead.
+func HarnessDialer(harnessDir string) (*transport.Dialer, error) {
+	cert := filepath.Join(harnessDir, "pki", "resolver.crt")
+	if _, err := os.Stat(cert); err != nil {
+		return nil, fmt.Errorf("harness resolver certificate missing (run make keys in test/sigstore-local): %w", err)
+	}
+	return transport.NewDialer(endpoint.TLS{
+		Type:    "https",
+		Address: endpoint.MustParseAuthority(harnessResolverAuthority),
+		Trust: endpoint.CABundle{
+			Type: "caBundle",
+			Path: primitive.AbsPath(cert),
+		},
+	})
+}
+
+// harnessHTTPTimeout bounds one Keycloak token round trip against the local
+// integration harness. It is not a copy of the keyless control-plane bound and
+// is not derived from it: that one governs a lane-declared endpoint the product
+// dials in production, this one an integration harness no lane declares, and
+// either may move without the other. The two happen to be equal today.
 const harnessHTTPTimeout = 30 * clock.Second
 
 // HarnessDir returns the absolute path of the local sigstore harness,
@@ -89,13 +118,9 @@ func MintIDToken(t *testing.T, issuer, caCertPath string) string {
 // with bare errors. The STRIKE_INTEGRATION hint lives in MintIDToken, not here:
 // a standalone command cannot act on it, and a wrong hint is worse than none.
 func FetchIDToken(ctx context.Context, issuer, caCertPath string) (string, error) {
-	cfg, err := transport.BuildTLSConfig(endpoint.CABundle{Type: "caBundle", Path: primitive.AbsPath(caCertPath)})
+	client, err := pinnedClient(caCertPath, harnessHTTPTimeout)
 	if err != nil {
 		return "", fmt.Errorf("keycloak tls config: %w", err)
-	}
-	client := &http.Client{
-		Transport: &http.Transport{TLSClientConfig: cfg},
-		Timeout:   harnessHTTPTimeout,
 	}
 	form := url.Values{
 		"grant_type": {"password"},

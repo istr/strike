@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/transport"
 	"github.com/istr/strike/internal/wire"
 )
 
@@ -64,8 +65,9 @@ func subjectFromIDToken(idToken string) (string, error) {
 // (fail-closed, ADR-040 D-3b-2): a statement that cannot obtain a
 // certificate, a timestamp, or an inclusion proof yields an error, never a
 // partial bundle. Returned bundles are positionally aligned with
-// statements.
-func ProduceKeylessBundles(ctx context.Context, eps lane.KeylessEndpoints, idToken string, statements [][]byte) ([][]byte, error) {
+// statements. The endpoints are reached through dialer, so they resolve by
+// the lane's declared resolver like every other declared peer.
+func ProduceKeylessBundles(ctx context.Context, eps lane.KeylessEndpoints, dialer *transport.Dialer, idToken string, statements [][]byte) ([][]byte, error) {
 	if len(statements) == 0 {
 		return nil, errors.New("keyless: no statements")
 	}
@@ -73,7 +75,7 @@ func ProduceKeylessBundles(ctx context.Context, eps lane.KeylessEndpoints, idTok
 	if err != nil {
 		return nil, fmt.Errorf("keyless: generate ephemeral key: %w", err)
 	}
-	leafDER, err := fulcioCertificate(ctx, eps.Fulcio, idToken, key)
+	leafDER, err := fulcioCertificate(ctx, eps.Fulcio, dialer, idToken, key)
 	if err != nil {
 		return nil, err
 	}
@@ -83,13 +85,13 @@ func ProduceKeylessBundles(ctx context.Context, eps lane.KeylessEndpoints, idTok
 		if err != nil {
 			return nil, fmt.Errorf("keyless: statement %d: %w", i, err)
 		}
-		rfc3161, err := tsaTimestamp(ctx, eps.TSA, sig)
+		rfc3161, err := tsaTimestamp(ctx, eps.TSA, dialer, sig)
 		if err != nil {
 			return nil, fmt.Errorf("keyless: statement %d: %w", i, err)
 		}
 		pae := wire.PAEEncode(wire.PayloadType, stmt)
 		paeDigest := sha256.Sum256(pae)
-		tle, err := rekorSubmitKeyless(ctx, eps.Rekor, paeDigest[:], sig, leafDER)
+		tle, err := rekorSubmitKeyless(ctx, eps.Rekor, dialer, paeDigest[:], sig, leafDER)
 		if err != nil {
 			return nil, fmt.Errorf("keyless: statement %d: %w", i, err)
 		}

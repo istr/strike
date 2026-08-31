@@ -210,7 +210,7 @@ func imageDigest(ref string) (string, error) {
 // its TLS terminator. Verification is pinned to the exported internal root
 // and never skipped.
 func waitHarnessReady(ctx context.Context, caddyRoot string) error {
-	client, err := pinnedClient(caddyRoot)
+	client, err := pinnedClient(caddyRoot, 0)
 	if err != nil {
 		return err
 	}
@@ -290,7 +290,7 @@ func probeOnce(ctx context.Context, client *http.Client, url, want string) error
 // time; both fetch the same chain from the same authority, so a last-writer
 // outcome is correct as long as no reader observes a partial file.
 func refreshTSAChain(ctx context.Context, caddyRoot, pkiDir string) error {
-	client, err := pinnedClient(caddyRoot)
+	client, err := pinnedClient(caddyRoot, 0)
 	if err != nil {
 		return err
 	}
@@ -352,8 +352,10 @@ func writeAtomic(path string, data []byte) error {
 }
 
 // pinnedClient returns a client that validates the harness endpoints against
-// the exported internal root.
-func pinnedClient(caCertPath string) (*http.Client, error) {
+// the exported internal root. timeout bounds one whole round trip; pass zero
+// to leave the bound to the caller's context, which is what the readiness
+// probes do.
+func pinnedClient(caCertPath string, timeout clock.Duration) (*http.Client, error) {
 	cfg, err := transport.BuildTLSConfig(endpoint.CABundle{
 		Type: "caBundle",
 		Path: primitive.AbsPath(caCertPath),
@@ -361,5 +363,5 @@ func pinnedClient(caCertPath string) (*http.Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("harness tls config: %w", err)
 	}
-	return &http.Client{Transport: &http.Transport{TLSClientConfig: cfg}}, nil
+	return &http.Client{Transport: &http.Transport{TLSClientConfig: cfg}, Timeout: timeout}, nil
 }

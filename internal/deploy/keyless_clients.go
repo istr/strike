@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"slices"
 
@@ -26,29 +27,67 @@ import (
 
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/endpoint"
+	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/transport"
 )
 
 // keylessHTTPTimeout bounds each keyless endpoint round trip. Rekor v2
-// publishes checkpoints in batches; its client guidance recommends a
-// generous write timeout.
+// publishes checkpoints in batches; its client guidance recommends a generous
+// write timeout. The test harness declares a bound of its own for a different
+// connection class; the two are independent and neither is derived from the
+// other.
 const keylessHTTPTimeout = 30 * clock.Second
 
 // keylessResponseLimit caps how much of an endpoint response is read.
 const keylessResponseLimit = 1 << 20
 
-// HTTPClientFor returns an HTTP client whose TLS configuration enforces the
-// endpoint's declared trust anchor. The #KeylessEndpoints schema admits only
-// https:// URLs, so every keyless connection is TLS with declared trust;
-// there is no plaintext branch.
-func HTTPClientFor(ep endpoint.HTTPS) (*http.Client, error) {
-	cfg, err := transport.BuildTLSConfig(ep.Trust)
-	if err != nil {
-		return nil, fmt.Errorf("keyless: %w", err)
+// HTTPClientFor returns an HTTP client that reaches ep through the
+// resolved-and-verified dial: the declared host is resolved by the lane's DoT
+// resolver, the connection goes to the address that resolver answered with,
+// and the presented certificate is verified against the declared host. A dial
+// to any authority other than the declared one is rejected, and a plaintext
+// dial is rejected structurally rather than by convention.
+//
+// The observed server identity is deliberately not recorded. ADR-030 records a
+// connection identity when and only when it participates in the trust chain,
+// and these endpoints are anchored in their own content: the Fulcio leaf chains
+// to a trusted-root certificate authority, the transparency-log entry carries
+// an inclusion proof against the log key, and the RFC3161 token verifies
+// against the timestamp-authority chain -- each offline, against an anchor
+// evaluated at an authenticated reference time (ADR-053). No sealed claim would
+// be corroborated by the channel, and the bundle these endpoints produce is the
+// signature over the attestation itself, so an identity recorded there would
+// describe the signing chain from inside what that chain signs.
+func HTTPClientFor(ep endpoint.HTTPS, dialer *transport.Dialer) (*http.Client, error) {
+	if dialer == nil {
+		return nil, errors.New("keyless: resolver-backed dialer required")
 	}
+	if ep.Address.Host == "" {
+		return nil, errors.New("keyless: endpoint host required")
+	}
+	dialAddr := ep.Address
+	if dialAddr.Port == nil {
+		port := primitive.Port(443)
+		dialAddr.Port = &port
+	}
+	expected := string(dialAddr.Authority())
 	return &http.Client{
-		Transport: &http.Transport{TLSClientConfig: cfg},
-		Timeout:   keylessHTTPTimeout,
+		Transport: &http.Transport{
+			DialTLSContext: func(ctx context.Context, _, addr string) (net.Conn, error) {
+				if addr != expected {
+					return nil, fmt.Errorf("keyless: dial %q outside the declared endpoint %q rejected", addr, expected)
+				}
+				vc, dialErr := dialer.DialPeer(ctx, dialAddr.Host, *dialAddr.Port, ep.Trust)
+				if dialErr != nil {
+					return nil, dialErr
+				}
+				return vc.Conn(), nil
+			},
+			DialContext: func(_ context.Context, _, addr string) (net.Conn, error) {
+				return nil, fmt.Errorf("keyless: plaintext dial to %q rejected; the endpoint is https-only", addr)
+			},
+		},
+		Timeout: keylessHTTPTimeout,
 	}, nil
 }
 
@@ -63,8 +102,8 @@ func closeKeylessBody(resp *http.Response) {
 // postKeyless performs one POST against a keyless endpoint and returns the
 // response body. Any status not in wantStatus is an error carrying the
 // (truncated) response body.
-func postKeyless(ctx context.Context, ep endpoint.HTTPS, path, contentType string, body []byte, header http.Header, wantStatus ...int) ([]byte, error) {
-	client, err := HTTPClientFor(ep)
+func postKeyless(ctx context.Context, ep endpoint.HTTPS, dialer *transport.Dialer, path, contentType string, body []byte, header http.Header, wantStatus ...int) ([]byte, error) {
+	client, err := HTTPClientFor(ep, dialer)
 	if err != nil {
 		return nil, err
 	}
@@ -99,7 +138,7 @@ func postKeyless(ctx context.Context, ep endpoint.HTTPS, path, contentType strin
 // The proof of possession is an ASN.1 DER ECDSA signature over the SHA-256
 // digest of the token subject (Fulcio API v2; mirrors sigstore-go's
 // certificate request). Returns the DER-encoded leaf certificate.
-func fulcioCertificate(ctx context.Context, ep endpoint.HTTPS, idToken string, key *ecdsa.PrivateKey) ([]byte, error) {
+func fulcioCertificate(ctx context.Context, ep endpoint.HTTPS, dialer *transport.Dialer, idToken string, key *ecdsa.PrivateKey) ([]byte, error) {
 	subject, err := subjectFromIDToken(idToken)
 	if err != nil {
 		return nil, err
@@ -128,7 +167,7 @@ func fulcioCertificate(ctx context.Context, ep endpoint.HTTPS, idToken string, k
 	}
 	header := http.Header{}
 	header.Set("Authorization", "Bearer "+idToken)
-	respBody, err := postKeyless(ctx, ep, "/api/v2/signingCert", "application/json", reqBody, header, http.StatusOK)
+	respBody, err := postKeyless(ctx, ep, dialer, "/api/v2/signingCert", "application/json", reqBody, header, http.StatusOK)
 	if err != nil {
 		return nil, err
 	}
@@ -165,7 +204,7 @@ func fulcioCertificate(ctx context.Context, ep endpoint.HTTPS, idToken string, k
 // returned bytes are the full timestamp response DER, which is what the
 // sigstore bundle carries in Rfc3161Timestamps (mirrors sigstore-go's
 // signer). The response is parsed once to fail fast on a malformed token.
-func tsaTimestamp(ctx context.Context, ep endpoint.HTTPS, signature []byte) ([]byte, error) {
+func tsaTimestamp(ctx context.Context, ep endpoint.HTTPS, dialer *transport.Dialer, signature []byte) ([]byte, error) {
 	sigDigest := sha256.Sum256(signature)
 	req := &timestamp.Request{
 		HashAlgorithm: crypto.SHA256,
@@ -175,7 +214,7 @@ func tsaTimestamp(ctx context.Context, ep endpoint.HTTPS, signature []byte) ([]b
 	if err != nil {
 		return nil, fmt.Errorf("keyless: marshal timestamp request: %w", err)
 	}
-	respBody, err := postKeyless(ctx, ep, "/api/v1/timestamp", "application/timestamp-query", reqBytes, nil, http.StatusOK, http.StatusCreated)
+	respBody, err := postKeyless(ctx, ep, dialer, "/api/v1/timestamp", "application/timestamp-query", reqBytes, nil, http.StatusOK, http.StatusCreated)
 	if err != nil {
 		return nil, err
 	}
@@ -191,7 +230,7 @@ func tsaTimestamp(ctx context.Context, ep endpoint.HTTPS, signature []byte) ([]b
 // proof and signed checkpoint. Hand-rolled HTTP POST per ratified R2: only
 // the generated proto types are imported, so rekor-tiles' pkg/client (and
 // its docker/otel dependency cluster) stays out of the compile graph.
-func rekorSubmitKeyless(ctx context.Context, ep endpoint.HTTPS, paeDigest, sig, leafCertDER []byte) (*protorekor.TransparencyLogEntry, error) {
+func rekorSubmitKeyless(ctx context.Context, ep endpoint.HTTPS, dialer *transport.Dialer, paeDigest, sig, leafCertDER []byte) (*protorekor.TransparencyLogEntry, error) {
 	req := &rekortilespb.CreateEntryRequest{
 		Spec: &rekortilespb.CreateEntryRequest_HashedRekordRequestV002{
 			HashedRekordRequestV002: &rekortilespb.HashedRekordRequestV002{
@@ -212,7 +251,7 @@ func rekorSubmitKeyless(ctx context.Context, ep endpoint.HTTPS, paeDigest, sig, 
 	if err != nil {
 		return nil, fmt.Errorf("keyless: marshal rekor request: %w", err)
 	}
-	respBody, err := postKeyless(ctx, ep, "/api/v2/log/entries", "application/json", body, nil, http.StatusCreated)
+	respBody, err := postKeyless(ctx, ep, dialer, "/api/v2/log/entries", "application/json", body, nil, http.StatusCreated)
 	if err != nil {
 		return nil, err
 	}

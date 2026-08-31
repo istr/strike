@@ -23,6 +23,7 @@ import (
 	"github.com/istr/strike/internal/capsule"
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/container"
+	"github.com/istr/strike/internal/deploy"
 	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/front"
 	"github.com/istr/strike/internal/lane"
@@ -440,18 +441,5 @@ func itestTransport(t *testing.T, caddyRoot string) http.RoundTripper {
 	if err != nil {
 		t.Fatalf("registry tls config: %v", err)
 	}
-	return itestHTTPSOnly{inner: &http.Transport{TLSClientConfig: cfg}}
-}
-
-// itestHTTPSOnly forces every request onto https before it reaches the dial
-// layer.
-type itestHTTPSOnly struct {
-	inner http.RoundTripper
-}
-
-// RoundTrip implements http.RoundTripper.
-func (h itestHTTPSOnly) RoundTrip(req *http.Request) (*http.Response, error) {
-	r := req.Clone(req.Context())
-	r.URL.Scheme = "https"
-	return h.inner.RoundTrip(r)
+	return deploy.HTTPSOnly(&http.Transport{TLSClientConfig: cfg})
 }

@@ -541,7 +541,7 @@ func (d *Deployer) signStatements(ctx context.Context, att *Attestation, stepID 
 				stepID, subject, d.OIDC.Identity)
 		}
 		produce = func(ctx context.Context, eps lane.KeylessEndpoints, stmts [][]byte) ([][]byte, error) {
-			return ProduceKeylessBundles(ctx, eps, token, stmts)
+			return ProduceKeylessBundles(ctx, eps, d.Dialer, token, stmts)
 		}
 	}
 	bundles, err := produce(ctx, d.Keyless.Endpoints, statements)

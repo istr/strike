@@ -333,6 +333,16 @@ func (c *pushIdentityCapture) get() (transport.ConnectionIdentity, bool) {
 	return c.id, c.ok
 }
 
+// HTTPSOnly wraps inner so every request is rewritten onto the https scheme
+// before it reaches the dial layer. Both directions of a registry deploy need
+// it: go-containerregistry resolves a localhost-style registry name to the
+// http scheme on its own, so without the rewrite a request never reaches the
+// TLS dial at all and the write side's plaintext rejection fires on traffic
+// that was meant to be encrypted.
+func HTTPSOnly(inner http.RoundTripper) http.RoundTripper {
+	return httpsOnlyTransport{inner: inner}
+}
+
 // httpsOnlyTransport forces every request onto https before it reaches the
 // dial layer. go-containerregistry resolves localhost-style registries to
 // the http scheme on its own; the deploy path owns its addressing (ADR-051
@@ -395,5 +405,5 @@ func newRegistryTransport(target lane.DeployRegistryTarget, dialer *transport.Di
 			return nil, fmt.Errorf("registry push: plaintext dial to %q rejected; the target is https-only", addr)
 		},
 	}
-	return httpsOnlyTransport{inner: base}, capture, nil
+	return HTTPSOnly(base), capture, nil
 }

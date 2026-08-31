@@ -30,6 +30,7 @@ import (
 	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/record"
 	"github.com/istr/strike/internal/testutil"
+	"github.com/istr/strike/internal/transport"
 	"github.com/istr/strike/internal/wire"
 )
 
@@ -78,6 +79,11 @@ func run(ctx context.Context) error {
 		}
 	}
 
+	dialer, err := testutil.HarnessDialer(harness)
+	if err != nil {
+		return err
+	}
+
 	trust := endpoint.CABundle{Type: "caBundle", Path: primitive.AbsPath(caddyRoot)}
 	eps := lane.KeylessEndpoints{
 		Fulcio: endpoint.HTTPS{Address: endpoint.MustParseURL(fulcioURL), Trust: trust},
@@ -90,11 +96,11 @@ func run(ctx context.Context) error {
 	}
 
 	goldenDir := filepath.Join(root, "internal", "verify", "testdata", "golden")
-	bundles, err := statementBundles(ctx, eps, token, goldenDir)
+	bundles, err := statementBundles(ctx, eps, dialer, token, goldenDir)
 	if err != nil {
 		return err
 	}
-	trustedRoot, err := assembleTrustedRoot(ctx, eps.Fulcio, rekorPub, tsaChain, ctfePub)
+	trustedRoot, err := assembleTrustedRoot(ctx, eps.Fulcio, dialer, rekorPub, tsaChain, ctfePub)
 	if err != nil {
 		return err
 	}
@@ -128,7 +134,7 @@ func run(ctx context.Context) error {
 // not only envelope verification. The lane identity and digest come from the
 // golden lane fixture, so a UC2 verify against that same lane matches what the
 // sealed predicate carries.
-func statementBundles(ctx context.Context, eps lane.KeylessEndpoints, token, goldenDir string) ([][]byte, error) {
+func statementBundles(ctx context.Context, eps lane.KeylessEndpoints, dialer *transport.Dialer, token, goldenDir string) ([][]byte, error) {
 	lanePath, err := lane.NewFilePath(filepath.Join(goldenDir, "lane.yaml"))
 	if err != nil {
 		return nil, fmt.Errorf("golden lane path: %w", err)
@@ -148,7 +154,7 @@ func statementBundles(ctx context.Context, eps lane.KeylessEndpoints, token, gol
 			return nil, fmt.Errorf("marshal %s statement: %w", goldenNames[i], err)
 		}
 	}
-	return deploy.ProduceKeylessBundles(ctx, eps, token, statements)
+	return deploy.ProduceKeylessBundles(ctx, eps, dialer, token, statements)
 }
 
 // syntheticAttestation builds a populated attestation for the golden fixtures:
@@ -193,8 +199,8 @@ type trustMaterials struct {
 // the same harness materials the live keyless test uses -- the Fulcio chain via
 // GET /api/v2/trustBundle over the pinned TLS client, the exported Rekor log
 // public key, and the fetched TSA certificate chain.
-func assembleTrustedRoot(ctx context.Context, fulcioEp endpoint.HTTPS, rekorPubPath, tsaChainPath, ctfePubPath string) ([]byte, error) {
-	fulcioCerts, err := fulcioChain(ctx, fulcioEp)
+func assembleTrustedRoot(ctx context.Context, fulcioEp endpoint.HTTPS, dialer *transport.Dialer, rekorPubPath, tsaChainPath, ctfePubPath string) ([]byte, error) {
+	fulcioCerts, err := fulcioChain(ctx, fulcioEp, dialer)
 	if err != nil {
 		return nil, err
 	}
@@ -288,8 +294,8 @@ func trustedRootProto(m trustMaterials) *trustrootpb.TrustedRoot {
 // fulcioChain fetches and parses the Fulcio certificate chain via
 // GET /api/v2/trustBundle. The returned order is the served order (leaf-most
 // first, trust anchor last).
-func fulcioChain(ctx context.Context, fulcioEp endpoint.HTTPS) ([]*x509.Certificate, error) {
-	client, err := deploy.HTTPClientFor(fulcioEp)
+func fulcioChain(ctx context.Context, fulcioEp endpoint.HTTPS, dialer *transport.Dialer) ([]*x509.Certificate, error) {
+	client, err := deploy.HTTPClientFor(fulcioEp, dialer)
 	if err != nil {
 		return nil, fmt.Errorf("fulcio client: %w", err)
 	}

@@ -25,6 +25,7 @@ import (
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/testutil"
+	"github.com/istr/strike/internal/transport"
 	"github.com/istr/strike/internal/wire"
 )
 
@@ -87,6 +88,11 @@ func TestKeylessLive(t *testing.T) {
 	}
 	t.Setenv("SIGSTORE_ID_TOKEN", testutil.MintIDToken(t, liveIssuer, caddyRoot))
 
+	dialer, dialerErr := testutil.HarnessDialer(harness)
+	if dialerErr != nil {
+		t.Fatalf("harness dialer: %v", dialerErr)
+	}
+
 	trust := endpoint.CABundle{Type: "caBundle", Path: primitive.AbsPath(caddyRoot)}
 	eps := lane.KeylessEndpoints{
 		Fulcio: endpoint.HTTPS{Address: endpoint.MustParseURL("https://fulcio.127.0.0.1.sslip.io:5555"), Trust: trust},
@@ -106,7 +112,7 @@ func TestKeylessLive(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	bundles, err := ProduceKeylessBundles(ctx, eps, token, statements)
+	bundles, err := ProduceKeylessBundles(ctx, eps, dialer, token, statements)
 	if err != nil {
 		t.Fatalf("ProduceKeylessBundles: %v", err)
 	}
@@ -114,7 +120,7 @@ func TestKeylessLive(t *testing.T) {
 		t.Fatalf("got %d bundles, want %d", len(bundles), len(statements))
 	}
 
-	tr := liveTrustRoot(ctx, t, eps.Fulcio, rekorPub, tsaChain, ctfePub)
+	tr := liveTrustRoot(ctx, t, eps.Fulcio, dialer, rekorPub, tsaChain, ctfePub)
 	certID, err := verify.NewShortCertificateIdentity(liveIssuer, "", liveIdentity, "")
 	if err != nil {
 		t.Fatalf("NewShortCertificateIdentity: %v", err)
@@ -163,10 +169,10 @@ func TestKeylessLive(t *testing.T) {
 // leaf names. Both log entries carry a lower validity bound only, matching the
 // generated trust root, where the log keys have no end date and sigstore-go
 // leaves the field zero.
-func liveTrustRoot(ctx context.Context, t *testing.T, fulcioEp endpoint.HTTPS, rekorPubPath, tsaChainPath, ctfePubPath string) *root.TrustedRoot {
+func liveTrustRoot(ctx context.Context, t *testing.T, fulcioEp endpoint.HTTPS, dialer *transport.Dialer, rekorPubPath, tsaChainPath, ctfePubPath string) *root.TrustedRoot {
 	t.Helper()
 
-	client, err := HTTPClientFor(fulcioEp)
+	client, err := HTTPClientFor(fulcioEp, dialer)
 	if err != nil {
 		t.Fatalf("fulcio client: %v", err)
 	}
