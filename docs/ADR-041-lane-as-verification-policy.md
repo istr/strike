@@ -191,3 +191,29 @@ reason is stronger.
 an explicit opt-in" is read as "where the system CA is not available
 at all: every peer requires an explicit fingerprint or CA bundle
 (ADR-007, ADR-021)".
+
+## Amendment 2026-09-01 -- the two ADR-040 citations: the stance was never written there
+
+This ADR twice attributes a written position to ADR-040: the
+Consequences cite "ADR-040's stance that the sigstore trust root is
+purely a verification-time parameter", and the closing "Extends
+ADR-040" paragraph cites "ADR-040's note that the sigstore trust
+root is declared nowhere in the lane". ADR-040 contains neither --
+no trust-root statement and no such note, verified at every state
+this review examined -- and its revision practice is append-only
+markers, so a silent removal is implausible; whether a pre-corpus
+draft carried the wording is a history question this note does not
+decide. The position itself is real and already stated in this ADR's
+own Context: "What the lane does not declare is the signature trust
+root, and the omission is not an oversight but the asymmetry of the
+two PKIs involved" -- a fact of the design ADR-040 realizes (the
+lane declares the OIDC signing identity, ADR-040 D5; never a
+verifier trust root), left unwritten there.
+
+**Supersedes, in the Consequences above:** "ADR-040's stance that"
+is read as "the pre-existing design position -- stated in this ADR's
+Context, not in ADR-040 -- that". **Supersedes, in the "Extends
+ADR-040" paragraph above:** "ADR-040's note that the sigstore trust
+root is declared nowhere in the lane" is read as "the position this
+ADR's Context states, that the sigstore trust root was declared
+nowhere in the lane".
