@@ -256,3 +256,20 @@ twice -- once in the verifier's production path, once as a producer-side test
 helper. That is the same defect the Context above records for the DSSE encoder:
 a two-role contract homed in a role package. Under the domain-owner tiebreak
 they are owned by neither role and live in the role-neutral package.
+
+## Amendment 2026-09-01 -- the schema source package is renamed to contract
+
+The contract-tier amendment above names the embedded schema package
+`specs` (the component `contract` holding the package `specs`). The
+tree has since renamed and restructured the package itself: the flat
+`specs/` directory (ADR-047's "One flat `specs/` directory") became
+the `contract/` tree with per-package subdirectories -- `specs/lane.cue`
+is `contract/lane/lane.cue`, and the endpoint vocabulary lives at
+`contract/endpoint/` (for example `contract/endpoint/trust.cue`) --
+so component and package now share the name. Later decisions use the
+new name as fact (ADR-049: "Every string disjunction in `contract/`";
+ADR-050: `contract/generate.go`); no ADR decided the rename
+separately. This amendment records it, in the manner of the
+internal/wire rename above: `specs/...` paths in ADR-017, ADR-027,
+ADR-046, and ADR-047 denote today's `contract/...`. **Supersedes, in
+the contract-tier amendment above:** `specs` is read as `contract`.
