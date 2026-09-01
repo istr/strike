@@ -25,6 +25,20 @@ client identity).
 > qualified by [ADR-051](ADR-051-deploy-as-sealing-point.md) D5: the
 > deploy path rejects SSH peers until the ADR-038 front lands.
 
+> **Reference note (2026-09-01):** the "ADR-028 roadmap" whose
+> D-series the Status cites (supersedes in part D24 and D26;
+> ratifies D27 and D28) is `docs/ROADMAP-ADR-028.md`, a pre-item-era
+> prose roadmap that was closed and removed in commit 287f30d
+> ("doc: Close ADR-028 roadmap and remove it", 2026-05-23), a month
+> before the prose-to-items migration -- so the D numbers have no
+> successor under `roadmap/`. The file is retrievable from history:
+> `git show 287f30d^:docs/ROADMAP-ADR-028.md` (D24 at line 199, D26
+> at line 242). Both entries carried the matching supersession marks
+> before removal, so the relation was recorded on both sides; D26's
+> substance is restated in full by D28 below, and D24's by this
+> ADR's decisions. The reference is sound -- its target simply lives
+> in the history now.
+
 ## Context
 
 ADR-028 specified three mediation components and two patterns: TLS
