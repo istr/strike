@@ -689,3 +689,42 @@ implementation reaches it:
 - **Observation over declaration.** The mediator records the connection
   identities and metadata it observed passing through it; it certifies the
   observed traffic, never a declared claim of mediation completeness.
+
+## Amendment 2026-09-01 -- the offline-lane clause contradicted this ADR's own resolver mandate
+
+The performance trade-off consequence promised: "lanes that need
+maximum throughput can declare no peers (network=none) and stay
+entirely offline". That clause contradicted this ADR's own Decision
+("The resolver declaration is mandatory. A lane without a declared
+resolver does not execute") and its own operational requirement
+("Every lane run requires a reachable DoT resolver"). Verified
+against the tree, the resolver side is the accurate one, on both
+halves and without any peer-count guard:
+
+- Declaration is peer-independent: `resolver` is a required field on
+  `#Lane`, and lane validation enforces it unconditionally -- an
+  empty host fails with "resolver: host required"; no code path
+  consults the peer count.
+- Reachability is peer-independent: `strike run` probes the declared
+  resolver immediately after validation and before any capsule or
+  container exists -- a real TLS handshake against the declared
+  anchor plus a root-NS lookup, five-second timeout; failure aborts
+  the run. The probe also supplies the observed resolver identity
+  the attestation records (ADR-030), so it is load-bearing, not a
+  skippable pre-flight.
+- The peer-less step itself never dials: every container unit runs
+  under a capsule, and a peer-less unit gets an empty allowlist --
+  its capsule resolver denies every name, the mediator denies every
+  SNI -- which replaced the former `--network=none` (ADR-033 D28;
+  the modes' removal is already marked in the header note for
+  ADR-033).
+
+**Supersedes, in the Consequences above:** "lanes that need maximum
+throughput can declare no peers (network=none) and stay entirely
+offline" is read as: a lane can declare zero peers, in which case no
+step container has reachable egress and no mediator hop sits in any
+data path -- but the lane still declares a resolver, and the
+controller still requires it reachable at run start. "Offline"
+describes the step container's egress view, never the controller
+process; the commands that never dial are `strike validate` and
+`strike dag`, while `strike run` always probes.
