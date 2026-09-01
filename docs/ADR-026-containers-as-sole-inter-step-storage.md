@@ -378,7 +378,7 @@ exclusions.
   governance implications that should not be silent defaults.
 - Small artifacts pay container-wrapping overhead (manifest +
   config + layer for a tiny file). Acceptable in exchange for
-  uniform storage, uniform tooling, uniform tooling.
+  uniform storage, uniform tooling.
 - Build introspection becomes standard: `podman images`,
   `podman image inspect`, and `podman image tree` show
   strike's intermediate state directly.
