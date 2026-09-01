@@ -4,6 +4,34 @@
 
 Accepted.
 
+> **Amended by [ADR-022](ADR-022-network-opt-in-as-peer-list.md),
+> applied in place:** unlike every other revision note in this corpus,
+> the Decision text below is already the revised text. Commit 523c5d6
+> (2026-05-02, "feat: Introduce qualified peers instead of network
+> boolean switch") rewrote this ADR in place when ADR-022 replaced the
+> network boolean with the typed peer list. The network bullet
+> previously read: "`--network=none` -- network disabled unless
+> `network: true` is set on the step. The opt-in surface is one bit,
+> visible in the lane source." -- and the "network bit" wording in the
+> not-configurable paragraph and the Consequences was replaced
+> alongside it. That edit contradicts the content-stability rule the
+> index states (revision by a later ADR, never by editing the original
+> decision). This note is the marker that edit should have been, added
+> retroactively so the record is legible again: ADR-022's statement
+> that "ADR-005's 'the opt-in surface is one bit' sentence is now
+> historical" refers to the pre-revision sentence quoted here, and the
+> Decision's forward reference to ADR-022 stems from the in-place
+> revision, not from the original text.
+
+> **Amended by [ADR-033](ADR-033-ssh-peer-egress-and-unified-mediation.md):**
+> the "`--network=none` by default" wording is itself historical:
+> ADR-033 D28 removes the network modes -- every step container,
+> peer-less ones included, runs under a per-step capsule (a peer-less
+> step's capsule resolver answers NXDOMAIN for every name), so the
+> default is capsule mediation, not a `--network` flag. The decision
+> stands: the hardened profile is non-configurable, and network
+> access remains opt-in via the declared peer list.
+
 ## Scope
 
 This ADR concerns the security profile of individual step containers

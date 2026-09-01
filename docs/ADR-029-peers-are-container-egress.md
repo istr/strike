@@ -16,6 +16,13 @@ routes container-initiated OCI traffic as HTTPS).
 > peers are container-egress contracts over exactly two protocols,
 > with the OCI peer type removed -- stands unchanged.
 
+> **Amended by [ADR-033](ADR-033-ssh-peer-egress-and-unified-mediation.md):**
+> the Consequences' "the step now runs with `--network=none`" is
+> historical: under ADR-033 D28 a peer-less step runs under a
+> per-step capsule whose resolver answers NXDOMAIN for every name,
+> not with a `--network` mode. The substance stands: zero declared
+> peers means no reachable network.
+
 ## Context
 
 ADR-022 introduced a typed peer list with three variants: HTTPS,
