@@ -215,3 +215,24 @@ those of its predecessors.
 - **Observation over declaration.** A deploy attestation records the observed
   pre- and post-action state, not the lane's intended outcome; what is signed
   is what the runtime did.
+
+## Amendment 2026-09-01 -- the split's precedent: the IP-literal check is not in ADR-024
+
+D5 and the CUE-first principle both ground the enforce-in-Go choice
+in "the same 'semantically schema, technically Go' split used for
+the IP-literal resolver check (ADR-024)". ADR-024 (SSH peer
+server-trust enforcement) contains no IP-literal resolver check, and
+no ADR decides that check in prose; it is a schema-plus-Go fact of
+the tree. The precedent itself is real and worth stating: the lane
+schema deliberately models no full IP-literal grammar -- a complete
+IPv6 regex is impractically large -- so the CUE syntax for the
+resolver address is lax, and the binding validation runs in Go
+(verified against the tree: lane validation enforces the IP literal
+right after the host-required check; the resolver declaration itself
+is ADR-028's). The corpus states the split as a principle in
+ADR-027's CUE-first bullet: "The CUE regex is the canonical
+acceptance criterion for the field's shape; the Go side adds the
+... checks the regex cannot express." **Supersedes, in D5 and in
+the CUE-first principle above:** the ADR-024 attribution in both
+places is read as "the resolver-address check -- lax in the schema,
+binding in Go; the split ADR-027's CUE-first principle states".
