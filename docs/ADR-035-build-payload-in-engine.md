@@ -20,6 +20,23 @@ artifact model ([ADR-008](ADR-008-cryptographic-primitives.md),
 > canonical step image, each output a named layer; that image's manifest digest is
 > the single integrity anchor, and every consumer pulls it by digest.
 
+> **Amended by [ADR-036](ADR-036-engine-native-input-delivery.md):** the
+> Decision's input-delivery clause assumed, in passing, that read-only
+> inputs could be *mounted* inside the workdir. ADR-036's live GO/NO-GO
+> probe (rootless Podman 5.4.2, libpod REST) refuted that assumption,
+> and its decision settles the mechanism: an input inside the workdir
+> is seeded -- its resolved content copied into the workdir named
+> volume before the container starts, via the engine archive endpoint
+> on a created-but-not-started container -- never mounted there. The
+> clause's conclusion survives the correction: seeded content becomes
+> part of the workdir tree and may be captured within an output
+> projection, exactly what this ADR permits for inside-workdir inputs.
+> The outside-workdir half stands with its mechanism made precise: a
+> read-only, directory-granular `image_volumes` mount, serving the
+> build only and not capturable, as written. Read "mounted inside the
+> workdir" as "seeded into the workdir" (ADR-036 decision 3, "Inside
+> the workdir: seed before start").
+
 ## Context
 
 The implementation materialized step outputs through a host scratch
