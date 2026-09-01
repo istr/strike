@@ -37,6 +37,17 @@ but does not supersede [ADR-005](ADR-005-per-step-security-profile.md),
 > no-escape-hatch posture stand; their hosting moves to the front
 > (ADR-038 Scope).
 
+> **Superseded in part by [ADR-032](ADR-032-peer-tls-version-floor.md):**
+> the parenthetical "(mandated by this ADR's transport primitive)" is
+> historical: ADR-032 supersedes the every-hop TLS-1.3 mandate.
+> External-peer hops -- the declared DoT resolver and the mediator's
+> upstream leg -- floor at TLS 1.2 (preferring 1.3, with the 1.2
+> cipher set bounded to the BSI TR-02102-2 AEAD/ECDHE suites; below
+> 1.2 is rejected with a diagnosed failure). Controlled hops keep the
+> TLS 1.3 minimum -- including the container-facing mediator leg this
+> passage argues about, so the ECH observation and the case for
+> termination stand unchanged; only the external legs are relaxed.
+
 ## Context
 
 [ADR-022](ADR-022-network-opt-in-as-peer-list.md) replaced the
