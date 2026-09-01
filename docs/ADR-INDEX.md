@@ -56,7 +56,7 @@ referenced here at all.
 | 009 | [Bootstrap reproducibility proof via stage 2 / stage 3 binary equality](ADR-009-bootstrap-reproducibility-proof.md) | Accepted | Reproducibility is enforced; Digest-pinned references; No shell |
 | 010 | [Typed DAG edges carry resolved references](ADR-010-typed-dag-edges.md)                       | Accepted | Code is liability; CUE first; Reproducibility    |
 | 011 | [Host filesystem cannot enter the DAG](ADR-011-sources-elimination.md)                        | Accepted | Digest-pinned references; Code is liability; Reproducibility |
-| 012 | [Engine identity captured in every attestation](ADR-012-engine-identity-capture.md)           | Accepted | Runtime is attested; Identity is asymmetric; Digest-pinned references |
+| 012 | [Engine identity captured in every attestation](ADR-012-engine-identity-capture.md)           | Accepted; superseded in part by ADR-040; amended by ADR-037, ADR-042 | Runtime is attested; Identity is asymmetric; Digest-pinned references |
 | 013 | [DSSE envelope shape and Rekor submission](ADR-013-dsse-envelope-and-rekor.md)                | Accepted; superseded in part by ADR-040; amended by ADR-043 | Runtime is attested; Code is liability; Digest-pinned references; Identity is asymmetric |
 | 014 | [Audit transport for forensic accountability](ADR-014-audit-transport.md)                     | Accepted | Runtime is attested; Secrets are typed; Code is liability |
 | 015 | [All time access dispatched through internal/clock](ADR-015-internal-clock-dispatch.md)       | Accepted | Reproducibility is enforced; Code is liability; CUE first |

@@ -4,6 +4,35 @@
 
 Accepted.
 
+> **Superseded in part by [ADR-040](ADR-040-control-plane-sbom-and-keyless-attestation.md);
+> amended by [ADR-037](ADR-037-two-engine-trust-layers.md) and
+> [ADR-042](ADR-042-field-naming-camelcase.md):** three later decisions
+> revise this record, unmarked until now. Placement (ADR-040 D3): the
+> Decision clause "Every deploy attestation includes an `engine`
+> field" is displaced -- engine context is a separate predicate of a
+> strike-defined type, co-attached as its own referrer
+> (`strike.dev/predicates/engine-context/v1`), carrying the engine
+> identity, transport fingerprint, and engine-reported actions;
+> because it is physically separate, the sealed provenance verifies
+> without trusting any engine-relayed claim, and which predicates
+> `strike verify` requires depends on the trust mode. Classification
+> (ADR-037): `#EngineRecord` is marked informational wholesale -- it
+> mixes a controller-observed cert fingerprint with self-reported
+> version/rootless in one unmarked record, and it is not a trust
+> input either way, the engine being untrusted. That qualifies this
+> ADR's framing that a verifier "needs to assess the trust level"
+> from it: the capture stands as recorded observation; it does not
+> gate the sealed statement. Naming (ADR-042): the snake_case wire
+> names here predate the camelCase rename of strike's own fields.
+> Verified against the tree, the trust-mode field is spelled
+> `caTrustType` ("pinned" | "system") in
+> `contract/endpoint/engine.cue` -- the case change plus a
+> Mode-to-Type respelling the corpus does not separately record.
+> What this ADR fixed survives, relocated: the handshake-time
+> fingerprint capture, the server/client asymmetry, the
+> self-reported flags recorded as claims, and the
+> identity-before-first-signed-deploy ordering.
+
 ## Context
 
 A signed attestation says "this artifact was produced by this build".
