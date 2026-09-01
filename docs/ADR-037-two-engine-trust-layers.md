@@ -8,8 +8,8 @@ but the decisions are continuous with the first version.
 
 Refines, and does not supersede, [ADR-001](ADR-001-engine-via-api-not-exec.md).
 Reframes the trust statements in
-[ADR-005](ADR-005-per-step-security-profile.md),
-[ADR-006](ADR-006-typed-secrets.md),
+[ADR-005](ADR-005-hardened-container-profile-non-configurable.md),
+[ADR-006](ADR-006-secrets-as-typed-primitive.md),
 [ADR-012](ADR-012-engine-identity-capture.md),
 [ADR-028](ADR-028-step-container-egress-mediation.md), and
 [ADR-033](ADR-033-ssh-peer-egress-and-unified-mediation.md). Its scope statement

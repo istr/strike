@@ -7,8 +7,8 @@ Accepted. Completes the Phase-2 enforcement of
 mediation pattern, supersedes in part D24 and D26 of the ADR-028
 roadmap, and ratifies D27 and D28. Builds on
 [ADR-031](ADR-031-pasta-splice-only-dependency.md) (pasta
-`--splice-only` dependency), [ADR-024](ADR-024-ssh-known-hosts.md)
-(SSH server trust), and [ADR-025](ADR-025-ssh-agent-proxy.md) (SSH
+`--splice-only` dependency), [ADR-024](ADR-024-ssh-peer-server-trust-enforcement.md)
+(SSH server trust), and [ADR-025](ADR-025-ssh-peer-client-identity-enforcement.md) (SSH
 client identity).
 
 > **Superseded in part by [ADR-038](ADR-038-protocol-mediated-ssh.md):**

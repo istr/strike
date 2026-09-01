@@ -5,11 +5,11 @@
 Accepted. Companion to [ADR-022](ADR-022-network-opt-in-as-peer-list.md);
 fulfills the deferred enforcement promise (the "Phase 2 gets its own
 ADR when a concrete enforcement story is needed" sentence). Refines
-but does not supersede [ADR-005](ADR-005-per-step-security-profile.md),
+but does not supersede [ADR-005](ADR-005-hardened-container-profile-non-configurable.md),
 [ADR-007](ADR-007-asymmetric-identity.md),
 [ADR-022](ADR-022-network-opt-in-as-peer-list.md),
-[ADR-024](ADR-024-ssh-known-hosts.md),
-[ADR-025](ADR-025-ssh-agent-proxy.md).
+[ADR-024](ADR-024-ssh-peer-server-trust-enforcement.md),
+[ADR-025](ADR-025-ssh-peer-client-identity-enforcement.md).
 
 > **Completed by [ADR-033](ADR-033-ssh-peer-egress-and-unified-mediation.md):**
 > this architecture is realized by the per-step NetworkCapsule. The
@@ -328,13 +328,13 @@ exist in strike, now bound together under the same architectural
 commitment as TLS mediation:
 
 - **Client identity at the controller** via the ssh-agent-proxy
-  pattern ([ADR-025](ADR-025-ssh-agent-proxy.md)). The container
+  pattern ([ADR-025](ADR-025-ssh-peer-client-identity-enforcement.md)). The container
   speaks the SSH protocol to its upstream peer, but the
   authentication signature is computed by strike's controller-held
   agent. The container never has the private key.
 - **Server identity verified against declared trust anchor** via
   the known_hosts mount pattern
-  ([ADR-024](ADR-024-ssh-known-hosts.md)). The mediator TCP-forwards
+  ([ADR-024](ADR-024-ssh-peer-server-trust-enforcement.md)). The mediator TCP-forwards
   the SSH connection; the container's SSH client validates the
   server's host key against the mounted known_hosts file derived
   from the peer declaration.
@@ -399,7 +399,7 @@ container process starts. The filter rules:
 The filter is installed by the OCI runtime as part of network-namespace
 setup, before the container's main process starts. The container
 process runs with `cap-drop=ALL` per
-[ADR-005](ADR-005-per-step-security-profile.md), and therefore cannot
+[ADR-005](ADR-005-hardened-container-profile-non-configurable.md), and therefore cannot
 modify these rules from within the namespace.
 
 Concrete implementation paths in the rootless setting are deferred
@@ -512,7 +512,7 @@ consumed by:
 - Component 1's DoT calls to the declared resolver
 - Component 2's TLS-mediation upstream handshakes
 - Strike's own direct calls (audit-sink transport per
-  [ADR-014](ADR-014-audit-pipeline.md), Rekor calls, `strike verify`)
+  [ADR-014](ADR-014-audit-transport.md), Rekor calls, `strike verify`)
 
 This is "code is liability" applied at the architectural level: one
 implementation of a single security-critical primitive, with multiple
