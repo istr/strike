@@ -728,3 +728,47 @@ controller still requires it reachable at run start. "Offline"
 describes the step container's egress view, never the controller
 process; the commands that never dial are `strike validate` and
 `strike dag`, while `strike run` always probes.
+
+## Amendment 2026-09-01 -- the resolver's trust vocabulary narrows to the CA bundle
+
+Component 1 commits the DoT resolver to "the same
+`#FingerprintTrust | #CABundleTrust` vocabulary as HTTPS peers"
+(spelled `#Fingerprint | #CABundle` in the tree), and states the
+commitment twice more: the schema-placement deferral keeps back
+"the trust-anchor vocabulary, attestation capture pattern, and
+mandatoriness", and the Principles bullet repeats "same
+trust-anchor vocabulary". The vocabulary half of all three no
+longer holds: this endpoint accepts a declared CA bundle and
+nothing else.
+
+The ground is conformance, not architecture. RFC 8310's Strict
+Privacy profile admits exactly two kinds of authentication
+information (section 6.6): an authentication domain name obtained
+from a section 7 source, or an SPKI pin set per RFC 7858. A
+SHA-256 digest over the leaf certificate is neither -- an SPKI pin
+covers the SubjectPublicKeyInfo, not the certificate -- and
+section 3 excludes IP addresses as server identifiers, so the
+address a fingerprint-trusted resolver is reached at authenticates
+nothing. Under full direct configuration (section 7.1) the lane
+carries an out-of-band ADN plus an IP, and the credential is
+verified as section 8.1 requires: the whole chain per RFC 5280,
+the reference identifier matched in subjectAltName only, never in
+the Subject. That is a CA bundle.
+
+What the parity clauses claim beyond the vocabulary stands
+unchanged. The mechanism is the same: one `BuildTLSConfig`, the
+same `#CABundle` a peer declares, in the same discriminated shape
+-- the resolver's anchor set is a strict subset of a peer's, never
+a widening, and never a shape a peer cannot express. Identity
+capture, attestation surface, and mandatoriness are untouched.
+`certFingerprint` remains available to every other declared
+endpoint and is rejected only here. The system trust store is not
+an alternative for this endpoint either: ADR-021's deferral is in
+force and ADR-041's dated note reads the peer axis as "the system
+CA is not available at all".
+
+**Supersedes, in Component 1's "DoT resolver as declared peer"
+section and in the Principles bullet above:** the trust-anchor
+vocabulary is read as "`caBundle` alone for the DoT resolver,
+`certFingerprint | caBundle` for every other declared TLS
+endpoint". Implemented by item-0049.
