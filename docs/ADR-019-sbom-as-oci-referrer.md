@@ -14,6 +14,16 @@ retained. Verified base-SBOM ingestion against declared signers is
 deferred to a later instruction that reuses the Fulcio/Rekor verification
 machinery.
 
+> **Amended by [ADR-051](ADR-051-deploy-as-sealing-point.md):** the
+> generation point moves again: ADR-051 D3 relocates SBOM generation
+> from the pack step to the deploy step ("refining ADR-040 D1 from
+> pack-implemented to deploy-generated"), so cataloging runs over the
+> deployed payload and a build-produced published image needs no
+> no-op pack step to acquire an SBOM. Unchanged by that move: the
+> OCI 1.1 referrer attachment this ADR decides -- the SBOMs ride as
+> referrers on the deploy subject digest (ADR-051 D2) -- and the
+> deferred verified base-SBOM ingestion named above.
+
 ## Context
 
 A signed image asserts "this artifact came from this build". A

@@ -4,6 +4,21 @@
 
 Accepted.
 
+> **Amended by [ADR-051](ADR-051-deploy-as-sealing-point.md):** two
+> decisions here are refined by their successor, in ADR-051's own
+> words: SBOM generation (D1) moves from the pack step to the deploy
+> step ("refining ADR-040 D1 from pack-implemented to
+> deploy-generated"), and the control-plane push (D4) is realized
+> for locally produced images -- the engine-push surface is removed
+> in full (ADR-051 D4; recorded in detail on ADR-026), and the push
+> destination is declared in the ADR-051 D6 shape. The pipeline
+> point consolidates ("Signing, SBOM generation, push, and
+> attestation happen once, at deploy, over the deployed payload");
+> D1's cataloger, scoping, and in-process execution, the keyless
+> signing chain, and the lane-level OIDC configuration are
+> unchanged. ADR-054 revises ADR-051 D5, not this ADR; its marker
+> sits on ADR-051.
+
 ## Context
 
 The control plane targets SLSA Build Level 3 when the container engine is
