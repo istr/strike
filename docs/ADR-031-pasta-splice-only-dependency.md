@@ -277,3 +277,25 @@ date threshold.
 - **Enforcement is structural, not discretionary.** `--splice-only` is
   the structural realization of default-deny egress; the backend exists
   to enforce that boundary, not to soften it.
+
+## Amendment 2026-09-01 -- the spike reference: ADR-023 never held the pasta spike
+
+The Status calls this ADR "Companion to ADR-023 (the pasta and
+`--splice-only` spike)", and the Context opens with "The egress
+model (ADR-023, ADR-028)". The number was wrong from birth: at the
+commit that added this ADR, `docs/ADR-023` was already "Pointer
+Arguments Require Justification" (verified against the history), no
+document in the corpus records the pasta spike, and this ADR is the
+number's only user in that sense -- the reference is also the only
+unlinked ADR mention in a Status whose other references (ADR-028,
+ADR-022) resolve as links. The spike itself was real; its settled
+result -- pasta in `--splice-only` mode creates no tap device and
+forwards only loopback, the default-deny substrate -- is the premise
+this ADR turns into a pinned dependency.
+
+**Supersedes, in the Status above:** "Companion to ADR-023 (the
+pasta and `--splice-only` spike) and" is read as "Companion to the
+pasta `--splice-only` spike -- a bounded spike whose settled result
+this ADR records as a dependency -- and". **Supersedes, in the
+Context above:** "The egress model (ADR-023, ADR-028)" is read as
+"The egress model (ADR-028)".
