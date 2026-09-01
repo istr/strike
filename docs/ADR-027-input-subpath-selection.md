@@ -330,3 +330,21 @@ subpath-bearing input edges fan out from its single output.
   follows. The CUE regex is the canonical acceptance criterion
   for the field's shape; the Go side adds the output-type and
   existence checks the regex cannot express.
+
+## Amendment 2026-09-01 -- the output key in the examples is renamed: name is id
+
+The examples above declare outputs with a `name:` key
+(`{ name: tree, type: directory, path: /out/tree }`). The schema key
+today is `id`: `#OutputSpec` requires an `id` on every output, typed
+`#Identifier` and carried as `out.ID` (ADR-046, Context and its
+output-key vocabulary amendment). No ADR recorded that rename --
+ADR-046 already treats `id` as existing fact ("nonetheless requires
+an `id`") -- so this amendment does. **Supersedes, in the examples
+and prose above:** the output declaration key `name:` is read as
+`id:`, and "output name" as the output id. Unaffected: the
+`from: <step>.<output-id>` references, which address the producing
+step's output by that identifier value, and the
+`(from, mount, subpath)` input model this ADR decides. The `name:`
+keys on the *input* entries of the before-example are not drift:
+removing that field is this ADR's own Decision, and the
+after-example shows the removal.
