@@ -527,3 +527,108 @@ Two findings need an operator input before their correction can be final: **A-07
 (lane vs. lace) and **R-02/R-03** (correct referents live outside the ADR corpus).
 
 — End of report —
+
+## Closing report — 2026-09-01
+
+The correction series announced in section 9 is complete. Twenty-five
+commits were delivered as git-am mboxes (author: Ingo Struck (git
+commits) <git@ingostruck.de>), one finding per commit, in this
+executed order: C-01, R-06, C-02, C-03, C-06, C-07, C-04, A-04, C-05,
+C-08, C-10, C-11, C-12, C-09, A-01, A-05, A-06, A-02, A-03, R-01,
+R-02, R-03, R-04, R-05, R-07a. Review base:
+`85523afecd6b04e239affbf44a00df65b146b73b`; series end:
+`be8fbfd624991eaddf810dc1fdfdb0cc824346db` plus the R-07a commit
+(docs/ADR-* tree `c2e623e57df55a3ab5c2372e9aedfde352c985c3`); this
+appendix lands on `1737778a8c19e03cc4f7fc9847dafd6abe0ceaeb`.
+
+### Disposition of all findings
+
+| ID | Disposition |
+|---|---|
+| C-01 | Resolved. ADR-038 supersession propagated: 024/025 status becomes Superseded by ADR-038; partial notes on 028/033; 029 note; index rows. |
+| C-02 | Resolved. ADR-030's push half superseded in part by ADR-051 (D4/D10); the pull row and "recording follows the trust chain" stand. |
+| C-03 | Resolved. ADR-013 dated amendment composes the ADR-040/ADR-043 notes; the Rekor-v2 failure-semantics gap is recorded, not decided. |
+| C-04 | Resolved. ADR-021 per-item notes: keyless resolved (ADR-040/043); system-CA deferral verified against the tree; the cache note was later replaced (see C-08). |
+| C-05 | Resolved. ADR-004's generated-not-hand-written clause scoped to its default role; qualifier ADR-042; the 042/047/048 chain told in the note. |
+| C-06 | Resolved. ADR-048's lattice prose and diagram deferred to ADR-044's amendments and the lint enforcement they specify. |
+| C-07 | Resolved. ADR-022's API-server-as-HTTPS-peer clause superseded by ADR-054 D1/D3; capture containers keep their peers. |
+| C-08 | Resolved. ADR-026's cross-machine half superseded (ADR-051 D1/D4); the removing change's rejected alternative adopted into the corpus; the principle clause marked unbuilt; the ADR-021 cache note replaced. Severity revised High to Medium: decided but unrecorded. |
+| C-09 | Resolved. ADR-005's in-place revision recorded (commit 523c5d6, offender confirmed via gitk); the pre-revision sentence restored verbatim; ADR-033 network-mode notes on 005 and 029. |
+| C-10 | Resolved. ADR-035: inside-workdir inputs are seeded, not mounted (ADR-036); the capturability conclusion survives. |
+| C-11 | Resolved. ADR-012 consolidated note: placement (ADR-040 D3), classification (ADR-037), naming (ADR-042, plus the caTrustType respelling recorded as fact). |
+| C-12 | Resolved. ADR-028's every-hop TLS-1.3 parenthetical superseded by ADR-032; the container-facing mediator leg stays a controlled 1.3 hop, so the ECH argument stands. |
+| A-01 | Resolved as a verified clarification. The offline-lane clause was the faulty side; resolver declaration and run-start probe are peer-independent, and only `strike validate`/`strike dag` never dial. |
+| A-02 | Resolved. The specs-to-contract rename recorded on ADR-044 (its own internal/wire amendment as precedent). |
+| A-03 | Resolved. The output key name-to-id rename recorded on ADR-027, the sole carrier; the input-side keys are ADR-027's own removal decision, not drift. |
+| A-04 | Resolved. ADR-037 D2 split onto its real axes (the peer-axis mode does not exist; engine-transport `system` is the unpinned default, its ratification recorded as a gap); ADR-041's contrast clause corrected to the stronger reason. The ADR-021 half landed with C-04. |
+| A-05 | Resolved. ADR-039 mirrors the ADR-016 note pair (ADR-042 renames; ADR-051 D10 target-identity removal, digests stay); ADR-037 lane_ref to lane_digest. |
+| A-06 | Resolved. ADR-019 and ADR-040 carry the ADR-051 refinement notes (SBOM pack to deploy; push realized); ADR-054's absence on 040 stated as the scoping decision it is. |
+| A-07 | Closed without a patch: operator confirmed `lace.yaml` is correct (the bootstrap "shoelace" referencing `lane.yaml`). |
+| A-08 | Deliberately left (operator decision). A provenance footnote without planning impact; gap-sweep candidate; the settling probe is named in the R-07a commit message. |
+| R-01 | Resolved. Eleven dead link targets repaired in place across 028/033/037; prose byte-identical, asserted per occurrence. |
+| R-02 | Resolved. ADR-031's pasta-spike attribution was wrong at birth (history probe: ADR-023 already held pointer-arguments); the corrected reading mentions the bounded spike and references nothing. |
+| R-03 | Resolved. The IP-literal split reattributed from ADR-024 to the fact of the tree and ADR-027's CUE-first principle; a second occurrence (the Principles bullet) found and covered. |
+| R-04 | Resolved. ADR-041's two phantom ADR-040 citations repointed at its own Context statement; nothing written into ADR-040. |
+| R-05 | Resolved. Reference note on ADR-033 locating `docs/ROADMAP-ADR-028.md` (closed and removed in 287f30d); the reference is sound, its target lives in the history. |
+| R-06 | Resolved. Index status vocabulary ratified (superseded-in-part and amended qualifiers; dated in-file amendments carry no status weight); fourteen-row sweep. |
+| R-07 | Partially resolved: (a) the ADR-026 duplication fixed in place; (b) deliberately left, the ADR-043 note on ADR-017 already governing the boundary list. |
+
+### Corrections to this report, discovered during execution
+
+- R-01: the true occurrence count is eleven, not eight.
+- A-02: ADR-035 carries no `specs/` path; the affected list is
+  ADR-017, ADR-027, ADR-046, ADR-047.
+- A-03: the drift lives in ADR-027 alone (ADR-026/ADR-035 carry no
+  `name:` output keys), and the input-side keys are ADR-027's own
+  Decision.
+- C-08: severity High to Medium -- the disposition existed in the
+  removing commit's message (1da3a0b) and only lacked a corpus
+  record.
+- R-02: settled as wrong-at-birth, not a renumbering casualty.
+- R-03: the faulty attribution occurs twice (D5 and the CUE-first
+  principle).
+- A-01 and A-04 resolved as tree-verified clarifications rather
+  than recorded gaps, with the one genuinely undecided residue (the
+  engine-TLS system default) recorded as a gap on ADR-037.
+- The C-02 draft (section 3) planned a dated amendment for a
+  partial supersession; the convention ratified in R-06 corrected
+  the form: revisions by another ADR are blockquotes with status
+  weight, dated sections are self-notes without it.
+
+### Conventions ratified or exercised by the series
+
+Blockquote notes ("Superseded in part by ADR-NNN", "Amended by
+ADR-NNN") carry status weight and are mirrored in the index
+qualifier; dated in-file "## Amendment" sections are self-notes and
+carry none. Self-corrections of an ADR's own text use the in-file
+"Supersedes, in ... above" reading device, never an edit. In-place
+edits are permitted only where no meaning-bearing prose changes
+(link targets; a duplicated word pair), openly enumerated in the
+commit. A commit hash enters an ADR note only when the editing
+event itself is the subject (C-09); otherwise the reasoning is
+adopted and the hash stays in the commit message (C-08). Gap notes
+end "records the gap; it does not decide it" and never reference
+records that do not exist.
+
+### Verification record
+
+Every anchor's docs/ADR-* tree hashed identical to the predicted
+post-patch tree -- twenty-five of twenty-five, zero drift -- which
+also proves every mbox landed unmodified. Every edit ran behind
+exact-anchor assertions that fail before any write; they fired
+twice (the A-04 file tails) and prevented a bad patch both times.
+Every mbox was round-trip verified by `git am` onto a pristine base
+with tree-hash comparison; the two patches built without a fresh
+anchor (C-03, C-08) were verified on both candidate bases.
+
+### Left in the corpus for the announced gap-collection sweep
+
+Rekor-v2 submission-failure semantics (ADR-013); the un-ratified
+engine-TLS system default (ADR-037); the caTrustType respelling
+(ADR-012); the unbuilt cross-machine clause's verbatim copy in
+DESIGN-PRINCIPLES.md (ADR-026's Scope places it there, outside this
+sweep's file scope); cross-machine cache direction (ADR-021); the
+input-side field-name question (noted in the A-03 delivery); R-07
+item (b); A-08.
+
+— End of closing report —
