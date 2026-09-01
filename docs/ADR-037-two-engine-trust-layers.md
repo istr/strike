@@ -17,6 +17,14 @@ Reframes the trust statements in
 which realizes the V and E layers as a standard SLSA provenance predicate and a
 co-attached engine-context predicate.
 
+> **Amended by [ADR-041](ADR-041-lane-as-verification-policy.md):** the
+> provenance taxonomy's `lane_ref` (the Declared row below) is
+> renamed: ADR-041 makes the field `lane_digest` and populates it for
+> the first time -- the raw-bytes digest of the signed lane document,
+> with no canonicalization machinery (wire spelling `laneDigest` per
+> ADR-042) -- so the Declared layer's anchor is the lane digest, not
+> a ref. The taxonomy itself is unchanged.
+
 ## Context
 
 ADR-001 flies a single banner: the container engine is an untrusted worker. "The

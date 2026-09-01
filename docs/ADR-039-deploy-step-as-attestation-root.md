@@ -10,6 +10,24 @@ not supersede [ADR-037](ADR-037-two-engine-trust-layers.md) (trust layers),
 [ADR-028](ADR-028-step-container-egress-mediation.md) (egress mediation). Shares
 its structural reasoning with [ADR-011](ADR-011-sources-elimination.md).
 
+> **Amended by [ADR-051](ADR-051-deploy-as-sealing-point.md):** in D3's
+> collection list, "the deploy target" identity is removed (D10): the
+> operator-assigned `target.id` label had no verifiable value and no
+> strike code read it. The pre- and post-state digests remain
+> collected -- ADR-016's recording is unchanged -- and the attestable
+> target is the dialed endpoint (`sealed.observedPeers`; for a
+> registry deploy also `sealed.pushed`). D5's "a lane's leaves are
+> exactly its deploy targets" is unaffected: there "target" means the
+> deploy step, not the removed identity value.
+
+> **Amended by [ADR-042](ADR-042-field-naming-camelcase.md):** the
+> snake_case field names below predate the camelCase convention:
+> `sealed.observed_peers` no longer matches the wire, which carries
+> `sealed.observedPeers`, and `engine_dependent.peer_attribution` is
+> `peerAttribution` -- carried, since ADR-040 D3, in the co-attached
+> engine-context predicate rather than as a field path of the sealed
+> attestation. `sealed.peers` is single-word and unaffected.
+
 ## Context
 
 strike's value is the attestation: the signed account of what was built, from
