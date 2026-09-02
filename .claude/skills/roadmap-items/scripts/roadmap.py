@@ -65,6 +65,31 @@ def _split_commas(inner):
     return [p for p in (x.strip() for x in inner.split(",")) if p != ""]
 
 
+def _list_flag(values):
+    """Flatten a repeatable, comma-separated option into one ordered list.
+
+    Every list-valued option is declared with action="append", so argparse
+    hands back one entry per occurrence and each entry may itself be a comma
+    separated list. Both spellings work and may be mixed:
+
+        --add-link a,b
+        --add-link a --add-link b
+
+    Storing a single value instead would make a repeated option keep only the
+    last occurrence and drop the earlier ones with no error, which is a silent
+    edit loss rather than a usage mistake the caller can see.
+
+    Duplicates are collapsed, first occurrence winning, because every caller
+    treats these as sets and would otherwise have to re-check membership.
+    """
+    out = []
+    for v in values or []:
+        for part in _split_commas(v):
+            if part not in out:
+                out.append(part)
+    return out
+
+
 def _parse_value(val):
     val = val.strip()
     if val.startswith("[") and val.endswith("]"):
@@ -388,7 +413,7 @@ def _arc_ranks(items, arc):
 
 def cmd_new(args):
     root = args.root
-    arcs = _split_commas(args.arcs)
+    arcs = _list_flag(args.arcs)
     if not arcs:
         sys.exit("error: --arcs needs at least one arc")
     items = load_all(root)
@@ -408,13 +433,13 @@ def cmd_new(args):
         "acceptance_intent": args.acceptance,
     }
     if args.deps:
-        wanted = _split_commas(args.deps)
+        wanted = _list_flag(args.deps)
         for d in wanted:
             if d not in items:
                 sys.exit("error: dependency %s does not exist" % d)
         meta["depends_on"] = wanted
     if args.links:
-        meta["links"] = _split_commas(args.links)
+        meta["links"] = _list_flag(args.links)
     if args.cls or args.reasoning:
         meta["execution_profile"] = {
             "class": args.cls or "smallest",
@@ -763,14 +788,14 @@ def cmd_update(args):
     if args.add_dep or args.remove_dep:
         items = load_all(args.root)
         deps = deps_of(m)
-        for d in _split_commas(args.add_dep or ""):
+        for d in _list_flag(args.add_dep):
             if d == args.id:
                 sys.exit("error: an item cannot depend on itself")
             if d not in items:
                 sys.exit("error: dependency %s does not exist" % d)
             if d not in deps:
                 deps.append(d)
-        for d in _split_commas(args.remove_dep or ""):
+        for d in _list_flag(args.remove_dep):
             if d in deps:
                 deps.remove(d)
         # A cycle is never a legitimate intermediate state, so it is refused at
@@ -783,10 +808,10 @@ def cmd_update(args):
         elif "depends_on" in m:
             del m["depends_on"]
     links = m.get("links", [])
-    for l in _split_commas(args.add_link or ""):
+    for l in _list_flag(args.add_link):
         if l not in links:
             links.append(l)
-    for l in _split_commas(args.remove_link or ""):
+    for l in _list_flag(args.remove_link):
         if l in links:
             links.remove(l)
     if links:
@@ -845,11 +870,11 @@ def cmd_restructure(args):
     m, body, path = _load_one(args.root, args.id)
     arcs = list(m["arcs"])
     if args.arcs:
-        arcs = _split_commas(args.arcs)
-    for a in _split_commas(args.add_arc or ""):
+        arcs = _list_flag(args.arcs)
+    for a in _list_flag(args.add_arc):
         if a not in arcs:
             arcs.append(a)
-    for a in _split_commas(args.remove_arc or ""):
+    for a in _list_flag(args.remove_arc):
         if a in arcs:
             arcs.remove(a)
     if not arcs:
@@ -1096,12 +1121,15 @@ def build_parser():
 
     n = sub.add_parser("new", help="create a proposed item")
     n.add_argument("--title", required=True)
-    n.add_argument("--arcs", required=True, help="comma-separated arc names")
+    n.add_argument("--arcs", required=True, action="append",
+                   help="arc names; comma-separated and/or repeated")
     n.add_argument("--goal", required=True, help="one-line end state")
     n.add_argument("--acceptance", required=True, help="acceptance intent (not greps)")
     n.add_argument("--rank")
-    n.add_argument("--deps", help="comma-separated item ids that must be done first")
-    n.add_argument("--links")
+    n.add_argument("--deps", action="append",
+                   help="item ids that must be done first; comma-separated and/or repeated")
+    n.add_argument("--links", action="append",
+                   help="pointers; comma-separated and/or repeated")
     n.add_argument("--class", dest="cls", help="execution_profile class (advisory)")
     n.add_argument("--reasoning", help="execution_profile reasoning depth (advisory)")
     n.add_argument("--note", help="drift-invariant body note")
@@ -1157,11 +1185,13 @@ def build_parser():
     up.add_argument("--title")
     up.add_argument("--goal")
     up.add_argument("--acceptance")
-    up.add_argument("--add-link", dest="add_link")
-    up.add_argument("--remove-link", dest="remove_link")
-    up.add_argument("--add-dep", dest="add_dep",
-                    help="comma-separated blockers to add (cycles refused)")
-    up.add_argument("--remove-dep", dest="remove_dep")
+    up.add_argument("--add-link", dest="add_link", action="append",
+                    help="links to add; comma-separated and/or repeated")
+    up.add_argument("--remove-link", dest="remove_link", action="append")
+    up.add_argument("--add-dep", dest="add_dep", action="append",
+                    help="blockers to add, comma-separated and/or repeated "
+                         "(cycles refused)")
+    up.add_argument("--remove-dep", dest="remove_dep", action="append")
     up.add_argument("--class", dest="cls")
     up.add_argument("--reasoning")
     up.set_defaults(func=cmd_update)
@@ -1179,9 +1209,10 @@ def build_parser():
 
     re_ = sub.add_parser("restructure", help="change an item's arc membership")
     re_.add_argument("id")
-    re_.add_argument("--arcs", help="replace the whole arc list")
-    re_.add_argument("--add-arc", dest="add_arc")
-    re_.add_argument("--remove-arc", dest="remove_arc")
+    re_.add_argument("--arcs", action="append",
+                     help="replace the whole arc list; comma-separated and/or repeated")
+    re_.add_argument("--add-arc", dest="add_arc", action="append")
+    re_.add_argument("--remove-arc", dest="remove_arc", action="append")
     re_.set_defaults(func=cmd_restructure)
 
     ro = sub.add_parser("reorder", help="move an item in the global execution order")

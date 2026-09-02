@@ -171,6 +171,18 @@ chosen invocation as `roadmap.py`.
 | Emit a `git am` patch (new items) | `emit-patch ID [ID ...] [-m MSG] [-o FILE]` |
 | Emit a `git am` patch (edits/moves) | `emit-patch --baseline DIR [-m MSG] [-o FILE]` |
 
+Every list-valued option -- `--arcs`, `--links`, `--deps`, `--add-link`,
+`--remove-link`, `--add-dep`, `--remove-dep`, `--add-arc`, `--remove-arc` --
+accepts a comma-separated value, a repeated flag, or both, and takes the union:
+
+```
+roadmap.py update item-0042 --add-link ADR-048 --add-link contract/attest/attestation.cue
+roadmap.py update item-0042 --add-link ADR-048,contract/attest/attestation.cue   # same
+```
+
+Duplicates collapse. Repeating an option never discards an earlier occurrence,
+so a bulk edit cannot lose a value without saying so.
+
 ### Worked examples
 
 Create an item that spans two arcs, then ask what is open in one of them:
