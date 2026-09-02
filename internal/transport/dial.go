@@ -45,14 +45,15 @@ type ConnectionIdentity struct {
 	// Empty when PeerCertificates is empty.
 	LeafFingerprint primitive.Digest
 
-	// ServerName is the SNI value the client sent during the
-	// handshake. Empty for IP-literal addresses (per RFC 6066,
-	// SNI must not be an IP literal).
-	ServerName string
-
 	// PeerAddress is the verified identity and port the connection
 	// was established to, as recorded by DialResolved.
 	PeerAddress endpoint.Address
+
+	// DialedAddr is the address and port the socket actually connected
+	// to. Routing and identity are two values (RFC 8310 section 3), and
+	// this is the routing half: for a resolver dial PeerAddress carries
+	// the authentication domain name while this carries the declared IP.
+	DialedAddr netip.AddrPort
 
 	// PeerCertificates is the certificate chain presented by
 	// the peer during the handshake. Index 0 is the leaf cert.
@@ -149,6 +150,15 @@ func BuildTLSConfig(trust endpoint.Trust) (*tls.Config, error) {
 // The context governs the dial timeout; pass a context with a deadline
 // if a timeout is desired.
 func DialResolved(ctx context.Context, dst netip.AddrPort, serverName primitive.Host, trust endpoint.Trust) (*VerifiedConn, error) {
+	return dialVerified(ctx, dst, serverName, trust, nil)
+}
+
+// dialVerified is DialResolved plus the session cache the DoT resolver dial
+// supplies. A nil cache is the peer case: Go then neither offers nor accepts
+// a session ticket, which is the correct default for a peer no RFC obliges to
+// resume. The resolver passes its dialer-owned cache, which is what satisfies
+// RFC 8310 section 9's resumption-without-server-side-state requirement.
+func dialVerified(ctx context.Context, dst netip.AddrPort, serverName primitive.Host, trust endpoint.Trust, sessions tls.ClientSessionCache) (*VerifiedConn, error) {
 	if !dst.IsValid() || dst.Port() == 0 {
 		return nil, errors.New("transport: dial requires a resolved address and port")
 	}
@@ -160,6 +170,7 @@ func DialResolved(ctx context.Context, dst netip.AddrPort, serverName primitive.
 		return nil, err
 	}
 	config.ServerName = serverName.String()
+	config.ClientSessionCache = sessions
 
 	raw, err := dialTCP(ctx, dst)
 	if err != nil {
@@ -173,7 +184,7 @@ func DialResolved(ctx context.Context, dst netip.AddrPort, serverName primitive.
 
 	port := primitive.Port(dst.Port())
 	addr := endpoint.Address{Host: serverName, Port: &port}
-	identity := CaptureIdentity(conn.ConnectionState(), addr)
+	identity := CaptureIdentity(conn.ConnectionState(), addr, dst)
 	return &VerifiedConn{conn: conn, identity: identity}, nil
 }
 
@@ -234,15 +245,15 @@ func loadCABundle(path primitive.AbsPath) (*x509.CertPool, error) {
 
 // CaptureIdentity extracts the connection identity from a
 // completed TLS handshake. The addr parameter populates
-// PeerAddress (typically host:port or the SNI, depending on
-// the caller's context).
-func CaptureIdentity(state tls.ConnectionState, addr endpoint.Address) ConnectionIdentity {
+// PeerAddress (the verified identity and its port); dialed
+// populates DialedAddr (the address the socket connected to).
+func CaptureIdentity(state tls.ConnectionState, addr endpoint.Address, dialed netip.AddrPort) ConnectionIdentity {
 	id := ConnectionIdentity{
 		PeerCertificates: state.PeerCertificates,
 		TLSVersion:       state.Version,
 		CipherSuite:      state.CipherSuite,
-		ServerName:       state.ServerName,
 		PeerAddress:      addr,
+		DialedAddr:       dialed,
 	}
 	if len(state.PeerCertificates) > 0 {
 		sum := sha256.Sum256(state.PeerCertificates[0].Raw)

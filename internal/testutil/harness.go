@@ -19,10 +19,16 @@ import (
 	"github.com/istr/strike/internal/transport"
 )
 
-// harnessResolverAuthority is the DoT endpoint the local integration harness
-// publishes on the host loopback. It is an address literal because a resolver
-// is the resolution authority and cannot resolve its own name.
-const harnessResolverAuthority = "127.0.0.1:8853"
+// The DoT endpoint the local integration harness publishes on the host
+// loopback. The address is a literal because a resolver is the resolution
+// authority and cannot resolve its own name; the domain name is the SAN the
+// harness certificate carries, and is used as the SNI and the reference
+// identifier without ever being resolved.
+const (
+	harnessResolverADN  primitive.Host = "resolver.127.0.0.1.sslip.io"
+	harnessResolverIP   primitive.IP   = "127.0.0.1"
+	harnessResolverPort primitive.Port = 8853
+)
 
 // HarnessDialer returns a dialer that resolves through the harness DoT
 // resolver, pinned to the certificate that resolver presents. A caller that
@@ -34,9 +40,11 @@ func HarnessDialer(harnessDir string) (*transport.Dialer, error) {
 	if _, err := os.Stat(cert); err != nil {
 		return nil, fmt.Errorf("harness resolver certificate missing (run make keys in test/sigstore-local): %w", err)
 	}
-	return transport.NewDialer(endpoint.TLS{
-		Type:    "https",
-		Address: endpoint.MustParseAuthority(harnessResolverAuthority),
+	port := harnessResolverPort
+	return transport.NewDialer(endpoint.DoT{
+		ADN:  harnessResolverADN,
+		IP:   harnessResolverIP,
+		Port: &port,
 		Trust: endpoint.CABundle{
 			Type: "caBundle",
 			Path: primitive.AbsPath(cert),

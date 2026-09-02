@@ -12,10 +12,11 @@ name: golden-lane
 id: golden-lane
 secrets: {}
 resolver:
-  host: "1.1.1.1:853"
+  adn: one.one.one.one
+  ip: 1.1.1.1
   trust:
-    type: certFingerprint
-    fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+    type: caBundle
+    path: /etc/strike/resolver-ca.pem
 oidc:
   issuer: "https://keycloak.127.0.0.1.sslip.io:8443/realms/sigstore"
   audience: "sigstore"

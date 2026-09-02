@@ -67,6 +67,15 @@ _sha256Hex: "[a-f0-9]{64}"
 // port. Punycode is required for internationalized domains.
 #Host: =~"^[a-z0-9.-]+$"
 
+// #IP is a bare IP literal, v4 or v6, carrying no port and no zone id. The
+// alphabet is the whole schema constraint: a complete IPv6 grammar is
+// impractically large as a regex, so the pattern narrows the character set to
+// lowercase hex, dots, and colons, and IP.Addr is the binding check. The
+// split is ADR-027's CUE-first bullet as ADR-039's amendment reads it -- the
+// regex is the canonical shape, Go adds what the regex cannot express. A few
+// hostnames pass the alphabet by coincidence; Go rejects them.
+#IP: =~"^[0-9a-f.:]+$"
+
 // #Port is a TCP/UDP port number, 1-65535.
 #Port: int & >=1 & <=65535
 

@@ -64,7 +64,9 @@ const itestLaneTemplate = `name: registry-deploy-itest
 id: registry-deploy-itest
 secrets: {}
 resolver:
-  host: "127.0.0.1:8853"
+  adn: resolver.127.0.0.1.sslip.io
+  ip: 127.0.0.1
+  port: 8853
   trust:
     type: caBundle
     path: __RESOLVER_CERT__

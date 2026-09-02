@@ -7,17 +7,12 @@ import (
 	"errors"
 	"io"
 	"net"
-	"os"
-	"path/filepath"
-	"strings"
 	"testing"
 
 	"golang.org/x/net/dns/dnsmessage"
 
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/closer"
-	"github.com/istr/strike/internal/endpoint"
-	"github.com/istr/strike/internal/primitive"
 )
 
 // startDNSTLSServer launches a TLS listener that speaks DNS-over-TLS:
@@ -153,18 +148,11 @@ func servfailHandler() func(*dnsmessage.Message) *dnsmessage.Message {
 }
 
 func TestDialerLookupHost_HappyPath(t *testing.T) {
-	cert, fingerprint := testCertPair(t, "127.0.0.1")
+	cert, caPEM := testCAAndServerCert(t, "resolver.test")
 	addr := startDNSTLSServer(t, cert, aRecordHandler("example.com.", [4]byte{93, 184, 216, 34}))
 	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
 	defer cancel()
-	decl := endpoint.TLS{
-		Type:    "https",
-		Address: endpoint.MustParseAuthority(addr),
-		Trust: endpoint.Fingerprint{
-			Type:        "certFingerprint",
-			Fingerprint: fingerprint,
-		},
-	}
+	decl := caBundleResolver(t, addr, writeCABundle(t, "resolver-ca.pem", caPEM))
 	addrs, err := mustDialer(t, decl).LookupHost(ctx, "example.com")
 	if err != nil {
 		t.Fatalf("LookupHost: %v", err)
@@ -177,22 +165,18 @@ func TestDialerLookupHost_HappyPath(t *testing.T) {
 	}
 }
 
-func TestDialerLookupHost_FingerprintMismatch(t *testing.T) {
-	cert, _ := testCertPair(t, "127.0.0.1")
+func TestDialerLookupHost_CABundleMismatch(t *testing.T) {
+	cert, _ := testCAAndServerCert(t, "resolver.test")
 	addr := startDNSTLSServer(t, cert, aRecordHandler("example.com.", [4]byte{93, 184, 216, 34}))
+
+	_, wrongCAPEM := testCAAndServerCert(t, "resolver.test")
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
 	defer cancel()
-	decl := endpoint.TLS{
-		Type:    "https",
-		Address: endpoint.MustParseAuthority(addr),
-		Trust: endpoint.Fingerprint{
-			Type:        "certFingerprint",
-			Fingerprint: primitive.DigestFromHex(strings.Repeat("0", 64)),
-		},
-	}
+	decl := caBundleResolver(t, addr, writeCABundle(t, "wrong-ca.pem", wrongCAPEM))
 	addrs, err := mustDialer(t, decl).LookupHost(ctx, "example.com")
 	if err == nil {
-		t.Fatal("expected error for fingerprint mismatch, got nil")
+		t.Fatal("expected error for CA bundle mismatch, got nil")
 	}
 	if addrs != nil {
 		t.Errorf("expected nil addrs, got %v", addrs)
@@ -202,14 +186,8 @@ func TestDialerLookupHost_FingerprintMismatch(t *testing.T) {
 func TestDialerLookupHost_ServerUnreachable(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*clock.Second)
 	defer cancel()
-	decl := endpoint.TLS{
-		Type:    "https",
-		Address: endpoint.MustParseAuthority("127.0.0.1:1"),
-		Trust: endpoint.Fingerprint{
-			Type:        "certFingerprint",
-			Fingerprint: primitive.DigestFromHex(strings.Repeat("a", 64)),
-		},
-	}
+	_, caPEM := testCAAndServerCert(t, "resolver.test")
+	decl := caBundleResolver(t, "127.0.0.1:1", writeCABundle(t, "unused-ca.pem", caPEM))
 	_, err := mustDialer(t, decl).LookupHost(ctx, "example.com")
 	if err == nil {
 		t.Fatal("expected error for unreachable server, got nil")
@@ -217,18 +195,11 @@ func TestDialerLookupHost_ServerUnreachable(t *testing.T) {
 }
 
 func TestDialerProbe_HappyPath(t *testing.T) {
-	cert, fingerprint := testCertPair(t, "127.0.0.1")
+	cert, caPEM := testCAAndServerCert(t, "resolver.test")
 	addr := startDNSTLSServer(t, cert, nsRootHandler())
 	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
 	defer cancel()
-	decl := endpoint.TLS{
-		Type:    "https",
-		Address: endpoint.MustParseAuthority(addr),
-		Trust: endpoint.Fingerprint{
-			Type:        "certFingerprint",
-			Fingerprint: fingerprint,
-		},
-	}
+	decl := caBundleResolver(t, addr, writeCABundle(t, "resolver-ca.pem", caPEM))
 	id, err := mustDialer(t, decl).Probe(ctx)
 	if err != nil {
 		t.Fatalf("Probe: %v", err)
@@ -236,74 +207,62 @@ func TestDialerProbe_HappyPath(t *testing.T) {
 	if id.LeafFingerprint == "" {
 		t.Error("expected non-empty leaf fingerprint from probe handshake")
 	}
-	if id.PeerAddress.Authority() != decl.Address.Authority() {
-		t.Errorf("PeerAddress = %q, want %q", id.PeerAddress.Authority(), decl.Address.Authority())
+	if id.PeerAddress.Host != testResolverADN {
+		t.Errorf("PeerAddress.Host = %q, want %q", id.PeerAddress.Host, testResolverADN)
+	}
+	if id.DialedAddr.String() != addr {
+		t.Errorf("DialedAddr = %q, want %q", id.DialedAddr, addr)
 	}
 }
 
-// TestDialerProbe_FingerprintMismatch pins the V-property gate: the run-start
-// probe rejects a resolver whose observed leaf diverges from the declared
-// certFingerprint anchor, which cmd/strike turns into a fatal abort before any
-// attestation is sealed.
-func TestDialerProbe_FingerprintMismatch(t *testing.T) {
-	cert, _ := testCertPair(t, "127.0.0.1")
-	addr := startDNSTLSServer(t, cert, nsRootHandler())
-	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
-	defer cancel()
-	decl := endpoint.TLS{
-		Type:    "https",
-		Address: endpoint.MustParseAuthority(addr),
-		Trust: endpoint.Fingerprint{
-			Type:        "certFingerprint",
-			Fingerprint: primitive.DigestFromHex(strings.Repeat("0", 64)),
-		},
-	}
-	if _, err := mustDialer(t, decl).Probe(ctx); err == nil {
-		t.Fatal("expected error for fingerprint mismatch, got nil")
-	}
-}
-
-// TestDialerProbe_CABundleMismatch is the caBundle arm of the same V-property
-// gate: a resolver whose leaf is not certified by the declared CA bundle is
-// rejected at the probe before any attestation is sealed.
+// TestDialerProbe_CABundleMismatch pins the V-property gate: the run-start
+// probe rejects a resolver whose leaf is not certified by the declared CA
+// bundle, which cmd/strike turns into a fatal abort before any attestation is
+// sealed.
 func TestDialerProbe_CABundleMismatch(t *testing.T) {
-	serverCert, _ := testCAAndServerCert(t, "127.0.0.1")
+	serverCert, _ := testCAAndServerCert(t, "resolver.test")
 	addr := startDNSTLSServer(t, serverCert, nsRootHandler())
 
-	_, wrongCAPEM := testCAAndServerCert(t, "127.0.0.1")
-	caPath := filepath.Join(t.TempDir(), "wrong-ca.pem")
-	if err := os.WriteFile(caPath, wrongCAPEM, 0o600); err != nil {
-		t.Fatal(err)
-	}
+	_, wrongCAPEM := testCAAndServerCert(t, "resolver.test")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
 	defer cancel()
-	decl := endpoint.TLS{
-		Type:    "https",
-		Address: endpoint.MustParseAuthority(addr),
-		Trust: endpoint.CABundle{
-			Type: "caBundle",
-			Path: primitive.AbsPath(caPath),
-		},
-	}
+	decl := caBundleResolver(t, addr, writeCABundle(t, "wrong-ca.pem", wrongCAPEM))
 	if _, err := mustDialer(t, decl).Probe(ctx); err == nil {
 		t.Fatal("expected error for CA bundle mismatch, got nil")
 	}
 }
 
+// TestDialerProbe_VerifiesADNNotIP pins RFC 8310 section 3: the presented
+// chain is accepted on the authentication domain name and never on the
+// address the connection was routed to. The leaf carries only a DNS SAN, so
+// a probe that matched on the dialed address could not succeed here, and one
+// that matched on a different name could not fail there.
+func TestDialerProbe_VerifiesADNNotIP(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
+	defer cancel()
+
+	named, namedCAPEM := testCAAndServerCert(t, "resolver.test")
+	namedAddr := startDNSTLSServer(t, named, nsRootHandler())
+	decl := caBundleResolver(t, namedAddr, writeCABundle(t, "resolver-ca.pem", namedCAPEM))
+	if _, err := mustDialer(t, decl).Probe(ctx); err != nil {
+		t.Fatalf("probe must accept a leaf named %q with no IP SAN: %v", testResolverADN, err)
+	}
+
+	other, otherCAPEM := testCAAndServerCert(t, "other.test")
+	otherAddr := startDNSTLSServer(t, other, nsRootHandler())
+	otherDecl := caBundleResolver(t, otherAddr, writeCABundle(t, "other-ca.pem", otherCAPEM))
+	if _, err := mustDialer(t, otherDecl).Probe(ctx); err == nil {
+		t.Fatal("probe must reject a leaf naming a different DNS name, got nil")
+	}
+}
+
 func TestDialerProbe_NoResponse(t *testing.T) {
-	cert, fingerprint := testCertPair(t, "127.0.0.1")
+	cert, caPEM := testCAAndServerCert(t, "resolver.test")
 	addr := startDNSTLSServer(t, cert, servfailHandler())
 	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
 	defer cancel()
-	decl := endpoint.TLS{
-		Type:    "https",
-		Address: endpoint.MustParseAuthority(addr),
-		Trust: endpoint.Fingerprint{
-			Type:        "certFingerprint",
-			Fingerprint: fingerprint,
-		},
-	}
+	decl := caBundleResolver(t, addr, writeCABundle(t, "resolver-ca.pem", caPEM))
 	if _, err := mustDialer(t, decl).Probe(ctx); err == nil {
 		t.Fatal("expected error for SERVFAIL response, got nil")
 	}
@@ -319,14 +278,8 @@ func TestDialerProbe_ErrorChainHasNoSystemResolverReference(t *testing.T) {
 	// Use any guaranteed-failing dial target. A non-listening
 	// localhost port is the most reliable: no network access,
 	// no test-server setup, fast and deterministic failure.
-	decl := endpoint.TLS{
-		Type:    "https",
-		Address: endpoint.MustParseAuthority("127.0.0.1:1"),
-		Trust: endpoint.Fingerprint{
-			Type:        "certFingerprint",
-			Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-		},
-	}
+	_, caPEM := testCAAndServerCert(t, "resolver.test")
+	decl := caBundleResolver(t, "127.0.0.1:1", writeCABundle(t, "unused-ca.pem", caPEM))
 	ctx, cancel := context.WithTimeout(context.Background(), 2*clock.Second)
 	defer cancel()
 

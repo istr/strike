@@ -112,7 +112,7 @@ func (p *ObservedPeer) UnmarshalJSON(data []byte) error {
 // the producer-side linkage and the sealed ResolverRecord carries the observed
 // identity only.
 type ResolverProbe struct {
-	Declared endpoint.TLS
+	Declared endpoint.DoT
 	Observed transport.ConnectionIdentity
 }
 
@@ -784,14 +784,16 @@ func (d *Deployer) engineRecords() (endpoint.Engine, *EngineMetadata) {
 // pre-flight probe observed. The resolver is mandatory: the probe
 // is an unconditional run-start gate that aborts on a declared-vs-observed
 // trust mismatch before any attestation is written, so a sealed run always
-// carries a verified observation. Parallel to engineRecord.
+// carries a verified observation. Host is the verified identity and DialedIP
+// the address the probe routed to; both come from the same handshake, so
+// neither is a declaration copied through. Parallel to engineRecord.
 func (d *Deployer) resolverRecord() ResolverRecord {
 	id := d.Resolver.Observed
 	return ResolverRecord{
 		Host:                  string(id.PeerAddress.Authority()),
+		DialedIP:              primitive.IPFromAddr(id.DialedAddr.Addr()),
 		ServerCertFingerprint: id.LeafFingerprint.String(),
 		TLSVersion:            tls.VersionName(id.TLSVersion),
 		CipherSuite:           tls.CipherSuiteName(id.CipherSuite),
-		ServerName:            id.ServerName,
 	}
 }

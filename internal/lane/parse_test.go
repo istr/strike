@@ -77,10 +77,11 @@ name: deploy-only
 id: deploy-only
 secrets: {}
 resolver:
-  host: "1.1.1.1:853"
+  adn: one.one.one.one
+  ip: 1.1.1.1
   trust:
-    type: certFingerprint
-    fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+    type: caBundle
+    path: /etc/strike/resolver-ca.pem
 oidc:
   issuer: "https://idp.example.com"
   audience: "strike"
@@ -152,10 +153,11 @@ name: sbom-signer-lane
 id: sbom-signer-lane
 secrets: {}
 resolver:
-  host: "1.1.1.1:853"
+  adn: one.one.one.one
+  ip: 1.1.1.1
   trust:
-    type: certFingerprint
-    fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+    type: caBundle
+    path: /etc/strike/resolver-ca.pem
 oidc:
   issuer: "https://idp.example.com"
   audience: "strike"
@@ -436,10 +438,11 @@ func TestParse_DisjunctionErrorIsReadable(t *testing.T) {
 name: test
 secrets: {}
 resolver:
-  host: "1.1.1.1:853"
+  adn: one.one.one.one
+  ip: 1.1.1.1
   trust:
-    type: certFingerprint
-    fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+    type: caBundle
+    path: /etc/strike/resolver-ca.pem
 oidc:
   issuer: "https://idp.example.com"
   audience: "strike"
@@ -501,10 +504,11 @@ name: test
 id: test
 secrets: {}
 resolver:
-  host: "1.1.1.1:853"
+  adn: one.one.one.one
+  ip: 1.1.1.1
   trust:
-    type: certFingerprint
-    fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+    type: caBundle
+    path: /etc/strike/resolver-ca.pem
 oidc:
   issuer: "https://idp.example.com"
   audience: "strike"

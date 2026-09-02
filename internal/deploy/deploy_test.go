@@ -60,6 +60,17 @@ const (
 // by tests that exercise captureOne or method execution. portKeys lists
 // every StepPorts key the test's step will look up (capture keys and/or
 // the step name itself).
+// probedResolver is the resolver observation a Deployer that seals an
+// attestation carries. Execute projects it into the sealed record, whose
+// dialedIP is a schema-constrained address literal, so a zero observation
+// would not validate.
+func probedResolver() deploy.ResolverProbe {
+	return deploy.ResolverProbe{Observed: transport.ConnectionIdentity{
+		PeerAddress: endpoint.MustParseAuthority("one.one.one.one:853"),
+		DialedAddr:  netip.MustParseAddrPort("1.1.1.1:853"),
+	}}
+}
+
 func deployCapsuleFields(t *testing.T, portKeys ...string) (ca *transport.EphemeralCA, dialer *transport.Dialer, caVolume string, ports map[string]capsule.HostPorts) {
 	t.Helper()
 	var err error
@@ -355,6 +366,7 @@ func TestDeployerExecute(t *testing.T) {
 		CAVolume:     caPath,
 		StepID:       "deploy-prod",
 		StepPorts:    ports,
+		Resolver:     probedResolver(),
 	}
 	deploy.SetProduceBundles(d, stubProduceBundles())
 	att, err := d.Execute(context.Background(), step, state)
@@ -492,6 +504,7 @@ func TestDeployerExecuteRegistryAttachesReferrers(t *testing.T) {
 		CAVolume:  caPath,
 		StepID:    "deploy-prod",
 		StepPorts: ports,
+		Resolver:  probedResolver(),
 	}
 	deploy.SetProduceBundles(d, stubProduceBundles())
 	att, execErr := d.Execute(context.Background(), step, state)
@@ -829,6 +842,7 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 		CAVolume:     caPath,
 		StepID:       "deploy-prod",
 		StepPorts:    ports,
+		Resolver:     probedResolver(),
 	}
 	deploy.SetProduceBundles(d, stubProduceBundles())
 	att, err := d.Execute(context.Background(), step, state)
@@ -991,6 +1005,7 @@ func TestDeployerExecute_KeylessBundles(t *testing.T) {
 		CAVolume:     caPath,
 		StepID:       "deploy-prod",
 		StepPorts:    ports,
+		Resolver:     probedResolver(),
 	}
 	var producedBundles [][]byte
 	stub := stubProduceBundles()
@@ -1047,6 +1062,7 @@ func TestDeployerExecute_KeylessFailureIsFatal(t *testing.T) {
 		CAVolume:     caPath,
 		StepID:       "deploy-prod",
 		StepPorts:    ports,
+		Resolver:     probedResolver(),
 	}
 	wantErr := errors.New("keyless: fulcio unreachable")
 	deploy.SetProduceBundles(d, func(_ context.Context, _ lane.KeylessEndpoints, _ [][]byte) ([][]byte, error) {

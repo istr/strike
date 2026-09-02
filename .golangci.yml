@@ -66,6 +66,12 @@ linters:
     errcheck:
       check-type-assertions: true
       check-blank: true
+    misspell:
+      # "adn" is the RFC 8310 authentication domain name, not a typo for
+      # "and": it is a lane field, a generated Go identifier, and a term in
+      # operator-facing error text.
+      ignore-rules:
+        - adn
     govet:
       enable-all: true
     gocyclo:

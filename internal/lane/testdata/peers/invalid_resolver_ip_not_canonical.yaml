@@ -1,11 +1,12 @@
-name: peers-resolver-fqdn
-id: peers-resolver-fqdn
+name: peers-absent
+id: peers-absent
 secrets: {}
 resolver:
-  host: "dns.example.com:853"
+  adn: one.one.one.one
+  ip: "::0001"
   trust:
-    type: certFingerprint
-    fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+    type: caBundle
+    path: /etc/strike/resolver-ca.pem
 oidc:
   issuer: "https://idp.example.com"
   audience: "strike"
@@ -31,23 +32,17 @@ keyless:
         type: certFingerprint
         fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 steps:
-  - id: fetch
+  - id: peerless
     image: docker.io/library/alpine@sha256:abababababababababababababababababababababababababababababababab
-    args: [wget, "https://example.com/file"]
+    args: [echo, "ok"]
     workdir: /out
     env: {}
     inputs: []
     secrets: []
     outputs:
-      - id: file
+      - id: ok
         type: file
-        path: file
-    peers:
-      - type: https
-        host: example.com
-        trust:
-          type: certFingerprint
-          fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+        path: ok
 
   - id: deploy
     deploy:

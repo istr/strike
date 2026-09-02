@@ -2,12 +2,9 @@ package transport_test
 
 import (
 	"context"
-	"path/filepath"
 	"testing"
 
 	"github.com/istr/strike/internal/clock"
-	"github.com/istr/strike/internal/endpoint"
-	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/testutil"
 )
 
@@ -25,14 +22,10 @@ func TestDialerProbe_HarnessDoT_INTEGRATION(t *testing.T) {
 	testutil.RequireHarness(t, engine, harness)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*clock.Second)
 	defer cancel()
-	dialer := mustDialer(t, endpoint.TLS{
-		Type:    "https",
-		Address: endpoint.MustParseAuthority("127.0.0.1:8853"),
-		Trust: endpoint.CABundle{
-			Type: "caBundle",
-			Path: primitive.AbsPath(filepath.Join(harness, "pki", "resolver.crt")),
-		},
-	})
+	dialer, err := testutil.HarnessDialer(harness)
+	if err != nil {
+		t.Fatalf("HarnessDialer: %v", err)
+	}
 	if _, err := dialer.Probe(ctx); err != nil {
 		t.Fatalf("Probe: %v", err)
 	}
@@ -51,14 +44,10 @@ func TestDialerLookupHost_HarnessNames_INTEGRATION(t *testing.T) {
 	engine := testutil.RequireEngine(t)
 	harness := testutil.HarnessDir(t)
 	testutil.RequireHarness(t, engine, harness)
-	dialer := mustDialer(t, endpoint.TLS{
-		Type:    "https",
-		Address: endpoint.MustParseAuthority("127.0.0.1:8853"),
-		Trust: endpoint.CABundle{
-			Type: "caBundle",
-			Path: primitive.AbsPath(filepath.Join(harness, "pki", "resolver.crt")),
-		},
-	})
+	dialer, err := testutil.HarnessDialer(harness)
+	if err != nil {
+		t.Fatalf("HarnessDialer: %v", err)
+	}
 	for _, name := range []string{
 		"registry.127.0.0.1.sslip.io",
 		"fulcio.127.0.0.1.sslip.io",

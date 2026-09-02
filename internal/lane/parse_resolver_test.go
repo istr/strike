@@ -9,22 +9,22 @@ import (
 	"github.com/istr/strike/internal/lane"
 )
 
-// TestResolver_FQDNRejected pins the Go-side validateResolver
-// behaviour: an FQDN passes CUE but is rejected by the
-// validate-lane gate, so both `strike validate` and `strike
-// run` (which pass every lane through the same gate) fail at
+// TestResolver_ADNIsAddressRejected pins the Go-side validateResolver
+// behaviour: an address literal in the adn field passes CUE but is
+// rejected by the validate-lane gate, so both `strike validate` and
+// `strike run` (which pass every lane through the same gate) fail at
 // the same point with the same diagnostic.
-func TestResolver_FQDNRejected(t *testing.T) {
-	path := filepath.Join("testdata", "peers", "invalid_resolver_fqdn_host.yaml")
+func TestResolver_ADNIsAddressRejected(t *testing.T) {
+	path := filepath.Join("testdata", "peers", "invalid_resolver_adn_is_ip.yaml")
 	err := parseAndValidate(t, path)
 	if err == nil {
-		t.Fatal("validation must reject FQDN resolver host")
+		t.Fatal("validation must reject an address literal in the resolver adn")
 	}
-	if !strings.Contains(err.Error(), "must be IP literal") {
-		t.Errorf("error message must contain 'must be IP literal'; got: %v", err)
+	if !strings.Contains(err.Error(), "adn") {
+		t.Errorf("error message must contain 'adn'; got: %v", err)
 	}
-	if !strings.Contains(err.Error(), "FQDNs are not allowed") {
-		t.Errorf("error message must explain why FQDNs are rejected; got: %v", err)
+	if !strings.Contains(err.Error(), "RFC 8310") {
+		t.Errorf("error message must explain why an address is rejected; got: %v", err)
 	}
 }
 
@@ -42,18 +42,19 @@ func TestResolver_MissingRejected(t *testing.T) {
 	}
 }
 
-// TestResolver_ValidIPv4 verifies that a plain IPv4 (without port)
-// is accepted.
-func TestResolver_ValidIPv4(t *testing.T) {
+// TestResolver_ValidNoPort verifies that a resolver without an explicit
+// port is accepted.
+func TestResolver_ValidNoPort(t *testing.T) {
 	yaml := []byte(`
 name: resolver-ipv4
 id: resolver-ipv4
 secrets: {}
 resolver:
-  host: "1.1.1.1"
+  adn: one.one.one.one
+  ip: 1.1.1.1
   trust:
-    type: certFingerprint
-    fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+    type: caBundle
+    path: /etc/strike/resolver-ca.pem
 oidc:
   issuer: "https://idp.example.com"
   audience: "strike"
@@ -123,22 +124,24 @@ steps:
 		t.Fatalf("NewFilePath: %v", fpErr)
 	}
 	if _, _, _, err := lane.Parse(fp); err != nil {
-		t.Fatalf("Parse must accept IPv4-only resolver host: %v", err)
+		t.Fatalf("Parse must accept a resolver without an explicit port: %v", err)
 	}
 }
 
-// TestResolver_ValidIPv4WithPort verifies that an IPv4 with
+// TestResolver_ValidWithPort verifies that a resolver with an
 // explicit port is accepted.
-func TestResolver_ValidIPv4WithPort(t *testing.T) {
+func TestResolver_ValidWithPort(t *testing.T) {
 	yaml := []byte(`
 name: resolver-ipv4-port
 id: resolver-ipv4-port
 secrets: {}
 resolver:
-  host: "9.9.9.9:853"
+  adn: one.one.one.one
+  ip: 1.1.1.1
+  port: 853
   trust:
-    type: certFingerprint
-    fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+    type: caBundle
+    path: /etc/strike/resolver-ca.pem
 oidc:
   issuer: "https://idp.example.com"
   audience: "strike"
@@ -208,6 +211,6 @@ steps:
 		t.Fatalf("NewFilePath: %v", fpErr)
 	}
 	if _, _, _, err := lane.Parse(fp); err != nil {
-		t.Fatalf("Parse must accept IPv4 with port resolver host: %v", err)
+		t.Fatalf("Parse must accept a resolver with an explicit port: %v", err)
 	}
 }

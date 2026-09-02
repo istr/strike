@@ -118,8 +118,8 @@ Direct NTS integration in strike is intentionally deferred: the
 attack surface is bounded by lane TTL (1h per the ephemeral-CA
 validity window), and the RFC3161 TSA token anchors the trusted
 time of attestation events externally to strike. A lane-declared NTS
-time source -- mirroring the `resolver` schema with `host` and
-`trust` fields -- remains an option if a concrete operational
+time source -- mirroring the `resolver` schema with `adn`, `ip`,
+and `trust` fields -- remains an option if a concrete operational
 need emerges.
 
 ### OWASP Top 10 mapping

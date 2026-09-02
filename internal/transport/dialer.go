@@ -2,6 +2,7 @@ package transport
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"net"
@@ -25,21 +26,40 @@ import (
 // indirection disappears with it.
 //
 // The zero value is not usable; construct with NewDialer. A Dialer is safe
-// for concurrent use: it holds only the declaration, and each call opens
-// its own connection.
+// for concurrent use: it holds the declaration, the projected dial target,
+// and a session cache that is safe for concurrent use itself, and each call
+// opens its own connection.
 type Dialer struct {
-	resolver endpoint.TLS
+	// sessions is the client session cache for the resolver dial, and the
+	// implementation of RFC 8310 section 9's requirement that a DNS client
+	// support TLS session resumption without server-side state: Go indicates
+	// no resumption support at all while this is nil. Capacity is one because
+	// a dialer speaks to exactly one endpoint, so the cache holds one key.
+	// The lock inside the cache is the standard library's, not an
+	// application-defined critical section (ADR-052 D1).
+	sessions tls.ClientSessionCache
+	resolver endpoint.DoT
+	target   netip.AddrPort
 }
 
 // NewDialer returns a Dialer that resolves through the declared DoT
-// endpoint. The declaration must name a host; lane validation additionally
-// requires that host to be an address literal, since the resolver is the
-// lane's resolution authority and cannot resolve its own name.
-func NewDialer(resolver endpoint.TLS) (*Dialer, error) {
-	if resolver.Address.Host == "" {
-		return nil, errors.New("transport: dialer requires a declared resolver host")
+// endpoint. The declaration must name an authentication domain name and an
+// IP; the IP is projected to the dial target once here rather than on every
+// query, so an unusable literal is a construction error instead of a
+// per-lookup one.
+func NewDialer(resolver endpoint.DoT) (*Dialer, error) {
+	if resolver.ADN == "" {
+		return nil, errors.New("transport: dialer requires a declared resolver adn")
 	}
-	return &Dialer{resolver: resolver}, nil
+	target, err := resolver.DialTarget()
+	if err != nil {
+		return nil, fmt.Errorf("transport: dialer: %w", err)
+	}
+	return &Dialer{
+		resolver: resolver,
+		target:   target,
+		sessions: tls.NewLRUClientSessionCache(1),
+	}, nil
 }
 
 // LookupHost resolves a hostname to its A and AAAA addresses via the
@@ -50,7 +70,7 @@ func (d *Dialer) LookupHost(ctx context.Context, name string) ([]netip.Addr, err
 	addrs, err := d.dotResolver().LookupNetIP(ctx, "ip", name)
 	if err != nil {
 		clearMisleadingServerField(err)
-		return nil, fmt.Errorf("transport: lookup %q via %s: %w", name, d.resolver.Address.Authority(), err)
+		return nil, fmt.Errorf("transport: lookup %q via %s (%s): %w", name, d.resolver.ADN, d.target, err)
 	}
 	return addrs, nil
 }
@@ -116,11 +136,11 @@ func (d *Dialer) Probe(ctx context.Context) (ConnectionIdentity, error) {
 	}
 	if _, err := r.LookupNS(ctx, "."); err != nil {
 		clearMisleadingServerField(err)
-		return ConnectionIdentity{}, fmt.Errorf("transport: resolver probe via %s: %w", d.resolver.Address.Authority(), err)
+		return ConnectionIdentity{}, fmt.Errorf("transport: resolver probe via %s (%s): %w", d.resolver.ADN, d.target, err)
 	}
 	id, ok := ic.get()
 	if !ok {
-		return ConnectionIdentity{}, fmt.Errorf("transport: resolver probe via %s: no TLS identity captured", d.resolver.Address.Authority())
+		return ConnectionIdentity{}, fmt.Errorf("transport: resolver probe via %s (%s): no TLS identity captured", d.resolver.ADN, d.target)
 	}
 	return id, nil
 }

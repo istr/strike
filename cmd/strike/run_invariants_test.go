@@ -19,10 +19,11 @@ func TestParse_RejectsSourcesField(t *testing.T) {
 name: bad
 secrets: {}
 resolver:
-  host: "1.1.1.1:853"
+  adn: one.one.one.one
+  ip: 1.1.1.1
   trust:
-    type: certFingerprint
-    fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+    type: caBundle
+    path: /etc/strike/resolver-ca.pem
 steps:
   - id: build
     image: img@sha256:` + strings.Repeat("a", 64) + `

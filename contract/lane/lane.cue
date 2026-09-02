@@ -35,7 +35,7 @@ import (
 		[ID=primitive.#Identifier]: #SecretSource
 	} @go(Secrets,type=map["github.com/istr/strike/contract/primitive".Identifier]SecretSource)
 	steps: [#Step, ...#Step] @go(Steps)
-	resolver: endpoint.#TLS @go(Resolver)
+	resolver: endpoint.#DoT @go(Resolver)
 	oidc:     #OIDCConfig   @go(OIDC)
 	// Keyless signing+verification config (ADR-040 3b, ADR-041). `endpoints`
 	// is required: every deploy attestation is produced through Fulcio, Rekor
@@ -56,8 +56,8 @@ import (
 // OIDCConfig declares the lane-wide keyless signing identity (ADR-040 D5).
 // Required: a lane that cannot be attested with a verifiable signature is
 // not a valid strike lane (mirrors ADR-039 D1 for the signing layer). The
-// IdP is a declared peer; trust pins its endpoints with the same endpoint.#Trust
-// anchor resolver.trust and endpoint.#TLS.trust use. validate/dag check
+// IdP is a declared peer; trust pins its endpoints with the full endpoint.#Trust
+// anchor vocabulary, as endpoint.#TLS.trust does. validate/dag check
 // declaration only and never contact the IdP; the live keyless flow runs at
 // the sign step of run.
 #OIDCConfig: {

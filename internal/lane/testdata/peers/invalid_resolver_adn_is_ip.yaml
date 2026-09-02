@@ -1,8 +1,8 @@
-name: peers-ssh-multi
-id: peers-ssh-multi
+name: peers-absent
+id: peers-absent
 secrets: {}
 resolver:
-  adn: one.one.one.one
+  adn: 1.1.1.1
   ip: 1.1.1.1
   trust:
     type: caBundle
@@ -32,27 +32,17 @@ keyless:
         type: certFingerprint
         fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
 steps:
-  - id: clone
+  - id: peerless
     image: docker.io/library/alpine@sha256:abababababababababababababababababababababababababababababababab
-    args: [git, clone, "git@git.example.com:org/repo"]
+    args: [echo, "ok"]
     workdir: /out
     env: {}
     inputs: []
     secrets: []
     outputs:
-      - id: tree
-        type: directory
-        path: tree
-    peers:
-      - type: ssh
-        host: git.example.com
-        knownHosts:
-          - keyType: ssh-ed25519
-            key: AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl
-          - keyType: ecdsa-sha2-nistp256
-            key: AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBHIOLkE5
-          - keyType: rsa-sha2-512
-            key: AAAAB3NzaC1yc2EAAAADAQABAAABAQDcdef
+      - id: ok
+        type: file
+        path: ok
 
   - id: deploy
     deploy:

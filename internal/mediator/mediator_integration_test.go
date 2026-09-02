@@ -37,19 +37,11 @@ func TestMediator_HarnessHTTPS_INTEGRATION(t *testing.T) {
 	engine := testutil.RequireEngine(t)
 	harness := testutil.HarnessDir(t)
 	testutil.RequireHarness(t, engine, harness)
-	resolverCert := primitive.AbsPath(filepath.Join(harness, "pki", "resolver.crt"))
 	caddyRoot := primitive.AbsPath(filepath.Join(harness, "pki", "caddy-root.crt"))
 
-	dialer, err := transport.NewDialer(endpoint.TLS{
-		Type:    "https",
-		Address: endpoint.MustParseAuthority("127.0.0.1:8853"),
-		Trust: endpoint.CABundle{
-			Type: "caBundle",
-			Path: resolverCert,
-		},
-	})
+	dialer, err := testutil.HarnessDialer(harness)
 	if err != nil {
-		t.Fatalf("transport.NewDialer: %v", err)
+		t.Fatalf("testutil.HarnessDialer: %v", err)
 	}
 
 	ca, err := transport.New("integration-lane")

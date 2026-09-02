@@ -541,42 +541,33 @@ func validateDeployMethodImplemented(p *Lane) error {
 	return nil
 }
 
-// validateResolver enforces the IP-literal constraint on the
-// declared DoT resolver host. The resolver is itself the
-// resolution authority for the lane; a host given as an FQDN
-// would require external DNS to resolve, defeating the purpose.
-//
-// This is semantically a schema constraint -- it describes
-// what a valid lane looks like -- but technically lives in Go.
-// Encoding the IP literal forms (IPv4, IPv6, bracketed-IPv6,
-// each optionally with port) as a CUE regex would be a 200-400-
-// character maintenance liability with no net cross-implementation
-// benefit: a Rust verifier would parse with std::net::IpAddr,
-// not mirror our regex. The Go check using net/netip is the
-// canonical enforcement; the schema records the intent in a
-// doc comment.
+// validateResolver enforces the two constraints on the declared DoT resolver
+// that the schema cannot express. The IP must be a canonical address literal:
+// the resolver is the lane's own resolution authority and cannot resolve a
+// name to reach itself, and the CUE alphabet admits a few hostnames by
+// coincidence. The ADN must not be an address literal: RFC 8310 section 3
+// excludes IP addresses as server identifiers, so an address in that field
+// would name a credential nothing can present.
 //
 // Defense-in-depth, analogous to ValidatePaths: this runs in the
-// validate-lane phase (before build), so `strike validate` and
-// `strike run` fail identically on the same invalid input.
+// validate-lane phase (before build), so `strike validate` and `strike run`
+// fail identically on the same invalid input. The IP parse is the same
+// DialTarget projection the dialer uses, so the check and the use cannot
+// diverge.
 func validateResolver(p *Lane) error {
-	host := string(p.Resolver.Address.Authority())
-	if host == "" {
-		return fmt.Errorf("resolver: host required")
+	if p.Resolver.ADN == "" {
+		return fmt.Errorf("resolver: adn required")
 	}
-	// ParseAddrPort handles `1.1.1.1:853` and `[2606:4700::1111]:853`.
-	// If port absent, fall back to ParseAddr for `1.1.1.1` and
-	// `2606:4700::1111`.
-	if _, err := netip.ParseAddrPort(host); err != nil {
-		if _, err := netip.ParseAddr(host); err != nil {
-			return fmt.Errorf(
-				"resolver host %q must be IP literal (IPv4 or IPv6, "+
-					"with optional :port; bracketed form for v6+port); "+
-					"FQDNs are not allowed because the resolver is itself "+
-					"the resolution authority and cannot resolve its own "+
-					"hostname",
-				host)
-		}
+	if _, err := netip.ParseAddr(p.Resolver.ADN.String()); err == nil {
+		return fmt.Errorf(
+			"resolver adn %q is an address literal; the adn is the "+
+				"authentication domain name the certificate is verified "+
+				"against, and RFC 8310 section 3 excludes addresses from "+
+				"that role -- put the address in ip",
+			p.Resolver.ADN)
+	}
+	if _, err := p.Resolver.DialTarget(); err != nil {
+		return err
 	}
 	return nil
 }

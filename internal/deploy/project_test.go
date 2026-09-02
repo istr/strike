@@ -25,8 +25,9 @@ func TestProjectStatements(t *testing.T) {
 				"b-image": {Digest: primitive.DigestFromHex(strings.Repeat("b", 64))},
 				"a-image": {Digest: primitive.DigestFromHex(strings.Repeat("a", 64))},
 			},
-			Peers:  map[primitive.Identifier][]lane.Peer{},
-			Engine: endpoint.EngineTLS{Type: "tls", CATrustType: "pinned", ServerCertFingerprint: "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"},
+			Resolver: deploy.ResolverRecord{Host: "one.one.one.one:853", DialedIP: "1.1.1.1"},
+			Peers:    map[primitive.Identifier][]lane.Peer{},
+			Engine:   endpoint.EngineTLS{Type: "tls", CATrustType: "pinned", ServerCertFingerprint: "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"},
 		},
 		EngineDependent: deploy.EngineDependent{
 			PeerAttribution: map[primitive.Identifier][]endpoint.Authority{"build": {"git.example.com:22"}},

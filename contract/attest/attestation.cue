@@ -253,8 +253,17 @@ import (
 // ---------------------------------------------------------------------------
 
 #ResolverRecord: {
-	// host is the declared DoT resolver endpoint (host:port).
+	// host is the resolver's authentication domain name and port, packed as
+	// "adn:port". It is the identity the handshake verified, never the address
+	// the connection was routed to.
 	host: string
+
+	// dialedIP is the bare IP literal the pre-flight probe connected to. It is
+	// a routing fact, not an identity: anycast and NAT mean it names a route
+	// rather than a host, and the identity anchor is serverCertFingerprint
+	// below. Every declared peer's routing target is recorded (see
+	// #ObservedPeer.resolved); this is the resolver's.
+	dialedIP: primitive.#IP
 
 	// serverCertFingerprint is sha256:<hex> of the resolver's leaf
 	// certificate, observed at the pre-flight handshake.
@@ -265,8 +274,4 @@ import (
 
 	// cipherSuite is the negotiated cipher suite, human-readable.
 	cipherSuite: string
-
-	// serverName is the SNI sent during the handshake. Empty for
-	// IP-literal resolver hosts (RFC 6066 forbids IP-literal SNI).
-	serverName?: string
 }

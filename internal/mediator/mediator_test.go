@@ -15,6 +15,7 @@ import (
 	"math/big"
 	"net"
 	"net/netip"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -170,12 +171,14 @@ func startTCPForwarder(t *testing.T, listenAddr, upstreamAddr string) {
 // upstream, and the lookup-failure test, use it.
 func unreachableDialer(t *testing.T) *transport.Dialer {
 	t.Helper()
-	d, err := transport.NewDialer(endpoint.TLS{
-		Type:    "https",
-		Address: endpoint.MustParseAuthority("127.0.0.1:1"),
-		Trust: endpoint.Fingerprint{
-			Type:        "certFingerprint",
-			Fingerprint: primitive.DigestFromHex(strings.Repeat("0", 64)),
+	deadPort := primitive.Port(1)
+	d, err := transport.NewDialer(endpoint.DoT{
+		ADN:  "resolver.test",
+		IP:   "127.0.0.1",
+		Port: &deadPort,
+		Trust: endpoint.CABundle{
+			Type: "caBundle",
+			Path: primitive.AbsPath(filepath.Join(t.TempDir(), "unused-ca.pem")),
 		},
 	})
 	if err != nil {

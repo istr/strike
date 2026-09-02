@@ -1,6 +1,7 @@
 package deploy
 
 import (
+	"net/netip"
 	"testing"
 
 	"github.com/istr/strike/internal/container"
@@ -105,13 +106,17 @@ func TestResolverRecord(t *testing.T) {
 		LeafFingerprint: "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
 		TLSVersion:      0x0304,
 		CipherSuite:     0x1301,
-		PeerAddress:     endpoint.MustParseAuthority("1.1.1.1:853"),
+		PeerAddress:     endpoint.MustParseAuthority("one.one.one.one:853"),
+		DialedAddr:      netip.MustParseAddrPort("1.1.1.1:853"),
 	}
 	d := &Deployer{Resolver: ResolverProbe{Observed: observed}}
 
 	rec := d.resolverRecord()
-	if rec.Host != "1.1.1.1:853" {
-		t.Errorf("Host = %q, want 1.1.1.1:853", rec.Host)
+	if rec.Host != "one.one.one.one:853" {
+		t.Errorf("Host = %q, want one.one.one.one:853", rec.Host)
+	}
+	if rec.DialedIP != "1.1.1.1" {
+		t.Errorf("DialedIP = %q, want 1.1.1.1", rec.DialedIP)
 	}
 	if rec.ServerCertFingerprint != observed.LeafFingerprint.String() {
 		t.Errorf("ServerCertFingerprint = %q, want %q", rec.ServerCertFingerprint, observed.LeafFingerprint)

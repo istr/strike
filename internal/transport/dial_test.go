@@ -465,8 +465,8 @@ func TestDialResolved_VerificationNameForms(t *testing.T) {
 				t.Fatal("timeout waiting for the ClientHello")
 			}
 
-			if got := conn.Identity().ServerName; got != tt.wantSNI {
-				t.Errorf("Identity.ServerName = %q, want %q", got, tt.wantSNI)
+			if got := conn.Identity().PeerAddress.Host; got != tt.serverName {
+				t.Errorf("Identity.PeerAddress.Host = %q, want %q", got, tt.serverName)
 			}
 		})
 	}

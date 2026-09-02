@@ -3,9 +3,7 @@ package transport
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net"
-	"net/netip"
 	"sync"
 )
 
@@ -37,24 +35,19 @@ func (c *identityCapture) get() (ConnectionIdentity, bool) {
 }
 
 // dialResolver opens the verified TLS connection to the declared DoT
-// endpoint. The declared host is an address literal -- lane validation
-// rejects an FQDN, because the resolver is the lane's own resolution
-// authority -- so it is both the routing destination and the identity the
-// certificate is verified against, and no name is resolved to reach the
-// resolver. A host that does not parse is an error rather than a fallback:
-// it means the value reached the dialer without validation.
+// endpoint. Routing comes from the declared IP, which NewDialer already
+// projected into the dial target, and identity from the declared
+// authentication domain name: the ADN is sent as SNI and is the reference
+// identifier the presented chain is matched against, in subjectAltName only,
+// because Go dropped the legacy CommonName fallback. No name is resolved to
+// reach the resolver, which is what lets the resolver be the lane's own
+// resolution authority.
+//
+// The dial carries the dialer's session cache, so a second lookup can resume
+// the first one's session without the server holding state (RFC 8310 section
+// 9).
 func (d *Dialer) dialResolver(ctx context.Context) (*VerifiedConn, error) {
-	host := d.resolver.Address.Host
-	addr, err := netip.ParseAddr(host.String())
-	if err != nil {
-		return nil, fmt.Errorf("transport: resolver host %q is not an address literal: %w", host, err)
-	}
-	p := d.resolver.Address.Port
-	if p == nil || *p < 1 || *p > 65535 {
-		return nil, fmt.Errorf("transport: resolver %s: a port in 1..65535 is required", d.resolver.Address.Authority())
-	}
-	dialPort := uint16(*p)
-	return DialResolved(ctx, netip.AddrPortFrom(addr, dialPort), host, d.resolver.Trust)
+	return dialVerified(ctx, d.target, d.resolver.ADN, d.resolver.Trust, d.sessions)
 }
 
 // dotResolver builds a net.Resolver whose dial path goes
