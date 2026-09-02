@@ -23,11 +23,13 @@
 // verifiers and policy engines (now including the layerOf rule table). It is DATA,
 // not a JSON Schema.
 //
-// The enforcement harness for this map is only partial and still to
-// come: the conformance test machine-checks the engineDependent and
-// informational sections and their published predicates, but the sealed
-// (V) section and the SLSA-provenance externalParameters projection are
-// pinned here and not yet checked.
+// ENFORCEMENT. The conformance test in
+// internal/deploy/trustlayers_conformance_internal_test.go machine-checks this
+// map against both projections by field name: every section of #Attestation and
+// every published predicate named below. A row nested under a collect-model
+// collection (sealed.artifacts[].*) names a nested position of the published
+// statement rather than a predicate field, so it is checked on the collect-model
+// side only.
 
 package trustlayers
 

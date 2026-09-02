@@ -18,19 +18,26 @@ import (
 // the soundness note's "no E-link recorded as a V-link": the schemas are
 // projections of the map and must not drift from it.
 //
-// Stage-1 scope: the engineDependent and informational sections of #Attestation
-// and the engine-context and informational published predicates. The sealed
-// section and the SLSA-provenance externalParameters projection are pinned in
-// the map but not yet machine-checked (Stage-2).
+// Scope: every collect-model section (sealed, engineDependent, informational)
+// and every published predicate the map names (the SLSA-provenance
+// externalParameters, engine-context, informational). Field names only, never
+// field types -- which keeps the check invariant under retyping while still
+// pinning the duplicated sealed / externalParameters definitions against each
+// other through the map they both project from.
 func TestTrustLayerConformance(t *testing.T) {
 	layers := schema.TrustLayers
 	attestRoot := schema.Deploy
 
-	// Expected field-name sets, derived from the single-source map. The map key
-	// is the logical field id, which equals the field label in both the
-	// #Attestation sections and the published predicates for the Stage-1 fields.
-	wantInternal := map[string]map[string]bool{"engineDependent": {}, "informational": {}}
-	wantPublished := map[string]map[string]bool{"engine-context": {}, "informational": {}}
+	// Expected field-name sets, derived from the single-source map. A row's
+	// internal path carries the projection for both sides: the first segment
+	// names the collect-model section, the second (with any "[]" dropped) names
+	// the field label there, and the same label names the field in the published
+	// predicate. A row nested below a collection ("sealed.artifacts[].digest")
+	// surfaces at a nested position of the published statement rather than as a
+	// predicate field, so it contributes to the section side only. A row absent
+	// from the collect-model (internal "-") is published under its logical id.
+	wantInternal := map[string]map[string]bool{"sealed": {}, "engineDependent": {}, "informational": {}}
+	wantPublished := map[string]map[string]bool{"slsa-provenance": {}, "engine-context": {}, "informational": {}}
 
 	fieldIter, err := layers.LookupPath(cue.ParsePath("fields")).Fields()
 	if err != nil {
@@ -49,15 +56,19 @@ func TestTrustLayerConformance(t *testing.T) {
 			t.Fatalf("field %q: read published: %v", key, err)
 		}
 
-		section := internal
+		section, label, nested := internal, key, false
 		if i := strings.IndexByte(internal, '.'); i >= 0 {
-			section = internal[:i]
+			section, label = internal[:i], internal[i+1:]
+			if j := strings.IndexByte(label, '.'); j >= 0 {
+				label, nested = label[:j], true
+			}
+			label = strings.TrimSuffix(label, "[]")
 		}
 		if set, ok := wantInternal[section]; ok {
-			set[key] = true
+			set[label] = true
 		}
-		if set, ok := wantPublished[published]; ok {
-			set[key] = true
+		if set, ok := wantPublished[published]; ok && !nested {
+			set[label] = true
 		}
 	}
 
@@ -65,8 +76,10 @@ func TestTrustLayerConformance(t *testing.T) {
 		want map[string]bool
 		def  string
 	}{
+		{wantInternal["sealed"], "#Sealed"},
 		{wantInternal["engineDependent"], "#EngineDependent"},
 		{wantInternal["informational"], "#Informational"},
+		{wantPublished["slsa-provenance"], "#StrikeExternalParameters"},
 		{wantPublished["engine-context"], "#EngineContextPredicate"},
 		{wantPublished["informational"], "#InformationalPredicate"},
 	}
@@ -77,7 +90,7 @@ func TestTrustLayerConformance(t *testing.T) {
 
 // TestLayerDecisionProcedure asserts that a field's trust layer is a pure
 // consequence of its provenance, per the decision procedure in
-// ATTESTATION-SOUNDNESS-AND-THE-TRUST-BOUNDARY.md. meta-trust-layers.cue encodes the
+// ATTESTATION-SOUNDNESS-AND-THE-TRUST-BOUNDARY.md. trust-layers.cue encodes the
 // rules once, as the data map layerOf; this test restates them independently and
 // fails if the two disagree -- so the procedure is checked against a spec, not
 // against itself. It also pins two structural invariants: a field's derived layer
@@ -191,7 +204,7 @@ func assertFieldSet(t *testing.T, root cue.Value, def string, want map[string]bo
 		got[iter.Selector().Unquoted()] = true
 	}
 	if !equalStringSets(got, want) {
-		t.Errorf("%s field set disagrees with meta-trust-layers.cue:\n  got:  %v\n  want: %v",
+		t.Errorf("%s field set disagrees with trust-layers.cue:\n  got:  %v\n  want: %v",
 			def, sortedKeys(got), sortedKeys(want))
 	}
 }
