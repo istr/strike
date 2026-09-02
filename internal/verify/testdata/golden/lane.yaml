@@ -1,13 +1,13 @@
-# Golden lane fixture for the keyless verifier (instruction 3a/3b).
+# Golden lane fixture for the keyless verifier.
 #
-# Parsed by TestVerifyGoldenGenerate to source the sealed predicate's lane
-# identity, declared OIDC, and lane digest; 3b loads the same file as its UC2
-# policy. The OIDC issuer/identity are the local sigstore harness signer
-# (tester@strike.localhost), and the keyless endpoints are the harness Fulcio,
-# Rekor v2, and TSA the generator already dials, trusted via the caddy root CA
-# bundle. The lane is never executed -- only parsed -- so the build step image
-# and registry refs are placeholders; what matters is that lane.Parse accepts
-# it and seals its digest.
+# The golden generator parses this file to source the sealed predicate's lane
+# identity, declared OIDC, and lane digest; the operator verify path loads the
+# same file as its policy source (ADR-041). The OIDC issuer/identity are the
+# local sigstore harness signer (tester@strike.localhost), and the keyless
+# endpoints are the harness Fulcio, Rekor v2, and TSA the generator already
+# dials, trusted via the caddy root CA bundle. The lane is never executed --
+# only parsed -- so the build step image and registry refs are placeholders;
+# what matters is that lane.Parse accepts it and seals its digest.
 name: golden-lane
 id: golden-lane
 secrets: {}
