@@ -1,7 +1,11 @@
 {
   "boundary": "RenderKnownHosts",
-  "description": "empty peer list produces empty output",
+  "description": "no peers at all produces empty output",
   "inputs": {
+    "front_key": {
+      "keyType": "ssh-ed25519",
+      "key": "AAAAC3NzaC1lZDI1NTE5AAAAIGZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZm"
+    },
     "peers": []
   },
   "expected": {

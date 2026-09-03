@@ -1,41 +1,45 @@
 {
   "boundary": "RenderKnownHosts",
-  "description": "three SSH peers in reverse-alphabetical order, output sorted alphabetically",
+  "description": "three ssh peers declared in reverse-alphabetical order render sorted by host",
   "inputs": {
+    "front_key": {
+      "keyType": "ssh-ed25519",
+      "key": "AAAAC3NzaC1lZDI1NTE5AAAAIGZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZm"
+    },
     "peers": [
       {
         "type": "ssh",
         "host": "zeta.example",
-        "known_hosts": [
+        "knownHosts": [
           {
-            "key_type": "ssh-ed25519",
-            "key": "ZetaKey"
+            "keyType": "ssh-ed25519",
+            "key": "AAAAC3NzaC1lZDI1NTE5AAAAIHp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6"
           }
         ]
       },
       {
         "type": "ssh",
         "host": "mu.example",
-        "known_hosts": [
+        "knownHosts": [
           {
-            "key_type": "ssh-ed25519",
-            "key": "MuKey"
+            "keyType": "ssh-ed25519",
+            "key": "AAAAC3NzaC1lZDI1NTE5AAAAIG1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1t"
           }
         ]
       },
       {
         "type": "ssh",
         "host": "alpha.example",
-        "known_hosts": [
+        "knownHosts": [
           {
-            "key_type": "ssh-ed25519",
-            "key": "AlphaKey"
+            "keyType": "ssh-ed25519",
+            "key": "AAAAC3NzaC1lZDI1NTE5AAAAIGFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFh"
           }
         ]
       }
     ]
   },
   "expected": {
-    "content_base64": "YWxwaGEuZXhhbXBsZSBzc2gtZWQyNTUxOSBBbHBoYUtleQptdS5leGFtcGxlIHNzaC1lZDI1NTE5IE11S2V5CnpldGEuZXhhbXBsZSBzc2gtZWQyNTUxOSBaZXRhS2V5Cg=="
+    "content_base64": "YWxwaGEuZXhhbXBsZSBzc2gtZWQyNTUxOSBBQUFBQzNOemFDMWxaREkxTlRFNUFBQUFJR1ptWm1abVptWm1abVptWm1abVptWm1abVptWm1abVptWm1abVptWm1abQptdS5leGFtcGxlIHNzaC1lZDI1NTE5IEFBQUFDM056YUMxbFpESTFOVEU1QUFBQUlHWm1abVptWm1abVptWm1abVptWm1abVptWm1abVptWm1abVptWm1abVptCnpldGEuZXhhbXBsZSBzc2gtZWQyNTUxOSBBQUFBQzNOemFDMWxaREkxTlRFNUFBQUFJR1ptWm1abVptWm1abVptWm1abVptWm1abVptWm1abVptWm1abVptWm1abQo="
   }
 }

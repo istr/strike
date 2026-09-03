@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/istr/strike/internal/closer"
+	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/schema"
 	"github.com/istr/strike/test/crossval"
@@ -211,4 +212,27 @@ type specHashInputs struct {
 
 type specHashExpected struct {
 	Hash string `json:"hash"`
+}
+
+// renderKnownHostsVector is the Go representation of a RenderKnownHosts test
+// vector. It lives here with the other vector representations rather than
+// beside its runner: the two are the same kind of thing, and splitting them
+// once already hid the runner from a reader looking for it.
+type renderKnownHostsVector struct {
+	Expected    renderKnownHostsExpected `json:"expected"`
+	Boundary    string                   `json:"boundary"`
+	Description string                   `json:"description"`
+	Inputs      renderKnownHostsInputs   `json:"inputs"`
+}
+
+// renderKnownHostsInputs carries both inputs of the boundary. Peers stay raw
+// because lane.UnmarshalPeer is the discriminated decoder for the peer
+// disjunction.
+type renderKnownHostsInputs struct {
+	FrontKey endpoint.HostKey  `json:"front_key"`
+	Peers    []json.RawMessage `json:"peers"`
+}
+
+type renderKnownHostsExpected struct {
+	ContentBase64 string `json:"content_base64"`
 }

@@ -5,7 +5,7 @@ import (
 	"bytes"
 	"crypto/ed25519"
 	"crypto/rand"
-	"encoding/json"
+	"encoding/base64"
 	"errors"
 	"io"
 	"io/fs"
@@ -318,20 +318,12 @@ func TestSSHTrustTar_structure(t *testing.T) {
 	}
 }
 
-// Golden tests against crossval vectors. The vectors carry real peer keys,
-// but RenderKnownHosts now emits the front's synthetic key. The golden test
-// verifies that the correct number of hosts are emitted and that every host
-// from the vector appears, each carrying the front key.
-
-type sshKnownHostsVectorInputs struct {
-	Peers []json.RawMessage `json:"peers"`
-}
-
-type sshKnownHostsVector struct {
-	Description string                    `json:"description"`
-	Boundary    string                    `json:"boundary"`
-	Inputs      sshKnownHostsVectorInputs `json:"inputs"`
-}
+// Golden test against the crossval vectors. The vector declares the front host
+// key it is rendered against, because every line carries that key and never the
+// peer's own declared key (ADR-038), so the rendered bytes are undefined
+// without it. The comparison is byte-exact: it subsumes the line count and the
+// per-line key that an earlier shape-only assertion checked, and unlike that
+// assertion it also covers host sorting and the bracketed host:port form.
 
 func TestRenderKnownHosts_Golden(t *testing.T) {
 	files, err := fs.Glob(crossval.FS, "sshknownhosts/*.json")
@@ -342,49 +334,39 @@ func TestRenderKnownHosts_Golden(t *testing.T) {
 		t.Fatal("no sshknownhosts vectors found")
 	}
 
-	fk := testFrontKey(t)
-	keyLine := strings.TrimSpace(string(gossh.MarshalAuthorizedKey(fk)))
-
 	for _, f := range files {
 		name := filepath.Base(f)
 		t.Run(name, func(t *testing.T) {
-			data, err := crossval.FS.ReadFile(f)
-			if err != nil {
-				t.Fatalf("read vector: %v", err)
-			}
-			var vec sshKnownHostsVector
-			if err := json.Unmarshal(data, &vec); err != nil {
-				t.Fatalf("unmarshal vector: %v", err)
+			vec := loadVector[renderKnownHostsVector](t, "sshknownhosts", name)
+
+			frontKey, _, _, _, keyErr := gossh.ParseAuthorizedKey(
+				[]byte(vec.Inputs.FrontKey.KnownHostsLine()))
+			if keyErr != nil {
+				t.Fatalf("parse front key: %v", keyErr)
 			}
 
 			peers := make([]lane.Peer, len(vec.Inputs.Peers))
-			var sshCount int
 			for i, raw := range vec.Inputs.Peers {
 				p, pErr := lane.UnmarshalPeer(raw)
 				if pErr != nil {
 					t.Fatalf("unmarshal peer[%d]: %v", i, pErr)
 				}
 				peers[i] = p
-				if _, ok := p.(endpoint.SSH); ok {
-					sshCount++
-				}
 			}
 
-			got := executor.RenderKnownHosts(peers, fk)
-			if sshCount == 0 {
-				if got != nil {
-					t.Errorf("expected nil for no SSH peers, got %q", got)
-				}
+			got := renderKnownHostsExpected{
+				ContentBase64: base64.StdEncoding.EncodeToString(
+					executor.RenderKnownHosts(peers, frontKey)),
+			}
+
+			if *update {
+				updateVectorBlocks(t, "sshknownhosts", name, map[string]any{"expected": got})
 				return
 			}
-			lines := strings.Split(strings.TrimSuffix(string(got), "\n"), "\n")
-			if len(lines) != sshCount {
-				t.Errorf("expected %d lines, got %d: %q", sshCount, len(lines), got)
-			}
-			for _, line := range lines {
-				if !strings.HasSuffix(line, keyLine) {
-					t.Errorf("line does not end with front key: %q", line)
-				}
+
+			if got.ContentBase64 != vec.Expected.ContentBase64 {
+				t.Errorf("content_base64 mismatch:\n  got:  %q\n  want: %q",
+					got.ContentBase64, vec.Expected.ContentBase64)
 			}
 		})
 	}

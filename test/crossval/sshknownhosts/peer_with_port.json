@@ -1,21 +1,25 @@
 {
   "boundary": "RenderKnownHosts",
-  "description": "SSH peer with host:port gets bracketed formatting",
+  "description": "ssh peer with an explicit port renders the bracketed host:port form",
   "inputs": {
+    "front_key": {
+      "keyType": "ssh-ed25519",
+      "key": "AAAAC3NzaC1lZDI1NTE5AAAAIGZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZm"
+    },
     "peers": [
       {
         "type": "ssh",
         "host": "git.example.com:2222",
-        "known_hosts": [
+        "knownHosts": [
           {
-            "key_type": "ssh-ed25519",
-            "key": "AAAAC3NzaC1lZDI1NTE5AAAAIPortKey"
+            "keyType": "ssh-ed25519",
+            "key": "AAAAC3NzaC1lZDI1NTE5AAAAIHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBw"
           }
         ]
       }
     ]
   },
   "expected": {
-    "content_base64": "W2dpdC5leGFtcGxlLmNvbV06MjIyMiBzc2gtZWQyNTUxOSBBQUFBQzNOemFDMWxaREkxTlRFNUFBQUFJUG9ydEtleQo="
+    "content_base64": "W2dpdC5leGFtcGxlLmNvbV06MjIyMiBzc2gtZWQyNTUxOSBBQUFBQzNOemFDMWxaREkxTlRFNUFBQUFJR1ptWm1abVptWm1abVptWm1abVptWm1abVptWm1abVptWm1abVptWm1abQo="
   }
 }
