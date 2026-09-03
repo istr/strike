@@ -50,7 +50,7 @@ lint-docs:
 
 .PHONY: lint-arch
 lint-arch:
-	go run github.com/fe3dback/go-arch-lint@v1.14.0 check --project-path .
+	go run github.com/fe3dback/go-arch-lint@v1.18.0 check --project-path .
 
 lint-ci:
 	golangci-lint run ./...

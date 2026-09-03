@@ -30,7 +30,7 @@ func TestWholeWorkdirOutput_Integration(t *testing.T) {
 	eng := testutil.RequireEngine(t)
 	ctx := context.Background()
 
-	const img = "cgr.dev/chainguard/go@sha256:0a0ba6cee2d535a4e9dcc63d4230be546d3c4c6631b23bc9989992711317649f"
+	const img = "cgr.dev/chainguard/go@sha256:694c79dc301a249df5f2541aff2d82718d4ef3ff36bfa8a9eaee55ecadd40d16"
 	mountEnsureImage(t, eng, img)
 
 	vol := fmt.Sprintf("strike-workdir-itest-%d", clock.Wall().UnixNano())

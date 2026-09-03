@@ -57,10 +57,15 @@ func (e *captureEngine) ContainerArchive(_ context.Context, _, _ string) (io.Rea
 func (e *captureEngine) ContainerCommit(_ context.Context, _ string) (string, error) {
 	return "", nil
 }
-func (e *captureEngine) ContainerRemove(_ context.Context, _ string) error             { return nil }
-func (e *captureEngine) VolumeCreate(_ context.Context, _ string) error                { return nil }
+
+func (e *captureEngine) ContainerRemove(_ context.Context, _ string) error { return nil }
+
+func (e *captureEngine) VolumeCreate(_ context.Context, _ string) error { return nil }
+
 func (e *captureEngine) SeedVolumes(_ context.Context, _ []container.VolumeSeed) error { return nil }
-func (e *captureEngine) VolumeRemove(_ context.Context, _ string) error                { return nil }
+
+func (e *captureEngine) VolumeRemove(_ context.Context, _ string) error { return nil }
+
 func (e *captureEngine) ContainerList(_ context.Context, _ string) ([]container.Summary, error) {
 	return nil, nil
 }
