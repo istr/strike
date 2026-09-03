@@ -3,17 +3,19 @@ package executor_test
 import (
 	"archive/tar"
 	"bytes"
-	"encoding/json"
+	"encoding/base64"
 	"flag"
 	"io/fs"
 	"path"
 	"path/filepath"
+	"slices"
 	"sort"
 	"testing"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/empty"
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
+	"github.com/google/go-containerregistry/pkg/v1/types"
 
 	"github.com/istr/strike/internal/executor"
 	"github.com/istr/strike/internal/lane"
@@ -76,7 +78,7 @@ func vectorInputTars(t *testing.T, specFiles []lane.PackFile, vecFiles map[strin
 	t.Helper()
 	fromToDest := make(map[string]string, len(specFiles))
 	for _, pf := range specFiles {
-		fromToDest[string(pf.From.Step)+"."+string(pf.From.Output)] = pf.Dest.String()
+		fromToDest[pf.From.Ref()] = pf.Dest.String()
 	}
 	inputTars := make(map[string][]byte, len(vecFiles))
 	for ref, f := range vecFiles {
@@ -97,68 +99,110 @@ func vectorInputTars(t *testing.T, specFiles []lane.PackFile, vecFiles map[strin
 // Golden test: AssembleImage (crossval vector).
 // --------------------------------------------------------------------------.
 
+// vectorBaseImage builds the base image the vector describes and verifies that
+// what it built matches that description. The construction is
+// go-containerregistry's; the description is the contract every implementation
+// starts from. A divergence means the two have drifted apart, so the vector no
+// longer describes what this implementation assembles on top of.
+func vectorBaseImage(t *testing.T, want assembleBase) v1.Image {
+	t.Helper()
+
+	base := mutate.ConfigMediaType(
+		mutate.MediaType(empty.Image, types.OCIManifestSchema1),
+		types.OCIConfigJSON,
+	)
+	cfg, err := base.ConfigFile()
+	if err != nil {
+		t.Fatalf("base config file: %v", err)
+	}
+	cfg = cfg.DeepCopy()
+	cfg.Architecture = "amd64"
+	cfg.OS = "linux"
+	base, err = mutate.ConfigFile(base, cfg)
+	if err != nil {
+		t.Fatalf("base config: %v", err)
+	}
+
+	mediaType, err := base.MediaType()
+	if err != nil {
+		t.Fatalf("base media type: %v", err)
+	}
+	if string(mediaType) != want.ManifestMediaType {
+		t.Fatalf("base manifest media type = %q, want %q", mediaType, want.ManifestMediaType)
+	}
+	manifest, err := base.Manifest()
+	if err != nil {
+		t.Fatalf("base manifest: %v", err)
+	}
+	if string(manifest.Config.MediaType) != want.ConfigMediaType {
+		t.Fatalf("base config media type = %q, want %q", manifest.Config.MediaType, want.ConfigMediaType)
+	}
+	if len(manifest.Layers) != len(want.Layers) {
+		t.Fatalf("base layer count = %d, want %d", len(manifest.Layers), len(want.Layers))
+	}
+	rawCfg, err := base.RawConfigFile()
+	if err != nil {
+		t.Fatalf("base raw config: %v", err)
+	}
+	if got := base64.StdEncoding.EncodeToString(rawCfg); got != want.ConfigJSONBase64 {
+		t.Fatalf("base config json mismatch:\n  got:  %s\n  want: %s", got, want.ConfigJSONBase64)
+	}
+	return base
+}
+
 func TestAssembleImage_Golden(t *testing.T) {
 	vec := loadVector[assembleVector](t, "assemble", "empty_base_single_file.json")
 
-	if vec.Inputs.Base != "oci:empty" {
-		t.Fatalf("unsupported base type: %q", vec.Inputs.Base)
-	}
+	base := vectorBaseImage(t, vec.Inputs.Base)
+	inputTars := vectorInputTars(t, vec.Inputs.Spec.Files, vec.Inputs.Files)
 
-	// Unmarshal spec from the vector.
-	var spec lane.PackSpec
-	if err := json.Unmarshal(vec.Inputs.Spec, &spec); err != nil {
-		t.Fatalf("unmarshal spec: %v", err)
-	}
-
-	inputTars := vectorInputTars(t, spec.Files, vec.Inputs.Files)
-
-	result, err := executor.AssembleImage(empty.Image, &spec, inputTars)
+	result, err := executor.AssembleImage(base, &vec.Inputs.Spec, inputTars)
 	if err != nil {
 		t.Fatalf("AssembleImage: %v", err)
-	}
-
-	layers, err := result.Image.Layers()
-	if err != nil {
-		t.Fatalf("layers: %v", err)
 	}
 
 	cfg, err := result.Image.ConfigFile()
 	if err != nil {
 		t.Fatalf("config: %v", err)
 	}
+	rawCfg, err := result.Image.RawConfigFile()
+	if err != nil {
+		t.Fatalf("raw config: %v", err)
+	}
 	cfgDigest, err := result.Image.ConfigName()
 	if err != nil {
 		t.Fatalf("config digest: %v", err)
 	}
 
-	// Verify config was applied.
-	if cfg.Config.User != "65534:65534" {
-		t.Errorf("user = %q, want 65534:65534", cfg.Config.User)
+	diffIDs := make([]string, len(cfg.RootFS.DiffIDs))
+	for i, h := range cfg.RootFS.DiffIDs {
+		diffIDs[i] = h.String()
 	}
-
-	got := struct {
-		ManifestDigest string `json:"manifest_digest"`
-		ConfigDigest   string `json:"config_digest"`
-		LayerCount     int    `json:"layer_count"`
-	}{
+	got := assembleExpected{
+		DiffIDs:          diffIDs,
+		ConfigJSONBase64: base64.StdEncoding.EncodeToString(rawCfg),
+	}
+	gotRef := assembleGoGGCRReference{
 		ManifestDigest: result.Digest.String(),
 		ConfigDigest:   cfgDigest.String(),
-		LayerCount:     len(layers),
 	}
 
 	if *update {
-		updateVectorExpected(t, "assemble", "empty_base_single_file.json", got)
+		updateVectorBlocks(t, "assemble", "empty_base_single_file.json", map[string]any{
+			"expected":          got,
+			"go_ggcr_reference": gotRef,
+		})
 		return
 	}
 
-	if got.ManifestDigest != vec.Expected.ManifestDigest {
-		t.Errorf("manifest_digest mismatch:\n  got:  %s\n  want: %s", got.ManifestDigest, vec.Expected.ManifestDigest)
+	if !slices.Equal(got.DiffIDs, vec.Expected.DiffIDs) {
+		t.Errorf("diff_ids mismatch:\n  got:  %v\n  want: %v", got.DiffIDs, vec.Expected.DiffIDs)
 	}
-	if got.ConfigDigest != vec.Expected.ConfigDigest {
-		t.Errorf("config_digest mismatch:\n  got:  %s\n  want: %s", got.ConfigDigest, vec.Expected.ConfigDigest)
+	if got.ConfigJSONBase64 != vec.Expected.ConfigJSONBase64 {
+		t.Errorf("config_json_base64 mismatch:\n  got:  %s\n  want: %s", got.ConfigJSONBase64, vec.Expected.ConfigJSONBase64)
 	}
-	if got.LayerCount != vec.Expected.LayerCount {
-		t.Errorf("layer_count mismatch: got %d, want %d", got.LayerCount, vec.Expected.LayerCount)
+	if gotRef != vec.GoGGCRReference {
+		t.Errorf("go_ggcr_reference mismatch:\n  got:  %+v\n  want: %+v", gotRef, vec.GoGGCRReference)
 	}
 }
 
@@ -193,9 +237,11 @@ func TestSpecHash_Golden(t *testing.T) {
 			)
 
 			if *update {
-				updateVectorExpected(t, "spechash", name, struct {
-					Hash string `json:"hash"`
-				}{Hash: got.String()})
+				updateVectorBlocks(t, "spechash", name, map[string]any{
+					"expected": struct {
+						Hash string `json:"hash"`
+					}{Hash: got.String()},
+				})
 				return
 			}
 

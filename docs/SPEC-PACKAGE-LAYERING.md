@@ -47,8 +47,12 @@ the same DAG (`.go-arch-lint.yml`).
   primitive and concept types.
 - **attest** -- the deploy attestation contract: the internal collect-model
   (`#Attestation`), the published in-toto / SLSA predicates, and the sigstore
-  `#Bundle`. It is the one package that names the others, importing lane,
-  concept, and primitive.
+  `#Bundle`. It composes lane, concept, and primitive types.
+- **trustlayers** -- the trust-layer classification map, exported as JSON data
+  rather than projected into Go. Depends on nothing.
+- **crossval** -- the cross-validation vector schema. It imports lane, so that
+  a vector's structured inputs are constrained by the same definitions the
+  boundary under test consumes rather than by an open shape.
 
 ## Generated vs hand-written Go
 

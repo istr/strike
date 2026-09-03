@@ -14,7 +14,10 @@
 
 package crossval
 
-import "github.com/istr/strike/contract/primitive"
+import (
+	"github.com/istr/strike/contract/lane"
+	"github.com/istr/strike/contract/primitive"
+)
 
 // #Vector is the union of all cross-validation test vector shapes, each
 // discriminated by its concrete boundary literal.
@@ -25,20 +28,59 @@ import "github.com/istr/strike/contract/primitive"
 	boundary:    "AssembleImage"
 	description: string
 	inputs: {
-		// "oci:empty" or "oci:layout" (with inline manifest).
-		base: string
+		// The base image the boundary starts from, stated in wire terms so any
+		// implementation constructs it instead of naming a library artifact.
+		// The boundary rebuilds the manifest, so the base contributes its media
+		// types, its config blob and its layer set, and nothing else.
+		base: {
+			manifest_media_type: string
+			config_media_type:   string
+			// config_json_base64 is the base config blob, byte-exact. Its
+			// sha256 is the config digest a constructing implementation writes
+			// into the base manifest.
+			config_json_base64: primitive.#Base64
+			// The boundary is defined for a zero-layer base only. A base with
+			// layers needs descriptors and blobs, which is a schema change.
+			layers: []
+		}
 		// PackSpec fields (subset used by AssembleImage).
-		spec: _
+		spec: {
+			files: [...lane.#PackFile]
+			config?: lane.#ImageConfig
+			annotations?: {
+				[string]: string
+			}
+		}
 		// ref -> {content_base64, mode}.
 		files: [string]: {
-			content_base64: string
+			content_base64: primitive.#Base64
 			mode:           int
 		}
 	}
+	// expected is normative: every conforming implementation reproduces it.
 	expected: {
+		// diff_ids is the uncompressed per-layer identity, the only per-layer
+		// key that survives a re-encoding (ADR-046). It is also carried inside
+		// config_json_base64; the separate list localizes a failure to tar
+		// canonicalization rather than to config serialization.
+		diff_ids: [...primitive.#Digest]
+		// config_json_base64 is the assembled config blob, byte-exact. It
+		// encodes reference decisions a second implementation must reproduce,
+		// among them the zero creation timestamp and one empty history entry
+		// per appended layer; they are stated here, not derived from the OCI
+		// image-config specification.
+		config_json_base64: primitive.#Base64
+	}
+	// go_ggcr_reference is NOT normative. These digests are a property of the
+	// reference implementation -- the Go standard library's json and flate
+	// encoders and the go-containerregistry types layered on them -- not of the
+	// boundary. The layer digest inside the manifest covers a compressed blob
+	// and DEFLATE output is not specified by compression level, so a second
+	// implementation neither reproduces nor checks them; they pin the reference
+	// against its own regression (ADR-046).
+	go_ggcr_reference: {
 		manifest_digest: primitive.#Digest
 		config_digest:   primitive.#Digest
-		layer_count:     int & >=0
 	}
 }
 

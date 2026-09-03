@@ -9,12 +9,13 @@ import (
 	"testing"
 
 	"github.com/istr/strike/internal/closer"
+	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/schema"
 	"github.com/istr/strike/test/crossval"
 )
 
 // crossvalDir is the on-disk path to cross-validation test vectors.
-// Used only by updateVectorExpected (writes); reads use crossval.FS.
+// Used only by updateVectorBlocks (writes); reads use crossval.FS.
 const crossvalDir = "../../test/crossval"
 
 // loadVector reads and unmarshals a cross-validation vector file from the
@@ -32,10 +33,12 @@ func loadVector[T any](t *testing.T, subdir, name string) T {
 	return v
 }
 
-// updateVectorExpected reads a vector file, replaces its "expected" block
-// with the provided value, and writes it back. The "inputs" block is never
-// modified.
-func updateVectorExpected(t *testing.T, subdir, name string, expected any) {
+// updateVectorBlocks reads a vector file, replaces the named top-level blocks
+// with the provided values, and writes it back. The "inputs" block is never
+// modified. A caller passes every block it replaces in one call: reads come
+// from the embedded FS, so a second call would re-read the pre-update bytes
+// and undo the first write.
+func updateVectorBlocks(t *testing.T, subdir, name string, blocks map[string]any) {
 	t.Helper()
 	data, readErr := crossval.FS.ReadFile(subdir + "/" + name)
 	if readErr != nil {
@@ -45,11 +48,13 @@ func updateVectorExpected(t *testing.T, subdir, name string, expected any) {
 	if unmarshalErr := json.Unmarshal(data, &raw); unmarshalErr != nil {
 		t.Fatalf("unmarshal vector for update %s/%s: %v", subdir, name, unmarshalErr)
 	}
-	expJSON, marshalErr := json.Marshal(expected)
-	if marshalErr != nil {
-		t.Fatalf("marshal expected for update %s/%s: %v", subdir, name, marshalErr)
+	for key, value := range blocks {
+		blockJSON, marshalErr := json.Marshal(value)
+		if marshalErr != nil {
+			t.Fatalf("marshal %s for update %s/%s: %v", key, subdir, name, marshalErr)
+		}
+		raw[key] = blockJSON
 	}
-	raw["expected"] = expJSON
 
 	out, indentErr := json.MarshalIndent(raw, "", "  ")
 	if indentErr != nil {
@@ -142,10 +147,11 @@ func validateVectorAgainstCUE(t *testing.T, name string) {
 
 // assembleVector is the Go representation of an AssembleImage test vector.
 type assembleVector struct {
-	Inputs      assembleInputs   `json:"inputs"`
-	Boundary    string           `json:"boundary"`
-	Description string           `json:"description"`
-	Expected    assembleExpected `json:"expected"`
+	GoGGCRReference assembleGoGGCRReference `json:"go_ggcr_reference"`
+	Boundary        string                  `json:"boundary"`
+	Description     string                  `json:"description"`
+	Inputs          assembleInputs          `json:"inputs"`
+	Expected        assembleExpected        `json:"expected"`
 }
 
 type assembleFileEntry struct {
@@ -153,16 +159,35 @@ type assembleFileEntry struct {
 	Mode          int    `json:"mode"`
 }
 
-type assembleInputs struct {
-	Files map[string]assembleFileEntry `json:"files"`
-	Base  string                       `json:"base"`
-	Spec  json.RawMessage              `json:"spec"`
+// assembleBase describes the base image the boundary starts from in wire
+// terms, so an implementation constructs it rather than naming a library
+// artifact.
+type assembleBase struct {
+	ManifestMediaType string   `json:"manifest_media_type"`
+	ConfigMediaType   string   `json:"config_media_type"`
+	ConfigJSONBase64  string   `json:"config_json_base64"`
+	Layers            []string `json:"layers"`
 }
 
+type assembleInputs struct {
+	Spec  lane.PackSpec                `json:"spec"`
+	Files map[string]assembleFileEntry `json:"files"`
+	Base  assembleBase                 `json:"base"`
+}
+
+// assembleExpected is what every conforming implementation reproduces.
 type assembleExpected struct {
+	ConfigJSONBase64 string   `json:"config_json_base64"`
+	DiffIDs          []string `json:"diff_ids"`
+}
+
+// assembleGoGGCRReference is not normative: these digests are a property of the
+// reference implementation, not of the boundary. The layer digest inside the
+// manifest covers a compressed blob and DEFLATE output is not specified by
+// compression level (ADR-046).
+type assembleGoGGCRReference struct {
 	ManifestDigest string `json:"manifest_digest"`
 	ConfigDigest   string `json:"config_digest"`
-	LayerCount     int    `json:"layer_count"`
 }
 
 type specHashVector struct {
