@@ -122,3 +122,39 @@ material.
 - External references are digest-pinned (vector inputs use
   content-addressed digests; vector outputs are deterministic
   hashes)
+
+## Amendment -- inputs are complete, expectations are qualified (item-0056)
+
+Two of the five boundaries did not hold the property this ADR claims for all
+of them.
+
+`AssembleImage` named its base image with the sentinel `"oci:empty"`, which
+resolves only inside go-containerregistry. The base is now stated in wire
+terms -- manifest and config media types, the byte-exact config blob, an
+explicit empty layer set -- and the runner verifies the base it constructs
+against that description before assembling.
+
+`RenderKnownHosts` renders the front's synthetic host key on every line
+(ADR-038 D5), and that key was not a vector input at all, so the rendered
+bytes were undefined. It is now declared as `inputs.front_key`, and the
+comparison is byte-exact rather than shape-only.
+
+The stronger consequence is that byte-equality is not available at every
+boundary. `AssembleImage` produces a manifest whose layer descriptor covers a
+gzip-compressed blob; DEFLATE output is not specified by compression level, so
+the manifest digest is a property of the encoder rather than of the boundary
+(ADR-046). Its vector therefore splits: `expected` carries the layer diff-ids
+and the byte-exact assembled config blob and is normative for every
+implementation, while `go_ggcr_reference` carries the manifest and config
+digests and is explicitly not. The reproducibility principle below is read
+accordingly: vectors test byte-equality of everything an independent
+implementation can produce, and name the rest.
+
+The other three boundaries were audited against their consumers and need no
+qualification: `SpecHash` reads only `Args` and `Env` from the step and is
+otherwise a sha256 chain over strings, `StateDigest` a sha256 over
+length-prefixed fields, `ValidateAttestation` schema unification.
+
+Key material in vectors follows the fake-digest convention already used here:
+form exact, content visibly synthetic. The ssh host keys are 68-character
+ssh-ed25519 wire blobs whose 32-byte body is one repeated ASCII character.

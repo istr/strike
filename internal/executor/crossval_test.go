@@ -11,6 +11,7 @@ import (
 	"github.com/istr/strike/internal/closer"
 	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/schema"
 	"github.com/istr/strike/test/crossval"
 )
@@ -39,6 +40,12 @@ func loadVector[T any](t *testing.T, subdir, name string) T {
 // modified. A caller passes every block it replaces in one call: reads come
 // from the embedded FS, so a second call would re-read the pre-update bytes
 // and undo the first write.
+//
+// A replaced block's key order is the Go struct's field order, which an
+// alignment linter may change at any time, so a committed vector is not
+// expected to be a byte-exact fixed point of this path. JSON objects are
+// unordered and no consumer depends on the order; what the golden tests
+// compare are the values.
 func updateVectorBlocks(t *testing.T, subdir, name string, blocks map[string]any) {
 	t.Helper()
 	data, readErr := crossval.FS.ReadFile(subdir + "/" + name)
@@ -204,14 +211,14 @@ type specHashStep struct {
 }
 
 type specHashInputs struct {
-	InputHashes  map[string]string `json:"input_hashes"`
-	SourceHashes map[string]string `json:"source_hashes"`
-	ImageDigest  string            `json:"image_digest"`
-	Step         specHashStep      `json:"step"`
+	InputHashes  map[string]primitive.Digest `json:"input_hashes"`
+	SourceHashes map[string]primitive.Digest `json:"source_hashes"`
+	ImageDigest  primitive.Digest            `json:"image_digest"`
+	Step         specHashStep                `json:"step"`
 }
 
 type specHashExpected struct {
-	Hash string `json:"hash"`
+	Hash primitive.Digest `json:"hash"`
 }
 
 // renderKnownHostsVector is the Go representation of a RenderKnownHosts test

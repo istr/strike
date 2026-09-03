@@ -120,10 +120,14 @@ import (
 	boundary:    "StateDigest"
 	description: string
 	inputs: {
+		// The capture fields carry the grammars the contract already owns. The
+		// Go fixture still decodes name and image as plain strings because
+		// deploy.NewCaptureSnap takes them that way; typing that producer is
+		// item-0080, and the contract leads.
 		captures: [...{
-			name:          string
-			image:         string
-			output_base64: string
+			name:          primitive.#Identifier
+			image:         primitive.#ImageRef
+			output_base64: primitive.#Base64
 		}]
 	}
 	expected: {

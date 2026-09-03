@@ -19,21 +19,11 @@ import (
 
 	"github.com/istr/strike/internal/executor"
 	"github.com/istr/strike/internal/lane"
-	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/registry"
 	"github.com/istr/strike/test/crossval"
 )
 
 var update = flag.Bool("update", false, "update cross-validation vector expected fields")
-
-// toDigestMap converts a map[string]string (from JSON vectors) to map[string]primitive.Digest.
-func toDigestMap(m map[string]string) map[string]primitive.Digest {
-	out := make(map[string]primitive.Digest, len(m))
-	for k, v := range m {
-		out[k] = primitive.Digest(v)
-	}
-	return out
-}
 
 // canonicalFileTar builds the canonical content tar for a single regular
 // file landing at dest: the parent directories of dest, then the file at
@@ -229,23 +219,20 @@ func TestSpecHash_Golden(t *testing.T) {
 				Env:  vec.Inputs.Step.Env,
 			}
 
-			imageDigest := primitive.Digest(vec.Inputs.ImageDigest)
 			got := registry.SpecHash(step,
-				imageDigest,
-				toDigestMap(vec.Inputs.InputHashes),
-				toDigestMap(vec.Inputs.SourceHashes),
+				vec.Inputs.ImageDigest,
+				vec.Inputs.InputHashes,
+				vec.Inputs.SourceHashes,
 			)
 
 			if *update {
 				updateVectorBlocks(t, "spechash", name, map[string]any{
-					"expected": struct {
-						Hash string `json:"hash"`
-					}{Hash: got.String()},
+					"expected": specHashExpected{Hash: got},
 				})
 				return
 			}
 
-			if got.String() != vec.Expected.Hash {
+			if got != vec.Expected.Hash {
 				t.Errorf("hash mismatch:\n  got:  %s\n  want: %s", got, vec.Expected.Hash)
 			}
 		})

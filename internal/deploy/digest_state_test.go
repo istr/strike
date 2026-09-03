@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/istr/strike/internal/deploy"
+	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/test/crossval"
 )
 
@@ -105,7 +106,7 @@ type stateDigestVector struct {
 	Description string `json:"description"`
 	Boundary    string `json:"boundary"`
 	Expected    struct {
-		Digest string `json:"digest"`
+		Digest primitive.Digest `json:"digest"`
 	} `json:"expected"`
 	Inputs struct {
 		Captures []struct {
@@ -147,7 +148,7 @@ func TestStateDigest_Golden(t *testing.T) {
 			}
 
 			got := deploy.StateDigest(captures)
-			if got.String() != vec.Expected.Digest {
+			if got != vec.Expected.Digest {
 				t.Errorf("digest mismatch:\n  got:  %s\n  want: %s", got, vec.Expected.Digest)
 			}
 		})

@@ -254,3 +254,19 @@ re-compresses blobs on save/export". The selection rule is unchanged -- the
 consumer selects by `diff_id`, never by the annotation -- and holds for a
 sharper reason: the produced manifest digest itself does not survive the
 export either.
+
+## Amendment -- a second confirmation, from the compressor (item-0056)
+
+The amendment above measured the round trip through a different engine. The
+toolchain and dependency upgrade at `5ff1b9e` produced the same result by
+changing the compressor instead: Go 1.26.6 to 1.27.1 (`compress/flate`),
+`klauspost/compress` v1.19.2 to v1.20.0, `go-containerregistry` v0.21.9 to
+v0.22.0. The `AssembleImage` crossval vector's compressed layer blob moved from
+164 to 160 bytes and the manifest digest moved with it, while the config blob
+digest and the `rootfs.diff_ids` stayed byte-identical.
+
+Two independent routes -- a different engine and a different encoder version --
+now give the same answer, which is the basis for the cross-validation split
+recorded in ADR-017's item-0056 amendment: `diff_id` and the config blob are
+the identities a second implementation can be held to; a manifest digest that
+transitively covers a compressed blob is not.
