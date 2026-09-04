@@ -258,7 +258,7 @@ func (d *Deployer) regionSBOM(ctx context.Context, repo string, subject v1.Descr
 	if out == nil {
 		return record.SBOMSet{}, fmt.Errorf("output %s.%s not declared", ref.Step, *ref.Output)
 	}
-	fsys, err := fsFromTarBuffer(layerBytes, lane.OutputContentPrefix(*out))
+	fsys, err := fsFromTarBuffer(layerBytes, lane.OutputContentPrefix(*out).String())
 	if err != nil {
 		return record.SBOMSet{}, err
 	}

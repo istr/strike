@@ -48,7 +48,8 @@ func loadBaseSBOMFixture(t *testing.T) (*verify.TrustedMaterial, baseSBOMMeta, [
 func TestVerifyOneBaseSBOM_HappyPath(t *testing.T) {
 	tm, m, bundle := loadBaseSBOMFixture(t)
 	d := &Deployer{BaseSBOMSigners: []lane.SBOMSigner{{Issuer: m.Issuer, Identity: m.Identity}}}
-	base := primitive.ImageRef("localhost/strike-base@" + m.SubjectDigest)
+	baseURI := "localhost/strike-base@" + m.SubjectDigest
+	base := primitive.ImageRef(baseURI)
 	baseHex := primitive.Sha256(strings.TrimPrefix(m.SubjectDigest, "sha256:"))
 	refDigest := "sha256:" + strings.Repeat("b", 64)
 
@@ -69,8 +70,8 @@ func TestVerifyOneBaseSBOM_HappyPath(t *testing.T) {
 	if dep.Digest == nil || dep.Digest.SHA256 != primitive.Sha256(strings.TrimPrefix(refDigest, "sha256:")) {
 		t.Errorf("descriptor digest = %v, want referrer digest", dep.Digest)
 	}
-	if dep.URI != string(base) {
-		t.Errorf("URI = %q, want %q", dep.URI, base)
+	if dep.URI != baseURI {
+		t.Errorf("URI = %q, want %q", dep.URI, baseURI)
 	}
 }
 

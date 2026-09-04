@@ -29,10 +29,10 @@ cuelint:
 	cd tools/cuelint && go build -o $(CURDIR)/.build/cuelint .
 	$(CURDIR)/.build/cuelint ./...
 
-# Standalone gate, intentionally not in the aggregate `lint` target: it fails
-# on the flow-typing classes it covers and stands up red (empty allowlist), so
-# the covered tree is proven clean class by class. It graduates into aggregate
-# lint at the first point where every covered class passes at once.
+# Flow-typing gate over the three near-zero-false-positive classes:
+# roundtrip-local, result-string-scalar, and detype-bypasses-stringer. It ran
+# standalone and deliberately red while the covered tree was proven clean class
+# by class; all three now pass at once, so it gates in aggregate lint.
 .PHONY: lint-typeflow
 lint-typeflow:
 	cd tools/linttypeflow && go build -o $(CURDIR)/.build/linttypeflow .
@@ -58,7 +58,7 @@ lint-ci:
 lint-cue-fmt:
 	go tool cue fmt --check --files contract
 
-lint: lint-ci lint-typeconv lint-arch lint-docs lint-cue-fmt
+lint: lint-ci lint-typeconv lint-typeflow lint-arch lint-docs lint-cue-fmt
 
 test:
 	go test -race -coverprofile=coverage.out -covermode=atomic ./...

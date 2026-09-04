@@ -23,15 +23,16 @@ func sanitizeForLog(s string) string {
 }
 
 func resolveDigest(ctx context.Context, client *registry.Client, imageRef primitive.ImageRef) (primitive.Digest, error) {
-	// Image ref already contains @sha256: - extract the digest.
-	s := string(imageRef)
-	for i, c := range s {
-		if c == '@' {
-			digest := primitive.Digest(s[i+1:])
-			return primitive.ParseDigest(digest)
-		}
+	// A digest-pinned reference carries its own content address.
+	digest, err := imageRef.Digest()
+	if err != nil {
+		return "", err
+	}
+	if digest != "" {
+		return digest, nil
 	}
 
 	// Local image without digest (e.g. bootstrap root) - resolve via engine API.
-	return client.InspectDigest(ctx, s)
+	ref := string(imageRef)
+	return client.InspectDigest(ctx, ref)
 }

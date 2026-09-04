@@ -83,12 +83,10 @@ func MustParseURL(s string) Address {
 // Authority returns the packed "host" or "host:port" wire form. A path, if
 // present, is not included.
 func (a Address) Authority() Authority {
-	h := a.Host.String()
 	if a.Port == nil {
-		return Authority(h)
+		return Authority(a.Host.String())
 	}
-	p := int(*a.Port)
-	return Authority(h + ":" + strconv.Itoa(p))
+	return Authority(a.Host.String() + ":" + a.Port.String())
 }
 
 // URL returns the "https://host[:port][/path]" wire form. It round-trips an
@@ -108,12 +106,10 @@ func (a Address) URL() string {
 // the OpenSSH host grammar requires around a host carrying an explicit port;
 // Authority packs the same pair without them.
 func (a Address) BracketedHostPort() string {
-	h := a.Host.String()
 	if a.Port == nil {
-		return h
+		return a.Host.String()
 	}
-	p := int(*a.Port)
-	return "[" + h + "]:" + strconv.Itoa(p)
+	return "[" + a.Host.String() + "]:" + a.Port.String()
 }
 
 // parsePort parses a decimal port string into the 1..65535 range.

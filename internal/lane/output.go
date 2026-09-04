@@ -12,11 +12,11 @@ import (
 // whole workdir (path absent). wrapOutputs uses it as the layer destination
 // prefix; input resolution uses it to find the content root in an extracted
 // producer artifact.
-func OutputContentPrefix(out FileOutput) string {
+func OutputContentPrefix(out FileOutput) primitive.RelPath {
 	if out.Path != nil {
-		return path.Base(out.Path.String())
+		return primitive.RelPath(path.Base(out.Path.String()))
 	}
-	return string(out.ID)
+	return primitive.RelPath(out.ID)
 }
 
 // Output returns the declared FileOutput named out on the step named step, or

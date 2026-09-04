@@ -432,7 +432,7 @@ func (rc *runContext) resolvePackInputs(ctx context.Context, step *lane.Step, sa
 
 		dest := f.Dest.String()
 		packTar, buildErr := registry.PackTarFromImage(
-			tarBytes, fh.LayerDiffID, lane.OutputContentPrefix(*out), dest[1:], f.Mode)
+			tarBytes, fh.LayerDiffID, lane.OutputContentPrefix(*out).String(), dest[1:], f.Mode)
 		if buildErr != nil {
 			return nil, fmt.Errorf("%s: pack input %s: %w", safeName, f.Dest, buildErr)
 		}
@@ -796,9 +796,9 @@ func archiveReroot(workdir primitive.AbsPath, out lane.FileOutput) (archivePath,
 		return archivePath, "", ""
 	}
 	if out.Path == nil {
-		return archivePath, "", lane.OutputContentPrefix(out)
+		return archivePath, "", lane.OutputContentPrefix(out).String()
 	}
-	return archivePath, path.Base(archivePath), lane.OutputContentPrefix(out)
+	return archivePath, path.Base(archivePath), lane.OutputContentPrefix(out).String()
 }
 
 // inputContentPath returns the in-image path within the producer's single
@@ -809,10 +809,10 @@ func archiveReroot(workdir primitive.AbsPath, out lane.FileOutput) (archivePath,
 func inputContentPath(inp lane.InputRef, out *lane.FileOutput) string {
 	base := lane.OutputContentPrefix(*out)
 	if inp.Subpath == nil {
-		return base
+		return base.String()
 	}
 	sub := inp.Subpath.String()
-	return path.Join(base, sub)
+	return path.Join(base.String(), sub)
 }
 
 // relWithinWorkdir returns the path of mount relative to workdir, and whether
