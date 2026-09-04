@@ -123,13 +123,13 @@ assignment (`s := string(id); f(s)`), a composite-literal field
 return (`return string(id)`). These own or defer the boundary explicitly and are
 allowed; the call-argument form is not.
 
-**Enforcement.** `tools/linttypeconv` walks the type-checked AST and fails the
+**Enforcement.** `tools/linttype` walks the type-checked AST and fails the
 build on any conversion of a strike named type sitting in a call argument, except
 within that type's own package -- or its external test package, the same
 ownership layer for that package's own test code -- or a site named in the
 linter's central allowlist. The allowlist is auditable and editable; each entry
 carries the reason a conversion is deferred, and an empty allowlist means the
-tree is exhaustively type-clean. `make lint-typeconv` runs it; it is part of
+tree is exhaustively type-clean. `make lint-type` runs it; it is part of
 `make check`.
 
 ---

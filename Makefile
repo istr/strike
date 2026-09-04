@@ -16,10 +16,12 @@ golden:
 
 # --- Quality gates ---
 
-.PHONY: lint-typeconv
-lint-typeconv:
-	cd tools/linttypeconv && go build -o $(CURDIR)/.build/linttypeconv .
-	$(CURDIR)/.build/linttypeconv ./...
+# Go-side type-discipline gate: conversion ownership, the three flow classes,
+# and stuttering accessors, all over one extractor traversal.
+.PHONY: lint-type
+lint-type:
+	cd tools/linttype && go build -o $(CURDIR)/.build/linttype .
+	$(CURDIR)/.build/linttype ./...
 
 # Standalone gate, intentionally not in the aggregate `lint` target: it reports
 # hand-written types that a CUE-first tree would generate instead, and is run on
@@ -28,15 +30,6 @@ lint-typeconv:
 cuelint:
 	cd tools/cuelint && go build -o $(CURDIR)/.build/cuelint .
 	$(CURDIR)/.build/cuelint ./...
-
-# Flow-typing gate over the three near-zero-false-positive classes:
-# roundtrip-local, result-string-scalar, and detype-bypasses-stringer. It ran
-# standalone and deliberately red while the covered tree was proven clean class
-# by class; all three now pass at once, so it gates in aggregate lint.
-.PHONY: lint-typeflow
-lint-typeflow:
-	cd tools/linttypeflow && go build -o $(CURDIR)/.build/linttypeflow .
-	$(CURDIR)/.build/linttypeflow ./...
 
 # Gate for the two tree-wide source checks that need no Go type information:
 # printable-ASCII source and ADR-index coverage. Both are go/analysis analyzers
@@ -58,7 +51,7 @@ lint-ci:
 lint-cue-fmt:
 	go tool cue fmt --check --files contract
 
-lint: lint-ci lint-typeconv lint-typeflow lint-arch lint-docs lint-cue-fmt
+lint: lint-ci lint-type lint-arch lint-docs lint-cue-fmt
 
 test:
 	go test -race -coverprofile=coverage.out -covermode=atomic ./...

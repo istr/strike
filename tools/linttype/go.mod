@@ -1,4 +1,4 @@
-module github.com/istr/strike/tools/linttypeconv
+module github.com/istr/strike/tools/linttype
 
 go 1.26.6
 

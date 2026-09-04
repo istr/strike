@@ -53,7 +53,7 @@ outside the package that defines the concept, is D1 against the defining
 package. The named-type conversions it performs on the concept's fields are the
 symptom; the missing method is the finding. See ADR-049 (2).
 
-Named assignments (`h := string(a.Host)`) pass `linttypeconv` by design. Passing
+Named assignments (`h := string(a.Host)`) pass `linttype` by design. Passing
 that linter is not a boundary citation.
 
 ### RB-04 -- A grammar-closed method returning a plain string is D1

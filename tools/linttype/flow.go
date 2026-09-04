@@ -44,14 +44,11 @@
 package main
 
 import (
-	"encoding/json"
-	"flag"
 	"fmt"
 	"go/ast"
 	"go/printer"
 	"go/token"
 	"go/types"
-	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -78,9 +75,20 @@ type Fact struct {
 	// IsBoundary marks a sanctioned stringification method detyping its own
 	// receiver. The survey keeps the fact; the gate drops it.
 	IsBoundary bool `json:"isboundary,omitempty"`
+	// tokenPos is where an analyzer reports the finding. It is unexported, so
+	// the JSONL survey is unaffected by it.
+	tokenPos token.Pos
 }
 
 var scalarName = regexp.MustCompile(`(?i)(host|port|digest|path|id$|ids$|name$|ref|refs$|authority|image|commit|sha|hash|url|uri|addr|fingerprint|issuer|subject|user|tag|duration|timestamp|secret)`)
+
+// unit is the per-package input the walk needs. Its field names match the
+// go/packages fields they stand in for, so the same methods serve a
+// packages.Load result and an analysis pass without a second walk.
+type unit struct {
+	PkgPath   string
+	TypesInfo *types.Info
+}
 
 type collector struct {
 	facts    []Fact
@@ -100,11 +108,12 @@ type allowEntry struct {
 	reason string
 }
 
-// allow tolerates a covered flow class in one function until its owning
-// roadmap item retypes it. The gate no longer stands red: every covered class
-// passes at once, which is why it runs inside the aggregate lint target. The
-// single entry below is a test-side round trip whose correct repair is a
-// constructor signature change, not a call-site edit.
+// allow tolerates one covered class in one function until its owning roadmap
+// item retypes it. It serves every gate in this tool: an entry is matched on
+// (pkg, func, kind), so the conversion-ownership gate and the flow gates share
+// one shape instead of two. The single entry below is a test-side round trip
+// whose correct repair is a constructor signature change, not a call-site
+// edit.
 var allow = []allowEntry{
 	{
 		pkg:    "github.com/istr/strike/internal/primitive_test",
@@ -118,6 +127,17 @@ var allow = []allowEntry{
 // gatingKinds are the near-zero-false-positive classes the gate enforces. The
 // survey still records every kind; only these fail the build.
 var gatingKinds = map[string]bool{
+	"conv-owner":               true,
+	"roundtrip-local":          true,
+	"result-string-scalar":     true,
+	"detype-bypasses-stringer": true,
+}
+
+// convKinds and flowKinds split the gating set between the two analyzers that
+// report it. gateFindings still applies the common drops.
+var convKinds = map[string]bool{"conv-owner": true}
+
+var flowKinds = map[string]bool{
 	"roundtrip-local":          true,
 	"result-string-scalar":     true,
 	"detype-bypasses-stringer": true,
@@ -159,51 +179,17 @@ func gateFindings(facts []Fact, allow []allowEntry) []Fact {
 
 func gateMessage(f Fact) string {
 	switch f.Kind {
+	case "conv-owner":
+		return f.Detail
 	case "result-string-scalar":
-		return fmt.Sprintf("%s: %s: %s returned as plain string in %s; return the named type or convert at the call boundary",
-			f.Pos, f.Kind, f.From, f.Func)
+		return fmt.Sprintf("%s: %s returned as plain string in %s; return the named type or convert at the call boundary",
+			f.Kind, f.From, f.Func)
 	case "detype-bypasses-stringer":
-		return fmt.Sprintf("%s: %s: %s owns a String() boundary but %s detypes it with %s; call the String() method instead",
-			f.Pos, f.Kind, f.From, f.Func, f.Detail)
+		return fmt.Sprintf("%s: %s owns a String() boundary but %s detypes it with %s; call the String() method instead",
+			f.Kind, f.From, f.Func, f.Detail)
 	}
-	return fmt.Sprintf("%s: %s: %s detyped to %s and retyped in %s (%s); keep the value typed end to end",
-		f.Pos, f.Kind, f.From, f.To, f.Func, f.Detail)
-}
-
-func main() {
-	report := flag.Bool("report", false,
-		"emit the full type-flow survey as JSONL on stdout instead of gating")
-	flag.Parse()
-	patterns := flag.Args()
-	if len(patterns) == 0 {
-		fmt.Fprintln(os.Stderr, "usage: linttypeflow [-report] <package-pattern>...")
-		os.Exit(2)
-	}
-	dir, err := os.Getwd()
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(2)
-	}
-	facts, err := collect(dir, patterns)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(2)
-	}
-	if *report {
-		enc := json.NewEncoder(os.Stdout)
-		for _, f := range facts {
-			enc.Encode(f)
-		}
-		fmt.Fprintf(os.Stderr, "facts: %d\n", len(facts))
-		return
-	}
-	findings := gateFindings(facts, allow)
-	for _, f := range findings {
-		fmt.Fprintln(os.Stderr, gateMessage(f))
-	}
-	if len(findings) > 0 {
-		os.Exit(1)
-	}
+	return fmt.Sprintf("%s: %s detyped to %s and retyped in %s (%s); keep the value typed end to end",
+		f.Kind, f.From, f.To, f.Func, f.Detail)
 }
 
 // collect loads the given patterns rooted at dir and returns every type-flow
@@ -234,12 +220,13 @@ func collect(dir string, patterns []string) ([]Fact, error) {
 			continue
 		}
 		c.fset = pkg.Fset
+		u := unit{PkgPath: pkg.PkgPath, TypesInfo: pkg.TypesInfo}
 		for _, file := range pkg.Syntax {
 			fname := c.fset.Position(file.Pos()).Filename
 			if !strings.HasPrefix(fname, c.repoRoot) {
 				continue // cgo/generated outside tree
 			}
-			c.walkFile(pkg, file)
+			c.walkFile(u, file)
 		}
 	}
 	sort.SliceStable(c.facts, func(i, j int) bool {
@@ -275,6 +262,13 @@ func (c *collector) relPos(p token.Pos) (string, bool, bool) {
 	isGen := strings.HasSuffix(pos.Filename, ".gen.go")
 	isTest := strings.HasSuffix(pos.Filename, "_test.go")
 	return fmt.Sprintf("%s:%d", rel, pos.Line), isGen, isTest
+}
+
+// at stamps the reporting position on a fact. Every emitted fact goes through
+// it, so a gate always has somewhere to point.
+func (f Fact) at(p token.Pos) Fact {
+	f.tokenPos = p
+	return f
 }
 
 // strikeNamed returns t as a strike-defined *types.Named (unwrapping pointers
@@ -514,7 +508,7 @@ type funcCtx struct {
 	recv types.Type
 }
 
-func (c *collector) walkFile(pkg *packages.Package, file *ast.File) {
+func (c *collector) walkFile(pkg unit, file *ast.File) {
 	// Stack-based walk to know enclosing function and parent node.
 	var stack []ast.Node
 	var fn funcCtx
@@ -635,7 +629,7 @@ type convSite struct {
 	isTest bool
 }
 
-func (c *collector) analyzeCall(pkg *packages.Package, call *ast.CallExpr, stack []ast.Node, fn funcCtx) {
+func (c *collector) analyzeCall(pkg unit, call *ast.CallExpr, stack []ast.Node, fn funcCtx) {
 	info := pkg.TypesInfo
 	target, arg, ok := asConversion(info, call)
 	if !ok {
@@ -661,7 +655,29 @@ func (c *collector) analyzeCall(pkg *packages.Package, call *ast.CallExpr, stack
 			From: typeStr(src), To: typeStr(target), Context: ctx,
 			Detail:  c.render(call),
 			Snippet: c.render(enclosingStmt(stack)), IsGen: isGen, IsTest: isTest,
-		})
+		}.at(call.Pos()))
+	}
+
+	// conv-owner: the conversion sits directly in a call argument and neither
+	// the target nor the source type is defined here, so the boundary is being
+	// written outside the package that owns the type's behavior. This is the
+	// same finding the separate ownership analyzer made, taken from the
+	// traversal that already resolved the types.
+	if strings.HasPrefix(ctx, "call-arg:") {
+		named := strikeNamed(target)
+		if named == nil {
+			named = strikeNamed(src)
+		}
+		if named != nil && !ownsConversion(pkg.PkgPath, strikeNamed(target), strikeNamed(src)) {
+			c.emit(Fact{
+				Kind: "conv-owner", Pos: pos, Pkg: pkg.PkgPath, Func: fn.name,
+				From: typeStr(src), To: typeStr(target), Context: ctx,
+				Detail: fmt.Sprintf(
+					"conversion of %s in a call argument; type the source or own the conversion in %s",
+					named.Obj().Name(), named.Obj().Pkg().Path()),
+				Snippet: c.render(enclosingStmt(stack)), IsGen: isGen, IsTest: isTest,
+			}.at(call.Pos()))
+		}
 	}
 
 	cv := convSite{call: call, arg: arg, target: target, src: src, pos: pos, isGen: isGen, isTest: isTest}
@@ -671,7 +687,7 @@ func (c *collector) analyzeCall(pkg *packages.Package, call *ast.CallExpr, stack
 
 // analyzeRoundtripNested records T(string(x)) / string(T(s)) written as one
 // directly nested pair of conversions.
-func (c *collector) analyzeRoundtripNested(pkg *packages.Package, cv convSite, fn funcCtx) {
+func (c *collector) analyzeRoundtripNested(pkg unit, cv convSite, fn funcCtx) {
 	info := pkg.TypesInfo
 	inner, ok := ast.Unparen(cv.arg).(*ast.CallExpr)
 	if !ok {
@@ -697,7 +713,7 @@ func (c *collector) analyzeRoundtripNested(pkg *packages.Package, cv convSite, f
 // analyzeRetypeFromStringop records a conversion to a strike scalar whose
 // argument is a string built somewhere else -- a call result or a
 // concatenation -- which rebuilds the type's grammar outside the owning type.
-func (c *collector) analyzeRetypeFromStringop(pkg *packages.Package, cv convSite, fn funcCtx) {
+func (c *collector) analyzeRetypeFromStringop(pkg unit, cv convSite, fn funcCtx) {
 	info := pkg.TypesInfo
 	if !isScalarStrike(cv.target) {
 		return
@@ -720,7 +736,7 @@ func (c *collector) analyzeRetypeFromStringop(pkg *packages.Package, cv convSite
 	}
 }
 
-func (c *collector) analyzeMapType(pkg *packages.Package, mt *ast.MapType, stack []ast.Node, fn funcCtx) {
+func (c *collector) analyzeMapType(pkg unit, mt *ast.MapType, stack []ast.Node, fn funcCtx) {
 	info := pkg.TypesInfo
 	keyType := info.TypeOf(mt.Key)
 	if !isPlainString(keyType) {
@@ -762,7 +778,7 @@ func (c *collector) analyzeMapType(pkg *packages.Package, mt *ast.MapType, stack
 	})
 }
 
-func (c *collector) analyzeIndex(pkg *packages.Package, ix *ast.IndexExpr, fn funcCtx) {
+func (c *collector) analyzeIndex(pkg unit, ix *ast.IndexExpr, fn funcCtx) {
 	info := pkg.TypesInfo
 	baseType := info.TypeOf(ix.X)
 	if baseType == nil {
@@ -782,7 +798,7 @@ func (c *collector) analyzeIndex(pkg *packages.Package, ix *ast.IndexExpr, fn fu
 	}
 }
 
-func (c *collector) analyzeFuncDecl(pkg *packages.Package, fd *ast.FuncDecl, fn funcCtx) {
+func (c *collector) analyzeFuncDecl(pkg unit, fd *ast.FuncDecl, fn funcCtx) {
 	info := pkg.TypesInfo
 	if fd.Type.Params == nil {
 		return
@@ -909,7 +925,7 @@ func (c *collector) analyzeFuncDecl(pkg *packages.Package, fd *ast.FuncDecl, fn 
 						From: typeStr(info.TypeOf(arg)), To: "string",
 						Snippet: c.render(node), IsGen: isGen, IsTest: isTest,
 						IsBoundary: isRecvIdent(info, arg, boundary),
-					})
+					}.at(call.Pos()))
 				}
 			}
 		}
@@ -920,7 +936,7 @@ func (c *collector) analyzeFuncDecl(pkg *packages.Package, fd *ast.FuncDecl, fn 
 // analyzeRoundtripLocal records a step whose argument is a local holding an
 // earlier step in the opposite direction: the value left its named type and
 // came back, or came back and left again, both halves inside one body.
-func (c *collector) analyzeRoundtripLocal(pkg *packages.Package, node *ast.CallExpr,
+func (c *collector) analyzeRoundtripLocal(pkg unit, node *ast.CallExpr,
 	arg ast.Expr, target types.Type, fn funcCtx, locals []localConv,
 ) {
 	info := pkg.TypesInfo
@@ -941,7 +957,7 @@ func (c *collector) analyzeRoundtripLocal(pkg *packages.Package, node *ast.CallE
 				From: typeStr(lc.from), To: typeStr(target),
 				Detail:  fmt.Sprintf("via local %q (%s)", lc.obj.Name(), typeStr(lc.to)),
 				Snippet: c.render(node), IsGen: isGen, IsTest: isTest,
-			})
+			}.at(node.Pos()))
 		}
 	}
 }
