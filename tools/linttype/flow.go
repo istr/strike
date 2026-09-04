@@ -550,12 +550,7 @@ func (c *collector) convContext(info *types.Info, stack []ast.Node, conv *ast.Ca
 		case *ast.ParenExpr:
 			continue
 		case *ast.CallExpr:
-			for _, a := range p.Args {
-				if a == stack[i+1] {
-					return "call-arg:" + c.calleeFQN(info, p)
-				}
-			}
-			return "call-fun"
+			return c.callContext(info, p, stack[i+1])
 		case *ast.ReturnStmt:
 			return "return"
 		case *ast.AssignStmt:
@@ -563,10 +558,7 @@ func (c *collector) convContext(info *types.Info, stack []ast.Node, conv *ast.Ca
 		case *ast.KeyValueExpr:
 			return "composite-field:" + c.render(p.Key)
 		case *ast.IndexExpr:
-			if p.Index == stack[i+1] {
-				return "map-index"
-			}
-			return "index-base"
+			return indexContext(p, stack[i+1])
 		case *ast.BinaryExpr:
 			return "binop:" + p.Op.String()
 		case *ast.CaseClause:
@@ -584,6 +576,26 @@ func (c *collector) convContext(info *types.Info, stack []ast.Node, conv *ast.Ca
 		}
 	}
 	return "toplevel"
+}
+
+// callContext names the role child plays in call p: an argument carries the
+// callee's name, anything else is the callee position itself.
+func (c *collector) callContext(info *types.Info, p *ast.CallExpr, child ast.Node) string {
+	for _, a := range p.Args {
+		if a == child {
+			return "call-arg:" + c.calleeFQN(info, p)
+		}
+	}
+	return "call-fun"
+}
+
+// indexContext names the role child plays in index expression p: the key of a
+// lookup, or the collection being looked into.
+func indexContext(p *ast.IndexExpr, child ast.Node) string {
+	if p.Index == child {
+		return "map-index"
+	}
+	return "index-base"
 }
 
 func (c *collector) calleeFQN(info *types.Info, call *ast.CallExpr) string {
@@ -798,139 +810,205 @@ func (c *collector) analyzeIndex(pkg unit, ix *ast.IndexExpr, fn funcCtx) {
 	}
 }
 
+// param is one named parameter of a declaration, kept together with the object
+// its uses in the body resolve to, so a conversion can be traced back to it.
+type param struct {
+	obj  types.Object
+	name string
+}
+
+// params splits a declaration's parameters into the two sets the body checks
+// need: the plain-string ones typing may start too late for, and the
+// strike-typed ones typing may break too early on.
+type params struct {
+	str   []param
+	typed []param
+}
+
+// site is where a declaration's facts are filed and which gate drops apply to
+// them. It travels with the checks so each one does not recompute it.
+type site struct {
+	pos    string
+	isGen  bool
+	isTest bool
+}
+
 func (c *collector) analyzeFuncDecl(pkg unit, fd *ast.FuncDecl, fn funcCtx) {
-	info := pkg.TypesInfo
 	if fd.Type.Params == nil {
 		return
 	}
 	pos, isGen, isTest := c.relPos(fd.Pos())
-	boundary := boundaryRecv(info, fd)
-
-	type param struct {
-		obj  types.Object
-		name string
-	}
-	var stringParams, typedParams []param
-	for _, field := range fd.Type.Params.List {
-		t := info.TypeOf(field.Type)
-		for _, nm := range field.Names {
-			obj := info.Defs[nm]
-			if obj == nil {
-				continue
-			}
-			if isPlainString(t) || isPlainStringSliceOrMap(t) {
-				stringParams = append(stringParams, param{obj, nm.Name})
-				if scalarName.MatchString(nm.Name) {
-					c.emit(Fact{
-						Kind: "param-string-scalar-name", Pos: pos, Pkg: pkg.PkgPath,
-						Func: fn.name, FuncSig: fn.sig,
-						Detail: nm.Name + " " + typeStr(t),
-						IsGen:  isGen, IsTest: isTest,
-					})
-				}
-			}
-			if isScalarStrike(t) || strikeNamed(t) != nil && !isScalarStrike(t) && isAddressLike(t) {
-				typedParams = append(typedParams, param{obj, nm.Name})
-			}
-		}
-	}
+	s := site{pos: pos, isGen: isGen, isTest: isTest}
+	ps := c.declParams(pkg, fd, fn, s)
 	if fd.Body == nil {
 		return
 	}
+	boundary := boundaryRecv(pkg.TypesInfo, fd)
 
-	// scan body for conversions touching params, and local roundtrips
+	// Locals accumulate as the walk goes, so a later step in the same body can
+	// be paired against an earlier one.
 	var locals []localConv
 
 	ast.Inspect(fd.Body, func(n ast.Node) bool {
 		switch node := n.(type) {
 		case *ast.AssignStmt:
-			if len(node.Lhs) != len(node.Rhs) {
-				return true
-			}
-			for i, rhs := range node.Rhs {
-				call, ok := ast.Unparen(rhs).(*ast.CallExpr)
-				if !ok {
-					continue
-				}
-				target, arg, ok := asDetyping(info, call)
-				if !ok {
-					continue
-				}
-				src := info.TypeOf(arg)
-				if strikeNamed(target) == nil && strikeNamed(src) == nil {
-					continue
-				}
-				if id, ok := node.Lhs[i].(*ast.Ident); ok {
-					if obj := info.Defs[id]; obj != nil {
-						locals = append(locals, localConv{obj, src, target, call.Pos()})
-					} else if obj := info.Uses[id]; obj != nil {
-						locals = append(locals, localConv{obj, src, target, call.Pos()})
-					}
-				}
-			}
+			collectLocals(pkg.TypesInfo, node, &locals)
 		case *ast.CallExpr:
-			target, arg, ok := asDetyping(info, node)
-			if !ok {
-				return true
-			}
-			src := info.TypeOf(arg)
-			// param-string-typed-in-body: plain-string param converted to strike type
-			if strikeNamed(target) != nil {
-				for _, p := range stringParams {
-					if usesObj(info, arg, p.obj) {
-						cpos, _, _ := c.relPos(node.Pos())
-						c.emit(Fact{
-							Kind: "param-string-typed-in-body", Pos: pos, Pkg: pkg.PkgPath,
-							Func: fn.name, FuncSig: fn.sig,
-							From: p.name + " string", To: typeStr(target),
-							Detail:  "conversion at " + cpos,
-							Snippet: c.render(node), IsGen: isGen, IsTest: isTest,
-						})
-					}
-				}
-			}
-			// param-detyped-in-body: strike-typed param taken back to a basic
-			// type, by conversion or through the String() boundary
-			if strikeNamed(src) != nil && strikeNamed(target) == nil {
-				for _, p := range typedParams {
-					if usesObj(info, arg, p.obj) {
-						cpos, _, _ := c.relPos(node.Pos())
-						c.emit(Fact{
-							Kind: "param-detyped-in-body", Pos: pos, Pkg: pkg.PkgPath,
-							Func: fn.name, FuncSig: fn.sig,
-							From: p.name + " " + typeStr(src), To: typeStr(target),
-							Detail:  "detyped at " + cpos,
-							Snippet: c.render(node), IsGen: isGen, IsTest: isTest,
-						})
-					}
-				}
-			}
-			c.analyzeRoundtripLocal(pkg, node, arg, target, fn, locals)
+			c.analyzeParamFlow(pkg, node, fn, ps, s, locals)
 		case *ast.ReturnStmt:
-			// result-string-scalar: returning string(strikeTyped) from a func
-			for _, res := range node.Results {
-				call, ok := ast.Unparen(res).(*ast.CallExpr)
-				if !ok {
-					continue
-				}
-				target, arg, ok := asConversion(info, call)
-				if !ok {
-					continue
-				}
-				if isPlainString(target) && strikeNamed(info.TypeOf(arg)) != nil {
-					cpos, _, _ := c.relPos(call.Pos())
-					c.emit(Fact{
-						Kind: "result-string-scalar", Pos: cpos, Pkg: pkg.PkgPath,
-						Func: fn.name, FuncSig: fn.sig,
-						From: typeStr(info.TypeOf(arg)), To: "string",
-						Snippet: c.render(node), IsGen: isGen, IsTest: isTest,
-						IsBoundary: isRecvIdent(info, arg, boundary),
-					}.at(call.Pos()))
-				}
-			}
+			c.analyzeResultString(pkg, node, fn, boundary, s)
 		}
 		return true
 	})
+}
+
+// declParams classifies every named parameter of the declaration.
+func (c *collector) declParams(pkg unit, fd *ast.FuncDecl, fn funcCtx, s site) params {
+	var ps params
+	for _, field := range fd.Type.Params.List {
+		t := pkg.TypesInfo.TypeOf(field.Type)
+		for _, nm := range field.Names {
+			p, isStr, isTyped := c.classifyParam(pkg, fn, s, t, nm)
+			if isStr {
+				ps.str = append(ps.str, p)
+			}
+			if isTyped {
+				ps.typed = append(ps.typed, p)
+			}
+		}
+	}
+	return ps
+}
+
+// classifyParam reports which parameter sets nm belongs to, and records a
+// plain-string parameter whose name suggests a scalar semantic.
+func (c *collector) classifyParam(pkg unit, fn funcCtx, s site, t types.Type, nm *ast.Ident) (p param, isStr, isTyped bool) {
+	obj := pkg.TypesInfo.Defs[nm]
+	if obj == nil {
+		return param{}, false, false
+	}
+	p = param{obj, nm.Name}
+	if isPlainString(t) || isPlainStringSliceOrMap(t) {
+		isStr = true
+		if scalarName.MatchString(nm.Name) {
+			c.emit(Fact{
+				Kind: "param-string-scalar-name", Pos: s.pos, Pkg: pkg.PkgPath,
+				Func: fn.name, FuncSig: fn.sig,
+				Detail: nm.Name + " " + typeStr(t),
+				IsGen:  s.isGen, IsTest: s.isTest,
+			})
+		}
+	}
+	if isScalarStrike(t) || strikeNamed(t) != nil && !isScalarStrike(t) && isAddressLike(t) {
+		isTyped = true
+	}
+	return p, isStr, isTyped
+}
+
+// collectLocals records a local that took a value across the named-type
+// boundary in either direction, so a later step can be paired against it.
+func collectLocals(info *types.Info, stmt *ast.AssignStmt, locals *[]localConv) {
+	if len(stmt.Lhs) != len(stmt.Rhs) {
+		return
+	}
+	for i, rhs := range stmt.Rhs {
+		call, ok := ast.Unparen(rhs).(*ast.CallExpr)
+		if !ok {
+			continue
+		}
+		target, arg, ok := asDetyping(info, call)
+		if !ok {
+			continue
+		}
+		src := info.TypeOf(arg)
+		if strikeNamed(target) == nil && strikeNamed(src) == nil {
+			continue
+		}
+		id, ok := stmt.Lhs[i].(*ast.Ident)
+		if !ok {
+			continue
+		}
+		obj := info.Defs[id]
+		if obj == nil {
+			obj = info.Uses[id]
+		}
+		if obj != nil {
+			*locals = append(*locals, localConv{obj, src, target, call.Pos()})
+		}
+	}
+}
+
+// analyzeParamFlow records typing that starts too late on a plain-string
+// parameter or breaks too early on a typed one, then hands the same call to
+// the local-roundtrip check.
+func (c *collector) analyzeParamFlow(pkg unit, node *ast.CallExpr, fn funcCtx, ps params, s site, locals []localConv) {
+	info := pkg.TypesInfo
+	target, arg, ok := asDetyping(info, node)
+	if !ok {
+		return
+	}
+	src := info.TypeOf(arg)
+	// param-string-typed-in-body: plain-string param converted to strike type
+	if strikeNamed(target) != nil {
+		for _, p := range ps.str {
+			if !usesObj(info, arg, p.obj) {
+				continue
+			}
+			cpos, _, _ := c.relPos(node.Pos())
+			c.emit(Fact{
+				Kind: "param-string-typed-in-body", Pos: s.pos, Pkg: pkg.PkgPath,
+				Func: fn.name, FuncSig: fn.sig,
+				From: p.name + " string", To: typeStr(target),
+				Detail:  "conversion at " + cpos,
+				Snippet: c.render(node), IsGen: s.isGen, IsTest: s.isTest,
+			})
+		}
+	}
+	// param-detyped-in-body: strike-typed param taken back to a basic type, by
+	// conversion or through the String() boundary
+	if strikeNamed(src) != nil && strikeNamed(target) == nil {
+		for _, p := range ps.typed {
+			if !usesObj(info, arg, p.obj) {
+				continue
+			}
+			cpos, _, _ := c.relPos(node.Pos())
+			c.emit(Fact{
+				Kind: "param-detyped-in-body", Pos: s.pos, Pkg: pkg.PkgPath,
+				Func: fn.name, FuncSig: fn.sig,
+				From: p.name + " " + typeStr(src), To: typeStr(target),
+				Detail:  "detyped at " + cpos,
+				Snippet: c.render(node), IsGen: s.isGen, IsTest: s.isTest,
+			})
+		}
+	}
+	c.analyzeRoundtripLocal(pkg, node, arg, target, fn, locals)
+}
+
+// analyzeResultString records a return statement that hands a strike named
+// value out as a plain string.
+func (c *collector) analyzeResultString(pkg unit, node *ast.ReturnStmt, fn funcCtx, boundary types.Object, s site) {
+	info := pkg.TypesInfo
+	for _, res := range node.Results {
+		call, ok := ast.Unparen(res).(*ast.CallExpr)
+		if !ok {
+			continue
+		}
+		target, arg, ok := asConversion(info, call)
+		if !ok {
+			continue
+		}
+		if !isPlainString(target) || strikeNamed(info.TypeOf(arg)) == nil {
+			continue
+		}
+		cpos, _, _ := c.relPos(call.Pos())
+		c.emit(Fact{
+			Kind: "result-string-scalar", Pos: cpos, Pkg: pkg.PkgPath,
+			Func: fn.name, FuncSig: fn.sig,
+			From: typeStr(info.TypeOf(arg)), To: "string",
+			Snippet: c.render(node), IsGen: s.isGen, IsTest: s.isTest,
+			IsBoundary: isRecvIdent(info, arg, boundary),
+		}.at(call.Pos()))
+	}
 }
 
 // analyzeRoundtripLocal records a step whose argument is a local holding an
