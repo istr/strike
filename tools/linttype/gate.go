@@ -43,14 +43,7 @@ var FlowAnalyzer = &analysis.Analyzer{
 
 func runFacts(pass *analysis.Pass) (any, error) {
 	path := pass.Pkg.Path()
-	if !strings.HasPrefix(path, strikePrefix) && path != "github.com/istr/strike" {
-		return []Fact(nil), nil
-	}
-	if strings.HasSuffix(path, ".test") {
-		// The synthetic test-binary main for this package: a generated
-		// testmain.go in the build cache, outside any module tree. The
-		// package's real files are analyzed under the "pkg [pkg.test]"
-		// variant, which still matches the prefix check above.
+	if skipPackage(path) {
 		return []Fact(nil), nil
 	}
 	root, err := moduleRoot(pass)
@@ -74,7 +67,11 @@ func runFacts(pass *analysis.Pass) (any, error) {
 // -- stay in gateFindings so the gate and the survey agree on what counts.
 func gateRun(kinds map[string]bool) func(*analysis.Pass) (any, error) {
 	return func(pass *analysis.Pass) (any, error) {
-		facts, _ := pass.ResultOf[factsAnalyzer].([]Fact)
+		facts, ok := pass.ResultOf[factsAnalyzer].([]Fact)
+		if !ok {
+			return nil, fmt.Errorf("facts result is %T, want []Fact",
+				pass.ResultOf[factsAnalyzer])
+		}
 		for _, f := range gateFindings(facts, allow) {
 			if !kinds[f.Kind] {
 				continue

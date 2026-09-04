@@ -20,8 +20,7 @@ golden:
 # and stuttering accessors, all over one extractor traversal.
 .PHONY: lint-type
 lint-type:
-	cd tools/linttype && go build -o $(CURDIR)/.build/linttype .
-	$(CURDIR)/.build/linttype ./...
+	go tool linttype ./...
 
 # Standalone gate, intentionally not in the aggregate `lint` target: it reports
 # hand-written types that a CUE-first tree would generate instead, and is run on
@@ -35,10 +34,9 @@ cuelint:
 # printable-ASCII source and ADR-index coverage. Both walk the module tree from
 # the directory holding go.mod, so the command takes no package pattern; it is
 # run from the repository root.
-.PHONY: lint-docs
-lint-docs:
-	cd tools/lintdocs && go build -o $(CURDIR)/.build/lintdocs .
-	$(CURDIR)/.build/lintdocs
+.PHONY: lint-doc
+lint-doc:
+	go tool lintdoc
 
 .PHONY: lint-arch
 lint-arch:
@@ -50,7 +48,7 @@ lint-ci:
 lint-cue-fmt:
 	go tool cue fmt --check --files contract
 
-lint: lint-ci lint-type lint-arch lint-docs lint-cue-fmt
+lint: lint-ci lint-type lint-arch lint-doc lint-cue-fmt
 
 test:
 	go test -race -coverprofile=coverage.out -covermode=atomic ./...

@@ -1,4 +1,4 @@
-// Command lintdocs gates the two tree-wide source checks that need no Go type
+// Command lintdoc gates the two tree-wide source checks that need no Go type
 // information: every non-test Markdown, Go, CUE and SVG file in the module
 // tree is printable ASCII, and every ADR file on disk is referenced from the
 // ADR index. Both checks walk the module tree from the directory holding

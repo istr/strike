@@ -155,7 +155,7 @@ patterns in `docs/CODE-STYLE.md`. Agent-critical points:
 
 - **ASCII only.** All code, comments, errors, docs, and commit messages are
   printable ASCII (U+0000 to U+007F). Use `--` not em dash, `->` not arrows,
-  `"` not curly quotes, "and" not `&`. Enforced by `make lint-docs`.
+  `"` not curly quotes, "and" not `&`. Enforced by `make lint-doc`.
 - **US English only** ("initialize", "color").
 - `gofmt` / `gofumpt`, no deviations. Max function length 80 lines / 50
   statements; max cyclomatic complexity 15 -- reduce with early returns and

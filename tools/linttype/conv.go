@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"go/ast"
 	"go/types"
 
@@ -22,25 +23,29 @@ var StutterAnalyzer = &analysis.Analyzer{
 }
 
 func runStutter(pass *analysis.Pass) (any, error) {
-	insp := pass.ResultOf[inspect.Analyzer].(*inspector.Inspector)
+	insp, ok := pass.ResultOf[inspect.Analyzer].(*inspector.Inspector)
+	if !ok {
+		return nil, fmt.Errorf("inspect result is %T, want *inspector.Inspector",
+			pass.ResultOf[inspect.Analyzer])
+	}
 	insp.Preorder([]ast.Node{(*ast.CallExpr)(nil)}, func(n ast.Node) {
-		call := n.(*ast.CallExpr)
-		if len(call.Args) != 0 {
+		call, isCall := n.(*ast.CallExpr)
+		if !isCall || len(call.Args) != 0 {
 			return
 		}
-		outer, ok := call.Fun.(*ast.SelectorExpr)
-		if !ok {
+		outer, isSel := call.Fun.(*ast.SelectorExpr)
+		if !isSel {
 			return
 		}
 		if calleeName(outer.X) != outer.Sel.Name {
 			return
 		}
 		t := pass.TypesInfo.TypeOf(outer.X)
-		if ptr, ok := t.(*types.Pointer); ok {
+		if ptr, isPtr := t.(*types.Pointer); isPtr {
 			t = ptr.Elem()
 		}
-		named, ok := t.(*types.Named)
-		if !ok || named.Obj().Name() == outer.Sel.Name {
+		named, isNamed := t.(*types.Named)
+		if !isNamed || named.Obj().Name() == outer.Sel.Name {
 			return
 		}
 		pass.Reportf(outer.Sel.Pos(),

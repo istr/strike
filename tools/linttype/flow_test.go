@@ -123,8 +123,8 @@ func TestGateFindingsAllowlist(t *testing.T) {
 		{Kind: "roundtrip-local", Pos: "a.go:1", Pkg: "p", Func: "F"},
 		{Kind: "roundtrip-local", Pos: "a.go:2", Pkg: "p", Func: "Other"},
 	}
-	allow := []allowEntry{{pkg: "p", fn: "F", kind: "roundtrip-local", owner: "item-test", reason: "fixture"}}
-	got := gateFindings(facts, allow)
+	entries := []allowEntry{{pkg: "p", fn: "F", kind: "roundtrip-local", owner: "item-test", reason: "fixture"}}
+	got := gateFindings(facts, entries)
 	if len(got) != 1 || got[0].Func != "Other" {
 		t.Fatalf("allowlist should suppress p.F only, got %+v", got)
 	}

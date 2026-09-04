@@ -1,18 +1,50 @@
-// Command linttypeflow reports type-flow leaks that the type checker can see:
-// a strike named value that is detyped and retyped, or returned as a plain
-// string. It has two modes. The default mode gates: it fails when a covered
-// flow class appears outside the owned allowlist, printing one finding per line
-// on stderr and exiting non-zero. The -report mode emits the full type-flow
-// survey as JSONL on stdout and always exits zero; prose reports render from
-// that data. The gate needs a buildable tree, so it aborts when the package
-// loader reports any error.
-//
-// The survey records these fact kinds; the gate covers roundtrip-local,
-// result-string-scalar and detype-bypasses-stringer, the near-zero-false-
-// positive classes:
+package main
+
+import (
+	"fmt"
+	"go/ast"
+	"go/printer"
+	"go/token"
+	"go/types"
+	"path/filepath"
+	"regexp"
+	"sort"
+	"strings"
+
+	"golang.org/x/tools/go/packages"
+)
+
+const strikePrefix = "github.com/istr/strike/"
+
+// skipPackage reports whether the extractor should record no facts for the
+// package at path: outside the strike module; the synthetic test-binary main
+// for a tested package (a generated testmain.go in the build cache, outside
+// any module tree -- the package's real files are analyzed under the
+// "pkg [pkg.test]" variant, which still matches the module-prefix check
+// below); or the tools tree, hand-written Go with no CUE-generated
+// vocabulary, so the named types resolved there are this tool's own
+// scaffolding rather than the contract vocabulary the gates exist for --
+// .go-arch-lint.yml excludes the same tree for the same reason. A measuring
+// instrument does not measure itself. The analysis-pass gate and the
+// go/packages survey both call this so the two traversals cannot drift apart.
+func skipPackage(path string) bool {
+	if !strings.HasPrefix(path, strikePrefix) && path != "github.com/istr/strike" {
+		return true
+	}
+	if strings.HasSuffix(path, ".test") {
+		return true
+	}
+	return strings.HasPrefix(path, strikePrefix+"tools/")
+}
+
+// Fact is one observation of the extractor. The survey records every kind
+// below; the gates cover conv-owner, roundtrip-local, result-string-scalar and
+// detype-bypasses-stringer, the near-zero-false-positive classes:
 //
 //   - conversion: every type conversion involving a strike-defined named type,
 //     with syntactic context (call-arg, return, assign, map-index, binop, ...)
+//   - conv-owner: a conversion sitting directly in a call argument, outside
+//     the defining package of the type being converted
 //   - roundtrip-nested: T(string(x)) / string(T(s)) directly nested
 //   - roundtrip-local: v := string(x) or v := x.String() ... T(v) (and inverse)
 //     within one function
@@ -41,24 +73,6 @@
 // result-string-scalar fact, flagged isboundary, and the gate drops it the way
 // it drops generated code. Every other detyping of a type that owns such a
 // boundary is a bypass and gates.
-package main
-
-import (
-	"fmt"
-	"go/ast"
-	"go/printer"
-	"go/token"
-	"go/types"
-	"path/filepath"
-	"regexp"
-	"sort"
-	"strings"
-
-	"golang.org/x/tools/go/packages"
-)
-
-const strikePrefix = "github.com/istr/strike/"
-
 type Fact struct {
 	Kind    string `json:"kind"`
 	Pos     string `json:"pos"`
@@ -86,15 +100,15 @@ var scalarName = regexp.MustCompile(`(?i)(host|port|digest|path|id$|ids$|name$|r
 // go/packages fields they stand in for, so the same methods serve a
 // packages.Load result and an analysis pass without a second walk.
 type unit struct {
-	PkgPath   string
 	TypesInfo *types.Info
+	PkgPath   string
 }
 
 type collector struct {
-	facts    []Fact
 	seen     map[string]bool
 	fset     *token.FileSet
 	repoRoot string
+	facts    []Fact
 }
 
 // allowEntry tolerates one covered flow class in one function until its owning
@@ -216,7 +230,7 @@ func collect(dir string, patterns []string) ([]Fact, error) {
 	}
 	c := &collector{seen: map[string]bool{}, repoRoot: absDir}
 	for _, pkg := range pkgs {
-		if !strings.HasPrefix(pkg.PkgPath, strikePrefix) && pkg.PkgPath != "github.com/istr/strike" {
+		if skipPackage(pkg.PkgPath) {
 			continue
 		}
 		c.fset = pkg.Fset
@@ -405,7 +419,9 @@ func typeStr(t types.Type) string {
 
 func (c *collector) render(n ast.Node) string {
 	var sb strings.Builder
-	printer.Fprint(&sb, c.fset, n)
+	if err := printer.Fprint(&sb, c.fset, n); err != nil {
+		return fmt.Sprintf("<unprintable node: %v>", err)
+	}
 	s := sb.String()
 	s = strings.Join(strings.Fields(s), " ")
 	if len(s) > 220 {
@@ -499,21 +515,20 @@ type localConv struct {
 }
 
 type funcCtx struct {
-	name string
-	sig  string
 	decl *ast.FuncDecl
 	// recv is the receiver type of the enclosing method, nil for a plain
 	// func. A type owns its own representation, so a conversion inside one of
 	// its methods is not a boundary bypass.
 	recv types.Type
+	name string
+	sig  string
 }
 
 func (c *collector) walkFile(pkg unit, file *ast.File) {
 	// Stack-based walk to know enclosing function and parent node.
 	var stack []ast.Node
 	var fn funcCtx
-	var visit func(n ast.Node) bool
-	visit = func(n ast.Node) bool {
+	visit := func(n ast.Node) bool {
 		if n == nil {
 			stack = stack[:len(stack)-1]
 			return true
@@ -543,8 +558,8 @@ func (c *collector) walkFile(pkg unit, file *ast.File) {
 }
 
 // context of a conversion: what syntactic role the converted value plays.
-func (c *collector) convContext(info *types.Info, stack []ast.Node, conv *ast.CallExpr) string {
-	// stack[len-1] == conv; parent is stack[len-2]
+// stack's last element is the conversion call itself; this walks its ancestors.
+func (c *collector) convContext(info *types.Info, stack []ast.Node) string {
 	for i := len(stack) - 2; i >= 0; i-- {
 		switch p := stack[i].(type) {
 		case *ast.ParenExpr:
@@ -652,7 +667,7 @@ func (c *collector) analyzeCall(pkg unit, call *ast.CallExpr, stack []ast.Node, 
 		return
 	}
 	pos, isGen, isTest := c.relPos(call.Pos())
-	ctx := c.convContext(info, stack, call)
+	ctx := c.convContext(info, stack)
 	c.emit(Fact{
 		Kind: "conversion", Pos: pos, Pkg: pkg.PkgPath, Func: fn.name,
 		From: typeStr(src), To: typeStr(target), Context: ctx,

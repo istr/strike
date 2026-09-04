@@ -61,5 +61,4 @@ func survey(patterns []string) {
 			log.Fatal(err)
 		}
 	}
-	log.Printf("facts: %d", len(facts))
 }
