@@ -65,7 +65,10 @@ func TestHasJSONField(t *testing.T) {
 		"type Plain struct{ X int }\n"
 	pkg := checkSource(t, src)
 	for name, want := range map[string]bool{"Tagged": true, "Plain": false} {
-		st := named(t, pkg, name).Underlying().(*types.Struct)
+		st, ok := named(t, pkg, name).Underlying().(*types.Struct)
+		if !ok {
+			t.Fatalf("%s is not a struct", name)
+		}
 		if got := hasJSONField(st); got != want {
 			t.Errorf("hasJSONField(%s) = %v, want %v", name, got, want)
 		}

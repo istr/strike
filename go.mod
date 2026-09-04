@@ -117,6 +117,7 @@ require (
 tool (
 	cuelang.org/go/cmd/cue
 	github.com/istr/strike/tools/gengolden
+	github.com/istr/strike/tools/lintcue
 	github.com/istr/strike/tools/lintdoc
 	github.com/istr/strike/tools/linttype
 )

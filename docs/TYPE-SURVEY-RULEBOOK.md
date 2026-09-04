@@ -157,9 +157,9 @@ The codifications of section 8.6, which no register row carries:
 | `unix`/`tls`/`mtls` in `UnmarshalEngine` | boundary | BC-03 | -- |
 | the same literals in `container` and `deploy` | D1 | BC-03 | item-0090, item-0092 |
 
-## Lint gates (cuelint)
+## Lint gates (lintcue)
 
-cuelint mechanizes three CUE-source rules over `contract/`. Each lands red until
+lintcue mechanizes three CUE-source rules over `contract/`. Each lands red until
 the owning cleanup item retypes the sites; none uses an allowlist.
 
 - **inline-string-disjunction** (ADR-049 rule 5): a non-definition field whose

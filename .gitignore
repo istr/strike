@@ -7,7 +7,6 @@ internal/**/*.gen.go
 .vscode
 cosign.*
 coverage.out
-.build/
 *.patch
 # No private key material in repository
 *.pem

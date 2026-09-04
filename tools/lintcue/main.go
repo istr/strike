@@ -1,4 +1,4 @@
-// Command cuelint fails when a hand-written Go type ought to be a
+// Command lintcue fails when a hand-written Go type ought to be a
 // generated CUE type. A named type is reported when it is not declared in a
 // generated file, is not behavioral, is not a struct whose every field is
 // unexported, and any of the following holds: it shares its name with a CUE
@@ -9,7 +9,8 @@
 // types carry exported fields. It also reports a struct that mixes exported and
 // unexported fields, which likewise has no single generated form. The tree must
 // compile for the report to be meaningful, so the command aborts when the
-// package loader reports any error.
+// package loader reports any error. Packages under tools/ are loaded but not
+// reported: a measuring instrument does not measure itself.
 //
 // It also lints the CUE source under contract/: an inline string disjunction in
 // a field (ADR-049 rule 5), a field that re-inlines a primitive grammar, and a
@@ -19,6 +20,7 @@ package main
 import (
 	"fmt"
 	"go/types"
+	"log"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -31,24 +33,44 @@ import (
 	"golang.org/x/tools/go/packages"
 )
 
-const modulePrefix = "github.com/istr/strike/"
+const (
+	modulePrefix = "github.com/istr/strike/"
+	toolsPrefix  = modulePrefix + "tools/"
+)
 
 func main() {
+	log.SetFlags(0)
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: lintcuecoverage <package-pattern>...")
+		log.Print("usage: lintcue <package-pattern>...")
 		os.Exit(2)
 	}
 	findings, err := run(os.Args[1:])
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		log.Print(err)
 		os.Exit(2)
 	}
 	for _, f := range findings {
-		fmt.Fprintln(os.Stderr, f)
+		log.Print(sanitizeForLog(f))
 	}
 	if len(findings) > 0 {
 		os.Exit(1)
 	}
+}
+
+// sanitizeForLog replaces control characters -- which could forge log lines --
+// with '_'. A finding string folds in a CUE @go redirect string, which passes
+// through this guard before it reaches the log.
+func sanitizeForLog(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		if r < 0x20 || r == 0x7f {
+			b.WriteRune('_')
+		} else {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }
 
 func run(patterns []string) ([]string, error) {
@@ -71,8 +93,13 @@ func run(patterns []string) ([]string, error) {
 	}
 	used := crossPackageUses(pkgs)
 	var findings []string
+	// Cross-package uses come from the whole load, so a product type that only
+	// a tool refers to keeps its reference. The tools tree itself is module
+	// code but not product surface, and is not reported: a measuring instrument
+	// does not measure itself.
 	for _, p := range pkgs {
-		if strings.HasPrefix(p.PkgPath, modulePrefix) && p.Types != nil {
+		if strings.HasPrefix(p.PkgPath, modulePrefix) &&
+			!strings.HasPrefix(p.PkgPath, toolsPrefix) && p.Types != nil {
 			findings = appendFindings(findings, p, cueNames, used)
 		}
 	}
@@ -130,7 +157,7 @@ func required(named *types.Named, name string, cueNames map[string]bool) bool {
 }
 
 func hasJSONField(st *types.Struct) bool {
-	for i := 0; i < st.NumFields(); i++ {
+	for i := range st.NumFields() {
 		if _, ok := reflect.StructTag(st.Tag(i)).Lookup("json"); ok {
 			return true
 		}
@@ -146,7 +173,7 @@ func unexportedStruct(n *types.Named) bool {
 	if !ok {
 		return false
 	}
-	for i := 0; i < st.NumFields(); i++ {
+	for i := range st.NumFields() {
 		if st.Field(i).Exported() {
 			return false
 		}
@@ -165,7 +192,7 @@ func mixedStruct(n *types.Named) bool {
 		return false
 	}
 	exported, unexported := false, false
-	for i := 0; i < st.NumFields(); i++ {
+	for i := range st.NumFields() {
 		if st.Field(i).Exported() {
 			exported = true
 		} else {
@@ -180,7 +207,7 @@ func behavioralNamed(n *types.Named) bool {
 	case *types.Interface, *types.Signature, *types.Chan:
 		return true
 	case *types.Struct:
-		for i := 0; i < u.NumFields(); i++ {
+		for i := range u.NumFields() {
 			if behavioralField(u.Field(i).Type()) {
 				return true
 			}

@@ -25,10 +25,9 @@ lint-type:
 # Standalone gate, intentionally not in the aggregate `lint` target: it reports
 # hand-written types that a CUE-first tree would generate instead, and is run on
 # demand rather than gating.
-.PHONY: cuelint
-cuelint:
-	cd tools/cuelint && go build -o $(CURDIR)/.build/cuelint .
-	$(CURDIR)/.build/cuelint ./...
+.PHONY: lint-cue
+lint-cue:
+	go tool lintcue ./...
 
 # Gate for the two tree-wide source checks that need no Go type information:
 # printable-ASCII source and ADR-index coverage. Both walk the module tree from
