@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -57,10 +58,17 @@ var ADRIndexAnalyzer = &analysis.Analyzer{
 var (
 	asciiOnce sync.Once
 	adrOnce   sync.Once
-	rootOnce  sync.Once
-	rootDir   string
-	rootErr   error
 )
+
+// moduleTree memoizes the opened module root. os.Root makes a path that would
+// leave the tree impossible to open rather than merely audited
+// (docs/CODE-STYLE.md#path-confined-io). The root stays open for the life of
+// the process: every pass after the first reuses it.
+var moduleTree struct {
+	once sync.Once
+	root *os.Root
+	err  error
+}
 
 func runASCII(pass *analysis.Pass) (any, error) {
 	var err error
@@ -74,30 +82,31 @@ func runADRIndex(pass *analysis.Pass) (any, error) {
 	return nil, err
 }
 
-// moduleRoot walks up from the working directory to the directory holding
-// go.mod, so the checks cover the module tree regardless of the directory the
-// driver was started in.
-func moduleRoot() (string, error) {
-	rootOnce.Do(func() {
+// moduleRoot opens the directory holding go.mod, found by walking up from the
+// working directory, so the checks cover the module tree regardless of the
+// directory the driver was started in. Every read below goes through the
+// returned root.
+func moduleRoot() (*os.Root, error) {
+	moduleTree.once.Do(func() {
 		dir, err := os.Getwd()
 		if err != nil {
-			rootErr = err
+			moduleTree.err = err
 			return
 		}
 		for {
 			if _, statErr := os.Stat(filepath.Join(dir, "go.mod")); statErr == nil {
-				rootDir = dir
+				moduleTree.root, moduleTree.err = os.OpenRoot(dir)
 				return
 			}
 			parent := filepath.Dir(dir)
 			if parent == dir {
-				rootErr = fmt.Errorf("go.mod not found above working directory")
+				moduleTree.err = fmt.Errorf("go.mod not found above working directory")
 				return
 			}
 			dir = parent
 		}
 	})
-	return rootDir, rootErr
+	return moduleTree.root, moduleTree.err
 }
 
 // walkASCII scans every covered file under the module root. Only .git is
@@ -107,7 +116,7 @@ func walkASCII(pass *analysis.Pass) error {
 	if err != nil {
 		return err
 	}
-	return filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
+	return fs.WalkDir(root.FS(), ".", func(name string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
@@ -117,18 +126,19 @@ func walkASCII(pass *analysis.Pass) error {
 			}
 			return nil
 		}
-		name := d.Name()
-		if strings.HasSuffix(name, "_test.go") || !asciiExts[filepath.Ext(name)] {
+		base := d.Name()
+		if strings.HasSuffix(base, "_test.go") || !asciiExts[path.Ext(base)] {
 			return nil
 		}
-		return scanASCII(pass, path)
+		return scanASCII(pass, root, name)
 	})
 }
 
-// scanASCII reports one diagnostic per line of path that holds a non-ASCII
-// byte, positioned at the first such byte on that line.
-func scanASCII(pass *analysis.Pass, path string) error {
-	content, err := os.ReadFile(path)
+// scanASCII reports one diagnostic per line of name that holds a non-ASCII
+// byte, positioned at the first such byte on that line. name is relative to
+// the module root and is what the diagnostic shows.
+func scanASCII(pass *analysis.Pass, root *os.Root, name string) error {
+	content, err := fs.ReadFile(root.FS(), name)
 	if err != nil {
 		return err
 	}
@@ -136,7 +146,7 @@ func scanASCII(pass *analysis.Pass, path string) error {
 	if len(offsets) == 0 {
 		return nil
 	}
-	file := pass.Fset.AddFile(path, -1, len(content))
+	file := pass.Fset.AddFile(name, -1, len(content))
 	file.SetLinesForContent(content)
 	for _, off := range offsets {
 		pass.Report(analysis.Diagnostic{Pos: file.Pos(off), Message: nonASCIIMessage})
@@ -165,12 +175,11 @@ func checkADRIndex(pass *analysis.Pass) error {
 	if err != nil {
 		return err
 	}
-	dir := filepath.Join(root, adrDir)
-	index, err := os.ReadFile(filepath.Join(dir, adrIndexName))
+	index, err := fs.ReadFile(root.FS(), path.Join(adrDir, adrIndexName))
 	if err != nil {
 		return err
 	}
-	entries, err := os.ReadDir(dir)
+	entries, err := fs.ReadDir(root.FS(), adrDir)
 	if err != nil {
 		return err
 	}
@@ -179,7 +188,7 @@ func checkADRIndex(pass *analysis.Pass) error {
 		if e.IsDir() || !isADRFile(name) || strings.Contains(string(index), name) {
 			continue
 		}
-		if reportErr := reportMissingADR(pass, filepath.Join(dir, name), name); reportErr != nil {
+		if reportErr := reportMissingADR(pass, root, path.Join(adrDir, name), name); reportErr != nil {
 			return reportErr
 		}
 	}
@@ -187,13 +196,14 @@ func checkADRIndex(pass *analysis.Pass) error {
 }
 
 // reportMissingADR reports the missing index entry at the start of the ADR
-// file itself.
-func reportMissingADR(pass *analysis.Pass, path, name string) error {
-	content, err := os.ReadFile(path)
+// file itself. rel is relative to the module root; name is the bare file name
+// the message quotes.
+func reportMissingADR(pass *analysis.Pass, root *os.Root, rel, name string) error {
+	content, err := fs.ReadFile(root.FS(), rel)
 	if err != nil {
 		return err
 	}
-	file := pass.Fset.AddFile(path, -1, len(content))
+	file := pass.Fset.AddFile(rel, -1, len(content))
 	file.SetLinesForContent(content)
 	pass.Report(analysis.Diagnostic{
 		Pos:     file.Pos(0),
