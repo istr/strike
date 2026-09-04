@@ -32,14 +32,13 @@ cuelint:
 	$(CURDIR)/.build/cuelint ./...
 
 # Gate for the two tree-wide source checks that need no Go type information:
-# printable-ASCII source and ADR-index coverage. Both are go/analysis analyzers
-# rather than plain commands, so they are adoptable by golangci-lint as a module
-# plugin; this target is the direct invocation and is retired when that
-# adoption lands.
+# printable-ASCII source and ADR-index coverage. Both walk the module tree from
+# the directory holding go.mod, so the command takes no package pattern; it is
+# run from the repository root.
 .PHONY: lint-docs
 lint-docs:
 	cd tools/lintdocs && go build -o $(CURDIR)/.build/lintdocs .
-	$(CURDIR)/.build/lintdocs ./...
+	$(CURDIR)/.build/lintdocs
 
 .PHONY: lint-arch
 lint-arch:
