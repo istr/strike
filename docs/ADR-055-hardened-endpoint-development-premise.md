@@ -459,3 +459,50 @@ Results:
 - **Code is liability.** The premise adds no host tooling, no in-tree gate
   runner, and no exemption to the module-wide `os/exec` ban; it moves the
   toolchain into an image the project already knows how to pin.
+
+## Amendment 2026-09-05 -- the M2 side finding overstated the probe's defect
+
+M2 records as a side finding that "the readiness probe in the test harness
+helper has no timeout of its own and fails as a silent hang rather than an
+error". Read against the tree, the first half is wrong.
+`internal/testutil/harnessrecover.go` is unchanged since `a7682a6`
+(2026-09-01), before the spike's anchor `f2b3c7e`; its blob at both anchors
+is `3e00d6c`. The readiness phase is bounded by `readyBudget` (180 seconds)
+as one shared context deadline, each request by `probeTimeout` (10
+seconds), and the pause between attempts by `pollInterval` (2 seconds), all
+as scoped contexts, so a cancelled parent ends the loop on its next check.
+The probe cannot hang unbounded; it fails after its budget with an error
+naming the endpoint and the last attempt's cause.
+
+What stands is the second half, restated. The probe does not distinguish a
+non-transient failure -- connection refused, no route, name resolution --
+from a service that is not yet ready, and retries the former for the whole
+budget; and the budget is per call, so several `RequireHarness` callers in
+one package spend it in sequence. Under M2's wrong topology, no host
+networking, that is minutes of deterministic failure before the first error
+line, which reads as a hang from outside. Whether that is what the spike
+observed is the operator's to confirm. The follow-up the Consequences
+promise is item-0152, whose shape is this restatement and which is ratified
+only against that confirmation.
+
+**Supersedes, in D7 M2 above:** "has no timeout of its own and fails as a
+silent hang rather than an error" is read as: "retries a non-transient
+failure for its full per-call budget, which is a test-hygiene defect with
+its own follow-up".
+
+## Amendment 2026-09-05 -- the roadmap revision landed
+
+The revision the Consequences schedule behind this ADR landed at `7c21e8e`,
+the commit after this record. The answers it owed live in the item store
+and are pointed at, not restated. The ADR-009 bootstrap lane has an owner,
+item-0150, which also decides where the lane lives once the root
+`lane.yaml` is not the only lane the stage_1 image can run. item-0063
+records its infrastructure as operator-provided, consumes strike as a
+released digest-pinned image rather than a binary built from the tree it
+gates, and runs the hermetic suite because a step container reaches no
+engine. item-0096 widens its acceptance to every file carrying a
+make-target reference, the append-only ones amended rather than edited, and
+precedes item-0063 rather than depending on it. item-0125 precedes the
+commit-gate items. The dev container's D3 rework and the Containerfile pin
+gate are item-0151. The freeze re-declaration and the ratchet's home are
+recorded in the Beta Definition of Done's amendment of the same date.

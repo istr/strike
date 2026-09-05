@@ -133,3 +133,42 @@ column above is the snapshot at ratification.
 >    superseded by ADR-051 D5, which made SSH-transported deploys a method of
 >    their own. The limitation stands unchanged -- deploy steps reject SSH
 >    peers -- and its one-sentence note remains required for row 14.
+
+> **2026-09-05, riding the roadmap revision at `7c21e8e`:**
+>
+> 1. The attest wire freeze is re-declared effective at `7c21e8e`. The
+>    frozen baseline is `contract/attest` as of that commit, tree
+>    `58b22d269a2dedf85e5f5c120f2ce16823f47d36`. Amendment 2 above named
+>    two changes between the freeze taking effect and this record entering
+>    the tree; there were three. The third is `06ab773` (2026-09-02,
+>    item-0049): `#ResolverRecord` gained `dialedIP` and lost `serverName`,
+>    with the keyless goldens regenerated separately at `bea6366`
+>    (item-0131). Like the second, it was ratified through its instruction
+>    and not recorded as a freeze event, for the same reason. The baseline
+>    carries all three. From `7c21e8e` on, every change to
+>    `contract/attest` is the beta-blocking ratification event the freeze
+>    declaration describes, with a re-baseline of every conformance golden
+>    built on it; item-0004 is the first such event already scheduled, and
+>    its acceptance carries the golden regeneration; item-0128 is a second
+>    if projection is chosen. A verifier of this declaration compares
+>    `git rev-parse <commit>:contract/attest` against the tree above.
+> 2. Amendment 4 is resolved: the bootstrap lane has an owner, item-0150.
+>    Row 11's Items column reads 0150 (construction) and 0062 (validation);
+>    row 10's gains 0150 beside 0062, because the README bootstrap the row
+>    names runs that lane.
+> 3. Amendment 5 is resolved: the coverage ratchet lives in the commit gate.
+>    A step container reaches no engine (ADR-005, ADR-011, ADR-035, ADR-055
+>    D5), so the commit gate runs the hermetic suite
+>    (`STRIKE_INTEGRATION=0`) and the ratchet measures that suite. The floor
+>    is a one-line file in the tree, raised only by a commit and never
+>    lowered by one. The 61.9 percent in row 12 was measured with the
+>    integration suite included and is not the commit gate's floor; the
+>    initial floor is measured at item-0063's landing anchor. Ratified
+>    2026-09-05 as the starting point; lifting the commit gate beyond the
+>    hermetic suite is a later decision.
+> 4. Row 1 gains item-0151 in its Items column: `.devcontainer/` is an
+>    external reference under the digest-pinning promise (ADR-055 D3 and
+>    its consequences) and is not yet pinned throughout.
+> 5. Sequencing steps 3 and 4 converge to the order the revision set --
+>    0150, 0125, 0062, 0151, 0096, 0016, 0063 -- and `_order.md` remains
+>    the truth.
