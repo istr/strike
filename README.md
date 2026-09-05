@@ -4,6 +4,7 @@ Reproducible, rootless CI/CD lanes. No shell. No root. No local toolchain.
 
 **Please note that the Strike project is still in the pre-beta and pre-production phase.**
 Breaking changes are acceptable and do not need to be mentioned.
+The bar the project must clear to leave that phase is recorded in [docs/BETA-DEFINITION-OF-DONE.md](docs/BETA-DEFINITION-OF-DONE.md).
 
 We are developing our tool architecture based on real-world use cases with
 the aim of creating a tool that operates according to a few principles
