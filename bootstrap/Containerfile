@@ -15,16 +15,16 @@
 # GIT_COMMIT=<commit-sha> ; podman build -t strike:stage_1 --build-arg GIT_COMMIT=${GIT_COMMIT} https://raw.githubusercontent.com/istr/strike/${GIT_COMMIT}/bootstrap/Containerfile
 # podman run --env COSIGN_PRIVATE_KEY --env COSIGN_PASSWORD --security-opt unmask=/proc/* --mount type=tmpfs,dst=/podman/.local/share/containers/storage,U --userns=keep-id strike:stage_1
 #
-FROM docker.io/library/golang:1.26-alpine@sha256:d337ecb3075f0ec76d81652b3fa52af47c3eba6c8ba9f93b835752df7ce62946 AS builder
+FROM docker.io/library/golang:1.26.8-alpine@sha256:6e5de3f5b9fb7e30b8bb2ffe8dcbcbdaa2990f0f31267456eabe83f870a623be AS builder
 ARG GIT_COMMIT
-RUN ["apk", "add", "--no-cache", "cue-cli", "git"]
+RUN ["apk", "add", "--no-cache", "git"]
 WORKDIR /src
 RUN ["git", "init"]
 # We want no-sh. However, we cannot pass GIT_COMMIT to git using ARG/ENV combination.
 RUN git fetch --depth 1 https://github.com/istr/strike ${GIT_COMMIT}
 RUN ["git", "checkout", "FETCH_HEAD"]
-RUN ["cue", "exp", "gengotypes", "./internal/lane/"]
-RUN ["go", "get"]
+RUN ["go", "mod", "download"]
+RUN ["go", "generate", "./contract"]
 ENV CGO_ENABLED=0
 RUN ["go", "build", "-trimpath", "-ldflags=-s -w", "-o", "strike", "./cmd/strike"]
 
