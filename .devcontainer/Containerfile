@@ -1,3 +1,11 @@
+# Dev container for the hardened-endpoint premise; see
+# docs/ADR-055-hardened-endpoint-development-premise.md.
+#
+# Transitional: this version does not conform to ADR-055 D3. The Node.js
+# runtime comes from a distribution repository and is past upstream end of
+# life, and the agent arrives through a Dev Containers feature at a floating
+# version. It is the measured baseline the conforming rework starts from,
+# not a precedent for either practice.
 FROM docker.io/library/golang:1.26.8@sha256:2d54f6c8c6ea532a321e0b4c69553b2ed3637608d4f4357dbed37939fe2620cc
 RUN ["apt-get", "update"]
 RUN ["apt-get", "install", "-y", "--no-install-recommends", "nodejs", "npm"]

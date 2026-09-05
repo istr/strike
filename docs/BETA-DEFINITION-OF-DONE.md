@@ -81,3 +81,55 @@ item-0013 (parked: single-port TLS demux), the Rust second implementation agains
 2. Freeze formalization vehicle (D-list entry or ADR) beyond this document.
 3. Coverage target statement in DEVELOPMENT.md: keep 100 percent wording plus a signed-core coverage arc, or re-scope.
 4. item-0064 optional rider: non-systemd podman-socket note in the README prerequisites.
+
+## Amendments
+
+Dated and append-only. The text above is the record as ratified and is not
+edited. Live status of a gate-matrix row is not maintained here: it derives
+from the roadmap item store through the row's Items column, and the Status
+column above is the snapshot at ratification.
+
+> **2026-09-05, riding [ADR-055](ADR-055-hardened-endpoint-development-premise.md):**
+>
+> 1. Open ratification point 1 was resolved on 2026-07-11: option (B), the
+>    dogfooded strike lane with the forge as status reporter. It was recorded
+>    in item-0063 at the time and is recorded here now.
+> 2. The attest wire freeze has been effective since item-0057 landed
+>    (retired 2026-07-19, `56b257e`). Open ratification point 2 is closed by
+>    this record being in the tree; the freeze needs no further vehicle.
+>    Between the freeze taking effect and this record entering the tree,
+>    `contract/attest` changed twice: at `e7d2efd` (2026-07-19), which is
+>    item-0057's own decision applied (ADR-051 D10, the deploy target
+>    identity removed), and at `6b99c0e` (2026-08-16), where the sealed
+>    record gained the pushed-subject record under ADR-051 D4, D6 and D10,
+>    with the keyless goldens regenerated afterwards (`792efce` 2026-08-19,
+>    `d4f9832` 2026-08-22). Both were ratified through their instructions;
+>    the second was not recorded as the beta-blocking freeze event this
+>    record requires, because the record was not in the tree to be invoked.
+>    Whether the freeze is re-declared effective at a later anchor is a
+>    ratification point of the roadmap revision that follows ADR-055.
+> 3. Row 10 is no longer one promise among fourteen. Per ADR-055 D6 the
+>    hardened endpoint -- a rootless engine, an IDE, a git client, an AI
+>    coding agent in a container, and nothing else -- is the environment in
+>    which every other row is evaluated. A gate whose check needs an
+>    executable on the host is red by definition. item-0035 is done; the
+>    Containerfile half of the row landed at `2fcbac9`; item-0062 remains.
+> 4. Row 11 is red, not pending. The root `lane.yaml` that the published
+>    bootstrap command executes has not validated since ADR-039 D5 made
+>    every DAG leaf a deploy step; the compare step has no runnable artifact.
+>    The bootstrap lane has no owning item; the roadmap revision behind
+>    ADR-055 assigns one.
+> 5. Row 12's gate no longer reads "hosted verbatim `make check`". Under
+>    option (B) and ADR-055 D4 the hosted gate is a strike lane over a pushed
+>    revision -- the commit gate. The working-tree gate the executor runs
+>    before submitting is a separate gate over the uncommitted tree and is
+>    not hosted. Neither substitutes for the other. Where the coverage
+>    ratchet lives between them is decided in the roadmap revision.
+> 6. The gate-eligibility clause's first category, "a lint or conformance
+>    target in `make check`", is read as the working-tree gate of ADR-055 D4,
+>    whatever composes it. Retiring the Makefile (item-0096) changes the
+>    composition, not the category.
+> 7. Deferral item-0015 was retired on 2026-07-19 without implementation,
+>    superseded by ADR-051 D5, which made SSH-transported deploys a method of
+>    their own. The limitation stands unchanged -- deploy steps reject SSH
+>    peers -- and its one-sentence note remains required for row 14.

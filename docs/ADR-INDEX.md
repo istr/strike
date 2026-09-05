@@ -99,6 +99,7 @@ referenced here at all.
 | 052 | [Execution is completely lock-free](ADR-052-execution-is-completely-lock-free.md) | Accepted | Enforcement is structural; Code is liability; Peers are declared; Runtime is attested |
 | 053 | [Trust-anchor validity is bound to an authenticated time](ADR-053-trust-anchor-validity-authenticated-time.md) | Accepted | Runtime is attested; Enforcement is structural; Observation over declaration |
 | 054 | [The kubernetes deploy is a control-plane API act](ADR-054-kubernetes-deploy-via-cluster-api.md) | Accepted | Runtime is attested; Identity is asymmetric; Peers are declared; Enforcement is structural; Code is liability |
+| 055 | [The hardened endpoint is the development premise](ADR-055-hardened-endpoint-development-premise.md) | Accepted | Restricted by default; Digest-pinned references; Reproducibility; No shell; No exec; Enforcement is structural; Code is liability |
 
 ## By principle
 
@@ -114,15 +115,15 @@ ADR-019, ADR-020, ADR-021, ADR-023, ADR-024, ADR-025, ADR-026, ADR-027,
 ADR-028, ADR-029, ADR-030, ADR-031, ADR-032, ADR-033, ADR-034, ADR-035,
 ADR-036, ADR-037, ADR-038, ADR-039, ADR-040, ADR-041, ADR-042, ADR-043,
 ADR-044, ADR-045, ADR-046, ADR-047, ADR-048, ADR-049, ADR-051, ADR-052,
-ADR-054.
+ADR-054, ADR-055.
 
 ### No shell
 
-ADR-001, ADR-002, ADR-009, ADR-038.
+ADR-001, ADR-002, ADR-009, ADR-038, ADR-055.
 
 ### No exec
 
-ADR-001, ADR-003, ADR-040.
+ADR-001, ADR-003, ADR-040, ADR-055.
 
 ### No root
 
@@ -159,13 +160,13 @@ ADR-041, ADR-051, ADR-054.
 
 ADR-008, ADR-009, ADR-011, ADR-012, ADR-013, ADR-016, ADR-017,
 ADR-018, ADR-019, ADR-020, ADR-021, ADR-026, ADR-027, ADR-029,
-ADR-030, ADR-031, ADR-034, ADR-035, ADR-036, ADR-038, ADR-040, ADR-041, ADR-043, ADR-045, ADR-046, ADR-051.
+ADR-030, ADR-031, ADR-034, ADR-035, ADR-036, ADR-038, ADR-040, ADR-041, ADR-043, ADR-045, ADR-046, ADR-051, ADR-055.
 
 ### Reproducibility is enforced, not hoped for
 
 ADR-009, ADR-010, ADR-011, ADR-015, ADR-016, ADR-017, ADR-026, ADR-027,
 ADR-031, ADR-034, ADR-035, ADR-036, ADR-037, ADR-039, ADR-040, ADR-046,
-ADR-051.
+ADR-051, ADR-055.
 
 ### Containers are the only storage
 
@@ -173,14 +174,14 @@ ADR-026, ADR-035, ADR-036, ADR-046.
 
 ### Restricted by default, relaxed only with reason
 
-ADR-032, ADR-034.
+ADR-032, ADR-034, ADR-055.
 
 ### Enforcement is structural, not discretionary
 
 ADR-005, ADR-006, ADR-022, ADR-024, ADR-025, ADR-028, ADR-029,
 ADR-031, ADR-033, ADR-034, ADR-035, ADR-036, ADR-037, ADR-038, ADR-041, ADR-043,
 ADR-044, ADR-045, ADR-046, ADR-048, ADR-049, ADR-051, ADR-052, ADR-053,
-ADR-054.
+ADR-054, ADR-055.
 
 ### Meaning is single-sourced
 
