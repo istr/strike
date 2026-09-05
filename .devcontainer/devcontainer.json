@@ -1,0 +1,17 @@
+{
+  "name": "strike",
+  "build": { "dockerfile": "Containerfile", "context": "." },
+  "runArgs": ["--userns=keep-id:uid=1000,gid=1000", "--network=host"],
+  "workspaceMount": "source=${localWorkspaceFolder},target=${localWorkspaceFolder},type=bind",
+  "workspaceFolder": "${localWorkspaceFolder}",
+  "mounts": [
+    "source=${localEnv:STRIKE_ENGINE_SOCKET},target=/run/podman/podman.sock,type=bind"
+  ],
+  "containerEnv": {
+    "CONTAINER_HOST": "unix:///run/podman/podman.sock"
+  },
+  "remoteUser": "dev",
+  "features": {
+    "ghcr.io/anthropics/devcontainer-features/claude-code:1.0": {}
+  }
+}

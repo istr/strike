@@ -1,0 +1,8 @@
+FROM docker.io/library/golang:1.26.8@sha256:2d54f6c8c6ea532a321e0b4c69553b2ed3637608d4f4357dbed37939fe2620cc
+RUN ["apt-get", "update"]
+RUN ["apt-get", "install", "-y", "--no-install-recommends", "nodejs", "npm"]
+RUN ["go", "install", "github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.2"]
+RUN ["go", "install", "golang.org/x/vuln/cmd/govulncheck@v1.7.0"]
+RUN ["useradd", "--create-home", "--uid", "1000", "--user-group", "dev"]
+RUN ["chown", "-R", "dev:dev", "/go"]
+USER dev
