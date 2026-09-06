@@ -1,5 +1,20 @@
 # ADR-018: Cryptographic Test Material Is Ephemeral
 
+> **Amended by [ADR-056](ADR-056-tls-trust-anchor-as-inline-certificate.md):**
+> the Decision below reads "all cryptographic test material", and its four
+> grounds in the Context are all private-key grounds: committed keys drifting
+> toward production shape, keys unrevokable from git history, runs sharing a
+> key, and a secret-scanner exception. ADR-056 D8 marks the boundary that
+> wording overshoots. A trust anchor that exists only as parser input --
+> never presented, never validated against a live peer, holding no authority
+> anywhere -- is outside it, and so is the "no shared test CA reused across
+> tests" clause as applied to such an anchor. The private key stays out of
+> the repository, `.gitignore` keeps blocking `*.pem` and `*.key`, and no
+> `testdata/certs/` directory exists. Exactly five such artifacts are
+> permitted, and `docs/FIXTURE-TRUST-ANCHOR.md` records them. Everything
+> else -- engine PKI, signing keys, harness material, cross-validation
+> vectors -- is unchanged and stays ephemeral.
+
 ## Status
 
 Accepted.

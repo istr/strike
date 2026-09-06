@@ -62,7 +62,7 @@ referenced here at all.
 | 015 | [All time access dispatched through internal/clock](ADR-015-internal-clock-dispatch.md)       | Accepted | Reproducibility is enforced; Code is liability; CUE first |
 | 016 | [State-drift recording, not detection or action](ADR-016-drift-recording-posture.md)          | Accepted; amended by ADR-042, ADR-051 | Code is liability; Runtime is attested; Reproducibility; Digest-pinned references; Secrets are typed |
 | 017 | [Cross-validation through golden vectors and JSON Schema export](ADR-017-cross-validation-vectors.md) | Accepted; amended by ADR-043 | CUE first; Reproducibility; Code is liability; Digest-pinned references |
-| 018 | [Cryptographic test material is ephemeral](ADR-018-ephemeral-test-material.md)                | Accepted | Secrets are typed; Code is liability; Digest-pinned references |
+| 018 | [Cryptographic test material is ephemeral](ADR-018-ephemeral-test-material.md)                | Accepted; amended by ADR-056 | Secrets are typed; Code is liability; Digest-pinned references |
 | 019 | [SBOMs as OCI 1.1 referrer artifacts](ADR-019-sbom-as-oci-referrer.md)                        | Accepted; superseded in part by ADR-040; amended by ADR-051 | Runtime is attested; Digest-pinned references; Identity is asymmetric; Code is liability |
 | 020 | [Storage driver selection and host environment plumbing](ADR-020-storage-driver-and-host-plumbing.md) | Accepted | No root; Code is liability; Digest-pinned references |
 | 021 | [Deferred extensions](ADR-021-deferred-extensions.md)                                         | Accepted; amended by ADR-040, ADR-043, ADR-051 | Code is liability; Digest-pinned references      |

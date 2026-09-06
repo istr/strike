@@ -301,3 +301,38 @@ by removing it.
 - **Code is liability.** Two anchor types and a file-reading path are
   replaced by one type and a parse; `pem.Decode` and its error cases never
   enter the tree.
+
+## Amendment 2026-09-06 -- the mode default is a CUE default arm
+
+D3 states that the parser resolves the `mode` default "in Go, following the
+convention `#DoT.port` established". Two observations at `d1d7c43` show that
+the citation and the requirement pull apart.
+
+`#DoT.port` does not produce what D3 requires. It is declared
+`port?: primitive.#Port @go(Port,optional=nillable)` and its default is
+applied in `endpoint.DoT.DialTarget`; the struct field stays nil, and no
+resolved 853 ever reaches the attest wire. The cited convention is the
+convention for a value defaulted at use, which is the opposite of "always
+concrete on the attest wire".
+
+`lane.Parse` already materializes CUE defaults. It calls
+`schema.FillLaneJSON`, which unifies the input against `#Lane` and returns
+the marshaled unification, so a default arm is concrete in the JSON before the
+Go decode runs. Three fields already rely on this -- `#LaneDefaults.timeout`,
+`#PackFile.mode`, and `#CaptureSet.required` -- and each generates a plain Go
+field rather than a pointer.
+
+**D3 is therefore read as follows.** The default is a CUE default arm,
+`mode: *"rootca" | #CertificateMode`. What D3 requires is unchanged and is met
+more directly: the field stays optional for a lane author, is concrete on the
+attest wire, and a verifier never has to know what an absent field meant.
+
+Three grounds decide it over a Go-side resolution. The default becomes a
+property of the contract rather than of one implementation, which is what
+ADR-004 makes CUE for: a second implementation reading `contract/` alone
+learns what an absent `mode` means. A Go-side resolution would need an
+unmarshal hook that the collapse to one shape otherwise deletes, since one
+shape needs no discriminator dispatch. And an optional field emits
+`omitempty`, so a Go zero value would vanish silently at serialization, where
+a required-with-default field serializes an empty string and fails
+`deploy.ValidateAttestation` loudly.
