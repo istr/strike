@@ -772,3 +772,11 @@ section and in the Principles bullet above:** the trust-anchor
 vocabulary is read as "`caBundle` alone for the DoT resolver,
 `certFingerprint | caBundle` for every other declared TLS
 endpoint". Implemented by item-0049.
+
+> **Superseded in part by
+> [ADR-056](ADR-056-tls-trust-anchor-as-inline-certificate.md):** the
+> two-term vocabulary this amendment narrows is replaced by a single
+> inline-certificate anchor. What the amendment establishes about the
+> resolver survives unchanged and is carried structurally rather than by
+> a separate type: the resolver's anchor set stays a strict subset of a
+> peer's, expressed as a unification onto `mode: "rootca"`.

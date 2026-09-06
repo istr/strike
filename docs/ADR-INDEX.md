@@ -72,7 +72,7 @@ referenced here at all.
 | 025 | [SSH peer client-identity enforcement](ADR-025-ssh-peer-client-identity-enforcement.md)        | Superseded by ADR-038 | Identity is asymmetric; No root; Code is liability; Peers are declared; Enforcement is structural |
 | 026 | [Containers as sole inter-step storage object](ADR-026-containers-as-sole-inter-step-storage.md) | Accepted; superseded in part by ADR-051; amended by ADR-045, ADR-046 | Containers are the only storage; Code is liability; Digest-pinned references; Reproducibility |
 | 027 | [Subpath selection on inputs](ADR-027-input-subpath-selection.md) | Accepted | Code is liability; CUE first; Digest-pinned references; Reproducibility |
-| 028 | [Step-Container Egress Mediation](ADR-028-step-container-egress-mediation.md) | Accepted; superseded in part by ADR-032, ADR-033, ADR-038 | No root; Peers are declared; Identity is asymmetric; Enforcement is structural; Runtime is attested; Code is liability; Observation over declaration |
+| 028 | [Step-Container Egress Mediation](ADR-028-step-container-egress-mediation.md) | Accepted; superseded in part by ADR-032, ADR-033, ADR-038, ADR-056 | No root; Peers are declared; Identity is asymmetric; Enforcement is structural; Runtime is attested; Code is liability; Observation over declaration |
 | 029 | [Peers are container-egress contracts; the OCI peer type is removed](ADR-029-peers-are-container-egress.md) | Accepted; amended by ADR-033, ADR-038 | Peers are declared; Identity is asymmetric; Digest-pinned references; Enforcement is structural; Code is liability |
 | 030 | [Controller-side connection recording follows the trust chain, not the connection count](ADR-030-controller-side-connection-recording.md) | Accepted; superseded in part by ADR-051 | Runtime is attested; Identity is asymmetric; Digest-pinned references; Code is liability; Observation over declaration |
 | 031 | [pasta --splice-only Toolchain Dependency and Platform Support](ADR-031-pasta-splice-only-dependency.md) | Accepted | No root; Peers are declared; Digest-pinned references; Reproducibility; Code is liability; Enforcement is structural |
@@ -100,6 +100,7 @@ referenced here at all.
 | 053 | [Trust-anchor validity is bound to an authenticated time](ADR-053-trust-anchor-validity-authenticated-time.md) | Accepted | Runtime is attested; Enforcement is structural; Observation over declaration |
 | 054 | [The kubernetes deploy is a control-plane API act](ADR-054-kubernetes-deploy-via-cluster-api.md) | Accepted | Runtime is attested; Identity is asymmetric; Peers are declared; Enforcement is structural; Code is liability |
 | 055 | [The hardened endpoint is the development premise](ADR-055-hardened-endpoint-development-premise.md) | Accepted | Restricted by default; Digest-pinned references; Reproducibility; No shell; No exec; Enforcement is structural; Code is liability |
+| 056 | [The TLS trust anchor is an inline certificate](ADR-056-tls-trust-anchor-as-inline-certificate.md) | Accepted | Reproducibility; External references are digest-pinned; Peers are declared; Runtime is attested; Observation over declaration; Restricted by default; Enforcement is structural; Code is liability |
 
 ## By principle
 
@@ -115,7 +116,7 @@ ADR-019, ADR-020, ADR-021, ADR-023, ADR-024, ADR-025, ADR-026, ADR-027,
 ADR-028, ADR-029, ADR-030, ADR-031, ADR-032, ADR-033, ADR-034, ADR-035,
 ADR-036, ADR-037, ADR-038, ADR-039, ADR-040, ADR-041, ADR-042, ADR-043,
 ADR-044, ADR-045, ADR-046, ADR-047, ADR-048, ADR-049, ADR-051, ADR-052,
-ADR-054, ADR-055.
+ADR-054, ADR-055, ADR-056.
 
 ### No shell
 
@@ -143,12 +144,12 @@ ADR-006, ADR-014, ADR-016, ADR-018.
 
 ADR-012, ADR-013, ADR-014, ADR-016, ADR-019, ADR-028, ADR-030,
 ADR-033, ADR-037, ADR-038, ADR-040, ADR-041, ADR-042, ADR-043, ADR-045,
-ADR-051, ADR-052, ADR-053, ADR-054.
+ADR-051, ADR-052, ADR-053, ADR-054, ADR-056.
 
 ### Peers are declared
 
 ADR-005, ADR-007, ADR-022, ADR-024, ADR-025, ADR-028, ADR-029,
-ADR-031, ADR-032, ADR-033, ADR-038, ADR-040, ADR-052, ADR-054.
+ADR-031, ADR-032, ADR-033, ADR-038, ADR-040, ADR-052, ADR-054, ADR-056.
 
 ### Identity is asymmetric
 
@@ -160,13 +161,13 @@ ADR-041, ADR-051, ADR-054.
 
 ADR-008, ADR-009, ADR-011, ADR-012, ADR-013, ADR-016, ADR-017,
 ADR-018, ADR-019, ADR-020, ADR-021, ADR-026, ADR-027, ADR-029,
-ADR-030, ADR-031, ADR-034, ADR-035, ADR-036, ADR-038, ADR-040, ADR-041, ADR-043, ADR-045, ADR-046, ADR-051, ADR-055.
+ADR-030, ADR-031, ADR-034, ADR-035, ADR-036, ADR-038, ADR-040, ADR-041, ADR-043, ADR-045, ADR-046, ADR-051, ADR-055, ADR-056.
 
 ### Reproducibility is enforced, not hoped for
 
 ADR-009, ADR-010, ADR-011, ADR-015, ADR-016, ADR-017, ADR-026, ADR-027,
 ADR-031, ADR-034, ADR-035, ADR-036, ADR-037, ADR-039, ADR-040, ADR-046,
-ADR-051, ADR-055.
+ADR-051, ADR-055, ADR-056.
 
 ### Containers are the only storage
 
@@ -174,14 +175,14 @@ ADR-026, ADR-035, ADR-036, ADR-046.
 
 ### Restricted by default, relaxed only with reason
 
-ADR-032, ADR-034, ADR-055.
+ADR-032, ADR-034, ADR-055, ADR-056.
 
 ### Enforcement is structural, not discretionary
 
 ADR-005, ADR-006, ADR-022, ADR-024, ADR-025, ADR-028, ADR-029,
 ADR-031, ADR-033, ADR-034, ADR-035, ADR-036, ADR-037, ADR-038, ADR-041, ADR-043,
 ADR-044, ADR-045, ADR-046, ADR-048, ADR-049, ADR-051, ADR-052, ADR-053,
-ADR-054, ADR-055.
+ADR-054, ADR-055, ADR-056.
 
 ### Meaning is single-sourced
 
@@ -189,7 +190,7 @@ ADR-044, ADR-047, ADR-048, ADR-049.
 
 ### Observation over declaration
 
-ADR-028, ADR-030, ADR-037, ADR-039, ADR-041, ADR-053.
+ADR-028, ADR-030, ADR-037, ADR-039, ADR-041, ADR-053, ADR-056.
 
 ## Format
 
