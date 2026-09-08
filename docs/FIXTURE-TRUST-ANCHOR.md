@@ -37,6 +37,31 @@ Revised BSD License as described in section 4.e of the IETF Trust Legal
 Provisions (https://trustee.ietf.org/license-info) and are provided without
 warranty as described in that license.
 
+## Digests
+
+`tools/lintdoc` is what pins this material. Its allowlist hardcodes a SHA-256
+for every base64 DER blob this tree is permitted to carry and reports any
+other embedded in a source file, a fixture or a document. A standalone
+certificate or key file is the other channel and git refuses it instead:
+`.gitignore` blocks `*.pem`, `*.key`, `*.crt` and `*.der`. The five entries
+below are that list's fixture
+half, repeated here so the two can be compared by eye; the list in the linter
+is the truth, and this table is the record. A sixth artifact appearing in this
+file, or one of these five going missing from it, is itself a finding.
+
+The digest is taken over the base64 text exactly as it appears below, not over
+the decoded bytes.
+
+| # | Artifact | Characters | SHA-256 of the base64 text |
+|---|---|---|---|
+| 1 | anchor, self-signed CA:TRUE | 596 | `348de86f9feea9730bf327ee217f5ab446d32b0e03a4e76002acfe01c24d7ff7` |
+| 2 | intermediate, issued by the anchor | 648 | `a1d40b436f21833ab50c11ba93477faaa14ab45a92738c2938f6a6c9d0a7bfbc` |
+| 3 | leaf, self-signed CA:FALSE | 652 | `2f68153791d0e00b68be6bed15ba297e2646f3c39d87a8d2118d02b756b40021` |
+| 4 | valid base64, not a certificate | 400 | `e4fd0b7055fe05b4ff419208a40b619b0364942d6608301c08e9399b3f8a7b5d` |
+| 5 | not base64 | 596 | `18b6bad88863ade7fa20054f26a850eba939487bc70a238fe824e08125a98163` |
+
+Recompute one with `printf '%s' '<the one-line value>' | sha256sum`.
+
 ## 1. The anchor -- self-signed, CA:TRUE
 
 The trust anchor every valid fixture declares. Under `mode: rootca` it is

@@ -72,9 +72,9 @@ func moduleRoot() (*os.Root, error) {
 	}
 }
 
-// walkASCII scans every covered file under the module root. Only .git is
-// skipped: it holds no covered file, while other dot-directories do.
-func (g *gate) walkASCII() error {
+// walkTree calls visit for every file under the module root. Only .git is
+// skipped: it holds nothing any check covers, while other dot-directories do.
+func (g *gate) walkTree(visit func(name string, d fs.DirEntry) error) error {
 	return fs.WalkDir(g.root.FS(), ".", func(name string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
@@ -85,6 +85,13 @@ func (g *gate) walkASCII() error {
 			}
 			return nil
 		}
+		return visit(name, d)
+	})
+}
+
+// walkASCII scans every covered file under the module root.
+func (g *gate) walkASCII() error {
+	return g.walkTree(func(name string, d fs.DirEntry) error {
 		base := d.Name()
 		if strings.HasSuffix(base, "_test.go") || !asciiExts[path.Ext(base)] {
 			return nil

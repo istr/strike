@@ -8,9 +8,13 @@ internal/**/*.gen.go
 cosign.*
 coverage.out
 *.patch
-# No private key material in repository
+# No private key material in repository, and no standalone certificate file.
+# tools/lintdoc gates blobs embedded in source, fixtures and documentation;
+# these four extensions are the other channel and are git's to refuse.
 *.pem
 *.key
+*.crt
+*.der
 /*.md
 !/AGENTS.md
 !/AI-WORKFLOW.md
