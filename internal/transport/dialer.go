@@ -104,7 +104,7 @@ func (d *Dialer) DialPeer(ctx context.Context, name primitive.Host, port primiti
 //
 // The probe verifies, in one round trip:
 //   - the resolver's TLS endpoint is reachable on the declared port
-//   - the declared trust anchor (fingerprint or CA bundle) matches
+//   - the declared trust anchor (the root certificate) matches
 //     the certificate the resolver presents at this moment
 //   - the resolver responds to DNS queries over the established
 //     TLS connection

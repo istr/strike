@@ -139,6 +139,12 @@ Why the exactness: `AI-ORCHESTRATION.md#why-the-instruction-file-is-a-contract`.
    allowlist entry, a lossy `@go` redirect, an accepted-until-revisited note
    -- carries the roadmap item id that owns it. A deferral without an owner is
    a defect of the change introducing it.
+5. **Gate values are measured, not derived.** Every count an instruction's
+   gate asserts is the output of a command the analysis lane ran at the
+   anchor, never a number reasoned out from reading. Each such command is
+   restricted so its value cannot depend on whether generated or ignored
+   artifacts are present on disk: a bare checkout and a working tree must
+   agree.
 
 ## The execution profile is part of the contract
 

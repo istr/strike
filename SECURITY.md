@@ -88,7 +88,7 @@ affects two concrete security surfaces:
 - **Peer certificate validity windows.** When strike dials a declared
   peer over TLS, Go's standard library checks the certificate's
   `NotBefore` and `NotAfter` against the host clock, even in
-  fingerprint-pinned mode. A clock advanced past a pinned
+  leaf-pinned mode. A clock advanced past a pinned
   certificate's expiry could cause strike to accept an
   otherwise-correctly-pinned but revoked-then-expired certificate.
 - **Ephemeral CA validity windows.** strike issues short-lived
@@ -164,19 +164,20 @@ strike is designed with a minimal attack surface:
 
 - **No subprocess execution** -- zero `exec.Command` calls, zero `os/exec` imports. All operations use the container Engine REST API over Unix socket.
 - **No root** -- runs entirely under rootless podman.
-- **No network by default** -- steps run with `--network=none` unless
-  they declare a typed peer list (`peers: [...]`); see
-  [ADR-022](docs/ADR-022-network-opt-in-as-peer-list.md).
-  Trust anchors are recorded in the deploy attestation for
-  audit. Outbound traffic enforcement is per peer type and not
-  uniform: SSH peers have known_hosts and ssh-agent-proxy
-  enforcement (ADR-024, ADR-025); HTTPS peers today have only
-  the kernel-level network on/off switch (peer list non-empty
-  -> bridge networking, empty -> `--network=none`), with
-  per-peer enforcement not implemented. A verifier reading the
-  attestation sees what the lane author declared, which is
-  independent of what the runtime enforced. Peer entries are
-  declarations, not proofs of enforcement.
+- **No network by default** -- every step runs under a capsule whose
+  egress passes through strike's mediator ([ADR-028](docs/ADR-028-step-container-egress-mediation.md),
+  [ADR-033](docs/ADR-033-ssh-peer-egress-and-unified-mediation.md)). A step that
+  declares no peer gets an empty allowlist, and the mediator refuses
+  every SNI on that connection. A step with a declared peer list is
+  admitted only against the trust anchor each entry carries; see
+  [ADR-022](docs/ADR-022-network-opt-in-as-peer-list.md). Trust anchors
+  are recorded in the deploy attestation for audit. Enforcement is
+  mediated for both peer protocols: SSH peers have known_hosts and
+  ssh-agent-proxy enforcement (ADR-024, ADR-025); HTTPS peers are
+  admitted per connection against the declared certificate anchor by
+  the mediator itself, not by a kernel-level network on/off switch. A
+  verifier reading the attestation sees what the lane author declared
+  and what the mediator actually admitted.
 - **Digest pinning** -- all external images must be referenced by SHA-256
   manifest digest.
 - **Secrets via API request body** -- passed as JSON over Unix socket in the

@@ -112,35 +112,68 @@ Lanes are YAML files validated against an embedded CUE schema. Every
 external container image must be SHA-256 pinned:
 
 ```yaml
+resolver:
+  adn: dns.example.com
+  ip: 198.51.100.1
+  trust:
+    cert: "<base64 DER of the resolver's root certificate>"
+oidc:
+  issuer: "https://idp.example.com"
+  audience: "strike"
+  identity: "strike@example.com"
+  trust:
+    cert: "<base64 DER of the identity provider's root certificate>"
+keyless:
+  endpoints:
+    fulcio:
+      url: "https://fulcio.example.com"
+      trust:
+        cert: "<base64 DER of the Fulcio root certificate>"
+    rekor:
+      url: "https://rekor.example.com"
+      trust:
+        cert: "<base64 DER of the Rekor root certificate>"
+    tsa:
+      url: "https://tsa.example.com"
+      trust:
+        cert: "<base64 DER of the TSA root certificate>"
 steps:
-  - name: source
+  - id: source
     image: docker.io/library/alpine/git@sha256:abc123...
     args: [git, clone, --depth, "1", "https://example.com/repo.git", /out/tree]
     peers:
       - type: https
         host: example.com
         trust:
-          mode: certFingerprint
-          fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+          cert: "<base64 DER of the peer's root certificate>"
     outputs:
-      - { name: tree, type: directory, path: /out/tree }
+      - { id: tree, type: directory, path: /out/tree }
     provenance:
       type: git
       path: /out/provenance.json
 
-  - name: build
+  - id: build
     image: cgr.dev/chainguard/go@sha256:def456...
     args: [go, build, -C, /src, -o, /out/binary, .]
     inputs:
       - { name: tree, from: source.tree, mount: /src }
     outputs:
-      - { name: binary, type: file, path: /out/binary }
+      - { id: binary, type: file, path: /out/binary }
 ```
 
-Steps run with `--network=none` by default. To opt into network
-access, declare a `peers:` list with the trust anchor for each
-peer (HTTPS cert fingerprint or CA bundle, SSH known_hosts, OCI
-registry digest). See [ADR-022](docs/ADR-022-network-opt-in-as-peer-list.md).
+Each `cert:` value above is produced with:
+
+```sh
+openssl x509 -in root.crt -outform DER | base64 -w0
+```
+
+A step reaches the network only through the peers it declares. Each
+peer carries its trust anchor: for HTTPS the certificate itself, for
+SSH the known_hosts entries, for an OCI registry the image digest. A
+step that declares no peer gets an empty egress allowlist and every
+connection attempt is refused. See
+[ADR-022](docs/ADR-022-network-opt-in-as-peer-list.md) and
+[ADR-028](docs/ADR-028-step-container-egress-mediation.md).
 
 ### Image references
 

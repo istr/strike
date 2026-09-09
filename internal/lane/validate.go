@@ -376,8 +376,8 @@ func isPathPrefix(prefix, full string) bool {
 // port), so two peers of different protocols on the same host:port are treated
 // as a conflict -- the strictest rule, matching the runtime dedup posture.
 //
-// The anchor is reduced to a canonical string. For TLS trust the discriminator
-// plus its anchor material (fingerprint or CA-bundle path); for SSH the sorted
+// The anchor is reduced to a canonical string. For TLS trust the mode plus
+// the certificate body; for SSH the sorted
 // set of "keytype key" entries, so known_hosts order is irrelevant. Steps and
 // peers are iterated in declaration order; the first conflicting endpoint
 // yields a deterministic error.

@@ -139,8 +139,8 @@ verifiable without contacting strike or the original engine.
 
 Network interaction is a typed trust contract, not a boolean. Any step
 that uses the network must enumerate its peers together with the
-appropriate trust anchor for each peer type: certificate fingerprint or
-CA bundle for HTTPS, known_hosts entries for SSH, image digest for OCI
+appropriate trust anchor for each peer type: the certificate itself for
+HTTPS, known_hosts entries for SSH, image digest for OCI
 registries, explicit system-CA opt-in for public web. The declaration
 bounds both the outbound egress surface and the set of accepted
 upstream identities, and it becomes part of the step's attestation.

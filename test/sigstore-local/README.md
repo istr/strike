@@ -25,8 +25,8 @@ infrastructure -- not part of the strike binary.
 
 Every HTTPS service is TLS-terminated by Caddy under one internal root
 (`pki/caddy-root.crt`) and reached via sslip.io. There is no plaintext
-endpoint -- a strike keyless producer pins this root as its `#TLSTrust`
-`ca_bundle` for every endpoint:
+endpoint -- a strike keyless producer pins this root as its `#Certificate`
+`cert` for every endpoint:
 
 - Fulcio: `https://fulcio.127.0.0.1.sslip.io:5555`
 - Rekor v2: `https://rekor.127.0.0.1.sslip.io:3003`
@@ -81,8 +81,8 @@ from the host browser and from inside the Fulcio container:
 
 Caddy terminates TLS with its internal CA. The pinnable trust anchor is Caddy's
 root (`pki/caddy-root.crt`, exported by `make caddy-root`); its 10-year root is
-stable while the 12-hour leaf rotates under it, so a lane.yaml CA-bundle pin on
-the root does not need re-pinning. This is stumbling block #1 (issuer-URL
+stable while the 12-hour leaf rotates under it, so a lane.yaml certificate pin
+on the root does not need re-pinning. This is stumbling block #1 (issuer-URL
 consistency); `make check-issuer` is its gate.
 
 ## Resolving the canonical issuer
@@ -220,8 +220,9 @@ Requires cosign (>= v3.0.1 or >= v2.6.0 for Rekor v2).
 Once the harness stands, the runnable smoke lane's `lane.yaml` `oidc:` block
 takes the harness values: issuer
 `https://keycloak.127.0.0.1.sslip.io:8443/realms/sigstore`, client_id `sigstore`,
-identity `tester@strike.localhost`, and trust = the CA bundle
-`pki/caddy-root.crt`. The placeholder fixtures (example.com) are untouched; only
+identity `tester@strike.localhost`, and trust = the certificate in
+`pki/caddy-root.crt`, inlined as base64 DER. The placeholder fixtures
+(example.com) are untouched; only
 lane.yaml couples. Instruction 5 (verify) must keep the trust root
 parametrizable: the ephemeral harness root for local, the public Sigstore TUF
 root in production. The Fulcio fileca root under `pki/` persists across

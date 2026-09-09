@@ -132,6 +132,13 @@ carries the reason a conversion is deferred, and an empty allowlist means the
 tree is exhaustively type-clean. `make lint-type` runs it; it is part of
 `make check`.
 
+**Adding a `String()` is retroactive.** The moment a primitive scalar gains
+one, `linttypeflow`'s `detype-bypasses-stringer` rule fires on every existing
+`string(x)` of that type anywhere in the tree, including sites the change never
+meant to touch. Sweeping those into the same change is part of adding the
+method, not a follow-up: the alternative is a red gate that no single later
+change owns.
+
 ---
 
 ## File I/O is path-confined `path-confined-io`

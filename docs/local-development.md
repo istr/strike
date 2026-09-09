@@ -24,119 +24,40 @@ directory" (the answer is no, and the option does not exist), but
 "how do I expose my local commits to a strike step running in a
 container".
 
-## The two options
+## The loop
 
-Both options below preserve the git protocol boundary. What they
-have in common is the shape: a server (any kind of git server) on
-a network address the container can reach, and a containerized
-git-clone step that fetches from it. The container receives a git
-object database, not a filesystem snapshot. `git checkout` inside
-the container can never reach a file that is not in the cloned
-ref.
+No host-side git server exists on the endpoint, and none is added for local
+iteration: [ADR-022](ADR-022-network-opt-in-as-peer-list.md)'s Consequences
+already record that an unauthenticated loopback git-fetch protocol is not
+expressible in the typed peer schema, and
+[ADR-055](ADR-055-hardened-endpoint-development-premise.md) D1 grants the
+reference endpoint a git *client*, not a git server -- running a local
+protocol daemon or a hand-rolled HTTP server would be host-side execution
+beyond the endpoint's four capabilities, on a filesystem that is `noexec`
+besides. The forge is the only git peer a strike lane fetches from, in
+development exactly as in CI.
 
-### Option A: local git-daemon on loopback
+The loop is therefore two gates over two different things, not two lane
+variants:
 
-Run `git daemon` on the host, exposing the working repository
-read-only on TCP/9418. The strike step fetches via
-`git://localhost:9418/repo`.
+1. **The working-tree gate**, run inside the dev container over the
+   uncommitted, bind-mounted tree, after every code change and before
+   submitting. It is unattested and discretionary; its job is the
+   correctness of a change.
+2. **A push**, which makes the change a content-addressed commit the forge
+   can serve.
+3. **The commit gate**, a strike lane that fetches the pushed revision from
+   the forge, runs from the same lane file whether started from the dev
+   container against the endpoint engine or from a forge runner. It is
+   attested and structural: it blocks merge.
 
-```sh
-# in the repository's parent directory:
-git daemon --reuseaddr --base-path=. --export-all --verbose
-```
+Neither gate substitutes for the other. A lane cannot see an uncommitted
+tree ([ADR-011](ADR-011-sources-elimination.md)); the working-tree gate
+cannot attest. A commit-gate failure after a green working-tree gate is a
+round trip -- amend, push, re-run -- not a defect on `main`.
 
-Lane snippet:
-
-```yaml
-- name: source
-  image: alpine/git@sha256:...
-  args: [git, clone, --depth, "1", git://localhost:9418/repo, /out/tree]
-  # Note: this snippet does not currently validate against the lane
-  # schema. The git:// protocol has no trust anchor, so it has no
-  # corresponding #Peer variant. Use Option B for a workflow that
-  # passes schema validation, or wait for a follow-up ADR that adds
-  # a plaintext-loopback peer variant.
-  outputs:
-    - name: tree
-      type: directory
-      path: /out/tree
-```
-
-**Iteration rhythm.** Each `git commit` is immediately visible to
-the next strike run. Nothing else to refresh.
-
-**Network requirement.** Per [ADR-022](ADR-022-network-opt-in-as-peer-list.md),
-network access requires a typed peer declaration with a trust
-anchor. The git protocol has no trust anchor, so this option is
-currently in transition: the snippet above does not pass schema
-validation. For a workflow that does, use Option B. A future ADR
-may add a plaintext-loopback peer variant for development; until
-then, treat Option A as illustrative of the underlying iteration
-pattern, not as a working lane fragment.
-
-**Caveat.** The `git://` protocol is unauthenticated. Anyone with
-access to the loopback interface (which on a multi-user host
-includes other users) can read the repository. On a shared host,
-restrict `git daemon` to a non-default port firewalled off, or
-use Option B instead.
-
-### Option B: local HTTP server on loopback
-
-Serve a bare clone over HTTPS using any small HTTP server
-(`git http-backend` behind nginx, a Go program with
-`http.FileServer`, etc.). The strike step fetches via
-`https://localhost/repo.git`.
-
-```sh
-# update the bare clone whenever local commits should become visible:
-git push --mirror /path/to/served-repo.git
-```
-
-Lane snippet:
-
-```yaml
-- name: source
-  image: alpine/git@sha256:...
-  args: [git, clone, --depth, "1", https://localhost/repo.git, /out/tree]
-  peers:
-    - type: https
-      host: localhost
-      trust:
-        mode: certFingerprint
-        fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
-  outputs:
-    - name: tree
-      type: directory
-      path: /out/tree
-```
-
-**Iteration rhythm.** Each iteration requires a `git push --mirror`
-to refresh the bare clone. One extra command per iteration.
-
-**Network requirement.** A `peers:` list with one HTTPS entry for
-the local server, carrying a cert fingerprint or pinned CA bundle.
-The lane snippet looks structurally identical to a production lane
-fetching from a real git server, which is the point: the local
-workflow exercises the same trust-declaration plumbing as
-production. See [ADR-022](ADR-022-network-opt-in-as-peer-list.md).
-
-**Why it might be worth the extra step.** This option is the only
-one that produces a lane file you could ship to production
-unchanged (modulo the URL and trust anchor). If you want your
-local iteration to be representative of how the lane runs in CI,
-this is the closest match.
-
-## Recommendation
-
-For routine local iteration: **Option A** (git-daemon on
-loopback). Lowest setup cost, fastest iteration, and the lane
-snippet is small enough to keep in a `local.yaml` next to the
-production lane.
-
-For "one last check before pushing to CI": **Option B** (local
-HTTPS). The lane snippet exercises the same trust-anchor
-declaration as production, which catches misconfigurations that
-Option A would let through.
+See [docs/DEVELOPMENT-ENDPOINT-PREMISES.md](DEVELOPMENT-ENDPOINT-PREMISES.md)
+"Two gates, and where each runs" for the full mechanics.
 
 ## What does *not* work and why
 
@@ -202,30 +123,18 @@ a behavioural shift. For developers used to careful git practice
 already, it is what they were doing anyway -- now enforced by the
 tool rather than by discipline.
 
-## Lane file structure for local work
-
-A pattern that works well in practice is to keep two lane files:
-
-- `lane.yaml` -- the production lane, fetching from the real
-  upstream git server with full trust-anchor declarations.
-- `local.yaml` -- the local-iteration lane, structurally identical
-  but with the source step replaced by Option A or B.
-
-Both files reference the same downstream steps. Only the source
-step differs. Switching between them is a single CLI argument.
-The diff between the two files is your reminder of what exactly
-the local workflow is shortcutting (the trust anchor for the git
-fetch).
-
 ## See also
 
 - [ADR-011: Host filesystem cannot enter the DAG](ADR-011-sources-elimination.md)
   -- the architectural decision this guide implements.
 - [ADR-007: Asymmetric identity](ADR-007-asymmetric-identity.md)
-  -- the trust-anchor declaration that Option B exercises and
-  Option A skips.
+  -- the trust-anchor declaration a real git peer carries.
 - [ADR-005: Hardened container profile](ADR-005-hardened-container-profile-non-configurable.md)
   -- the per-step hardening profile.
 - [ADR-022: Network opt-in as a typed peer list](ADR-022-network-opt-in-as-peer-list.md)
   -- the typed peer declaration that replaces the boolean
   network field.
+- [ADR-055: The hardened endpoint is the development premise](ADR-055-hardened-endpoint-development-premise.md)
+  -- the endpoint's four capabilities and the two-gate loop.
+- [docs/DEVELOPMENT-ENDPOINT-PREMISES.md](DEVELOPMENT-ENDPOINT-PREMISES.md)
+  -- the operating procedure ADR-055 names as the reference.

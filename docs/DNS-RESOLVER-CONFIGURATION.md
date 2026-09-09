@@ -15,8 +15,7 @@ This document describes how to configure the resolver field.
       adn: one.one.one.one
       ip: 1.1.1.1
       trust:
-        type: caBundle
-        path: /etc/strike/resolver-ca.pem
+        cert: "<base64 DER of the resolver's root certificate>"
 
 This is the full direct configuration of RFC 8310 section 7.1:
 an authentication domain name and an IP address, both obtained
@@ -41,9 +40,10 @@ The `port` field is optional. Omitting it means 853, the DoT
 port assigned by RFC 7858. Declare it only when the resolver
 listens elsewhere.
 
-The `trust` field is the CA bundle the presented chain is
-verified against. It is the only anchor this endpoint accepts;
-see "Why certFingerprint is rejected here" below.
+The `trust` field is the resolver's root certificate, inlined as
+base64 DER, that the presented chain is verified against. It is
+the only anchor this endpoint accepts; see "Why a pinned leaf is
+rejected here" below.
 
 ## Public DoT resolvers
 
@@ -60,8 +60,7 @@ shown as a second `ip` value -- pick one.
       ip: 1.1.1.1
       # ip: 2606:4700:4700::1111
       trust:
-        type: caBundle
-        path: /etc/strike/resolver-ca.pem
+        cert: "<base64 DER of the resolver's root certificate>"
 
 Other addresses: `1.0.0.1`, `2606:4700:4700::1001`.
 
@@ -72,8 +71,7 @@ Other addresses: `1.0.0.1`, `2606:4700:4700::1001`.
       ip: 9.9.9.9
       # ip: 2620:fe::fe
       trust:
-        type: caBundle
-        path: /etc/strike/resolver-ca.pem
+        cert: "<base64 DER of the resolver's root certificate>"
 
 Other addresses: `149.112.112.112`, `2620:fe::9`.
 
@@ -84,8 +82,7 @@ Other addresses: `149.112.112.112`, `2620:fe::9`.
       ip: 8.8.8.8
       # ip: 2001:4860:4860::8888
       trust:
-        type: caBundle
-        path: /etc/strike/resolver-ca.pem
+        cert: "<base64 DER of the resolver's root certificate>"
 
 Other addresses: `8.8.4.4`, `2001:4860:4860::8844`.
 
@@ -102,68 +99,51 @@ differ.
       adn: dns.internal.example
       ip: 192.168.10.1
       trust:
-        type: caBundle
-        path: /etc/strike/internal-ca.pem
+        cert: "<base64 DER of the resolver's root certificate>"
 
 The resolver's certificate must carry `dns.internal.example` in
-its subjectAltName, and the bundle must contain the CA that
+its subjectAltName, and the declared root must be the CA that
 issued it. A self-signed leaf works only if that same leaf is
-the bundle, which makes the certificate its own issuer -- it is
-simpler to run an internal CA and issue from it.
+the declared root, which makes the certificate its own issuer --
+it is simpler to run an internal CA and issue from it.
 
-The `caBundle` path is a container-internal path; the executor
-mounts the lane-relative bundle file there. See ADR-028 for
-the mount mechanics.
-
-## Obtaining a CA bundle
+## Obtaining the anchor certificate
 
 The anchor is the CA that issued the resolver's certificate,
-not the certificate itself. Verification is the full RFC 5280
-path validation, with the `adn` matched in subjectAltName only
--- never in the Subject.
+not the leaf itself. Verification is the full RFC 5280 path
+validation, with the `adn` matched in subjectAltName only --
+never in the Subject.
 
-For a public provider, the bundle is the ordinary public root
-store, or the single root the provider documents. Most systems
-already ship one; copy it to the path the lane declares:
+For a public provider, the root is the single root the provider
+documents, or the relevant root from the system store. For a
+self-hosted resolver, the root is the internal CA's own
+certificate -- the same one the CA emitted when it was created.
 
-    cp /etc/ssl/certs/ca-certificates.crt /etc/strike/resolver-ca.pem
+Either way, the value the lane declares is the DER encoding of
+that root certificate, base64-encoded:
 
-For a self-hosted resolver, the bundle is the internal CA's
-certificate in PEM form -- the same file the CA emitted when it
-was created.
+    openssl x509 -in root.crt -outform DER | base64 -w0
 
-To confirm the chain and the name before writing the lane:
-
-    openssl s_client -connect 1.1.1.1:853 -servername one.one.one.one \
-      -CAfile /etc/strike/resolver-ca.pem -verify_return_error </dev/null
-
-Adapt per provider: `-connect 9.9.9.9:853 -servername dns.quad9.net`,
-`-connect 8.8.8.8:853 -servername dns.google`, or the internal
-address and name for a self-hosted resolver. The `-servername`
-argument is the `adn`; it sets SNI, and it is what the
-certificate is checked against.
-
-A bundle survives leaf rotation, which is the point of
+A root certificate survives leaf rotation, which is the point of
 anchoring on the issuer: public providers rotate leaf
 certificates monthly to yearly, and none of that reaches the
-lane. The bundle changes only when the issuing CA does.
+lane. The declared anchor changes only when the issuing CA does.
 
-## Why certFingerprint is rejected here
+## Why a pinned leaf is rejected here
 
-`trust.type: certFingerprint` is a parse error on the resolver
-and valid on every other declared endpoint. RFC 8310 section
-6.6 admits exactly two kinds of authentication information for
-a DoT server: an authentication domain name obtained from a
-section 7 source, or an SPKI pin set. A SHA-256 digest over the
-leaf certificate is neither -- it pins the whole certificate
-rather than the public key, and it identifies no name that a
-certification path could be validated against. Pinning it would
-make the resolver's address the thing being trusted, and
-section 3 excludes addresses from that role.
+`mode: leaf` is a parse error on the resolver and valid on every
+other declared endpoint. RFC 8310 section 6.6 admits exactly two
+kinds of authentication information for a DoT server: an
+authentication domain name obtained from a section 7 source, or
+an SPKI pin set. A certificate pinned as a leaf is neither -- it
+pins the whole certificate rather than the public key, and it
+identifies no name that a certification path could be validated
+against. Pinning it would make the resolver's address the thing
+being trusted, and section 3 excludes addresses from that role.
 
-The narrowing is the resolver's alone. Peers, the OIDC IdP, the
-keyless endpoints, and the registry target all keep the full
-`certFingerprint | caBundle` vocabulary. See ADR-028.
+The narrowing is the resolver's alone: `#DoT.trust` unifies to
+`mode: rootca`. Peers, the OIDC IdP, the keyless endpoints, and
+the registry target all keep both modes available. See ADR-028.
 
 ## Probe behavior
 
@@ -174,8 +154,8 @@ handshake plus one DNS query, that:
 
 - the resolver's TLS endpoint is reachable at the declared
   address and port
-- the certificate the resolver presents is issued by the
-  declared CA bundle and names the declared `adn`
+- the certificate the resolver presents chains to the
+  declared root and names the declared `adn`
 - the resolver responds to DNS queries over the established
   TLS connection
 
