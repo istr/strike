@@ -506,3 +506,96 @@ precedes item-0063 rather than depending on it. item-0125 precedes the
 commit-gate items. The dev container's D3 rework and the Containerfile pin
 gate are item-0151. The freeze re-declaration and the ratchet's home are
 recorded in the Beta Definition of Done's amendment of the same date.
+
+## Amendment 2026-09-09 -- the endpoint is a Linux environment, not a workstation
+
+Status: Proposed. Append-only: this block adds a decision and narrows two
+clauses it names below without editing them in place; every other clause of
+the original Decision, Consequences, and Principles, and both amendments of
+2026-09-05, stands unchanged.
+
+D1 names four capabilities and calls the machine carrying them "an
+endpoint". D3 then binds the working tree "at its host path", mounts the
+engine socket, and shares "the host's network namespace". Every one of
+those clauses says "host" and means one machine, because on the reference
+endpoint -- Linux with a rootless engine -- the machine running the editor
+and the machine running the engine are the same machine. On macOS and on
+Windows they are not. The engine runs in a Linux guest, the editor's user
+interface runs on the workstation, and a file-sharing protocol lies between
+them: virtiofs under the AppleHV and QEMU providers, 9P over vsock under
+Hyper-V, native automounts under WSL.
+
+Three of the premises fail in that gap, and they fail in the same place --
+the file-sharing layer, not the engine:
+
+- the working tree cannot be bound at its host path, because on Windows
+  that path is not a valid container path at all, and the editor's
+  `${localWorkspaceFolder}` carries the workstation's path grammar;
+- M1's `noexec` is a property of the endpoint's own mount options and is
+  not reproduced across a shared directory;
+- M7's constraint -- one path that is exec-capable and engine-visible at
+  once -- cannot be stated across two filesystems.
+
+### D8 -- the endpoint is the Linux environment, wherever it runs
+
+The endpoint of D1 is a Linux environment carrying the four capabilities.
+It is the workstation itself where the workstation runs Linux; where it
+does not, the endpoint is a local guest whose lifecycle the operator owns.
+The workstation then contributes exactly two things -- a hypervisor and the
+editor's user interface -- and is not the endpoint.
+
+The working tree lives on the endpoint's own filesystem. No workstation
+directory is shared into the endpoint, and the engine's host file-sharing
+mechanism is not on the development path at all.
+
+The endpoint's init system is not part of the premise. systemd is not among
+D1's four capabilities, the reference endpoint does not run it, and the
+engine's socket is served by a long-running user process rather than by a
+socket unit.
+
+With the tree on the endpoint, every clause of D3 holds as written on all
+three workstation operating systems, because nothing crosses the
+hypervisor boundary but the editor protocol. `.devcontainer/` therefore
+needs no per-platform variation: the Dev Containers implementation runs on
+the endpoint, so `${localEnv:...}` reads the endpoint's environment,
+`${localWorkspaceFolder}` is an endpoint path, and `--network=host` and the
+user-namespace mapping mean what D3 says they mean.
+
+**Narrowing, in Alternatives considered above:** "Remote executor (a cloud
+dev environment or a remote VM over SSH). Permitted -- the Dev Containers
+mechanism runs there unchanged -- but not the reference" rejected a host in
+another trust domain, which is the question ADR-037 bounds. A guest on the
+operator's own machine is not remote in that sense: the hypervisor boundary
+lies inside the endpoint's trust domain, the operator owns the guest's
+lifecycle, and no third party holds the tree. The rejection stands for a
+cloud dev environment and for a VM on another machine; it does not reach a
+local guest.
+
+**Supersedes, in D1 above:** "an endpoint on which exactly four
+capabilities exist" is read as: "a Linux environment on which exactly four
+capabilities exist -- the workstation itself where the workstation runs
+Linux, a local guest otherwise".
+
+**Supersedes, in D3 above:** "The working tree is bind-mounted into the
+container at its host path" is read as: "The working tree lives on the
+endpoint and is bind-mounted into the container at its endpoint path".
+Throughout D3 and in D7 M1, M2, M3 and M7, "host" is read as "endpoint".
+
+**Renames, in Consequences above:** `docs/DEVELOPMENT-HOST-PREMISES.md` is
+`docs/DEVELOPMENT-ENDPOINT-PREMISES.md` from this date. The bullet naming
+the old path stands unedited; the file moved because "host" in its title
+meant the workstation, which D8 says it is not. Its content and its role --
+the operating procedure, of which this ADR is the record -- are otherwise
+unchanged by the rename.
+
+Status of the platform facts: researched from vendor documentation, not
+measured. D7's points were measured because a ratified guess in an
+append-only document costs an amendment to correct; this block does not
+clear that bar and does not claim to. Three things are named for
+measurement before D8 is relied on beyond Linux: that a rootless-podman
+endpoint installs the Dev Containers feature content without the permission
+failure reported against that combination; that the guest's throughput
+carries the working-tree gate's build and test loop; and that the guest
+reproduces M1's locked `noexec` and M7's constraint rather than merely not
+contradicting them. Until those land, Linux is the measured reference and
+the other two workstations are declared, not proven.
