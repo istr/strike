@@ -145,8 +145,10 @@ proves reproducibility through binary comparison.
 operations. No TLS configuration overrides.
 
 **A01 Broken Access Control** -- Step containers run with `--cap-drop=ALL`,
-`--read-only`, `--security-opt=no-new-privileges`, and `--network=none` by
-default. Output directories are mounted with `noexec,nosuid`. Inputs are
+`--read-only`, and `--security-opt=no-new-privileges`. Networking is a
+per-step `pasta` capsule whose egress passes through strike's mediator; a
+step with no declared peers gets an empty allowlist and no connection
+succeeds. Output directories are mounted with `noexec,nosuid`. Inputs are
 read-only.
 
 **A05 Security Misconfiguration** -- The hardened security profile is
@@ -215,7 +217,8 @@ podman run \
   --tmpfs /tmp:rw,noexec,nosuid,size=512m \
   --rm \
   --security-opt=no-new-privileges \
-  --network=none \
+  --network=pasta:<per-step capsule args, empty allowlist by default> \
+  --dns=<the capsule's own resolver address> \
   -v /host/out:/out:rw,noexec,nosuid \
   -v /host/input:/input:ro \
   image@sha256:... \
@@ -223,9 +226,9 @@ podman run \
 ```
 
 What a step container **cannot** do: start nested containers, modify its own
-image, execute from /out or /tmp, create setuid binaries, access the network
-(unless explicitly granted), write anywhere except /out and /tmp, survive past
-its own exit, or escalate privileges.
+image, execute from /out or /tmp, create setuid binaries, reach a peer it did
+not declare, write anywhere except /out and /tmp, survive past its own exit,
+or escalate privileges.
 
 Steps have a configurable timeout (default: 10 minutes). When a step
 exceeds its timeout, the context is cancelled and the container is
