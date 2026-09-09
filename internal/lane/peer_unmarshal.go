@@ -38,30 +38,26 @@ func unmarshalPeer(data []byte) (Peer, error) {
 	}
 }
 
-// unmarshalHTTPSPeer decodes an https peer into an endpoint.TLS,
-// dispatching the trust discriminator and parsing the packed authority host.
-// Trust is required; missing trust is an error.
+// unmarshalHTTPSPeer decodes an https peer into an endpoint.TLS, decoding the
+// trust anchor by field and parsing the packed authority host. Trust is
+// required; missing trust is an error.
 func unmarshalHTTPSPeer(data []byte) (Peer, error) {
 	var aux struct {
+		Trust *endpoint.Certificate `json:"trust"`
 		Type  endpoint.CarriageType `json:"type"`
 		Host  string                `json:"host"`
-		Trust json.RawMessage       `json:"trust"`
 	}
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return nil, fmt.Errorf("decode https peer: %w", err)
 	}
-	if len(aux.Trust) == 0 {
+	if aux.Trust == nil {
 		return nil, fmt.Errorf("https peer: trust required")
-	}
-	t, err := unmarshalTLSTrust(aux.Trust)
-	if err != nil {
-		return nil, fmt.Errorf("https peer: %w", err)
 	}
 	addr, err := endpoint.ParseAuthority(aux.Host)
 	if err != nil {
 		return nil, fmt.Errorf("https peer: %w", err)
 	}
-	return endpoint.TLS{Type: aux.Type, Address: addr, Trust: t}, nil
+	return endpoint.TLS{Type: aux.Type, Address: addr, Trust: *aux.Trust}, nil
 }
 
 // unmarshalSSHPeer decodes an ssh peer into an endpoint.SSH, parsing the
@@ -80,41 +76,6 @@ func unmarshalSSHPeer(data []byte) (Peer, error) {
 		return nil, fmt.Errorf("ssh peer: %w", err)
 	}
 	return endpoint.SSH{Type: aux.Type, Address: addr, KnownHosts: aux.KnownHosts}, nil
-}
-
-// unmarshalTLSTrust decodes a single trust JSON object into
-// the appropriate concrete branch type based on the "type"
-// discriminator.
-func unmarshalTLSTrust(data []byte) (endpoint.Trust, error) {
-	if len(data) == 0 || string(data) == jsonNull {
-		return nil, fmt.Errorf("trust entry missing")
-	}
-
-	var probe struct {
-		Type endpoint.TrustType `json:"type"`
-	}
-	if err := json.Unmarshal(data, &probe); err != nil {
-		return nil, fmt.Errorf("trust: %w", err)
-	}
-
-	switch probe.Type {
-	case endpoint.TrustTypeCertFingerprint:
-		var t endpoint.Fingerprint
-		if err := json.Unmarshal(data, &t); err != nil {
-			return nil, fmt.Errorf("decode certFingerprint trust: %w", err)
-		}
-		return t, nil
-	case endpoint.TrustTypeCaBundle:
-		var t endpoint.CABundle
-		if err := json.Unmarshal(data, &t); err != nil {
-			return nil, fmt.Errorf("decode caBundle trust: %w", err)
-		}
-		return t, nil
-	case "":
-		return nil, fmt.Errorf("trust missing type discriminator")
-	default:
-		return nil, fmt.Errorf("unknown trust type %q", probe.Type)
-	}
 }
 
 // UnmarshalJSON implements json.Unmarshaler for Step. It
@@ -177,32 +138,28 @@ func (sc *Capture) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// unmarshalOIDCConfig decodes an OIDC config JSON object into
-// OIDCConfig. The Trust field is an interface (endpoint.Trust) and
-// requires discriminator dispatch via unmarshalTLSTrust.
+// unmarshalOIDCConfig decodes an OIDC config JSON object into OIDCConfig. The
+// helper survives the collapse to one trust shape because trust is required
+// here and the default decoder cannot tell an absent object from an empty one.
 func unmarshalOIDCConfig(data []byte) (OIDCConfig, error) {
 	type alias struct {
-		Issuer   string          `json:"issuer"`
-		Audience string          `json:"audience"`
-		Identity string          `json:"identity"`
-		Trust    json.RawMessage `json:"trust"`
+		Trust    *endpoint.Certificate `json:"trust"`
+		Issuer   string                `json:"issuer"`
+		Audience string                `json:"audience"`
+		Identity string                `json:"identity"`
 	}
 	var aux alias
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return OIDCConfig{}, fmt.Errorf("decode oidc: %w", err)
 	}
-	if len(aux.Trust) == 0 {
+	if aux.Trust == nil {
 		return OIDCConfig{}, fmt.Errorf("oidc: trust required")
-	}
-	t, err := unmarshalTLSTrust(aux.Trust)
-	if err != nil {
-		return OIDCConfig{}, fmt.Errorf("oidc: %w", err)
 	}
 	return OIDCConfig{
 		Issuer:   aux.Issuer,
 		Audience: aux.Audience,
 		Identity: aux.Identity,
-		Trust:    t,
+		Trust:    *aux.Trust,
 	}, nil
 }
 
@@ -247,9 +204,7 @@ func unmarshalKeyless(data []byte) (Keyless, error) {
 	return k, nil
 }
 
-// unmarshalKeylessEndpoints decodes the keyless endpoint set. Each
-// endpoint's Trust field is an interface (endpoint.Trust) and requires
-// discriminator dispatch via unmarshalTLSTrust.
+// unmarshalKeylessEndpoints decodes the keyless endpoint set.
 func unmarshalKeylessEndpoints(data []byte) (KeylessEndpoints, error) {
 	type alias struct {
 		Fulcio json.RawMessage `json:"fulcio"`
@@ -275,38 +230,34 @@ func unmarshalKeylessEndpoints(data []byte) (KeylessEndpoints, error) {
 	return KeylessEndpoints{Fulcio: fulcio, Rekor: rekor, TSA: tsa}, nil
 }
 
-// unmarshalKeylessEndpoint decodes one keyless endpoint, dispatching the
-// endpoint.Trust discriminator. All three endpoints are mandatory inside a
-// declared keyless block, and trust is mandatory per endpoint.
+// unmarshalKeylessEndpoint decodes one keyless endpoint. All three endpoints
+// are mandatory inside a declared keyless block, and trust is mandatory per
+// endpoint.
 func unmarshalKeylessEndpoint(name string, data []byte) (endpoint.HTTPS, error) {
 	if len(data) == 0 || string(data) == jsonNull {
 		return endpoint.HTTPS{}, fmt.Errorf("keyless: %s required", name)
 	}
 	type alias struct {
-		URL   string          `json:"url"`
-		Trust json.RawMessage `json:"trust"`
+		Trust *endpoint.Certificate `json:"trust"`
+		URL   string                `json:"url"`
 	}
 	var aux alias
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return endpoint.HTTPS{}, fmt.Errorf("decode keyless %s: %w", name, err)
 	}
-	if len(aux.Trust) == 0 {
+	if aux.Trust == nil {
 		return endpoint.HTTPS{}, fmt.Errorf("keyless %s: trust required", name)
-	}
-	t, err := unmarshalTLSTrust(aux.Trust)
-	if err != nil {
-		return endpoint.HTTPS{}, fmt.Errorf("keyless %s: %w", name, err)
 	}
 	addr, err := endpoint.ParseURL(aux.URL)
 	if err != nil {
 		return endpoint.HTTPS{}, fmt.Errorf("keyless %s: %w", name, err)
 	}
-	return endpoint.HTTPS{Address: addr, Trust: t}, nil
+	return endpoint.HTTPS{Address: addr, Trust: *aux.Trust}, nil
 }
 
 // UnmarshalJSON implements json.Unmarshaler for Lane. It
 // decodes the resolver, oidc, and keyless fields through their respective
-// helpers, which dispatch the endpoint.Trust discriminator. All other
+// helpers, which reject an absent trust anchor. All other
 // fields fall through to the default decoder via the alias trick.
 func (p *Lane) UnmarshalJSON(data []byte) error {
 	type alias Lane

@@ -80,7 +80,7 @@ func (d *Dialer) LookupHost(ctx context.Context, name string) ([]netip.Addr, err
 // presented certificate against name itself. Routing comes from the
 // resolver, identity from the declaration; a caller cannot conflate them
 // because DialResolved takes them separately.
-func (d *Dialer) DialPeer(ctx context.Context, name primitive.Host, port primitive.Port, trust endpoint.Trust) (*VerifiedConn, error) {
+func (d *Dialer) DialPeer(ctx context.Context, name primitive.Host, port primitive.Port, trust endpoint.Certificate) (*VerifiedConn, error) {
 	if port < 1 || port > 65535 {
 		return nil, fmt.Errorf("transport: peer %s: port %d out of range 1..65535", name, port)
 	}

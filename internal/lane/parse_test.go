@@ -10,6 +10,7 @@ import (
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/primitive"
+	"github.com/istr/strike/internal/testutil"
 )
 
 func mustFilePath(t *testing.T, path string) lane.FilePath {
@@ -19,6 +20,13 @@ func mustFilePath(t *testing.T, path string) lane.FilePath {
 		t.Fatalf("NewFilePath(%q): %v", path, err)
 	}
 	return fp
+}
+
+// withAnchor substitutes the fixture trust anchor into a lane fixture that
+// carries the @anchor@ token, so a 596-character literal appears once in this
+// package rather than in every block.
+func withAnchor(src string) string {
+	return strings.ReplaceAll(src, "@anchor@", testutil.AnchorCertB64)
 }
 
 func TestParseDuration(t *testing.T) {
@@ -72,7 +80,7 @@ func TestParse_ValidMinimal(t *testing.T) {
 }
 
 func TestParse_ValidDeployOnly(t *testing.T) {
-	yaml := []byte(`
+	yaml := []byte(withAnchor(`
 name: deploy-only
 id: deploy-only
 secrets: {}
@@ -80,32 +88,27 @@ resolver:
   adn: one.one.one.one
   ip: 1.1.1.1
   trust:
-    type: caBundle
-    path: /etc/strike/resolver-ca.pem
+    cert: "@anchor@"
 oidc:
   issuer: "https://idp.example.com"
   audience: "strike"
   identity: "strike@example.com"
   trust:
-    type: certFingerprint
-    fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+    cert: "@anchor@"
 keyless:
   endpoints:
     fulcio:
       url: "https://fulcio.example:5555"
       trust:
-        type: certFingerprint
-        fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+        cert: "@anchor@"
     rekor:
       url: "https://rekor.example:3003"
       trust:
-        type: certFingerprint
-        fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+        cert: "@anchor@"
     tsa:
       url: "https://tsa.example:3004"
       trust:
-        type: certFingerprint
-        fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+        cert: "@anchor@"
 steps:
   - id: deploy
     deploy:
@@ -114,8 +117,7 @@ steps:
         target:
           host: registry.example.com
           trust:
-            type: certFingerprint
-            fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+            cert: "@anchor@"
           name: app
       recording:
         preState:
@@ -129,7 +131,7 @@ steps:
     inputs: []
     secrets: []
     outputs: []
-`)
+`))
 	dir := t.TempDir()
 	path := filepath.Join(dir, "lane.yaml")
 	if err := os.WriteFile(path, yaml, 0o600); err != nil {
@@ -148,7 +150,7 @@ steps:
 }
 
 func TestParse_BaseSBOMSigners(t *testing.T) {
-	yaml := []byte(`
+	yaml := []byte(withAnchor(`
 name: sbom-signer-lane
 id: sbom-signer-lane
 secrets: {}
@@ -156,32 +158,27 @@ resolver:
   adn: one.one.one.one
   ip: 1.1.1.1
   trust:
-    type: caBundle
-    path: /etc/strike/resolver-ca.pem
+    cert: "@anchor@"
 oidc:
   issuer: "https://idp.example.com"
   audience: "strike"
   identity: "strike@example.com"
   trust:
-    type: certFingerprint
-    fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+    cert: "@anchor@"
 keyless:
   endpoints:
     fulcio:
       url: "https://fulcio.example:5555"
       trust:
-        type: certFingerprint
-        fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+        cert: "@anchor@"
     rekor:
       url: "https://rekor.example:3003"
       trust:
-        type: certFingerprint
-        fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+        cert: "@anchor@"
     tsa:
       url: "https://tsa.example:3004"
       trust:
-        type: certFingerprint
-        fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+        cert: "@anchor@"
 baseSbomSigners:
   - issuer: "https://accounts.google.com"
     identity: "sbom-builder@example.iam.gserviceaccount.com"
@@ -193,8 +190,7 @@ steps:
         target:
           host: registry.example.com
           trust:
-            type: certFingerprint
-            fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+            cert: "@anchor@"
           name: app
       recording:
         preState:
@@ -208,7 +204,7 @@ steps:
     inputs: []
     secrets: []
     outputs: []
-`)
+`))
 	dir := t.TempDir()
 	path := filepath.Join(dir, "lane.yaml")
 	if err := os.WriteFile(path, yaml, 0o600); err != nil {
@@ -234,6 +230,16 @@ func TestParse_NonPinnedImageRejected(t *testing.T) {
 	_, _, _, err := lane.Parse(mustFilePath(t, "testdata/invalid_image_not_pinned.yaml"))
 	if err == nil {
 		t.Fatal("expected error for non-pinned image")
+	}
+	if !strings.Contains(err.Error(), "validation") {
+		t.Errorf("error should mention validation: %v", err)
+	}
+}
+
+func TestParse_MalformedDigestRejected(t *testing.T) {
+	_, _, _, err := lane.Parse(mustFilePath(t, "testdata/invalid_image_malformed_digest.yaml"))
+	if err == nil {
+		t.Fatal("expected error for malformed image digest")
 	}
 	if !strings.Contains(err.Error(), "validation") {
 		t.Errorf("error should mention validation: %v", err)
@@ -434,39 +440,34 @@ func TestParse_PathTraversal(t *testing.T) {
 func TestParse_DisjunctionErrorIsReadable(t *testing.T) {
 	// Use whichever discriminator-bearing field exists on the
 	// current branch. Adjust if the lane schema has shifted.
-	bad := []byte(`
+	bad := []byte(withAnchor(`
 name: test
 secrets: {}
 resolver:
   adn: one.one.one.one
   ip: 1.1.1.1
   trust:
-    type: caBundle
-    path: /etc/strike/resolver-ca.pem
+    cert: "@anchor@"
 oidc:
   issuer: "https://idp.example.com"
   audience: "strike"
   identity: "strike@example.com"
   trust:
-    type: certFingerprint
-    fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+    cert: "@anchor@"
 keyless:
   endpoints:
     fulcio:
       url: "https://fulcio.example:5555"
       trust:
-        type: certFingerprint
-        fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+        cert: "@anchor@"
     rekor:
       url: "https://rekor.example:3003"
       trust:
-        type: certFingerprint
-        fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+        cert: "@anchor@"
     tsa:
       url: "https://tsa.example:3004"
       trust:
-        type: certFingerprint
-        fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+        cert: "@anchor@"
 steps:
   - id: bad-deploy
     deploy:
@@ -476,7 +477,7 @@ steps:
       recording:
         preState: {required: false, capture: []}
         postState: {required: false, capture: []}
-`)
+`))
 
 	dir := t.TempDir()
 	path := filepath.Join(dir, "lane.yaml")
@@ -507,32 +508,27 @@ resolver:
   adn: one.one.one.one
   ip: 1.1.1.1
   trust:
-    type: caBundle
-    path: /etc/strike/resolver-ca.pem
+    cert: "@anchor@"
 oidc:
   issuer: "https://idp.example.com"
   audience: "strike"
   identity: "strike@example.com"
   trust:
-    type: certFingerprint
-    fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+    cert: "@anchor@"
 keyless:
   endpoints:
     fulcio:
       url: "https://fulcio.example:5555"
       trust:
-        type: certFingerprint
-        fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+        cert: "@anchor@"
     rekor:
       url: "https://rekor.example:3003"
       trust:
-        type: certFingerprint
-        fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+        cert: "@anchor@"
     tsa:
       url: "https://tsa.example:3004"
       trust:
-        type: certFingerprint
-        fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+        cert: "@anchor@"
 steps:
   - id: src
     image: img@sha256:abababababababababababababababababababababababababababababababab
@@ -564,8 +560,7 @@ steps:
         target:
           host: registry.example.com
           trust:
-            type: certFingerprint
-            fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+            cert: "@anchor@"
           name: app
       recording:
         preState:
@@ -600,7 +595,7 @@ steps:
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			yaml := fmt.Sprintf(tmpl, tt.subpath)
+			yaml := fmt.Sprintf(withAnchor(tmpl), tt.subpath)
 			dir := t.TempDir()
 			path := filepath.Join(dir, "lane.yaml")
 			if err := os.WriteFile(path, []byte(yaml), 0o600); err != nil {

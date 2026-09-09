@@ -22,11 +22,11 @@ package endpoint
 	// Address is same-package, so the override names the bare type and emits no
 	// import. ParseAuthority and Address.Authority project across the boundary.
 	host: #Authority @go(Address,type=Address)
-	// trust resolves to the hand-written Trust interface in this same package;
-	// #Trust is @go(-), so the override names the bare same-package type and
-	// emits no import (a contract/endpoint path would self-import after the
-	// make generate contract/ -> internal/ rewrite).
-	trust: #Trust @go(Trust,type=Trust)
+	// trust is the certificate this peer is permitted to present, or the root
+	// of the chain it presents. Certificate is same-package, so the override
+	// names the bare type and emits no import (a contract/endpoint path would
+	// self-import after the make generate contract/ -> internal/ rewrite).
+	trust: #Certificate @go(Trust,type=Certificate)
 }
 
 // SSH is an SSH-carriage endpoint: an address plus the set of host keys

@@ -11,7 +11,7 @@ func (e SSH) Addr() Address { return e.Address }
 // MarshalJSON projects the host to its packed authority wire form.
 func (e TLS) MarshalJSON() ([]byte, error) {
 	return json.Marshal(struct {
-		Trust Trust        `json:"trust"`
+		Trust Certificate  `json:"trust"`
 		Type  CarriageType `json:"type"`
 		Host  string       `json:"host"`
 	}{Type: e.Type, Host: string(e.Address.Authority()), Trust: e.Trust})

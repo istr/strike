@@ -100,31 +100,31 @@ var derBlobs = []derBlob{
 		label:  "golden trusted root: harness Fulcio CA",
 	},
 	{
-		digest: "d4fa89755c0638c3f019de4607d7ab7d60c10fa5a6eed9cf784b3ca354c4f7e0",
+		digest: "813428ca088c1aa6717d89e017a39c7a134f0bea863fe2de2bb9af92d92b03e2",
 		label:  "golden trusted root: harness TSA root",
 	},
 	{
-		digest: "70cd2025389aa389a07506758924e6e42daae8a9d3b2aaaf672f7e9da122bd8f",
+		digest: "acebeac90407273ac0abf3b2a20b7260e25d16463fdef7540212930900eec54a",
 		label:  "golden trusted root: harness TSA intermediate",
 	},
 	{
-		digest: "974221dda08d81dc00eeefc2ef7be73e9da632289e58646a7abb54e333cee2bd",
+		digest: "12476dba72f2f8f1aae989cae158b74b944097f6b7d1dcb04e2d1b1ed679de55",
 		label:  "golden trusted root: harness TSA timestamping leaf",
 	},
 	{
-		digest: "07c139fd695f339ffabafddbde6a636c4851d1f50a4397fb171b974e0d6551d7",
+		digest: "ceaae46e2121719e97bb6a900b5f4ebd6a6e686cadad86b498cdc2cc5eb63c08",
 		label:  "golden bundles: Fulcio leaf for tester@strike.localhost",
 	},
 	{
-		digest: "4a1c97cb31f35a1742926b87a67e434892a4f00647ee5940dff4ceb398e7c800",
+		digest: "b7e80c2cf62e71f784f53df99dbb96e714ff9b66c828ec4a0b99cde9cf9883fd",
 		label:  "golden sealed bundle: RFC3161 timestamp token",
 	},
 	{
-		digest: "bfb7bace9fb62149b93a5d32c288f86505a36d6db77dede2d1f161b99e8515de",
+		digest: "bd79cd67f094e37695bcbd490092cb9c983998cda65dd0ac3425b2bdcfbc4d7e",
 		label:  "golden engine-context bundle: RFC3161 timestamp token",
 	},
 	{
-		digest: "c0b85c754ae383dd87bfd750619c684961e70744a73480bb92058abbc9eba6d9",
+		digest: "6f33ca6cd1c2c7c1671a9b3f97c9182cb6e110ac4b60b61085c40a834c63bfcb",
 		label:  "golden informational bundle: RFC3161 timestamp token",
 	},
 

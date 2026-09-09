@@ -14,6 +14,7 @@ import (
 	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/provenance"
 	"github.com/istr/strike/internal/record"
+	"github.com/istr/strike/internal/testutil"
 	"github.com/istr/strike/test/crossval"
 )
 
@@ -225,10 +226,7 @@ func TestValidateAttestation_WithPeers(t *testing.T) {
 					endpoint.TLS{
 						Type:    "https",
 						Address: endpoint.MustParseAuthority("api.example.com"),
-						Trust: endpoint.Fingerprint{
-							Type:        "certFingerprint",
-							Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-						},
+						Trust:   testutil.AnchorTrust(),
 					},
 				},
 				"clone": {

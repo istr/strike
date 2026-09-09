@@ -41,14 +41,15 @@ func HarnessDialer(harnessDir string) (*transport.Dialer, error) {
 		return nil, fmt.Errorf("harness resolver certificate missing (run make keys in test/sigstore-local): %w", err)
 	}
 	port := harnessResolverPort
+	trust, trustErr := CertificateFromPEMFile(cert)
+	if trustErr != nil {
+		return nil, fmt.Errorf("harness resolver anchor: %w", trustErr)
+	}
 	return transport.NewDialer(endpoint.DoT{
-		ADN:  harnessResolverADN,
-		IP:   harnessResolverIP,
-		Port: &port,
-		Trust: endpoint.CABundle{
-			Type: "caBundle",
-			Path: primitive.AbsPath(cert),
-		},
+		ADN:   harnessResolverADN,
+		IP:    harnessResolverIP,
+		Port:  &port,
+		Trust: trust,
 	})
 }
 

@@ -84,7 +84,10 @@ func run(ctx context.Context) error {
 		return err
 	}
 
-	trust := endpoint.CABundle{Type: "caBundle", Path: primitive.AbsPath(caddyRoot)}
+	trust, trustErr := testutil.CertificateFromPEMFile(caddyRoot)
+	if trustErr != nil {
+		return fmt.Errorf("golden trust anchor: %w", trustErr)
+	}
 	eps := lane.KeylessEndpoints{
 		Fulcio: endpoint.HTTPS{Address: endpoint.MustParseURL(fulcioURL), Trust: trust},
 		Rekor:  endpoint.HTTPS{Address: endpoint.MustParseURL(rekorURL), Trust: trust},

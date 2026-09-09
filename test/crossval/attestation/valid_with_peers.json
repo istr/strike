@@ -24,8 +24,8 @@
               "type": "https",
               "host": "api.example.com",
               "trust": {
-                "type": "certFingerprint",
-                "fingerprint": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+                "mode": "rootca",
+                "cert": "MIIBuzCCAWGgAwIBAgIBATAKBggqhkjOPQQDAjBEMR0wGwYDVQQKDBRzdHJpa2UgdGVzdCBtYXRlcmlhbDEjMCEGA1UEAwwac3RyaWtlIGZpeHR1cmUgdGVzdCBhbmNob3IwIBcNMjYwMTAxMDAwMDAwWhgPOTk5OTEyMzEyMzU5NTlaMEQxHTAbBgNVBAoMFHN0cmlrZSB0ZXN0IG1hdGVyaWFsMSMwIQYDVQQDDBpzdHJpa2UgZml4dHVyZSB0ZXN0IGFuY2hvcjBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABEIlSPiPt4L/teyjdERSxyoeVY+9b3O+XkjpMjLMRcWxbEzRDEy41bihcTnpSILImSVymTQl9BQZq36QpCpJQnKjQjBAMA8GA1UdEwEB/wQFMAMBAf8wDgYDVR0PAQH/BAQDAgEGMB0GA1UdDgQWBBRbcKeYF/ef9jfS9+PcRGwhCde71DAKBggqhkjOPQQDAgNIADBFAiEAgS0Tvd1/A38U+EpMiaA1GtTjXCX11rqbLgUQf5iRhhgCIDnuZnbVCpcQjNQLMsrhhzlFRTlAWOVNlS0apM4uHD/E"
               }
             }
           ]

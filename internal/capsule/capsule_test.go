@@ -6,7 +6,6 @@ import (
 	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/rand"
-	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -16,7 +15,6 @@ import (
 	"math/big"
 	"net"
 	"net/netip"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -40,13 +38,10 @@ func testDialer(t *testing.T) *transport.Dialer {
 	t.Helper()
 	deadPort := primitive.Port(1)
 	d, err := transport.NewDialer(endpoint.DoT{
-		ADN:  "resolver.test",
-		IP:   "127.0.0.1",
-		Port: &deadPort,
-		Trust: endpoint.CABundle{
-			Type: "caBundle",
-			Path: primitive.AbsPath(filepath.Join(t.TempDir(), "unused-ca.pem")),
-		},
+		ADN:   "resolver.test",
+		IP:    "127.0.0.1",
+		Port:  &deadPort,
+		Trust: testutil.AnchorTrust(),
 	})
 	if err != nil {
 		t.Fatalf("transport.NewDialer: %v", err)
@@ -358,7 +353,7 @@ func TestTwoCapsules_DistinctPorts(t *testing.T) {
 
 	peers := []mediator.PeerTrust{{
 		Address: endpoint.MustParseAuthority("example.com"),
-		Trust:   endpoint.Fingerprint{Type: "fingerprint", Fingerprint: "sha256:aaaa"},
+		Trust:   testutil.AnchorTrust(),
 	}}
 
 	c1, err := capsule.New("step-a", ports["step-a"], peers, nil, 0, ca, testDialer(t))
@@ -473,9 +468,9 @@ func parseAAnswers(t *testing.T, raw []byte) (dnsmessage.RCode, []netip.Addr) {
 }
 
 // startTestUpstreamTLS spins up a TLS echo server with a self-signed cert
-// valid for the given SNI. Returns the cert fingerprint, listener address,
-// and a cleanup function.
-func startTestUpstreamTLS(t *testing.T, sni string) (fingerprint primitive.Digest, addr netip.AddrPort, cleanup func()) {
+// valid for the given SNI. Returns the leaf anchor pinning that cert, the
+// listener address, and a cleanup function.
+func startTestUpstreamTLS(t *testing.T, sni string) (anchor endpoint.Certificate, addr netip.AddrPort, cleanup func()) {
 	t.Helper()
 
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -504,8 +499,7 @@ func startTestUpstreamTLS(t *testing.T, sni string) (fingerprint primitive.Diges
 		t.Fatalf("create cert: %v", err)
 	}
 
-	sum := sha256.Sum256(certDER)
-	fingerprint = primitive.DigestFromHex(hex.EncodeToString(sum[:]))
+	anchor = endpoint.CertificateFromDER(certDER, endpoint.CertificateModeLeaf)
 
 	tlsCert := tls.Certificate{
 		Certificate: [][]byte{certDER},
@@ -547,7 +541,7 @@ func startTestUpstreamTLS(t *testing.T, sni string) (fingerprint primitive.Diges
 		closer.Warn(tlsLn, "test upstream listener")
 		wg.Wait()
 	}
-	return fingerprint, netip.MustParseAddrPort(ln.Addr().String()), cleanup
+	return anchor, netip.MustParseAddrPort(ln.Addr().String()), cleanup
 }
 
 func TestCapsule_ResolverSynthesizesStepAddr(t *testing.T) {
@@ -558,7 +552,7 @@ func TestCapsule_ResolverSynthesizesStepAddr(t *testing.T) {
 
 	peers := []mediator.PeerTrust{{
 		Address: endpoint.MustParseAuthority(sni),
-		Trust:   endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:aaaa"},
+		Trust:   testutil.AnchorTrust(),
 	}}
 
 	c, err := capsule.New("synth-step", hp, peers, nil, 0, ca, testDialer(t))
@@ -597,7 +591,7 @@ func TestCapsule_DNSThenConnect_EndToEnd(t *testing.T) {
 	sni := testPeerSNI
 	hp := capsule.HostPorts{Resolver: 15365, Mediator: 15366}
 
-	fp, upAddr, upCleanup := startTestUpstreamTLS(t, sni)
+	anchor, upAddr, upCleanup := startTestUpstreamTLS(t, sni)
 	defer upCleanup()
 
 	upIP := upAddr.Addr()
@@ -656,10 +650,7 @@ func TestCapsule_DNSThenConnect_EndToEnd(t *testing.T) {
 
 	peers := []mediator.PeerTrust{{
 		Address: endpoint.MustParseAuthority(sni),
-		Trust: endpoint.Fingerprint{
-			Type:        "certFingerprint",
-			Fingerprint: fp,
-		},
+		Trust:   anchor,
 	}}
 
 	c, err := capsule.New("e2e-step", hp, peers, nil, 0, ca, testutil.StartDoTResolver(t, upIP))
@@ -748,7 +739,7 @@ func TestCapsule_DeniedName_NXDOMAIN(t *testing.T) {
 
 	peers := []mediator.PeerTrust{{
 		Address: endpoint.MustParseAuthority("allowed.example"),
-		Trust:   endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:aaaa"},
+		Trust:   testutil.AnchorTrust(),
 	}}
 
 	c, err := capsule.New("deny-step", hp, peers, nil, 0, ca, testDialer(t))
@@ -785,7 +776,7 @@ func TestCapsule_AAAA_AllowedName_Empty(t *testing.T) {
 
 	peers := []mediator.PeerTrust{{
 		Address: endpoint.MustParseAuthority(sni),
-		Trust:   endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:aaaa"},
+		Trust:   testutil.AnchorTrust(),
 	}}
 
 	c, err := capsule.New("aaaa-step", hp, peers, nil, 0, ca, testDialer(t))

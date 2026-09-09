@@ -363,7 +363,7 @@ func (t httpsOnlyTransport) RoundTrip(req *http.Request) (*http.Response, error)
 // to the declared registry target dials through: the payload push, the SBOM
 // referrers, and the statement-bundle referrers. Enforcement is structural
 // (ADR-051 D4): the declared target name is resolved through the lane's own
-// DoT resolver and the TLS dial verifies the declared endpoint.Trust anchor
+// DoT resolver and the TLS dial verifies the declared endpoint.Certificate anchor
 // against that name, a dial to any address other than the declared authority
 // is rejected -- a redirect off the target therefore fails instead of being
 // followed -- and a plaintext dial is rejected outright. The identity
@@ -376,7 +376,7 @@ func newRegistryTransport(target lane.DeployRegistryTarget, dialer *transport.Di
 	if target.Name == "" {
 		return nil, nil, fmt.Errorf("registry target: name required")
 	}
-	if target.Trust == nil {
+	if target.Trust.Cert == "" {
 		return nil, nil, fmt.Errorf("registry target: trust required")
 	}
 	if dialer == nil {

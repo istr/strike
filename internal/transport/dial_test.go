@@ -10,7 +10,6 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/hex"
-	"encoding/pem"
 	"io"
 	"math/big"
 	"net"
@@ -43,8 +42,8 @@ func drainConn(c net.Conn) {
 
 // testCertPair generates a self-signed ECDSA P-256 cert valid
 // for the given hosts (DNS names and/or IPs). Returns the cert
-// and its SHA-256 fingerprint string.
-func testCertPair(t *testing.T, hosts ...string) (*tls.Certificate, primitive.Digest) {
+// and the leaf-mode anchor that pins it.
+func testCertPair(t *testing.T, hosts ...string) (*tls.Certificate, endpoint.Certificate) {
 	t.Helper()
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
@@ -70,19 +69,17 @@ func testCertPair(t *testing.T, hosts ...string) (*tls.Certificate, primitive.Di
 	if err != nil {
 		t.Fatalf("create cert: %v", err)
 	}
-	sum := sha256.Sum256(certDER)
-	fingerprint := primitive.DigestFromHex(hex.EncodeToString(sum[:]))
 	tlsCert := tls.Certificate{
 		Certificate: [][]byte{certDER},
 		PrivateKey:  key,
 	}
-	return &tlsCert, fingerprint
+	return &tlsCert, endpoint.CertificateFromDER(certDER, endpoint.CertificateModeLeaf)
 }
 
 // testCAAndServerCert generates a test CA and a server cert
 // signed by it. Returns the server tls.Certificate and the CA
-// cert in PEM form ready to write to disk for caBundle testing.
-func testCAAndServerCert(t *testing.T, hosts ...string) (*tls.Certificate, []byte) {
+// as a rootca-mode anchor.
+func testCAAndServerCert(t *testing.T, hosts ...string) (*tls.Certificate, endpoint.Certificate) {
 	t.Helper()
 
 	caKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -106,7 +103,6 @@ func testCAAndServerCert(t *testing.T, hosts ...string) (*tls.Certificate, []byt
 	if err != nil {
 		t.Fatalf("parse CA cert: %v", err)
 	}
-	caCertPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caCertDER})
 
 	serverKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
@@ -136,7 +132,7 @@ func testCAAndServerCert(t *testing.T, hosts ...string) (*tls.Certificate, []byt
 		Certificate: [][]byte{serverCertDER},
 		PrivateKey:  serverKey,
 	}
-	return &tlsCert, caCertPEM
+	return &tlsCert, endpoint.CertificateFromDER(caCertDER, endpoint.CertificateModeRootca)
 }
 
 // startTLSServer launches a TLS listener on 127.0.0.1 that
@@ -173,26 +169,22 @@ func startTLSServer(t *testing.T, config *tls.Config) netip.AddrPort {
 	return netip.MustParseAddrPort(ln.Addr().String())
 }
 
-func TestDialResolved_FingerprintMatch(t *testing.T) {
-	cert, fingerprint := testCertPair(t, "127.0.0.1")
+func TestDialResolved_LeafMatch(t *testing.T) {
+	cert, trust := testCertPair(t, "127.0.0.1")
 	dst := startTLSServer(t, &tls.Config{
 		Certificates: []tls.Certificate{*cert},
 		MinVersion:   tls.VersionTLS13,
 	})
 	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
 	defer cancel()
-	trust := endpoint.Fingerprint{
-		Type:        "certFingerprint",
-		Fingerprint: fingerprint,
-	}
 	conn, err := transport.DialResolved(ctx, dst, "127.0.0.1", trust)
 	if err != nil {
 		t.Fatalf("DialResolved: %v", err)
 	}
 	defer closer.Warn(conn.Conn(), "test verified conn")
 	id := conn.Identity()
-	if id.LeafFingerprint != fingerprint {
-		t.Errorf("Identity.LeafFingerprint = %q, want %q", id.LeafFingerprint, fingerprint)
+	if want := leafDigest(cert); id.LeafFingerprint != want {
+		t.Errorf("Identity.LeafFingerprint = %q, want %q", id.LeafFingerprint, want)
 	}
 	if id.TLSVersion != tls.VersionTLS13 {
 		t.Errorf("Identity.TLSVersion = 0x%x, want 0x%x (TLS 1.3)", id.TLSVersion, tls.VersionTLS13)
@@ -207,10 +199,7 @@ func TestDialResolved_FingerprintMatch(t *testing.T) {
 // address that is not resolved cannot be dialed, and an empty verification
 // name is an error rather than a silent downgrade to an unverified peer.
 func TestDialResolved_RejectsUnusableArguments(t *testing.T) {
-	trust := endpoint.Fingerprint{
-		Type:        "certFingerprint",
-		Fingerprint: primitive.DigestFromHex(strings.Repeat("0", 64)),
-	}
+	trust := testutil.AnchorTrust()
 	tests := []struct {
 		name       string
 		serverName primitive.Host
@@ -249,7 +238,7 @@ func TestDialResolved_RejectsUnusableArguments(t *testing.T) {
 	}
 }
 
-func TestDialResolved_FingerprintMismatch(t *testing.T) {
+func TestDialResolved_LeafMismatch(t *testing.T) {
 	cert, _ := testCertPair(t, "127.0.0.1")
 	dst := startTLSServer(t, &tls.Config{
 		Certificates: []tls.Certificate{*cert},
@@ -257,21 +246,20 @@ func TestDialResolved_FingerprintMismatch(t *testing.T) {
 	})
 	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
 	defer cancel()
-	trust := endpoint.Fingerprint{
-		Type:        "certFingerprint",
-		Fingerprint: primitive.DigestFromHex(strings.Repeat("0", 64)),
-	}
+	// A leaf anchor over a different certificate: the server presents the
+	// first, the declaration pins the second.
+	_, trust := testCertPair(t, "127.0.0.1")
 	_, err := transport.DialResolved(ctx, dst, "127.0.0.1", trust)
 	if err == nil {
-		t.Fatal("expected fingerprint mismatch error, got nil")
+		t.Fatal("expected leaf mismatch error, got nil")
 	}
-	if !strings.Contains(err.Error(), "fingerprint mismatch") {
-		t.Errorf("error %q must mention 'fingerprint mismatch'", err)
+	if !strings.Contains(err.Error(), "does not match the declared leaf anchor") {
+		t.Errorf("error %q must report the leaf mismatch", err)
 	}
 }
 
-func TestDialResolved_CABundleValid(t *testing.T) {
-	serverCert, caPEM := testCAAndServerCert(t, "127.0.0.1")
+func TestDialResolved_RootCAValid(t *testing.T) {
+	serverCert, trust := testCAAndServerCert(t, "127.0.0.1")
 	dst := startTLSServer(t, &tls.Config{
 		Certificates: []tls.Certificate{*serverCert},
 		MinVersion:   tls.VersionTLS13,
@@ -279,10 +267,6 @@ func TestDialResolved_CABundleValid(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
 	defer cancel()
-	trust := endpoint.CABundle{
-		Type: "caBundle",
-		Path: writeCABundle(t, "ca.pem", caPEM),
-	}
 	conn, err := transport.DialResolved(ctx, dst, "127.0.0.1", trust)
 	if err != nil {
 		t.Fatalf("DialResolved: %v", err)
@@ -297,32 +281,29 @@ func TestDialResolved_CABundleValid(t *testing.T) {
 	}
 }
 
-func TestDialResolved_CABundleWrongCA(t *testing.T) {
+func TestDialResolved_RootCAWrongCA(t *testing.T) {
 	serverCert, _ := testCAAndServerCert(t, "127.0.0.1")
 	dst := startTLSServer(t, &tls.Config{
 		Certificates: []tls.Certificate{*serverCert},
 		MinVersion:   tls.VersionTLS13,
 	})
 
-	_, caPEMB := testCAAndServerCert(t, "127.0.0.1")
+	// The anchor is deliberately the other CA.
+	_, wrongCA := testCAAndServerCert(t, "127.0.0.1")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
 	defer cancel()
-	trust := endpoint.CABundle{
-		Type: "caBundle",
-		Path: writeCABundle(t, "wrong-ca.pem", caPEMB),
-	}
-	_, err := transport.DialResolved(ctx, dst, "127.0.0.1", trust)
+	_, err := transport.DialResolved(ctx, dst, "127.0.0.1", wrongCA)
 	if err == nil {
 		t.Fatal("expected CA verification error, got nil")
 	}
 }
 
-// TestDialResolved_CABundleWrongName pins that the verification name is
+// TestDialResolved_RootCAWrongName pins that the verification name is
 // enforced and not merely sent: the presented chain validates against the
-// declared bundle, but it carries no SAN for the name the caller asked for,
+// declared root, but it carries no SAN for the name the caller asked for,
 // and the handshake fails.
-func TestDialResolved_CABundleWrongName(t *testing.T) {
-	serverCert, caPEM := testCAAndServerCert(t, "other.example")
+func TestDialResolved_RootCAWrongName(t *testing.T) {
+	serverCert, trust := testCAAndServerCert(t, "other.example")
 	dst := startTLSServer(t, &tls.Config{
 		Certificates: []tls.Certificate{*serverCert},
 		MinVersion:   tls.VersionTLS13,
@@ -330,10 +311,6 @@ func TestDialResolved_CABundleWrongName(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
 	defer cancel()
-	trust := endpoint.CABundle{
-		Type: "caBundle",
-		Path: writeCABundle(t, "ca.pem", caPEM),
-	}
 	_, err := transport.DialResolved(ctx, dst, "asked-for.example", trust)
 	if err == nil {
 		t.Fatal("expected certificate-name error, got nil")
@@ -344,7 +321,7 @@ func TestDialResolved_CABundleWrongName(t *testing.T) {
 }
 
 func TestDialResolved_TLS12Accepted(t *testing.T) {
-	cert, fingerprint := testCertPair(t, "127.0.0.1")
+	cert, trust := testCertPair(t, "127.0.0.1")
 	// A TLS 1.2-only server must handshake successfully now that
 	// the floor is 1.2.
 	serverCfg := &tls.Config{
@@ -355,10 +332,6 @@ func TestDialResolved_TLS12Accepted(t *testing.T) {
 	dst := startTLSServer(t, serverCfg)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
 	defer cancel()
-	trust := endpoint.Fingerprint{
-		Type:        "certFingerprint",
-		Fingerprint: fingerprint,
-	}
 	conn, err := transport.DialResolved(ctx, dst, "127.0.0.1", trust)
 	if err != nil {
 		t.Fatalf("DialResolved: %v", err)
@@ -370,7 +343,7 @@ func TestDialResolved_TLS12Accepted(t *testing.T) {
 }
 
 func TestDialResolved_TLS11Rejected(t *testing.T) {
-	cert, fingerprint := testCertPair(t, "127.0.0.1")
+	cert, trust := testCertPair(t, "127.0.0.1")
 	// A TLS 1.1-only server must be rejected: below the floor.
 	serverCfg := &tls.Config{
 		Certificates: []tls.Certificate{*cert},
@@ -380,35 +353,45 @@ func TestDialResolved_TLS11Rejected(t *testing.T) {
 	dst := startTLSServer(t, serverCfg)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
 	defer cancel()
-	trust := endpoint.Fingerprint{
-		Type:        "certFingerprint",
-		Fingerprint: fingerprint,
-	}
 	_, err := transport.DialResolved(ctx, dst, "127.0.0.1", trust)
 	if err == nil {
 		t.Fatal("expected handshake failure due to TLS version, got nil")
 	}
 }
 
-// writeCABundle writes a PEM bundle into the test's temp dir and returns
-// its path as the declared trust anchor takes it.
-func writeCABundle(t *testing.T, name string, pemBytes []byte) primitive.AbsPath {
-	t.Helper()
-	path := filepath.Join(t.TempDir(), name)
-	if err := os.WriteFile(path, pemBytes, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	return primitive.AbsPath(path)
+// leafDigest is the SHA-256 fingerprint ConnectionIdentity records for a
+// presented leaf, computed over the certificate the test minted.
+func leafDigest(cert *tls.Certificate) primitive.Digest {
+	sum := sha256.Sum256(cert.Certificate[0])
+	return primitive.DigestFromHex(hex.EncodeToString(sum[:]))
 }
 
-type fakeTrust struct{}
-
-func (fakeTrust) TrustType() endpoint.TrustType { return "fake" }
-
-func TestBuildTLSConfig_UnknownTrust(t *testing.T) {
-	_, err := transport.BuildTLSConfig(fakeTrust{})
-	if err == nil {
-		t.Fatal("expected error for unknown trust type")
+// TestBuildTLSConfig_RejectsUnusableAnchor pins the two ways a declared
+// anchor fails before any packet is sent: a mode the dialer does not know,
+// and a body that is not a certificate.
+func TestBuildTLSConfig_RejectsUnusableAnchor(t *testing.T) {
+	unknownMode := testutil.AnchorTrust()
+	unknownMode.Mode = "fake"
+	notACert := testutil.AnchorTrust()
+	notACert.Cert = "not-base64!"
+	tests := []struct {
+		name    string
+		wantErr string
+		trust   endpoint.Certificate
+	}{
+		{name: "unknown mode", trust: unknownMode, wantErr: "unknown trust mode"},
+		{name: "body is not base64", trust: notACert, wantErr: "not standard base64"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := transport.BuildTLSConfig(tt.trust)
+			if err == nil {
+				t.Fatalf("expected error containing %q, got nil", tt.wantErr)
+			}
+			if !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("error %q does not contain %q", err, tt.wantErr)
+			}
+		})
 	}
 }
 
@@ -430,7 +413,7 @@ func TestDialResolved_VerificationNameForms(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			serverCert, caPEM := testCAAndServerCert(t, tt.san)
+			serverCert, trust := testCAAndServerCert(t, tt.san)
 			sniChan := make(chan string, 1)
 			dst := startTLSServer(t, &tls.Config{
 				Certificates: []tls.Certificate{*serverCert},
@@ -444,10 +427,6 @@ func TestDialResolved_VerificationNameForms(t *testing.T) {
 
 			ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
 			defer cancel()
-			trust := endpoint.CABundle{
-				Type: "caBundle",
-				Path: writeCABundle(t, "ca.pem", caPEM),
-			}
 			conn, err := transport.DialResolved(ctx, dst, tt.serverName, trust)
 			if err != nil {
 				t.Fatalf("DialResolved: %v", err)

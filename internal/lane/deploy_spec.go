@@ -60,26 +60,22 @@ func (s *DeploySpec) UnmarshalJSON(data []byte) error {
 }
 
 // UnmarshalJSON decodes the registry push target: the packed authority host
-// projects into endpoint.Address and the trust discriminator dispatches into
-// its endpoint.Trust arm, mirroring the resolver decode
-// (unmarshalDNSResolver). The https carriage type is fixed and set here, not
-// read from the wire.
+// projects into endpoint.Address and trust decodes by field, mirroring the
+// resolver decode (unmarshalDNSResolver). The https carriage type is fixed and
+// set here, not read from the wire.
 func (t *DeployRegistryTarget) UnmarshalJSON(data []byte) error {
 	var aux struct {
-		Host  string            `json:"host"`
-		Name  primitive.OCIName `json:"name"`
-		Trust json.RawMessage   `json:"trust"`
+		Trust *endpoint.Certificate `json:"trust"`
+		Host  string                `json:"host"`
+		Name  primitive.OCIName     `json:"name"`
 	}
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return fmt.Errorf("decode registry target: %w", err)
 	}
-	if len(aux.Trust) == 0 {
+	if aux.Trust == nil {
 		return fmt.Errorf("registry target: trust required")
 	}
-	tr, err := unmarshalTLSTrust(aux.Trust)
-	if err != nil {
-		return fmt.Errorf("registry target: %w", err)
-	}
+	tr := *aux.Trust
 	addr, err := endpoint.ParseAuthority(aux.Host)
 	if err != nil {
 		return fmt.Errorf("registry target host: %w", err)

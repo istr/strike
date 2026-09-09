@@ -13,7 +13,6 @@ import (
 	"github.com/istr/strike/internal/closer"
 	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/mediator"
-	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/testutil"
 	"github.com/istr/strike/internal/transport"
 )
@@ -37,7 +36,7 @@ func TestMediator_HarnessHTTPS_INTEGRATION(t *testing.T) {
 	engine := testutil.RequireEngine(t)
 	harness := testutil.HarnessDir(t)
 	testutil.RequireHarness(t, engine, harness)
-	caddyRoot := primitive.AbsPath(filepath.Join(harness, "pki", "caddy-root.crt"))
+	caddyRoot := filepath.Join(harness, "pki", "caddy-root.crt")
 
 	dialer, err := testutil.HarnessDialer(harness)
 	if err != nil {
@@ -50,13 +49,14 @@ func TestMediator_HarnessHTTPS_INTEGRATION(t *testing.T) {
 	}
 	defer closer.Warn(ca, "integration CA")
 
+	registryRoot, rootErr := testutil.CertificateFromPEMFile(caddyRoot)
+	if rootErr != nil {
+		t.Fatalf("harness root anchor: %v", rootErr)
+	}
 	peers := []mediator.PeerTrust{
 		{
 			Address: endpoint.MustParseAuthority(itestPeerHost + ":5443"),
-			Trust: endpoint.CABundle{
-				Type: "caBundle",
-				Path: caddyRoot,
-			},
+			Trust:   registryRoot,
 		},
 	}
 

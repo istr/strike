@@ -1,6 +1,7 @@
 package lane
 
 import (
+	"bytes"
 	"fmt"
 	"maps"
 	"net/netip"
@@ -18,16 +19,7 @@ import (
 // inline. Build assumes a lane that has passed this gate. The leaf-topology
 // validators need the built graph and stay on the DAG.
 func ValidateLane(p *Lane, index map[primitive.Identifier]*Step) error {
-	if err := validateStepKindDisjointness(p); err != nil {
-		return err
-	}
-	if err := validateDeployPresence(p); err != nil {
-		return err
-	}
-	if err := validateDeployMethodImplemented(p); err != nil {
-		return err
-	}
-	if err := validateResolver(p); err != nil {
+	if err := validateDeclarations(p); err != nil {
 		return err
 	}
 	if err := ValidatePaths(p); err != nil {
@@ -61,6 +53,27 @@ func ValidateLane(p *Lane, index map[primitive.Identifier]*Step) error {
 		return err
 	}
 	return nil
+}
+
+// validateDeclarations runs the checks that read the lane's declarations
+// alone and need nothing from the step index or the DAG: the step kind, the
+// deploy presence and method, the resolver, and every trust anchor. They come
+// first so a bad declaration is reported as such rather than as whatever a
+// later validator happens to reach.
+func validateDeclarations(p *Lane) error {
+	if err := validateStepKindDisjointness(p); err != nil {
+		return err
+	}
+	if err := validateDeployPresence(p); err != nil {
+		return err
+	}
+	if err := validateDeployMethodImplemented(p); err != nil {
+		return err
+	}
+	if err := validateResolver(p); err != nil {
+		return err
+	}
+	return validateTrustAnchors(p)
 }
 
 // validateImageFromRefs checks that each step's imageFromStep references a known
@@ -397,14 +410,7 @@ type canonicalAnchor string
 func peerAnchor(peer Peer) canonicalAnchor {
 	switch x := peer.(type) {
 	case endpoint.TLS:
-		switch t := x.Trust.(type) {
-		case endpoint.Fingerprint:
-			return canonicalAnchor("https/certFingerprint/" + t.Fingerprint.String())
-		case endpoint.CABundle:
-			return canonicalAnchor("https/caBundle/" + t.Path.String())
-		default:
-			return "https/unknown"
-		}
+		return canonicalAnchor("https/" + string(x.Trust.Mode) + "/" + x.Trust.Cert.String())
 	case endpoint.SSH:
 		entries := make([]string, len(x.KnownHosts))
 		for i, kh := range x.KnownHosts {
@@ -568,6 +574,83 @@ func validateResolver(p *Lane) error {
 	}
 	if _, err := p.Resolver.DialTarget(); err != nil {
 		return err
+	}
+	return nil
+}
+
+// validateTrustAnchors reconciles every declared anchor with its mode
+// (ADR-056 D7). The mode is a claim about the certificate; a claim the
+// certificate does not support is a hard failure here rather than a dial-time
+// surprise. Every declaration site is walked, so a lane cannot carry an anchor
+// that only some code path would have rejected.
+func validateTrustAnchors(p *Lane) error {
+	sites := []struct {
+		anchor endpoint.Certificate
+		where  string
+	}{
+		{anchor: p.Resolver.Trust, where: "resolver"},
+		{anchor: p.OIDC.Trust, where: "oidc"},
+		{anchor: p.Keyless.Endpoints.Fulcio.Trust, where: "keyless fulcio"},
+		{anchor: p.Keyless.Endpoints.Rekor.Trust, where: "keyless rekor"},
+		{anchor: p.Keyless.Endpoints.TSA.Trust, where: "keyless tsa"},
+	}
+	for _, s := range p.Steps {
+		for _, peer := range s.Peers {
+			tls, ok := peer.(endpoint.TLS)
+			if !ok {
+				continue
+			}
+			sites = append(sites, struct {
+				anchor endpoint.Certificate
+				where  string
+			}{anchor: tls.Trust, where: fmt.Sprintf("step %q peer %q", s.ID, tls.Address.Authority())})
+		}
+		if s.Deploy == nil {
+			continue
+		}
+		reg, ok := s.Deploy.Method.(DeployRegistry)
+		if !ok {
+			continue
+		}
+		sites = append(sites, struct {
+			anchor endpoint.Certificate
+			where  string
+		}{anchor: reg.Target.Trust, where: fmt.Sprintf("step %q registry target", s.ID)})
+	}
+	for _, site := range sites {
+		if err := checkTrustAnchor(site.anchor, site.where); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// checkTrustAnchor decodes one anchor and, in rootca mode, checks the three
+// properties a root must have. The checks are ordered so each negative reports
+// the property it actually violates: a CA:FALSE certificate would otherwise
+// fail the signature check first, on a constraint violation rather than on the
+// constraint itself. In leaf mode a parseable certificate is enough -- the
+// comparison at dial time is over bytes and asks nothing of the content.
+func checkTrustAnchor(c endpoint.Certificate, where string) error {
+	cert, err := c.Parse()
+	if err != nil {
+		return fmt.Errorf("%s: %w", where, err)
+	}
+	if c.Mode != endpoint.CertificateModeRootca {
+		return nil
+	}
+	if !cert.IsCA {
+		return fmt.Errorf(
+			"%s: rootca anchor is not a CA certificate (basicConstraints CA:FALSE)", where)
+	}
+	if !bytes.Equal(cert.RawIssuer, cert.RawSubject) {
+		return fmt.Errorf(
+			"%s: rootca anchor is not self-signed: issuer and subject differ", where)
+	}
+	if sigErr := cert.CheckSignature(
+		cert.SignatureAlgorithm, cert.RawTBSCertificate, cert.Signature); sigErr != nil {
+		return fmt.Errorf(
+			"%s: rootca anchor signature does not verify under its own key: %w", where, sigErr)
 	}
 	return nil
 }

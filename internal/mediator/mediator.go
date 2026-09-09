@@ -35,8 +35,8 @@ import (
 
 // PeerTrust ties a peer SNI to its TLS trust anchor.
 type PeerTrust struct {
-	Trust   endpoint.Trust
 	Address endpoint.Address
+	Trust   endpoint.Certificate
 }
 
 // defaultUpstreamPort is the port the mediator dials when a declared peer
@@ -51,7 +51,7 @@ const defaultUpstreamPort uint16 = 443
 // takes the name it resolves and records from the lane declaration rather
 // than from the container's SNI string.
 type peerEntry struct {
-	trust endpoint.Trust
+	trust endpoint.Certificate
 	name  primitive.Host
 	port  uint16
 }

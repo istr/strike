@@ -15,7 +15,6 @@ import (
 	"math/big"
 	"net"
 	"net/netip"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -32,9 +31,9 @@ import (
 // Helpers for test setup.
 
 // testUpstream spins up a TLS echo server with a self-signed cert
-// valid for the given SNI. Returns the server's cert fingerprint,
-// listener address, and a cleanup function.
-func testUpstream(t *testing.T, sni string) (fingerprint primitive.Digest, addr string, cleanup func()) {
+// valid for the given SNI. Returns the leaf anchor pinning the
+// server's cert, the listener address, and a cleanup function.
+func testUpstream(t *testing.T, sni string) (anchor endpoint.Certificate, addr string, cleanup func()) {
 	t.Helper()
 
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -63,8 +62,7 @@ func testUpstream(t *testing.T, sni string) (fingerprint primitive.Digest, addr 
 		t.Fatalf("create upstream cert: %v", err)
 	}
 
-	sum := sha256.Sum256(certDER)
-	fingerprint = primitive.DigestFromHex(hex.EncodeToString(sum[:]))
+	anchor = endpoint.CertificateFromDER(certDER, endpoint.CertificateModeLeaf)
 
 	tlsCert := tls.Certificate{
 		Certificate: [][]byte{certDER},
@@ -106,7 +104,7 @@ func testUpstream(t *testing.T, sni string) (fingerprint primitive.Digest, addr 
 		closer.Warn(tlsLn, "test upstream listener")
 		wg.Wait()
 	}
-	return fingerprint, ln.Addr().String(), cleanup
+	return anchor, ln.Addr().String(), cleanup
 }
 
 // startTCPForwarder binds a TCP listener at listenAddr and proxies every
@@ -173,13 +171,10 @@ func unreachableDialer(t *testing.T) *transport.Dialer {
 	t.Helper()
 	deadPort := primitive.Port(1)
 	d, err := transport.NewDialer(endpoint.DoT{
-		ADN:  "resolver.test",
-		IP:   "127.0.0.1",
-		Port: &deadPort,
-		Trust: endpoint.CABundle{
-			Type: "caBundle",
-			Path: primitive.AbsPath(filepath.Join(t.TempDir(), "unused-ca.pem")),
-		},
+		ADN:   "resolver.test",
+		IP:    "127.0.0.1",
+		Port:  &deadPort,
+		Trust: testutil.AnchorTrust(),
 	})
 	if err != nil {
 		t.Fatalf("transport.NewDialer: %v", err)
@@ -315,8 +310,8 @@ func TestNew_EmptyPeersIsValid(t *testing.T) {
 func TestNew_RejectsDuplicatePeer(t *testing.T) {
 	ca := newTestCA(t)
 	peers := []mediator.PeerTrust{
-		{Address: endpoint.MustParseAuthority("example.com"), Trust: endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:aaa"}},
-		{Address: endpoint.MustParseAuthority("example.com"), Trust: endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:bbb"}},
+		{Address: endpoint.MustParseAuthority("example.com"), Trust: testutil.AnchorTrust()},
+		{Address: endpoint.MustParseAuthority("example.com"), Trust: testutil.AnchorTrust()},
 	}
 	_, err := mediator.New("step", peers, ca, unreachableDialer(t))
 	if err == nil || !strings.Contains(err.Error(), "duplicate") {
@@ -327,8 +322,8 @@ func TestNew_RejectsDuplicatePeer(t *testing.T) {
 func TestNew_CanonicalizesPeerHosts(t *testing.T) {
 	ca := newTestCA(t)
 	peers := []mediator.PeerTrust{
-		{Address: endpoint.MustParseAuthority("Example.COM"), Trust: endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:aaa"}},
-		{Address: endpoint.MustParseAuthority("example.com."), Trust: endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:bbb"}},
+		{Address: endpoint.MustParseAuthority("Example.COM"), Trust: testutil.AnchorTrust()},
+		{Address: endpoint.MustParseAuthority("example.com."), Trust: testutil.AnchorTrust()},
 	}
 	_, err := mediator.New("step", peers, ca, unreachableDialer(t))
 	if err == nil || !strings.Contains(err.Error(), "duplicate") {
@@ -342,7 +337,7 @@ func TestNew_RejectsOutOfRangePort(t *testing.T) {
 	peers := []mediator.PeerTrust{
 		{
 			Address: endpoint.Address{Host: "example.com", Port: &bad},
-			Trust:   endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:aaa"},
+			Trust:   testutil.AnchorTrust(),
 		},
 	}
 	_, err := mediator.New("step", peers, ca, unreachableDialer(t))
@@ -355,7 +350,7 @@ func TestServe_AllowedSNI_EndToEnd(t *testing.T) {
 	ca := newTestCA(t)
 	sni := "test-peer.example"
 
-	fp, upAddr, cleanup := testUpstream(t, sni)
+	anchor, upAddr, cleanup := testUpstream(t, sni)
 	defer cleanup()
 
 	// The peer below declares no port, so the mediator dials the default
@@ -365,10 +360,7 @@ func TestServe_AllowedSNI_EndToEnd(t *testing.T) {
 	startTCPForwarder(t, "127.0.0.2:443", upAddr)
 
 	peers := []mediator.PeerTrust{
-		{Address: endpoint.MustParseAuthority(sni), Trust: endpoint.Fingerprint{
-			Type:        "certFingerprint",
-			Fingerprint: fp,
-		}},
+		{Address: endpoint.MustParseAuthority(sni), Trust: anchor},
 	}
 
 	m, mAddr, _ := startMediator(t, "e2e-step", peers, ca, resolvingDialer(t, "127.0.0.2"))
@@ -402,8 +394,14 @@ func TestServe_AllowedSNI_EndToEnd(t *testing.T) {
 	if recs[0].Upstream == nil {
 		t.Error("Upstream identity is nil")
 	}
-	if recs[0].Upstream != nil && recs[0].Upstream.LeafFingerprint != fp {
-		t.Errorf("fingerprint = %q, want %q", recs[0].Upstream.LeafFingerprint, fp)
+	upstreamCert, parseErr := anchor.Parse()
+	if parseErr != nil {
+		t.Fatalf("parse upstream anchor: %v", parseErr)
+	}
+	sum := sha256.Sum256(upstreamCert.Raw)
+	wantFP := primitive.DigestFromHex(hex.EncodeToString(sum[:]))
+	if recs[0].Upstream != nil && recs[0].Upstream.LeafFingerprint != wantFP {
+		t.Errorf("fingerprint = %q, want %q", recs[0].Upstream.LeafFingerprint, wantFP)
 	}
 	if len(recs[0].Resolved) != 1 || recs[0].Resolved[0].String() != "127.0.0.2" {
 		t.Errorf("Resolved = %v, want [127.0.0.2]", recs[0].Resolved)
@@ -414,7 +412,7 @@ func TestServe_HonorsDeclaredPort(t *testing.T) {
 	ca := newTestCA(t)
 	sni := "tlshost"
 
-	fp, upAddr, cleanup := testUpstream(t, sni)
+	anchor, upAddr, cleanup := testUpstream(t, sni)
 	defer cleanup()
 
 	// The peer declares an explicit non-default port (8443, unprivileged --
@@ -422,10 +420,7 @@ func TestServe_HonorsDeclaredPort(t *testing.T) {
 	startTCPForwarder(t, "127.0.0.3:8443", upAddr)
 
 	peers := []mediator.PeerTrust{
-		{Address: endpoint.MustParseAuthority("tlshost:8443"), Trust: endpoint.Fingerprint{
-			Type:        "certFingerprint",
-			Fingerprint: fp,
-		}},
+		{Address: endpoint.MustParseAuthority("tlshost:8443"), Trust: anchor},
 	}
 
 	m, mAddr, _ := startMediator(t, "declared-port-step", peers, ca, resolvingDialer(t, "127.0.0.3"))
@@ -470,9 +465,7 @@ func TestServe_BareHostDefaultsPort443(t *testing.T) {
 	// resolves to 127.0.0.1 with nothing listening, and the resulting
 	// dial-failure error carries the port the mediator actually targeted.
 	peers := []mediator.PeerTrust{
-		{Address: endpoint.MustParseAuthority(sni), Trust: endpoint.Fingerprint{
-			Type: "certFingerprint", Fingerprint: "sha256:aaa",
-		}},
+		{Address: endpoint.MustParseAuthority(sni), Trust: testutil.AnchorTrust()},
 	}
 
 	m, mAddr, _ := startMediator(t, "barehost-step", peers, ca, resolvingDialer(t, "127.0.0.1"))
@@ -504,9 +497,7 @@ func TestServe_DeniedSNI_HandshakeFails(t *testing.T) {
 	ca := newTestCA(t)
 
 	peers := []mediator.PeerTrust{
-		{Address: endpoint.MustParseAuthority("allowed.example"), Trust: endpoint.Fingerprint{
-			Type: "certFingerprint", Fingerprint: "sha256:aaa",
-		}},
+		{Address: endpoint.MustParseAuthority("allowed.example"), Trust: testutil.AnchorTrust()},
 	}
 
 	m, mAddr, _ := startMediator(t, "denied-step", peers, ca, unreachableDialer(t))
@@ -561,9 +552,7 @@ func TestServe_EmptySNI_Denied(t *testing.T) {
 	ca := newTestCA(t)
 
 	peers := []mediator.PeerTrust{
-		{Address: endpoint.MustParseAuthority("allowed.example"), Trust: endpoint.Fingerprint{
-			Type: "certFingerprint", Fingerprint: "sha256:aaa",
-		}},
+		{Address: endpoint.MustParseAuthority("allowed.example"), Trust: testutil.AnchorTrust()},
 	}
 
 	_, mAddr, _ := startMediator(t, "emptysni-step", peers, ca, unreachableDialer(t))
@@ -583,9 +572,7 @@ func TestServe_UpstreamLookupError(t *testing.T) {
 	sni := "lookup-err.example"
 
 	peers := []mediator.PeerTrust{
-		{Address: endpoint.MustParseAuthority(sni), Trust: endpoint.Fingerprint{
-			Type: "certFingerprint", Fingerprint: "sha256:aaa",
-		}},
+		{Address: endpoint.MustParseAuthority(sni), Trust: testutil.AnchorTrust()},
 	}
 
 	m, mAddr, _ := startMediator(t, "lookup-err-step", peers, ca, unreachableDialer(t))
@@ -624,9 +611,7 @@ func TestServe_UpstreamDialFails(t *testing.T) {
 	// Lookup returns 127.0.0.1; mediator dials 127.0.0.1:443
 	// which should have no listener.
 	peers := []mediator.PeerTrust{
-		{Address: endpoint.MustParseAuthority(sni), Trust: endpoint.Fingerprint{
-			Type: "certFingerprint", Fingerprint: "sha256:aaa",
-		}},
+		{Address: endpoint.MustParseAuthority(sni), Trust: testutil.AnchorTrust()},
 	}
 
 	m, mAddr, _ := startMediator(t, "dial-fail-step", peers, ca, resolvingDialer(t, "127.0.0.1"))
@@ -659,21 +644,16 @@ func TestServe_UpstreamHandshakeFails(t *testing.T) {
 	ca := newTestCA(t)
 	sni := "hs-fail.example"
 
-	fp, _, cleanup := testUpstream(t, sni)
+	_, _, cleanup := testUpstream(t, sni)
 	defer cleanup()
 
-	// Use a wrong fingerprint so the upstream handshake
-	// verification fails. The dial to 127.0.0.1:443 will fail
+	// Declare an anchor the upstream cannot satisfy so the upstream
+	// handshake verification fails. The dial to 127.0.0.1:443 will fail
 	// (no listener on 443), producing an error record. This tests
 	// that the error path records correctly. Full handshake-
 	// mismatch testing requires binding port 443 (integration).
-	wrongFP := fp[:len(fp)-4] + "dead"
-
 	peers := []mediator.PeerTrust{
-		{Address: endpoint.MustParseAuthority(sni), Trust: endpoint.Fingerprint{
-			Type:        "certFingerprint",
-			Fingerprint: wrongFP,
-		}},
+		{Address: endpoint.MustParseAuthority(sni), Trust: testutil.AnchorTrust()},
 	}
 
 	m, mAddr, _ := startMediator(t, "hs-fail-step", peers, ca, resolvingDialer(t, "127.0.0.1"))
@@ -709,9 +689,7 @@ func TestServe_ConcurrentConnections(t *testing.T) {
 	// All connections hit the error path (port 443 has no listener).
 	// Tests concurrency safety under -race.
 	peers := []mediator.PeerTrust{
-		{Address: endpoint.MustParseAuthority(sni), Trust: endpoint.Fingerprint{
-			Type: "certFingerprint", Fingerprint: "sha256:aaa",
-		}},
+		{Address: endpoint.MustParseAuthority(sni), Trust: testutil.AnchorTrust()},
 	}
 
 	m, mAddr, _ := startMediator(t, "concurrent-step", peers, ca, resolvingDialer(t, "127.0.0.1"))
@@ -820,7 +798,7 @@ func TestServe_CancelInterruptsInFlightProxy(t *testing.T) {
 	ca := newTestCA(t)
 	sni := "inflight.example"
 
-	fp, upAddr, cleanup := testUpstream(t, sni)
+	anchor, upAddr, cleanup := testUpstream(t, sni)
 	defer cleanup()
 
 	_, upPort, splitErr := net.SplitHostPort(upAddr)
@@ -829,10 +807,7 @@ func TestServe_CancelInterruptsInFlightProxy(t *testing.T) {
 	}
 
 	peers := []mediator.PeerTrust{
-		{Address: endpoint.MustParseAuthority(sni + ":" + upPort), Trust: endpoint.Fingerprint{
-			Type:        "certFingerprint",
-			Fingerprint: fp,
-		}},
+		{Address: endpoint.MustParseAuthority(sni + ":" + upPort), Trust: anchor},
 	}
 	m, err := mediator.New("inflight-step", peers, ca, resolvingDialer(t, "127.0.0.1"))
 	if err != nil {

@@ -42,7 +42,7 @@ import (
 // from contract/attest into attest.gen.go. The identity union's interface and
 // dispatching UnmarshalJSON stay hand-written here: gengotypes emits the
 // concrete arms (ObservedSSH, ObservedTLS) but not Go interface/sum-type
-// machinery for a disjunction, mirroring endpoint.Trust.
+// machinery for a disjunction.
 //
 // The identity union mirrors lane.Peer: an interface with a type discriminator,
 // concrete branch structs, and a dispatching UnmarshalJSON on the container.

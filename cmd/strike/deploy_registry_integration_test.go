@@ -24,7 +24,6 @@ import (
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/deploy"
-	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/front"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/output"
@@ -59,7 +58,8 @@ const (
 // that seals and pushes it. No step declares peers, so no step container and
 // no capsule egress is involved -- the only network the lane itself opens is
 // the control-plane push and the keyless chain, both anchored by declaration.
-// Trust paths are absolute host paths, resolved into the template at run time.
+// Trust anchors are the harness certificates, rendered into the template at
+// run time from the PKI files the harness minted.
 const itestLaneTemplate = `name: registry-deploy-itest
 id: registry-deploy-itest
 secrets: {}
@@ -68,32 +68,27 @@ resolver:
   ip: 127.0.0.1
   port: 8853
   trust:
-    type: caBundle
-    path: __RESOLVER_CERT__
+    cert: "__RESOLVER_CERT__"
 oidc:
   issuer: "https://keycloak.127.0.0.1.sslip.io:8443/realms/sigstore"
   audience: "sigstore"
   identity: "tester@strike.localhost"
   trust:
-    type: caBundle
-    path: __CADDY_ROOT__
+    cert: "__CADDY_ROOT__"
 keyless:
   endpoints:
     fulcio:
       url: "https://fulcio.127.0.0.1.sslip.io:5555"
       trust:
-        type: caBundle
-        path: __CADDY_ROOT__
+        cert: "__CADDY_ROOT__"
     rekor:
       url: "https://rekor.127.0.0.1.sslip.io:3003"
       trust:
-        type: caBundle
-        path: __CADDY_ROOT__
+        cert: "__CADDY_ROOT__"
     tsa:
       url: "https://tsa.127.0.0.1.sslip.io:3004"
       trust:
-        type: caBundle
-        path: __CADDY_ROOT__
+        cert: "__CADDY_ROOT__"
 steps:
   - id: pack
     pack:
@@ -111,8 +106,7 @@ steps:
         target:
           host: registry.127.0.0.1.sslip.io:5443
           trust:
-            type: caBundle
-            path: __CADDY_ROOT__
+            cert: "__CADDY_ROOT__"
           name: __REPO__
       artifacts:
         app:
@@ -197,13 +191,23 @@ func TestRegistryDeployLive_Integration(t *testing.T) {
 }
 
 // writeFixtureLane renders the fixture lane into a temp directory and returns
-// its path. The temp directory becomes the lane root, so nothing in the
-// repository tree is written.
+// its path. The anchors are read from the harness PKI files, because a lane
+// that dials the harness has to trust what the harness presents; the temp
+// directory becomes the lane root, so nothing in the repository tree is
+// written.
 func writeFixtureLane(t *testing.T, caddyRoot, resolverCert, repo string) string {
 	t.Helper()
+	caddy, caddyErr := testutil.CertificateFromPEMFile(caddyRoot)
+	if caddyErr != nil {
+		t.Fatalf("harness root anchor: %v", caddyErr)
+	}
+	resolver, resolverErr := testutil.CertificateFromPEMFile(resolverCert)
+	if resolverErr != nil {
+		t.Fatalf("harness resolver anchor: %v", resolverErr)
+	}
 	content := strings.NewReplacer(
-		"__CADDY_ROOT__", caddyRoot,
-		"__RESOLVER_CERT__", resolverCert,
+		"__CADDY_ROOT__", caddy.Cert.String(),
+		"__RESOLVER_CERT__", resolver.Cert.String(),
 		"__REPO__", repo,
 	).Replace(itestLaneTemplate)
 	path := filepath.Join(t.TempDir(), "lane.yaml")
@@ -439,7 +443,11 @@ func assertBundleReadable(ctx context.Context, t *testing.T, caddyRoot, repo str
 // registry name.
 func itestTransport(t *testing.T, caddyRoot string) http.RoundTripper {
 	t.Helper()
-	cfg, err := transport.BuildTLSConfig(endpoint.CABundle{Type: "caBundle", Path: primitive.AbsPath(caddyRoot)})
+	trust, trustErr := testutil.CertificateFromPEMFile(caddyRoot)
+	if trustErr != nil {
+		t.Fatalf("registry tls anchor: %v", trustErr)
+	}
+	cfg, err := transport.BuildTLSConfig(trust)
 	if err != nil {
 		t.Fatalf("registry tls config: %v", err)
 	}

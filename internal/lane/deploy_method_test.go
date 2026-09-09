@@ -48,7 +48,7 @@ func TestDeploySpec_UnmarshalJSON_Discriminator(t *testing.T) {
 					"type": "registry",
 					"target": {
 						"host": "dst.io",
-						"trust": {"type": "certFingerprint", "fingerprint": "sha256:` + strings.Repeat("b", 64) + `"},
+						"trust": {"cert": "@anchor@"},
 						"name": "app"
 					}
 				},
@@ -97,7 +97,7 @@ func TestDeploySpec_UnmarshalJSON_Discriminator(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			var spec lane.DeploySpec
-			err := json.Unmarshal([]byte(tc.input), &spec)
+			err := json.Unmarshal([]byte(withAnchor(tc.input)), &spec)
 			if tc.wantErr != "" {
 				if err == nil {
 					t.Fatalf("expected error containing %q, got nil", tc.wantErr)
@@ -123,7 +123,7 @@ func TestDeploySpec_RoundTrip(t *testing.T) {
 			"type": "registry",
 			"target": {
 				"host": "dst.io",
-				"trust": {"type": "certFingerprint", "fingerprint": "sha256:` + strings.Repeat("d", 64) + `"},
+				"trust": {"cert": "@anchor@"},
 				"name": "app"
 			}
 		},
@@ -136,7 +136,7 @@ func TestDeploySpec_RoundTrip(t *testing.T) {
 	}`
 
 	var spec lane.DeploySpec
-	if err := json.Unmarshal([]byte(original), &spec); err != nil {
+	if err := json.Unmarshal([]byte(withAnchor(original)), &spec); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
 

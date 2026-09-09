@@ -10,6 +10,6 @@ package endpoint
 
 #HTTPS: {
 	@go(HTTPS)
-	url:   #URL   @go(Address,type=Address)
-	trust: #Trust @go(Trust,type=Trust)
+	url:   #URL         @go(Address,type=Address)
+	trust: #Certificate @go(Trust,type=Certificate)
 }

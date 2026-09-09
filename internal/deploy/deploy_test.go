@@ -153,7 +153,6 @@ func newRegistryDeployFixture(t *testing.T) registryDeployFixture {
 
 	srv := httptest.NewTLSServer(ggcrregistry.New(ggcrregistry.WithReferrersSupport(true)))
 	t.Cleanup(srv.Close)
-	leafSum := sha256.Sum256(srv.Certificate().Raw)
 
 	return registryDeployFixture{
 		engine: eng,
@@ -162,11 +161,8 @@ func newRegistryDeployFixture(t *testing.T) registryDeployFixture {
 			Target: lane.DeployRegistryTarget{
 				Type:    "https",
 				Address: endpoint.MustParseAuthority(srv.Listener.Addr().String()),
-				Trust: endpoint.Fingerprint{
-					Type:        "certFingerprint",
-					Fingerprint: primitive.Digest("sha256:" + hex.EncodeToString(leafSum[:])),
-				},
-				Name: "app",
+				Trust:   endpoint.CertificateFromDER(srv.Certificate().Raw, endpoint.CertificateModeLeaf),
+				Name:    "app",
 			},
 		},
 		handle: output.ImageHandle{
@@ -338,7 +334,7 @@ func TestDeployerExecute(t *testing.T) {
 						ID:      "version",
 						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 						Command: []string{"cat", "/version"},
-						Peers:   []lane.Peer{endpoint.TLS{Type: "https", Address: endpoint.MustParseAuthority("localhost:5555"), Trust: endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}},
+						Peers:   []lane.Peer{endpoint.TLS{Type: "https", Address: endpoint.MustParseAuthority("localhost:5555"), Trust: testutil.AnchorTrust()}},
 					}},
 				},
 				PostState: lane.CaptureSet{
@@ -346,7 +342,7 @@ func TestDeployerExecute(t *testing.T) {
 						ID:      "version",
 						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 						Command: []string{"cat", "/version"},
-						Peers:   []lane.Peer{endpoint.TLS{Type: "https", Address: endpoint.MustParseAuthority("localhost:5555"), Trust: endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}},
+						Peers:   []lane.Peer{endpoint.TLS{Type: "https", Address: endpoint.MustParseAuthority("localhost:5555"), Trust: testutil.AnchorTrust()}},
 					}},
 				},
 			},
@@ -472,7 +468,7 @@ func TestDeployerExecuteRegistryAttachesReferrers(t *testing.T) {
 				Target: lane.DeployRegistryTarget{
 					Type:    "https",
 					Address: endpoint.MustParseAuthority(authority),
-					Trust:   endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: leafFP},
+					Trust:   endpoint.CertificateFromDER(srv.Certificate().Raw, endpoint.CertificateModeLeaf),
 					Name:    "app",
 				},
 			},
@@ -692,11 +688,8 @@ func TestDeployerExecuteRegistryRejectsUnverifiedExport(t *testing.T) {
 				Target: lane.DeployRegistryTarget{
 					Type:    "https",
 					Address: endpoint.MustParseAuthority("localhost:5000"),
-					Trust: endpoint.Fingerprint{
-						Type:        "certFingerprint",
-						Fingerprint: "sha256:2222222222222222222222222222222222222222222222222222222222222222",
-					},
-					Name: "app",
+					Trust:   testutil.AnchorTrust(),
+					Name:    "app",
 				},
 			},
 			Artifacts: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
@@ -814,7 +807,7 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 						ID:      "version",
 						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 						Command: []string{"cat", "/version"},
-						Peers:   []lane.Peer{endpoint.TLS{Type: "https", Address: endpoint.MustParseAuthority("localhost:5555"), Trust: endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}},
+						Peers:   []lane.Peer{endpoint.TLS{Type: "https", Address: endpoint.MustParseAuthority("localhost:5555"), Trust: testutil.AnchorTrust()}},
 					}},
 				},
 				PostState: lane.CaptureSet{
@@ -822,7 +815,7 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 						ID:      "version",
 						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 						Command: []string{"cat", "/version"},
-						Peers:   []lane.Peer{endpoint.TLS{Type: "https", Address: endpoint.MustParseAuthority("localhost:5555"), Trust: endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}},
+						Peers:   []lane.Peer{endpoint.TLS{Type: "https", Address: endpoint.MustParseAuthority("localhost:5555"), Trust: testutil.AnchorTrust()}},
 					}},
 				},
 			},
@@ -1093,7 +1086,7 @@ func deployStep(t *testing.T, method lane.DeployMethod) *lane.Step {
 						ID:      "version",
 						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 						Command: []string{"cat", "/version"},
-						Peers:   []lane.Peer{endpoint.TLS{Type: "https", Address: endpoint.MustParseAuthority("localhost:5555"), Trust: endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}},
+						Peers:   []lane.Peer{endpoint.TLS{Type: "https", Address: endpoint.MustParseAuthority("localhost:5555"), Trust: testutil.AnchorTrust()}},
 					}},
 				},
 				PostState: lane.CaptureSet{
@@ -1101,7 +1094,7 @@ func deployStep(t *testing.T, method lane.DeployMethod) *lane.Step {
 						ID:      "version",
 						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 						Command: []string{"cat", "/version"},
-						Peers:   []lane.Peer{endpoint.TLS{Type: "https", Address: endpoint.MustParseAuthority("localhost:5555"), Trust: endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}},
+						Peers:   []lane.Peer{endpoint.TLS{Type: "https", Address: endpoint.MustParseAuthority("localhost:5555"), Trust: testutil.AnchorTrust()}},
 					}},
 				},
 			},
@@ -1149,7 +1142,7 @@ func TestUnmarshalDeploySpec_UnknownType(t *testing.T) {
 // the engine created must be removed.
 func TestDeployExecute_StepTimeoutWithMediatedConnection(t *testing.T) {
 	peerSNI := "capture-peer.example"
-	fp, upAddr, upCleanup := deployTestUpstream(t, peerSNI)
+	anchor, upAddr, upCleanup := deployTestUpstream(t, peerSNI)
 	defer upCleanup()
 
 	_, upPort, splitErr := net.SplitHostPort(upAddr)
@@ -1194,7 +1187,7 @@ func TestDeployExecute_StepTimeoutWithMediatedConnection(t *testing.T) {
 	peer := endpoint.TLS{
 		Type:    "https",
 		Address: endpoint.MustParseAuthority(peerSNI + ":" + upPort),
-		Trust:   endpoint.Fingerprint{Type: "certFingerprint", Fingerprint: fp},
+		Trust:   anchor,
 	}
 
 	// Required: true is load-bearing. With a non-required pre-state set,
@@ -1298,11 +1291,11 @@ func TestDeployExecute_StepTimeoutWithMediatedConnection(t *testing.T) {
 }
 
 // deployTestUpstream starts a TLS echo server with a self-signed cert
-// valid for sni and returns its cert fingerprint and address. Kept local
-// to this package: the mediator package has an equivalent for its own
-// tests, and a little copying beats a shared test dependency across two
-// packages.
-func deployTestUpstream(t *testing.T, sni string) (fingerprint primitive.Digest, addr string, cleanup func()) {
+// valid for sni and returns the leaf anchor pinning that cert and the
+// address. Kept local to this package: the mediator package has an
+// equivalent for its own tests, and a little copying beats a shared test
+// dependency across two packages.
+func deployTestUpstream(t *testing.T, sni string) (anchor endpoint.Certificate, addr string, cleanup func()) {
 	t.Helper()
 
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -1327,8 +1320,7 @@ func deployTestUpstream(t *testing.T, sni string) (fingerprint primitive.Digest,
 	if err != nil {
 		t.Fatalf("create upstream cert: %v", err)
 	}
-	sum := sha256.Sum256(certDER)
-	fingerprint = primitive.DigestFromHex(hex.EncodeToString(sum[:]))
+	anchor = endpoint.CertificateFromDER(certDER, endpoint.CertificateModeLeaf)
 
 	lc := net.ListenConfig{}
 	ln, err := lc.Listen(context.Background(), "tcp", "127.0.0.1:0")
@@ -1364,5 +1356,5 @@ func deployTestUpstream(t *testing.T, sni string) (fingerprint primitive.Digest,
 		testutil.CloseLog(t, tlsLn, "deploy test upstream listener")
 		wg.Wait()
 	}
-	return fingerprint, ln.Addr().String(), cleanup
+	return anchor, ln.Addr().String(), cleanup
 }

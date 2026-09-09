@@ -9,13 +9,10 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/binary"
-	"encoding/pem"
 	"io"
 	"math/big"
 	"net"
 	"net/netip"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"golang.org/x/net/dns/dnsmessage"
@@ -39,14 +36,14 @@ const resumptionADN primitive.Host = "resolver.test"
 // support at all, so this test fails closed if the cache is ever dropped from
 // the dialer.
 func TestDialer_ResumesResolverSession(t *testing.T) {
-	cert, caPath := resumptionCert(t)
+	cert, anchor := resumptionCert(t)
 	target := startResumptionServer(t, cert)
 	port := primitive.Port(target.Port())
 	d, err := NewDialer(endpoint.DoT{
 		ADN:   resumptionADN,
 		IP:    primitive.IPFromAddr(target.Addr()),
 		Port:  &port,
-		Trust: endpoint.CABundle{Type: "caBundle", Path: caPath},
+		Trust: anchor,
 	})
 	if err != nil {
 		t.Fatalf("NewDialer: %v", err)
@@ -188,11 +185,10 @@ func answerNSRoot(conn net.Conn) {
 }
 
 // resumptionCert generates an ephemeral CA and a leaf it signs for
-// resumptionADN, writes the CA in PEM form into the test's own temporary
-// directory, and returns the leaf together with the bundle path. It is
-// generated here rather than taken from internal/testutil because that
-// package imports this one.
-func resumptionCert(t *testing.T) (*tls.Certificate, primitive.AbsPath) {
+// resumptionADN, and returns the leaf together with the CA as a rootca
+// anchor. It is generated here rather than taken from internal/testutil
+// because that package imports this one.
+func resumptionCert(t *testing.T) (*tls.Certificate, endpoint.Certificate) {
 	t.Helper()
 	caKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
@@ -235,10 +231,6 @@ func resumptionCert(t *testing.T) (*tls.Certificate, primitive.AbsPath) {
 		t.Fatalf("create leaf cert: %v", err)
 	}
 
-	path := filepath.Join(t.TempDir(), "resumption-ca.pem")
-	pemBytes := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caDER})
-	if err := os.WriteFile(path, pemBytes, 0o600); err != nil {
-		t.Fatalf("write CA bundle: %v", err)
-	}
-	return &tls.Certificate{Certificate: [][]byte{leafDER}, PrivateKey: leafKey}, primitive.AbsPath(path)
+	return &tls.Certificate{Certificate: [][]byte{leafDER}, PrivateKey: leafKey},
+		endpoint.CertificateFromDER(caDER, endpoint.CertificateModeRootca)
 }

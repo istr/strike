@@ -2,11 +2,10 @@ package deploy
 
 import (
 	"context"
-	"strings"
 
 	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/lane"
-	"github.com/istr/strike/internal/primitive"
+	"github.com/istr/strike/internal/testutil"
 )
 
 // CaptureSnap exposes captureSnap for the external test package.
@@ -31,18 +30,15 @@ func SetProduceBundles(d *Deployer, f func(ctx context.Context, eps lane.Keyless
 
 // DeployRegistryForTest returns a registry deploy method with a syntactically
 // valid push target, for tests whose subject is not the push itself. The
-// fingerprint is a placeholder: no test using this value dials the target.
+// anchor is the fixture one: no test using this value dials the target.
 func DeployRegistryForTest() lane.DeployRegistry {
 	return lane.DeployRegistry{
 		Type: "registry",
 		Target: lane.DeployRegistryTarget{
 			Type:    "https",
 			Address: endpoint.MustParseAuthority("registry.example.com:443"),
-			Trust: endpoint.Fingerprint{
-				Type:        "certFingerprint",
-				Fingerprint: primitive.DigestFromHex(strings.Repeat("e", 64)),
-			},
-			Name: "test/app",
+			Trust:   testutil.AnchorTrust(),
+			Name:    "test/app",
 		},
 	}
 }

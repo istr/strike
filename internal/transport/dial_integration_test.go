@@ -9,8 +9,6 @@ import (
 
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/closer"
-	"github.com/istr/strike/internal/endpoint"
-	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/testutil"
 	"github.com/istr/strike/internal/transport"
 )
@@ -31,9 +29,9 @@ func TestDialResolved_HarnessDoT_INTEGRATION(t *testing.T) {
 	engine := testutil.RequireEngine(t)
 	harness := testutil.HarnessDir(t)
 	testutil.RequireHarness(t, engine, harness)
-	trust := endpoint.CABundle{
-		Type: "caBundle",
-		Path: primitive.AbsPath(filepath.Join(harness, "pki", "resolver.crt")),
+	trust, trustErr := testutil.CertificateFromPEMFile(filepath.Join(harness, "pki", "resolver.crt"))
+	if trustErr != nil {
+		t.Fatalf("harness resolver anchor: %v", trustErr)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*clock.Second)
 	defer cancel()

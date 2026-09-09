@@ -10,6 +10,7 @@ import (
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/mediator"
 	"github.com/istr/strike/internal/primitive"
+	"github.com/istr/strike/internal/testutil"
 	"github.com/istr/strike/internal/transport"
 )
 
@@ -60,10 +61,7 @@ func TestCollectObservedPeers(t *testing.T) {
 	tlsPeer := endpoint.TLS{
 		Type:    "https",
 		Address: endpoint.MustParseAuthority("api.example.com:443"),
-		Trust: endpoint.Fingerprint{
-			Type:        "certFingerprint",
-			Fingerprint: primitive.DigestFromHex(strings.Repeat("a", 64)),
-		},
+		Trust:   testutil.AnchorTrust(),
 	}
 	sshPeer := endpoint.SSH{
 		Type:    "ssh",
@@ -187,10 +185,7 @@ func TestCollectObservedPeers_ConflictAborts(t *testing.T) {
 	tlsPeer := endpoint.TLS{
 		Type:    "https",
 		Address: endpoint.MustParseAuthority("api.example.com:443"),
-		Trust: endpoint.Fingerprint{
-			Type:        "certFingerprint",
-			Fingerprint: primitive.DigestFromHex(strings.Repeat("a", 64)),
-		},
+		Trust:   testutil.AnchorTrust(),
 	}
 	dag, index, state := observedPeersLane(t, []lane.Peer{tlsPeer})
 

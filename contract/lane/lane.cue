@@ -56,17 +56,17 @@ import (
 // OIDCConfig declares the lane-wide keyless signing identity (ADR-040 D5).
 // Required: a lane that cannot be attested with a verifiable signature is
 // not a valid strike lane (mirrors ADR-039 D1 for the signing layer). The
-// IdP is a declared peer; trust pins its endpoints with the full endpoint.#Trust
-// anchor vocabulary, as endpoint.#TLS.trust does. validate/dag check
+// IdP is a declared peer; trust pins its endpoints with the same
+// endpoint.#Certificate anchor endpoint.#TLS.trust carries. validate/dag check
 // declaration only and never contact the IdP; the live keyless flow runs at
 // the sign step of run.
 #OIDCConfig: {
 	@go(OIDCConfig)
 
-	issuer:   string          @go(Issuer)   // iss / issuer-url; config only, no IdP contact at validate/dag
-	audience: string          @go(Audience) // aud
-	identity: string          @go(Identity) // expected SAN subject Fulcio writes into the cert
-	trust:    endpoint.#Trust @go(Trust,type="github.com/istr/strike/contract/endpoint".Trust)
+	issuer:   string                @go(Issuer)   // iss / issuer-url; config only, no IdP contact at validate/dag
+	audience: string                @go(Audience) // aud
+	identity: string                @go(Identity) // expected SAN subject Fulcio writes into the cert
+	trust:    endpoint.#Certificate @go(Trust,type="github.com/istr/strike/contract/endpoint".Certificate)
 }
 
 // KeylessEndpoints declares the sigstore services the keyless chain dials
@@ -326,9 +326,9 @@ import (
 	type: "https" @go(Type,type="github.com/istr/strike/contract/endpoint".CarriageType)
 	// host (left of @go) is the packed-authority wire grammar; the Go side is
 	// the Address concept in name and type; see endpoint.#TLS.host.
-	host:  endpoint.#Authority @go(Address,type="github.com/istr/strike/contract/endpoint".Address)
-	trust: endpoint.#Trust     @go(Trust,type="github.com/istr/strike/contract/endpoint".Trust)
-	name:  primitive.#OCIName  @go(Name)
+	host:  endpoint.#Authority   @go(Address,type="github.com/istr/strike/contract/endpoint".Address)
+	trust: endpoint.#Certificate @go(Trust,type="github.com/istr/strike/contract/endpoint".Certificate)
+	name:  primitive.#OCIName    @go(Name)
 }
 
 // ---------------------------------------------------------------------------

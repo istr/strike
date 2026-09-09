@@ -8,7 +8,15 @@ import (
 
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/provenance"
+	"github.com/istr/strike/internal/testutil"
 )
+
+// withAnchor substitutes the fixture trust anchor into a lane fixture that
+// carries the @anchor@ token, so a 596-character literal appears once in this
+// package rather than in every block.
+func withAnchor(src string) string {
+	return strings.ReplaceAll(src, "@anchor@", testutil.AnchorCertB64)
+}
 
 // --------------------------------------------------------------------------.
 // Negative: structural invariants enforced by Build.
@@ -22,8 +30,7 @@ resolver:
   adn: one.one.one.one
   ip: 1.1.1.1
   trust:
-    type: caBundle
-    path: /etc/strike/resolver-ca.pem
+    cert: "@anchor@"
 steps:
   - id: build
     image: img@sha256:` + strings.Repeat("a", 64) + `
@@ -38,7 +45,7 @@ steps:
         path: /out/bin
 `
 	tmpFile := filepath.Join(t.TempDir(), "bad.yaml")
-	if err := os.WriteFile(tmpFile, []byte(yaml), 0o600); err != nil {
+	if err := os.WriteFile(tmpFile, []byte(withAnchor(yaml)), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	fp, fpErr := lane.NewFilePath(tmpFile)

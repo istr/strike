@@ -1,5 +1,5 @@
 // Engine connection identity: the control-plane-observed identity of the engine
-// transport, a discriminated union over the connection kind (mirrors #Trust).
+// transport, a discriminated union over the connection kind.
 // Consumed by the deploy attestation at sealed.engine. Layer V (cpObserved):
 // the control plane reads these facts off the TLS handshake itself.
 //

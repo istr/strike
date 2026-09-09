@@ -23,7 +23,6 @@ import (
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/lane"
-	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/testutil"
 	"github.com/istr/strike/internal/transport"
 	"github.com/istr/strike/internal/wire"
@@ -93,7 +92,10 @@ func TestKeylessLive(t *testing.T) {
 		t.Fatalf("harness dialer: %v", dialerErr)
 	}
 
-	trust := endpoint.CABundle{Type: "caBundle", Path: primitive.AbsPath(caddyRoot)}
+	trust, trustErr := testutil.CertificateFromPEMFile(caddyRoot)
+	if trustErr != nil {
+		t.Fatalf("harness root anchor: %v", trustErr)
+	}
 	eps := lane.KeylessEndpoints{
 		Fulcio: endpoint.HTTPS{Address: endpoint.MustParseURL("https://fulcio.127.0.0.1.sslip.io:5555"), Trust: trust},
 		Rekor:  endpoint.HTTPS{Address: endpoint.MustParseURL("https://rekor.127.0.0.1.sslip.io:3003"), Trust: trust},

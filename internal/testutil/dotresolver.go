@@ -8,13 +8,10 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/binary"
-	"encoding/pem"
 	"io"
 	"math/big"
 	"net"
 	"net/netip"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"golang.org/x/net/dns/dnsmessage"
@@ -49,7 +46,7 @@ func StartDoTResolver(t *testing.T, answer netip.Addr) *transport.Dialer {
 		t.Fatalf("StartDoTResolver: answer %s must be IPv4", answer)
 	}
 
-	cert, caPath := resolverCert(t)
+	cert, anchor := resolverCert(t)
 	ln, err := tls.Listen("tcp", "127.0.0.1:0", &tls.Config{
 		Certificates: []tls.Certificate{*cert},
 		MinVersion:   tls.VersionTLS13,
@@ -74,13 +71,10 @@ func StartDoTResolver(t *testing.T, answer netip.Addr) *transport.Dialer {
 	}
 	port := primitive.Port(listen.Port())
 	dialer, err := transport.NewDialer(endpoint.DoT{
-		ADN:  TestResolverADN,
-		IP:   primitive.IPFromAddr(listen.Addr()),
-		Port: &port,
-		Trust: endpoint.CABundle{
-			Type: "caBundle",
-			Path: caPath,
-		},
+		ADN:   TestResolverADN,
+		IP:    primitive.IPFromAddr(listen.Addr()),
+		Port:  &port,
+		Trust: anchor,
 	})
 	if err != nil {
 		t.Fatalf("StartDoTResolver: %v", err)
@@ -89,11 +83,9 @@ func StartDoTResolver(t *testing.T, answer netip.Addr) *transport.Dialer {
 }
 
 // resolverCert generates an ephemeral CA and a leaf it signs for
-// TestResolverADN, writes the CA in PEM form into the test's own temporary
-// directory, and returns the leaf together with the bundle path. The bundle
-// is materialized on disk because a declared anchor carries a path; the
-// directory is the test's, so the framework removes it.
-func resolverCert(t *testing.T) (*tls.Certificate, primitive.AbsPath) {
+// TestResolverADN, and returns the leaf together with the CA as a rootca
+// anchor.
+func resolverCert(t *testing.T) (*tls.Certificate, endpoint.Certificate) {
 	t.Helper()
 	caKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
@@ -136,12 +128,8 @@ func resolverCert(t *testing.T) (*tls.Certificate, primitive.AbsPath) {
 		t.Fatalf("create resolver cert: %v", err)
 	}
 
-	path := filepath.Join(t.TempDir(), "resolver-ca.pem")
-	pemBytes := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caDER})
-	if err := os.WriteFile(path, pemBytes, 0o600); err != nil {
-		t.Fatalf("write resolver CA bundle: %v", err)
-	}
-	return &tls.Certificate{Certificate: [][]byte{leafDER}, PrivateKey: leafKey}, primitive.AbsPath(path)
+	return &tls.Certificate{Certificate: [][]byte{leafDER}, PrivateKey: leafKey},
+		endpoint.CertificateFromDER(caDER, endpoint.CertificateModeRootca)
 }
 
 // answerOneQuery reads one length-prefixed DNS query (RFC 7858 framing),

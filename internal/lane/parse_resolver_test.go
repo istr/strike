@@ -45,7 +45,7 @@ func TestResolver_MissingRejected(t *testing.T) {
 // TestResolver_ValidNoPort verifies that a resolver without an explicit
 // port is accepted.
 func TestResolver_ValidNoPort(t *testing.T) {
-	yaml := []byte(`
+	yaml := []byte(withAnchor(`
 name: resolver-ipv4
 id: resolver-ipv4
 secrets: {}
@@ -53,32 +53,27 @@ resolver:
   adn: one.one.one.one
   ip: 1.1.1.1
   trust:
-    type: caBundle
-    path: /etc/strike/resolver-ca.pem
+    cert: "@anchor@"
 oidc:
   issuer: "https://idp.example.com"
   audience: "strike"
   identity: "strike@example.com"
   trust:
-    type: certFingerprint
-    fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+    cert: "@anchor@"
 keyless:
   endpoints:
     fulcio:
       url: "https://fulcio.example:5555"
       trust:
-        type: certFingerprint
-        fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+        cert: "@anchor@"
     rekor:
       url: "https://rekor.example:3003"
       trust:
-        type: certFingerprint
-        fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+        cert: "@anchor@"
     tsa:
       url: "https://tsa.example:3004"
       trust:
-        type: certFingerprint
-        fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+        cert: "@anchor@"
 steps:
   - id: build
     image: docker.io/library/alpine@sha256:abababababababababababababababababababababababababababababababab
@@ -98,8 +93,7 @@ steps:
         target:
           host: registry.example.com
           trust:
-            type: certFingerprint
-            fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+            cert: "@anchor@"
           name: app
       recording:
         preState:
@@ -113,7 +107,7 @@ steps:
     inputs: []
     secrets: []
     outputs: []
-`)
+`))
 	dir := t.TempDir()
 	path := filepath.Join(dir, "lane.yaml")
 	if err := os.WriteFile(path, yaml, 0o600); err != nil {
@@ -131,7 +125,7 @@ steps:
 // TestResolver_ValidWithPort verifies that a resolver with an
 // explicit port is accepted.
 func TestResolver_ValidWithPort(t *testing.T) {
-	yaml := []byte(`
+	yaml := []byte(withAnchor(`
 name: resolver-ipv4-port
 id: resolver-ipv4-port
 secrets: {}
@@ -140,32 +134,27 @@ resolver:
   ip: 1.1.1.1
   port: 853
   trust:
-    type: caBundle
-    path: /etc/strike/resolver-ca.pem
+    cert: "@anchor@"
 oidc:
   issuer: "https://idp.example.com"
   audience: "strike"
   identity: "strike@example.com"
   trust:
-    type: certFingerprint
-    fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+    cert: "@anchor@"
 keyless:
   endpoints:
     fulcio:
       url: "https://fulcio.example:5555"
       trust:
-        type: certFingerprint
-        fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+        cert: "@anchor@"
     rekor:
       url: "https://rekor.example:3003"
       trust:
-        type: certFingerprint
-        fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+        cert: "@anchor@"
     tsa:
       url: "https://tsa.example:3004"
       trust:
-        type: certFingerprint
-        fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+        cert: "@anchor@"
 steps:
   - id: build
     image: docker.io/library/alpine@sha256:abababababababababababababababababababababababababababababababab
@@ -185,8 +174,7 @@ steps:
         target:
           host: registry.example.com
           trust:
-            type: certFingerprint
-            fingerprint: sha256:0000000000000000000000000000000000000000000000000000000000000000
+            cert: "@anchor@"
           name: app
       recording:
         preState:
@@ -200,7 +188,7 @@ steps:
     inputs: []
     secrets: []
     outputs: []
-`)
+`))
 	dir := t.TempDir()
 	path := filepath.Join(dir, "lane.yaml")
 	if err := os.WriteFile(path, yaml, 0o600); err != nil {

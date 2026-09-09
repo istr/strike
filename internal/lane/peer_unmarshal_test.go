@@ -17,14 +17,11 @@ func TestUnmarshalPeer_Discriminator(t *testing.T) {
 		wantErr string
 	}{
 		{
-			name: "https with fingerprint",
+			name: "https with absent mode",
 			input: `{
 				"type": "https",
 				"host": "example.com",
-				"trust": {
-					"type": "certFingerprint",
-					"fingerprint": "sha256:` + strings.Repeat("a", 64) + `"
-				}
+				"trust": {"cert": "@anchor@"}
 			}`,
 			check: func(t *testing.T, p lane.Peer) {
 				h, ok := p.(endpoint.TLS)
@@ -34,36 +31,30 @@ func TestUnmarshalPeer_Discriminator(t *testing.T) {
 				if h.Address.Authority() != "example.com" {
 					t.Errorf("Host = %q, want example.com", h.Address.Authority())
 				}
-				ft, ok := h.Trust.(endpoint.Fingerprint)
-				if !ok {
-					t.Fatalf("Trust type = %T, want endpoint.Fingerprint", h.Trust)
+				// The default mode is a CUE default arm that Parse materializes
+				// before decoding; this decoder alone leaves an absent mode empty.
+				if h.Trust.Mode != "" {
+					t.Errorf("Trust.Mode = %q, want empty before schema defaults apply", h.Trust.Mode)
 				}
-				if ft.Type != "certFingerprint" {
-					t.Errorf("Trust.Type = %q, want certFingerprint", ft.Type)
+				if h.Trust.Cert == "" {
+					t.Error("Trust.Cert is empty")
 				}
 			},
 		},
 		{
-			name: "https with caBundle",
+			name: "https with leaf mode",
 			input: `{
 				"type": "https",
 				"host": "internal.example",
-				"trust": {
-					"type": "caBundle",
-					"path": "/etc/ssl/ca.pem"
-				}
+				"trust": {"mode": "leaf", "cert": "@anchor@"}
 			}`,
 			check: func(t *testing.T, p lane.Peer) {
 				h, ok := p.(endpoint.TLS)
 				if !ok {
 					t.Fatalf("type = %T, want endpoint.TLS", p)
 				}
-				cb, ok := h.Trust.(endpoint.CABundle)
-				if !ok {
-					t.Fatalf("Trust type = %T, want endpoint.CABundle", h.Trust)
-				}
-				if cb.Path != "/etc/ssl/ca.pem" {
-					t.Errorf("Trust.Path = %q, want /etc/ssl/ca.pem", cb.Path)
+				if h.Trust.Mode != endpoint.CertificateModeLeaf {
+					t.Errorf("Trust.Mode = %q, want leaf", h.Trust.Mode)
 				}
 			},
 		},
@@ -109,20 +100,11 @@ func TestUnmarshalPeer_Discriminator(t *testing.T) {
 			input:   `{"type": "https", "host": "example.com"}`,
 			wantErr: "trust required",
 		},
-		{
-			name: "https unknown trust type",
-			input: `{
-				"type": "https",
-				"host": "example.com",
-				"trust": {"type": "system_ca"}
-			}`,
-			wantErr: "unknown trust type",
-		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			p, err := lane.UnmarshalPeer([]byte(tc.input))
+			p, err := lane.UnmarshalPeer([]byte(withAnchor(tc.input)))
 			if tc.wantErr != "" {
 				if err == nil {
 					t.Fatalf("expected error containing %q, got nil", tc.wantErr)
@@ -156,7 +138,7 @@ func TestStep_UnmarshalJSON_Peers(t *testing.T) {
 			{
 				"type": "https",
 				"host": "example.com",
-				"trust": {"type": "certFingerprint", "fingerprint": "sha256:` + strings.Repeat("a", 64) + `"}
+				"trust": {"cert": "@anchor@"}
 			},
 			{
 				"type": "ssh",
@@ -167,7 +149,7 @@ func TestStep_UnmarshalJSON_Peers(t *testing.T) {
 	}`
 
 	var s lane.Step
-	if err := json.Unmarshal([]byte(input), &s); err != nil {
+	if err := json.Unmarshal([]byte(withAnchor(input)), &s); err != nil {
 		t.Fatalf("Step UnmarshalJSON: %v", err)
 	}
 	if len(s.Peers) != 2 {
@@ -185,7 +167,7 @@ func TestStep_UnmarshalJSON_Peers(t *testing.T) {
 // peers and re-marshalling it produces JSON that re-unmarshals
 // to the same shape.
 func TestStep_RoundTrip(t *testing.T) {
-	original := []byte(`{
+	original := []byte(withAnchor(`{
 		"name": "fetch",
 		"image": "alpine:3.20",
 		"args": [],
@@ -194,9 +176,9 @@ func TestStep_RoundTrip(t *testing.T) {
 		"outputs": [],
 		"secrets": [],
 		"peers": [
-			{"type": "https", "host": "registry.example.com", "trust": {"type": "certFingerprint", "fingerprint": "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}
+			{"type": "https", "host": "registry.example.com", "trust": {"cert": "@anchor@"}}
 		]
-	}`)
+	}`))
 
 	var s lane.Step
 	if err := json.Unmarshal(original, &s); err != nil {

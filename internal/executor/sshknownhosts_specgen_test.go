@@ -175,10 +175,7 @@ func TestExecute_WithoutSSHPeer(t *testing.T) {
 				endpoint.TLS{
 					Type:    "https",
 					Address: endpoint.MustParseAuthority("api.example.com"),
-					Trust: endpoint.Fingerprint{
-						Type:        "certFingerprint",
-						Fingerprint: "sha256:abc",
-					},
+					Trust:   testutil.AnchorTrust(),
 				},
 			},
 		},

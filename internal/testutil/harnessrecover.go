@@ -16,8 +16,6 @@ import (
 
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/container"
-	"github.com/istr/strike/internal/endpoint"
-	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/transport"
 )
 
@@ -356,10 +354,11 @@ func writeAtomic(path string, data []byte) error {
 // to leave the bound to the caller's context, which is what the readiness
 // probes do.
 func pinnedClient(caCertPath string, timeout clock.Duration) (*http.Client, error) {
-	cfg, err := transport.BuildTLSConfig(endpoint.CABundle{
-		Type: "caBundle",
-		Path: primitive.AbsPath(caCertPath),
-	})
+	trust, trustErr := CertificateFromPEMFile(caCertPath)
+	if trustErr != nil {
+		return nil, fmt.Errorf("harness anchor: %w", trustErr)
+	}
+	cfg, err := transport.BuildTLSConfig(trust)
 	if err != nil {
 		return nil, fmt.Errorf("harness tls config: %w", err)
 	}

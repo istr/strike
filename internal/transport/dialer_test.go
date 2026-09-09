@@ -11,6 +11,7 @@ import (
 	"github.com/istr/strike/internal/closer"
 	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/primitive"
+	"github.com/istr/strike/internal/testutil"
 	"github.com/istr/strike/internal/transport"
 )
 
@@ -31,10 +32,11 @@ func mustDialer(t *testing.T, decl endpoint.DoT) *transport.Dialer {
 // and the reference identifier.
 const testResolverADN primitive.Host = "resolver.test"
 
-// caBundleResolver declares a DoT resolver reached at the listener address
-// addr and verified against testResolverADN through the CA bundle written at
-// caPath. It is the only resolver declaration shape the schema admits.
-func caBundleResolver(t *testing.T, addr string, caPath primitive.AbsPath) endpoint.DoT {
+// resolverEndpoint declares a DoT resolver reached at the listener address
+// addr and verified against testResolverADN through anchor, the root the
+// presented chain must lead to. It is the only resolver declaration shape
+// the schema admits.
+func resolverEndpoint(t *testing.T, addr string, anchor endpoint.Certificate) endpoint.DoT {
 	t.Helper()
 	ap, err := netip.ParseAddrPort(addr)
 	if err != nil {
@@ -45,7 +47,7 @@ func caBundleResolver(t *testing.T, addr string, caPath primitive.AbsPath) endpo
 		ADN:   testResolverADN,
 		IP:    primitive.IPFromAddr(ap.Addr()),
 		Port:  &port,
-		Trust: endpoint.CABundle{Type: "caBundle", Path: caPath},
+		Trust: anchor,
 	}
 }
 
@@ -93,23 +95,20 @@ func TestNewDialer_RejectsUnusableResolverIP(t *testing.T) {
 }
 
 func TestDialerDialPeer_ResolvesThenVerifies(t *testing.T) {
-	peerCert, caPEM := testCAAndServerCert(t, "peer.example")
+	peerCert, peerCA := testCAAndServerCert(t, "peer.example")
 	peer := startTLSServer(t, &tls.Config{
 		Certificates: []tls.Certificate{*peerCert},
 		MinVersion:   tls.VersionTLS13,
 	})
 
-	resolverCert, resolverCAPEM := testCAAndServerCert(t, "resolver.test")
+	resolverCert, resolverCA := testCAAndServerCert(t, "resolver.test")
 	resolverAddr := startDNSTLSServer(t, resolverCert, aRecordHandler("peer.example.", [4]byte{127, 0, 0, 1}))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
 	defer cancel()
 	port := primitive.Port(peer.Port())
-	d := mustDialer(t, caBundleResolver(t, resolverAddr, writeCABundle(t, "resolver-ca.pem", resolverCAPEM)))
-	conn, err := d.DialPeer(ctx, "peer.example", port, endpoint.CABundle{
-		Type: "caBundle",
-		Path: writeCABundle(t, "ca.pem", caPEM),
-	})
+	d := mustDialer(t, resolverEndpoint(t, resolverAddr, resolverCA))
+	conn, err := d.DialPeer(ctx, "peer.example", port, peerCA)
 	if err != nil {
 		t.Fatalf("DialPeer: %v", err)
 	}
@@ -124,9 +123,8 @@ func TestDialerDialPeer_ResolvesThenVerifies(t *testing.T) {
 }
 
 func TestDialerDialPeer_RejectsOutOfRangePort(t *testing.T) {
-	_, caPEM := testCAAndServerCert(t, "resolver.test")
-	d := mustDialer(t, caBundleResolver(t, "127.0.0.1:853", writeCABundle(t, "unused-ca.pem", caPEM)))
-	_, err := d.DialPeer(context.Background(), "peer.example", 0, endpoint.CABundle{Type: "caBundle"})
+	d := mustDialer(t, resolverEndpoint(t, "127.0.0.1:853", testutil.AnchorTrust()))
+	_, err := d.DialPeer(context.Background(), "peer.example", 0, testutil.AnchorTrust())
 	if err == nil {
 		t.Fatal("expected an error for a zero port")
 	}
@@ -138,9 +136,8 @@ func TestDialerDialPeer_RejectsOutOfRangePort(t *testing.T) {
 func TestDialerDialPeer_LookupFailurePropagates(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
 	defer cancel()
-	_, caPEM := testCAAndServerCert(t, "resolver.test")
-	d := mustDialer(t, caBundleResolver(t, "127.0.0.1:1", writeCABundle(t, "unused-ca.pem", caPEM)))
-	_, err := d.DialPeer(ctx, "peer.example", 443, endpoint.CABundle{Type: "caBundle"})
+	d := mustDialer(t, resolverEndpoint(t, "127.0.0.1:1", testutil.AnchorTrust()))
+	_, err := d.DialPeer(ctx, "peer.example", 443, testutil.AnchorTrust())
 	if err == nil {
 		t.Fatal("expected an error when the resolver is unreachable")
 	}

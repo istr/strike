@@ -1,6 +1,7 @@
 package transport
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"crypto/tls"
@@ -93,40 +94,42 @@ func (c *VerifiedConn) Conn() net.Conn {
 }
 
 // BuildTLSConfig produces a *tls.Config that verifies a peer
-// against the supplied endpoint.Trust. Minimum TLS 1.2 (external peers
+// against the supplied endpoint.Certificate. Minimum TLS 1.2 (external peers
 // such as public registries are not always 1.3-capable; see the
 // peer-TLS-floor ADR), with the TLS 1.2 path restricted to the BSI
 // TR-02102-2 AEAD/PFS cipher suites; TLS 1.3 is preferred and used
 // whenever the peer supports it. No caller-facing options; the
 // returned config is wired for exactly the trust mode declared.
 //
-// For endpoint.Fingerprint: standard chain verification is bypassed
-// (InsecureSkipVerify=true) and replaced with a SHA-256
-// fingerprint match on the leaf certificate. This is the only
-// path in strike code that sets InsecureSkipVerify=true; the
+// In leaf mode: standard chain verification is bypassed
+// (InsecureSkipVerify=true) and replaced with a byte comparison
+// against the declared certificate. This is the only path in
+// strike code that sets InsecureSkipVerify=true; the
 // VerifyPeerCertificate callback is what actually enforces
 // trust.
 //
-// For endpoint.CABundle: the bundle file is read from disk and
-// installed as RootCAs. Standard chain verification applies.
-func BuildTLSConfig(trust endpoint.Trust) (*tls.Config, error) {
+// In rootca mode: the declared certificate is installed as the
+// sole root. Standard chain verification applies.
+func BuildTLSConfig(trust endpoint.Certificate) (*tls.Config, error) {
 	config := &tls.Config{
 		MinVersion:   tls.VersionTLS12,
 		CipherSuites: bsiTLS12CipherSuites,
 	}
-	switch t := trust.(type) {
-	case endpoint.Fingerprint:
+	anchor, err := trust.Parse()
+	if err != nil {
+		return nil, fmt.Errorf("transport: %w", err)
+	}
+	switch trust.Mode {
+	case endpoint.CertificateModeLeaf:
 		config.InsecureSkipVerify = true
-		config.VerifyPeerCertificate = makeFingerprintVerifier(t.Fingerprint)
-		config.VerifyConnection = makeConnectionFingerprintVerifier(t.Fingerprint)
-	case endpoint.CABundle:
-		pool, err := loadCABundle(t.Path)
-		if err != nil {
-			return nil, err
-		}
+		config.VerifyPeerCertificate = makeLeafVerifier(anchor.Raw)
+		config.VerifyConnection = makeConnectionLeafVerifier(anchor.Raw)
+	case endpoint.CertificateModeRootca:
+		pool := x509.NewCertPool()
+		pool.AddCert(anchor)
 		config.RootCAs = pool
 	default:
-		return nil, fmt.Errorf("transport: unknown trust type: %T", trust)
+		return nil, fmt.Errorf("transport: unknown trust mode: %q", trust.Mode)
 	}
 	return config, nil
 }
@@ -149,7 +152,7 @@ func BuildTLSConfig(trust endpoint.Trust) (*tls.Config, error) {
 //
 // The context governs the dial timeout; pass a context with a deadline
 // if a timeout is desired.
-func DialResolved(ctx context.Context, dst netip.AddrPort, serverName primitive.Host, trust endpoint.Trust) (*VerifiedConn, error) {
+func DialResolved(ctx context.Context, dst netip.AddrPort, serverName primitive.Host, trust endpoint.Certificate) (*VerifiedConn, error) {
 	return dialVerified(ctx, dst, serverName, trust, nil)
 }
 
@@ -158,7 +161,7 @@ func DialResolved(ctx context.Context, dst netip.AddrPort, serverName primitive.
 // a session ticket, which is the correct default for a peer no RFC obliges to
 // resume. The resolver passes its dialer-owned cache, which is what satisfies
 // RFC 8310 section 9's resumption-without-server-side-state requirement.
-func dialVerified(ctx context.Context, dst netip.AddrPort, serverName primitive.Host, trust endpoint.Trust, sessions tls.ClientSessionCache) (*VerifiedConn, error) {
+func dialVerified(ctx context.Context, dst netip.AddrPort, serverName primitive.Host, trust endpoint.Certificate, sessions tls.ClientSessionCache) (*VerifiedConn, error) {
 	if !dst.IsValid() || dst.Port() == 0 {
 		return nil, errors.New("transport: dial requires a resolved address and port")
 	}
@@ -188,59 +191,36 @@ func dialVerified(ctx context.Context, dst netip.AddrPort, serverName primitive.
 	return &VerifiedConn{conn: conn, identity: identity}, nil
 }
 
-// makeFingerprintVerifier returns a VerifyPeerCertificate
-// callback that succeeds iff the leaf certificate's SHA-256
-// fingerprint matches the expected "sha256:<hex>" string.
-func makeFingerprintVerifier(expected primitive.Digest) func([][]byte, [][]*x509.Certificate) error {
+// makeLeafVerifier returns a VerifyPeerCertificate callback that
+// succeeds iff the leaf certificate's DER bytes equal the
+// declared anchor's.
+func makeLeafVerifier(expected []byte) func([][]byte, [][]*x509.Certificate) error {
 	return func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
 		if len(rawCerts) == 0 {
 			return errors.New("transport: no peer certificate presented")
 		}
-		sum := sha256.Sum256(rawCerts[0])
-		got := primitive.DigestFromHex(hex.EncodeToString(sum[:]))
-		if got != expected {
-			return fmt.Errorf("transport: peer certificate fingerprint mismatch: got %s, want %s",
-				got, expected)
+		if !bytes.Equal(rawCerts[0], expected) {
+			return errors.New("transport: peer certificate does not match the declared leaf anchor")
 		}
 		return nil
 	}
 }
 
-// makeConnectionFingerprintVerifier returns a VerifyConnection
-// callback that re-checks the leaf fingerprint on resumed
-// sessions. VerifyPeerCertificate is not called for resumed
-// connections (the raw certs are not re-sent); VerifyConnection
-// receives the cached peer certificates and closes the gap.
-func makeConnectionFingerprintVerifier(expected primitive.Digest) func(tls.ConnectionState) error {
+// makeConnectionLeafVerifier returns a VerifyConnection callback
+// that re-checks the leaf on resumed sessions.
+// VerifyPeerCertificate is not called for resumed connections
+// (the raw certs are not re-sent); VerifyConnection receives the
+// cached peer certificates and closes the gap.
+func makeConnectionLeafVerifier(expected []byte) func(tls.ConnectionState) error {
 	return func(state tls.ConnectionState) error {
 		if len(state.PeerCertificates) == 0 {
 			return errors.New("transport: no peer certificate in connection state")
 		}
-		sum := sha256.Sum256(state.PeerCertificates[0].Raw)
-		got := primitive.DigestFromHex(hex.EncodeToString(sum[:]))
-		if got != expected {
-			return fmt.Errorf("transport: peer certificate fingerprint mismatch (resumed): got %s, want %s",
-				got, expected)
+		if !bytes.Equal(state.PeerCertificates[0].Raw, expected) {
+			return errors.New("transport: peer certificate does not match the declared leaf anchor (resumed)")
 		}
 		return nil
 	}
-}
-
-// loadCABundle reads a PEM-encoded CA bundle file and returns
-// it as a CertPool. The path is treated as an operator-supplied
-// filesystem location; lane schema validation has already
-// confirmed it is canonical absolute, but it is still variable
-// from gosec's perspective.
-func loadCABundle(path primitive.AbsPath) (*x509.CertPool, error) {
-	pemData, err := os.ReadFile(filepath.Clean(path.String()))
-	if err != nil {
-		return nil, fmt.Errorf("transport: read CA bundle %q: %w", path, err)
-	}
-	pool := x509.NewCertPool()
-	if !pool.AppendCertsFromPEM(pemData) {
-		return nil, fmt.Errorf("transport: CA bundle %q contains no certificates", path)
-	}
-	return pool, nil
 }
 
 // CaptureIdentity extracts the connection identity from a

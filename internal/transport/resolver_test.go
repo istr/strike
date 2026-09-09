@@ -13,6 +13,7 @@ import (
 
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/closer"
+	"github.com/istr/strike/internal/testutil"
 )
 
 // startDNSTLSServer launches a TLS listener that speaks DNS-over-TLS:
@@ -148,11 +149,11 @@ func servfailHandler() func(*dnsmessage.Message) *dnsmessage.Message {
 }
 
 func TestDialerLookupHost_HappyPath(t *testing.T) {
-	cert, caPEM := testCAAndServerCert(t, "resolver.test")
+	cert, ca := testCAAndServerCert(t, "resolver.test")
 	addr := startDNSTLSServer(t, cert, aRecordHandler("example.com.", [4]byte{93, 184, 216, 34}))
 	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
 	defer cancel()
-	decl := caBundleResolver(t, addr, writeCABundle(t, "resolver-ca.pem", caPEM))
+	decl := resolverEndpoint(t, addr, ca)
 	addrs, err := mustDialer(t, decl).LookupHost(ctx, "example.com")
 	if err != nil {
 		t.Fatalf("LookupHost: %v", err)
@@ -165,18 +166,18 @@ func TestDialerLookupHost_HappyPath(t *testing.T) {
 	}
 }
 
-func TestDialerLookupHost_CABundleMismatch(t *testing.T) {
+func TestDialerLookupHost_RootCAMismatch(t *testing.T) {
 	cert, _ := testCAAndServerCert(t, "resolver.test")
 	addr := startDNSTLSServer(t, cert, aRecordHandler("example.com.", [4]byte{93, 184, 216, 34}))
 
-	_, wrongCAPEM := testCAAndServerCert(t, "resolver.test")
+	_, wrongCA := testCAAndServerCert(t, "resolver.test")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
 	defer cancel()
-	decl := caBundleResolver(t, addr, writeCABundle(t, "wrong-ca.pem", wrongCAPEM))
+	decl := resolverEndpoint(t, addr, wrongCA)
 	addrs, err := mustDialer(t, decl).LookupHost(ctx, "example.com")
 	if err == nil {
-		t.Fatal("expected error for CA bundle mismatch, got nil")
+		t.Fatal("expected error for root CA mismatch, got nil")
 	}
 	if addrs != nil {
 		t.Errorf("expected nil addrs, got %v", addrs)
@@ -186,8 +187,7 @@ func TestDialerLookupHost_CABundleMismatch(t *testing.T) {
 func TestDialerLookupHost_ServerUnreachable(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*clock.Second)
 	defer cancel()
-	_, caPEM := testCAAndServerCert(t, "resolver.test")
-	decl := caBundleResolver(t, "127.0.0.1:1", writeCABundle(t, "unused-ca.pem", caPEM))
+	decl := resolverEndpoint(t, "127.0.0.1:1", testutil.AnchorTrust())
 	_, err := mustDialer(t, decl).LookupHost(ctx, "example.com")
 	if err == nil {
 		t.Fatal("expected error for unreachable server, got nil")
@@ -195,11 +195,11 @@ func TestDialerLookupHost_ServerUnreachable(t *testing.T) {
 }
 
 func TestDialerProbe_HappyPath(t *testing.T) {
-	cert, caPEM := testCAAndServerCert(t, "resolver.test")
+	cert, ca := testCAAndServerCert(t, "resolver.test")
 	addr := startDNSTLSServer(t, cert, nsRootHandler())
 	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
 	defer cancel()
-	decl := caBundleResolver(t, addr, writeCABundle(t, "resolver-ca.pem", caPEM))
+	decl := resolverEndpoint(t, addr, ca)
 	id, err := mustDialer(t, decl).Probe(ctx)
 	if err != nil {
 		t.Fatalf("Probe: %v", err)
@@ -215,21 +215,21 @@ func TestDialerProbe_HappyPath(t *testing.T) {
 	}
 }
 
-// TestDialerProbe_CABundleMismatch pins the V-property gate: the run-start
-// probe rejects a resolver whose leaf is not certified by the declared CA
-// bundle, which cmd/strike turns into a fatal abort before any attestation is
+// TestDialerProbe_RootCAMismatch pins the V-property gate: the run-start
+// probe rejects a resolver whose leaf is not certified by the declared root,
+// which cmd/strike turns into a fatal abort before any attestation is
 // sealed.
-func TestDialerProbe_CABundleMismatch(t *testing.T) {
+func TestDialerProbe_RootCAMismatch(t *testing.T) {
 	serverCert, _ := testCAAndServerCert(t, "resolver.test")
 	addr := startDNSTLSServer(t, serverCert, nsRootHandler())
 
-	_, wrongCAPEM := testCAAndServerCert(t, "resolver.test")
+	_, wrongCA := testCAAndServerCert(t, "resolver.test")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
 	defer cancel()
-	decl := caBundleResolver(t, addr, writeCABundle(t, "wrong-ca.pem", wrongCAPEM))
+	decl := resolverEndpoint(t, addr, wrongCA)
 	if _, err := mustDialer(t, decl).Probe(ctx); err == nil {
-		t.Fatal("expected error for CA bundle mismatch, got nil")
+		t.Fatal("expected error for root CA mismatch, got nil")
 	}
 }
 
@@ -242,27 +242,27 @@ func TestDialerProbe_VerifiesADNNotIP(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
 	defer cancel()
 
-	named, namedCAPEM := testCAAndServerCert(t, "resolver.test")
+	named, namedCA := testCAAndServerCert(t, "resolver.test")
 	namedAddr := startDNSTLSServer(t, named, nsRootHandler())
-	decl := caBundleResolver(t, namedAddr, writeCABundle(t, "resolver-ca.pem", namedCAPEM))
+	decl := resolverEndpoint(t, namedAddr, namedCA)
 	if _, err := mustDialer(t, decl).Probe(ctx); err != nil {
 		t.Fatalf("probe must accept a leaf named %q with no IP SAN: %v", testResolverADN, err)
 	}
 
-	other, otherCAPEM := testCAAndServerCert(t, "other.test")
+	other, otherCA := testCAAndServerCert(t, "other.test")
 	otherAddr := startDNSTLSServer(t, other, nsRootHandler())
-	otherDecl := caBundleResolver(t, otherAddr, writeCABundle(t, "other-ca.pem", otherCAPEM))
+	otherDecl := resolverEndpoint(t, otherAddr, otherCA)
 	if _, err := mustDialer(t, otherDecl).Probe(ctx); err == nil {
 		t.Fatal("probe must reject a leaf naming a different DNS name, got nil")
 	}
 }
 
 func TestDialerProbe_NoResponse(t *testing.T) {
-	cert, caPEM := testCAAndServerCert(t, "resolver.test")
+	cert, ca := testCAAndServerCert(t, "resolver.test")
 	addr := startDNSTLSServer(t, cert, servfailHandler())
 	ctx, cancel := context.WithTimeout(context.Background(), 5*clock.Second)
 	defer cancel()
-	decl := caBundleResolver(t, addr, writeCABundle(t, "resolver-ca.pem", caPEM))
+	decl := resolverEndpoint(t, addr, ca)
 	if _, err := mustDialer(t, decl).Probe(ctx); err == nil {
 		t.Fatal("expected error for SERVFAIL response, got nil")
 	}
@@ -278,8 +278,7 @@ func TestDialerProbe_ErrorChainHasNoSystemResolverReference(t *testing.T) {
 	// Use any guaranteed-failing dial target. A non-listening
 	// localhost port is the most reliable: no network access,
 	// no test-server setup, fast and deterministic failure.
-	_, caPEM := testCAAndServerCert(t, "resolver.test")
-	decl := caBundleResolver(t, "127.0.0.1:1", writeCABundle(t, "unused-ca.pem", caPEM))
+	decl := resolverEndpoint(t, "127.0.0.1:1", testutil.AnchorTrust())
 	ctx, cancel := context.WithTimeout(context.Background(), 2*clock.Second)
 	defer cancel()
 

@@ -3,10 +3,19 @@ package lane
 import (
 	"strings"
 	"testing"
+
+	"github.com/istr/strike/internal/testutil"
 )
 
+// withAnchor substitutes the fixture trust anchor into a lane fixture that
+// carries the @anchor@ token, so a 596-character literal appears once in this
+// package rather than in every block.
+func withAnchor(src string) string {
+	return strings.ReplaceAll(src, "@anchor@", testutil.AnchorCertB64)
+}
+
 func TestUnmarshalKeyless(t *testing.T) {
-	const fp = `{"type":"certFingerprint","fingerprint":"sha256:0000000000000000000000000000000000000000000000000000000000000000"}`
+	const fp = `{"cert":"@anchor@"}`
 	const eps = `"endpoints": {
 		"fulcio": {"url": "https://fulcio.example:5555", "trust": ` + fp + `},
 		"rekor":  {"url": "https://rekor.example:3003", "trust": ` + fp + `},
@@ -38,18 +47,13 @@ func TestUnmarshalKeyless(t *testing.T) {
 			"rekor":  {"url": "https://r.example", "trust": ` + fp + `},
 			"tsa":    {"url": "https://t.example", "trust": ` + fp + `}
 		}}`, wantErr: "keyless fulcio: trust required"},
-		{name: "unknown trust type", in: `{"endpoints": {
-			"fulcio": {"url": "https://f.example", "trust": {"type": "system_ca"}},
-			"rekor":  {"url": "https://r.example", "trust": ` + fp + `},
-			"tsa":    {"url": "https://t.example", "trust": ` + fp + `}
-		}}`, wantErr: "keyless fulcio:"},
 		{name: "bad keyless json", in: `{`, wantErr: "decode keyless"},
 		{name: "bad trustRoot json", in: `{` + eps + `, "trustRoot": 5}`, wantErr: "decode trustRoot"},
 		{name: "bad trustRootRef json", in: `{` + eps + `, "trustRootRef": 5}`, wantErr: "decode trustRootRef"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := unmarshalKeyless([]byte(tt.in))
+			got, err := unmarshalKeyless([]byte(withAnchor(tt.in)))
 			if tt.wantErr != "" {
 				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 					t.Fatalf("error = %v, want substring %q", err, tt.wantErr)
@@ -62,8 +66,8 @@ func TestUnmarshalKeyless(t *testing.T) {
 			if got.Endpoints.Fulcio.Address.URL() != "https://fulcio.example:5555" {
 				t.Errorf("fulcio url = %q", got.Endpoints.Fulcio.Address.URL())
 			}
-			if got.Endpoints.TSA.Trust == nil || got.Endpoints.TSA.Trust.TrustType() != "certFingerprint" {
-				t.Errorf("tsa trust not dispatched: %#v", got.Endpoints.TSA.Trust)
+			if got.Endpoints.TSA.Trust.Cert == "" {
+				t.Errorf("tsa trust anchor missing: %#v", got.Endpoints.TSA.Trust)
 			}
 			if tt.wantInline && (got.TrustRoot == nil || got.TrustRoot.MediaType != "x") {
 				t.Errorf("trustRoot not parsed: %#v", got.TrustRoot)
