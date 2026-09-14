@@ -509,7 +509,7 @@ recorded in the Beta Definition of Done's amendment of the same date.
 
 ## Amendment 2026-09-09 -- the endpoint is a Linux environment, not a workstation
 
-Status: Proposed. Append-only: this block adds a decision and narrows two
+Status: Accepted. Append-only: this block adds a decision and narrows two
 clauses it names below without editing them in place; every other clause of
 the original Decision, Consequences, and Principles, and both amendments of
 2026-09-05, stands unchanged.
@@ -599,3 +599,120 @@ carries the working-tree gate's build and test loop; and that the guest
 reproduces M1's locked `noexec` and M7's constraint rather than merely not
 contradicting them. Until those land, Linux is the measured reference and
 the other two workstations are declared, not proven.
+
+## Amendment 2026-09-14 -- one topology: strike is a client of one operator-provided engine
+
+Status: Accepted (item-0155). Append-only: this block adds a decision and narrows two
+clauses it names below without editing them in place; every other clause
+of the original Decision, Consequences and Principles, and the three
+amendments above, stand unchanged. The engine-topology decision of
+item-0155 is recorded here; its consequences for the proof are recorded in
+the ADR-009 amendment of the same date.
+
+### D9 -- strike is a client of exactly one engine, and it is the operator's
+
+strike bundles, starts or runs inside no container engine. In every
+topology it is a client of exactly one engine, the one the operator
+provides as the first of D1's four capabilities, reached through the
+socket the operator binds at the single entry point D5 names. Nested
+containerization -- an engine inside a container that strike runs in, or
+inside a container strike starts -- is retired from the tree entirely: the
+first form by this decision, the second by ADR-005, which was never
+relaxed.
+
+The decision closes a figure that ADR-001 (the engine is reached through
+its API, never executed) and ADR-003 (the only host dependency is a working
+rootless engine) had left open on one side: the engine is a host
+dependency and only a host dependency, never a shipped component. D1 and
+D2 already said the same in their own terms -- the engine is the one
+capability that is not an image -- and an engine inside an image was the
+one place where the tree said otherwise.
+
+Scope. The decision governs strike's execution path. A service in the
+test harness that happens to be a container runtime (the k3s deploy
+target item-0141 exercises) is a deploy target, not an executor, and is
+not reached by it. A remote engine over mTLS (ADR-037's horizon) is a
+client-of-one-engine case and is consistent with it.
+
+Reasoning, recorded because a ratified decision in an append-only record
+should carry the argument that decided it. The single nesting of the
+bootstrap `stage_1` image was weighed on 2026-09-14 against the sibling
+topology, fairly to both sides. Nesting offers four things that are real:
+least privilege for the control plane, which holds an inner socket rather
+than the operator's; ephemeral engine state on tmpfs; an engine
+configuration pinned by the image; and independence from the host engine
+version. None of them is trust. Against them: the trusted computing base
+of the proof grows by an engine image nobody attests, while the
+operator's engine stays inside it, since it starts and can inspect the
+container that holds the inner one; the isolation boundary between a step
+and the control plane -- the boundary SLSA v1.2 Build L3 requires -- is the
+same in both topologies, so nesting buys the host a boundary and the proof
+none; the operator container needs relaxed confinement (a proc unmask,
+nested user namespaces) that nothing else in the tree needs and that D7
+never measured, and host hardening of the user-namespace kind reaches
+that first; the proof would run in a topology used nowhere else, so its
+failures could be its own; tmpfs must hold every image and the build; and
+two modes force two builder identities under SLSA v1.2. Verified the same
+day: no trust-bearing engine image exists to shrink the first cost -- the
+public build configuration of the Chainguard catalog lists no podman,
+buildah, buildkit or skopeo image, and Wolfi carries no podman and no
+passt package, so a self-built engine image would build both from source
+under ADR-031's pasta dependency. The trusted computing base decided.
+
+### Consequences
+
+- The bootstrap `stage_1` image carries no engine; its second stage is a
+  digest-pinned static base with the binary and the pinned tree
+  (item-0062). The bootstrap run line reuses D3's mechanism -- the engine
+  socket bound, `CONTAINER_HOST`, host networking, the mapped user -- with
+  a different image and no shell; item-0156 measures it on the reference
+  endpoint as the extension of D7 to the bootstrap.
+- Every record strike produces carries the operator's engine identity;
+  the "inner engine" reading of ADR-037 has no instance. One builder
+  identity suffices for the sealed provenance; the genesis-built control
+  plane and a released one are told apart by builder version, not by
+  mode.
+- SECURITY.md's justification of `--userns=keep-id` by nested engine
+  execution is withdrawn; the mapping keeps ADR-003's reason, file
+  ownership across the controller-engine boundary, which ADR-005 relies
+  on.
+- The engine requirement is uniform across endpoint, runner and harness:
+  Podman at or above the version gate, rootless, with pasta. For a hosted
+  forge runner this is satisfiable: the ubuntu-26.04 runner image ships
+  the distribution's Podman 5.7.0, while the ubuntu-24.04 and 22.04
+  images were rolled back to 4.9.3 and 3.4.4 between 2026-09-01 and
+  2026-09-06 (actions/runner-images issue 14642). Status of this fact:
+  researched from the vendor's announcement, not measured; item-0063
+  records it for the commit gate's infrastructure.
+- Optional structural enforcement, at the operator's discretion: a
+  lintdoc rule that no Containerfile in the tree installs an engine. Not
+  required by this decision.
+- The reviews behind this decision are the bootstrap report of
+  2026-09-14 (adr-009-bootstrap-review) and its two companion
+  reports on compiler versus build-tool bootstrapping and on a SLSA L3 Go
+  control plane; item-0155 carries the summary.
+
+**Supersedes, in D5 above:** "On the reference endpoint strike executes as
+a container process, either inside the executor's container against the
+mounted host socket (the daily path) or as the bootstrap `stage_1` image
+with its own nested engine (the reproducibility proof of ADR-009)." is
+read as: "On the reference endpoint strike executes as a container process
+against the endpoint's engine socket, bound at the operator's invocation:
+inside the executor's container on the daily path, and as the bootstrap
+`stage_1` image for the reproducibility proof of ADR-009."
+
+**Supersedes, in D5 above:** "The two topologies are not interchangeable
+and the choice is visible in the record: in the sibling topology the
+engine identity a deploy record carries is the host engine's; in the
+nested topology it is the inner engine's (ADR-037). The nested topology is
+reserved for the bootstrap proof." is read as: "There is one topology, and
+every deploy record carries the endpoint engine's identity (ADR-037)."
+
+**Narrowing, in Alternatives considered above:** "**The bootstrap `stage_1`
+image as the daily vehicle** (nested engine, tmpfs storage). Rejected for
+daily use: every image is pulled twice, the storage is discarded with the
+container, and the engine identity in every record is the inner engine's
+rather than the host's. Retained for the ADR-009 proof, where the nesting
+is the point." is read as: "Rejected for every use, the ADR-009 proof
+included; D9 records why. The three reasons given for daily use stand and
+are joined by the trusted-computing-base argument."
