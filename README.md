@@ -70,8 +70,10 @@ happens inside containers.
 
 ## Bootstrap
 
-strike builds itself. The bootstrap process starts from a single Containerfile
-fetched by pinned commit hash from GitHub -- no local clone required.
+strike builds itself, and the bootstrap proves that build reproducible. It
+starts from a single Containerfile fetched by pinned commit hash from GitHub --
+no local clone required. No stage of the bootstrap carries a container engine:
+strike is always a client of the one engine you already run.
 
 ```sh
 GIT_COMMIT=810b8812549187da2c73b0ac142f46db5d8b036c
@@ -82,27 +84,37 @@ podman build -t strike:stage_1 \
 ```
 
 This builds the stage_1 image from a fully pinned source: the Containerfile is
-fetched by commit SHA, and the base image is pinned by digest. Inside the
-container, git fetches the exact commit, builds the strike binary, and produces
-a self-contained executor image.
+fetched by commit SHA, and the base images are pinned by digest. Inside the
+build, git fetches the exact commit and the strike binary is compiled; the
+stage_1 image carries the binary and the pinned tree.
 
-Then run the bootstrap lane:
+stage_1 runs as a sibling of its own steps: your engine starts it with the
+engine socket bound in and named through `CONTAINER_HOST`, host networking,
+and the keep-id user mapping, and strike drives that same engine to run the
+bootstrap lane (`lane.yaml`):
 
-```sh
-podman run --userns=keep-id strike:stage_1
-```
+1. **source** -- fetches the pinned commit in a digest-pinned git image and
+   records its git provenance.
+2. **build-binary** -- compiles the strike binary in a pinned Chainguard Go
+   image with `CGO_ENABLED=0`.
+3. **build-image** -- packs the binary into an OCI image based on
+   `chainguard/static`. This image is stage_2.
+4. **second build** -- the same build and pack again, in the same run, with
+   the cache bypassed. This image is stage_3.
+5. **compare** -- a control-plane step that asserts stage_2 and stage_3 are
+   byte-identical; a mismatch fails the run before anything is published.
+6. **publish** -- a registry deploy of stage_2, signed under a keyless chain.
 
-This executes the bootstrap lane (`lane.yaml`):
+The bootstrap lane is not complete yet: today `lane.yaml` carries only the
+build and pack steps, and a published run line follows once the lane runs.
 
-1. **build_binary** -- compiles the strike binary from source using a pinned
-   Chainguard Go image with `CGO_ENABLED=0`.
-2. **build_image** -- packs the binary into a signed OCI image based on
-   `chainguard/static`.
-3. **stage_2** -- runs `bootstrap/lace.yaml` inside `strike:stage_1` to rebuild
-   the image from source, producing `stage_3`.
-4. **compare** -- verifies that stage_2 and stage_3 produce identical images,
-   proving the build is reproducible.
-5. **publish** -- pushes the verified image to the registry.
+The in-lane comparison proves that strike's orchestration is deterministic.
+Two further checks prove more: the released strike, rebuilding the same commit
+on another host, must reach the same image digest, and a plain build of the
+binary in the pinned Go image, without strike, must match the binary in the
+released image. None of the three defends against a compromised compiler; the
+Go toolchain is a fixed, externally verified input. See
+[ADR-009](docs/ADR-009-bootstrap-reproducibility-proof.md).
 
 ## How it works
 
@@ -177,24 +189,25 @@ connection attempt is refused. See
 
 ### Image references
 
-Steps resolve their execution image in one of three ways:
+Steps resolve their execution image in one of two ways:
 
-| Field        | Use case                     | Pinning                              |
-|--------------|------------------------------|--------------------------------------|
-| `image`      | External registry image      | Must contain `@sha256:` digest       |
-| `image`      | Local bootstrap root         | Digest resolved via `podman inspect` |
-| `image_from` | Output of a previous step    | Digest extracted at load time        |
+| Field           | Use case                  | Pinning                        |
+|-----------------|---------------------------|--------------------------------|
+| `image`         | External registry image   | Must contain `@sha256:` digest |
+| `imageFromStep` | Output of a previous step | Digest extracted at load time  |
 
-`image_from` references an `image` output from an earlier step by name. The
-executor loads the tar into the local container store and pins the image by its
-manifest digest, creating an implicit DAG edge:
+`imageFromStep` names an earlier step whose output is an image; an image
+output is addressed by its producing step alone. The executor loads the tar
+into the local container store and pins the image by its manifest digest,
+creating an implicit DAG edge:
 
 ```yaml
-  - name: stage_2
-    image_from:
-      step: build_image
-      output: image
-    args: [run, /src/bootstrap/lace.yaml]
+  - id: check-built
+    imageFromStep: build-image
+    args: [/usr/bin/strike, validate, /src/lane.yaml]
+    inputs:
+      - from: { step: src, output: tree }
+        mount: /src
 ```
 
 ### Content-addressable caching

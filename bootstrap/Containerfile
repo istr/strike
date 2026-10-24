@@ -1,19 +1,22 @@
-# Bootstrap the strike ci/cd tool.
+# Bootstrap the strike ci/cd tool: stage_0 of the reproducibility proof in
+# docs/ADR-009-bootstrap-reproducibility-proof.md.
 #
 # Stage 0 is "dirty" in two aspects:
 # - it uses a legacy Containerfile
 # - it still needs an implicit shell expansion in one of the Containerfile steps
 #
-# Stage 0 creates a "dirty" stage 1 container with podman and strike in it.
-# This stage 1 container then uses the "dirty" strike to:
-# - build a stage 2 container
-# - use the stage 2 container to build a stage 3 container
-# - release the stage 2 container if it is identical to stage 3
+# Stage 0 builds the strike binary from the pinned commit and produces the
+# stage_1 image with the binary and the pinned tree. stage_1 runs the
+# bootstrap lane as a sibling of its steps on the operator's engine: the lane
+# builds stage_2, builds it again with the cache bypassed as stage_3, and
+# publishes stage_2 only if both are byte-identical. No stage runs an engine
+# of its own (docs/ADR-055-hardened-endpoint-development-premise.md, D9); the
+# engine-bearing base of the second stage below is retired by the amendment
+# of 2026-09-14 to ADR-009.
 #
 # Prerequisite: you have podman installed on your host.
 #
 # GIT_COMMIT=<commit-sha> ; podman build -t strike:stage_1 --build-arg GIT_COMMIT=${GIT_COMMIT} https://raw.githubusercontent.com/istr/strike/${GIT_COMMIT}/bootstrap/Containerfile
-# podman run --env COSIGN_PRIVATE_KEY --env COSIGN_PASSWORD --security-opt unmask=/proc/* --mount type=tmpfs,dst=/podman/.local/share/containers/storage,U --userns=keep-id strike:stage_1
 #
 FROM docker.io/library/golang:1.26.10-alpine@sha256:d1f3216ef30257c850cc136ba42a359ccd9d3e75f19b2c276e520c0b4ef327ce AS builder
 ARG GIT_COMMIT

@@ -137,8 +137,13 @@ spawning.
 **A08 Software and Data Integrity Failures** -- strike's core mission.
 Unsigned container images must not leave the local store (enforced by the
 unsigned-OCI-blocks-network guard). All external images must be digest-pinned.
-SBOMs are attached as signed OCI 1.1 referrer artifacts. The bootstrap process
-proves reproducibility through binary comparison.
+SBOMs are attached as signed OCI 1.1 referrer artifacts. The bootstrap proves
+reproducibility through three checks: a second build in the same run with the
+cache bypassed, whose image must be byte-identical to the first; a digest
+equality between the bootstrap and the released strike rebuilding the same
+commit on another host; and a rebuild of the binary without strike, from the
+pinned Go image. None of the three defends against a compromised compiler
+([ADR-009](docs/ADR-009-bootstrap-reproducibility-proof.md)).
 
 **A02 Cryptographic Failures** -- Signing uses ECDSA P-256 via Go's
 `crypto/ecdsa` with `crypto/rand`. No use of `math/rand` for security-relevant
@@ -241,11 +246,16 @@ definition.
 ## User namespace mapping
 
 All container steps run with `--userns=keep-id`. This maps the host user's UID
-into the container as-is and passes the host's subuid/subgid range, enabling
-nested rootless podman execution (e.g. for the stage_2 bootstrap step).
+into the container as-is, so file ownership in output paths matches the calling
+user across the boundary between strike and the engine
+([ADR-003](docs/ADR-003-rootless-end-to-end.md)); the hardened profile above
+relies on that mapping
+([ADR-005](docs/ADR-005-hardened-container-profile-non-configurable.md)). No
+step and no part of the bootstrap runs a container engine of its own: strike
+is a client of exactly one engine, the operator's.
 
 This does **not** grant additional capabilities. Seccomp and AppArmor profiles
-remain active. An attacker who escapes an inner container reaches only
+remain active. An attacker who escapes a step container reaches only
 unprivileged host UIDs from the subuid range -- the same UIDs that rootless
 podman already maps for any unprivileged user.
 
