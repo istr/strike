@@ -330,14 +330,13 @@ func TestBridge_EndToEnd(t *testing.T) {
 	})
 
 	ca := bridgeTestCA(t)
-	hp := capsule.HostPorts{Resolver: 15400, Mediator: 15401}
 	targets := []capsule.SSHTarget{{
 		Host:     primitive.Host(upstream.addr()),
 		HostKeys: []string{upstream.hostKeyLine()},
 		Port:     upstream.port(),
 	}}
 
-	caps, capsErr := capsule.New("bridge-step", hp, nil, targets, 40000, ca, loopbackDialer(t))
+	caps, capsErr := capsule.New("bridge-step", nil, targets, 40000, ca, loopbackDialer(t))
 	if capsErr != nil {
 		t.Fatalf("capsule.New: %v", capsErr)
 	}
@@ -407,13 +406,12 @@ func TestBridge_WrongToken_Refused(t *testing.T) {
 	})
 
 	ca := bridgeTestCA(t)
-	hp := capsule.HostPorts{Resolver: 15410, Mediator: 15411}
 	targets := []capsule.SSHTarget{{
 		Host:     primitive.Host(upstream.addr()),
 		HostKeys: []string{upstream.hostKeyLine()},
 		Port:     upstream.port(),
 	}}
-	caps, capsErr := capsule.New("wrong-tok", hp, nil, targets, 40000, ca, loopbackDialer(t))
+	caps, capsErr := capsule.New("wrong-tok", nil, targets, 40000, ca, loopbackDialer(t))
 	if capsErr != nil {
 		t.Fatal(capsErr)
 	}
@@ -485,13 +483,12 @@ func TestBridge_InboundCloseUnblocksHandler(t *testing.T) {
 	})
 
 	ca := bridgeTestCA(t)
-	hp := capsule.HostPorts{Resolver: 15430, Mediator: 15431}
 	targets := []capsule.SSHTarget{{
 		Host:     primitive.Host(upstream.addr()),
 		HostKeys: []string{upstream.hostKeyLine()},
 		Port:     upstream.port(),
 	}}
-	caps, capsErr := capsule.New("inbound-close", hp, nil, targets, 40000, ca, loopbackDialer(t))
+	caps, capsErr := capsule.New("inbound-close", nil, targets, 40000, ca, loopbackDialer(t))
 	if capsErr != nil {
 		t.Fatal(capsErr)
 	}
@@ -579,13 +576,12 @@ func TestBridge_DisallowedCommand_Refused(t *testing.T) {
 	})
 
 	ca := bridgeTestCA(t)
-	hp := capsule.HostPorts{Resolver: 15420, Mediator: 15421}
 	targets := []capsule.SSHTarget{{
 		Host:     primitive.Host(upstream.addr()),
 		HostKeys: []string{upstream.hostKeyLine()},
 		Port:     upstream.port(),
 	}}
-	caps, capsErr := capsule.New("bad-cmd", hp, nil, targets, 40000, ca, loopbackDialer(t))
+	caps, capsErr := capsule.New("bad-cmd", nil, targets, 40000, ca, loopbackDialer(t))
 	if capsErr != nil {
 		t.Fatal(capsErr)
 	}

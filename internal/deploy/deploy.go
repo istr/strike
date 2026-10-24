@@ -123,15 +123,11 @@ func HardenedRunOpts() container.RunOpts {
 }
 
 // startUnitCapsule constructs and starts a capsule for one deploy
-// container unit, keyed by name in d.StepPorts. Returns the capsule
+// container unit. Returns the capsule
 // (always non-nil on success) for the caller to Stop. Mirrors the
 // run-path dispatch: every container unit runs under pasta with a
 // per-unit allowlist (empty for peer-less units).
 func (d *Deployer) startUnitCapsule(ctx context.Context, name string, peers []lane.Peer) (*capsule.NetworkCapsule, error) {
-	ports, ok := d.StepPorts[name]
-	if !ok {
-		return nil, fmt.Errorf("deploy %q: no pre-allocated host ports", name)
-	}
 	var trusts []mediator.PeerTrust
 	for _, p := range peers {
 		if hp, ok := p.(endpoint.TLS); ok {
@@ -148,7 +144,7 @@ func (d *Deployer) startUnitCapsule(ctx context.Context, name string, peers []la
 			targets = append(targets, sshTarget(sp, keys))
 		}
 	}
-	caps, err := capsule.New(name, ports, trusts, targets, 0, d.CA, d.Dialer)
+	caps, err := capsule.New(name, trusts, targets, 0, d.CA, d.Dialer)
 	if err != nil {
 		return nil, fmt.Errorf("deploy %q: construct capsule: %w", name, err)
 	}
@@ -178,8 +174,7 @@ func (d *Deployer) applyCapsule(opts *container.RunOpts, caps *capsule.NetworkCa
 	})
 }
 
-// captureKey is the stepPorts key for a state-capture container; it
-// must match cmd/strike/run.go captureKey.
+// captureKey is the unit name of a state-capture container.
 func captureKey(stepID, captureID primitive.Identifier) string {
 	return "capture:" + string(stepID) + ":" + string(captureID)
 }
@@ -188,7 +183,6 @@ func captureKey(stepID, captureID primitive.Identifier) string {
 type Deployer struct {
 	OIDC            lane.OIDCConfig // lane-declared signing identity (ADR-040 D5); carried into the sealed provenance externalParameters
 	Engine          container.Engine
-	StepPorts       map[string]capsule.HostPorts // unit name -> host ports
 	DAG             *lane.DAG
 	Lane            *lane.Lane // full lane, for region output-declaration lookup (ADR-051 D9)
 	EngineID        *container.EngineIdentity

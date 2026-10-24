@@ -74,10 +74,9 @@ func (e *captureEngine) ContainerStart(_ context.Context, _ string) error { retu
 const sshTrustVolumeDest = "/etc/ssh"
 
 // specgenTestCapsule creates a minimal capsule for specgen tests.
-// The capsule is not Start()ed; Execute only calls PastaArgs() and
-// ResolverAddr(), which work without binding listeners. Returns the
-// capsule and a synthetic CA volume name (the mock engine does not
-// perform real volume operations).
+// The capsule is started because PastaArgs names the ports Start binds.
+// Returns the capsule and a synthetic CA volume name (the mock engine
+// does not perform real volume operations).
 func specgenTestCapsule(t *testing.T) (*capsule.NetworkCapsule, string) {
 	t.Helper()
 	ca, err := transport.New("specgen-test")
@@ -86,12 +85,22 @@ func specgenTestCapsule(t *testing.T) (*capsule.NetworkCapsule, string) {
 	}
 	t.Cleanup(func() { testutil.CloseLog(t, ca, "specgen CA") })
 
-	c, err := capsule.New("specgen", capsule.HostPorts{Resolver: 15353, Mediator: 15354},
+	c, err := capsule.New("specgen",
 		nil, nil, 0, ca,
 		testutil.StartDoTResolver(t, netip.MustParseAddr("127.0.0.1")))
 	if err != nil {
 		t.Fatalf("capsule.New: %v", err)
 	}
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	if err := c.Start(ctx); err != nil {
+		t.Fatalf("capsule.Start: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := c.Stop(); err != nil {
+			t.Logf("capsule stop: %v", err)
+		}
+	})
 	return c, "strike-ca-specgen-test"
 }
 

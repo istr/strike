@@ -231,11 +231,6 @@ func cmdRun(ctx context.Context, path string, engine container.Engine) error {
 	}
 	defer frontCleanup()
 
-	stepPorts, portsErr := allocateMediatedPorts(p)
-	if portsErr != nil {
-		return portsErr
-	}
-
 	rc := &runContext{
 		ctx:        ctx,
 		engine:     engine,
@@ -249,7 +244,6 @@ func cmdRun(ctx context.Context, path string, engine container.Engine) error {
 		front:      ft,
 		dialer:     dialer,
 		runtime:    lane.NewRuntime(dag),
-		stepPorts:  stepPorts,
 		capsules:   map[primitive.Identifier]*capsule.NetworkCapsule{},
 		laneRoot:   laneRoot,
 		resolverID: resolverID,
@@ -348,46 +342,6 @@ func initFront(ctx context.Context) (*front.Front, func(), error) {
 	// call-graph edge onto services (ADR-044).
 	var c io.Closer = ft
 	return ft, func() { closer.Warn(c, "front") }, nil
-}
-
-// allocateMediatedPorts pre-allocates a host-port block for every
-// container unit in lane-file order: each run step, each deploy step's
-// method container (keyed by the step name), and each pre/post
-// state-capture container (keyed "capture:<stepID>:<captureID>" to
-// stay collision-free across parallel deploy steps). Pack steps launch
-// no step container and are skipped.
-func allocateMediatedPorts(p *lane.Lane) (map[string]capsule.HostPorts, error) {
-	var reqs []capsule.StepPortReq
-	for i := range p.Steps {
-		s := &p.Steps[i]
-		switch {
-		case s.Pack != nil:
-			continue
-		case s.Deploy != nil:
-			reqs = append(reqs, capsule.StepPortReq{Name: string(s.ID)})
-			for _, sc := range s.Deploy.Recording.PreState.Captures {
-				reqs = append(reqs, capsule.StepPortReq{Name: captureKey(s.ID, sc.ID)})
-			}
-			for _, sc := range s.Deploy.Recording.PostState.Captures {
-				reqs = append(reqs, capsule.StepPortReq{Name: captureKey(s.ID, sc.ID)})
-			}
-		default:
-			reqs = append(reqs, capsule.StepPortReq{Name: string(s.ID)})
-		}
-	}
-	ports, err := capsule.AllocatePorts(reqs)
-	if err != nil {
-		return nil, err
-	}
-	return ports, nil
-}
-
-// captureKey is the stepPorts map key for a state-capture container.
-// Pre and post captures of the same name within one deploy step share
-// a key (they run sequentially), but captures in different deploy
-// steps do not collide.
-func captureKey(stepID, captureID primitive.Identifier) string {
-	return "capture:" + string(stepID) + ":" + string(captureID)
 }
 
 func cmdCompare(file1, file2, output string) {

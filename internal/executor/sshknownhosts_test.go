@@ -217,9 +217,8 @@ func TestSSHTrustContent_with_ssh_peers(t *testing.T) {
 			t.Logf("ca close: %v", err)
 		}
 	})
-	hp := capsule.HostPorts{Resolver: 5353, Mediator: 5354}
 	targets := []capsule.SSHTarget{{Host: "git.example.com", HostKeys: []string{authLine}}}
-	caps, capsErr := capsule.New("trust-step", hp, nil, targets, 40000, ca,
+	caps, capsErr := capsule.New("trust-step", nil, targets, 40000, ca,
 		testutil.StartDoTResolver(t, netip.MustParseAddr("93.184.216.34")))
 	if capsErr != nil {
 		t.Fatalf("capsule.New: %v", capsErr)

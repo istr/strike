@@ -42,7 +42,6 @@ type runContext struct {
 	laneDigest primitive.Digest
 	dag        *lane.DAG
 	stepIndex  map[primitive.Identifier]*lane.Step
-	stepPorts  map[string]capsule.HostPorts                     // mediated step name -> host ports
 	capsules   map[primitive.Identifier]*capsule.NetworkCapsule // run-step name -> pre-built capsule
 	laneRoot   *os.Root
 	trust      trustVolumes
@@ -171,7 +170,6 @@ func (rc *runContext) executeDeploy(ctx context.Context, step *lane.Step, stepID
 		Dialer:          rc.dialer,
 		CAVolume:        rc.trust.ca,
 		StepID:          stepID,
-		StepPorts:       rc.stepPorts,
 	}
 
 	att, err := d.Execute(ctx, step, rc.runtime)
@@ -987,16 +985,11 @@ func (rc *runContext) stopCapsules() {
 }
 
 // startCapsule constructs and starts a NetworkCapsule for one container
-// unit, looked up by name in the pre-allocated host-port map. Every
+// unit, on kernel-assigned loopback ports. Every
 // container unit gets a capsule: peer-less units get an empty allowlist
 // (resolver denies every name, mediator denies every SNI), which
 // replaces the former --network=none.
 func (rc *runContext) startCapsule(ctx context.Context, name, safeName string, peers []lane.Peer) (*capsule.NetworkCapsule, error) {
-	ports, ok := rc.stepPorts[name]
-	if !ok {
-		return nil, fmt.Errorf("%s: no pre-allocated host ports", safeName)
-	}
-
 	httpsPeers := httpsPeersOf(peers)
 	peerTrusts := make([]mediator.PeerTrust, len(httpsPeers))
 	for i, p := range httpsPeers {
@@ -1004,14 +997,14 @@ func (rc *runContext) startCapsule(ctx context.Context, name, safeName string, p
 	}
 	sshTargets := sshTargetsOf(peers)
 
-	caps, capsErr := capsule.New(name, ports, peerTrusts, sshTargets, rc.front.Addr().Port(), rc.ca, rc.dialer)
+	caps, capsErr := capsule.New(name, peerTrusts, sshTargets, rc.front.Addr().Port(), rc.ca, rc.dialer)
 	if capsErr != nil {
 		return nil, fmt.Errorf("%s: construct capsule: %w", safeName, capsErr)
 	}
 	if startErr := caps.Start(ctx); startErr != nil {
 		return nil, fmt.Errorf("%s: start capsule: %w", safeName, startErr)
 	}
-	log.Printf("CAPSULE %s @ 127.0.0.1 r:%d m:%d (https=%d ssh=%d)", safeName, ports.Resolver, ports.Mediator, len(httpsPeers), len(sshTargets))
+	log.Printf("CAPSULE %s @ 127.0.0.1 (https=%d ssh=%d)", safeName, len(httpsPeers), len(sshTargets))
 	return caps, nil
 }
 

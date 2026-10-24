@@ -27,21 +27,23 @@ const FrontContainerPort uint16 = 22
 
 // BuildPastaArgs returns the pasta options for a step container.
 // The container sees the resolver on resolverPort (53) and the mediator
-// on mediatorPort (443); strike binds these listeners host-side on the
-// unprivileged host ports (strike is rootless and cannot bind <1024).
-// pasta's -T/-U forward spec remaps the container port to the host port
-// with the "container:host" syntax and accepts no listening address
-// (only -t/-u do), which is why per-step distinctness lives in the host
-// port rather than a per-step address. When frontHostPort is non-zero, a
+// on mediatorPort (443); strike binds these listeners host-side on
+// kernel-assigned unprivileged ports (strike is rootless and cannot bind
+// <1024). pasta's -T/-U forward spec remaps the container port to the
+// host port with the "container:host" syntax and accepts no listening
+// address (only -t/-u do), which is why per-step distinctness lives in
+// the host port rather than a per-step address. The resolver's TCP and
+// UDP listeners are separate sockets and carry separate host ports. When
+// frontHostPort is non-zero, a
 // forward from the container's port 22 to the front's host listener is
 // appended, so the step's SSH client reaches the front (ADR-038 D5).
 //
 // Output order:
 //
 //	--splice-only
-//	-T <resolverPort>:<resolverHostPort>
+//	-T <resolverPort>:<resolverTCPHostPort>
 //	-T <mediatorPort>:<mediatorHostPort>
-//	-U <resolverPort>:<resolverHostPort>
+//	-U <resolverPort>:<resolverUDPHostPort>
 //	-T 22:<frontHostPort>                 (when frontHostPort != 0)
 //
 // The -U forward for the resolver port is essential: DNS clients try
@@ -49,12 +51,12 @@ const FrontContainerPort uint16 = 22
 // container DNS queries time out on UDP.
 //
 // Byte-identical for byte-identical inputs.
-func BuildPastaArgs(resolverPort, resolverHostPort, mediatorPort, mediatorHostPort, frontHostPort uint16) []string {
+func BuildPastaArgs(resolverPort, resolverTCPHostPort, resolverUDPHostPort, mediatorPort, mediatorHostPort, frontHostPort uint16) []string {
 	args := []string{
 		"--splice-only",
-		"-T", fmt.Sprintf("%d:%d", resolverPort, resolverHostPort),
+		"-T", fmt.Sprintf("%d:%d", resolverPort, resolverTCPHostPort),
 		"-T", fmt.Sprintf("%d:%d", mediatorPort, mediatorHostPort),
-		"-U", fmt.Sprintf("%d:%d", resolverPort, resolverHostPort),
+		"-U", fmt.Sprintf("%d:%d", resolverPort, resolverUDPHostPort),
 	}
 	if frontHostPort != 0 {
 		args = append(args, "-T", fmt.Sprintf("%d:%d", FrontContainerPort, frontHostPort))

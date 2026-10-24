@@ -20,13 +20,11 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"math"
 	"net"
 	"net/netip"
 	"os"
 	"sort"
 	"sync"
-	"syscall"
 
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
@@ -45,16 +43,15 @@ import (
 const (
 	// resolverPort and mediatorPort are the ports the container
 	// sees: standard DNS (53) and HTTPS (443). pasta's -T/-U forwards
-	// remap them to the per-step unprivileged host ports from
-	// AllocatePorts.
+	// remap them to the kernel-assigned host ports Start binds.
 	resolverPort uint16 = 53
 	mediatorPort uint16 = 443
 )
 
 // loopbackV4 is the address every step's resolver and mediator listen
 // on and the container reaches. pasta -T/-U forward the container's
-// 53/443 to the step's host ports, so per-step distinctness lives in
-// the port, not the address. Each step has its own netns, so the
+// 53/443 to the step's kernel-assigned host ports, so per-step
+// distinctness lives in the port, not the address. Each step has its own netns, so the
 // shared loopback never collides.
 var loopbackV4 = netip.AddrFrom4([4]byte{127, 0, 0, 1})
 
@@ -94,7 +91,7 @@ type NetworkCapsule struct {
 	sshForwards []*sshForwarder
 	sshPins     [][]ssh.PublicKey
 	sshTokens   []string
-	hostPorts   HostPorts
+	frontPort   uint16
 	state       capsuleState
 	mu          sync.Mutex
 }
@@ -110,10 +107,6 @@ const (
 // New constructs a NetworkCapsule for one step.
 //
 //   - stepID identifies the step in records and logs.
-//   - hostPorts is the per-step host-port pair allocated by
-//     AllocatePorts. The resolver binds 127.0.0.1:hostPorts.Resolver,
-//     the mediator 127.0.0.1:hostPorts.Mediator; the container
-//     reaches both via pasta on 127.0.0.1:53 and :443.
 //   - peers enumerates the HTTPS peers the step may reach. Their
 //     hosts become the resolver's allowlist; their full trust
 //     configs become the mediator's peer map.
@@ -124,7 +117,6 @@ const (
 //     resolver. Must be non-nil.
 func New(
 	stepID string,
-	hostPorts HostPorts,
 	peers []mediator.PeerTrust,
 	sshTargets []SSHTarget,
 	frontHostPort uint16,
@@ -178,14 +170,13 @@ func New(
 
 	return &NetworkCapsule{
 		stepID:      stepID,
-		hostPorts:   hostPorts,
+		frontPort:   frontForwardPort(sshTargets, frontHostPort),
 		resolver:    res,
 		mediator:    med,
 		sshForwards: forwarders,
 		sshPins:     sshPins,
 		sshTokens:   sshTokens,
 		ca:          ca,
-		pastaArgs:   egress.BuildPastaArgs(resolverPort, hostPorts.Resolver, mediatorPort, hostPorts.Mediator, frontForwardPort(sshTargets, frontHostPort)),
 		state:       stateNew,
 	}, nil
 }
@@ -268,7 +259,8 @@ func (c *NetworkCapsule) Tokens() []string {
 	return out
 }
 
-// PastaArgs returns a copy of the pasta options for this step.
+// PastaArgs returns a copy of the pasta options for this step. The
+// forwards name the ports Start bound, so it is empty before Start.
 func (c *NetworkCapsule) PastaArgs() []string {
 	out := make([]string, len(c.pastaArgs))
 	copy(out, c.pastaArgs)
@@ -296,46 +288,32 @@ func (c *NetworkCapsule) Start(ctx context.Context) error {
 		return errors.New("capsule: already started")
 	}
 
-	resolverAddrStr := netip.AddrPortFrom(loopbackV4, c.hostPorts.Resolver).String()
-	mediatorAddrStr := netip.AddrPortFrom(loopbackV4, c.hostPorts.Mediator).String()
-
-	// SO_REUSEADDR on the UDP socket allows binding 127.0.0.1 on the
-	// resolver port even when another process (e.g. avahi-daemon on
-	// mDNS port 5353, which the first mediated step's resolver port
-	// coincides with) holds a wildcard bind on that port. Safe because
-	// our bind is to a specific address (127.0.0.1) and a distinct
-	// per-step port.
-	reuseLC := net.ListenConfig{
-		Control: func(_, _ string, c syscall.RawConn) error {
-			var opErr error
-			if err := c.Control(func(fd uintptr) {
-				if fd > math.MaxInt {
-					opErr = errors.New("capsule: fd exceeds int range")
-					return
-				}
-				opErr = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1)
-			}); err != nil {
-				return err
-			}
-			return opErr
-		},
-	}
+	// Port 0 asks the kernel for a free loopback port per listener, so
+	// concurrent controllers sharing one loopback never collide. The
+	// resolver's UDP and TCP sockets get separate ports; pasta takes
+	// separate host ports for its -T and -U forwards.
 	lc := net.ListenConfig{}
-	udp, err := reuseLC.ListenPacket(ctx, "udp", resolverAddrStr)
+	loopbackAny := netip.AddrPortFrom(loopbackV4, 0).String()
+	udp, err := lc.ListenPacket(ctx, "udp", loopbackAny)
 	if err != nil {
-		return fmt.Errorf("capsule: bind resolver UDP %s: %w", resolverAddrStr, err)
+		return fmt.Errorf("capsule: bind resolver UDP: %w", err)
 	}
-	tcp, err := lc.Listen(ctx, "tcp", resolverAddrStr)
+	tcp, err := lc.Listen(ctx, "tcp", loopbackAny)
 	if err != nil {
 		closer.Warn(udp, "capsule resolver UDP")
-		return fmt.Errorf("capsule: bind resolver TCP %s: %w", resolverAddrStr, err)
+		return fmt.Errorf("capsule: bind resolver TCP: %w", err)
 	}
-	mtcp, err := lc.Listen(ctx, "tcp", mediatorAddrStr)
+	mtcp, err := lc.Listen(ctx, "tcp", loopbackAny)
 	if err != nil {
 		closer.Warn(udp, "capsule resolver UDP")
 		closer.Warn(tcp, "capsule resolver TCP")
-		return fmt.Errorf("capsule: bind mediator TCP %s: %w", mediatorAddrStr, err)
+		return fmt.Errorf("capsule: bind mediator TCP: %w", err)
 	}
+	// The listeners bind IPv4 loopback, so each address is a *net.UDPAddr
+	// or *net.TCPAddr with a uint16 port.
+	c.pastaArgs = egress.BuildPastaArgs(resolverPort,
+		listenerPort(tcp.Addr()), listenerPort(udp.LocalAddr()),
+		mediatorPort, listenerPort(mtcp.Addr()), c.frontPort)
 
 	c.resolverUDP = udp
 	c.resolverTCP = tcp
@@ -351,6 +329,11 @@ func (c *NetworkCapsule) Start(ctx context.Context) error {
 
 	c.state = stateStarted
 	return nil
+}
+
+// listenerPort returns the port of a bound loopback listener address.
+func listenerPort(a net.Addr) uint16 {
+	return netip.MustParseAddrPort(a.String()).Port()
 }
 
 // Stop cancels the serve goroutines, waits, and closes the

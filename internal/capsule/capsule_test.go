@@ -15,6 +15,7 @@ import (
 	"math/big"
 	"net"
 	"net/netip"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -60,9 +61,39 @@ func testCA(t *testing.T) *transport.EphemeralCA {
 	return ca
 }
 
-// testPorts returns a HostPorts suitable for tests that do not call Start.
-func testPorts() capsule.HostPorts {
-	return capsule.HostPorts{Resolver: 5353, Mediator: 5354}
+// forwardPort returns the host port a started capsule's pasta args name
+// for the given flag ("-T" or "-U") and container port.
+func forwardPort(t *testing.T, c *capsule.NetworkCapsule, flag string, containerPort int) uint16 {
+	t.Helper()
+	args := c.PastaArgs()
+	prefix := strconv.Itoa(containerPort) + ":"
+	for i := 0; i+1 < len(args); i++ {
+		if args[i] == flag && strings.HasPrefix(args[i+1], prefix) {
+			n, err := strconv.ParseUint(strings.TrimPrefix(args[i+1], prefix), 10, 16)
+			if err != nil {
+				t.Fatalf("parse forward %q: %v", args[i+1], err)
+			}
+			return uint16(n)
+		}
+	}
+	t.Fatalf("no %s forward for container port %d in %v", flag, containerPort, args)
+	return 0
+}
+
+// startForTest starts c and stops it when the test ends. PastaArgs names
+// the ports Start bound, so tests that read it start the capsule first.
+func startForTest(t *testing.T, c *capsule.NetworkCapsule) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	if err := c.Start(ctx); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := c.Stop(); err != nil {
+			t.Logf("stop: %v", err)
+		}
+	})
 }
 
 // testHostKeyLine generates an ephemeral ed25519 key and returns its
@@ -82,14 +113,14 @@ func testHostKeyLine(t *testing.T) string {
 
 func TestNew_RejectsEmptyStepID(t *testing.T) {
 	ca := testCA(t)
-	_, err := capsule.New("", testPorts(), nil, nil, 0, ca, testDialer(t))
+	_, err := capsule.New("", nil, nil, 0, ca, testDialer(t))
 	if err == nil {
 		t.Error("expected error for empty stepID, got nil")
 	}
 }
 
 func TestNew_RejectsNilCA(t *testing.T) {
-	_, err := capsule.New("step", testPorts(), nil, nil, 0, nil, testDialer(t))
+	_, err := capsule.New("step", nil, nil, 0, nil, testDialer(t))
 	if err == nil {
 		t.Error("expected error for nil CA, got nil")
 	}
@@ -97,7 +128,7 @@ func TestNew_RejectsNilCA(t *testing.T) {
 
 func TestNew_RejectsNilDialer(t *testing.T) {
 	ca := testCA(t)
-	_, err := capsule.New("step", testPorts(), nil, nil, 0, ca, nil)
+	_, err := capsule.New("step", nil, nil, 0, ca, nil)
 	if err == nil {
 		t.Error("expected error for nil dialer, got nil")
 	}
@@ -105,10 +136,11 @@ func TestNew_RejectsNilDialer(t *testing.T) {
 
 func TestNew_EmptyPeersIsValid(t *testing.T) {
 	ca := testCA(t)
-	c, err := capsule.New("step", testPorts(), nil, nil, 0, ca, testDialer(t))
+	c, err := capsule.New("step", nil, nil, 0, ca, testDialer(t))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
+	startForTest(t, c)
 	args := c.PastaArgs()
 	if len(args) == 0 {
 		t.Error("expected non-empty PastaArgs")
@@ -117,10 +149,11 @@ func TestNew_EmptyPeersIsValid(t *testing.T) {
 
 func TestPastaArgs_ContainsSpliceOnly(t *testing.T) {
 	ca := testCA(t)
-	c, err := capsule.New("step", testPorts(), nil, nil, 0, ca, testDialer(t))
+	c, err := capsule.New("step", nil, nil, 0, ca, testDialer(t))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
+	startForTest(t, c)
 	args := c.PastaArgs()
 	if args[0] != "--splice-only" {
 		t.Errorf("args[0] = %q, want --splice-only", args[0])
@@ -144,10 +177,11 @@ func TestPastaArgs_ContainsSpliceOnly(t *testing.T) {
 
 func TestPastaArgs_IsSnapshot(t *testing.T) {
 	ca := testCA(t)
-	c, err := capsule.New("step", testPorts(), nil, nil, 0, ca, testDialer(t))
+	c, err := capsule.New("step", nil, nil, 0, ca, testDialer(t))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
+	startForTest(t, c)
 	a := c.PastaArgs()
 	a[0] = testMutatedSentinel
 	b := c.PastaArgs()
@@ -158,7 +192,7 @@ func TestPastaArgs_IsSnapshot(t *testing.T) {
 
 func TestResolverAddr_UsesPort53(t *testing.T) {
 	ca := testCA(t)
-	c, err := capsule.New("step", testPorts(), nil, nil, 0, ca, testDialer(t))
+	c, err := capsule.New("step", nil, nil, 0, ca, testDialer(t))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -173,8 +207,7 @@ func TestResolverAddr_UsesPort53(t *testing.T) {
 
 func TestStart_BindsListeners(t *testing.T) {
 	ca := testCA(t)
-	hp := capsule.HostPorts{Resolver: 15353, Mediator: 15354}
-	c, err := capsule.New("step", hp, nil, nil, 0, ca, testDialer(t))
+	c, err := capsule.New("step", nil, nil, 0, ca, testDialer(t))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -193,24 +226,26 @@ func TestStart_BindsListeners(t *testing.T) {
 
 	// Verify the addresses are in use (a duplicate bind gets EADDRINUSE).
 	lc := net.ListenConfig{}
-	_, err = lc.ListenPacket(ctx, "udp", "127.0.0.1:15353")
+	udpAddr := net.JoinHostPort("127.0.0.1", strconv.Itoa(int(forwardPort(t, c, "-U", 53))))
+	rtcpAddr := net.JoinHostPort("127.0.0.1", strconv.Itoa(int(forwardPort(t, c, "-T", 53))))
+	mtcpAddr := net.JoinHostPort("127.0.0.1", strconv.Itoa(int(forwardPort(t, c, "-T", 443))))
+	_, err = lc.ListenPacket(ctx, "udp", udpAddr)
 	if err == nil {
-		t.Error("expected EADDRINUSE on UDP 127.0.0.1:15353")
+		t.Errorf("expected EADDRINUSE on UDP %s", udpAddr)
 	}
-	_, err = lc.Listen(ctx, "tcp", "127.0.0.1:15353")
+	_, err = lc.Listen(ctx, "tcp", rtcpAddr)
 	if err == nil {
-		t.Error("expected EADDRINUSE on TCP 127.0.0.1:15353")
+		t.Errorf("expected EADDRINUSE on TCP %s", rtcpAddr)
 	}
-	_, err = lc.Listen(ctx, "tcp", "127.0.0.1:15354")
+	_, err = lc.Listen(ctx, "tcp", mtcpAddr)
 	if err == nil {
-		t.Error("expected EADDRINUSE on TCP 127.0.0.1:15354")
+		t.Errorf("expected EADDRINUSE on TCP %s", mtcpAddr)
 	}
 }
 
 func TestStop_ReleasesListeners(t *testing.T) {
 	ca := testCA(t)
-	hp := capsule.HostPorts{Resolver: 15355, Mediator: 15356}
-	c, err := capsule.New("step", hp, nil, nil, 0, ca, testDialer(t))
+	c, err := capsule.New("step", nil, nil, 0, ca, testDialer(t))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -221,13 +256,14 @@ func TestStop_ReleasesListeners(t *testing.T) {
 	if startErr := c.Start(ctx); startErr != nil {
 		t.Fatalf("Start: %v", startErr)
 	}
+	mtcpAddr := net.JoinHostPort("127.0.0.1", strconv.Itoa(int(forwardPort(t, c, "-T", 443))))
 	if stopErr := c.Stop(); stopErr != nil {
 		t.Fatalf("Stop: %v", stopErr)
 	}
 
 	// After Stop, re-bind should succeed.
 	lc := net.ListenConfig{}
-	ln, err := lc.Listen(context.Background(), "tcp", "127.0.0.1:15356")
+	ln, err := lc.Listen(context.Background(), "tcp", mtcpAddr)
 	if err != nil {
 		t.Errorf("expected re-bind to succeed after Stop, got: %v", err)
 	} else {
@@ -237,8 +273,7 @@ func TestStop_ReleasesListeners(t *testing.T) {
 
 func TestStop_Idempotent(t *testing.T) {
 	ca := testCA(t)
-	hp := capsule.HostPorts{Resolver: 15357, Mediator: 15358}
-	c, err := capsule.New("step", hp, nil, nil, 0, ca, testDialer(t))
+	c, err := capsule.New("step", nil, nil, 0, ca, testDialer(t))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -259,7 +294,7 @@ func TestStop_Idempotent(t *testing.T) {
 
 func TestStop_BeforeStart(t *testing.T) {
 	ca := testCA(t)
-	c, err := capsule.New("step", testPorts(), nil, nil, 0, ca, testDialer(t))
+	c, err := capsule.New("step", nil, nil, 0, ca, testDialer(t))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -270,7 +305,7 @@ func TestStop_BeforeStart(t *testing.T) {
 
 func TestStartAfterStop_ReturnsError(t *testing.T) {
 	ca := testCA(t)
-	c, err := capsule.New("step", testPorts(), nil, nil, 0, ca, testDialer(t))
+	c, err := capsule.New("step", nil, nil, 0, ca, testDialer(t))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -284,8 +319,7 @@ func TestStartAfterStop_ReturnsError(t *testing.T) {
 
 func TestStartTwice_ReturnsError(t *testing.T) {
 	ca := testCA(t)
-	hp := capsule.HostPorts{Resolver: 15359, Mediator: 15360}
-	c, err := capsule.New("step", hp, nil, nil, 0, ca, testDialer(t))
+	c, err := capsule.New("step", nil, nil, 0, ca, testDialer(t))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -309,7 +343,7 @@ func TestStartTwice_ReturnsError(t *testing.T) {
 
 func TestRecords_BeforeStart(t *testing.T) {
 	ca := testCA(t)
-	c, err := capsule.New("step", testPorts(), nil, nil, 0, ca, testDialer(t))
+	c, err := capsule.New("step", nil, nil, 0, ca, testDialer(t))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -322,8 +356,7 @@ func TestRecords_BeforeStart(t *testing.T) {
 
 func TestRecords_AfterStop_PreservesData(t *testing.T) {
 	ca := testCA(t)
-	hp := capsule.HostPorts{Resolver: 15361, Mediator: 15362}
-	c, err := capsule.New("step", hp, nil, nil, 0, ca, testDialer(t))
+	c, err := capsule.New("step", nil, nil, 0, ca, testDialer(t))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -346,21 +379,16 @@ func TestRecords_AfterStop_PreservesData(t *testing.T) {
 func TestTwoCapsules_DistinctPorts(t *testing.T) {
 	ca := testCA(t)
 
-	ports, err := capsule.AllocatePorts([]capsule.StepPortReq{{Name: "step-a"}, {Name: "step-b"}})
-	if err != nil {
-		t.Fatalf("AllocatePorts: %v", err)
-	}
-
 	peers := []mediator.PeerTrust{{
 		Address: endpoint.MustParseAuthority("example.com"),
 		Trust:   testutil.AnchorTrust(),
 	}}
 
-	c1, err := capsule.New("step-a", ports["step-a"], peers, nil, 0, ca, testDialer(t))
+	c1, err := capsule.New("step-a", peers, nil, 0, ca, testDialer(t))
 	if err != nil {
 		t.Fatalf("New c1: %v", err)
 	}
-	c2, err := capsule.New("step-b", ports["step-b"], peers, nil, 0, ca, testDialer(t))
+	c2, err := capsule.New("step-b", peers, nil, 0, ca, testDialer(t))
 	if err != nil {
 		t.Fatalf("New c2: %v", err)
 	}
@@ -385,6 +413,23 @@ func TestTwoCapsules_DistinctPorts(t *testing.T) {
 			t.Logf("c2 stop: %v", err)
 		}
 	}()
+
+	// Kernel-assigned ports: no two live listeners share a host port.
+	// TCP and UDP port spaces are separate, so key by flag as well.
+	seen := map[string]bool{}
+	for _, c := range []*capsule.NetworkCapsule{c1, c2} {
+		for _, f := range []struct {
+			flag string
+			port int
+		}{{"-T", 53}, {"-T", 443}, {"-U", 53}} {
+			p := forwardPort(t, c, f.flag, f.port)
+			key := f.flag + strconv.Itoa(int(p))
+			if p == 0 || seen[key] {
+				t.Errorf("host port %s is zero or reused across capsules", key)
+			}
+			seen[key] = true
+		}
+	}
 }
 
 const testMutatedSentinel = "mutated"
@@ -548,14 +593,13 @@ func TestCapsule_ResolverSynthesizesStepAddr(t *testing.T) {
 	ca := testCA(t)
 	loopback := netip.MustParseAddr("127.0.0.1")
 	sni := testPeerSNI
-	hp := capsule.HostPorts{Resolver: 15363, Mediator: 15364}
 
 	peers := []mediator.PeerTrust{{
 		Address: endpoint.MustParseAuthority(sni),
 		Trust:   testutil.AnchorTrust(),
 	}}
 
-	c, err := capsule.New("synth-step", hp, peers, nil, 0, ca, testDialer(t))
+	c, err := capsule.New("synth-step", peers, nil, 0, ca, testDialer(t))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -574,7 +618,7 @@ func TestCapsule_ResolverSynthesizesStepAddr(t *testing.T) {
 
 	// DNS A query for the allowed peer.
 	query := buildDNSQuery(t, sni, dnsmessage.TypeA)
-	resp := udpDNSQuery(t, netip.AddrPortFrom(loopback, hp.Resolver).String(), query)
+	resp := udpDNSQuery(t, netip.AddrPortFrom(loopback, forwardPort(t, c, "-U", 53)).String(), query)
 
 	rcode, addrs := parseAAnswers(t, resp)
 	if rcode != dnsmessage.RCodeSuccess {
@@ -589,7 +633,6 @@ func TestCapsule_DNSThenConnect_EndToEnd(t *testing.T) {
 	ca := testCA(t)
 	loopback := netip.MustParseAddr("127.0.0.1")
 	sni := testPeerSNI
-	hp := capsule.HostPorts{Resolver: 15365, Mediator: 15366}
 
 	anchor, upAddr, upCleanup := startTestUpstreamTLS(t, sni)
 	defer upCleanup()
@@ -653,7 +696,7 @@ func TestCapsule_DNSThenConnect_EndToEnd(t *testing.T) {
 		Trust:   anchor,
 	}}
 
-	c, err := capsule.New("e2e-step", hp, peers, nil, 0, ca, testutil.StartDoTResolver(t, upIP))
+	c, err := capsule.New("e2e-step", peers, nil, 0, ca, testutil.StartDoTResolver(t, upIP))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -672,7 +715,7 @@ func TestCapsule_DNSThenConnect_EndToEnd(t *testing.T) {
 
 	// (1) DNS A query -> receive loopback.
 	query := buildDNSQuery(t, sni, dnsmessage.TypeA)
-	resp := udpDNSQuery(t, netip.AddrPortFrom(loopback, hp.Resolver).String(), query)
+	resp := udpDNSQuery(t, netip.AddrPortFrom(loopback, forwardPort(t, c, "-U", 53)).String(), query)
 	rcode, addrs := parseAAnswers(t, resp)
 	if rcode != dnsmessage.RCodeSuccess {
 		t.Fatalf("RCode = %v, want Success", rcode)
@@ -687,7 +730,7 @@ func TestCapsule_DNSThenConnect_EndToEnd(t *testing.T) {
 		t.Fatal("failed to append CA cert")
 	}
 
-	mediatorAddr := netip.AddrPortFrom(loopback, hp.Mediator).String()
+	mediatorAddr := netip.AddrPortFrom(loopback, forwardPort(t, c, "-T", 443)).String()
 	raw, err := new(net.Dialer).DialContext(ctx, "tcp", mediatorAddr)
 	if err != nil {
 		t.Fatalf("dial mediator: %v", err)
@@ -735,14 +778,13 @@ func TestCapsule_DNSThenConnect_EndToEnd(t *testing.T) {
 func TestCapsule_DeniedName_NXDOMAIN(t *testing.T) {
 	ca := testCA(t)
 	loopback := netip.MustParseAddr("127.0.0.1")
-	hp := capsule.HostPorts{Resolver: 15367, Mediator: 15368}
 
 	peers := []mediator.PeerTrust{{
 		Address: endpoint.MustParseAuthority("allowed.example"),
 		Trust:   testutil.AnchorTrust(),
 	}}
 
-	c, err := capsule.New("deny-step", hp, peers, nil, 0, ca, testDialer(t))
+	c, err := capsule.New("deny-step", peers, nil, 0, ca, testDialer(t))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -760,7 +802,7 @@ func TestCapsule_DeniedName_NXDOMAIN(t *testing.T) {
 	}()
 
 	query := buildDNSQuery(t, "denied.example", dnsmessage.TypeA)
-	resp := udpDNSQuery(t, netip.AddrPortFrom(loopback, hp.Resolver).String(), query)
+	resp := udpDNSQuery(t, netip.AddrPortFrom(loopback, forwardPort(t, c, "-U", 53)).String(), query)
 
 	rcode, _ := parseAAnswers(t, resp)
 	if rcode != dnsmessage.RCodeNameError {
@@ -772,14 +814,13 @@ func TestCapsule_AAAA_AllowedName_Empty(t *testing.T) {
 	ca := testCA(t)
 	loopback := netip.MustParseAddr("127.0.0.1")
 	sni := testPeerSNI
-	hp := capsule.HostPorts{Resolver: 15369, Mediator: 15370}
 
 	peers := []mediator.PeerTrust{{
 		Address: endpoint.MustParseAuthority(sni),
 		Trust:   testutil.AnchorTrust(),
 	}}
 
-	c, err := capsule.New("aaaa-step", hp, peers, nil, 0, ca, testDialer(t))
+	c, err := capsule.New("aaaa-step", peers, nil, 0, ca, testDialer(t))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -797,7 +838,7 @@ func TestCapsule_AAAA_AllowedName_Empty(t *testing.T) {
 	}()
 
 	query := buildDNSQuery(t, sni, dnsmessage.TypeAAAA)
-	resp := udpDNSQuery(t, netip.AddrPortFrom(loopback, hp.Resolver).String(), query)
+	resp := udpDNSQuery(t, netip.AddrPortFrom(loopback, forwardPort(t, c, "-U", 53)).String(), query)
 
 	var p dnsmessage.Parser
 	h, err := p.Start(resp)
@@ -818,13 +859,13 @@ func TestCapsule_AAAA_AllowedName_Empty(t *testing.T) {
 
 func TestCapsule_SSHForward_PastaArgs(t *testing.T) {
 	ca := testCA(t)
-	hp := capsule.HostPorts{Resolver: 15373, Mediator: 15374}
 	targets := []capsule.SSHTarget{{Host: "git.example.com", HostKeys: []string{testHostKeyLine(t)}}}
 
-	c, err := capsule.New("ssh-step", hp, nil, targets, 40000, ca, testDialer(t))
+	c, err := capsule.New("ssh-step", nil, targets, 40000, ca, testDialer(t))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
+	startForTest(t, c)
 	args := c.PastaArgs()
 	// The front forward must appear as -T 22:<frontHostPort>; SSH egress
 	// reaches the peer through the front, not a per-peer forward.
@@ -848,10 +889,9 @@ func TestCapsule_SSHForward_PastaArgs(t *testing.T) {
 
 func TestCapsule_New_SSHTargets_RequireFrontPort(t *testing.T) {
 	ca := testCA(t)
-	hp := capsule.HostPorts{Resolver: 15385, Mediator: 15386}
 	targets := []capsule.SSHTarget{{Host: "git.example.com", HostKeys: []string{testHostKeyLine(t)}}}
 
-	_, err := capsule.New("bad-step", hp, nil, targets, 0, ca, testDialer(t))
+	_, err := capsule.New("bad-step", nil, targets, 0, ca, testDialer(t))
 	if err == nil {
 		t.Fatal("expected error when frontHostPort is 0 with SSH targets")
 	}
@@ -862,7 +902,7 @@ func TestCapsule_New_SSHTargets_RequireFrontPort(t *testing.T) {
 
 func TestCapsule_NoSSH_NoFrontForward(t *testing.T) {
 	ca := testCA(t)
-	c, err := capsule.New("no-ssh", testPorts(), nil, nil, 0, ca, testDialer(t))
+	c, err := capsule.New("no-ssh", nil, nil, 0, ca, testDialer(t))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -876,7 +916,7 @@ func TestCapsule_NoSSH_NoFrontForward(t *testing.T) {
 
 func TestTokens_NoSSHTargets_Empty(t *testing.T) {
 	ca := testCA(t)
-	c, err := capsule.New("step", testPorts(), nil, nil, 0, ca, testDialer(t))
+	c, err := capsule.New("step", nil, nil, 0, ca, testDialer(t))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -887,7 +927,7 @@ func TestTokens_NoSSHTargets_Empty(t *testing.T) {
 
 func TestSSHConfig_NoSSHTargets_Nil(t *testing.T) {
 	ca := testCA(t)
-	c, err := capsule.New("step", testPorts(), nil, nil, 0, ca, testDialer(t))
+	c, err := capsule.New("step", nil, nil, 0, ca, testDialer(t))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -898,10 +938,9 @@ func TestSSHConfig_NoSSHTargets_Nil(t *testing.T) {
 
 func TestTokens_OneSSHTarget(t *testing.T) {
 	ca := testCA(t)
-	hp := capsule.HostPorts{Resolver: 15376, Mediator: 15377}
 	targets := []capsule.SSHTarget{{Host: "git.example.com", HostKeys: []string{testHostKeyLine(t)}}}
 
-	c, err := capsule.New("tok-step", hp, nil, targets, 40000, ca, testDialer(t))
+	c, err := capsule.New("tok-step", nil, targets, 40000, ca, testDialer(t))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -920,10 +959,9 @@ func TestTokens_OneSSHTarget(t *testing.T) {
 
 func TestSSHConfig_OneSSHTarget_Structure(t *testing.T) {
 	ca := testCA(t)
-	hp := capsule.HostPorts{Resolver: 15379, Mediator: 15380}
 	targets := []capsule.SSHTarget{{Host: "git.example.com", HostKeys: []string{testHostKeyLine(t)}}}
 
-	c, err := capsule.New("cfg-step", hp, nil, targets, 40000, ca, testDialer(t))
+	c, err := capsule.New("cfg-step", nil, targets, 40000, ca, testDialer(t))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -1021,10 +1059,9 @@ func TestCloseOutbound_ForceClosesTrackedClient(t *testing.T) {
 	// Build a capsule with one SSH target, track the client, then CloseOutbound.
 	ca := testCA(t)
 	hostKeyLine := strings.TrimSpace(string(ssh.MarshalAuthorizedKey(hostSigner.PublicKey())))
-	hp := capsule.HostPorts{Resolver: 15500, Mediator: 15501}
 	srvAddr := netip.MustParseAddrPort(srvLn.Addr().String())
 	targets := []capsule.SSHTarget{{Host: primitive.Host(srvAddr.Addr().String()), HostKeys: []string{hostKeyLine}, Port: srvAddr.Port()}}
-	caps, capsErr := capsule.New("close-step", hp, nil, targets, 40000, ca, testDialer(t))
+	caps, capsErr := capsule.New("close-step", nil, targets, 40000, ca, testDialer(t))
 	if capsErr != nil {
 		t.Fatal(capsErr)
 	}
@@ -1051,7 +1088,7 @@ func TestCloseOutbound_ForceClosesTrackedClient(t *testing.T) {
 
 func TestCloseOutbound_NoSSH_Noop(t *testing.T) {
 	ca := testCA(t)
-	caps, err := capsule.New("no-ssh", testPorts(), nil, nil, 0, ca, testDialer(t))
+	caps, err := capsule.New("no-ssh", nil, nil, 0, ca, testDialer(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1062,10 +1099,9 @@ func TestCloseOutbound_NoSSH_Noop(t *testing.T) {
 
 func TestTokens_IsSnapshot(t *testing.T) {
 	ca := testCA(t)
-	hp := capsule.HostPorts{Resolver: 15382, Mediator: 15383}
 	targets := []capsule.SSHTarget{{Host: "git.example.com", HostKeys: []string{testHostKeyLine(t)}}}
 
-	c, err := capsule.New("snap-step", hp, nil, targets, 40000, ca, testDialer(t))
+	c, err := capsule.New("snap-step", nil, targets, 40000, ca, testDialer(t))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}

@@ -24,6 +24,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -36,7 +37,6 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/static"
 	"github.com/google/go-containerregistry/pkg/v1/types"
 
-	"github.com/istr/strike/internal/capsule"
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/deploy"
@@ -57,9 +57,7 @@ const (
 )
 
 // deployCapsuleFields populates the capsule-related Deployer fields needed
-// by tests that exercise captureOne or method execution. portKeys lists
-// every StepPorts key the test's step will look up (capture keys and/or
-// the step name itself).
+// by tests that exercise captureOne or method execution.
 // probedResolver is the resolver observation a Deployer that seals an
 // attestation carries. Execute projects it into the sealed record, whose
 // dialedIP is a schema-constrained address literal, so a zero observation
@@ -71,7 +69,7 @@ func probedResolver() deploy.ResolverProbe {
 	}}
 }
 
-func deployCapsuleFields(t *testing.T, portKeys ...string) (ca *transport.EphemeralCA, dialer *transport.Dialer, caVolume string, ports map[string]capsule.HostPorts) {
+func deployCapsuleFields(t *testing.T) (ca *transport.EphemeralCA, dialer *transport.Dialer, caVolume string) {
 	t.Helper()
 	var err error
 	ca, err = transport.New("deploy-test")
@@ -84,15 +82,7 @@ func deployCapsuleFields(t *testing.T, portKeys ...string) (ca *transport.Epheme
 
 	dialer = testutil.StartDoTResolver(t, netip.MustParseAddr("127.0.0.1"))
 
-	ports = make(map[string]capsule.HostPorts, len(portKeys))
-	base := uint16(16000)
-	for i, k := range portKeys {
-		ports[k] = capsule.HostPorts{
-			Resolver: base + uint16(i)*2,
-			Mediator: base + uint16(i)*2 + 1,
-		}
-	}
-	return ca, dialer, caVolume, ports
+	return ca, dialer, caVolume
 }
 
 // registryDeployFixture is the shared setup for the tests that must run a
@@ -351,8 +341,7 @@ func TestDeployerExecute(t *testing.T) {
 		},
 	}
 
-	ca, dialer, caPath, ports := deployCapsuleFields(t,
-		"capture:deploy-prod:version", "deploy-prod")
+	ca, dialer, caPath := deployCapsuleFields(t)
 
 	d := &deploy.Deployer{
 		Engine:       fx.engine,
@@ -363,7 +352,6 @@ func TestDeployerExecute(t *testing.T) {
 		Dialer:       dialer,
 		CAVolume:     caPath,
 		StepID:       "deploy-prod",
-		StepPorts:    ports,
 		Resolver:     probedResolver(),
 	}
 	deploy.SetProduceBundles(d, stubProduceBundles())
@@ -485,8 +473,7 @@ func TestDeployerExecuteRegistryAttachesReferrers(t *testing.T) {
 		},
 	}
 
-	ca, dialer, caPath, ports := deployCapsuleFields(t,
-		"capture:deploy-prod:version", "deploy-prod")
+	ca, dialer, caPath := deployCapsuleFields(t)
 
 	d := &deploy.Deployer{
 		Engine:     eng,
@@ -496,13 +483,12 @@ func TestDeployerExecuteRegistryAttachesReferrers(t *testing.T) {
 			"image": {Step: "build"},
 			"web":   {Step: "web", Output: &distOut},
 		},
-		LaneID:    "test-lane",
-		CA:        ca,
-		Dialer:    dialer,
-		CAVolume:  caPath,
-		StepID:    "deploy-prod",
-		StepPorts: ports,
-		Resolver:  probedResolver(),
+		LaneID:   "test-lane",
+		CA:       ca,
+		Dialer:   dialer,
+		CAVolume: caPath,
+		StepID:   "deploy-prod",
+		Resolver: probedResolver(),
 	}
 	deploy.SetProduceBundles(d, stubProduceBundles())
 	att, execErr := d.Execute(context.Background(), step, state)
@@ -824,8 +810,7 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 		},
 	}
 
-	ca, dialer, caPath, ports := deployCapsuleFields(t,
-		"capture:deploy-prod:version", "deploy-prod")
+	ca, dialer, caPath := deployCapsuleFields(t)
 
 	d := &deploy.Deployer{
 		Engine: fx.engine, EngineID: fx.engine.Identity(),
@@ -836,7 +821,6 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 		Dialer:       dialer,
 		CAVolume:     caPath,
 		StepID:       "deploy-prod",
-		StepPorts:    ports,
 		Resolver:     probedResolver(),
 	}
 	deploy.SetProduceBundles(d, stubProduceBundles())
@@ -940,17 +924,15 @@ func TestDeployerExecute_RequiredPreStateFails(t *testing.T) {
 		},
 	}
 
-	ca, dialer, caPath, ports := deployCapsuleFields(t,
-		"capture:deploy-fail-pre:version", "deploy-fail-pre")
+	ca, dialer, caPath := deployCapsuleFields(t)
 
 	d := &deploy.Deployer{
-		Engine:    eng,
-		LaneID:    "test-lane",
-		CA:        ca,
-		Dialer:    dialer,
-		CAVolume:  caPath,
-		StepID:    "deploy-fail-pre",
-		StepPorts: ports,
+		Engine:   eng,
+		LaneID:   "test-lane",
+		CA:       ca,
+		Dialer:   dialer,
+		CAVolume: caPath,
+		StepID:   "deploy-fail-pre",
 	}
 	deploy.SetProduceBundles(d, stubProduceBundles())
 	_, err := d.Execute(context.Background(), step, state)
@@ -987,8 +969,7 @@ func TestDeployerExecute_KeylessBundles(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ca, dialer, caPath, ports := deployCapsuleFields(t,
-		"capture:deploy-prod:version", "deploy-prod")
+	ca, dialer, caPath := deployCapsuleFields(t)
 
 	step := deployStep(t, fx.method)
 	d := &deploy.Deployer{
@@ -1001,7 +982,6 @@ func TestDeployerExecute_KeylessBundles(t *testing.T) {
 		Dialer:       dialer,
 		CAVolume:     caPath,
 		StepID:       "deploy-prod",
-		StepPorts:    ports,
 		Resolver:     probedResolver(),
 	}
 	var producedBundles [][]byte
@@ -1045,8 +1025,7 @@ func TestDeployerExecute_KeylessFailureIsFatal(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ca, dialer, caPath, ports := deployCapsuleFields(t,
-		"capture:deploy-prod:version", "deploy-prod")
+	ca, dialer, caPath := deployCapsuleFields(t)
 
 	step := deployStep(t, fx.method)
 	d := &deploy.Deployer{
@@ -1058,7 +1037,6 @@ func TestDeployerExecute_KeylessFailureIsFatal(t *testing.T) {
 		Dialer:       dialer,
 		CAVolume:     caPath,
 		StepID:       "deploy-prod",
-		StepPorts:    ports,
 		Resolver:     probedResolver(),
 	}
 	wantErr := errors.New("keyless: fulcio unreachable")
@@ -1156,6 +1134,8 @@ func TestDeployExecute_StepTimeoutWithMediatedConnection(t *testing.T) {
 
 	waiting := make(chan struct{}, 1)
 	removed := make(chan string, 4)
+	mediatorPorts := make(chan string, 1)
+	mediatorForward := regexp.MustCompile(`443:(\d+)`)
 
 	eng := newTLSTestEngine(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		p := r.URL.Path
@@ -1163,6 +1143,18 @@ func TestDeployExecute_StepTimeoutWithMediatedConnection(t *testing.T) {
 		case isContainerInspect(r):
 			writeHardenedInspect(t, w)
 		case strings.HasSuffix(p, "/containers/create"):
+			// The capsule binds a kernel-assigned mediator port; the
+			// pasta forward in the create spec is where it is named.
+			body, readErr := io.ReadAll(r.Body)
+			if readErr != nil {
+				t.Errorf("read create body: %v", readErr)
+			}
+			if m := mediatorForward.FindSubmatch(body); m != nil {
+				select {
+				case mediatorPorts <- string(m[1]):
+				default:
+				}
+			}
 			writeJSON(t, w, map[string]string{"Id": "capture-container"})
 
 		case strings.HasSuffix(p, "/start"):
@@ -1187,8 +1179,7 @@ func TestDeployExecute_StepTimeoutWithMediatedConnection(t *testing.T) {
 		}
 	}))
 
-	captureKey := "capture:timeout-step:probe"
-	ca, dialer, caVolume, ports := deployCapsuleFields(t, captureKey, "timeout-step")
+	ca, dialer, caVolume := deployCapsuleFields(t)
 
 	peer := endpoint.TLS{
 		Type:    "https",
@@ -1226,7 +1217,6 @@ func TestDeployExecute_StepTimeoutWithMediatedConnection(t *testing.T) {
 		Dialer:     dialer,
 		CAVolume:   caVolume,
 		StepID:     "timeout-step",
-		StepPorts:  ports,
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*clock.Second)
@@ -1249,7 +1239,7 @@ func TestDeployExecute_StepTimeoutWithMediatedConnection(t *testing.T) {
 		t.Fatal("the capture container's wait never reached the engine")
 	}
 
-	mediatorAddr := netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), ports[captureKey].Mediator).String()
+	mediatorAddr := net.JoinHostPort("127.0.0.1", <-mediatorPorts)
 	pool := x509.NewCertPool()
 	if !pool.AppendCertsFromPEM(ca.PublicCertPEM()) {
 		t.Fatal("append CA cert to pool")
