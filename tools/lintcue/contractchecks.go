@@ -91,9 +91,10 @@ func primitiveConstraints(root string) map[string]string {
 
 func appendFieldFindings(fs []string, field *ast.Field, prims map[string]string) []string {
 	name := labelName(field.Label)
+	// ADR-049 rule 5: a string disjunction is a named type, never inline.
 	if !isDefinitionLabel(name) && isStringDisjunction(field.Value) {
 		fs = append(fs, finding(field, "inline-string-disjunction", fmt.Sprintf(
-			"field %q inlines a string disjunction; define a named type and reference it (ADR-049 rule 5)",
+			"field %q inlines a string disjunction; define a named type and reference it",
 			name)))
 	}
 	if !isDefinitionLabel(name) {

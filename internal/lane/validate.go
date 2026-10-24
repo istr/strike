@@ -541,7 +541,7 @@ func validateDeployMethodImplemented(p *Lane) error {
 		}
 		if _, ok := s.Deploy.Method.(DeployKubernetes); ok {
 			return fmt.Errorf(
-				"step %q: kubernetes deploy method is not yet implemented (ADR-054)", s.ID)
+				"step %q: kubernetes deploy method is not yet implemented", s.ID)
 		}
 	}
 	return nil

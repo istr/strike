@@ -75,7 +75,7 @@ func (r Run) Execute(ctx context.Context) (string, error) {
 	// structurally, so an execute-by-tag path cannot reappear.
 	img := string(opts.Image)
 	if !strings.Contains(img, "@sha256:") {
-		return "", fmt.Errorf("executor: refusing to run non-digest-pinned image %q (ADR-045)", opts.Image)
+		return "", fmt.Errorf("executor: refusing to run non-digest-pinned image %q", opts.Image)
 	}
 	opts.Cmd = r.Step.Args
 	opts.Env = env

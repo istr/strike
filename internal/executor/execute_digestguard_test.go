@@ -28,17 +28,17 @@ func TestExecute_DigestGuard(t *testing.T) {
 		{
 			name:    "mutable tag rejected",
 			image:   primitive.ImageRefPtr("alpine:latest"),
-			wantErr: "ADR-045",
+			wantErr: "non-digest-pinned image",
 		},
 		{
 			name:    "empty image rejected",
-			wantErr: "ADR-045",
+			wantErr: "non-digest-pinned image",
 		},
 		{
 			name:     "image_from tag override rejected",
 			image:    primitive.ImageRefPtr(digest),
 			imageRef: "localhost/strike/lane/step:spechash",
-			wantErr:  "ADR-045",
+			wantErr:  "non-digest-pinned image",
 		},
 		{
 			name:        "digest reference passes guard",
@@ -63,8 +63,8 @@ func TestExecute_DigestGuard(t *testing.T) {
 			if !strings.Contains(err.Error(), tt.wantErr) {
 				t.Errorf("error = %v, want substring %q", err, tt.wantErr)
 			}
-			if tt.wantNoGuard && strings.Contains(err.Error(), "ADR-045") {
-				t.Errorf("digest image tripped the ADR-045 guard: %v", err)
+			if tt.wantNoGuard && strings.Contains(err.Error(), "non-digest-pinned image") {
+				t.Errorf("digest image tripped the digest guard: %v", err)
 			}
 		})
 	}

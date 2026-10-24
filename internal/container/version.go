@@ -40,8 +40,7 @@ func RequireVersion(engine Engine, minVersion string) error {
 	}
 	if compareVersions(haveParts, wantParts) < 0 {
 		return fmt.Errorf("container engine: version %s is below required %s; "+
-			"strike requires Podman %s or later (see docs/SPIKE-rootless-netns-backend.md)",
-			have, minVersion, minVersion)
+			"strike requires Podman %s or later", have, minVersion, minVersion)
 	}
 	return nil
 }

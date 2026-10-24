@@ -125,7 +125,7 @@ func (d *DAG) ValidateLeavesAreDeploys(p *Lane) error {
 		if len(d.reverse[s.ID]) == 0 {
 			return fmt.Errorf("step %q is a non-deploy DAG leaf: nothing consumes "+
 				"its output and it is not a deploy step; a gate must produce an "+
-				"output the deploy consumes so it sits in the chain (ADR-039 D5)",
+				"output the deploy consumes so it sits in the chain",
 				s.ID)
 		}
 	}
