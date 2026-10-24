@@ -387,20 +387,22 @@ func assertReferrerSet(t *testing.T, descs []v1.Descriptor) {
 	}
 }
 
-// assertBundleReadable fetches one statement-bundle referrer and checks that
-// its single layer is the bundle document itself. Cryptographic verification
-// of the bundle is the verifier's job, not this test's.
+// assertBundleReadable fetches the sealed statement-bundle referrer and checks
+// that its single layer is the bundle document itself, and that the sealed
+// statement records the registry target as an observed peer together with the
+// DoT answers the push dialed from. Cryptographic verification of the bundle
+// is the verifier's job, not this test's.
 func assertBundleReadable(ctx context.Context, t *testing.T, caddyRoot, repo string, descs []v1.Descriptor) {
 	t.Helper()
 	var bundleDigest string
 	for _, d := range descs {
-		if d.ArtifactType == registry.SigstoreBundleMediaType {
+		if d.ArtifactType == registry.SigstoreBundleMediaType && d.Annotations[itestStatementAnnotation] == "sealed" {
 			bundleDigest = d.Digest.String()
 			break
 		}
 	}
 	if bundleDigest == "" {
-		t.Fatal("no statement-bundle referrer to read back")
+		t.Fatal("no sealed statement-bundle referrer to read back")
 	}
 	ref, err := name.NewDigest(itestRegistryHost + "/" + repo + "@" + bundleDigest)
 	if err != nil {
@@ -428,12 +430,38 @@ func assertBundleReadable(ctx context.Context, t *testing.T, caddyRoot, repo str
 	if readErr != nil {
 		t.Fatalf("read bundle layer: %v", readErr)
 	}
-	var parsed map[string]any
+	var parsed struct {
+		MediaType *string `json:"mediaType"`
+		Envelope  struct {
+			Payload []byte `json:"payload"`
+		} `json:"dsseEnvelope"`
+	}
 	if jsonErr := json.Unmarshal(raw, &parsed); jsonErr != nil {
 		t.Fatalf("bundle layer is not JSON: %v", jsonErr)
 	}
-	if _, ok := parsed["mediaType"]; !ok {
+	if parsed.MediaType == nil {
 		t.Errorf("bundle document has no mediaType field")
+	}
+	var statement struct {
+		Predicate struct {
+			BuildDefinition struct {
+				ExternalParameters struct {
+					ObservedPeers map[string]struct {
+						Resolved []string `json:"resolved"`
+					} `json:"observedPeers"`
+				} `json:"externalParameters"`
+			} `json:"buildDefinition"`
+		} `json:"predicate"`
+	}
+	if jsonErr := json.Unmarshal(parsed.Envelope.Payload, &statement); jsonErr != nil {
+		t.Fatalf("sealed statement is not JSON: %v", jsonErr)
+	}
+	peer, ok := statement.Predicate.BuildDefinition.ExternalParameters.ObservedPeers[itestRegistryHost]
+	if !ok {
+		t.Fatalf("sealed observedPeers has no entry for the registry target %s", itestRegistryHost)
+	}
+	if len(peer.Resolved) == 0 {
+		t.Errorf("sealed observedPeers[%s].resolved is empty; the push resolved the target through the lane resolver", itestRegistryHost)
 	}
 }
 

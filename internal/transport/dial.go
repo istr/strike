@@ -60,8 +60,10 @@ type ConnectionIdentity struct {
 	// the peer during the handshake. Index 0 is the leaf cert.
 	// Empty if no certs were presented (which would have caused
 	// verification to fail; this field is for post-success
-	// inspection).
-	PeerCertificates []*x509.Certificate
+	// inspection). Kept out of JSON: the run state is logged as JSON
+	// and every record that leaves the process carries the leaf
+	// fingerprint instead, so a serialized chain only floods the log.
+	PeerCertificates []*x509.Certificate `json:"-"`
 
 	// TLSVersion is the negotiated TLS version. External-peer hops
 	// (DoT resolver, mediator upstream) floor at TLS 1.2 and prefer
@@ -80,12 +82,19 @@ type ConnectionIdentity struct {
 // verified connection is available via Conn().
 type VerifiedConn struct {
 	conn     *tls.Conn
+	resolved []netip.Addr // the DoT answers the dial chose from; nil for a dial by address
 	identity ConnectionIdentity
 }
 
 // Identity returns the connection identity captured at handshake.
 func (c *VerifiedConn) Identity() ConnectionIdentity {
 	return c.identity
+}
+
+// Resolved returns the addresses the lane's DoT resolver returned for the
+// peer name when the connection was dialed by name (DialPeer), nil otherwise.
+func (c *VerifiedConn) Resolved() []netip.Addr {
+	return c.resolved
 }
 
 // Conn returns the underlying verified TLS connection.

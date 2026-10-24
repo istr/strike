@@ -10,6 +10,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/hex"
+	"encoding/json"
 	"io"
 	"math/big"
 	"net"
@@ -182,6 +183,9 @@ func TestDialResolved_LeafMatch(t *testing.T) {
 		t.Fatalf("DialResolved: %v", err)
 	}
 	defer closer.Warn(conn.Conn(), "test verified conn")
+	if got := conn.Resolved(); got != nil {
+		t.Errorf("Resolved = %v, want nil for a dial by address", got)
+	}
 	id := conn.Identity()
 	if want := leafDigest(cert); id.LeafFingerprint != want {
 		t.Errorf("Identity.LeafFingerprint = %q, want %q", id.LeafFingerprint, want)
@@ -278,6 +282,15 @@ func TestDialResolved_RootCAValid(t *testing.T) {
 	}
 	if len(id.PeerCertificates) == 0 {
 		t.Error("expected at least one peer certificate")
+	}
+	// The chain is for in-process inspection only; the logged run state
+	// carries the identity as JSON and must not expand it.
+	raw, err := json.Marshal(id)
+	if err != nil {
+		t.Fatalf("marshal identity: %v", err)
+	}
+	if strings.Contains(string(raw), "PeerCertificates") {
+		t.Errorf("identity JSON carries the certificate chain: %d bytes", len(raw))
 	}
 }
 

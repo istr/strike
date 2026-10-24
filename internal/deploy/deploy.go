@@ -357,14 +357,15 @@ func (d *Deployer) buildAttestation(
 	}
 	// The control-plane push connection is a Layer-V observation of the
 	// declared registry target: the identity verified on the one permitted
-	// dial enters the observed-peer set under the declared authority.
+	// dial and the DoT answers it was dialed from enter the observed-peer set
+	// under the declared authority.
 	// The pushed record is the registry-dereferenceable identity of the
 	// artifact; the artifact records carry the produced identity the export was
 	// checked against. Both are sealed, and their divergence is the attested
 	// record of the engine's export re-encoding (ADR-051 D4/D6, ADR-046).
 	var pushed *PushedArtifact
 	if push != nil {
-		if err := addObservedPeer(push.authority, nil, push.observed, observedPeers); err != nil {
+		if err := addObservedPeer(push.authority, push.resolved, push.observed, observedPeers); err != nil {
 			return nil, err
 		}
 		pushed = &PushedArtifact{
@@ -709,6 +710,7 @@ type attachTarget struct {
 	ref        string                                  // deploy target repository (authority/name)
 	authority  endpoint.Authority                      // declared target authority (ObservedPeers key)
 	repository primitive.OCIName                       // declared target repository name (Sealed.Pushed)
+	resolved   []netip.Addr                            // DoT answers for the target across the push connections
 }
 
 // executeMethod dispatches to the appropriate deploy method. It returns a
@@ -731,7 +733,7 @@ func (d *Deployer) executeMethod(ctx context.Context, spec lane.DeploySpec, stat
 func rejectSSHPeers(peers []lane.Peer) error {
 	for _, p := range peers {
 		if _, ok := p.(endpoint.SSH); ok {
-			return fmt.Errorf("deploy SSH peers not yet implemented (ADR-038)")
+			return fmt.Errorf("deploy SSH peers not yet implemented")
 		}
 	}
 	return nil

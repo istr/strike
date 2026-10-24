@@ -92,7 +92,12 @@ func (d *Dialer) DialPeer(ctx context.Context, name primitive.Host, port primiti
 		return nil, fmt.Errorf("transport: no addresses resolved for %s", name)
 	}
 	dialPort := uint16(port)
-	return DialResolved(ctx, netip.AddrPortFrom(addrs[0], dialPort), name, trust)
+	vc, err := DialResolved(ctx, netip.AddrPortFrom(addrs[0], dialPort), name, trust)
+	if err != nil {
+		return nil, err
+	}
+	vc.resolved = addrs
+	return vc, nil
 }
 
 // Probe performs a one-shot DNS-over-TLS roundtrip against the declared

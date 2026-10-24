@@ -3,6 +3,7 @@ package transport_test
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 	"net/netip"
 	"strings"
 	"testing"
@@ -119,6 +120,11 @@ func TestDialerDialPeer_ResolvesThenVerifies(t *testing.T) {
 	want := endpoint.Address{Host: "peer.example", Port: &port}.Authority()
 	if got := conn.Identity().PeerAddress.Authority(); got != want {
 		t.Errorf("PeerAddress = %q, want %q", got, want)
+	}
+	// The DoT answer the dial chose from travels with the connection, so a
+	// caller can record the resolution beside the identity.
+	if got := fmt.Sprint(conn.Resolved()); got != "[127.0.0.1]" {
+		t.Errorf("Resolved = %s, want [127.0.0.1]", got)
 	}
 }
 

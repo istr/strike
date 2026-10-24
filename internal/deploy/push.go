@@ -8,6 +8,7 @@ import (
 	"maps"
 	"net"
 	"net/http"
+	"net/netip"
 	"slices"
 	"sync"
 
@@ -94,7 +95,7 @@ func (d *Deployer) executeRegistryDeploy(ctx context.Context, m lane.DeployRegis
 	}
 	maps.Copy(sboms, regionSets)
 
-	id, ok := obs.get()
+	id, resolved, ok := obs.get()
 	if !ok {
 		return nil, fmt.Errorf("registry deploy: no validated push connection observed")
 	}
@@ -102,6 +103,7 @@ func (d *Deployer) executeRegistryDeploy(ctx context.Context, m lane.DeployRegis
 		subject:    subject,
 		rt:         rt,
 		observed:   ObservedTLS{Type: "https", ServerCertFingerprint: id.LeafFingerprint},
+		resolved:   resolved,
 		sboms:      sboms,
 		ref:        repo,
 		authority:  m.Target.Address.Authority(),
@@ -311,26 +313,32 @@ func pushByDigest(ctx context.Context, repo, digest string, img v1.Image, rt htt
 	return remote.Write(dst, img, remote.WithTransport(rt), remote.WithContext(ctx))
 }
 
-// pushIdentityCapture records the first validated push-connection identity.
+// pushIdentityCapture records the first validated push-connection identity
+// and the union of the DoT answers across every push connection, the
+// resolution the observed peer carries like a mediated peer does.
 type pushIdentityCapture struct {
-	id transport.ConnectionIdentity
-	mu sync.Mutex
-	ok bool
+	resolved []netip.Addr
+	id       transport.ConnectionIdentity
+	mu       sync.Mutex
+	ok       bool
 }
 
-func (c *pushIdentityCapture) record(id transport.ConnectionIdentity) {
+func (c *pushIdentityCapture) record(vc *transport.VerifiedConn) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if !c.ok {
-		c.id = id
+		c.id = vc.Identity()
 		c.ok = true
+	}
+	for _, a := range vc.Resolved() {
+		c.resolved = appendUnique(c.resolved, a)
 	}
 }
 
-func (c *pushIdentityCapture) get() (transport.ConnectionIdentity, bool) {
+func (c *pushIdentityCapture) get() (transport.ConnectionIdentity, []netip.Addr, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.id, c.ok
+	return c.id, c.resolved, c.ok
 }
 
 // HTTPSOnly wraps inner so every request is rewritten onto the https scheme
@@ -398,7 +406,7 @@ func newRegistryTransport(target lane.DeployRegistryTarget, dialer *transport.Di
 			if dialErr != nil {
 				return nil, dialErr
 			}
-			capture.record(vc.Identity())
+			capture.record(vc)
 			return vc.Conn(), nil
 		},
 		DialContext: func(_ context.Context, _, addr string) (net.Conn, error) {
