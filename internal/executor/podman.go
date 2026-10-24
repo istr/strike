@@ -48,7 +48,7 @@ type Run struct {
 // created, so the caller can always clean up.
 func (r Run) Execute(ctx context.Context) (string, error) {
 	// Build environment (non-sensitive + secrets)
-	env := make(map[string]string, len(r.Step.Env)+len(r.Secrets)+2)
+	env := make(map[string]string, len(r.Step.Env)+len(r.Secrets))
 	for k, v := range r.Step.Env {
 		env[k] = v
 	}
@@ -58,8 +58,6 @@ func (r Run) Execute(ctx context.Context) (string, error) {
 		log.Printf("SECRET %s=%s", k, v)
 		env[k] = v.Expose()
 	}
-	env["XDG_RUNTIME_DIR"] = "/tmp/run"
-	env["XDG_DATA_HOME"] = "/tmp/data"
 
 	// The container has no bind mounts: inputs are seeded into the workdir
 	// volume before start (r.Seeds), trust material rides named volumes, and

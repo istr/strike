@@ -230,6 +230,9 @@ image, execute from /out or /tmp, create setuid binaries, reach a peer it did
 not declare, write anywhere except /out and /tmp, survive past its own exit,
 or escalate privileges.
 
+A step container's environment is exactly the step's declared `env` plus its
+resolved secrets; the executor injects no variables of its own.
+
 Steps have a configurable timeout (default: 10 minutes). When a step
 exceeds its timeout, the context is cancelled and the container is
 forcibly removed. Set per-step via `timeout: "30s"` in the lane
@@ -277,11 +280,3 @@ The following tools run in CI on every change:
 - **govulncheck** -- official Go security team tool, reports only
   actually-reachable vulnerable functions in dependencies.
 - **go test -race** -- detects data races in concurrent code.
-
-## Container storage paths
-
-The executor injects `XDG_RUNTIME_DIR=/tmp/run` and `XDG_DATA_HOME=/tmp/data`
-into every container step. Container images that invoke podman internally will
-automatically use `/tmp`-based storage paths, writable for any UID. This is
-intentional and part of the execution model -- it ensures nested rootless podman
-works regardless of the container image's default user or home directory layout.
