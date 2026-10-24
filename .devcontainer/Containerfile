@@ -6,7 +6,7 @@
 # life, and the agent arrives through a Dev Containers feature at a floating
 # version. It is the measured baseline the conforming rework starts from,
 # not a precedent for either practice.
-FROM docker.io/library/golang:1.26.8@sha256:2d54f6c8c6ea532a321e0b4c69553b2ed3637608d4f4357dbed37939fe2620cc
+FROM docker.io/library/golang:1.26.10@sha256:3eca740eb349175cc59f462d409fc324a8239ab3ffdf73d8e63175a041c08b6b
 RUN ["apt-get", "update"]
 RUN ["apt-get", "install", "-y", "--no-install-recommends", "nodejs", "npm"]
 RUN ["go", "install", "github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.2"]

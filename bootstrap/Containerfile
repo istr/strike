@@ -15,7 +15,7 @@
 # GIT_COMMIT=<commit-sha> ; podman build -t strike:stage_1 --build-arg GIT_COMMIT=${GIT_COMMIT} https://raw.githubusercontent.com/istr/strike/${GIT_COMMIT}/bootstrap/Containerfile
 # podman run --env COSIGN_PRIVATE_KEY --env COSIGN_PASSWORD --security-opt unmask=/proc/* --mount type=tmpfs,dst=/podman/.local/share/containers/storage,U --userns=keep-id strike:stage_1
 #
-FROM docker.io/library/golang:1.26.8-alpine@sha256:6e5de3f5b9fb7e30b8bb2ffe8dcbcbdaa2990f0f31267456eabe83f870a623be AS builder
+FROM docker.io/library/golang:1.26.10-alpine@sha256:d1f3216ef30257c850cc136ba42a359ccd9d3e75f19b2c276e520c0b4ef327ce AS builder
 ARG GIT_COMMIT
 RUN ["apk", "add", "--no-cache", "git"]
 WORKDIR /src
