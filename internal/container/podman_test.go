@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -232,6 +233,8 @@ func TestContainerRun(t *testing.T) {
 		path := r.URL.Path
 
 		switch {
+		case isContainerInspect(r):
+			writeHardenedInspect(t, w, "FOO=bar")
 		case strings.HasSuffix(path, "/containers/create"):
 			body, err := io.ReadAll(r.Body)
 			if err != nil {
@@ -266,11 +269,11 @@ func TestContainerRun(t *testing.T) {
 	var stderr bytes.Buffer
 
 	exitCode, err := eng.ContainerRun(context.Background(), container.RunOpts{
-		Env:         map[string]string{"FOO": "bar"},
-		Tmpfs:       map[string]string{"/tmp": "rw,noexec,nosuid,size=512m"},
-		Cmd:         []string{"echo", "hello"},
-		CapDrop:     []string{"ALL"},
-		SecurityOpt: []string{"no-new-privileges"},
+		Env:             map[string]string{"FOO": "bar"},
+		Tmpfs:           map[string]string{"/tmp": "rw,noexec,nosuid,size=512m"},
+		Cmd:             []string{"echo", "hello"},
+		CapDrop:         []string{"ALL"},
+		NoNewPrivileges: true,
 		Mounts: []container.Mount{
 			{Source: "/host/src", Target: "/src", ReadOnly: true},
 		},
@@ -303,6 +306,18 @@ func verifySpecGenerator(t *testing.T, capturedSpec map[string]any) {
 	}
 	if capturedSpec["read_only_filesystem"] != true {
 		t.Errorf("spec read_only_filesystem = %v, want true", capturedSpec["read_only_filesystem"])
+	}
+	if capturedSpec["no_new_privileges"] != true {
+		t.Errorf("spec no_new_privileges = %v, want true", capturedSpec["no_new_privileges"])
+	}
+	if capturedSpec["base_hosts_file"] != "none" {
+		t.Errorf("spec base_hosts_file = %v, want none", capturedSpec["base_hosts_file"])
+	}
+	if got := fmt.Sprint(capturedSpec["dns_search"]); got != "[.]" {
+		t.Errorf("spec dns_search = %s, want [.]", got)
+	}
+	if got := fmt.Sprint(capturedSpec["hostadd"]); got != "[host.containers.internal:127.0.0.1 host.docker.internal:127.0.0.1]" {
+		t.Errorf("spec hostadd = %s, want both engine aliases on loopback", got)
 	}
 	env, ok := capturedSpec["env"].(map[string]any)
 	if !ok {
@@ -375,6 +390,8 @@ func captureCreateHandler(t *testing.T, spec *map[string]any) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		p := r.URL.Path
 		switch {
+		case isContainerInspect(r):
+			writeHardenedInspect(t, w)
 		case strings.HasSuffix(p, "/containers/create"):
 			body, err := io.ReadAll(r.Body)
 			if err != nil {
@@ -400,6 +417,8 @@ func TestContainerRunExitCode(t *testing.T) {
 	eng := newTLSTestEngine(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
 		switch {
+		case isContainerInspect(r):
+			writeHardenedInspect(t, w)
 		case strings.HasSuffix(path, "/containers/create"):
 			writeJSON(t, w, map[string]string{"Id": "fail-container"})
 		case strings.HasSuffix(path, "/start"):
@@ -426,6 +445,106 @@ func TestContainerRunExitCode(t *testing.T) {
 	}
 	if exitCode != 42 {
 		t.Fatalf("exitCode = %d, want 42", exitCode)
+	}
+}
+
+// TestContainerRun_ProfileNotApplied covers the post-create profile check: an
+// engine that accepted the create but did not apply a declared field, or that
+// merged configuration of its own, fails the run before start, and the created
+// container is removed.
+func TestContainerRun_ProfileNotApplied(t *testing.T) {
+	hostConfig := func(key string, v any) func(map[string]any) {
+		return func(m map[string]any) {
+			hc, ok := m["HostConfig"].(map[string]any)
+			if !ok {
+				t.Fatal("hardened inspect carries no HostConfig object")
+			}
+			hc[key] = v
+		}
+	}
+	env := func(kv ...string) func(map[string]any) {
+		return func(m map[string]any) { m["Config"] = map[string]any{"Env": kv} }
+	}
+	tests := []struct {
+		mutate      func(map[string]any)
+		name        string
+		wantErr     string
+		status      int
+		imageStatus int
+	}{
+		{name: "no-new-privileges dropped", wantErr: "no-new-privileges", mutate: hostConfig("SecurityOpt", []string{})},
+		{name: "read-only root dropped", wantErr: "read-only root filesystem", mutate: hostConfig("ReadonlyRootfs", false)},
+		{
+			name: "capabilities left", wantErr: "capabilities after cap-drop ALL",
+			mutate: func(m map[string]any) { m["EffectiveCaps"] = []string{"CAP_CHOWN"} },
+		},
+		{
+			name: "bounding set left", wantErr: "capabilities after cap-drop ALL",
+			mutate: func(m map[string]any) { m["BoundingCaps"] = []string{"CAP_KILL"} },
+		},
+		{
+			name: "keep-id not applied", wantErr: "keep-id mapping",
+			mutate: hostConfig("IDMappings", map[string]any{"UidMap": []string{"0:1:65536"}}),
+		},
+		{name: "endpoint hosts file merged", wantErr: "base hosts file", mutate: hostConfig("HostsFile", "")},
+		{name: "endpoint search domain merged", wantErr: "dns search", mutate: hostConfig("DnsSearch", []string{"example.internal"})},
+		{
+			name: "engine alias on the endpoint", wantErr: "extra hosts",
+			mutate: hostConfig("ExtraHosts", []string{"host.containers.internal:192.0.2.1"}),
+		},
+		{name: "engine env added", wantErr: "engine added env HTTP_PROXY", mutate: env("FOO=bar", "HTTP_PROXY=http://proxy")},
+		{name: "declared env changed", wantErr: "engine changed declared env FOO", mutate: env("FOO=other")},
+		{name: "declared env dropped", wantErr: "engine dropped declared env FOO", mutate: env()},
+		{name: "inspect fails", wantErr: "inspect: status 500", status: http.StatusInternalServerError},
+		{name: "image inspect fails", wantErr: "image test:latest not found", imageStatus: http.StatusNotFound},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var started, removed bool
+			eng := newTLSTestEngine(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				path := r.URL.Path
+				switch {
+				case isContainerInspect(r) && strings.Contains(path, "/images/"):
+					if tt.imageStatus != 0 {
+						w.WriteHeader(tt.imageStatus)
+						return
+					}
+					writeHardenedInspect(t, w)
+				case isContainerInspect(r):
+					if tt.status != 0 {
+						w.WriteHeader(tt.status)
+						return
+					}
+					body := hardenedInspect("FOO=bar")
+					if tt.mutate != nil {
+						tt.mutate(body)
+					}
+					writeJSON(t, w, body)
+				case strings.HasSuffix(path, "/containers/create"):
+					writeJSON(t, w, map[string]string{"Id": "weak-container"})
+				case strings.HasSuffix(path, "/start"):
+					started = true
+					w.WriteHeader(http.StatusNoContent)
+				case r.Method == http.MethodDelete:
+					removed = true
+					writeJSON(t, w, []map[string]any{})
+				}
+			}))
+			opts := container.DefaultSecureOpts()
+			opts.Image = "test:latest"
+			opts.Env = map[string]string{"FOO": "bar"}
+			opts.Stdout, opts.Stderr = io.Discard, io.Discard
+			_, err := eng.ContainerRun(context.Background(), opts)
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("ContainerRun() error = %v, want containing %q", err, tt.wantErr)
+			}
+			if started {
+				t.Error("container was started under a profile other than the declared one")
+			}
+			if !removed {
+				t.Error("created container was not removed after the profile check failed")
+			}
+		})
 	}
 }
 
@@ -766,8 +885,8 @@ func TestDefaultSecureOpts(t *testing.T) {
 	if !opts.ReadOnly {
 		t.Error("expected ReadOnly=true")
 	}
-	if len(opts.SecurityOpt) != 1 || opts.SecurityOpt[0] != "no-new-privileges" {
-		t.Errorf("SecurityOpt = %v, want [no-new-privileges]", opts.SecurityOpt)
+	if !opts.NoNewPrivileges {
+		t.Error("expected NoNewPrivileges=true")
 	}
 	tmpOpts, ok := opts.Tmpfs["/tmp"]
 	if !ok {
@@ -785,28 +904,38 @@ func TestDefaultSecureOpts(t *testing.T) {
 }
 
 func TestDetectSocket_XDGRuntime(t *testing.T) {
-	dir := t.TempDir()
-	sockDir := filepath.Join(dir, "podman")
-	if err := os.MkdirAll(sockDir, 0o750); err != nil {
-		t.Fatal(err)
+	tests := []struct {
+		name    string
+		want    string
+		present []string // socket paths under XDG_RUNTIME_DIR
+	}{
+		{name: "service socket", present: []string{"podman.sock"}, want: "podman.sock"},
+		{name: "socket unit", present: []string{"podman/podman.sock"}, want: "podman/podman.sock"},
+		{name: "service socket wins", present: []string{"podman.sock", "podman/podman.sock"}, want: "podman.sock"},
 	}
-	sockPath := filepath.Join(sockDir, "podman.sock")
-	if err := os.WriteFile(sockPath, nil, 0o600); err != nil {
-		t.Fatal(err)
-	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			for _, rel := range tt.present {
+				p := filepath.Join(dir, rel)
+				if err := os.MkdirAll(filepath.Dir(p), 0o750); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(p, nil, 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			t.Setenv("CONTAINER_HOST", "")
+			t.Setenv("XDG_RUNTIME_DIR", dir)
 
-	t.Setenv("CONTAINER_HOST", "")
-	t.Setenv("XDG_RUNTIME_DIR", dir)
-	t.Setenv("CONTAINER_TLS_CA", "")
-	t.Setenv("CONTAINER_TLS_CERT", "")
-	t.Setenv("CONTAINER_TLS_KEY", "")
-
-	eng, err := container.New()
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
-	if eng == nil {
-		t.Fatal("expected non-nil engine")
+			got, err := container.DetectSocket()
+			if err != nil {
+				t.Fatalf("DetectSocket() error = %v", err)
+			}
+			if want := "unix://" + filepath.Join(dir, tt.want); got != want {
+				t.Errorf("DetectSocket() = %q, want %q", got, want)
+			}
+		})
 	}
 }
 
@@ -837,6 +966,8 @@ func TestDemuxLogStream_StderrStream(t *testing.T) {
 	eng := newTLSTestEngine(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
 		switch {
+		case isContainerInspect(r):
+			writeHardenedInspect(t, w)
 		case strings.HasSuffix(path, "/containers/create"):
 			writeJSON(t, w, map[string]string{"Id": "test-stderr"})
 		case strings.HasSuffix(path, "/start"):
@@ -878,6 +1009,8 @@ func TestDemuxLogStream_UnknownStreamType(t *testing.T) {
 	eng := newTLSTestEngine(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
 		switch {
+		case isContainerInspect(r):
+			writeHardenedInspect(t, w)
 		case strings.HasSuffix(path, "/containers/create"):
 			writeJSON(t, w, map[string]string{"Id": "test-unknown"})
 		case strings.HasSuffix(path, "/start"):
@@ -944,6 +1077,8 @@ func TestContainerRun_WaitAbortedForcesRemove(t *testing.T) {
 	eng := newTLSTestEngine(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		p := r.URL.Path
 		switch {
+		case isContainerInspect(r):
+			writeHardenedInspect(t, w)
 		case strings.HasSuffix(p, "/containers/create"):
 			writeJSON(t, w, map[string]string{"Id": "stuck-container"})
 

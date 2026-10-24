@@ -301,6 +301,8 @@ func containerMock(t *testing.T, stdout string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
 		switch {
+		case isContainerInspect(r):
+			writeHardenedInspect(t, w)
 		case strings.HasSuffix(path, "/containers/create"):
 			writeJSON(t, w, map[string]string{"Id": "capture-ctr"})
 		case strings.HasSuffix(path, "/start"):
@@ -765,8 +767,8 @@ func TestHardenedRunOpts(t *testing.T) {
 	if !opts.ReadOnly {
 		t.Error("expected ReadOnly=true")
 	}
-	if len(opts.SecurityOpt) != 1 || opts.SecurityOpt[0] != "no-new-privileges" {
-		t.Errorf("SecurityOpt = %v, want [no-new-privileges]", opts.SecurityOpt)
+	if !opts.NoNewPrivileges {
+		t.Error("expected NoNewPrivileges=true")
 	}
 	tmpOpts, ok := opts.Tmpfs["/tmp"]
 	if !ok {
@@ -903,6 +905,8 @@ func TestDeployerExecute_RequiredPreStateFails(t *testing.T) {
 	failMock := func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
 		switch {
+		case isContainerInspect(r):
+			writeHardenedInspect(t, w)
 		case strings.HasSuffix(path, "/containers/create"):
 			writeJSON(t, w, map[string]string{"Id": "fail-ctr"})
 		case strings.HasSuffix(path, "/start"):
@@ -1156,6 +1160,8 @@ func TestDeployExecute_StepTimeoutWithMediatedConnection(t *testing.T) {
 	eng := newTLSTestEngine(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		p := r.URL.Path
 		switch {
+		case isContainerInspect(r):
+			writeHardenedInspect(t, w)
 		case strings.HasSuffix(p, "/containers/create"):
 			writeJSON(t, w, map[string]string{"Id": "capture-container"})
 

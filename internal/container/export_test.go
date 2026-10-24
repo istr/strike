@@ -56,6 +56,11 @@ type ContainerInspectConfigFields struct {
 	Cmd        []string `json:"Cmd"`
 }
 
+// DetectSocket exposes detectSocket so tests can observe which socket wins.
+func DetectSocket() (string, error) {
+	return detectSocket()
+}
+
 // PodmanContainerCreate exposes containerCreate for integration tests.
 func PodmanContainerCreate(ctx context.Context, eng Engine, opts RunOpts) (string, error) {
 	pe, ok := eng.(*podmanEngine)

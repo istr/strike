@@ -112,6 +112,7 @@ type ImageInfo struct {
 	ID          string
 	Digest      primitive.Digest
 	RepoDigests []string
+	Env         []string // the image config's "KEY=value" entries
 	Size        int64
 }
 
@@ -128,27 +129,27 @@ type Summary struct {
 
 // RunOpts configures a container execution.
 type RunOpts struct {
-	Stdin        io.Reader
-	Stderr       io.Writer
-	Stdout       io.Writer
-	Env          map[string]string
-	Tmpfs        map[string]string
-	Image        primitive.ImageRef
-	Network      string
-	UsernsMode   string
-	Workdir      string
-	Mounts       []Mount
-	ImageVolumes []ImageVolume
-	TrustVolumes []VolumeMount
-	Volume       *VolumeMount
-	SecurityOpt  []string
-	CapDrop      []string
-	Cmd          []string
-	Entrypoint   []string
-	PastaArgs    []string // pasta options when Network == "pasta"
-	DNSServers   []string // resolv.conf nameservers in the container
-	ReadOnly     bool
-	Remove       bool
+	Stdin           io.Reader
+	Stderr          io.Writer
+	Stdout          io.Writer
+	Env             map[string]string
+	Tmpfs           map[string]string
+	Image           primitive.ImageRef
+	Network         string
+	UsernsMode      string
+	Workdir         string
+	Mounts          []Mount
+	ImageVolumes    []ImageVolume
+	TrustVolumes    []VolumeMount
+	Volume          *VolumeMount
+	CapDrop         []string
+	Cmd             []string
+	Entrypoint      []string
+	PastaArgs       []string // pasta options when Network == "pasta"
+	DNSServers      []string // resolv.conf nameservers in the container
+	ReadOnly        bool
+	NoNewPrivileges bool
+	Remove          bool
 }
 
 // Mount describes a bind mount.
@@ -207,12 +208,12 @@ type ImageVolume struct {
 // profile. Callers override specific fields (Image, Cmd, Network, Mounts).
 func DefaultSecureOpts() RunOpts {
 	return RunOpts{
-		CapDrop:     []string{"ALL"},
-		ReadOnly:    true,
-		SecurityOpt: []string{"no-new-privileges"},
-		Tmpfs:       map[string]string{"/tmp": "rw,noexec,nosuid,size=512m"},
-		UsernsMode:  "keep-id",
-		Remove:      true,
+		CapDrop:         []string{"ALL"},
+		ReadOnly:        true,
+		NoNewPrivileges: true,
+		Tmpfs:           map[string]string{"/tmp": "rw,noexec,nosuid,size=512m"},
+		UsernsMode:      "keep-id",
+		Remove:          true,
 	}
 }
 
@@ -303,11 +304,17 @@ func detectSocket() (string, error) {
 		return host, nil
 	}
 
-	// 2. Standard rootless socket
+	// 2. Rootless sockets under the runtime directory: the one a long-running
+	// `podman system service` serves on the reference endpoint (ADR-055 D8),
+	// then the one podman's own socket unit serves.
 	if xdg := os.Getenv("XDG_RUNTIME_DIR"); xdg != "" {
-		sock := filepath.Join(xdg, "podman", "podman.sock")
-		if _, err := probe.Stat(sock); err == nil {
-			return "unix://" + sock, nil
+		for _, sock := range []string{
+			filepath.Join(xdg, "podman.sock"),
+			filepath.Join(xdg, "podman", "podman.sock"),
+		} {
+			if _, err := probe.Stat(sock); err == nil {
+				return "unix://" + sock, nil
+			}
 		}
 	}
 
@@ -325,6 +332,6 @@ func detectSocket() (string, error) {
 	}
 
 	return "", fmt.Errorf(
-		"no container engine socket found; set $CONTAINER_HOST or " +
-			"enable the podman socket: systemctl --user enable --now podman.socket")
+		"no container engine socket found; set $CONTAINER_HOST or serve one with " +
+			"`podman system service --time=0 unix://$XDG_RUNTIME_DIR/podman.sock`")
 }

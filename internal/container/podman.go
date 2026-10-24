@@ -7,11 +7,14 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
+	"maps"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 
 	"github.com/istr/strike/internal/clock"
@@ -285,7 +288,10 @@ func (e *podmanEngine) ImageInspect(ctx context.Context, ref string) (*ImageInfo
 		ID          string            `json:"Id"`
 		Digest      string            `json:"Digest"`
 		RepoDigests []string          `json:"RepoDigests"`
-		Size        int64             `json:"Size"`
+		Config      struct {
+			Env []string `json:"Env"`
+		} `json:"Config"`
+		Size int64 `json:"Size"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
 		return nil, fmt.Errorf("image inspect %s: decode: %w", ref, err)
@@ -295,6 +301,7 @@ func (e *podmanEngine) ImageInspect(ctx context.Context, ref string) (*ImageInfo
 		Digest:      primitive.Digest(raw.Digest),
 		RepoDigests: raw.RepoDigests,
 		Annotations: raw.Annotations,
+		Env:         raw.Config.Env,
 		Size:        raw.Size,
 	}, nil
 }
@@ -370,6 +377,10 @@ func (e *podmanEngine) runContainer(ctx context.Context, opts RunOpts, seeds []S
 	id, err := e.containerCreate(ctx, opts)
 	if err != nil {
 		return "", -1, fmt.Errorf("container create: %w", err)
+	}
+	if verifyErr := e.verifyProfile(ctx, id, opts); verifyErr != nil {
+		e.removeAfterFailure(ctx, id)
+		return "", -1, fmt.Errorf("container profile: %w", verifyErr)
 	}
 	// Seed input content into the created (not yet started) container's
 	// writable volume before start. The container has not run, so nothing
@@ -471,6 +482,152 @@ func (e *podmanEngine) containerCreate(ctx context.Context, opts RunOpts) (strin
 		return "", fmt.Errorf("container create: engine returned empty container id")
 	}
 	return result.ID, nil
+}
+
+// createdContainer is the part of the libpod container inspect the
+// post-create profile check reads.
+type createdContainer struct {
+	EffectiveCaps []string `json:"EffectiveCaps"`
+	BoundingCaps  []string `json:"BoundingCaps"`
+	Config        struct {
+		Env []string `json:"Env"`
+	} `json:"Config"`
+	HostConfig struct {
+		SecurityOpt []string `json:"SecurityOpt"`
+		DNSSearch   []string `json:"DnsSearch"`
+		ExtraHosts  []string `json:"ExtraHosts"`
+		HostsFile   string   `json:"HostsFile"`
+		IDMappings  struct {
+			UIDMap []string `json:"UidMap"`
+		} `json:"IDMappings"`
+		ReadonlyRootfs bool `json:"ReadonlyRootfs"`
+	} `json:"HostConfig"`
+}
+
+// verifyProfile reads the created container back and fails unless the engine
+// applied what strike declared and merged nothing strike did not. The engine
+// ignores create fields it does not know instead of rejecting them, and it
+// merges its own configuration into every container, so the request alone
+// proves nothing: a misspelled key once left every step without
+// no-new-privileges. The check runs before seeding and start, so nothing
+// executes under a profile other than the declared one.
+func (e *podmanEngine) verifyProfile(ctx context.Context, id string, opts RunOpts) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, e.base+"/containers/"+id+"/json", nil)
+	if err != nil {
+		return err
+	}
+	resp, err := e.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.Printf("WARN close response body: %v", err)
+		}
+	}()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("inspect: status %d", resp.StatusCode)
+	}
+	var got createdContainer
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		return fmt.Errorf("inspect: decode: %w", err)
+	}
+	sent := buildSpecGenerator(opts)
+	img, imgErr := e.ImageInspect(ctx, sent.Image)
+	if imgErr != nil {
+		return imgErr
+	}
+	if hardErr := checkHardening(&got, opts); hardErr != nil {
+		return hardErr
+	}
+	if isoErr := checkIsolation(&got, sent); isoErr != nil {
+		return isoErr
+	}
+	return checkEnv(got.Config.Env, opts.Env, img.Env)
+}
+
+// checkHardening compares the applied profile with the declared one.
+func checkHardening(got *createdContainer, opts RunOpts) error {
+	if opts.ReadOnly && !got.HostConfig.ReadonlyRootfs {
+		return errors.New("engine did not apply the read-only root filesystem")
+	}
+	if opts.NoNewPrivileges && !slices.Contains(got.HostConfig.SecurityOpt, "no-new-privileges") {
+		return errors.New("engine did not apply no-new-privileges")
+	}
+	if slices.Contains(opts.CapDrop, "ALL") && len(got.EffectiveCaps)+len(got.BoundingCaps) > 0 {
+		return fmt.Errorf("engine left capabilities after cap-drop ALL: effective %v, bounding %v",
+			got.EffectiveCaps, got.BoundingCaps)
+	}
+	// keep-id maps the engine's user (id 0 of the rootless namespace) onto a
+	// non-root container id; inspect names the mode only as "private", so
+	// the mapping itself is the evidence.
+	if opts.UsernsMode == "keep-id" && !keepsID(got.HostConfig.IDMappings.UIDMap) {
+		return fmt.Errorf("engine did not apply the keep-id mapping: uid map %v", got.HostConfig.IDMappings.UIDMap)
+	}
+	return nil
+}
+
+// keepsID reports whether a "container:host:size" uid map places the
+// engine's own user, and only that user, on a non-root container id.
+func keepsID(uidMap []string) bool {
+	for _, m := range uidMap {
+		parts := strings.Split(m, ":")
+		if len(parts) == 3 && parts[0] != "0" && parts[1] == "0" && parts[2] == "1" {
+			return true
+		}
+	}
+	return false
+}
+
+// checkIsolation compares the hosts and resolver configuration the engine
+// applied with the one strike sent, which leaves no endpoint entry in either.
+func checkIsolation(got *createdContainer, sent specGen) error {
+	if got.HostConfig.HostsFile != sent.BaseHostsFile {
+		return fmt.Errorf("engine used base hosts file %q, want %q", got.HostConfig.HostsFile, sent.BaseHostsFile)
+	}
+	if !slices.Equal(got.HostConfig.DNSSearch, sent.DNSSearch) {
+		return fmt.Errorf("engine applied dns search %v, want %v", got.HostConfig.DNSSearch, sent.DNSSearch)
+	}
+	if !slices.Equal(got.HostConfig.ExtraHosts, sent.HostAdd) {
+		return fmt.Errorf("engine applied extra hosts %v, want %v", got.HostConfig.ExtraHosts, sent.HostAdd)
+	}
+	return nil
+}
+
+// checkEnv fails on a container variable that neither the step, the image,
+// nor libpod itself set -- engine configuration such as a containers.conf env
+// list or proxy passthrough -- and on a declared variable the engine changed
+// or dropped. libpod's own are its marker, the hostname, and the PATH and TERM
+// it supplies when the image declares none. Errors name keys, never values:
+// step env carries secrets.
+func checkEnv(have []string, declared map[string]string, image []string) error {
+	fromImage := map[string]bool{}
+	for _, kv := range image {
+		k, _, _ := strings.Cut(kv, "=")
+		fromImage[k] = true
+	}
+	seen := map[string]bool{}
+	for _, kv := range have {
+		k, v, _ := strings.Cut(kv, "=")
+		seen[k] = true
+		if want, ok := declared[k]; ok {
+			if v != want {
+				return fmt.Errorf("engine changed declared env %s", k)
+			}
+			continue
+		}
+		switch {
+		case fromImage[k], k == "container", k == "HOSTNAME", k == "PATH", k == "TERM":
+			continue
+		}
+		return fmt.Errorf("engine added env %s, declared by neither the step nor the image", k)
+	}
+	for _, k := range slices.Sorted(maps.Keys(declared)) {
+		if !seen[k] {
+			return fmt.Errorf("engine dropped declared env %s", k)
+		}
+	}
+	return nil
 }
 
 func (e *podmanEngine) containerStart(ctx context.Context, id string) error {
@@ -954,15 +1111,18 @@ type specGen struct {
 	NetworkOptions     *specNetworkOptions `json:"network_options,omitempty"`
 	Image              string              `json:"image"`
 	WorkDir            string              `json:"work_dir,omitempty"`
+	BaseHostsFile      string              `json:"base_hosts_file"`
 	Command            []string            `json:"command"`
 	Entrypoint         []string            `json:"entrypoint,omitempty"`
 	Mounts             []specMount         `json:"mounts,omitempty"`
 	Volumes            []specNamedVolume   `json:"volumes,omitempty"`
 	ImageVolumes       []specImageVolume   `json:"image_volumes,omitempty"`
 	DNSServer          []string            `json:"dns_server,omitempty"`
+	DNSSearch          []string            `json:"dns_search"`
+	HostAdd            []string            `json:"hostadd"`
 	CapDrop            []string            `json:"cap_drop,omitempty"`
-	SecurityOpt        []string            `json:"security_opt,omitempty"`
 	ReadOnlyFilesystem bool                `json:"read_only_filesystem,omitempty"`
+	NoNewPrivileges    bool                `json:"no_new_privileges,omitempty"`
 	Remove             bool                `json:"remove"`
 }
 
@@ -1024,9 +1184,18 @@ func buildSpecGenerator(opts RunOpts) specGen {
 		Mounts:             buildMounts(opts),
 		DNSServer:          opts.DNSServers,
 		CapDrop:            opts.CapDrop,
-		SecurityOpt:        opts.SecurityOpt,
 		ReadOnlyFilesystem: opts.ReadOnly,
+		NoNewPrivileges:    opts.NoNewPrivileges,
 		Remove:             opts.Remove,
+		// The engine otherwise copies the endpoint's /etc/hosts, its DNS
+		// search domain, and host.containers.internal at the endpoint's LAN
+		// address into every container, and inspect reports none of it. These
+		// three leave the same /etc/hosts on every endpoint: localhost, and
+		// the two engine aliases pinned to loopback, where the container
+		// reaches only its capsule.
+		BaseHostsFile: "none",
+		DNSSearch:     []string{"."},
+		HostAdd:       []string{"host.containers.internal:127.0.0.1", "host.docker.internal:127.0.0.1"},
 	}
 
 	// Named volumes: the writable workdir surface (opts.Volume) plus any
