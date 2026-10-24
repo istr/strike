@@ -20,6 +20,14 @@ services:
     volumes:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
+    # Only the internal CA under /data/caddy/pki persists; leaf certificates
+    # are issued fresh on every start. A persisted leaf that expired past
+    # Caddy's grace period is deleted at start while renewal still needs its
+    # key, and Caddy then keeps serving the expired leaf until restarted.
+    # notmpcopyup keeps the tmpfs empty: podman's default copies the leaves
+    # already stored in caddy_data into it.
+    tmpfs:
+      - /data/caddy/certificates:notmpcopyup
     networks:
       sigstore:
         aliases:
