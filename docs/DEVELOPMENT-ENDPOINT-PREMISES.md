@@ -190,3 +190,38 @@ default command still runs the root `lane.yaml`, which does not validate, so
 the published `podman run` step of the ADR-009 proof is not yet runnable.
 The [Beta Definition of Done](BETA-DEFINITION-OF-DONE.md) records this under
 its 2026-09-05 amendment.
+
+The stage_1 image runs as a sibling of its steps on the endpoint engine,
+like the dev container. The run line is measured
+([ADR-055](ADR-055-hardened-endpoint-development-premise.md), amendment of
+2026-10-24) against a stage_1 built on the static base the bootstrap moves
+to:
+
+```sh
+podman run --rm \
+  --userns=keep-id:uid=65532,gid=65532 \
+  --network=host \
+  -v "$XDG_RUNTIME_DIR/podman.sock:/run/podman/podman.sock" \
+  -e CONTAINER_HOST=unix:///run/podman/podman.sock \
+  -e SIGSTORE_ID_TOKEN \
+  strike:stage_1 run <bootstrap lane file>
+```
+
+Each part is load-bearing:
+
+- **The user mapping.** The image runs as its own user, 65532. Plain
+  `--userns=keep-id` leaves the process there while the socket belongs to
+  the endpoint user, and strike refuses a socket its process does not own.
+  `keep-id:uid=65532,gid=65532` places the endpoint user on the image's user.
+- **Host networking.** strike's resolver and mediator listen on the
+  controller's loopback, and pasta forwards every step to the endpoint's
+  loopback. Without host networking the two are different loopbacks and
+  every step's name resolution times out.
+- **The token.** `SIGSTORE_ID_TOKEN` is read at the deploy, and steps do not
+  inherit it. Any holder of the engine socket can read it in the container's
+  inspect until the container is removed, so mint it for one run and keep
+  `--rm`.
+
+Run one strike controller per endpoint at a time until item-0161 lands: all
+controllers share the loopback, and their resolver and mediator ports
+collide.

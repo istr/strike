@@ -25,6 +25,11 @@ client identity).
 > qualified by [ADR-051](ADR-051-deploy-as-sealing-point.md) D5: the
 > deploy path rejects SSH peers until the ADR-038 front lands.
 
+> **Amended 2026-10-24 (below):** capsule host ports are assigned by the
+> kernel when each unit starts, not deterministically in lane-file order;
+> "Address space as a deliberate cost" is read accordingly. Implemented by
+> item-0161.
+
 > **Reference note (2026-09-01):** the "ADR-028 roadmap" whose
 > D-series the Status cites (supersedes in part D24 and D26;
 > ratifies D27 and D28) is `docs/ROADMAP-ADR-028.md`, a pre-item-era
@@ -176,3 +181,60 @@ dependency.
 - **Enforcement is structural, not discretionary.** Every step container
   runs under a capsule; there is no `--network=none`/`bridge` escape and
   no unmediated egress path.
+
+## Amendment 2026-10-24 -- host ports are assigned by the kernel at unit start
+
+Status: Accepted (operator decision of 2026-10-24). Append-only: this block
+replaces one decision clause, read as given at its end; every other clause
+of this record, its Status notes included, stands unchanged. The code still
+allocates as the original clause says until item-0161 lands.
+
+### What was found
+
+The item-0156 spike of 2026-10-24 measured two strike controllers on one
+endpoint (ADR-055, amendment of that date, point B4). Every controller on an
+endpoint runs with host networking, so all of them share one loopback, and
+deterministic allocation in lane-file order gives every controller the same
+ports: the first unit of every lane asks for the same two. The second
+controller failed at its first unit on the resolver TCP bind with "address
+already in use". Its resolver UDP bind had succeeded before that, over the
+first controller's, because the UDP socket sets SO_REUSEADDR to coexist with
+a wildcard mDNS listener on the base port. A probe of the same bind sequence
+showed that during such an overlap the newer UDP socket receives the
+datagrams, so the first controller's step DNS queries can be dropped.
+Derived from the allocator, not measured: a second controller can also fail
+mid-run, and a bootstrap beside an integration-test run from the dev
+container collides the same way.
+
+The determinism the clause records buys nothing that is checked. Host ports
+enter neither the step spec hash nor any attestation, and ADR-037 names them
+as selectors that are never trust anchors. The SSH front of ADR-038 already
+binds a kernel-assigned loopback port.
+
+### Decision
+
+Each container unit's capsule binds its resolver (UDP and TCP) and mediator
+(TCP) listeners on the controller's loopback at ports the kernel assigns when
+the unit starts, and the unit's pasta forwards name the ports it was given.
+pasta takes separate host ports for its TCP and UDP forwards, so the
+listeners need not share a number. The up-front allocation in lane-file
+order, the port budget above the base and the SO_REUSEADDR workaround it
+required are retired with it.
+
+What does not change: every container unit runs under a capsule (D28); the
+container still sees its resolver on 127.0.0.1:53 and its mediator on
+127.0.0.1:443; the cost of the rootless, no-daemon posture is still paid in
+host ports, one set per running unit, and now only while the unit runs.
+
+Alternatives weighed on 2026-10-24 and rejected: keeping the clause and
+documenting one strike run per endpoint as an operating constraint, which
+leaves mid-run failures and the UDP window and moves the burden to the
+operator; and a random per-run base, which lowers the collision rate without
+removing it and keeps the UDP window.
+
+**Supersedes, in "Address space as a deliberate cost" above:** "Each
+container unit consumes a contiguous block of host ports (`2 + SSH-peer-count`),
+allocated deterministically in lane-file order." is read as: "Each running
+container unit holds the host ports of its capsule's listeners, assigned by
+the kernel when the unit starts." and "The host-port budget (above 5353) is
+large relative to any realistic lane." is withdrawn.

@@ -32,6 +32,17 @@ Accepted.
 > stands: the hardened profile is non-configurable, and network
 > access remains opt-in via the declared peer list.
 
+> **Erratum (2026-10-24), recorded in
+> [ADR-055](ADR-055-hardened-endpoint-development-premise.md), amendment of
+> that date, point B5:** until that date `--security-opt=no-new-privileges`
+> was not in effect for any step container. The controller sent it to the
+> engine under a create field the engine does not know, and the engine
+> ignores unknown fields instead of rejecting them; capability drops and the
+> read-only root were applied. The decision is unchanged. Since the repair
+> the flag is sent under the engine's own field, and the controller reads
+> every created container back and refuses to start one whose applied
+> profile differs from this one.
+
 ## Scope
 
 This ADR concerns the security profile of individual step containers

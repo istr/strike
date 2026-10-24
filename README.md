@@ -90,8 +90,10 @@ stage_1 image carries the binary and the pinned tree.
 
 stage_1 runs as a sibling of its own steps: your engine starts it with the
 engine socket bound in and named through `CONTAINER_HOST`, host networking,
-and the keep-id user mapping, and strike drives that same engine to run the
-bootstrap lane (`lane.yaml`):
+and the keep-id mapping that places your user on the image's user
+(`--userns=keep-id:uid=65532,gid=65532`; plain `--userns=keep-id` leaves the
+process on the image's user, which cannot open your socket), and strike
+drives that same engine to run the bootstrap lane (`lane.yaml`):
 
 1. **source** -- fetches the pinned commit in a digest-pinned git image and
    records its git provenance.

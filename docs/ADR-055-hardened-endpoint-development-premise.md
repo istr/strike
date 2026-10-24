@@ -716,3 +716,187 @@ rather than the host's. Retained for the ADR-009 proof, where the nesting
 is the point." is read as: "Rejected for every use, the ADR-009 proof
 included; D9 records why. The three reasons given for daily use stand and
 are joined by the trusted-computing-base argument."
+
+## Amendment 2026-10-24 -- D7 extended to the bootstrap run line
+
+Status: Accepted (item-0156), ratified by the operator on 2026-10-24.
+Append-only: this block adds measured points to D7 and narrows one clause
+of the D9 amendment it names below without editing it in place; every other
+clause of this record and of its five amendments above stands unchanged.
+
+The D9 amendment's Consequences announce that the bootstrap run line
+"reuses D3's mechanism -- the engine socket bound, `CONTAINER_HOST`, host
+networking, the mapped user -- with a different image and no shell" and
+that it is measured "as the extension of D7 to the bootstrap". That
+measurement was taken by a throwaway spike on 2026-10-24 against anchor
+`d8ed8b632ba8eea47784b5893d3f83c8440013bd`, from the dev container,
+against the endpoint engine: Podman 5.4.2, rootless, pasta
+`2026_05_07.1afd4ed`, netavark, cgroup v2, seccomp on, AppArmor and SELinux
+off. As in D7, the machine also carries a host toolchain that nothing
+used. The dev container has no podman CLI, so every spike operation went
+through the libpod REST API over the socket; the run line below was then
+run by the operator with the endpoint's podman CLI (B7).
+
+The stage_1 image was built in the shape the ADR-009 amendment of
+2026-09-14 requires and `bootstrap/Containerfile` at the anchor does not
+yet have: the unchanged builder stage, then
+`cgr.dev/chainguard/static@sha256:2fdfacc8d61164aa9e20909dceec7cc28b9feb66580e8e1a65b9f2443c53b61b`
+carrying the binary and the tree, with `USER 65532` and no engine. Its
+builder copied the anchor's tree rather than fetching it, because the
+anchor was not pushed. Two spike lanes ran in it:
+
+- **L1**: the live registry-deploy test fixture. The harness resolver, a
+  pack step, and a registry deploy to the harness under the harness keyless
+  chain.
+- **L2**: the public DoT resolver `1.1.1.1`, anchored to its real root,
+  with two mediated container steps feeding a pack and the same deploy.
+  `go mod download` reached `proxy.golang.org` and `sum.golang.org`, and
+  `git clone` reached `github.com`. The step image was the Go image of the
+  version `go.mod` names.
+
+### D7 continued -- B1 to B7, and the header
+
+- **B1 -- Engine reach and the version gate.** *Measured.* Plain
+  `--userns=keep-id` does not reach the engine. A process runs as its
+  image's `USER` (65532), while the bound socket presents as the endpoint
+  uid, and the client's owner check refuses: "unix socket owner does not
+  match current user".
+  - `--userns=keep-id:uid=65532,gid=65532` maps the endpoint uid onto the
+    image's user. The socket then presents as 65532, `Ping`, `Info` and the
+    version gate pass, and the lane runs. `--user` set to the endpoint uid
+    with plain keep-id passes too, but ties the run line to that uid.
+  - The control-plane container also runs with a read-only root, all
+    capabilities dropped and no-new-privileges.
+  - The target uid is a property of the static base; another base changes
+    it.
+- **B2 -- A step reaches the resolver, `github.com`, the module proxy, the
+  checksum database and a keyless chain through the mediator.** *Measured.*
+  - L2 ran green. The sealed provenance records `github.com:443`,
+    `proxy.golang.org:443`, `sum.golang.org:443` and the registry target as
+    observed peers, and the engine-context statement attributes each to its
+    step.
+  - The record carries the endpoint engine (unix socket, rootless, 5.4.2),
+    the only one (D9).
+  - Host networking is required. Without it, the capsule listens in the
+    controller's own network namespace while pasta forwards each step to the
+    endpoint loopback, and the step's resolution times out. This is M2 for
+    the bootstrap image.
+- **B3 -- The harness on the same engine is reachable from the bootstrap
+  controller.** *Measured.* L1 ran green: resolver, IdP, Fulcio, Rekor v2,
+  TSA and registry, all on the endpoint loopback.
+- **B4 -- Loopback ports under two concurrent controllers.** *Measured.*
+  - Capsule ports are allocated deterministically from one base in lane
+    order (ADR-033), so every controller on an endpoint competes for the same
+    ports on the one shared loopback. A second controller started while the
+    first ran a step failed at its first step with "address already in use"
+    on the resolver's TCP bind; the first completed. The front's
+    kernel-assigned port does not collide.
+  - Before that error, the resolver's UDP bind with `SO_REUSEADDR` succeeded
+    over the first controller's. A standalone probe of the same bind
+    sequence shows the second socket receives the datagrams during such an
+    overlap.
+  - *Derived, not measured:* a second controller can fail mid-run, and in
+    the overlap window the first controller's step DNS queries are dropped.
+    The same holds for a bootstrap beside an integration-test run from the
+    dev container. The repair is decided in the ADR-033 amendment of
+    2026-10-24: ports are assigned by the kernel when each unit starts
+    (item-0161).
+- **B5 -- Engine-side configuration beyond what strike declares, and its
+  detection after create.** *Measured; the endpoint configuration point
+  operator-observed.*
+  - *What the engine merges.* It merges into every container `container`
+    and `HOSTNAME` env entries, resource limits, annotations and the default
+    seccomp profile, all readable from the container inspect after create.
+    It also copies the endpoint's `/etc/hosts`, its DNS search domain and
+    `host.containers.internal` at the endpoint's LAN address into every
+    container, and the inspect shows none of this.
+  - *What it drops.* The engine ignores create fields it does not know:
+    the profile's no-new-privileges was sent under such a field and was
+    absent from every step (`NoNewPrivs: 0`, inspect `SecurityOpt []`), while
+    capability drops and the read-only root were applied. ADR-005's profile
+    therefore did not hold in full on this engine until the repair below.
+  - *The repair, landing with this amendment.*
+    - The flag is sent under the engine's field.
+    - Every container is created with a base hosts file of none, an empty
+      search domain and both engine aliases on loopback, so `/etc/hosts` has
+      the same bytes on every endpoint.
+    - strike reads every created container and its image back before seeding
+      and start. It fails the run unless the engine applied the read-only
+      root, no-new-privileges, an empty capability set, the keep-id mapping
+      and the hosts and resolver configuration it was sent. It also fails it
+      on an env variable that neither the step, the image nor libpod's own
+      defaults set (the `container` marker, the hostname, a default `PATH` and
+      `TERM`), and on a declared variable the engine changed or dropped.
+  - *Operator-observed on the endpoint, 2026-10-24:* its `containers.conf`
+    injects no env. The dev container cannot read that file without binding
+    a host path, so this point is the operator's observation, not the
+    spike's. Any engine that does inject env now fails the post-create
+    check.
+- **B6 -- The id-token path of the sibling run.** *Measured for the
+  harness; open for the public chain.*
+  - The controller reads the token from its environment at the deploy, and
+    step containers do not inherit the controller's environment. Two paths
+    ran green:
+    - `-e SIGSTORE_ID_TOKEN`: the token is in clear in the control-plane
+      container's inspect for any holder of the socket until the container
+      is removed, so `--rm` bounds it to the run.
+    - A podman secret injected as env: this keeps the token out of the
+      inspect, but the engine stores it until it is removed and returns it
+      to any socket holder on request. It narrows the exposure; it does not
+      remove it.
+  - *Open, blocked by the OIDC-flow measurement item-0008 and item-0063
+    name:* how a public-chain token is minted on an endpoint without a
+    browser.
+  - *Open until the bootstrap lane exists (item-0150):* whether its double
+    build outlives the token. The harness token's lifetime is 300 seconds.
+- **The keyed-signing variables.** *Measured.* The Containerfile header at
+  the anchor names neither `COSIGN_PRIVATE_KEY` nor `COSIGN_PASSWORD`;
+  `35e58cb` removed them. The header still describes the run in prose only,
+  and its second stage is still the retired engine image; both are
+  item-0062's.
+
+### The run line, as measured
+
+```sh
+podman run --rm \
+  --userns=keep-id:uid=65532,gid=65532 \
+  --network=host \
+  -v "$XDG_RUNTIME_DIR/podman.sock:/run/podman/podman.sock" \
+  -e CONTAINER_HOST=unix:///run/podman/podman.sock \
+  -e SIGSTORE_ID_TOKEN \
+  strike:stage_1 run <bootstrap lane file>
+```
+
+`--read-only --cap-drop=ALL --security-opt=no-new-privileges` are measured
+compatible additions. The lane file argument is item-0150's.
+
+- **B7 -- The run line through the podman CLI.** *Measured, operator-run on
+  the endpoint.*
+  - The operator ran the line verbatim with the endpoint's podman CLI
+    (5.4.2, the engine's version). The only additions were `--name`, so the
+    running container could be inspected, and the spike lane as the
+    argument. stage_1 was rebuilt for this from the working tree with the
+    repairs of B5.
+  - The harness lane ran green. The CLI-created container matched the
+    REST-measured one in every compared field: user 65532, the uid map
+    placing the endpoint user on 65532, host networking, auto-removal, the
+    socket bind from `/run/user/1000/podman.sock` (the shell's expansion of
+    `$XDG_RUNTIME_DIR`, recorded by the engine as the create command), and
+    `CONTAINER_HOST` and the token in the environment. The engine adds
+    `HOME` and `HOSTNAME` once the container runs; neither is present at
+    create.
+  - With the three optional flags added, the public-peer lane ran green.
+    The CLI applied each as the engine's own field: read-only root, an empty
+    capability set, and no-new-privileges.
+  - Its first attempt failed before any step ran: the step image was not in
+    the engine's store, and strike creates step containers without pulling
+    their images.
+
+**Narrowing, in the Consequences of the amendment of 2026-09-14 above:**
+"the engine socket bound, `CONTAINER_HOST`, host networking, the mapped
+user" is read as: "the engine socket bound, `CONTAINER_HOST`, host
+networking, and the endpoint user mapped onto the image's user
+(`--userns=keep-id:uid=65532,gid=65532` for the static base)". The ADR-009
+amendment's "the keep-id mapping" (its mechanism, item 2) is read the same
+way; that record is not amended, because the mapping is still keep-id and
+only its target is narrowed here.

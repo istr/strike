@@ -246,18 +246,23 @@ definition.
 ## User namespace mapping
 
 All container steps run with `--userns=keep-id`. This maps the host user's UID
-into the container as-is, so file ownership in output paths matches the calling
-user across the boundary between strike and the engine
+to the same UID inside the container and every other container UID into the
+subuid range, so files written under that UID belong to the calling user
+across the boundary between strike and the engine
 ([ADR-003](docs/ADR-003-rootless-end-to-end.md)); the hardened profile above
 relies on that mapping
-([ADR-005](docs/ADR-005-hardened-container-profile-non-configurable.md)). No
-step and no part of the bootstrap runs a container engine of its own: strike
-is a client of exactly one engine, the operator's.
+([ADR-005](docs/ADR-005-hardened-container-profile-non-configurable.md)). The
+mapping does not choose the process user: a step whose image declares a `USER`
+runs as that user (a `nonroot` image runs as 65532, a subuid on the host
+side), and only a step whose image declares none runs as the host user's UID.
+No step and no part of the bootstrap runs a container engine of its own:
+strike is a client of exactly one engine, the operator's.
 
 This does **not** grant additional capabilities. Seccomp and AppArmor profiles
-remain active. An attacker who escapes a step container reaches only
-unprivileged host UIDs from the subuid range -- the same UIDs that rootless
-podman already maps for any unprivileged user.
+remain active. An attacker who escapes a step container reaches at most the
+host user's own UID -- the UID a step runs as when its image declares no
+`USER` -- and otherwise an unprivileged UID from the subuid range; rootless
+podman grants nothing beyond what the host user already holds.
 
 ## Secret handling
 
