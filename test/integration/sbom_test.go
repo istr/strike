@@ -22,7 +22,7 @@ func TestPackLayoutPayloadOnly(t *testing.T) {
 	ensureImage(t, engine, goImage)
 	ensureImage(t, engine, staticBase)
 
-	binPath := buildTestBinary(t, engine)
+	bin := buildTestBinary(t, engine)
 
 	result, err := executor.Pack(executor.PackOpts{
 		Spec: &lane.PackSpec{
@@ -35,7 +35,7 @@ func TestPackLayoutPayloadOnly(t *testing.T) {
 				User:       primitive.UserSpecPtr("65534:65534"),
 			},
 		},
-		InputTars: packInputTars(t, binPath),
+		InputTars: packInputTars(t, bin),
 	})
 	if err != nil {
 		t.Fatalf("pack: %v", err)

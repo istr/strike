@@ -13,6 +13,7 @@ import (
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/layout"
 
+	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/closer"
 	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/executor"
@@ -46,36 +47,60 @@ func ensureImage(t *testing.T, engine container.Engine, ref string) {
 }
 
 // buildTestBinary compiles the test Go program in a container and returns
-// the path to the resulting binary.
-func buildTestBinary(t *testing.T, engine container.Engine) string {
+// the binary. The source is seeded into an engine volume and the binary is
+// read back from the stopped container's archive, so no host path is bound
+// into the container (ADR-035).
+func buildTestBinary(t *testing.T, engine container.Engine) []byte {
 	t.Helper()
-	srcDir, absErr := filepath.Abs(filepath.Join("testdata", "src"))
-	if absErr != nil {
-		t.Fatalf("abs path: %v", absErr)
-	}
-	outDir := t.TempDir()
 	ctx := context.Background()
 
+	srcRoot, rootErr := os.OpenRoot(filepath.Join("testdata", "src"))
+	if rootErr != nil {
+		t.Fatalf("open source root: %v", rootErr)
+	}
+	defer closer.Warn(srcRoot, "buildTestBinary source root")
+	var src bytes.Buffer
+	tw := tar.NewWriter(&src)
+	if addErr := tw.AddFS(srcRoot.FS()); addErr != nil {
+		t.Fatalf("tar source: %v", addErr)
+	}
+	if cErr := tw.Close(); cErr != nil {
+		t.Fatalf("close source tar: %v", cErr)
+	}
+
+	vol := fmt.Sprintf("strike-itest-build-%d", clock.Wall().UnixNano())
+	if volErr := engine.VolumeCreate(ctx, vol); volErr != nil {
+		t.Fatalf("volume create: %v", volErr)
+	}
+	t.Cleanup(func() {
+		if rmErr := engine.VolumeRemove(ctx, vol); rmErr != nil {
+			t.Logf("WARN volume remove: %v", rmErr)
+		}
+	})
+
 	var stdout, stderr bytes.Buffer
-	exitCode, err := engine.ContainerRun(ctx, container.RunOpts{
+	id, exitCode, err := engine.ContainerRunHeld(ctx, container.RunOpts{
 		Image: goImage,
 		Cmd: []string{
-			"build", "-C", "/src", "-trimpath",
+			"build", "-C", "/work", "-trimpath",
 			"-buildvcs=false", "-ldflags=-s -w",
-			"-o", "/out/app", ".",
+			"-o", "/work/app", ".",
 		},
-		Env:    map[string]string{"CGO_ENABLED": "0", "GOCACHE": "/tmp/gocache", "GOPATH": "/tmp/gopath"},
-		Stdout: &stdout,
-		Stderr: &stderr,
-		Mounts: []container.Mount{
-			{Source: srcDir, Target: "/src", ReadOnly: true},
-			{Source: outDir, Target: "/out"},
-		},
+		Env:      map[string]string{"CGO_ENABLED": "0", "GOCACHE": "/tmp/gocache", "GOPATH": "/tmp/gopath"},
+		Stdout:   &stdout,
+		Stderr:   &stderr,
+		Volume:   &container.VolumeMount{Name: vol, Dest: "/work"},
 		CapDrop:  []string{"ALL"},
 		ReadOnly: true,
 		Tmpfs:    map[string]string{"/tmp": "rw,noexec,nosuid,size=512m"},
-		Remove:   true,
-	})
+	}, []container.Seed{{Path: "/work", Tar: bytes.NewReader(src.Bytes())}})
+	if id != "" {
+		defer func() {
+			if rmErr := engine.ContainerRemove(ctx, id); rmErr != nil {
+				t.Logf("WARN container remove: %v", rmErr)
+			}
+		}()
+	}
 	if err != nil {
 		t.Fatalf("build: %v", err)
 	}
@@ -84,35 +109,28 @@ func buildTestBinary(t *testing.T, engine container.Engine) string {
 			exitCode, stdout.String(), stderr.String())
 	}
 
-	binPath := filepath.Join(outDir, "app")
-	info, statErr := os.Stat(binPath)
-	if statErr != nil {
-		t.Fatalf("binary not found: %v", statErr)
+	rc, archErr := engine.ContainerArchive(ctx, id, "/work/app")
+	if archErr != nil {
+		t.Fatalf("archive binary: %v", archErr)
 	}
-	t.Logf("binary: %s (%d bytes)", binPath, info.Size())
-	return binPath
-}
-
-// packInputTars reads the built binary and returns the canonical content
-// tar map the test pack spec expects: the binary landing at /app with mode
-// 0o755, the shape registry.PackTarFromImage emits for a single-file
-// selection. The binary is read through os.Root, scoped to its directory.
-func packInputTars(t *testing.T, binPath string) map[string][]byte {
-	t.Helper()
-	root, rootErr := os.OpenRoot(filepath.Dir(binPath))
-	if rootErr != nil {
-		t.Fatalf("open binary root: %v", rootErr)
+	defer closer.Warn(rc, "buildTestBinary archive")
+	tr := tar.NewReader(rc)
+	if _, nextErr := tr.Next(); nextErr != nil {
+		t.Fatalf("binary not in archive: %v", nextErr)
 	}
-	defer closer.Warn(root, "packInputTars root")
-	f, openErr := root.Open(filepath.Base(binPath))
-	if openErr != nil {
-		t.Fatalf("open binary: %v", openErr)
-	}
-	content, readErr := io.ReadAll(f)
-	closer.Warn(f, "packInputTars binary")
+	bin, readErr := io.ReadAll(tr)
 	if readErr != nil {
 		t.Fatalf("read binary: %v", readErr)
 	}
+	t.Logf("binary: %d bytes", len(bin))
+	return bin
+}
+
+// packInputTars returns the canonical content tar map the test pack spec
+// expects: the binary landing at /app with mode 0o755, the shape
+// registry.PackTarFromImage emits for a single-file selection.
+func packInputTars(t *testing.T, content []byte) map[string][]byte {
+	t.Helper()
 
 	var buf bytes.Buffer
 	tw := tar.NewWriter(&buf)
@@ -132,7 +150,7 @@ func packInputTars(t *testing.T, binPath string) map[string][]byte {
 
 // packTestImage assembles an OCI image from a binary and returns
 // the pack result.
-func packTestImage(t *testing.T, binPath string) *executor.PackResult {
+func packTestImage(t *testing.T, bin []byte) *executor.PackResult {
 	t.Helper()
 
 	result, packErr := executor.Pack(executor.PackOpts{
@@ -146,7 +164,7 @@ func packTestImage(t *testing.T, binPath string) *executor.PackResult {
 				User:       primitive.UserSpecPtr("65534:65534"),
 			},
 		},
-		InputTars: packInputTars(t, binPath),
+		InputTars: packInputTars(t, bin),
 	})
 	if packErr != nil {
 		t.Fatalf("pack: %v", packErr)

@@ -20,10 +20,10 @@ func TestPackPipeline(t *testing.T) {
 	ensureImage(t, engine, staticBase)
 
 	// 1. Build the Go binary in a container.
-	binPath := buildTestBinary(t, engine)
+	bin := buildTestBinary(t, engine)
 
 	// 2. Pack: assemble OCI image.
-	result := packTestImage(t, binPath)
+	result := packTestImage(t, bin)
 
 	t.Logf("image digest: %s", result.Digest)
 
@@ -65,7 +65,7 @@ func TestPackPipeline(t *testing.T) {
 				User:       primitive.UserSpecPtr("65534:65534"),
 			},
 		},
-		InputTars: packInputTars(t, binPath),
+		InputTars: packInputTars(t, bin),
 	})
 	if err != nil {
 		t.Fatalf("pack (second run): %v", err)

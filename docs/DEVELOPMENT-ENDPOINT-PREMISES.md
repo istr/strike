@@ -166,22 +166,11 @@ container. The integration suite runs against the endpoint engine through
 the mounted socket and against the sigstore harness on the endpoint's
 loopback; host networking makes both reachable.
 
-Four tests in `test/integration` bind a `t.TempDir()` path into a step
-container. `testing.T.TempDir` honors `GOTMPDIR`, and `GOTMPDIR` is also
-where `go test` writes and executes the compiled test binary, so the
-directory it names must be both exec-capable and visible to the endpoint
-engine at the same path.
-
-- On a development machine whose home is exec-capable this is satisfied by
-  one shared scratch directory bind-mounted into the container at its
-  endpoint path, without `noexec`, with `GOTMPDIR` pointing at it. The full
-  suite is green with that configuration.
-- On the hardened endpoint it cannot be satisfied: every endpoint-visible
-  path the operator can write is `noexec`, and every exec-capable path
-  inside the container is invisible to the endpoint engine. The four tests
-  fail there until they are reshaped to bind no host path (item-0125, on
-  which ADR-055 M7 records the ratified resolution). Production strike binds
-  no host path; only these tests do.
+No test binds a host path into a step container. Like production strike,
+the integration tests seed their inputs into an engine volume and read
+results back from the stopped container's archive (ADR-035), so the suite
+needs no scratch directory that the endpoint engine can see and no
+`GOTMPDIR` setting. This resolves ADR-055 M7.
 
 ## Secrets
 

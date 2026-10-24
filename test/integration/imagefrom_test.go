@@ -32,8 +32,8 @@ func TestImageFromStep_RunsByDigestRef(t *testing.T) {
 	ensureImage(t, engine, staticBase)
 
 	// 1. Produce an image output the way executePack does: pack, then wrap.
-	binPath := buildTestBinary(t, engine)
-	result := packTestImage(t, binPath)
+	bin := buildTestBinary(t, engine)
+	result := packTestImage(t, bin)
 
 	const laneID = "imagefrom-itest"
 	const producerStep = "workspace"
