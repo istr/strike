@@ -12,6 +12,7 @@
     "CONTAINER_HOST": "unix:///run/podman/podman.sock",
     "CLAUDE_CONFIG_DIR": "/home/dev/.claude"
   },
+  "otherPortsAttributes": { "onAutoForward": "ignore" },
   "remoteUser": "dev",
   "features": {
     "ghcr.io/anthropics/devcontainer-features/claude-code:1.0": {}
