@@ -1,12 +1,9 @@
 package main
 
 import (
-	"context"
 	"testing"
 
-	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/primitive"
-	"github.com/istr/strike/internal/registry"
 )
 
 // --------------------------------------------------------------------------.
@@ -45,7 +42,7 @@ func TestSanitizeForLog(t *testing.T) {
 
 func TestResolveDigest_WithAtSign(t *testing.T) {
 	// When ref contains @, the digest is extracted directly.
-	digest, err := resolveDigest(context.Background(), nil, primitive.NewImageRef("docker.io/lib/img@sha256:abc1230000000000000000000000000000000000000000000000000000000000"))
+	digest, err := resolveDigest(primitive.NewImageRef("docker.io/lib/img@sha256:abc1230000000000000000000000000000000000000000000000000000000000"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,29 +51,9 @@ func TestResolveDigest_WithAtSign(t *testing.T) {
 	}
 }
 
-func TestResolveDigest_ViaInspect(t *testing.T) {
-	eng := &mockEngine{
-		inspectRV: &container.ImageInfo{Digest: "sha256:00000000000000000000000000000000000000000000000000000000000000ff"},
-	}
-	client := &registry.Client{Engine: eng}
-
-	digest, err := resolveDigest(context.Background(), client, primitive.NewImageRef("myimage:latest"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if digest.String() != "sha256:00000000000000000000000000000000000000000000000000000000000000ff" {
-		t.Errorf("digest = %q, want sha256:fromengine", digest.String())
-	}
-}
-
-func TestResolveDigest_InspectError(t *testing.T) {
-	eng := &mockEngine{
-		inspectRV: &container.ImageInfo{},
-	}
-	client := &registry.Client{Engine: eng}
-
-	_, err := resolveDigest(context.Background(), client, primitive.NewImageRef("myimage:latest"))
+func TestResolveDigest_RejectsUnpinned(t *testing.T) {
+	_, err := resolveDigest(primitive.NewImageRef("myimage:latest"))
 	if err == nil {
-		t.Fatal("expected error when inspect returns no digest")
+		t.Fatal("expected error for a reference without a digest")
 	}
 }

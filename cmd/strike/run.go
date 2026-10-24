@@ -127,7 +127,7 @@ func (rc *runContext) runStep(stepID primitive.Identifier) error {
 		return fmt.Errorf("%s: %w", safeName, err)
 	}
 
-	imageDigest, err := rc.resolveImageDigest(ctx, step, safeName, inputs)
+	imageDigest, err := rc.resolveImageDigest(step, safeName, inputs)
 	if err != nil {
 		return err
 	}
@@ -183,9 +183,9 @@ func (rc *runContext) executeDeploy(ctx context.Context, step *lane.Step, stepID
 	return nil
 }
 
-func (rc *runContext) resolveImageDigest(ctx context.Context, step *lane.Step, safeName string, inputs stepInputs) (primitive.Digest, error) {
+func (rc *runContext) resolveImageDigest(step *lane.Step, safeName string, inputs stepInputs) (primitive.Digest, error) {
 	if step.Pack != nil {
-		digest, err := resolveDigest(ctx, rc.regClient, step.Pack.Base)
+		digest, err := resolveDigest(step.Pack.Base)
 		if err != nil {
 			return "", fmt.Errorf("%s: pack base digest: %w", safeName, err)
 		}
@@ -204,7 +204,7 @@ func (rc *runContext) resolveImageDigest(ctx context.Context, step *lane.Step, s
 		}
 		return digest, nil
 	}
-	digest, err := resolveDigest(ctx, rc.regClient, *step.Image)
+	digest, err := resolveDigest(*step.Image)
 	if err != nil {
 		return "", fmt.Errorf("%s: image digest: %w", safeName, err)
 	}

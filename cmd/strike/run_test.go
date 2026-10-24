@@ -705,7 +705,7 @@ func TestResolveImageDigest_FromRef(t *testing.T) {
 	rc := newTestRC(t, &mockEngine{})
 	step := &lane.Step{Image: primitive.ImageRefPtr("docker.io/lib/golang@sha256:abcdef1234567890000000000000000000000000000000000000000000000000")}
 
-	digest, err := rc.resolveImageDigest(context.Background(), step, "test", stepInputs{})
+	digest, err := rc.resolveImageDigest(step, "test", stepInputs{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -714,21 +714,12 @@ func TestResolveImageDigest_FromRef(t *testing.T) {
 	}
 }
 
-func TestResolveImageDigest_FromInspect(t *testing.T) {
-	eng := &mockEngine{
-		inspectRV: &container.ImageInfo{
-			Digest: "sha256:0000000000000000000000000000000000000000000000000000000000000002",
-		},
-	}
-	rc := newTestRC(t, eng)
+func TestResolveImageDigest_RejectsUnpinned(t *testing.T) {
+	rc := newTestRC(t, &mockEngine{})
 	step := &lane.Step{Image: primitive.ImageRefPtr("docker.io/lib/golang:1.22")}
 
-	digest, err := rc.resolveImageDigest(context.Background(), step, "test", stepInputs{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.HasPrefix(digest.String(), "sha256:") {
-		t.Errorf("expected sha256 digest, got %q", digest)
+	if _, err := rc.resolveImageDigest(step, "test", stepInputs{}); err == nil {
+		t.Fatal("expected error for an image reference without a digest")
 	}
 }
 
@@ -760,7 +751,7 @@ func TestResolveImageDigest_ImageFrom(t *testing.T) {
 	if gatherErr != nil {
 		t.Fatal(gatherErr)
 	}
-	digest, err := rc.resolveImageDigest(context.Background(), step, "test", inputs)
+	digest, err := rc.resolveImageDigest(step, "test", inputs)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,11 +1,10 @@
 package main
 
 import (
-	"context"
+	"fmt"
 	"strings"
 
 	"github.com/istr/strike/internal/primitive"
-	"github.com/istr/strike/internal/registry"
 )
 
 // sanitizeForLog replaces control characters to prevent log injection.
@@ -22,17 +21,16 @@ func sanitizeForLog(s string) string {
 	return b.String()
 }
 
-func resolveDigest(ctx context.Context, client *registry.Client, imageRef primitive.ImageRef) (primitive.Digest, error) {
-	// A digest-pinned reference carries its own content address.
+// resolveDigest returns the content address a lane image reference is pinned
+// to. The schema admits only digest-pinned references, so a reference without
+// one is rejected rather than resolved through the engine.
+func resolveDigest(imageRef primitive.ImageRef) (primitive.Digest, error) {
 	digest, err := imageRef.Digest()
 	if err != nil {
 		return "", err
 	}
-	if digest != "" {
-		return digest, nil
+	if digest == "" {
+		return "", fmt.Errorf("image reference %q carries no digest", imageRef)
 	}
-
-	// Local image without digest (e.g. bootstrap root) - resolve via engine API.
-	ref := string(imageRef)
-	return client.InspectDigest(ctx, ref)
+	return digest, nil
 }
