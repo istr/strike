@@ -14,3 +14,6 @@ RUN ["go", "install", "golang.org/x/vuln/cmd/govulncheck@v1.7.0"]
 RUN ["useradd", "--create-home", "--uid", "1000", "--user-group", "--shell", "/bin/bash", "dev"]
 RUN ["chown", "-R", "dev:dev", "/go"]
 USER dev
+# Mount point of the strike-claude volume; an empty volume copies this
+# directory's ownership on first mount, so the agent's state stays writable.
+RUN ["mkdir", "-p", "/home/dev/.claude"]

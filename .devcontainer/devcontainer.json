@@ -5,10 +5,12 @@
   "workspaceMount": "source=${localWorkspaceFolder},target=${localWorkspaceFolder},type=bind",
   "workspaceFolder": "${localWorkspaceFolder}",
   "mounts": [
-    "source=${localEnv:XDG_RUNTIME_DIR}/podman.sock,target=/run/podman/podman.sock,type=bind"
+    "source=${localEnv:XDG_RUNTIME_DIR}/podman.sock,target=/run/podman/podman.sock,type=bind",
+    "source=strike-claude,target=/home/dev/.claude,type=volume"
   ],
   "containerEnv": {
-    "CONTAINER_HOST": "unix:///run/podman/podman.sock"
+    "CONTAINER_HOST": "unix:///run/podman/podman.sock",
+    "CLAUDE_CONFIG_DIR": "/home/dev/.claude"
   },
   "remoteUser": "dev",
   "features": {
