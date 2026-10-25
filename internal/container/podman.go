@@ -143,6 +143,9 @@ func (e *podmanEngine) Info(ctx context.Context) error {
 			APIVersion string `json:"APIVersion"`
 		} `json:"version"`
 		Host struct {
+			OS       string `json:"os"`
+			Arch     string `json:"arch"`
+			Variant  string `json:"variant"`
 			Security struct {
 				SELinuxEnabled  bool `json:"selinuxEnabled"`
 				AppArmorEnabled bool `json:"apparmorEnabled"`
@@ -160,6 +163,9 @@ func (e *podmanEngine) Info(ctx context.Context) error {
 	e.identity.Runtime = &RuntimeInfo{
 		Version:    raw.Version.Version,
 		APIVersion: raw.Version.APIVersion,
+		OS:         raw.Host.OS,
+		Arch:       raw.Host.Arch,
+		Variant:    raw.Host.Variant,
 		Rootless:   raw.Host.Security.Rootless,
 		SELinux:    raw.Host.Security.SELinuxEnabled,
 		AppArmor:   raw.Host.Security.AppArmorEnabled,
@@ -186,33 +192,11 @@ func (e *podmanEngine) ImageExists(ctx context.Context, ref string) (bool, error
 	return resp.StatusCode == http.StatusNoContent, nil
 }
 
-// ImagePull fetches an image from a remote registry.
-func (e *podmanEngine) ImagePull(ctx context.Context, ref string) error {
-	u := e.base + "/images/pull?reference=" + url.QueryEscape(ref)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, nil)
-	if err != nil {
-		return err
-	}
-	resp, err := e.client.Do(req)
-	if err != nil {
-		return fmt.Errorf("image pull %s: %w", ref, err)
-	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			log.Printf("WARN close response body: %v", err)
-		}
-	}()
-	// The pull response is a stream of JSON objects. Read to completion.
-	if _, err := io.Copy(io.Discard, resp.Body); err != nil {
-		return fmt.Errorf("image pull %s: read response: %w", ref, err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("image pull %s: status %d", ref, resp.StatusCode)
-	}
-	return nil
-}
-
-// ImageLoad loads an OCI tar archive into the local store.
+// ImageLoad loads an OCI tar archive into the local store. It returns the
+// first name the engine reports for the loaded image: its id, or, when the
+// layout index names the image through an org.opencontainers.image.ref.name
+// annotation, that name. A non-2xx status is an error carrying the engine's
+// message.
 func (e *podmanEngine) ImageLoad(ctx context.Context, input io.Reader) (string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, e.base+"/images/load", input)
 	if err != nil {
@@ -229,6 +213,13 @@ func (e *podmanEngine) ImageLoad(ctx context.Context, input io.Reader) (string, 
 		}
 	}()
 
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			return "", fmt.Errorf("image load: status %d: (body read failed)", resp.StatusCode)
+		}
+		return "", fmt.Errorf("image load: status %d: %s", resp.StatusCode, body)
+	}
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", fmt.Errorf("image load: read response: %w", err)

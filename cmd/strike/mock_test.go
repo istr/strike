@@ -15,7 +15,6 @@ import (
 type mockEngine struct {
 	loadErr        error
 	imageExistsErr error
-	pullErr        error
 	pingErr        error
 	inspectErr     error
 	tagErr         error
@@ -27,18 +26,20 @@ type mockEngine struct {
 	saveCalls      map[string]int    // tag -> number of ImageSave calls
 	loadRV         string
 	runExitCode    int
+	existsCalls    int
+	loadCalls      int
 	imageExistsRV  bool
 }
 
 func (m *mockEngine) Ping(context.Context) error { return m.pingErr }
 
 func (m *mockEngine) ImageExists(_ context.Context, _ string) (bool, error) {
+	m.existsCalls++
 	return m.imageExistsRV, m.imageExistsErr
 }
 
-func (m *mockEngine) ImagePull(context.Context, string) error { return m.pullErr }
-
 func (m *mockEngine) ImageLoad(_ context.Context, _ io.Reader) (string, error) {
+	m.loadCalls++
 	return m.loadRV, m.loadErr
 }
 

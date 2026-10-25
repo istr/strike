@@ -287,3 +287,22 @@ resolver's observed identity is still captured from a TLS connection the
 controller establishes itself, still once per lane run, and still as a
 `transport.ConnectionIdentity`; section 1 and the first Implementation bullet
 hold as written, over the new names.
+
+## Amendment 2026-10-25 -- the base-image fetch is the controller's
+
+"The governing constraint" describes the base-image pull as running through
+`Engine.ImagePull`, with the controller verifying the engine-reported digest
+afterwards. For externally declared step images neither half held: no
+production path called the engine pull, and the digest check it cites
+(`loadTagVerify`, today `WrapImageTarAsImage` and `finalizeImage`) covers
+lane-generated images only. Under ADR-045's amendment of this date the
+controller fetches an absent external step image itself and verifies every
+byte against the declared digest before the engine sees it; the engine pull
+method is gone.
+
+The decision stands, and its reasoning is now true as written: the trust
+anchor for an inbound image is the controller-computed content hash matched
+against the declared pin. Of the two reasons section 3 gives for not recording
+the registry connection, one has lapsed -- the registry's TLS identity is now
+observable by the controller -- and the other decides alone: the identity
+contributes nothing to trust, so it is not recorded.

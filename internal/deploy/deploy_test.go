@@ -218,7 +218,17 @@ func newTLSTestEngine(t *testing.T, handler http.Handler) container.Engine {
 		t.Fatalf("server TLS keypair: %v", err)
 	}
 
-	srv := httptest.NewUnstartedServer(handler)
+	// Every image resolves in the test engine's store: the materialization
+	// path reads image existence before a capture's create, and these tests
+	// exercise the container lifecycle, not the fetch.
+	present := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/images/") && strings.HasSuffix(r.URL.Path, "/exists") {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		handler.ServeHTTP(w, r)
+	})
+	srv := httptest.NewUnstartedServer(present)
 	srv.TLS = &tls.Config{
 		Certificates: []tls.Certificate{serverTLSCert},
 		MinVersion:   tls.VersionTLS13,

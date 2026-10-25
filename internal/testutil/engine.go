@@ -25,5 +25,8 @@ func RequireEngine(t *testing.T) container.Engine {
 	if pingErr := eng.Ping(t.Context()); pingErr != nil {
 		t.Fatalf("container engine not responding (%v); set STRIKE_INTEGRATION=0 to skip integration tests", pingErr)
 	}
+	if infoErr := eng.Info(t.Context()); infoErr != nil {
+		t.Fatalf("container engine info (%v); set STRIKE_INTEGRATION=0 to skip integration tests", infoErr)
+	}
 	return eng
 }

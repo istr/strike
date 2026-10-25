@@ -282,3 +282,18 @@ first cut.
   chosen over a dependency.
 - No exec -- the keyless flow runs in-process as libraries, never by spawning a
   CLI.
+
+## Amendment 2026-10-25 -- D4: the engine never pulls
+
+D4 reads "The engine may still pull by digest for now, but it never pushes."
+The interim is over. The control plane also fetches external step images and
+loads them into the engine (ADR-045, amendment of this date), and the engine
+pull surface is removed from strike: the engine neither pulls nor pushes.
+
+A consequence worth naming: the engine host's registry configuration --
+mirrors, blocked and insecure registries, certificate directories,
+credentials, and pull-time signature policy -- no longer applies to step
+images. The lane's declared locator decides which registry the control plane
+contacts; a mirror is declared by naming it, with the same digest, which
+content addressing makes equivalent. The control plane's trust store governs
+the fetch's TLS. Registries that require authentication are not reached.

@@ -9,6 +9,8 @@ import (
 
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/container"
+	"github.com/istr/strike/internal/primitive"
+	"github.com/istr/strike/internal/registry"
 	"github.com/istr/strike/internal/registry/regtest"
 	"github.com/istr/strike/internal/testutil"
 )
@@ -20,19 +22,13 @@ const (
 	mountGoImage = "cgr.dev/chainguard/go@sha256:0a0ba6cee2d535a4e9dcc63d4230be546d3c4c6631b23bc9989992711317649f"
 )
 
-// mountEnsureImage pulls an image if not already local.
+// mountEnsureImage materializes an image through the production path if the
+// store does not resolve it yet.
 func mountEnsureImage(t *testing.T, engine container.Engine, ref string) {
 	t.Helper()
-	ctx := context.Background()
-	exists, err := engine.ImageExists(ctx, ref)
-	if err != nil {
-		t.Fatalf("image exists check: %v", err)
-	}
-	if !exists {
-		t.Logf("pulling %s ...", ref)
-		if pullErr := engine.ImagePull(ctx, ref); pullErr != nil {
-			t.Fatalf("pull %s: %v", ref, pullErr)
-		}
+	c := &registry.Client{Engine: engine}
+	if err := c.EnsureImage(context.Background(), primitive.NewImageRef(ref)); err != nil {
+		t.Fatalf("EnsureImage %s: %v", ref, err)
 	}
 }
 

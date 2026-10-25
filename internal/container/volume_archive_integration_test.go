@@ -10,6 +10,8 @@ import (
 
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/container"
+	"github.com/istr/strike/internal/primitive"
+	"github.com/istr/strike/internal/registry"
 	"github.com/istr/strike/internal/testutil"
 )
 
@@ -27,14 +29,8 @@ func TestEngineVolumeArchiveRoundTrip(t *testing.T) {
 	ctx := context.Background()
 
 	const img = "cgr.dev/chainguard/go@sha256:0a0ba6cee2d535a4e9dcc63d4230be546d3c4c6631b23bc9989992711317649f"
-	exists, existsErr := eng.ImageExists(ctx, img)
-	if existsErr != nil {
-		t.Fatalf("image exists: %v", existsErr)
-	}
-	if !exists {
-		if pullErr := eng.ImagePull(ctx, img); pullErr != nil {
-			t.Fatalf("pull %s: %v", img, pullErr)
-		}
+	if err := (&registry.Client{Engine: eng}).EnsureImage(ctx, primitive.NewImageRef(img)); err != nil {
+		t.Fatalf("EnsureImage %s: %v", img, err)
 	}
 
 	vol := fmt.Sprintf("strike-itest-%d", clock.Wall().UnixNano())
@@ -117,14 +113,8 @@ func TestEngineSeedThenRun(t *testing.T) {
 	ctx := context.Background()
 
 	const img = "cgr.dev/chainguard/go@sha256:0a0ba6cee2d535a4e9dcc63d4230be546d3c4c6631b23bc9989992711317649f"
-	exists, existsErr := eng.ImageExists(ctx, img)
-	if existsErr != nil {
-		t.Fatalf("image exists: %v", existsErr)
-	}
-	if !exists {
-		if pullErr := eng.ImagePull(ctx, img); pullErr != nil {
-			t.Fatalf("pull %s: %v", img, pullErr)
-		}
+	if err := (&registry.Client{Engine: eng}).EnsureImage(ctx, primitive.NewImageRef(img)); err != nil {
+		t.Fatalf("EnsureImage %s: %v", img, err)
 	}
 
 	vol := fmt.Sprintf("strike-seed-itest-%d", clock.Wall().UnixNano())

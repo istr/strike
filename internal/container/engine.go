@@ -22,11 +22,10 @@ type Engine interface {
 	// ImageExists checks if an image exists in the local store.
 	ImageExists(ctx context.Context, ref string) (bool, error)
 
-	// ImagePull fetches an image from a remote registry.
-	ImagePull(ctx context.Context, ref string) error
-
-	// ImageLoad loads an OCI tar archive into the local store.
-	// Returns the image ID.
+	// ImageLoad loads an OCI tar archive into the local store. It returns
+	// the first name the engine reports for the loaded image: its id, or,
+	// when the layout index names the image through an
+	// org.opencontainers.image.ref.name annotation, that name.
 	ImageLoad(ctx context.Context, input io.Reader) (string, error)
 
 	// ImageInspect returns metadata for a local image.
@@ -258,10 +257,16 @@ type ConnectionInfo struct {
 	ClientCertSubject string `json:"clientCertSubject,omitempty"`
 }
 
-// RuntimeInfo holds the engine's self-reported metadata from /info.
+// RuntimeInfo holds the engine's self-reported metadata from /info. OS, Arch
+// and Variant are the engine host's platform; they select which entry of an
+// image index the control plane fetches for the engine and carry no trust
+// (ADR-037: selection is not trust).
 type RuntimeInfo struct {
 	Version    string `json:"version"`
 	APIVersion string `json:"apiVersion"`
+	OS         string `json:"os"`
+	Arch       string `json:"arch"`
+	Variant    string `json:"variant"`
 	Rootless   bool   `json:"rootless"`
 	SELinux    bool   `json:"selinux"`
 	AppArmor   bool   `json:"apparmor"`

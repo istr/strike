@@ -41,30 +41,53 @@ func OCITarFromImage(img v1.Image, annotations map[string]string) ([]byte, error
 	if len(annotations) > 0 {
 		desc.Annotations = annotations
 	}
+	var buf bytes.Buffer
+	if wErr := writeOCITar(&buf, img, *desc, nil); wErr != nil {
+		return nil, wErr
+	}
+	return buf.Bytes(), nil
+}
+
+// writeOCITar streams img as an OCI image layout tar to w. top is the one
+// descriptor the layout index carries: the image's own manifest descriptor,
+// or the descriptor of the image index img was selected from, whose raw
+// bytes are then rawIndex and are written as a blob of their own, so that
+// the engine records the index digest beside the manifest digest. Every
+// blob is written before index.json: a stream that fails inside a blob
+// leaves the engine an archive it cannot import.
+func writeOCITar(w io.Writer, img v1.Image, top v1.Descriptor, rawIndex []byte) error {
+	manifest, err := partial.Descriptor(img)
+	if err != nil {
+		return fmt.Errorf("layout: describe image: %w", err)
+	}
 	index, err := json.MarshalIndent(v1.IndexManifest{
 		SchemaVersion: 2,
 		MediaType:     types.OCIImageIndex,
-		Manifests:     []v1.Descriptor{*desc},
+		Manifests:     []v1.Descriptor{top},
 	}, "", "   ")
 	if err != nil {
-		return nil, fmt.Errorf("layout: marshal index: %w", err)
+		return fmt.Errorf("layout: marshal index: %w", err)
 	}
 
-	var buf bytes.Buffer
-	tw := tar.NewWriter(&buf)
-	if blobErr := writeLayoutBlobs(tw, img, *desc); blobErr != nil {
-		return nil, blobErr
+	tw := tar.NewWriter(w)
+	if blobErr := writeLayoutBlobs(tw, img, *manifest); blobErr != nil {
+		return blobErr
+	}
+	if rawIndex != nil {
+		if iErr := writeLayoutEntry(tw, blobName(top.Digest), rawIndex); iErr != nil {
+			return iErr
+		}
 	}
 	if fErr := writeLayoutEntry(tw, "index.json", index); fErr != nil {
-		return nil, fErr
+		return fErr
 	}
 	if fErr := writeLayoutEntry(tw, "oci-layout", []byte(ociLayoutMarker)); fErr != nil {
-		return nil, fErr
+		return fErr
 	}
 	if closeErr := tw.Close(); closeErr != nil {
-		return nil, fmt.Errorf("layout: close tar: %w", closeErr)
+		return fmt.Errorf("layout: close tar: %w", closeErr)
 	}
-	return buf.Bytes(), nil
+	return nil
 }
 
 // writeLayoutBlobs writes the blobs tree of an OCI layout: the manifest, the

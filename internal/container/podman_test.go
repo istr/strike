@@ -72,35 +72,6 @@ func TestImageExists(t *testing.T) {
 	}
 }
 
-func TestImagePull(t *testing.T) {
-	tests := []struct {
-		name       string
-		statusCode int
-		wantErr    bool
-	}{
-		{"success", http.StatusOK, false},
-		{"not found", http.StatusNotFound, true},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			eng := newTLSTestEngine(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if r.Method != http.MethodPost {
-					t.Errorf("expected POST, got %s", r.Method)
-				}
-				ref := r.URL.Query().Get("reference")
-				if ref != "alpine:3.19" {
-					t.Errorf("reference = %q, want alpine:3.19", ref)
-				}
-				w.WriteHeader(tt.statusCode)
-			}))
-			err := eng.ImagePull(context.Background(), "alpine:3.19")
-			if (err != nil) != tt.wantErr {
-				t.Fatalf("ImagePull() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
-}
-
 func TestImageInspect(t *testing.T) {
 	tests := []struct {
 		response   map[string]any

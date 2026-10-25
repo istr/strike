@@ -39,6 +39,9 @@ func TestIntegrationInfoSchema(t *testing.T) {
 		{"Runtime.AppArmor", id.Runtime.AppArmor, []string{"host", "security", "apparmorEnabled"}},
 		{"Runtime.APIVersion", id.Runtime.APIVersion, []string{"version", "APIVersion"}},
 		{"Runtime.Version", id.Runtime.Version, []string{"version", "Version"}},
+		{"Runtime.OS", id.Runtime.OS, []string{"host", "os"}},
+		{"Runtime.Arch", id.Runtime.Arch, []string{"host", "arch"}},
+		{"Runtime.Variant", id.Runtime.Variant, []string{"host", "variant"}},
 	}
 	runDriftChecks(t, m, checks)
 }

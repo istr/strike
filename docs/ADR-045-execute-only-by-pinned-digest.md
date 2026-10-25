@@ -115,3 +115,32 @@ intended; they never carry trust.
   guarded against per case.
 - **Code is liability** -- one execution-reference form replaces two; the
   tag-execution path and its engine-resolver dependence are deleted.
+
+## Amendment 2026-10-25 -- the pull path this decision cites did not exist; the control plane materializes
+
+The decision names "the engine pull-by-digest used for externally declared
+images" as an existing component and reasons that "a pull-by-digest
+recomputes the digest on fetch". When it was written no production path
+pulled: the engine pull method had lost its last caller, the cache-tag lookup,
+on 2026-05-15, and a step whose image was absent from the engine store failed
+at container create. The integration tests pre-pulled their images and masked
+the gap (found by the item-0156 spike of 2026-10-24).
+
+The path exists now, in the shape ADR-030 and ADR-037 D1 describe. The
+control plane fetches an absent external step image by its declared digest,
+verifies the index or manifest and every blob against the digest chain as it
+reads them, and loads the bytes into the engine as an OCI image layout whose
+index names the declared digest and carries the declared reference as
+`org.opencontainers.image.ref.name`, so the store resolves the reference as it
+would after a pull by that reference (measured on podman 5.4.2, 2026-10-25).
+The step then executes the declared reference unchanged. The engine never
+pulls. "Recomputes the digest on fetch" is read as: the controller recomputes
+it. The engine's own check on load is not relied upon; measured, a load that
+reuses a layer the store already holds does not read the offered blob.
+
+The classification is unchanged. The controller-side check is a control-plane
+observation; the engine's materialization of the loaded bytes as the
+container root filesystem stays engine-dependent, as the "irreducible
+boundary" paragraph above states. Lane-generated images were already
+materialized this way -- control-plane assembly, load, digest compare -- so one
+materialization path now serves every step image.

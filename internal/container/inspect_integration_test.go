@@ -7,23 +7,20 @@ import (
 
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/container"
+	"github.com/istr/strike/internal/primitive"
+	"github.com/istr/strike/internal/registry"
 	"github.com/istr/strike/internal/testutil"
 )
 
 const inspectTestImage = "cgr.dev/chainguard/static@sha256:2fdfacc8d61164aa9e20909dceec7cc28b9feb66580e8e1a65b9f2443c53b61b"
 
-// ensureImageLocal pulls an image if it is not in the local store.
+// ensureImageLocal materializes an image in the engine store through the
+// production path if the store does not resolve it yet.
 func ensureImageLocal(ctx context.Context, t *testing.T, eng container.Engine, ref string) {
 	t.Helper()
-	exists, err := eng.ImageExists(ctx, ref)
-	if err != nil {
-		t.Fatalf("ImageExists: %v", err)
-	}
-	if !exists {
-		t.Logf("pulling %s ...", ref)
-		if pullErr := eng.ImagePull(ctx, ref); pullErr != nil {
-			t.Fatalf("ImagePull: %v", pullErr)
-		}
+	c := &registry.Client{Engine: eng}
+	if err := c.EnsureImage(ctx, primitive.NewImageRef(ref)); err != nil {
+		t.Fatalf("EnsureImage %s: %v", ref, err)
 	}
 }
 

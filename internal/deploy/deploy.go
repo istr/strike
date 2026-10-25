@@ -640,6 +640,12 @@ func (d *Deployer) captureOne(ctx context.Context, sc lane.Capture) (captureSnap
 	if len(sc.Command) == 0 {
 		return captureSnap{}, fmt.Errorf("capture %q: command is required", sc.ID)
 	}
+	// The capture image is a lane-declared external image like a step's
+	// (ADR-045): materialized by the control plane when the store does not
+	// resolve it, before the capsule binds and the container is created.
+	if err := (&registry.Client{Engine: d.Engine}).EnsureImage(ctx, sc.Image); err != nil {
+		return captureSnap{}, fmt.Errorf("capture %q: %w", sc.ID, err)
+	}
 
 	var stdout, stderr bytes.Buffer
 

@@ -11,6 +11,7 @@ import (
 	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/primitive"
+	"github.com/istr/strike/internal/registry"
 )
 
 // Run holds the configuration for executing a step container.
@@ -117,6 +118,16 @@ func (r Run) Execute(ctx context.Context) (string, error) {
 	}
 	opts.Stdout = os.Stdout
 	opts.Stderr = os.Stderr
+
+	// An external image the store does not resolve is materialized by the
+	// control plane before the create (ADR-045): fetched by its declared
+	// digest, verified, loaded. A lane-generated image (ImageRef set) was
+	// placed by its producer.
+	if r.ImageRef == "" {
+		if err := (&registry.Client{Engine: r.Engine}).EnsureImage(ctx, opts.Image); err != nil {
+			return "", err
+		}
+	}
 
 	id, exitCode, err := r.Engine.ContainerRunHeld(ctx, opts, r.Seeds)
 	if err != nil {

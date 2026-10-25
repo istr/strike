@@ -29,20 +29,13 @@ const (
 	staticBase = "cgr.dev/chainguard/static@sha256:2fdfacc8d61164aa9e20909dceec7cc28b9feb66580e8e1a65b9f2443c53b61b"
 )
 
-// ensureImage pulls an image if it is not already in the local store.
+// ensureImage materializes an image through the production path if the
+// engine store does not resolve it yet.
 func ensureImage(t *testing.T, engine container.Engine, ref string) {
 	t.Helper()
-	ctx := context.Background()
-	exists, err := engine.ImageExists(ctx, ref)
-	if err != nil {
-		t.Fatalf("image exists check: %v", err)
-	}
-	if exists {
-		return
-	}
-	t.Logf("pulling %s ...", ref)
-	if pullErr := engine.ImagePull(ctx, ref); pullErr != nil {
-		t.Fatalf("image pull %s: %v", ref, pullErr)
+	c := &registry.Client{Engine: engine}
+	if err := c.EnsureImage(context.Background(), primitive.NewImageRef(ref)); err != nil {
+		t.Fatalf("EnsureImage %s: %v", ref, err)
 	}
 }
 
