@@ -48,3 +48,12 @@ func TestAllFixturesBuild(t *testing.T) {
 		})
 	}
 }
+
+// TestBootstrapLaneValidates holds the repository's bootstrap lane to the
+// validation strike validate applies: parse, lane validation, DAG build and
+// leaf topology.
+func TestBootstrapLaneValidates(t *testing.T) {
+	if _, _, _, _, _, err := validateLane(filepath.Join("..", "..", "lane.yaml")); err != nil {
+		t.Fatalf("validate lane.yaml: %v", err)
+	}
+}
