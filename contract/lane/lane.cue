@@ -162,8 +162,17 @@ import (
 	// reports a conflict ("incompatible list lengths") otherwise. This is
 	// transparent to gengotypes -- the generated Outputs field is unchanged --
 	// and is the same idiom as the deploy-leaf constraint above (ADR-039).
+	//
+	// Only a pack step declares the image output (ADR-046): every image a lane
+	// generates is assembled by the control plane on a digest-pinned base. A
+	// step with output therefore declares neither image nor imageFromStep;
+	// with the deploy constraint above and the exactly-one-kind rule, that
+	// leaves pack. A present image or imageFromStep is reported at its own
+	// path, the same idiom as output on a deploy step.
 	if output != _|_ {
 		outputs: []
+		image?:         error("the image output is declared on a pack step only")
+		imageFromStep?: error("the image output is declared on a pack step only")
 	}
 }
 

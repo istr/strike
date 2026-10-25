@@ -323,6 +323,25 @@ Add fuzz tests for all input parsers and validators:
 Fuzz tests must not panic on any input. Failing inputs are saved to
 `testdata/fuzz/` and run as regression tests automatically.
 
+### 2.7 Test lanes
+
+A lane a test builds in Go -- a `lane.Lane` or `lane.Step` literal handed to
+code that runs after `lane.Parse` -- is a lane `lane.Parse` would accept:
+digest-pinned references, every field the schema requires, one step kind per
+step, and every constraint the schema states. Code after Parse relies on the
+schema and keeps no guard for a shape the schema rejects. A test that feeds
+it such a shape exercises a state production cannot reach, and a guard added
+to make that test pass is dead code. Example: the schema admits the image
+output on a pack step only, so the registry deploy validator does not check
+that the pushed image is a pack step.
+
+The one exception is a test of the validation logic itself: `lane.Parse`,
+`lane.ValidateLane` and its checks, the DAG construction checks (duplicate
+step ids, cycles, the deploy-leaf rule), and the digest guards. Such a test
+builds a lane the schema rejects, as input to the check under test. The
+check still relies on the schema for every property it does not check
+itself.
+
 ## 3. Code style
 
 See `docs/CODE-STYLE.md` for lint-suppression policy, the allowed-annotations

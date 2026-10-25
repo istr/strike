@@ -141,12 +141,16 @@ func packInputTars(t *testing.T, content []byte) map[string][]byte {
 	return map[string][]byte{"/app": buf.Bytes()}
 }
 
-// packTestImage assembles an OCI image from a binary and returns
-// the pack result.
-func packTestImage(t *testing.T, bin []byte) *executor.PackResult {
+// packTestImage assembles an OCI image from a binary on the static base, as
+// the engine's platform resolves it, and returns the pack result.
+func packTestImage(t *testing.T, engine container.Engine, bin []byte) *executor.PackResult {
 	t.Helper()
 
-	result, packErr := executor.Pack(executor.PackOpts{
+	platform, platErr := registry.EnginePlatform(engine)
+	if platErr != nil {
+		t.Fatalf("engine platform: %v", platErr)
+	}
+	result, packErr := executor.Pack(context.Background(), executor.PackOpts{
 		Spec: &lane.PackSpec{
 			Base: primitive.ImageRef(staticBase),
 			Files: []lane.PackFile{
@@ -158,6 +162,7 @@ func packTestImage(t *testing.T, bin []byte) *executor.PackResult {
 			},
 		},
 		InputTars: packInputTars(t, bin),
+		Platform:  platform,
 	})
 	if packErr != nil {
 		t.Fatalf("pack: %v", packErr)

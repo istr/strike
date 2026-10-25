@@ -6,9 +6,6 @@ import (
 
 	"github.com/google/go-containerregistry/pkg/v1/layout"
 
-	"github.com/istr/strike/internal/executor"
-	"github.com/istr/strike/internal/lane"
-	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/registry/regtest"
 	"github.com/istr/strike/internal/testutil"
 )
@@ -24,22 +21,7 @@ func TestPackLayoutPayloadOnly(t *testing.T) {
 
 	bin := buildTestBinary(t, engine)
 
-	result, err := executor.Pack(executor.PackOpts{
-		Spec: &lane.PackSpec{
-			Base: primitive.ImageRef(staticBase),
-			Files: []lane.PackFile{
-				{From: lane.OutputRef{Step: "build", Output: "app"}, Dest: "/app", Mode: 0o755},
-			},
-			Config: &lane.ImageConfig{
-				Entrypoint: []string{"/app"},
-				User:       primitive.UserSpecPtr("65534:65534"),
-			},
-		},
-		InputTars: packInputTars(t, bin),
-	})
-	if err != nil {
-		t.Fatalf("pack: %v", err)
-	}
+	result := packTestImage(t, engine, bin)
 	imgDigest := result.Digest.String()
 	t.Logf("image digest: %s", imgDigest)
 

@@ -4,17 +4,15 @@ package executor
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"sort"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
-	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
 	"github.com/google/go-containerregistry/pkg/v1/types"
-
-	"github.com/google/go-containerregistry/pkg/name"
 
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/primitive"
@@ -24,10 +22,12 @@ import (
 // PackOpts is everything pack needs; callers in main.go assemble this.
 // InputTars maps each pack file's destination to the canonical content tar
 // the caller resolved for it; a pack input never becomes a host path
-// (ADR-035, ADR-036).
+// (ADR-035, ADR-036). Platform is the engine's platform: a base declared by
+// an index digest resolves to the entry of that platform (ADR-046).
 type PackOpts struct {
 	InputTars map[string][]byte
 	Spec      *lane.PackSpec
+	Platform  v1.Platform
 }
 
 // PackResult holds the outputs of a successful pack operation. LayoutTar is
@@ -110,13 +110,13 @@ func AssembleImage(base v1.Image, spec *lane.PackSpec, inputTars map[string][]by
 // signing, SBOM generation, and publication happen once, at deploy
 // (ADR-051 D1/D3).
 //
-// Pack is the orchestrator: it handles I/O (pull, serialize) and delegates to
+// Pack is the orchestrator: it handles I/O (fetch, serialize) and delegates to
 // the pure AssembleImage for the security-critical computation.
-func Pack(opts PackOpts) (*PackResult, error) {
-	// 1. Pull and verify the base image (network I/O)
-	base, err := pullVerified(opts.Spec.Base)
+func Pack(ctx context.Context, opts PackOpts) (*PackResult, error) {
+	// 1. Fetch and verify the base image of the requested platform (network I/O)
+	base, err := registry.FetchImage(ctx, opts.Spec.Base, opts.Platform)
 	if err != nil {
-		return nil, fmt.Errorf("pack: pull base image: %w", err)
+		return nil, fmt.Errorf("pack: fetch base image %s: %w", opts.Spec.Base, err)
 	}
 
 	// 2. Assemble image -- pure computation, no I/O
@@ -209,35 +209,6 @@ func applyConfig(img v1.Image, spec *lane.PackSpec) (v1.Image, error) {
 	if err != nil {
 		return nil, fmt.Errorf("pack: apply config: %w", err)
 	}
-	return img, nil
-}
-
-// pullVerified pulls a remote image by digest-pinned reference.
-// For multi-arch images the ref digest pins the index; go-containerregistry
-// verifies the index digest on fetch, then resolves to the platform image.
-func pullVerified(ref primitive.ImageRef) (v1.Image, error) {
-	s := string(ref)
-	nameRef, err := name.ParseReference(s)
-	if err != nil {
-		return nil, fmt.Errorf("parse ref %q: %w", ref, err)
-	}
-
-	// Require a digest reference -- tags are not allowed.
-	if _, ok := nameRef.(name.Digest); !ok {
-		return nil, fmt.Errorf("ref %q must be pinned by digest", ref)
-	}
-
-	desc, err := remote.Get(nameRef)
-	if err != nil {
-		return nil, fmt.Errorf("pull %q: %w", ref, err)
-	}
-
-	// If the ref points to an index, resolve to the platform image.
-	img, err := desc.Image()
-	if err != nil {
-		return nil, fmt.Errorf("resolve image %q: %w", ref, err)
-	}
-
 	return img, nil
 }
 

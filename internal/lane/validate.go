@@ -200,9 +200,9 @@ func validateArtifactEntries(s *Step, index map[primitive.Identifier]*Step) erro
 }
 
 // validateRegistryArtifacts enforces the registry-method structure (ADR-051
-// D9): a non-empty map, exactly one image arm (the pushed subject), every
-// region packed into the pushed pack image, and no regions on a build-image
-// push -- containment in a build image is not verifiable from the lane.
+// D9): a non-empty map, exactly one image arm (the pushed subject), and every
+// region packed into the pushed image. The pushed image is a pack step's: the
+// schema admits the image output on a pack step only (ADR-046).
 func validateRegistryArtifacts(s *Step, index map[primitive.Identifier]*Step) error {
 	if len(s.Deploy.Artifacts) == 0 {
 		return fmt.Errorf("step %q: registry deploy requires a non-empty artifacts map", s.ID)
@@ -224,10 +224,6 @@ func validateRegistryArtifacts(s *Step, index map[primitive.Identifier]*Step) er
 		ref := s.Deploy.Artifacts[name]
 		if ref.Output == nil {
 			continue
-		}
-		if pushStep.Pack == nil {
-			return fmt.Errorf(
-				"step %q: deploy artifact %q: file or directory regions require the pushed image %q to be a pack step; containment in a build image is not verifiable", s.ID, name, imageArm)
 		}
 		if !packCovers(pushStep, ref) {
 			return fmt.Errorf(

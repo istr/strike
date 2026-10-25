@@ -29,9 +29,10 @@ keyless:
   trustRootRef: "localhost:5555/trustroot@sha256:abababababababababababababababababababababababababababababababab"
 steps:
   - id: build
-    image: docker.io/library/golang@sha256:abababababababababababababababababababababababababababababababab
-    args: ["go", "build"]
-    workdir: /out
+    pack:
+      base: docker.io/library/golang@sha256:abababababababababababababababababababababababababababababababab
+      files: []
+    args: []
     env: {}
     inputs: []
     secrets: []

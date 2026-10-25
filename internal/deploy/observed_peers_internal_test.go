@@ -14,8 +14,9 @@ import (
 	"github.com/istr/strike/internal/transport"
 )
 
-// observedPeersLane builds a two-step lane -- a build step carrying peers and
-// a deploy step -- and returns the built DAG, its step index and a runtime.
+// observedPeersLane builds a three-step lane -- a build step carrying peers, a
+// pack step that packs its directory output, and a deploy step that names the
+// pack step -- and returns the built DAG, its step index and a runtime.
 // The deploy method is irrelevant here: collectObservedPeers reads recorded
 // connections and declared peers, never the method.
 func observedPeersLane(t *testing.T, peers []lane.Peer) (*lane.DAG, map[primitive.Identifier]*lane.Step, *lane.Runtime) {
@@ -30,14 +31,22 @@ func observedPeersLane(t *testing.T, peers []lane.Peer) (*lane.DAG, map[primitiv
 				Env:     map[string]string{},
 				Inputs:  []lane.InputRef{},
 				Secrets: []lane.SecretRef{},
-				Output:  "image",
+				Outputs: []lane.FileOutput{{ID: "tree"}},
 				Peers:   peers,
+			},
+			{
+				ID: "pack",
+				Pack: &lane.PackSpec{
+					Base:  "alpine:3.20",
+					Files: []lane.PackFile{{From: lane.OutputRef{Step: "build", Output: "tree"}, Dest: "/tree"}},
+				},
+				Output: "image",
 			},
 			{
 				ID: "deploy-prod",
 				Deploy: &lane.DeploySpec{
 					Method:    DeployRegistryForTest(),
-					Artifacts: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
+					Artifacts: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "pack"}},
 					Recording: lane.StateRecording{},
 				},
 			},

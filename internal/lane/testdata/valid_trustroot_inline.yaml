@@ -65,9 +65,10 @@ keyless:
           end: "2036-06-11T20:38:48Z"
 steps:
   - id: build
-    image: docker.io/library/golang@sha256:abababababababababababababababababababababababababababababababab
-    args: ["go", "build"]
-    workdir: /out
+    pack:
+      base: docker.io/library/golang@sha256:abababababababababababababababababababababababababababababababab
+      files: []
+    args: []
     env: {}
     inputs: []
     secrets: []

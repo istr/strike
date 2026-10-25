@@ -364,9 +364,14 @@ func (rc *runContext) executePack(ctx context.Context, step *lane.Step, stepID p
 	if step.Output == "" {
 		return fmt.Errorf("%s: pack output requires an image output", safeName)
 	}
-	result, err := executor.Pack(executor.PackOpts{
+	platform, err := registry.EnginePlatform(rc.engine)
+	if err != nil {
+		return fmt.Errorf("%s: pack base: %w", safeName, err)
+	}
+	result, err := executor.Pack(ctx, executor.PackOpts{
 		Spec:      step.Pack,
 		InputTars: inputTars,
+		Platform:  platform,
 	})
 	if err != nil {
 		return fmt.Errorf("%s: pack failed: %w", safeName, err)
@@ -516,26 +521,14 @@ func (rc *runContext) executeContainerStep(ctx context.Context, step *lane.Step,
 	return nil
 }
 
-func (rc *runContext) wrapOutputs(ctx context.Context, step *lane.Step, stepID primitive.Identifier, safeName, containerID string) error {
-	if err := rc.wrapFileOutputs(ctx, step, stepID, safeName, containerID); err != nil {
-		return err
-	}
-	if step.Output != "" {
-		specHash := rc.runtime.SpecHash(stepID)
-		if wrapErr := rc.wrapImageOutput(ctx, step, stepID, safeName, containerID, specHash); wrapErr != nil {
-			return wrapErr
-		}
-	}
-	return nil
-}
-
-// wrapFileOutputs assembles every file and directory output of the held
+// wrapOutputs assembles every file and directory output of the held
 // container into one canonical, digest-pinned step image (ADR-046) -- one
 // annotated layer per output -- and registers a digest-pinned handle for each
 // output. The manifest digest is the single integrity anchor; every consumer
 // pulls the image by that digest and extracts the layer identified by the output id in
-// its handle.
-func (rc *runContext) wrapFileOutputs(ctx context.Context, step *lane.Step, stepID primitive.Identifier, safeName, containerID string) error {
+// its handle. A container step declares no image output: the schema admits it
+// on a pack step only.
+func (rc *runContext) wrapOutputs(ctx context.Context, step *lane.Step, stepID primitive.Identifier, safeName, containerID string) error {
 	if len(step.Outputs) == 0 {
 		return nil
 	}
@@ -578,38 +571,6 @@ func (rc *runContext) wrapFileOutputs(ctx context.Context, step *lane.Step, step
 		if regErr := rc.runtime.Register(stepID, out.ID, handle); regErr != nil {
 			return fmt.Errorf("%s: register output %q: %w", safeName, out.ID, regErr)
 		}
-	}
-	return nil
-}
-
-// wrapImageOutput commits the held container to a new image, normalizes it
-// through ggcr for reproducible digests (ADR-046), and registers the
-// digest-pinned output handle.
-func (rc *runContext) wrapImageOutput(ctx context.Context, _ *lane.Step, stepID primitive.Identifier, safeName, containerID string, specHash primitive.Digest) error {
-	tag := registry.WrapTag(rc.lane.ID, stepID, specHash)
-
-	imageID, commitErr := rc.engine.ContainerCommit(ctx, containerID)
-	if commitErr != nil {
-		return fmt.Errorf("%s: commit image output: %w", safeName, commitErr)
-	}
-
-	stream, saveErr := rc.engine.ImageSave(ctx, imageID)
-	if saveErr != nil {
-		return fmt.Errorf("%s: save committed image: %w", safeName, saveErr)
-	}
-	defer closer.Warn(stream, "committed image save stream")
-
-	digest, _, configDigest, err := rc.regClient.WrapImageArchiveAsImage(ctx, stream, tag)
-	if err != nil {
-		return fmt.Errorf("%s: normalize image output: %w", safeName, err)
-	}
-
-	handle := output.ImageHandle{
-		Ref:          registry.WrapDigest(rc.lane.ID, stepID, digest),
-		ConfigDigest: configDigest,
-	}
-	if regErr := rc.runtime.Register(stepID, "", handle); regErr != nil {
-		return fmt.Errorf("%s: register output: %w", safeName, regErr)
 	}
 	return nil
 }
@@ -782,9 +743,6 @@ func singleFileOutsideErr(inp lane.InputRef) error {
 //   - file: the archive is a single bare entry already named
 //     basename(out.Path) == OutputContentPrefix; keep it (stripPrefix="",
 //     destPrefix=""). Stripping its own name would drop the only entry.
-//
-// stripPrefix/destPrefix are unused for image outputs (wrapped via
-// WrapImageArchiveAsImage); archivePath is used for all types.
 func archiveReroot(workdir primitive.AbsPath, out lane.FileOutput) (archivePath, stripPrefix, destPrefix string) {
 	archivePath = workdir.String()
 	if out.Path != nil {

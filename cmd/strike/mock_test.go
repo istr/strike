@@ -82,9 +82,6 @@ func (m *mockEngine) ContainerArchive(_ context.Context, _, _ string) (io.ReadCl
 	return io.NopCloser(bytes.NewReader(nil)), nil
 }
 
-func (m *mockEngine) ContainerCommit(_ context.Context, _ string) (string, error) {
-	return "sha256:mock-committed-image", nil
-}
 func (m *mockEngine) ContainerRemove(_ context.Context, _ string) error             { return nil }
 func (m *mockEngine) VolumeCreate(_ context.Context, _ string) error                { return nil }
 func (m *mockEngine) SeedVolumes(_ context.Context, _ []container.VolumeSeed) error { return nil }

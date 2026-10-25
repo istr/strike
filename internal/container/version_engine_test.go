@@ -34,9 +34,6 @@ func (s *stubEngine) ContainerArchive(_ context.Context, _, _ string) (io.ReadCl
 	return io.NopCloser(bytes.NewReader(nil)), nil
 }
 
-func (s *stubEngine) ContainerCommit(_ context.Context, _ string) (string, error) {
-	return "", nil
-}
 func (s *stubEngine) ContainerRemove(_ context.Context, _ string) error             { return nil }
 func (s *stubEngine) VolumeCreate(_ context.Context, _ string) error                { return nil }
 func (s *stubEngine) SeedVolumes(_ context.Context, _ []container.VolumeSeed) error { return nil }

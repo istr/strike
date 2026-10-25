@@ -42,9 +42,10 @@ steps:
       type: git
       path: other/provenance.json
   - id: bundle
-    image: docker.io/library/golang@sha256:abababababababababababababababababababababababababababababababab
-    args: ["go", "build"]
-    workdir: /out
+    pack:
+      base: docker.io/library/golang@sha256:abababababababababababababababababababababababababababababababab
+      files: []
+    args: []
     env: {}
     inputs: []
     secrets: []

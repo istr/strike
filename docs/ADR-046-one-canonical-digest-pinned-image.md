@@ -270,3 +270,53 @@ now give the same answer, which is the basis for the cross-validation split
 recorded in ADR-017's item-0056 amendment: `diff_id` and the config blob are
 the identities a second implementation can be held to; a manifest digest that
 transitively covers a compressed blob is not.
+
+## Amendment 2026-10-25 -- the image output is a pack output; the built-rootfs branch is removed
+
+Decision (a) names the forms of the one step image: "a built rootfs, or named
+layers (one per content output at its `OutputLayerName`), or both". The
+built-rootfs form was the image output of a container step: the producer
+committed the held container through the engine and exported the commit. It
+never yielded a correct image. ADR-035 rejects container commit: under the
+read-only root of the hardened profile (ADR-005) a commit captures an empty
+top layer and not the workdir volume, so the image held the base and none of
+the step's work. The commit is not reproducible either: the engine commit
+takes no timestamp and stamps the config and history with the current time,
+so the config digest changed on every run, against this ADR's
+reproducibility principle. The wrap that followed read the engine's export as
+if it were a layout file inside a container archive, which it is not, and
+failed on the first blob it unwrapped. No test reached the path.
+
+The branch is removed. The lane schema admits the image output on a pack step
+only, beside the output XOR outputs constraint, and a container step produces
+file and directory outputs only. The engine commit method, the container-step
+image wrap and the archive-unwrapping image wrap helper are deleted, and with
+them the registry deploy validator's check that the pushed image is a pack
+step, which the schema now settles for every parsed lane. A step that builds
+a base image declares its root filesystem as a directory output; a pack step
+lays that output onto a digest-pinned base; a later step runs the packed
+image through `imageFromStep`.
+
+**Supersedes, in the Decision above:** (a) is read as "a step's outputs are
+assembled into one content-addressed step image -- one content layer per file
+or directory output, each rooted at its `OutputContentPrefix`, or, for a pack
+step, the assembled image". Properties (b) and (c) are unchanged.
+
+Every image a lane generates is now assembled by the control plane from bytes
+it verified, so ADR-045's premise that the control plane computes the digest
+over bytes it observed holds without exception for `imageFromStep` and for
+the deploy image arm. The boundary that follows: a pack base is an externally
+declared digest, so a lane-generated image is at most one pack deep, and a
+lane cannot layer an image on an image it built. A base taken from a step
+would be a later extension, by its own decision.
+
+The pack base resolves to the engine's platform. A base declared by an index
+digest is fetched through the same verified path and the same selection rule
+the control plane uses to materialize an absent step image (ADR-045,
+amendment of 2026-10-25): the entry whose os and architecture equal the
+engine's, decided by variant when several match, and an error, never a
+guess, when none or several remain. Before, the fetch took
+go-containerregistry's default platform, linux/amd64, whatever the engine
+ran.
+
+ADR-035's rejection of container commit stands unchanged.

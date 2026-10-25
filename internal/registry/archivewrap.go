@@ -3,7 +3,6 @@ package registry
 import (
 	"archive/tar"
 	"bytes"
-	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -17,7 +16,6 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/types"
 
 	"github.com/istr/strike/internal/lane"
-	"github.com/istr/strike/internal/primitive"
 )
 
 // canonicalEntry is a collected tar entry, held until all entries are read
@@ -149,9 +147,9 @@ func writeCanonicalTar(entries []canonicalEntry) ([]byte, error) {
 // FirstRegularFile scans a tar stream and returns a reader positioned at the
 // first regular-file entry, together with its size. The returned reader is
 // valid only until the next read from the underlying stream; callers must
-// consume it before reading further. Used to pull a single produced file
-// (an OCI-layout tar, or a provenance document) out of an engine container
-// archive, which wraps even a single file in a one-entry tar.
+// consume it before reading further. Used to pull a single produced file (a
+// provenance document) out of an engine container archive, which wraps even a
+// single file in a one-entry tar.
 func FirstRegularFile(r io.Reader) (io.Reader, int64, error) {
 	tr := tar.NewReader(r)
 	for {
@@ -166,23 +164,6 @@ func FirstRegularFile(r io.Reader) (io.Reader, int64, error) {
 			return tr, hdr.Size, nil
 		}
 	}
-}
-
-// WrapImageArchiveAsImage pulls the single OCI-layout tar file out of an
-// engine container-archive stream and loads it as an image (the image
-// output type under the engine flow), returning the manifest digest, the tar
-// size, and the image-config blob digest. It reuses the image-load core
-// shared with the pack path.
-func (c *Client) WrapImageArchiveAsImage(ctx context.Context, r io.Reader, tag string, extra ...map[string]string) (primitive.Digest, int64, primitive.Digest, error) {
-	inner, _, err := FirstRegularFile(r)
-	if err != nil {
-		return "", 0, "", fmt.Errorf("image output: %w", err)
-	}
-	tarBytes, readErr := io.ReadAll(inner)
-	if readErr != nil {
-		return "", 0, "", fmt.Errorf("image output: read layout: %w", readErr)
-	}
-	return c.WrapImageTarAsImage(ctx, tarBytes, tag, extra...)
 }
 
 // relUnderPrefix returns the portion of a tar entry name below prefix, and

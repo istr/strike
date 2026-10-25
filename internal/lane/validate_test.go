@@ -43,6 +43,8 @@ func TestValidateLane_Reject(t *testing.T) {
 		{"invalid_mount_relative_path.yaml", "mount"},
 		{"invalid_provenance_path_outside_output.yaml", "not within any declared output"},
 		{"invalid_kubernetes_not_implemented.yaml", "not yet implemented"},
+		{"invalid_image_output_on_container_step.yaml", "steps.0.image"},
+		{"invalid_image_output_on_image_from_step.yaml", "steps.1.imageFromStep"},
 	}
 
 	matches, err := filepath.Glob("testdata/validate/invalid_*.yaml")

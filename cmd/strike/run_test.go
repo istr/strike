@@ -729,7 +729,7 @@ func TestResolveImageDigest_ImageFrom(t *testing.T) {
 		ID: "test-lane",
 		Steps: []lane.Step{
 			{
-				ID: "pack", Image: primitive.ImageRefPtr("img"), Args: []string{}, Env: map[string]string{},
+				ID: "pack", Pack: &lane.PackSpec{Base: "img"}, Args: []string{}, Env: map[string]string{},
 				Output: "image",
 			},
 			{
@@ -769,7 +769,7 @@ func TestResolveImageDigest_ImageFromMissing(t *testing.T) {
 	p := &lane.Lane{
 		Steps: []lane.Step{
 			{
-				ID: "pack", Image: primitive.ImageRefPtr("img"), Args: []string{}, Env: map[string]string{},
+				ID: "pack", Pack: &lane.PackSpec{Base: "img"}, Args: []string{}, Env: map[string]string{},
 				Output: "image",
 			},
 			{

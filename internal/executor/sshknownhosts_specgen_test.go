@@ -53,10 +53,6 @@ func (e *captureEngine) ContainerArchive(_ context.Context, _, _ string) (io.Rea
 	return io.NopCloser(bytes.NewReader(nil)), nil
 }
 
-func (e *captureEngine) ContainerCommit(_ context.Context, _ string) (string, error) {
-	return "", nil
-}
-
 func (e *captureEngine) ContainerRemove(_ context.Context, _ string) error { return nil }
 
 func (e *captureEngine) VolumeCreate(_ context.Context, _ string) error { return nil }

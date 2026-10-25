@@ -15,7 +15,7 @@ func TestValidateDeployArtifactRefs(t *testing.T) {
 	miss := primitive.Identifier("missing")
 
 	producer := &Step{ID: "web", Outputs: []FileOutput{{ID: "dist"}}}
-	builder := &Step{ID: "build", Output: "image"}
+	builder := &Step{ID: "build", Output: "image", Pack: &PackSpec{}}
 	packer := &Step{ID: "pack", Output: "image", Pack: &PackSpec{
 		Files: []PackFile{{From: OutputRef{Step: "web", Output: "dist"}}},
 	}}
@@ -79,14 +79,6 @@ func TestValidateDeployArtifactRefs(t *testing.T) {
 				"b": {Step: "build"},
 			}),
 			wantErr: "exactly one image-arm",
-		},
-		{
-			name: "registry region on build push rejected",
-			deploy: registryDeploy(map[primitive.Identifier]ArtifactRef{
-				"app": {Step: "build"},
-				"web": {Step: "web", Output: &out},
-			}),
-			wantErr: "to be a pack step",
 		},
 		{
 			name: "registry region not pack-covered rejected",

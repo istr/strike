@@ -5,9 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/istr/strike/internal/executor"
-	"github.com/istr/strike/internal/lane"
-	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/registry"
 	"github.com/istr/strike/internal/testutil"
 )
@@ -23,7 +20,7 @@ func TestPackPipeline(t *testing.T) {
 	bin := buildTestBinary(t, engine)
 
 	// 2. Pack: assemble OCI image.
-	result := packTestImage(t, bin)
+	result := packTestImage(t, engine, bin)
 
 	t.Logf("image digest: %s", result.Digest)
 
@@ -54,22 +51,7 @@ func TestPackPipeline(t *testing.T) {
 	}
 
 	// 6. Verify determinism: pack again, same digest.
-	result2, err := executor.Pack(executor.PackOpts{
-		Spec: &lane.PackSpec{
-			Base: primitive.ImageRef(staticBase),
-			Files: []lane.PackFile{
-				{From: lane.OutputRef{Step: "build", Output: "app"}, Dest: "/app", Mode: 0o755},
-			},
-			Config: &lane.ImageConfig{
-				Entrypoint: []string{"/app"},
-				User:       primitive.UserSpecPtr("65534:65534"),
-			},
-		},
-		InputTars: packInputTars(t, bin),
-	})
-	if err != nil {
-		t.Fatalf("pack (second run): %v", err)
-	}
+	result2 := packTestImage(t, engine, bin)
 	if result.Digest != result2.Digest {
 		t.Errorf("non-deterministic pack:\n  run 1: %s\n  run 2: %s",
 			result.Digest, result2.Digest)

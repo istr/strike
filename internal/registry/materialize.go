@@ -49,7 +49,7 @@ func (c *Client) EnsureImage(ctx context.Context, ref primitive.ImageRef) error 
 	if present {
 		return nil
 	}
-	platform, err := enginePlatform(c.Engine)
+	platform, err := EnginePlatform(c.Engine)
 	if err != nil {
 		return fmt.Errorf("image %s: %w", ref, err)
 	}
@@ -91,16 +91,29 @@ func (c *Client) EnsureImage(ctx context.Context, ref primitive.ImageRef) error 
 	return nil
 }
 
-// enginePlatform is the platform the engine reported through Info. It
-// selects the index entry to fetch and carries no trust: a wrong platform
-// yields an image that does not start, never an image that passes the
-// digest check.
-func enginePlatform(e container.Engine) (v1.Platform, error) {
+// EnginePlatform is the platform the engine reported through Info. It
+// selects the index entry to fetch, for a step image and for a pack base
+// alike, and carries no trust: a wrong platform yields an image that does not
+// start, never an image that passes the digest check.
+func EnginePlatform(e container.Engine) (v1.Platform, error) {
 	id := e.Identity()
 	if id == nil || id.Runtime == nil || id.Runtime.OS == "" || id.Runtime.Arch == "" {
 		return v1.Platform{}, errors.New("engine platform unknown: engine info not read")
 	}
 	return v1.Platform{OS: id.Runtime.OS, Architecture: id.Runtime.Arch, Variant: id.Runtime.Variant}, nil
+}
+
+// FetchImage resolves a digest-pinned reference to the image of platform,
+// verified as fetchByDigest verifies it: the index or manifest against the
+// declared digest on fetch, every blob as it is read. It is the pack base
+// fetch, so a lane-generated image is assembled on the base of the platform
+// that runs it (ADR-046).
+func FetchImage(ctx context.Context, ref primitive.ImageRef, platform v1.Platform) (v1.Image, error) {
+	f, err := fetchByDigest(ctx, ref, platform)
+	if err != nil {
+		return nil, err
+	}
+	return f.image, nil
 }
 
 // fetchByDigest resolves ref at its registry. go-containerregistry verifies

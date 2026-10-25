@@ -176,6 +176,10 @@ Full testing reference -- PKI helpers, coverage, integration, fuzz --
 - Hermetic: no podman, no network, no registry. `t.TempDir()` for files,
   `t.Helper()` in helpers.
 - Test both success and error paths; no assertion-free tests.
+- A lane a test builds in Go is one `lane.Parse` would accept; code after
+  Parse keeps no guard for a shape the schema rejects. Only a test of the
+  validation logic itself builds an invalid lane, as input to the check
+  under test. Detail: `docs/DEVELOPMENT.md#27-test-lanes`.
 - All cryptographic test material (signing keys, TLS certs, CA chains) is
   ephemeral, generated at test time via `crypto`. Never commit key material,
   not even as fixtures.

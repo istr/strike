@@ -35,6 +35,21 @@ steps:
     inputs: []
     secrets: []
     forceRun: true
+    outputs:
+      - id: repo
+        type: directory
+  - id: app
+    pack:
+      base: docker.io/library/alpine@sha256:abababababababababababababababababababababababababababababababab
+      files:
+        - from:
+            step: clone
+            output: repo
+          dest: /repo
+    args: []
+    env: {}
+    inputs: []
+    secrets: []
     output: image
   - id: deploy
     deploy:
@@ -47,7 +62,7 @@ steps:
           name: app
       artifacts:
         app:
-          step: clone
+          step: app
       recording:
         preState:
           required: false
