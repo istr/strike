@@ -144,9 +144,9 @@ func validatePackFileRefs(p *Lane, index map[primitive.Identifier]*Step) error {
 // D9): every entry references a known step and, per arm, an existing output
 // -- the producing step's image output when output is absent, a declared
 // file or directory output when present -- no two entries reference the
-// same output, and the registry-method structural rules hold. Kubernetes
-// cardinality and containment are settled by the kubernetes rewiring, not
-// here.
+// same output, and the registry-method structural rules hold, the
+// reproduction gate among them. Kubernetes cardinality and containment are
+// settled by the kubernetes rewiring, not here.
 func validateDeployArtifactRefs(p *Lane, index map[primitive.Identifier]*Step) error {
 	for _, s := range p.Steps {
 		if s.Deploy == nil {
@@ -155,10 +155,41 @@ func validateDeployArtifactRefs(p *Lane, index map[primitive.Identifier]*Step) e
 		if err := validateArtifactEntries(&s, index); err != nil {
 			return err
 		}
-		if _, ok := s.Deploy.Method.(DeployRegistry); ok {
-			if err := validateRegistryArtifacts(&s, index); err != nil {
-				return err
-			}
+		reg, ok := s.Deploy.Method.(DeployRegistry)
+		if !ok {
+			continue
+		}
+		if err := validateRegistryArtifacts(&s, index); err != nil {
+			return err
+		}
+		if err := validateReproducedBy(&s, reg, index); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateReproducedBy checks the reproduction gate of a registry deploy
+// (ADR-009): reproducedBy, when present, names a known step that declares an
+// image output, and not the step of the deploy's own image arm, which would
+// compare an image with itself. The schema admits the image output on a pack
+// step only, so the named step is a pack step.
+func validateReproducedBy(s *Step, reg DeployRegistry, index map[primitive.Identifier]*Step) error {
+	if reg.ReproducedBy == nil {
+		return nil
+	}
+	rep := *reg.ReproducedBy
+	repStep, ok := index[rep]
+	if !ok {
+		return fmt.Errorf("step %q: reproducedBy references unknown step %q", s.ID, rep)
+	}
+	if repStep.Output == "" {
+		return fmt.Errorf("step %q: reproducedBy %q declares no image output", s.ID, rep)
+	}
+	for _, ref := range s.Deploy.Artifacts {
+		if ref.Output == nil && ref.Step == rep {
+			return fmt.Errorf(
+				"step %q: reproducedBy %q names the image arm; it must name a second build of that image", s.ID, rep)
 		}
 	}
 	return nil

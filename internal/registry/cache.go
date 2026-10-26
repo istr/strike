@@ -6,8 +6,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"io"
-	"os"
 	"sort"
 
 	"github.com/istr/strike/internal/lane"
@@ -73,29 +71,6 @@ func WrapTag(laneID, stepID primitive.Identifier, specHash primitive.Digest) str
 // the locally-loaded image with no registry pull.
 func WrapDigest(laneID, stepID primitive.Identifier, digest primitive.Digest) string {
 	return fmt.Sprintf("%s@%s", wrapRepo(laneID, stepID), digest.String())
-}
-
-// hashReader computes SHA256 of the data from r.
-func hashReader(r io.Reader) (primitive.Digest, error) {
-	h := sha256.New()
-	if _, err := io.Copy(h, r); err != nil {
-		return "", err
-	}
-	return primitive.DigestFromHex(hex.EncodeToString(h.Sum(nil))), nil
-}
-
-// HashFile computes SHA256 of a file within the given root scope.
-func HashFile(root *os.Root, path string) (hash primitive.Digest, err error) {
-	f, err := root.Open(path)
-	if err != nil {
-		return "", err
-	}
-	defer func() {
-		if cerr := f.Close(); cerr != nil && err == nil {
-			err = cerr
-		}
-	}()
-	return hashReader(f)
 }
 
 func sortedKeys(m map[string]string) []string {

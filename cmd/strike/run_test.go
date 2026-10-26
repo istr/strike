@@ -686,6 +686,52 @@ func TestCheckCache_DeployArtifactBypass(t *testing.T) {
 	}
 }
 
+// TestCheckCache_ReadByDeployBypass covers both reasons a registry deploy
+// reads a step's image, over a lane Parse accepts: as its image arm, and as
+// the second build it names in reproducedBy. Neither step is restored from
+// cache, although the engine store holds a matching image.
+func TestCheckCache_ReadByDeployBypass(t *testing.T) {
+	_, p, _, idx, dag, err := validateLane("../../internal/lane/testdata/valid_reproduced_by.yaml")
+	if err != nil {
+		t.Fatalf("validate fixture: %v", err)
+	}
+	tests := []struct {
+		name string
+		id   primitive.Identifier
+	}{
+		{name: "image arm", id: "build"},
+		{name: "reproducedBy", id: "rebuild"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			eng := &mockEngine{
+				inspectRV: &container.ImageInfo{
+					Digest: testFullDigest,
+					Annotations: map[string]string{
+						"dev.strike.content-size": "42",
+					},
+				},
+			}
+			rc := newTestRC(t, eng)
+			rc.lane = p
+			rc.stepIndex = idx
+			rc.runtime = lane.NewRuntime(dag)
+
+			step := idx[tc.id]
+			if step.ForceRun {
+				t.Fatalf("fixture step %q declares forceRun, which would mask the bypass under test", tc.id)
+			}
+			hit, cacheErr := rc.checkCache(context.Background(), step, tc.id, tc.name, primitive.DigestFromHex("abc0000000000000000000000000000000000000000000000000000000000000"))
+			if cacheErr != nil {
+				t.Fatalf("unexpected error: %v", cacheErr)
+			}
+			if hit {
+				t.Errorf("expected cache miss for step %q, which a registry deploy reads", tc.id)
+			}
+		})
+	}
+}
+
 func TestCheckCache_EngineError(t *testing.T) {
 	eng := &mockEngine{inspectErr: fmt.Errorf("engine unavailable")}
 	rc := newTestRC(t, eng)

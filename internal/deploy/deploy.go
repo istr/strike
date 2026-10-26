@@ -401,14 +401,22 @@ func (d *Deployer) buildAttestation(
 	}, nil
 }
 
-// Execute runs a deploy step: capture pre-state, execute the deploy
-// action, capture post-state, and build the attestation.
+// Execute runs a deploy step: check the reproduction gate, capture
+// pre-state, execute the deploy action, capture post-state, and build the
+// attestation.
 func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.Runtime) (*Attestation, error) {
 	if step.Deploy == nil {
 		return nil, fmt.Errorf("step %q: not a deploy step", step.ID)
 	}
 	spec := *step.Deploy
 	started := clock.Wall()
+
+	// 0. Reproduction gate: a registry deploy that names reproducedBy stops
+	// here, before anything is captured, pushed or signed, when the two
+	// images differ (ADR-009).
+	if gateErr := checkReproducedBy(spec.Method, d.ArtifactRefs, state); gateErr != nil {
+		return nil, fmt.Errorf("step %q: %w", step.ID, gateErr)
+	}
 
 	// 1. Capture pre-state -> canonical digest.
 	preCaptures, err := d.captureState(ctx, spec.Recording.PreState)

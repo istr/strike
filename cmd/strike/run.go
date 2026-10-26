@@ -243,14 +243,17 @@ func (rc *runContext) computeSpecHash(step *lane.Step, stepID primitive.Identifi
 	return key, nil
 }
 
-// sealsArtifact reports whether any deploy step names an output of this step
-// among its artifacts (image arm or region, ADR-051 D9). Such a step is
-// always produced, never restored from cache: the deploy path checks the
-// engine export against the produced content identity -- the config digest
-// for the image arm, the layer diff_id for a region -- before it signs or
-// pushes (ADR-051 D4), and a cache hit rebuilds the handle from the engine
-// store, which holds no control-plane-computed anchor to check against.
-// Producing the artifact is cheap next to sealing one that cannot be checked.
+// sealsArtifact reports whether a deploy step reads this step's output to
+// seal it: as one of its artifacts (image arm or region, ADR-051 D9), or as
+// the reproducedBy step its registry method compares the image arm against
+// before sealing (ADR-009). Such a step is always produced, never restored
+// from cache: the deploy path checks the engine export against the produced
+// content identity -- the config digest for the image arm, the layer diff_id
+// for a region -- before it signs or pushes (ADR-051 D4), the reproduction
+// gate compares two digests the control plane computed in this run, and a
+// cache hit rebuilds the handle from the engine store, which holds no
+// control-plane-computed anchor to check against. Producing the artifact is
+// cheap next to sealing one that cannot be checked.
 func (rc *runContext) sealsArtifact(stepID primitive.Identifier) bool {
 	for _, s := range rc.stepIndex {
 		if s.Deploy == nil {
@@ -260,6 +263,9 @@ func (rc *runContext) sealsArtifact(stepID primitive.Identifier) bool {
 			if ref.Step == stepID {
 				return true
 			}
+		}
+		if reg, ok := s.Deploy.Method.(lane.DeployRegistry); ok && reg.ReproducedBy != nil && *reg.ReproducedBy == stepID {
+			return true
 		}
 	}
 	return false
@@ -272,7 +278,7 @@ func (rc *runContext) checkCache(ctx context.Context, step *lane.Step, stepID pr
 	}
 
 	if rc.sealsArtifact(stepID) {
-		log.Printf("NOCACHE %s (deploy artifact)", safeName)
+		log.Printf("NOCACHE %s (read by a deploy)", safeName)
 		return false, nil
 	}
 
@@ -344,7 +350,8 @@ func (rc *runContext) registerCachedOutputs(ctx context.Context, step *lane.Step
 	// The cached image handle carries no produced config digest: a cache hit
 	// restores the handle from the engine store, which holds no
 	// control-plane-computed anchor. That is sound only because a step whose
-	// output any deploy artifact names never reaches this path (see
+	// output any deploy artifact names, or whose image a registry deploy
+	// compares through reproducedBy, never reaches this path (see
 	// checkCache).
 	if step.Output != "" {
 		handle := output.ImageHandle{Ref: imageRef}

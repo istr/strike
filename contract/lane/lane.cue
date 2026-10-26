@@ -314,6 +314,15 @@ import (
 #DeployRegistry: {
 	@go(DeployRegistry)
 	type: "registry" @go(Type,type=DeployMethodType)
+	// reproducedBy names a second pack step whose image must be
+	// byte-identical to the image of this deploy's image arm (ADR-009). The
+	// control plane compares the two manifest digests it computed as the
+	// first act of the deploy and fails the deploy, before any capture, push
+	// or signature, when they differ. The named step is a predecessor of
+	// this deploy and, like the image arm, is produced in every run and
+	// never restored from cache. The field precedes target so the generated
+	// struct does not end in a pointer, which fieldalignment reports.
+	reproducedBy?: primitive.#Identifier @go(ReproducedBy,optional=nillable)
 	// target is the push destination the control plane writes the resolved
 	// artifacts image to (ADR-051 D4/D6).
 	target: #DeployRegistryTarget @go(Target)

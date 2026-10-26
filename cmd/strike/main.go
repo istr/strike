@@ -41,7 +41,6 @@ Usage:
   strike run      [lane.yaml]   Run a lane
   strike validate [lane.yaml]   Validate without running
   strike dag      [lane.yaml]   Show DAG and exit
-  strike compare  <file1> <file2> <output>   Compare two files by SHA-256
   strike verify   [flags] <image@digest>     Verify an artifact's attestations
 
 Default file: lane.yaml in the current directory
@@ -55,15 +54,6 @@ func main() {
 	if len(os.Args) < 2 {
 		log.Print(usage)
 		os.Exit(1)
-	}
-
-	// compare has its own arg layout.
-	if os.Args[1] == "compare" {
-		if len(os.Args) != 5 {
-			log.Fatal("usage: strike compare <file1> <file2> <output>")
-		}
-		cmdCompare(os.Args[2], os.Args[3], os.Args[4])
-		return
 	}
 
 	// verify has its own flag-bearing arg layout.
@@ -342,49 +332,4 @@ func initFront(ctx context.Context) (*front.Front, func(), error) {
 	// call-graph edge onto services (ADR-044).
 	var c io.Closer = ft
 	return ft, func() { closer.Warn(c, "front") }, nil
-}
-
-func cmdCompare(file1, file2, output string) {
-	safeFile1 := sanitizeForLog(file1)
-	safeFile2 := sanitizeForLog(file2)
-	safeOutput := sanitizeForLog(output)
-
-	root1, err := os.OpenRoot(filepath.Dir(file1))
-	if err != nil {
-		log.Fatalf("error: %s: %v", safeFile1, err)
-	}
-	defer closer.Warn(root1, "compare root 1")
-	h1, err := registry.HashFile(root1, filepath.Base(file1))
-	if err != nil {
-		log.Fatalf("error: %s: %v", safeFile1, err)
-	}
-	root2, err := os.OpenRoot(filepath.Dir(file2))
-	if err != nil {
-		log.Fatalf("error: %s: %v", safeFile2, err)
-	}
-	defer closer.Warn(root2, "compare root 2")
-	h2, err := registry.HashFile(root2, filepath.Base(file2))
-	if err != nil {
-		log.Fatalf("error: %s: %v", safeFile2, err)
-	}
-	if h1 != h2 {
-		log.Fatalf("error: files differ\n  %s: %s\n  %s: %s", safeFile1, h1, safeFile2, h2)
-	}
-	outRoot, err := os.OpenRoot(filepath.Dir(output))
-	if err != nil {
-		log.Fatalf("error: %s: %v", safeOutput, err)
-	}
-	defer closer.Warn(outRoot, "compare output root")
-	outFile, err := outRoot.Create(filepath.Base(output))
-	if err != nil {
-		log.Fatalf("error: write %s: %v", safeOutput, err)
-	}
-	if _, writeErr := outFile.Write([]byte(h1.String() + "\n")); writeErr != nil {
-		closer.Warn(outFile, "compare output")
-		log.Fatalf("error: write %s: %v", safeOutput, writeErr)
-	}
-	if closeErr := outFile.Close(); closeErr != nil {
-		log.Fatalf("error: write %s: %v", safeOutput, closeErr)
-	}
-	log.Printf("ok: %s", sanitizeForLog(h1.String()))
 }

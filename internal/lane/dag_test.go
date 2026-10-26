@@ -220,6 +220,44 @@ func TestBuild_DeployArtifactEdge(t *testing.T) {
 	assertOrder(t, dag.Order(), "pack", "deploy")
 }
 
+// TestBuild_ReproducedByEdge checks that a registry deploy depends on the step
+// it names in reproducedBy. The ids make the edge visible in the order:
+// without it, publish would sort before rebuild, and rebuild would be a leaf
+// that is not a deploy.
+func TestBuild_ReproducedByEdge(t *testing.T) {
+	p := &lane.Lane{
+		Steps: []lane.Step{
+			{
+				ID: "build", Pack: &lane.PackSpec{Base: "img"}, Args: []string{}, Env: map[string]string{},
+				Output: "image",
+			},
+			{
+				ID: "rebuild", Pack: &lane.PackSpec{Base: "img"}, Args: []string{}, Env: map[string]string{},
+				Output: "image",
+			},
+			{
+				ID: "publish", Env: map[string]string{}, Args: []string{},
+				Deploy: &lane.DeploySpec{
+					Method:    lane.DeployRegistry{Type: "registry", ReproducedBy: primitive.IdentifierPtr("rebuild")},
+					Artifacts: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
+				},
+			},
+		},
+	}
+	index, err := lane.IndexSteps(p)
+	if err != nil {
+		t.Fatalf("lane.IndexSteps: %v", err)
+	}
+	dag, err := lane.Build(p, index)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertOrder(t, dag.Order(), "rebuild", "publish")
+	if leafErr := dag.ValidateLeavesAreDeploys(p); leafErr != nil {
+		t.Errorf("ValidateLeavesAreDeploys: %v", leafErr)
+	}
+}
+
 // --------------------------------------------------------------------------.
 // TestBuild -- error cases.
 // --------------------------------------------------------------------------.

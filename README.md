@@ -76,7 +76,7 @@ no local clone required. No stage of the bootstrap carries a container engine:
 strike is always a client of the one engine you already run.
 
 ```sh
-GIT_COMMIT=013959bd71bf2807f84179be0378bbe48065549f
+GIT_COMMIT=e016e1a095926fb7217af94bcda6a8ce1bc2c4f2
 
 podman build -t strike:stage_1 \
   --build-arg GIT_COMMIT=${GIT_COMMIT} \
@@ -103,9 +103,10 @@ drives that same engine to run the bootstrap lane (`lane.yaml`):
    `chainguard/static`. This image is stage_2.
 4. **second build** -- the same build and pack again, in the same run, with
    the cache bypassed. This image is stage_3.
-5. **compare** -- a control-plane step that asserts stage_2 and stage_3 are
-   byte-identical; a mismatch fails the run before anything is published.
-6. **publish** -- a registry deploy of stage_2, signed under a keyless chain.
+5. **publish** -- a registry deploy of stage_2, signed under a keyless chain.
+   Its `reproducedBy` gate names stage_3: before anything is published, the
+   deploy asserts that stage_2 and stage_3 are byte-identical and fails on a
+   mismatch.
 
 The bootstrap lane is not complete yet: today `lane.yaml` carries only the
 build and pack steps, and a published run line follows once the lane runs.
@@ -232,7 +233,7 @@ Secrets are passed as environment variables, never written to process arguments.
 ## Project structure
 
 ```
-cmd/strike/main.go               CLI entry point (run, validate, dag, compare)
+cmd/strike/main.go               CLI entry point (run, validate, dag, verify)
 contract/
   lane/lane.cue                   CUE schema (source of truth)
 internal/

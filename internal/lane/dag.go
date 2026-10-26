@@ -46,10 +46,11 @@ func Build(p *Lane, index map[primitive.Identifier]*Step) (*DAG, error) {
 }
 
 // buildAdjacency records the dependency edge from each step to every step it
-// references -- image-from, inputs, pack files, and deploy artifacts -- from the
-// reference identifiers alone. Reference integrity is a precondition
-// (ValidateLane), so an unknown reference has already been rejected and an
-// unknown deploy-source kind cannot reach this point.
+// references -- image-from, inputs, pack files, deploy artifacts, and the
+// reproducedBy step of a registry deploy -- from the reference identifiers
+// alone. Reference integrity is a precondition (ValidateLane), so an unknown
+// reference has already been rejected and an unknown deploy-source kind
+// cannot reach this point.
 func (d *DAG) buildAdjacency(p *Lane) {
 	for _, s := range p.Steps {
 		if s.ImageFromStep != nil {
@@ -66,6 +67,9 @@ func (d *DAG) buildAdjacency(p *Lane) {
 		if s.Deploy != nil {
 			for _, ref := range s.Deploy.Artifacts {
 				d.addEdge(s.ID, ref.Step)
+			}
+			if reg, ok := s.Deploy.Method.(DeployRegistry); ok && reg.ReproducedBy != nil {
+				d.addEdge(s.ID, *reg.ReproducedBy)
 			}
 		}
 	}

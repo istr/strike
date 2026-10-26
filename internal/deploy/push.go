@@ -130,6 +130,50 @@ func selectImageArm(refs map[primitive.Identifier]lane.ArtifactRef) (primitive.I
 	return name, found, nil
 }
 
+// checkReproducedBy is the reproduction gate of a registry deploy (ADR-009):
+// when the method names a reproducedBy step, the manifest digest of that
+// step's image must equal the image arm's. Both digests must be ones the
+// control plane computed when it assembled and loaded the image in this run;
+// a handle without a produced config digest was restored from the engine
+// store and is refused rather than compared. Lane validation admits exactly
+// one image arm. Any other method, or a registry deploy without
+// reproducedBy, passes. Execute runs this first, so a mismatch stops the
+// deploy before anything is captured, pushed or signed.
+func checkReproducedBy(method lane.DeployMethod, refs map[primitive.Identifier]lane.ArtifactRef, state *lane.Runtime) error {
+	reg, ok := method.(lane.DeployRegistry)
+	if !ok || reg.ReproducedBy == nil {
+		return nil
+	}
+	var arm primitive.Identifier
+	for _, ref := range refs {
+		if ref.Output == nil {
+			arm = ref.Step
+		}
+	}
+	steps := [2]primitive.Identifier{arm, *reg.ReproducedBy}
+	var digests [2]primitive.Digest
+	for i, id := range steps {
+		h, err := state.Resolve(lane.OutputRef{Step: id})
+		if err != nil {
+			return fmt.Errorf("reproducedBy: %w", err)
+		}
+		ih, isImage := h.(output.ImageHandle)
+		if !isImage || ih.ConfigDigest == "" {
+			return fmt.Errorf("reproducedBy: step %q holds no image produced in this run", id)
+		}
+		digest, err := output.ManifestDigest(ih)
+		if err != nil {
+			return fmt.Errorf("reproducedBy: %w", err)
+		}
+		digests[i] = digest
+	}
+	if digests[0] != digests[1] {
+		return fmt.Errorf("reproducedBy: step %q built %s but step %q built %s; the image is not reproducible",
+			steps[0], digests[0], steps[1], digests[1])
+	}
+	return nil
+}
+
 // verifyExportedImage checks an engine-exported image against the content
 // identity the control plane computed when it produced that image. The engine
 // re-encodes layer blobs on export, so the produced manifest digest does not

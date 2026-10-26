@@ -278,3 +278,65 @@ against a trusting-trust attack; that defense needs a second,
 independently produced toolchain of the same version yielding the same
 output, of which the informational stage_1-versus-lane comparison is the
 first, weak form."
+
+## Amendment 2026-10-25 -- the compare is a gate of the registry deploy
+
+Status: Accepted (item-0158). Append-only: this block replaces point 5 of the
+mechanism the amendment of 2026-09-14 sets out, the reading that amendment
+gives the Decision's verification sentence, and one of its consequences,
+without editing them in place; every other clause of both texts stands.
+
+### What was found
+
+Point 5 placed the compare in a step kind of its own that emits the agreed
+digest as a file output the deploy consumes. Read against the tree, that
+shape does not hold. A file or directory output a registry deploy names is a
+region of the pushed image (ADR-051 D9), and the compare output cannot be
+packed into the image it vouches for without a cycle. A compare step whose
+output nothing consumes is a leaf that is not a deploy, which ADR-039 D5
+rejects. And a failing step stops only its successors (ADR-039 D5), so a
+compare that is not an edge into the deploy cannot hold the push back.
+
+### The amended compare
+
+The compare is part of the deploy it guards. A registry deploy names in
+`reproducedBy` a second pack step whose image must equal the image of its
+image arm. As the first act of the deploy -- before the pre-state capture,
+the push and the signature -- the control plane compares the manifest
+digests it computed for the two images, and a mismatch fails the deploy with
+both steps and both digests named. The named step is a predecessor of the
+deploy, so the deploy's sub-tree, and with it its attestation, covers the
+second build. Both compared steps are produced in every run and never
+restored from cache, so both digests are the control plane's own.
+
+The manifest digest alone is compared. It commits to the config and to every
+layer, and the layout the control plane serializes is a deterministic
+function of the assembled image, whose length the manifest carries, so a
+second comparison of layout bytes adds nothing. No file output is emitted:
+the agreed digest is the image arm's artifact record. The attestation
+carries no gate record of its own: the gate is declared in the lane whose
+digest the attestation seals (ADR-041), and an attestation exists only if
+the gate passed. `strike compare` is removed.
+
+**Supersedes, in the amendment of 2026-09-14, point 5 of the amended
+mechanism:** it is read as: "5. The lane verifies `stage_2 == stage_3`
+through the `reproducedBy` gate of its registry deploy: the deploy's image
+arm is the first build's pack step and `reproducedBy` names the second
+build's. The gate is the deploy's first act; a mismatch fails the deploy
+before anything is captured, pushed or signed. Equality remains the
+reproducibility proof."
+
+**Supersedes, in the amendment of 2026-09-14:** the reading "The bootstrap
+lane verifies `stage_2 == stage_3` through the control-plane compare step,
+by the manifest digests the control plane computed and, for pack outputs, by
+the canonical layout bytes it assembled." is read as: "The bootstrap lane
+verifies `stage_2 == stage_3` through the `reproducedBy` gate of its
+registry deploy, by the manifest digests the control plane computed."
+
+**Supersedes, in the Consequences of the amendment of 2026-09-14:**
+"`strike compare` and the host-write exemption it carries become redundant
+once the compare step exists; item-0158 retires them and item-0125 records
+the exemption's disappearance." is read as: "`strike compare` is removed
+with the gate (item-0158). Its digest-file write passed the host-write gate
+unnamed rather than exempted, because that gate does not match a write
+through an opened root; item-0125 owns closing that form."
