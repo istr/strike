@@ -48,7 +48,15 @@ lint-ci:
 lint-cue-fmt:
 	go tool cue fmt --check --files contract bootstrap
 
-lint: lint-ci lint-type lint-arch lint-doc lint-cue-fmt
+# Unreachable functions, test callers included. deadcode exits 0 when it
+# reports, so any output fails the gate. Pinned by version because the
+# in-module form needs golang.org/x/telemetry in go.sum.
+.PHONY: lint-deadcode
+lint-deadcode:
+	out=$$(go run golang.org/x/tools/cmd/deadcode@v0.49.0 -test ./...) || exit 1; \
+	if [ -n "$$out" ]; then echo "$$out"; exit 1; fi
+
+lint: lint-ci lint-type lint-arch lint-doc lint-cue-fmt lint-deadcode
 
 test:
 	go test -race -coverprofile=coverage.out -covermode=atomic ./...

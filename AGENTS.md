@@ -243,11 +243,11 @@ build step.
 
 **Before submitting**, run `make check` exactly as written. A green
 `make check` with zero warnings and zero findings is the only acceptable
-pre-commit state. Phase order is cheap-before-expensive (lint and deadcode,
-then tests, then vuln and build); a failing earlier phase is fixed first,
-even when it looks unrelated to your change -- it is part of the working
-state your change owns. `deadcode -test ./...` must be clean: wire exported
-functions in, or do not write them.
+pre-commit state. Phase order is cheap-before-expensive (lint, which
+includes deadcode, then vuln, then tests, then build); a failing earlier
+phase is fixed first, even when it looks unrelated to your change -- it is
+part of the working state your change owns. `make lint-deadcode` must be
+clean: wire exported functions in, or do not write them.
 
 ## What not to do
 
