@@ -76,7 +76,7 @@ no local clone required. No stage of the bootstrap carries a container engine:
 strike is always a client of the one engine you already run.
 
 ```sh
-GIT_COMMIT=6a49956641e22bd2d369ed2c7aae40645612e6f6
+GIT_COMMIT=564a39238c9243a3d7b2a1b4293391c3b081ce63
 
 podman build -t strike:stage_1 \
   --build-arg GIT_COMMIT=${GIT_COMMIT} \
