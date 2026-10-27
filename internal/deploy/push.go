@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io/fs"
+	"log"
 	"maps"
 	"net"
 	"net/http"
@@ -138,7 +139,8 @@ func selectImageArm(refs map[primitive.Identifier]lane.ArtifactRef) (primitive.I
 // store and is refused rather than compared. Lane validation admits exactly
 // one image arm. Any other method, or a registry deploy without
 // reproducedBy, passes. Execute runs this first, so a mismatch stops the
-// deploy before anything is captured, pushed or signed.
+// deploy before anything is captured, pushed or signed. A passing gate logs
+// both steps and the digest they agree on.
 func checkReproducedBy(method lane.DeployMethod, refs map[primitive.Identifier]lane.ArtifactRef, state *lane.Runtime) error {
 	reg, ok := method.(lane.DeployRegistry)
 	if !ok || reg.ReproducedBy == nil {
@@ -171,6 +173,7 @@ func checkReproducedBy(method lane.DeployMethod, refs map[primitive.Identifier]l
 		return fmt.Errorf("reproducedBy: step %q built %s but step %q built %s; the image is not reproducible",
 			steps[0], digests[0], steps[1], digests[1])
 	}
+	log.Printf("GATE   reproducedBy: %s and %s built %s", steps[0], steps[1], digests[0])
 	return nil
 }
 

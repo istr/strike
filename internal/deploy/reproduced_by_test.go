@@ -1,7 +1,9 @@
 package deploy_test
 
 import (
+	"bytes"
 	"context"
+	"log"
 	"net/http"
 	"strings"
 	"sync/atomic"
@@ -33,6 +35,7 @@ func TestDeployerExecute_ReproducedBy(t *testing.T) {
 		armRef     string
 		againRef   string
 		againCfg   primitive.Digest
+		wantLog    string
 		wantErr    []string
 		wantExport bool
 	}{
@@ -41,6 +44,7 @@ func TestDeployerExecute_ReproducedBy(t *testing.T) {
 			armRef:     "localhost/strike/test-lane/build@" + reproDigestA,
 			againRef:   "localhost/strike/test-lane/rebuild@" + reproDigestA,
 			againCfg:   reproConfig,
+			wantLog:    "GATE   reproducedBy: build and rebuild built " + reproDigestA,
 			wantErr:    []string{"deploy action failed"},
 			wantExport: true,
 		},
@@ -114,7 +118,11 @@ func TestDeployerExecute_ReproducedBy(t *testing.T) {
 				StepID:       "publish",
 			}
 
+			var logged bytes.Buffer
+			prev := log.Writer()
+			log.SetOutput(&logged)
 			_, err := d.Execute(context.Background(), step, state)
+			log.SetOutput(prev)
 			if err == nil {
 				t.Fatal("Execute succeeded; the engine fails every export, so no case may pass")
 			}
@@ -125,6 +133,12 @@ func TestDeployerExecute_ReproducedBy(t *testing.T) {
 			}
 			if got := exports.Load() > 0; got != tc.wantExport {
 				t.Errorf("image export attempted = %v, want %v", got, tc.wantExport)
+			}
+			if tc.wantLog != "" && !strings.Contains(logged.String(), tc.wantLog) {
+				t.Errorf("log = %q, want it to contain %q", logged.String(), tc.wantLog)
+			}
+			if tc.wantLog == "" && strings.Contains(logged.String(), "GATE") {
+				t.Errorf("log = %q, want no gate line", logged.String())
 			}
 		})
 	}

@@ -42,7 +42,7 @@ steps:
     image: cgr.dev/chainguard/git@sha256:ad0d6854943a045ff64c9894703201c8ec5469265ec0cfd44109d068f5a955a2
     args:
       - clone
-      - --revision=d311b8a540f643ea3383cbcd8bab4a50088fa978
+      - --revision=6a49956641e22bd2d369ed2c7aae40645612e6f6
       - --depth=1
       - --separate-git-dir=/out/git
       - https://github.com/istr/strike

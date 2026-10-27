@@ -177,6 +177,10 @@ func (rc *runContext) executeDeploy(ctx context.Context, step *lane.Step, stepID
 		return fmt.Errorf("%s: deploy failed: %w", safeName, err)
 	}
 
+	if p := att.Sealed.Pushed; p != nil {
+		log.Printf("OK     %s -> %s/%s@%s", safeName, p.Registry, p.Repository, p.Digest)
+		return nil
+	}
 	log.Printf("OK     %s -> %s", safeName, att.Sealed.LaneID)
 	return nil
 }
