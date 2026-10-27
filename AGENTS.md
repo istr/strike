@@ -291,10 +291,11 @@ revert`. Scope is encouraged when the change is single-area
 explain in the body. Detail and examples:
 `docs/DEVELOPMENT.md#6-commit-messages`.
 
-**Bootstrap pin.** Every commit sets `GIT_COMMIT` in `README.md` and the
-`--revision=` of the source step in `lane.yaml` to its own parent: the
-output of `git rev-parse HEAD`, read before committing. An interim rule;
-procedure: `docs/RELEASES.md#bootstrap-pin-interim`.
+**Bootstrap pin.** Every commit sets `GIT_COMMIT` in `README.md` to its own
+parent: the output of `git rev-parse HEAD`, read before committing. The
+bootstrap lane renders its source revision from the commit the build fetched
+and carries no pin. An interim rule; procedure:
+`docs/RELEASES.md#bootstrap-pin-interim`.
 
 ## When a gate fails: diagnose, never assign blame
 

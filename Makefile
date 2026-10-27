@@ -46,7 +46,7 @@ lint-ci:
 	golangci-lint run ./...
 
 lint-cue-fmt:
-	go tool cue fmt --check --files contract
+	go tool cue fmt --check --files contract bootstrap
 
 lint: lint-ci lint-type lint-arch lint-doc lint-cue-fmt
 

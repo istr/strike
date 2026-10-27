@@ -185,17 +185,14 @@ the container or the tree.
 
 `podman build` of `bootstrap/Containerfile` is the only path to a strike
 binary on the endpoint, so that file is on the critical path of everything
-downstream. At the time of writing it builds the tree it pins; the image's
-default command still runs the root `lane.yaml`, which does not validate, so
-the published `podman run` step of the ADR-009 proof is not yet runnable.
-The [Beta Definition of Done](BETA-DEFINITION-OF-DONE.md) records this under
-its 2026-09-05 amendment.
+downstream. It builds the tree it pins and renders the bootstrap lane into
+the stage_1 image, whose default command runs that lane; the README, section
+Bootstrap, gives the build and run lines.
 
 The stage_1 image runs as a sibling of its steps on the endpoint engine,
 like the dev container. The run line is measured
 ([ADR-055](ADR-055-hardened-endpoint-development-premise.md), amendment of
-2026-10-24) against a stage_1 built on the static base the bootstrap moves
-to:
+2026-10-24) against a stage_1 built on the static base:
 
 ```sh
 podman run --rm \
@@ -204,7 +201,7 @@ podman run --rm \
   -v "$XDG_RUNTIME_DIR/podman.sock:/run/podman/podman.sock" \
   -e CONTAINER_HOST=unix:///run/podman/podman.sock \
   -e SIGSTORE_ID_TOKEN \
-  strike:stage_1 run <bootstrap lane file>
+  strike:stage_1
 ```
 
 Each part is load-bearing:

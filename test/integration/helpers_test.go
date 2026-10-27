@@ -23,7 +23,7 @@ import (
 	"github.com/istr/strike/internal/registry/regtest"
 )
 
-// Digest-pinned image references matching lane.yaml.
+// Digest-pinned image references.
 const (
 	goImage    = "cgr.dev/chainguard/go@sha256:0a0ba6cee2d535a4e9dcc63d4230be546d3c4c6631b23bc9989992711317649f"
 	staticBase = "cgr.dev/chainguard/static@sha256:2fdfacc8d61164aa9e20909dceec7cc28b9feb66580e8e1a65b9f2443c53b61b"

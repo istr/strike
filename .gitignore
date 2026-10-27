@@ -15,6 +15,8 @@ coverage.out
 *.key
 *.crt
 *.der
+# The two inputs the stage_0 build copies beside the bootstrap lane template.
+/bootstrap/input/
 /*.md
 !/AGENTS.md
 !/AI-WORKFLOW.md

@@ -174,6 +174,21 @@ var derBlobs = []derBlob{
 		digest: "c9636cd2aa143f2edf958a52f94123730b960262786f858b86f2d5d6916866d6",
 		label:  "lane trustroot fixtures: harness TSA timestamping leaf",
 	},
+
+	// Public roots the bootstrap lane template bootstrap/lane.cue declares,
+	// each measured as the sole root that verifies its live endpoint.
+	{
+		digest: "b75b7fd33261f2ddc4e7d97f2bbf3d76eb97b87ed77850e6c41dc5e7f7630d0b",
+		label:  "bootstrap lane: SSL.com Root Certification Authority ECC (one.one.one.one)",
+	},
+	{
+		digest: "0688a99defdb0b2169ff851996662a7c96cd5d54a55e71a56381687de6b1d9e9",
+		label:  "bootstrap lane: USERTrust ECC Certification Authority (github.com)",
+	},
+	{
+		digest: "f4537865ce0125ee212eed13990e4c75abe9eaeaa205c8dc1c4b4fc1b2e44719",
+		label:  "bootstrap lane: GTS Root R4 (proxy.golang.org, storage.googleapis.com)",
+	},
 }
 
 // blobHit is one candidate token and the byte offset it starts at.

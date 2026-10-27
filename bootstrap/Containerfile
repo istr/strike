@@ -5,18 +5,24 @@
 # - it uses a legacy Containerfile
 # - it still needs an implicit shell expansion in one of the Containerfile steps
 #
-# Stage 0 builds the strike binary from the pinned commit and produces the
-# stage_1 image with the binary and the pinned tree. stage_1 runs the
-# bootstrap lane as a sibling of its steps on the operator's engine: the lane
-# builds stage_2, builds it again with the cache bypassed as stage_3, and
-# publishes stage_2 only if both are byte-identical. No stage runs an engine
-# of its own (docs/ADR-055-hardened-endpoint-development-premise.md, D9); the
-# engine-bearing base of the second stage below is retired by the amendment
-# of 2026-09-14 to ADR-009.
+# The builder stage fetches the pinned commit and builds the strike binary.
+# The render stage renders the bootstrap lane from its template
+# bootstrap/lane.cue, with the fetched commit and the root of the local
+# sigstore harness as its two inputs. The last stage is stage_1: a
+# digest-pinned static base carrying the binary and the rendered lane, and
+# nothing else. stage_1 runs the lane as a sibling of its steps on your
+# engine; the lane builds stage_2, builds it again with the cache bypassed as
+# stage_3, and deploys stage_2 to the harness registry only if both are
+# byte-identical. No stage runs an engine of its own
+# (docs/ADR-055-hardened-endpoint-development-premise.md, D9).
 #
-# Prerequisite: you have podman installed on your host.
+# Prerequisites: rootless podman, and the local sigstore harness up from a
+# clone of the repository (make -C test/sigstore-local up). The build reads
+# the harness root from the clone through the build context named harness.
 #
-# GIT_COMMIT=<commit-sha> ; podman build -t strike:stage_1 --build-arg GIT_COMMIT=${GIT_COMMIT} https://raw.githubusercontent.com/istr/strike/${GIT_COMMIT}/bootstrap/Containerfile
+# GIT_COMMIT=<commit-sha> ; podman build -t strike:stage_1 --build-arg GIT_COMMIT=${GIT_COMMIT} --build-context harness=test/sigstore-local/pki https://raw.githubusercontent.com/istr/strike/${GIT_COMMIT}/bootstrap/Containerfile
+#
+# The run line that executes stage_1 is in README.md, section Bootstrap.
 #
 FROM docker.io/library/golang:1.26.10-alpine@sha256:d1f3216ef30257c850cc136ba42a359ccd9d3e75f19b2c276e520c0b4ef327ce AS builder
 ARG GIT_COMMIT
@@ -31,12 +37,13 @@ RUN ["go", "generate", "./contract"]
 ENV CGO_ENABLED=0
 RUN ["go", "build", "-trimpath", "-ldflags=-s -w", "-o", "strike", "./cmd/strike"]
 
-FROM docker.io/mgoltzsche/podman@sha256:53e4c6d0597bd01afca2355b83d993c4254efce0e64afa0beb3026d38ee27a9d
-COPY --from=builder /src /src
+FROM builder AS render
+COPY --from=builder /src/.git/HEAD /src/bootstrap/input/HEAD
+COPY --from=harness caddy-root.crt /src/bootstrap/input/caddy-root.crt
+RUN ["go", "tool", "cue", "export", "./bootstrap", "-e", "out", "--out", "yaml", "--outfile", "/src/bootstrap/lane.yaml"]
 
-RUN rm -f /usr/bin/fuse-overlayfs /usr/bin/libfuse* /usr/local/bin/*fuse*
-RUN printf "[storage]\ndriver = \"overlay\"\n" > /etc/containers/storage.conf
-
-WORKDIR /src
-ENTRYPOINT ["/src/strike"]
-CMD ["run"]
+FROM cgr.dev/chainguard/static@sha256:2fdfacc8d61164aa9e20909dceec7cc28b9feb66580e8e1a65b9f2443c53b61b
+COPY --from=builder /src/strike /usr/bin/strike
+COPY --from=render /src/bootstrap/lane.yaml /bootstrap/lane.yaml
+ENTRYPOINT ["/usr/bin/strike"]
+CMD ["run", "/bootstrap/lane.yaml"]

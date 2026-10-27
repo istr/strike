@@ -89,8 +89,8 @@ func TestDerBlobsWellFormed(t *testing.T) {
 			recorded++
 		}
 	}
-	if len(derBlobs) != 23 {
-		t.Errorf("allowlist has %d entries, want 23", len(derBlobs))
+	if len(derBlobs) != 26 {
+		t.Errorf("allowlist has %d entries, want 26", len(derBlobs))
 	}
 	if recorded != 5 {
 		t.Errorf("recorded entries = %d, want 5", recorded)

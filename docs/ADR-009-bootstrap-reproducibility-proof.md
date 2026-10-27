@@ -340,3 +340,68 @@ the exemption's disappearance." is read as: "`strike compare` is removed
 with the gate (item-0158). Its digest-file write passed the host-write gate
 unnamed rather than exempted, because that gate does not match a write
 through an opened root; item-0125 owns closing that form."
+
+## Amendment 2026-10-27 -- the workstation proof, rendered in stage_0
+
+Status: Accepted (item-0150). Append-only: this block decides what the
+amendment of 2026-09-14 left to item-0150, records what was measured, and
+replaces three of that amendment's readings named at its end; every other
+clause of this record and of its two amendments stands.
+
+### What was decided
+
+- **One bootstrap lane, rendered in stage_0.** The lane is the template
+  `bootstrap/lane.cue`, unified with `lane.#Lane` when it is rendered, so the
+  schema checks it before it is written. The stage_0 build renders it with
+  `go tool cue export` from two embedded inputs that `COPY` places beside the
+  template without a shell: `.git/HEAD` after the checkout of the fetched
+  commit, and the harness root from a second build context named `harness`.
+  The fetched commit becomes the source step's revision, so the lane builds
+  the commit the stage_1 binary was built from and carries no pin of its
+  own. The root `lane.yaml` is removed.
+- **The proof is the workstation proof.** The deploy goes to the local
+  harness registry under the local harness keyless chain. Publishing under
+  the public chain needs push credentials, a keyless token obtained at the
+  deploy and declared public-chain endpoints; it is not part of this lane
+  (item-0166).
+- **stage_1 carries the binary and the rendered lane, and nothing else.**
+  Its command names the lane: `run /bootstrap/lane.yaml`.
+- **The module fetch is one step.** It alone reaches the network for
+  modules, through `proxy.golang.org` and `storage.googleapis.com`, because
+  the proxy serves some module archives by redirect to Google Cloud Storage,
+  an undocumented detail of the proxy. The checksum database is not
+  declared: `go.sum` covers every module, and a gap fails the step instead
+  of being filled from the network. generate and both builds run without
+  network, with `GOPROXY=off`, `GOTOOLCHAIN=local` and the fetch step's
+  module cache mounted read-only.
+
+### What was measured, 2026-10-27, on the reference endpoint
+
+Four delegate-measure spikes, against `6a49956`: the two builds produce the
+same image digest cold and warm, and the gate passed in every run; two fresh
+fetches of one commit yield the same source tree and the same module cache,
+byte for byte; a cold run took 104 to 132 seconds; the template renders
+without an experiment flag or a module version change, its embedded root is
+byte-identical to the harness root's DER, and a symbolic HEAD, a second PEM
+block or a missing input each fail the render; the `harness` build context
+reaches a build whose Containerfile is fetched by URL.
+
+**Supersedes, in the amendment of 2026-09-14, point 1 of the amended
+mechanism:** "Its second stage is a digest-pinned static base carrying the
+binary and the pinned tree." is read as: "Its last stage is a digest-pinned
+static base carrying the binary and the bootstrap lane it renders from
+`bootstrap/lane.cue`, and nothing else."
+
+**Supersedes, in the amendment of 2026-09-14, point 6 of the amended
+mechanism:** "The deploy under the local harness chain is the workstation
+proof; the deploy under the public chain is the publish. Which lane file
+carries which is decided in item-0150." is read as: "The bootstrap lane is
+the workstation proof under the local harness chain; the publish under the
+public chain is not part of it (item-0166)."
+
+**Supersedes, in the Consequences of the amendment of 2026-09-14:** "From
+stage_2 on, the source enters only through the lane's fetch step, and the
+tree the Containerfile bakes is read for the lane file alone." is read as:
+"From stage_2 on, the source enters only through the lane's source step; the
+tree the Containerfile fetches is read to build the binary and to render the
+lane, and does not enter stage_1."

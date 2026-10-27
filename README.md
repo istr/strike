@@ -71,45 +71,76 @@ happens inside containers.
 ## Bootstrap
 
 strike builds itself, and the bootstrap proves that build reproducible. It
-starts from a single Containerfile fetched by pinned commit hash from GitHub --
-no local clone required. No stage of the bootstrap carries a container engine:
-strike is always a client of the one engine you already run.
+starts from a single Containerfile fetched by pinned commit hash from GitHub.
+No stage of the bootstrap carries a container engine: strike is always a
+client of the one engine you already run.
+
+The bootstrap is a workstation proof against the local sigstore harness in
+`test/sigstore-local`: it deploys to the harness registry and signs under the
+harness keyless chain. Bring the harness up from a clone of this repository
+first (`make -C test/sigstore-local up`), then build stage_1 from the clone's
+root:
 
 ```sh
-GIT_COMMIT=564a39238c9243a3d7b2a1b4293391c3b081ce63
+GIT_COMMIT=f2146d423e82a58175c65db85c9ee0b5bbf08117
 
 podman build -t strike:stage_1 \
   --build-arg GIT_COMMIT=${GIT_COMMIT} \
+  --build-context harness=test/sigstore-local/pki \
   https://raw.githubusercontent.com/istr/strike/${GIT_COMMIT}/bootstrap/Containerfile
 ```
 
 This builds the stage_1 image from a fully pinned source: the Containerfile is
 fetched by commit SHA, and the base images are pinned by digest. Inside the
-build, git fetches the exact commit and the strike binary is compiled; the
-stage_1 image carries the binary and the pinned tree.
+build, git fetches the exact commit, the strike binary is compiled, and the
+bootstrap lane is rendered from its template `bootstrap/lane.cue`: the commit
+the build fetched becomes the lane's source revision, and the harness root
+from the `harness` build context anchors the harness endpoints. The stage_1
+image carries the binary and the rendered lane, and nothing else.
 
-stage_1 runs as a sibling of its own steps: your engine starts it with the
-engine socket bound in and named through `CONTAINER_HOST`, host networking,
-and the keep-id mapping that places your user on the image's user
-(`--userns=keep-id:uid=65532,gid=65532`; plain `--userns=keep-id` leaves the
-process on the image's user, which cannot open your socket), and strike
-drives that same engine to run the bootstrap lane (`lane.yaml`):
+stage_1 runs as a sibling of its own steps:
 
-1. **source** -- fetches the pinned commit in a digest-pinned git image and
-   records its git provenance.
-2. **build-binary** -- compiles the strike binary in a pinned Chainguard Go
-   image with `CGO_ENABLED=0`.
-3. **build-image** -- packs the binary into an OCI image based on
+```sh
+SIGSTORE_ID_TOKEN=$(make -s -C test/sigstore-local token) \
+podman run --rm \
+  --userns=keep-id:uid=65532,gid=65532 \
+  --network=host \
+  --read-only --cap-drop=ALL --security-opt=no-new-privileges \
+  -v "$XDG_RUNTIME_DIR/podman.sock:/run/podman/podman.sock" \
+  -e CONTAINER_HOST=unix:///run/podman/podman.sock \
+  -e SIGSTORE_ID_TOKEN \
+  strike:stage_1
+```
+
+Your engine starts it with the engine socket bound in and named through
+`CONTAINER_HOST`, host networking, and the keep-id mapping that places your
+user on the image's user (plain `--userns=keep-id` leaves the process on the
+image's user, which cannot open your socket). The harness token is minted for
+this one run. strike drives that same engine to run the bootstrap lane:
+
+1. **source** -- fetches the commit in a digest-pinned git image; its only
+   peer is `github.com`.
+2. **fetch** -- downloads the Go modules in the pinned Chainguard Go image.
+   It is the only other step with network: `proxy.golang.org`, and
+   `storage.googleapis.com`, where the proxy redirects some module archives.
+   `go.sum` covers every module, so a gap fails the step.
+3. **generate** -- generates the CUE-derived Go sources, without network.
+4. **build-binary** -- compiles the strike binary with `CGO_ENABLED=0` and
+   the toolchain locked to the image, without network.
+5. **build-image** -- packs the binary into an OCI image based on
    `chainguard/static`. This image is stage_2.
-4. **second build** -- the same build and pack again, in the same run, with
-   the cache bypassed. This image is stage_3.
-5. **publish** -- a registry deploy of stage_2, signed under a keyless chain.
-   Its `reproducedBy` gate names stage_3: before anything is published, the
-   deploy asserts that stage_2 and stage_3 are byte-identical and fails on a
-   mismatch.
+6. **build-binary-2**, **build-image-2** -- the same build and pack again, in
+   the same run, with the cache bypassed. This image is stage_3.
+7. **publish** -- a registry deploy of stage_2 to the harness registry,
+   signed under the harness keyless chain. Its `reproducedBy` gate names
+   stage_3: before anything is pushed, the deploy asserts that stage_2 and
+   stage_3 are byte-identical and fails on a mismatch.
 
-The bootstrap lane is not complete yet: today `lane.yaml` carries only the
-build and pack steps, and a published run line follows once the lane runs.
+A passing run logs `GATE   reproducedBy: build-image and build-image-2 built
+sha256:...` and then `OK     publish ->
+registry.127.0.0.1.sslip.io:5443/istr/strike@sha256:...`. Publishing to a
+public registry under the public sigstore chain is not part of the bootstrap
+yet.
 
 The in-lane comparison proves that strike's orchestration is deterministic.
 Two further checks prove more: the released strike, rebuilding the same commit
@@ -261,7 +292,7 @@ internal/
   deploy/
     deploy.go                     Deploy with mandatory state attestation
 bootstrap/Containerfile           Self-contained bootstrap image
-lane.yaml                         Top-level bootstrap lane
+bootstrap/lane.cue                Bootstrap lane template
 ```
 
 ## Development

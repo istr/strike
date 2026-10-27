@@ -1,6 +1,7 @@
 {
   "realm": "sigstore",
   "enabled": true,
+  "accessTokenLifespan": 600,
   "sslRequired": "none",
   "registrationAllowed": false,
   "clients": [
