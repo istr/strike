@@ -555,6 +555,12 @@ Format: `<type>(<optional scope>): <description>`
 - Breaking changes: add `!` after the type/scope (e.g., `feat!: ...` or
   `fix(lane)!: ...`) and explain in the commit body.
 - Reference issue numbers where applicable.
+- A commit produced with an AI model MUST end with one `Co-Authored-By:`
+  trailer per model, naming the model
+  (`Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`), and MUST NOT
+  disclose any other detail of the AI interaction: no session links or ids
+  (e.g. a `Claude-Session:` trailer), no prompts, transcripts, or tool
+  metadata.
 
 Examples:
 

@@ -232,6 +232,19 @@ Deviations paragraph with one brief line per deviation. This clause keeps git
 log and the report synchronized: both then carry the same facts about what
 changed and why.
 
+## Commit attribution names the model, nothing else
+
+Every commit produced with an AI model -- executed from an instruction file,
+or prepared as a patch outside the tree -- MUST end with one
+`Co-Authored-By:` trailer per model, naming the model
+(`Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`). It MUST NOT
+disclose any other detail of the AI interaction: no session links or ids
+(e.g. a `Claude-Session:` trailer), no prompts, transcripts, or tool
+metadata. A dictated commit message carries the model trailer only, and the
+operator checks a patch's trailers before applying it, because `git am`
+keeps every one. Why: the history is public and permanent; removing a leak
+means rewriting every later commit and re-pinning `GIT_COMMIT`.
+
 ## Cluster by risk, not by finding order
 
 When a review produces many findings, group them by risk before sequencing.

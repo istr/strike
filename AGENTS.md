@@ -297,6 +297,15 @@ bootstrap lane renders its source revision from the commit the build fetched
 and carries no pin. An interim rule; procedure:
 `docs/RELEASES.md#bootstrap-pin-interim`.
 
+**AI attribution.** A commit produced with an AI model MUST end with one
+`Co-Authored-By:` trailer per model, naming the model
+(`Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`). It MUST NOT
+disclose any other detail of the AI interaction: no session links or ids
+(e.g. a `Claude-Session:` trailer), no prompts, transcripts, or tool
+metadata. Delete such a line when the tooling adds one. Why: the history is
+public and permanent; removing a leak means rewriting every later commit and
+re-pinning `GIT_COMMIT`.
+
 ## When a gate fails: diagnose, never assign blame
 
 A failing check is a signal to diagnose, not a verdict to defend against.

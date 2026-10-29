@@ -154,6 +154,9 @@ Format: `<type>(<optional scope>): <description>`
 - Scope is optional but encouraged when the change targets a single package
   (e.g., `fix(container): ...`, `test(deploy): ...`).
 - Breaking changes: add `!` after the type/scope and explain in the body.
+- AI-assisted commits MUST name each model in a `Co-Authored-By:` trailer
+  and MUST NOT disclose any other detail of the AI interaction, such as
+  session links or ids, prompts, or transcripts.
 
 ## How to contribute
 
