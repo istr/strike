@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed, 2026-10-29. Drafted against
+Accepted, 2026-10-29. Drafted against
 `955ddb3d02d21c67fc4f89c4113611fcceaed523`. Every design fork behind this
 record was surfaced and ratified by the operator between 2026-10-27 and
 2026-10-29 (working paper "Decision Forks -- Release Authorization ADR",

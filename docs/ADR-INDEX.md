@@ -101,7 +101,7 @@ referenced here at all.
 | 054 | [The kubernetes deploy is a control-plane API act](ADR-054-kubernetes-deploy-via-cluster-api.md) | Accepted | Runtime is attested; Identity is asymmetric; Peers are declared; Enforcement is structural; Code is liability |
 | 055 | [The hardened endpoint is the development premise](ADR-055-hardened-endpoint-development-premise.md) | Accepted; amended by ADR-057 | Restricted by default; Digest-pinned references; Reproducibility; No shell; No exec; Enforcement is structural; Code is liability |
 | 056 | [The TLS trust anchor is an inline certificate](ADR-056-tls-trust-anchor-as-inline-certificate.md) | Accepted | Reproducibility; External references are digest-pinned; Peers are declared; Runtime is attested; Observation over declaration; Restricted by default; Enforcement is structural; Code is liability |
-| 057 | [A release is two signatures -- reproducible provenance and an authorizing verified identity](ADR-057-release-authorization-two-signatures.md) | Proposed | Identity is asymmetric; Runtime is attested; Observation over declaration; Enforcement is structural; Digest-pinned references; Reproducibility; Restricted by default; Code is liability; Meaning is single-sourced; No shell; No exec; No root |
+| 057 | [A release is two signatures -- reproducible provenance and an authorizing verified identity](ADR-057-release-authorization-two-signatures.md) | Accepted | Identity is asymmetric; Runtime is attested; Observation over declaration; Enforcement is structural; Digest-pinned references; Reproducibility; Restricted by default; Code is liability; Meaning is single-sourced; No shell; No exec; No root |
 
 ## By principle
 
