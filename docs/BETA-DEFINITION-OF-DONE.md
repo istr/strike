@@ -172,3 +172,24 @@ column above is the snapshot at ratification.
 > 5. Sequencing steps 3 and 4 converge to the order the revision set --
 >    0150, 0125, 0062, 0151, 0096, 0016, 0063 -- and `_order.md` remains
 >    the truth.
+
+> **2026-10-29, riding [ADR-057](ADR-057-release-authorization-two-signatures.md):**
+>
+> 1. Row 6 is read on two levels, honestly separated (ADR-057 D11). For the
+>    provenance bundles the row is unchanged: `cosign verify-attestation`
+>    passes offline and flag-clean against the published trusted root and
+>    the declared identity. For the authorization bundle of ADR-057 D3 and
+>    D5, "independently provable" is redeemed through open standards, not
+>    through one tool: the release procedure publishes the steps anyone can
+>    run without strike (the chain to the EU Trusted List, the ECDSA P-384
+>    signature over the PAE bytes, the Rekor entry and the TSA token), and
+>    sigstore-go with the trusted root is the library form. cosign cannot
+>    verify a certificate without a SAN; its result at the test card is
+>    recorded either as an invocation or as a limitation under row 14 with
+>    its cause, never as an identity check with catch-all patterns.
+> 2. ADR-057 touches no field of `contract/attest`; it is not a freeze
+>    event under "Attest wire freeze". It changes `contract/lane` and adds
+>    `contract/release`.
+> 3. The items that carry this amendment into rows 6 and 14 follow the
+>    roadmap revision against the commit that lands ADR-057; the Items
+>    column above is not edited here.

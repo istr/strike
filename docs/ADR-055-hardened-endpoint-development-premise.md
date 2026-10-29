@@ -900,3 +900,32 @@ networking, and the endpoint user mapped onto the image's user
 amendment's "the keep-id mapping" (its mechanism, item 2) is read the same
 way; that record is not amended, because the mapping is still keep-id and
 only its target is narrowed here.
+
+## Amendment 2026-10-29 -- D1 "released" is defined; D5 gains the signer invocation
+
+[ADR-057](ADR-057-release-authorization-two-signatures.md) gives the word
+"released" in D1 its first in-tree definition. Under that record the
+release build runs on substrate the forge operates (ADR-057 D10); the
+endpoint's part of a release is the approver's reproduction of the
+published digest (ADR-057 D4, the README bootstrap run), the
+authorization signature produced through a delegate agent (ADR-057 D9),
+and the register commit that names the digest (ADR-057 D6). None of this
+adds a capability to the four D1 names: the pcscd sidecar, the agent and
+the signer are containers the engine starts, and the reader is a device
+bound at the operator's invocation.
+
+**Reading, in D1 above:** "strike is developed, gated, bootstrapped, and
+released from an endpoint on which exactly four capabilities exist" is
+read with "released" as "authorized for release and registered, in the
+sense of ADR-057 D4, D6 and D9".
+
+**Supersedes, in D5 above:** "The operator's engine invocation -- the dev
+container definition, or the `podman run` line the README publishes -- is
+the single entry point of the workflow and the only place where a host
+path is bound." is read as: "The operator's engine invocation -- the dev
+container definition, the `podman run` line the README publishes, or the
+signer invocation `docs/RELEASES.md` publishes (ADR-057 D9), which binds
+the reader device through the pcscd sidecar beside the engine socket -- is
+the single entry point of the workflow and the only place where a host
+path or a host device is bound." The 2026-09-14 reading of D5's first
+sentence is unchanged.

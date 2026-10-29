@@ -297,3 +297,23 @@ images. The lane's declared locator decides which registry the control plane
 contacts; a mirror is declared by naming it, with the same digest, which
 content addressing makes equivalent. The control plane's trust store governs
 the fetch's TLS. Registries that require authentication are not reached.
+
+## Amendment 2026-10-29 -- D2: the hardware-gating sentence is the builder's rule
+
+[ADR-057](ADR-057-release-authorization-two-signatures.md) introduces a
+second signer role beside the control plane: the approver, a verified
+natural or legal person who authorizes a release with a key held on a
+certified hardware signature-creation device under a qualified
+certificate (ADR-057 D3, D9). D2's first sentence was written with one
+signer in view and is scoped to that signer. The keyless chain, the
+in-process library set, and the FIDO2 posture of the builder are
+unchanged; the reversal for the approver role carries its reason in
+ADR-057 D3 and does not reinstate the model ADR-043 retired, because the
+key never enters strike and the chain anchors in a public trust list.
+
+**Supersedes, in D2 above:** "Identity is gated by hardware at the IdP,
+not by holding a key." is read as: "For the builder -- the control plane
+signing the sealed statements of a deploy -- identity is gated by hardware
+at the IdP, not by holding a key. For the approver of ADR-057, identity is
+a qualified certificate on a hardware signature-creation device, pinned
+in the lane as a leaf (ADR-057 D3)."

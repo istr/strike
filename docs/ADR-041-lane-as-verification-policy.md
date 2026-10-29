@@ -217,3 +217,28 @@ ADR-040" paragraph above:** "ADR-040's note that the sigstore trust
 root is declared nowhere in the lane" is read as "the position this
 ADR's Context states, that the sigstore trust root was declared
 nowhere in the lane".
+
+## Amendment 2026-10-29 -- decision 6: the abort point is the issued certificate
+
+[ADR-057](ADR-057-release-authorization-two-signatures.md) D2 declares the
+builder identity as a provider-neutral tuple -- issuer, SAN, and a closed
+block of Fulcio extension pins -- and matches it against the certificate
+Fulcio issued, because claim names differ per OIDC provider and the
+certificate is what the verifier will see. Fail-closed is preserved; the
+abort point moves. ADR-057 also extends this record by a second signer
+role (`approvers`) and a second verifier profile (ADR-057 D3, D7);
+decisions 1 to 5 and 7 apply to both roles unchanged, and the explicit
+trust-root override of D4 is the retroactive channel for the approver's
+issuing authority (ADR-057 D3).
+
+**Supersedes, in decision 6 above:** "Before any Fulcio contact, the
+ambient token's subject must equal the lane-declared identity, or the
+deploy aborts. The token is the observation, the declaration the
+expectation; a mismatch is caught at the source rather than hours later
+at the verifier." is read as: "Before any Fulcio contact, the ambient
+token's `iss` must equal the lane-declared issuer; before the first
+signature, the leaf certificate Fulcio issued -- its SAN and its issuer
+extensions -- must match the lane-declared identity tuple of ADR-057 D2,
+or the deploy aborts. The certificate is the observation, the declaration
+the expectation; a mismatch is caught at the producer rather than hours
+later at the verifier."
