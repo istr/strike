@@ -7,12 +7,15 @@ for queries; this file is the cross-arc truth for *what runs next*. IDs only
 
 - item-0085
 - item-0081
+- item-0172
 - item-0167
 - item-0166
+- item-0173
 - item-0125
 - item-0151
 - item-0168
 - item-0169
+- item-0174
 - item-0062
 - item-0096
 - item-0016
