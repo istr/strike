@@ -158,7 +158,7 @@ type OutputArchive struct {
 // id to its layer's uncompressed-content digest (diff_id), the engine-level
 // key a consumer uses to select that layer after an engine round-trip.
 type WrapResult struct {
-	LayerDiffIDs map[primitive.Identifier]string
+	LayerDiffIDs map[primitive.Identifier]primitive.Digest
 	Digest       primitive.Digest
 	Size         int64
 }
@@ -175,7 +175,7 @@ func (c *Client) WrapOutputsAsImage(ctx context.Context, outs []OutputArchive, t
 		types.OCIConfigJSON,
 	)
 	adds := make([]mutate.Addendum, 0, len(outs))
-	diffIDs := make(map[primitive.Identifier]string, len(outs))
+	diffIDs := make(map[primitive.Identifier]primitive.Digest, len(outs))
 	var total int64
 	for _, out := range outs {
 		layer, size, err := canonicalLayerFromTar(out.Tar, out.StripPrefix, out.DestPrefix)
@@ -186,7 +186,7 @@ func (c *Client) WrapOutputsAsImage(ctx context.Context, outs []OutputArchive, t
 		if err != nil {
 			return WrapResult{}, fmt.Errorf("diff id output %q: %w", out.OutputID, err)
 		}
-		diffIDs[out.OutputID] = diffID.String()
+		diffIDs[out.OutputID] = v1HashToDigest(diffID)
 		adds = append(adds, mutate.Addendum{
 			Layer:       layer,
 			Annotations: map[string]string{OutputLayerAnnotation: string(out.OutputID)},
@@ -205,8 +205,9 @@ func (c *Client) WrapOutputsAsImage(ctx context.Context, outs []OutputArchive, t
 }
 
 // v1HashToDigest converts a go-containerregistry v1.Hash to a primitive.Digest.
-// The Hash is strike's own freshly computed manifest digest, so its sha256:hex
-// String form is trusted directly.
+// go-containerregistry computes a Hash only as sha256 and parses one only as
+// sha256 with exactly 64 lowercase hex digits, so the String form of every
+// Hash it hands out is a canonical digest and is taken directly.
 func v1HashToDigest(h v1.Hash) primitive.Digest {
 	return primitive.Digest(h.String())
 }

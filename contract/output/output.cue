@@ -42,5 +42,5 @@ import "github.com/istr/strike/contract/primitive"
 	// load/save round-trip, so neither the annotation nor the compressed layer
 	// digest is stable; the diff_id is. Consumers select the layer by matching
 	// this against the image config rootfs.diff_ids.
-	layerDiffID: string @go(LayerDiffID)
+	layerDiffID: primitive.#Digest @go(LayerDiffID)
 }

@@ -116,19 +116,19 @@ func (d *Deployer) executeRegistryDeploy(ctx context.Context, m lane.DeployRegis
 // the pushed subject (ADR-051 D9). Lane validation guarantees exactly one;
 // this re-check is the last structural guard before the push.
 func selectImageArm(refs map[primitive.Identifier]lane.ArtifactRef) (primitive.Identifier, lane.ArtifactRef, error) {
-	var name primitive.Identifier
+	var artName primitive.Identifier
 	var found lane.ArtifactRef
 	n := 0
 	for _, k := range slices.Sorted(maps.Keys(refs)) {
 		if refs[k].Output == nil {
-			name, found = k, refs[k]
+			artName, found = k, refs[k]
 			n++
 		}
 	}
 	if n != 1 {
 		return "", lane.ArtifactRef{}, fmt.Errorf("exactly one image-arm artifacts entry required, got %d", n)
 	}
-	return name, found, nil
+	return artName, found, nil
 }
 
 // checkReproducedBy is the reproduction gate of a registry deploy (ADR-009):
@@ -245,12 +245,12 @@ func payloadDescriptor(img v1.Image) (v1.Descriptor, error) {
 // SBOMs over the pushed manifest digest -- the image arm's whole-image
 // catalog (ADR-051 D3/D9) -- and pushes both as OCI referrers of subject,
 // annotated with the image arm's artifacts name.
-func pushImageSBOM(ctx context.Context, repo string, subject v1.Descriptor, img v1.Image, rt http.RoundTripper, name primitive.Identifier) (record.SBOMSet, error) {
+func pushImageSBOM(ctx context.Context, repo string, subject v1.Descriptor, img v1.Image, rt http.RoundTripper, artName primitive.Identifier) (record.SBOMSet, error) {
 	fsys, err := flattenImageToFS(img)
 	if err != nil {
 		return record.SBOMSet{}, fmt.Errorf("flatten payload: %w", err)
 	}
-	return pushSBOMPair(ctx, repo, subject, rt, name, fsys, subject.Digest.String())
+	return pushSBOMPair(ctx, repo, subject, rt, artName, fsys, subject.Digest.String())
 }
 
 // regionSBOMs catalogs every file and directory region of the artifacts map
@@ -263,16 +263,16 @@ func pushImageSBOM(ctx context.Context, repo string, subject v1.Descriptor, img 
 func (d *Deployer) regionSBOMs(ctx context.Context, repo string, subject v1.Descriptor, rt http.RoundTripper, state *lane.Runtime) (map[primitive.Identifier]record.SBOMSet, error) {
 	sets := map[primitive.Identifier]record.SBOMSet{}
 	exported := map[string][]byte{}
-	for _, name := range slices.Sorted(maps.Keys(d.ArtifactRefs)) {
-		ref := d.ArtifactRefs[name]
+	for _, artName := range slices.Sorted(maps.Keys(d.ArtifactRefs)) {
+		ref := d.ArtifactRefs[artName]
 		if ref.Output == nil {
 			continue
 		}
-		set, err := d.regionSBOM(ctx, repo, subject, rt, state, name, ref, exported)
+		set, err := d.regionSBOM(ctx, repo, subject, rt, state, artName, ref, exported)
 		if err != nil {
-			return nil, fmt.Errorf("region %q: %w", name, err)
+			return nil, fmt.Errorf("region %q: %w", artName, err)
 		}
-		sets[name] = set
+		sets[artName] = set
 	}
 	return sets, nil
 }
@@ -281,7 +281,7 @@ func (d *Deployer) regionSBOMs(ctx context.Context, repo string, subject v1.Desc
 // producer image (deduplicated across regions of the same producer through
 // exported), select and content-check the layer, read it at the output's own
 // coordinates, and push the SBOM pair under the region's diff_id subject.
-func (d *Deployer) regionSBOM(ctx context.Context, repo string, subject v1.Descriptor, rt http.RoundTripper, state *lane.Runtime, name primitive.Identifier, ref lane.ArtifactRef, exported map[string][]byte) (record.SBOMSet, error) {
+func (d *Deployer) regionSBOM(ctx context.Context, repo string, subject v1.Descriptor, rt http.RoundTripper, state *lane.Runtime, artName primitive.Identifier, ref lane.ArtifactRef, exported map[string][]byte) (record.SBOMSet, error) {
 	handle, err := state.Resolve(lane.OutputRef{Step: ref.Step, Output: *ref.Output})
 	if err != nil {
 		return record.SBOMSet{}, err
@@ -311,14 +311,14 @@ func (d *Deployer) regionSBOM(ctx context.Context, repo string, subject v1.Descr
 	if err != nil {
 		return record.SBOMSet{}, err
 	}
-	return pushSBOMPair(ctx, repo, subject, rt, name, fsys, fh.LayerDiffID)
+	return pushSBOMPair(ctx, repo, subject, rt, artName, fsys, fh.LayerDiffID.String())
 }
 
 // pushSBOMPair catalogs fsys under subjectDigest, pushes the CycloneDX and
 // SPDX documents as OCI referrers of subject -- each annotated with the
 // artifacts-map name it belongs to -- and returns both document digests for
 // the artifact's sealed record (ADR-051 D9).
-func pushSBOMPair(ctx context.Context, repo string, subject v1.Descriptor, rt http.RoundTripper, name primitive.Identifier, fsys fs.FS, subjectDigest string) (record.SBOMSet, error) {
+func pushSBOMPair(ctx context.Context, repo string, subject v1.Descriptor, rt http.RoundTripper, artName primitive.Identifier, fsys fs.FS, subjectDigest string) (record.SBOMSet, error) {
 	cdxBytes, spdxBytes, err := GenerateImageSBOM(fsys, subjectDigest, clock.Reproducible())
 	if err != nil {
 		return record.SBOMSet{}, fmt.Errorf("sbom: %w", err)
@@ -330,7 +330,7 @@ func pushSBOMPair(ctx context.Context, repo string, subject v1.Descriptor, rt ht
 		{mediaType: "application/vnd.cyclonedx+json", content: cdxBytes},
 		{mediaType: "application/spdx+json", content: spdxBytes},
 	} {
-		art, artErr := registry.ArtifactImage(doc.content, doc.mediaType, subject, map[string]string{artifactAnnotation: string(name)})
+		art, artErr := registry.ArtifactImage(doc.content, doc.mediaType, subject, map[string]string{artifactAnnotation: string(artName)})
 		if artErr != nil {
 			return record.SBOMSet{}, fmt.Errorf("sbom artifact: %w", artErr)
 		}

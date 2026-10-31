@@ -13,6 +13,7 @@ import (
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 
 	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/primitive"
 )
 
 // SeedTarFromImage selects a content subtree from a producer image and
@@ -33,7 +34,7 @@ import (
 // engine mount failure. The emitted tar is deterministic: name-sorted
 // entries, zeroed mtime and ownership, preserved file modes, verbatim
 // (contained) symlinks.
-func SeedTarFromImage(tarBytes []byte, layerDiffID, inImagePath, destPrefix string) ([]byte, error) {
+func SeedTarFromImage(tarBytes []byte, layerDiffID primitive.Digest, inImagePath, destPrefix string) ([]byte, error) {
 	layerBytes, err := OutputLayer(tarBytes, layerDiffID)
 	if err != nil {
 		return nil, err
@@ -64,7 +65,7 @@ func SeedTarFromImage(tarBytes []byte, layerDiffID, inImagePath, destPrefix stri
 // destPath is the in-image destination without its leading slash. Containment
 // is enforced by the same rules SeedTarFromImage relies on, plus the locality
 // check in writeCanonicalTar.
-func PackTarFromImage(tarBytes []byte, layerDiffID, inImagePath, destPath string, fileMode int64) ([]byte, error) {
+func PackTarFromImage(tarBytes []byte, layerDiffID primitive.Digest, inImagePath, destPath string, fileMode int64) ([]byte, error) {
 	layerBytes, err := OutputLayer(tarBytes, layerDiffID)
 	if err != nil {
 		return nil, err
@@ -132,7 +133,7 @@ func withImpliedDirs(entries []canonicalEntry) []canonicalEntry {
 //     surfaces strike's own diagnostic rather than an engine mount failure.
 //
 // The bytes are not copied; only headers and symlink targets are inspected.
-func ValidateImageMount(tarBytes []byte, layerDiffID, inImagePath string) (MountKind, error) {
+func ValidateImageMount(tarBytes []byte, layerDiffID primitive.Digest, inImagePath string) (MountKind, error) {
 	layerBytes, err := OutputLayer(tarBytes, layerDiffID)
 	if err != nil {
 		return MountKindMissing, err
@@ -160,13 +161,13 @@ func ValidateImageMount(tarBytes []byte, layerDiffID, inImagePath string) (Mount
 // needs no anchor beyond the one the output handle already carries.
 // Consumers: the pack-input and seed paths in this package, and the deploy
 // region catalog (ADR-051 D9).
-func OutputLayer(tarBytes []byte, layerDiffID string) ([]byte, error) {
+func OutputLayer(tarBytes []byte, layerDiffID primitive.Digest) ([]byte, error) {
 	img, err := ImageFromOCITar(tarBytes)
 	if err != nil {
 		return nil, err
 	}
 
-	want, err := v1.NewHash(layerDiffID)
+	want, err := v1.NewHash(layerDiffID.String())
 	if err != nil {
 		return nil, fmt.Errorf("parse layer diff id %q: %w", layerDiffID, err)
 	}

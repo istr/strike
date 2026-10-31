@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/registry"
 )
 
@@ -283,7 +284,7 @@ func TestSeedTarFromImage_LayerNotFound(t *testing.T) {
 	}, map[string][]byte{"a.txt": []byte("a")})
 	imgTar, _ := buildLayeredImageTar(t, map[string][]byte{"alpha": layerTar})
 
-	_, err := registry.SeedTarFromImage(imgTar, "sha256:"+strings.Repeat("0", 64), "a.txt", "work")
+	_, err := registry.SeedTarFromImage(imgTar, primitive.DigestFromHex(strings.Repeat("0", 64)), "a.txt", "work")
 	if err == nil {
 		t.Fatal("expected error for missing layer id")
 	}

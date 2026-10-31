@@ -602,8 +602,7 @@ func artifactDigest(handle output.Handle, ref lane.ArtifactRef) (primitive.Diges
 	if !ok {
 		return "", fmt.Errorf("region artifact resolved to a %s output", handle.HandleKind())
 	}
-	diffID := primitive.Digest(fh.LayerDiffID)
-	return primitive.ParseDigest(diffID)
+	return fh.LayerDiffID, nil
 }
 
 // recordAttestation marshals and records the attestation in lane state.

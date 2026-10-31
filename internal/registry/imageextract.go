@@ -14,6 +14,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/types"
 
 	"github.com/istr/strike/internal/container"
+	"github.com/istr/strike/internal/primitive"
 )
 
 // SaveImage exports an image from the engine as an OCI archive tar.
@@ -136,7 +137,7 @@ func (l *memLayer) MediaType() (types.MediaType, error) { return l.desc.MediaTyp
 // engine load/save round-trip (ADR-046); a cache hit recovers each output's
 // LayerDiffID from this ordered list, bound to step.Outputs by the canonical
 // layer ordering the producer assembles.
-func LayerDiffIDs(tarBytes []byte) ([]string, error) {
+func LayerDiffIDs(tarBytes []byte) ([]primitive.Digest, error) {
 	img, err := ImageFromOCITar(tarBytes)
 	if err != nil {
 		return nil, fmt.Errorf("diff ids: %w", err)
@@ -145,9 +146,9 @@ func LayerDiffIDs(tarBytes []byte) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("diff ids: read config: %w", err)
 	}
-	ids := make([]string, len(cfg.RootFS.DiffIDs))
+	ids := make([]primitive.Digest, len(cfg.RootFS.DiffIDs))
 	for i, h := range cfg.RootFS.DiffIDs {
-		ids[i] = h.String()
+		ids[i] = v1HashToDigest(h)
 	}
 	return ids, nil
 }

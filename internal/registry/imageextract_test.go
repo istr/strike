@@ -16,6 +16,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/types"
 
 	"github.com/istr/strike/internal/container"
+	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/registry"
 	"github.com/istr/strike/internal/registry/regtest"
 )
@@ -98,7 +99,7 @@ func layerFromTar(t *testing.T, data []byte) v1.Layer {
 // (diff_id) -- the stable engine-level selection key (ADR-046) a consumer
 // passes to SeedTarFromImage. Layer order follows the sorted
 // output ids for determinism.
-func buildLayeredImageTar(t *testing.T, layers map[string][]byte) ([]byte, map[string]string) {
+func buildLayeredImageTar(t *testing.T, layers map[string][]byte) ([]byte, map[string]primitive.Digest) {
 	t.Helper()
 	ids := make([]string, 0, len(layers))
 	for id := range layers {
@@ -109,14 +110,14 @@ func buildLayeredImageTar(t *testing.T, layers map[string][]byte) ([]byte, map[s
 		mutate.MediaType(empty.Image, types.OCIManifestSchema1),
 		types.OCIConfigJSON,
 	)
-	diffIDs := make(map[string]string, len(ids))
+	diffIDs := make(map[string]primitive.Digest, len(ids))
 	for _, id := range ids {
 		layer := layerFromTar(t, layers[id])
 		diffID, diffErr := layer.DiffID()
 		if diffErr != nil {
 			t.Fatalf("DiffID %s: %v", id, diffErr)
 		}
-		diffIDs[id] = diffID.String()
+		diffIDs[id] = primitive.Digest(diffID.String())
 		var err error
 		img, err = mutate.Append(img, mutate.Addendum{
 			Layer:       layer,
@@ -136,7 +137,7 @@ func buildLayeredImageTar(t *testing.T, layers map[string][]byte) ([]byte, map[s
 // buildSingleLayerImageTar builds an OCI layout tar with one content layer
 // (from raw tar bytes) and returns the tar plus that layer's diff_id, which
 // the consumer passes as the selection key.
-func buildSingleLayerImageTar(t *testing.T, layerTarBytes []byte) ([]byte, string) {
+func buildSingleLayerImageTar(t *testing.T, layerTarBytes []byte) ([]byte, primitive.Digest) {
 	t.Helper()
 	const id = "content"
 	data, diffIDs := buildLayeredImageTar(t, map[string][]byte{id: layerTarBytes})

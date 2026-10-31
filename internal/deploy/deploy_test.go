@@ -610,7 +610,7 @@ func TestDeployerExecuteRegistryAttachesReferrers(t *testing.T) {
 	if !ok {
 		t.Fatal("Sealed.Artifacts missing region entry \"web\"")
 	}
-	if webArt.Digest != primitive.Digest(regionDiff) {
+	if webArt.Digest != regionDiff {
 		t.Errorf("region digest = %s, want the layer diff_id %s", webArt.Digest, regionDiff)
 	}
 	if webArt.SBOM == nil {

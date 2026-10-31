@@ -118,7 +118,7 @@ func BuildMultiFileImageTar(files map[string][]byte) ([]byte, error) {
 // registry.OutputLayerAnnotation. It returns the layout tar and the layer's
 // uncompressed-content digest (diff_id) -- the stable engine-level selection
 // key (ADR-046), which the consumer passes to SeedTarFromImage.
-func BuildLayeredImageTar(outputID string, files map[string][]byte) ([]byte, string, error) {
+func BuildLayeredImageTar(outputID string, files map[string][]byte) ([]byte, primitive.Digest, error) {
 	var buf bytes.Buffer
 	tw := tar.NewWriter(&buf)
 	names := make([]string, 0, len(files))
@@ -176,7 +176,7 @@ func BuildLayeredImageTar(outputID string, files map[string][]byte) ([]byte, str
 	if err != nil {
 		return nil, "", err
 	}
-	return tarBytes, diffID.String(), nil
+	return tarBytes, primitive.Digest(diffID.String()), nil
 }
 
 // singleFileLayer builds a deterministic OCI layer with one regular file.
