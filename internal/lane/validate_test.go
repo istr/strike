@@ -48,6 +48,8 @@ func TestValidateLane_Reject(t *testing.T) {
 		{"invalid_reproduced_by_unknown_step.yaml", "reproducedBy references unknown step"},
 		{"invalid_reproduced_by_no_image_output.yaml", `reproducedBy "compile" declares no image output`},
 		{"invalid_reproduced_by_image_arm.yaml", `reproducedBy "build" names the image arm`},
+		{"invalid_oidc_identity_not_uri.yaml", "oidc identity"},
+		{"invalid_sbom_signer_identity_not_uri.yaml", "baseSbomSigners[0] identity"},
 	}
 
 	matches, err := filepath.Glob("testdata/validate/invalid_*.yaml")

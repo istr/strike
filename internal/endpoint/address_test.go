@@ -1,6 +1,8 @@
 package endpoint_test
 
 import (
+	"bytes"
+	"encoding/json"
 	"testing"
 
 	"github.com/istr/strike/internal/endpoint"
@@ -78,6 +80,11 @@ func TestParseURL(t *testing.T) {
 		{"http scheme", "http://fulcio.example", "", "", 0, true},
 		{"empty host", "https://:5555", "", "", 0, true},
 		{"bad port", "https://h:abc/x", "", "", 0, true},
+		{"query", "https://idp.example.com/x?a=b", "", "", 0, true},
+		{"empty query", "https://idp.example.com?", "", "", 0, true},
+		{"fragment", "https://idp.example.com/#f", "", "", 0, true},
+		{"leading zero port", "https://idp.example.com:0443", "", "", 0, true},
+		{"signed port", "https://idp.example.com:+443", "", "", 0, true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -178,6 +185,65 @@ func TestURLRoundTrip(t *testing.T) {
 			}
 			if got := a.URL(); got != s {
 				t.Errorf("round-trip URL() = %q, want %q", got, s)
+			}
+		})
+	}
+}
+
+// TestAddressIssuerWireForm is the round-trip property over every OIDC and
+// base-SBOM-signer issuer the tree's fixtures declare: ParseURL, String,
+// MarshalJSON, and UnmarshalJSON reproduce the input string byte for byte, so
+// an issuer field typed as Address emits exactly the bytes a plain string
+// field emits.
+func TestAddressIssuerWireForm(t *testing.T) {
+	for _, s := range []string{
+		"https://accounts.google.com",
+		"https://idp.example.com",
+		"https://issuer.example",
+		"https://keycloak.127.0.0.1.sslip.io:8443/realms/sigstore",
+		"https://wrong.example",
+	} {
+		t.Run(s, func(t *testing.T) {
+			a, err := endpoint.ParseURL(s)
+			if err != nil {
+				t.Fatalf("ParseURL(%q): %v", s, err)
+			}
+			if got := a.String(); got != s {
+				t.Errorf("String() = %q, want %q", got, s)
+			}
+			got, err := json.Marshal(a)
+			if err != nil {
+				t.Fatalf("marshal Address: %v", err)
+			}
+			want, err := json.Marshal(s)
+			if err != nil {
+				t.Fatalf("marshal string: %v", err)
+			}
+			if !bytes.Equal(got, want) {
+				t.Errorf("MarshalJSON = %s, want %s", got, want)
+			}
+			var back endpoint.Address
+			if err := json.Unmarshal(got, &back); err != nil {
+				t.Fatalf("UnmarshalJSON(%s): %v", got, err)
+			}
+			if back.URL() != s {
+				t.Errorf("UnmarshalJSON round trip = %q, want %q", back.URL(), s)
+			}
+		})
+	}
+}
+
+func TestAddressUnmarshalJSONRejects(t *testing.T) {
+	for _, in := range []string{
+		`42`,
+		`null`,
+		`"http://idp.example.com"`,
+		`"https://idp.example.com?a=b"`,
+	} {
+		t.Run(in, func(t *testing.T) {
+			var a endpoint.Address
+			if err := json.Unmarshal([]byte(in), &a); err == nil {
+				t.Fatalf("Unmarshal(%s) = %+v, want error", in, a)
 			}
 		})
 	}

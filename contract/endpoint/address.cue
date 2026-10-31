@@ -25,11 +25,15 @@ import "github.com/istr/strike/contract/primitive"
 #Authority: =~"^[a-z0-9.-]+(:[0-9]+)?$"
 
 // URL is the "https://host[:port][/path]" wire form a URL-bearing Address
-// serializes to at a boundary. Like #Authority it is a specify-register
-// constraint (ADR-048): a boundary field carries #URL as its CUE type so the
-// https-only wire string validates, and redirects its Go type to Address so
-// internal code holds the representation-neutral value. ParseURL and
-// Address.URL round-trip the string; the optional port and path are parsed in
-// Go, so the constraint pins only the https scheme that makes a plaintext base
-// a parse error rather than a runtime rejection.
-#URL: =~"^https://"
+// serializes to at a boundary, and the single URL form strike accepts. It is a
+// restricted RFC 3986 URL: the https scheme and a host are mandatory, the host
+// carries the #Authority host grammar, a port carries no leading zero, and a
+// query or fragment component is forbidden. The restriction keeps it
+// compatible with the OpenID Connect issuer identifier, which is compared
+// byte-exactly, and with every other URL-bearing use. Like #Authority it is a
+// specify-register constraint (ADR-048): a boundary field carries #URL as its
+// CUE type so the wire string validates, and redirects its Go type to Address
+// so internal code holds the representation-neutral value. ParseURL and
+// Address.URL round-trip the string; ParseURL also rejects a query, a
+// fragment, and any input that does not round-trip, and range-checks the port.
+#URL: =~"^https://[a-z0-9.-]+(:[1-9][0-9]*)?(/[^?#]*)?$"

@@ -8,8 +8,10 @@
 // RFC 8785 (JSON Canonicalization Scheme) that strike's signed payloads
 // exercise: objects, arrays, strings, and the literals true/false/null. The
 // payloads carry no numbers -- the signed graph has no numeric fields, asserted
-// by TestSignedGraphNoNumbers -- so the scheme's number formatting is
-// intentionally absent: a number is a contract violation and is rejected.
+// by TestSignedGraphNoNumbers, and a type with its own MarshalJSON (such as
+// endpoint.Address, whose numeric port marshals inside one URL string) emits
+// none -- so the scheme's number formatting is intentionally absent: a number
+// is a contract violation and is rejected.
 // Object keys are emitted in ascending byte order; every key in the signed
 // graph is ASCII (in-toto and SLSA field names, and primitive.Identifier map
 // keys, which are lowercase ASCII), for which byte order is identical to RFC

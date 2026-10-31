@@ -23,6 +23,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/istr/strike/internal/clock"
+	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/verify"
 	"github.com/istr/strike/internal/wire"
 )
@@ -343,7 +344,7 @@ func TestLeafAndDSSE(t *testing.T) {
 	p := newTestPKI(t)
 	tm := p.material(t)
 
-	leaf, ca, err := verify.Leaf(p.leaf.Raw, tm, p.now, testIdentity, testIssuer)
+	leaf, ca, err := verify.Leaf(p.leaf.Raw, tm, p.now, testIdentity, endpoint.MustParseURL(testIssuer))
 	if err != nil {
 		t.Fatalf("Leaf (happy): %v", err)
 	}
@@ -359,14 +360,14 @@ func TestLeafAndDSSE(t *testing.T) {
 	}
 
 	// Wrong identity and wrong issuer must fail.
-	if _, _, gotErr := verify.Leaf(p.leaf.Raw, tm, p.now, "attacker@evil", testIssuer); !errors.Is(gotErr, verify.ErrIdentity) {
+	if _, _, gotErr := verify.Leaf(p.leaf.Raw, tm, p.now, "attacker@evil", endpoint.MustParseURL(testIssuer)); !errors.Is(gotErr, verify.ErrIdentity) {
 		t.Fatalf("wrong identity: got %v, want ErrIdentity", gotErr)
 	}
-	if _, _, gotErr := verify.Leaf(p.leaf.Raw, tm, p.now, testIdentity, "https://evil"); !errors.Is(gotErr, verify.ErrIdentity) {
+	if _, _, gotErr := verify.Leaf(p.leaf.Raw, tm, p.now, testIdentity, endpoint.MustParseURL("https://evil")); !errors.Is(gotErr, verify.ErrIdentity) {
 		t.Fatalf("wrong issuer: got %v, want ErrIdentity", gotErr)
 	}
 	// Outside validity must fail on the chain.
-	if _, _, gotErr := verify.Leaf(p.leaf.Raw, tm, p.now.Add(clock.Hour), testIdentity, testIssuer); !errors.Is(gotErr, verify.ErrLeafChain) {
+	if _, _, gotErr := verify.Leaf(p.leaf.Raw, tm, p.now.Add(clock.Hour), testIdentity, endpoint.MustParseURL(testIssuer)); !errors.Is(gotErr, verify.ErrLeafChain) {
 		t.Fatalf("expired: got %v, want ErrLeafChain", gotErr)
 	}
 

@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/go-containerregistry/pkg/name"
 
+	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/registry"
@@ -57,8 +58,8 @@ func cmdVerify(args []string) {
 // in UC1, where there is no lane to bind the attestation to).
 type verifyPolicy struct {
 	keyless    lane.Keyless
-	identity   string
-	issuer     string
+	identity   primitive.StringOrURI
+	issuer     endpoint.Address
 	laneDigest string
 }
 
@@ -87,7 +88,15 @@ func resolveVerifyPolicy(opts verifyOptions) (verifyPolicy, error) {
 	if opts.identity == "" || opts.issuer == "" {
 		return verifyPolicy{}, fmt.Errorf("UC1 requires both --identity and --issuer")
 	}
-	return verifyPolicy{identity: opts.identity, issuer: opts.issuer}, nil
+	identity := primitive.StringOrURI(opts.identity)
+	if err := identity.Validate(); err != nil {
+		return verifyPolicy{}, fmt.Errorf("--identity: %w", err)
+	}
+	issuer, err := endpoint.ParseURL(opts.issuer)
+	if err != nil {
+		return verifyPolicy{}, fmt.Errorf("--issuer: %w", err)
+	}
+	return verifyPolicy{identity: identity, issuer: issuer}, nil
 }
 
 // Expected predicate types per layer; mirrors the producer's projection
@@ -202,7 +211,7 @@ func runVerify(ctx context.Context, out io.Writer, opts verifyOptions) error {
 		return fmt.Errorf("no attestation bundles attached to %s", opts.subjectRef)
 	}
 
-	v := verify.New(tm, pol.identity, pol.issuer)
+	v := verify.New(tm, pol.identity.String(), pol.issuer)
 	seen := make(map[string]bool, len(bundles))
 	var vFail, eFail bool
 	for _, b := range bundles {

@@ -25,6 +25,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/static"
 	"github.com/google/go-containerregistry/pkg/v1/types"
 
+	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/registry"
 	"github.com/istr/strike/internal/verify"
 )
@@ -253,7 +254,7 @@ func TestRunVerifySubjectMismatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse golden trusted root: %v", err)
 	}
-	stmt, err := verify.New(tm, goldenIdentity, goldenIssuer).Verify(bundle)
+	stmt, err := verify.New(tm, goldenIdentity, endpoint.MustParseURL(goldenIssuer)).Verify(bundle)
 	if err != nil {
 		t.Fatalf("golden bundle must verify under the golden policy: %v", err)
 	}
@@ -290,6 +291,8 @@ func TestRunVerifyModeValidation(t *testing.T) {
 		{"neither mode", verifyOptions{subjectRef: ref}},
 		{"uc1 missing issuer", verifyOptions{subjectRef: ref, identity: goldenIdentity}},
 		{"uc1 missing identity", verifyOptions{subjectRef: ref, issuer: goldenIssuer}},
+		{"uc1 issuer with query", verifyOptions{subjectRef: ref, identity: goldenIdentity, issuer: goldenIssuer + "?a=b"}},
+		{"uc1 identity not a uri", verifyOptions{subjectRef: ref, identity: "1tester:example.com", issuer: goldenIssuer}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

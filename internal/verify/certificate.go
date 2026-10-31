@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/istr/strike/internal/clock"
+	"github.com/istr/strike/internal/endpoint"
 )
 
 // Fulcio issuer extensions: v2 (1.8) wraps the value in a DER UTF8String;
@@ -24,7 +25,7 @@ var (
 // SubjectPublicKeyInfo the SCT layer hashes into the precertificate it
 // reconstructs. The issuer is taken from the chain just verified rather than
 // looked up again, so both layers rest on one chain build.
-func Leaf(leafDER []byte, tm *TrustedMaterial, trustedTime clock.Time, identity, issuer string) (*x509.Certificate, *x509.Certificate, error) {
+func Leaf(leafDER []byte, tm *TrustedMaterial, trustedTime clock.Time, identity string, issuer endpoint.Address) (*x509.Certificate, *x509.Certificate, error) {
 	leaf, err := x509.ParseCertificate(leafDER)
 	if err != nil {
 		return nil, nil, fmt.Errorf("%w: parse: %w", ErrLeafChain, err)
@@ -48,8 +49,8 @@ func Leaf(leafDER []byte, tm *TrustedMaterial, trustedTime clock.Time, identity,
 	if err != nil {
 		return nil, nil, fmt.Errorf("%w: %w", ErrIdentity, err)
 	}
-	if gotIssuer != issuer {
-		return nil, nil, fmt.Errorf("%w: issuer %q != %q", ErrIdentity, gotIssuer, issuer)
+	if gotIssuer != issuer.URL() {
+		return nil, nil, fmt.Errorf("%w: issuer %q != %q", ErrIdentity, gotIssuer, issuer.URL())
 	}
 	return leaf, chains[0][1], nil
 }

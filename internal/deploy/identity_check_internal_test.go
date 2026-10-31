@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/record"
@@ -29,7 +30,7 @@ func TestSignStatementsRejectsMismatchedTokenIdentity(t *testing.T) {
 
 	d := &Deployer{
 		OIDC: lane.OIDCConfig{
-			Issuer:   "https://idp.example.com",
+			Issuer:   endpoint.MustParseURL("https://idp.example.com"),
 			Identity: "strike@example.com",
 		},
 	}

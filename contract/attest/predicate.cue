@@ -115,8 +115,8 @@ import (
 // strike verify asserts against the Fulcio certificate. The trust anchor is
 // not repeated: it is lane config, not an attested output fact.
 #ProvenanceOIDC: {
-	issuer:   string
-	identity: string
+	issuer:   endpoint.#URL          @go(Issuer,type=endpoint.Address)
+	identity: primitive.#StringOrURI @go(Identity)
 }
 
 #SLSARunDetails: {

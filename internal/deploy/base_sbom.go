@@ -65,7 +65,7 @@ func (d *Deployer) verifyOneBaseSBOM(
 	var lastErr error
 	matched := false
 	for _, s := range d.BaseSBOMSigners {
-		p, verr := verify.New(tm, s.Identity, s.Issuer).Verify(r.Bundle)
+		p, verr := verify.New(tm, s.Identity.String(), s.Issuer).Verify(r.Bundle)
 		if verr == nil {
 			payload = p
 			matched = true

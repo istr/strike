@@ -31,7 +31,7 @@ func TestSLSAProvenanceStatement_Valid(t *testing.T) {
 				ExternalParameters: deploy.StrikeExternalParameters{
 					LaneID:     "demo",
 					LaneDigest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-					OIDC:       deploy.ProvenanceOIDC{Issuer: "https://idp.example.com", Identity: "strike@example.com"},
+					OIDC:       deploy.ProvenanceOIDC{Issuer: endpoint.MustParseURL("https://idp.example.com"), Identity: "strike@example.com"},
 					Peers:      map[primitive.Identifier][]lane.Peer{},
 					Resolver:   deploy.ResolverRecord{Host: "one.one.one.one:853", DialedIP: "1.1.1.1"},
 				},

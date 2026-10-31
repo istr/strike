@@ -57,9 +57,9 @@ func ValidateLane(p *Lane, index map[primitive.Identifier]*Step) error {
 
 // validateDeclarations runs the checks that read the lane's declarations
 // alone and need nothing from the step index or the DAG: the step kind, the
-// deploy presence and method, the resolver, and every trust anchor. They come
-// first so a bad declaration is reported as such rather than as whatever a
-// later validator happens to reach.
+// deploy presence and method, the resolver, every signer identity, and every
+// trust anchor. They come first so a bad declaration is reported as such
+// rather than as whatever a later validator happens to reach.
 func validateDeclarations(p *Lane) error {
 	if err := validateStepKindDisjointness(p); err != nil {
 		return err
@@ -73,7 +73,25 @@ func validateDeclarations(p *Lane) error {
 	if err := validateResolver(p); err != nil {
 		return err
 	}
+	if err := validateSignerIdentities(p); err != nil {
+		return err
+	}
 	return validateTrustAnchors(p)
+}
+
+// validateSignerIdentities checks every declared signer identity -- the oidc
+// identity and each base-SBOM signer identity -- against the StringOrURI
+// grammar the schema documents but does not encode (RFC 7519).
+func validateSignerIdentities(p *Lane) error {
+	if err := p.OIDC.Identity.Validate(); err != nil {
+		return fmt.Errorf("oidc identity %q: %w", p.OIDC.Identity, err)
+	}
+	for i, s := range p.BaseSBOMSigners {
+		if err := s.Identity.Validate(); err != nil {
+			return fmt.Errorf("baseSbomSigners[%d] identity %q: %w", i, s.Identity, err)
+		}
+	}
+	return nil
 }
 
 // validateImageFromRefs checks that each step's imageFromStep references a known

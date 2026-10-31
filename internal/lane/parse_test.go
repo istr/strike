@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/istr/strike/internal/clock"
+	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/testutil"
@@ -215,7 +216,7 @@ steps:
 		t.Fatalf("Parse: %v", err)
 	}
 	want := []lane.SBOMSigner{{
-		Issuer:   "https://accounts.google.com",
+		Issuer:   endpoint.MustParseURL("https://accounts.google.com"),
 		Identity: "sbom-builder@example.iam.gserviceaccount.com",
 	}}
 	if len(p.BaseSBOMSigners) != len(want) {

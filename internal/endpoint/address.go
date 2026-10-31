@@ -4,10 +4,12 @@
 // -- a packed "host:port" authority, an "https://host:port/path" URL, and a
 // bracket-delimited "[host]:port" host-port pair -- are projected here, not
 // encoded in the type. Authority() and URL() round-trip the strings
-// ParseAuthority and ParseURL accept; BracketedHostPort() is render-only.
+// ParseAuthority and ParseURL accept; BracketedHostPort() is render-only. The
+// JSON and String forms of an Address are its URL() form.
 package endpoint
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -48,11 +50,17 @@ func MustParseAuthority(s string) Address {
 
 // ParseURL parses an "https://host[:port][/path]" base URL into an Address.
 // Only the https scheme is accepted; host is required; port and path are
-// optional. The path is preserved verbatim so URL() round-trips the input.
+// optional; a query or fragment component is rejected. The path is preserved
+// verbatim, and an input URL() would not render byte for byte -- a port with
+// a leading zero or a sign -- is rejected rather than normalized, so every
+// accepted string round-trips.
 func ParseURL(s string) (Address, error) {
 	const scheme = "https://"
 	if !strings.HasPrefix(s, scheme) {
 		return Address{}, fmt.Errorf("invalid url %q: must start with https://", s)
+	}
+	if strings.ContainsAny(s, "?#") {
+		return Address{}, fmt.Errorf("invalid url %q: query and fragment are not permitted", s)
 	}
 	rest := s[len(scheme):]
 	authority := rest
@@ -67,6 +75,9 @@ func ParseURL(s string) (Address, error) {
 		return Address{}, fmt.Errorf("invalid url %q: %w", s, err)
 	}
 	a.Path = path
+	if a.URL() != s {
+		return Address{}, fmt.Errorf("invalid url %q: not in canonical form %q", s, a.URL())
+	}
 	return a, nil
 }
 
@@ -98,6 +109,34 @@ func (a Address) URL() string {
 		s += p
 	}
 	return s
+}
+
+// String returns the URL() form. The packed host:port keying of peers is the
+// separate Authority type, not this method.
+func (a Address) String() string {
+	return a.URL()
+}
+
+// MarshalJSON emits the URL() form as a JSON string. The canonical form is a
+// restricted URL limited to be compatible with the OIDC iss identifier.
+func (a Address) MarshalJSON() ([]byte, error) {
+	return json.Marshal(a.URL())
+}
+
+// UnmarshalJSON decodes a JSON string through ParseURL, so a decoded Address
+// always holds a canonical URL. Any other JSON value, null included, is an
+// error.
+func (a *Address) UnmarshalJSON(data []byte) error {
+	var s string
+	if err := json.Unmarshal(data, &s); err != nil {
+		return fmt.Errorf("decode url: %w", err)
+	}
+	p, err := ParseURL(s)
+	if err != nil {
+		return err
+	}
+	*a = p
+	return nil
 }
 
 // BracketedHostPort returns the host and port packed with the host enclosed in

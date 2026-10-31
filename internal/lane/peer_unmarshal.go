@@ -144,9 +144,9 @@ func (sc *Capture) UnmarshalJSON(data []byte) error {
 func unmarshalOIDCConfig(data []byte) (OIDCConfig, error) {
 	type alias struct {
 		Trust    *endpoint.Certificate `json:"trust"`
-		Issuer   string                `json:"issuer"`
+		Issuer   endpoint.Address      `json:"issuer"`
 		Audience string                `json:"audience"`
-		Identity string                `json:"identity"`
+		Identity primitive.StringOrURI `json:"identity"`
 	}
 	var aux alias
 	if err := json.Unmarshal(data, &aux); err != nil {

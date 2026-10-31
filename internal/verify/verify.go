@@ -21,6 +21,7 @@ import (
 	protorekor "github.com/sigstore/protobuf-specs/gen/pb-go/rekor/v1"
 
 	"github.com/istr/strike/internal/clock"
+	"github.com/istr/strike/internal/endpoint"
 )
 
 // Sentinel errors. Every verification failure is or wraps one of these: a
@@ -95,14 +96,14 @@ type ParsedBundle struct {
 // an expected signer identity. Construct once with New, then Verify many
 // bundles. It holds no network client and contacts nothing.
 type Verifier struct {
+	issuer   endpoint.Address
 	tm       *TrustedMaterial
 	identity string
-	issuer   string
 }
 
 // New returns a Verifier bound to the parsed trusted material and the signer
 // identity (SAN) and OIDC issuer every accepted bundle must carry.
-func New(tm *TrustedMaterial, identity, issuer string) *Verifier {
+func New(tm *TrustedMaterial, identity string, issuer endpoint.Address) *Verifier {
 	return &Verifier{tm: tm, identity: identity, issuer: issuer}
 }
 

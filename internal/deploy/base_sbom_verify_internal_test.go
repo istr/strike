@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/registry"
@@ -47,7 +48,7 @@ func loadBaseSBOMFixture(t *testing.T) (*verify.TrustedMaterial, baseSBOMMeta, [
 
 func TestVerifyOneBaseSBOM_HappyPath(t *testing.T) {
 	tm, m, bundle := loadBaseSBOMFixture(t)
-	d := &Deployer{BaseSBOMSigners: []lane.SBOMSigner{{Issuer: m.Issuer, Identity: m.Identity}}}
+	d := &Deployer{BaseSBOMSigners: []lane.SBOMSigner{{Issuer: endpoint.MustParseURL(m.Issuer), Identity: primitive.StringOrURI(m.Identity)}}}
 	baseURI := "localhost/strike-base@" + m.SubjectDigest
 	base := primitive.ImageRef(baseURI)
 	baseHex := primitive.Sha256(strings.TrimPrefix(m.SubjectDigest, "sha256:"))
@@ -77,7 +78,7 @@ func TestVerifyOneBaseSBOM_HappyPath(t *testing.T) {
 
 func TestVerifyOneBaseSBOM_SubjectMismatchFails(t *testing.T) {
 	tm, m, bundle := loadBaseSBOMFixture(t)
-	d := &Deployer{BaseSBOMSigners: []lane.SBOMSigner{{Issuer: m.Issuer, Identity: m.Identity}}}
+	d := &Deployer{BaseSBOMSigners: []lane.SBOMSigner{{Issuer: endpoint.MustParseURL(m.Issuer), Identity: primitive.StringOrURI(m.Identity)}}}
 	base := primitive.ImageRef("localhost/strike-base@sha256:" + strings.Repeat("c", 64))
 	wrongHex := primitive.Sha256(strings.Repeat("c", 64))
 
@@ -96,7 +97,7 @@ func TestVerifyOneBaseSBOM_SubjectMismatchFails(t *testing.T) {
 
 func TestVerifyOneBaseSBOM_WrongSignerFails(t *testing.T) {
 	tm, m, bundle := loadBaseSBOMFixture(t)
-	d := &Deployer{BaseSBOMSigners: []lane.SBOMSigner{{Issuer: "https://wrong.example", Identity: "wrong@example"}}}
+	d := &Deployer{BaseSBOMSigners: []lane.SBOMSigner{{Issuer: endpoint.MustParseURL("https://wrong.example"), Identity: "wrong@example"}}}
 	base := primitive.ImageRef("localhost/strike-base@" + m.SubjectDigest)
 	baseHex := primitive.Sha256(strings.TrimPrefix(m.SubjectDigest, "sha256:"))
 
@@ -125,7 +126,7 @@ func TestVerifyBaseSBOMs_NoSignersIsNoop(t *testing.T) {
 }
 
 func TestVerifyBaseSBOMs_SignersWithoutTrustRootFails(t *testing.T) {
-	d := &Deployer{BaseSBOMSigners: []lane.SBOMSigner{{Issuer: "https://issuer.example", Identity: "signer@example"}}}
+	d := &Deployer{BaseSBOMSigners: []lane.SBOMSigner{{Issuer: endpoint.MustParseURL("https://issuer.example"), Identity: "signer@example"}}}
 	_, err := d.verifyBaseSBOMs(context.Background(), "deploy")
 	if err == nil {
 		t.Fatal("expected fail-closed error when signers are declared but no trust root resolves")

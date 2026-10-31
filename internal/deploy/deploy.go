@@ -539,7 +539,7 @@ func (d *Deployer) signStatements(ctx context.Context, att *Attestation, stepID 
 		if sErr != nil {
 			return nil, fmt.Errorf("step %q: %w", stepID, sErr)
 		}
-		if subject != d.OIDC.Identity {
+		if subject != d.OIDC.Identity.String() {
 			return nil, fmt.Errorf("step %q: keyless: token identity %q does not match the lane-declared identity %q",
 				stepID, subject, d.OIDC.Identity)
 		}

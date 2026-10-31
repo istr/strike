@@ -5,6 +5,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/verify"
 )
 
@@ -48,7 +49,7 @@ func TestBaseSBOMFixtureVerifiesUnderStrike(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read bundle: %v", err)
 	}
-	payload, err := verify.New(tm, meta.Identity, meta.Issuer).Verify(bundle)
+	payload, err := verify.New(tm, meta.Identity, endpoint.MustParseURL(meta.Issuer)).Verify(bundle)
 	if err != nil {
 		t.Fatalf("strike verify rejected the cosign CycloneDX bundle: %v", err)
 	}

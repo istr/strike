@@ -40,7 +40,7 @@ func TestProjectStatements(t *testing.T) {
 			Provenance:      []provenance.Record{},
 		},
 	}
-	oidc := lane.OIDCConfig{Issuer: "https://idp.example.com", Identity: "deployer@example.com"}
+	oidc := lane.OIDCConfig{Issuer: endpoint.MustParseURL("https://idp.example.com"), Identity: "deployer@example.com"}
 
 	slsa, engineCtx, info, err := deploy.ProjectStatements(att, oidc, nil)
 	if err != nil {
@@ -57,7 +57,7 @@ func TestProjectStatements(t *testing.T) {
 
 	// Sealed (V): declared OIDC identity carried; engine connection present.
 	ep := slsa.Predicate.BuildDefinition.ExternalParameters
-	if ep.OIDC.Issuer != "https://idp.example.com" || ep.OIDC.Identity != "deployer@example.com" {
+	if ep.OIDC.Issuer.URL() != "https://idp.example.com" || ep.OIDC.Identity != "deployer@example.com" {
 		t.Error("OIDC identity not carried into sealed externalParameters")
 	}
 	if ep.Engine == nil {

@@ -63,10 +63,10 @@ import (
 #OIDCConfig: {
 	@go(OIDCConfig)
 
-	issuer:   string                @go(Issuer)   // iss / issuer-url; config only, no IdP contact at validate/dag
-	audience: string                @go(Audience) // aud
-	identity: string                @go(Identity) // expected SAN subject Fulcio writes into the cert
-	trust:    endpoint.#Certificate @go(Trust,type="github.com/istr/strike/contract/endpoint".Certificate)
+	issuer:   endpoint.#URL          @go(Issuer,type="github.com/istr/strike/contract/endpoint".Address) // iss / issuer-url; config only, no IdP contact at validate/dag
+	audience: string                 @go(Audience)                                                       // aud
+	identity: primitive.#StringOrURI @go(Identity)                                                       // expected SAN subject Fulcio writes into the cert
+	trust:    endpoint.#Certificate  @go(Trust,type="github.com/istr/strike/contract/endpoint".Certificate)
 }
 
 // KeylessEndpoints declares the sigstore services the keyless chain dials
@@ -109,8 +109,8 @@ import (
 #SBOMSigner: {
 	@go(SBOMSigner)
 
-	issuer:   string @go(Issuer)   // expected Fulcio cert OIDC issuer
-	identity: string @go(Identity) // expected cert SAN (exact match)
+	issuer:   endpoint.#URL          @go(Issuer,type="github.com/istr/strike/contract/endpoint".Address) // expected Fulcio cert OIDC issuer
+	identity: primitive.#StringOrURI @go(Identity)                                                       // expected cert SAN (exact match)
 }
 
 // ---------------------------------------------------------------------------

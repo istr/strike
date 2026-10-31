@@ -1,6 +1,7 @@
 package deploy
 
 import (
+	"encoding/json"
 	"reflect"
 	"testing"
 )
@@ -45,7 +46,13 @@ func TestCanonicalJSON(t *testing.T) {
 // JSON (json:"-") and unexported fields are skipped; a []byte (including
 // json.RawMessage) serializes to a base64 string, not numbers, and is not a
 // violation. Union types reached through an interface are not traversed here;
-// their concrete records are string-only by construction.
+// their concrete records marshal to string-only JSON. A type that implements
+// json.Marshaler is not traversed either: its MarshalJSON, not its field
+// layout, decides the JSON it emits, so a numeric field inside it never
+// reaches the signed bytes as a number (endpoint.Address holds a numeric port
+// and marshals to one URL string). Such a type proves its string-only output
+// in its own tests, and canonicalJSON still fails the signing path closed if
+// a MarshalJSON ever emits a number.
 func TestSignedGraphNoNumbers(t *testing.T) {
 	roots := []reflect.Type{
 		reflect.TypeOf(SLSAProvenanceStatement{}),
@@ -65,6 +72,9 @@ func assertNoNumeric(t *testing.T, typ reflect.Type, path string, seen map[refle
 		return
 	}
 	seen[typ] = true
+	if typ.Implements(reflect.TypeFor[json.Marshaler]()) {
+		return // MarshalJSON, not the field layout, decides the JSON form
+	}
 	switch typ.Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
 		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,

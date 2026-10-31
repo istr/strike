@@ -83,3 +83,11 @@ _sha256Hex: "[a-f0-9]{64}"
 // string. Left unconstrained because all of these forms are valid; it is a
 // named type so the field is carried as primitive.UserSpec end to end.
 #UserSpec: string
+
+// #StringOrURI is the RFC 7519 (section 2) StringOrURI: an arbitrary string,
+// except that a value containing ':' must be a URI (RFC 3986); values are
+// compared case-sensitively and verbatim. It types a signer identity, the SAN
+// a Fulcio certificate carries: an email address (colon-free) or a URI of any
+// scheme. The colon-implies-URI rule and non-emptiness are not encoded here;
+// StringOrURI.Validate enforces them after parse.
+#StringOrURI: string
