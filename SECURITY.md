@@ -274,8 +274,10 @@ Secrets flow through the system as follows:
    memory only.
 3. Secrets are passed to step containers as environment variables via the
    container engine REST API request body (JSON over Unix socket). Secrets
-   never enter strike's own process environment and never appear in process
-   arguments.
+   are never written into strike's own process environment and never
+   appear in process arguments; the only values strike reads from its
+   environment are declared, short-lived, audience-bound per-run tokens
+   (ADR-058 D7).
 4. Secrets are never written to disk, never included in cache artifacts, and
    never logged.
 

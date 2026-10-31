@@ -75,3 +75,16 @@ prohibited.
 
 - Identity is asymmetric
 - Peers are declared
+
+## Amendment 2026-10-31 -- "record both sides explicitly" is read per side (ADR-058 D8)
+
+The consequence "Deploy attestations record both sides explicitly" is
+read, from this date, as "both sides declared separately, each recorded
+where it is verifiable". The server side of a registry push is recorded
+as observed (`#PushedArtifact`, `#ObservedTLS`). The client side is
+recorded where a verifier can check it: the keyless signing identity in
+the sealed provenance and the Rekor entry. A bearer credential's
+identity is the registry's knowledge, not the record's;
+[ADR-058](ADR-058-registry-client-identity-workload-token.md) D8
+declines to carry it. The decision text and the example in the
+consequence stand.

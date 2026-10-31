@@ -185,3 +185,16 @@ exclusions:
 - **Enforcement is structural, not discretionary.** Client identity
   stays at the controller via the agent proxy; the container never holds
   key material and cannot opt out.
+
+## Amendment 2026-10-31 -- the deferral list gains owners (ADR-058)
+
+Of the four deferrals under "What is deferred",
+[ADR-058](ADR-058-registry-client-identity-workload-token.md) closes
+"OIDC workload identity" for OCI registries: the registry client
+credential is a declared, audience-bound workload-identity token, apart
+from server trust (ADR-058 D1 to D5). The HTTPS-peer half of that
+deferral stays open and is expected to take the same form. "KMS-based
+client identity" and "Agent identity filtering" stay deferred and are
+carried as parked post-beta roadmap items. "TPM-resident keys" needs no
+owner: it requires no strike change, as the entry says. The supersession
+by ADR-038 is unaffected; this section touches no decision text.

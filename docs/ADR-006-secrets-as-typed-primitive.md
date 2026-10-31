@@ -62,3 +62,25 @@ POST to a Unix socket). They never appear in:
 - **Enforcement is structural, not discretionary.** Secret non-leakage
   is a property of the type, enforced by construction rather than by
   caller discipline.
+
+## Amendment 2026-10-31 -- the environment clause names the property it protects (ADR-058 D7)
+
+The decision bullet "strike's own process environment" described the
+write path this record removed: before it, secret values were assigned
+into strike's environment on their way to a step container. Read since
+as an absolute -- strike reads nothing from its environment -- the clause
+became unreachable on every hosted forge, where the platform delivers
+the token that requests all other tokens through the environment, and
+the tree never met it: the builder's identity token has been read from
+`SIGSTORE_ID_TOKEN` since keyless signing landed.
+
+[ADR-058](ADR-058-registry-client-identity-workload-token.md) D7 reads
+the clause, from this date, as: strike writes nothing into its own
+environment and passes nothing through it to a step container; strike
+holds no credential that outlives the run; from the environment strike
+reads only declared, short-lived, audience-bound per-run tokens or the
+platform's capability tokens, under the lifetime bound of ADR-058 D4.
+The bullet list in the decision is not rewritten; this section governs
+its reading. The successor that removes the delivered secret altogether,
+an attested identity from a SPIFFE Workload API, is parked as a
+post-beta item.

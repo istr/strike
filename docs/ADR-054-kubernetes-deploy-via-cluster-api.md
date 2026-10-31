@@ -194,3 +194,16 @@ append-only document costs an amendment to correct:
 - **Code is liability.** The unsound implementation is deleted rather than
   repaired, and the structure that returns unchanged is kept rather than removed
   and rebuilt.
+
+## Amendment 2026-10-31 -- D5: the credential mechanism is answered for the registry method (ADR-058)
+
+The D5 bullet "which credential mechanism carries the client identity"
+is answered for the registry deploy method by
+[ADR-058](ADR-058-registry-client-identity-workload-token.md): a
+declared workload-identity token referenced from `lane.secrets`, carried
+in `#DeployRegistryTarget.credential` beside the trust anchor, never
+inside it. The kubernetes method inherits the form -- credential
+separate from anchor, declared in the lane, delivered by the invocation,
+bounded in lifetime -- and its own token convention is decided when the
+method is rebuilt against a running cluster, as D5 requires. The other
+D5 bullets stay open.

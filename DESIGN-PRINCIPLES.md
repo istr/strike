@@ -119,9 +119,10 @@ two sources of truth disagree.
 Secret values are carried in a dedicated type whose every string,
 format, and JSON serialization returns a redacted placeholder. They live
 only in process memory, are passed to step containers via the engine
-API request body, and never appear in strike's own environment, in
-process arguments, in logs, or on disk. Leakage prevention is a
-property of the type, not a discipline of the caller.
+API request body, and are never written into strike's own environment,
+process arguments, logs, or disk; strike reads from its environment only
+declared, short-lived, audience-bound per-run tokens. Leakage prevention
+is a property of the type, not a discipline of the caller.
 
 
 ## Runtime is attested
