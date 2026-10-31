@@ -102,7 +102,7 @@ referenced here at all.
 | 055 | [The hardened endpoint is the development premise](ADR-055-hardened-endpoint-development-premise.md) | Accepted; amended by ADR-057 | Restricted by default; Digest-pinned references; Reproducibility; No shell; No exec; Enforcement is structural; Code is liability |
 | 056 | [The TLS trust anchor is an inline certificate](ADR-056-tls-trust-anchor-as-inline-certificate.md) | Accepted | Reproducibility; External references are digest-pinned; Peers are declared; Runtime is attested; Observation over declaration; Restricted by default; Enforcement is structural; Code is liability |
 | 057 | [A release is two signatures -- reproducible provenance and an authorizing verified identity](ADR-057-release-authorization-two-signatures.md) | Accepted | Identity is asymmetric; Runtime is attested; Observation over declaration; Enforcement is structural; Digest-pinned references; Reproducibility; Restricted by default; Code is liability; Meaning is single-sourced; No shell; No exec; No root |
-| 058 | [The registry client identity is a workload-identity token, declared apart from server trust](ADR-058-registry-client-identity-workload-token.md) | Proposed | Identity is asymmetric; Secrets are typed; Peers are declared; No exec; Observation over declaration; Enforcement is structural; Restricted by default; Code is liability |
+| 058 | [The registry client identity is a workload-identity token, declared apart from server trust](ADR-058-registry-client-identity-workload-token.md) | Accepted | Identity is asymmetric; Secrets are typed; Peers are declared; No exec; Observation over declaration; Enforcement is structural; Restricted by default; Code is liability |
 
 ## By principle
 

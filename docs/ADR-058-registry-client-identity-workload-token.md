@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed, 2026-10-31. Drafted against
+Accepted, 2026-10-31. Drafted against
 `4c8de4be424c241c2f2ebe7b4dd1c2c34265b8e7`. Every design fork behind this
 record was surfaced and ratified by the operator between 2026-10-29 and
 2026-10-31 (working paper "Decision Forks -- Registry Client Identity ADR",
