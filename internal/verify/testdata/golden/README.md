@@ -1,7 +1,7 @@
 # Keyless verifier golden fixtures
 
 Five files that must verify together: `sealed.sigstore.json`,
-`engine-context.sigstore.json`, `informational.sigstore.json`,
+`engine-dependent.sigstore.json`, `informational.sigstore.json`,
 `trusted_root.json`, and `lane.yaml`. The first four are generated; `lane.yaml`
 is hand-maintained input, not output.
 

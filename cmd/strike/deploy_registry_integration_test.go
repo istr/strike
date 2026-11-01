@@ -371,7 +371,7 @@ func assertReferrerSet(t *testing.T, descs []v1.Descriptor) {
 			t.Errorf("unexpected referrer artifactType %q", d.ArtifactType)
 		}
 	}
-	for _, want := range []string{"sealed", "engine-context", "informational"} {
+	for _, want := range []string{"sealed", "engine-dependent", "informational"} {
 		if !statements[want] {
 			t.Errorf("no referrer annotated %s=%s", itestStatementAnnotation, want)
 		}

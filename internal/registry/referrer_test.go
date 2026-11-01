@@ -21,6 +21,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/types"
 
 	"github.com/istr/strike/internal/primitive"
+	"github.com/istr/strike/internal/record"
 	"github.com/istr/strike/internal/registry"
 	"github.com/istr/strike/internal/verify"
 )
@@ -76,9 +77,9 @@ func testAttach(t *testing.T, referrersAPI bool) {
 	subject := pushSubject(t, target)
 
 	bundles := []registry.StatementBundle{
-		{Statement: "sealed", Bundle: []byte(`{"bundle":"sealed"}`)},
-		{Statement: "engine-context", Bundle: []byte(`{"bundle":"engine-context"}`)},
-		{Statement: "informational", Bundle: []byte(`{"bundle":"informational"}`)},
+		{Statement: record.TrustLayerSealed, Bundle: []byte(`{"bundle":"sealed"}`)},
+		{Statement: record.TrustLayerEngineDependent, Bundle: []byte(`{"bundle":"engine-dependent"}`)},
+		{Statement: record.TrustLayerInformational, Bundle: []byte(`{"bundle":"informational"}`)},
 	}
 	if err := registry.AttachStatementBundles(context.Background(), target, subject, bundles); err != nil {
 		t.Fatalf("AttachStatementBundles: %v", err)
@@ -136,13 +137,14 @@ func testAttach(t *testing.T, referrersAPI bool) {
 		seen[stmt] = content
 	}
 	for _, b := range bundles {
-		got, ok := seen[b.Statement]
+		stmt := string(b.Statement)
+		got, ok := seen[stmt]
 		if !ok {
-			t.Errorf("missing referrer annotated %q", b.Statement)
+			t.Errorf("missing referrer annotated %q", stmt)
 			continue
 		}
-		if !strings.Contains(string(got), b.Statement) {
-			t.Errorf("referrer %q content = %q", b.Statement, got)
+		if !strings.Contains(string(got), stmt) {
+			t.Errorf("referrer %q content = %q", stmt, got)
 		}
 	}
 }
@@ -162,9 +164,9 @@ func testFetch(t *testing.T, referrersAPI bool) {
 	subject := pushSubject(t, target)
 
 	bundles := []registry.StatementBundle{
-		{Statement: "sealed", Bundle: []byte(`{"bundle":"sealed"}`)},
-		{Statement: "engine-context", Bundle: []byte(`{"bundle":"engine-context"}`)},
-		{Statement: "informational", Bundle: []byte(`{"bundle":"informational"}`)},
+		{Statement: record.TrustLayerSealed, Bundle: []byte(`{"bundle":"sealed"}`)},
+		{Statement: record.TrustLayerEngineDependent, Bundle: []byte(`{"bundle":"engine-dependent"}`)},
+		{Statement: record.TrustLayerInformational, Bundle: []byte(`{"bundle":"informational"}`)},
 	}
 	if err := registry.AttachStatementBundles(context.Background(), target, subject, bundles); err != nil {
 		t.Fatalf("AttachStatementBundles: %v", err)
@@ -178,7 +180,7 @@ func testFetch(t *testing.T, referrersAPI bool) {
 	if len(got) != len(bundles) {
 		t.Fatalf("fetched = %d, want %d", len(got), len(bundles))
 	}
-	gotByName := map[string][]byte{}
+	gotByName := map[record.TrustLayer][]byte{}
 	for _, b := range got {
 		gotByName[b.Statement] = b.Bundle
 	}
@@ -219,6 +221,28 @@ func TestFetchStatementBundlesNoReferrers(t *testing.T) {
 	}
 	if len(got) != 0 {
 		t.Fatalf("fetched = %d, want 0", len(got))
+	}
+}
+
+// TestFetchStatementBundlesSkipsUnknownLayer: a referrer whose annotation names
+// no trust layer is skipped, and the known layer still comes back.
+func TestFetchStatementBundlesSkipsUnknownLayer(t *testing.T) {
+	host := localRegistry(t, true)
+	target := host + "/app:v1"
+	subject := pushSubject(t, target)
+	bundles := []registry.StatementBundle{
+		{Statement: record.TrustLayerSealed, Bundle: []byte(`{"bundle":"sealed"}`)},
+		{Statement: "speculative", Bundle: []byte(`{"bundle":"speculative"}`)},
+	}
+	if err := registry.AttachStatementBundles(context.Background(), target, subject, bundles); err != nil {
+		t.Fatalf("AttachStatementBundles: %v", err)
+	}
+	got, err := registry.FetchStatementBundles(context.Background(), host+"/app@"+subject.Digest.String())
+	if err != nil {
+		t.Fatalf("FetchStatementBundles: %v", err)
+	}
+	if len(got) != 1 || got[0].Statement != record.TrustLayerSealed {
+		t.Fatalf("fetched %d bundles, want only the sealed one", len(got))
 	}
 }
 
@@ -337,7 +361,7 @@ func TestFetchBaseSBOMReferrersSkipsStrikeOwnBundle(t *testing.T) {
 	// strike's own producer convention: discoverable, but no SBOM predicate-type
 	// annotation, so it is not a base SBOM and must be skipped.
 	if err := registry.AttachStatementBundles(context.Background(), target, subject, []registry.StatementBundle{
-		{Statement: "sealed", Bundle: []byte("strike-bundle")},
+		{Statement: record.TrustLayerSealed, Bundle: []byte("strike-bundle")},
 	}); err != nil {
 		t.Fatalf("attach: %v", err)
 	}

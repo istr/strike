@@ -36,3 +36,9 @@ import "github.com/istr/strike/contract/primitive"
 	// spdx is the sha256 content digest of the SPDX JSON document.
 	spdx: primitive.#Digest @go(SPDX)
 }
+
+// #TrustLayer is the trust a verifier must supply to rely on an attested fact,
+// and the layer a published statement bundle carries (ADR-037). sealed is sound
+// to any verifier without engine trust; engine-dependent is sound only to a
+// verifier who trusts the engine; informational puts forward no trust claim.
+#TrustLayer: "sealed" | "engine-dependent" | "informational"

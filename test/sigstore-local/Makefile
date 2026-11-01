@@ -122,7 +122,7 @@ pki/resolver.crt pki/resolver.key &:
 
 ctlog-pubkey: pki/ctfe-pub.pem ## export the CT log (ctfe) public key (for trust-root assembly)
 
-conformance: ## cosign independent-verify of the golden bundles, offline (V gates exit; E/informational reported)
+conformance: ## cosign independent-verify of the golden bundles, offline (sealed gates exit; engine-dependent/informational reported)
 	@echo "== conformance: cosign independent verification of golden bundles (no insecure flags) =="
 	@if cosign verify-blob-attestation \
 	  --bundle ../../internal/verify/testdata/golden/sealed.sigstore.json \
@@ -131,11 +131,11 @@ conformance: ## cosign independent-verify of the golden bundles, offline (V gate
 	  --certificate-oidc-issuer $(ISSUER) \
 	  --type https://slsa.dev/provenance/v1 \
 	  --check-claims=false >/dev/null 2>&1; then \
-	    echo "  OK   sealed (V)"; \
+	    echo "  OK   sealed"; \
           else \
-	    { echo "  FAIL sealed (V) -- conformance gate failed" >&2; exit 1; }; \
+	    { echo "  FAIL sealed -- conformance gate failed" >&2; exit 1; }; \
           fi
-	@for e in "engine-context https://istr.dev/strike/predicates/engine-context/v1" "informational https://istr.dev/strike/predicates/informational/v1"; do \
+	@for e in "engine-dependent https://istr.dev/strike/predicates/engine-context/v1" "informational https://istr.dev/strike/predicates/informational/v1"; do \
 	  set -- $$e; \
 	  if cosign verify-blob-attestation \
 	      --bundle ../../internal/verify/testdata/golden/$$1.sigstore.json \

@@ -48,7 +48,7 @@ import (
 // concrete branch structs, and a dispatching UnmarshalJSON on the container.
 
 // ObservedIdentity is the validated channel identity of an observed peer,
-// discriminated by IdentityType ("ssh" | "https"). Layer V.
+// discriminated by IdentityType ("ssh" | "https"). Sealed layer.
 type ObservedIdentity interface {
 	// IdentityType returns the discriminator ("ssh", "https").
 	IdentityType() endpoint.CarriageType
@@ -200,18 +200,20 @@ type Deployer struct {
 	Resolver        ResolverProbe        // declared resolver endpoint + the identity the pre-flight probe observed and verified
 }
 
-// collectObservedPeers builds the Layer-V observed_peers map and the Layer-E
-// peer_attribution map for one deploy step's sub-tree, and folds the deploy
-// step's state-capture declared peers into declaredPeers under the deploy step
-// name (ADR-039 D4). declaredPeers is the CollectPeers result for this deploy
-// step (it already contains the deploy method's own peers under step.ID).
+// collectObservedPeers builds the sealed-layer observed_peers map and the
+// engine-dependent peer_attribution map for one deploy step's sub-tree, and
+// folds the deploy step's state-capture declared peers into declaredPeers under
+// the deploy step name (ADR-039 D4). declaredPeers is the CollectPeers result
+// for this deploy step (it already contains the deploy method's own peers under
+// step.ID).
 //
 // observed_peers is deduplicated per "host:port" with no step attribution
-// (Layer V); a second observation of the same endpoint with a different
+// (sealed layer); a second observation of the same endpoint with a different
 // validated identity is a conflict and returns an error -- the deploy is not
 // attested. peer_attribution records, per step, the endpoints that step's
-// mediated connections reached (Layer E). Only DecisionAllowed records are
-// ingested; deploy units are HTTPS-only, so their own records yield ObservedTLS.
+// mediated connections reached (engine-dependent layer). Only DecisionAllowed
+// records are ingested; deploy units are HTTPS-only, so their own records yield
+// ObservedTLS.
 func (d *Deployer) collectObservedPeers(
 	step *lane.Step,
 	declaredPeers map[primitive.Identifier][]lane.Peer,
@@ -349,7 +351,7 @@ func (d *Deployer) buildAttestation(
 	if err != nil {
 		return nil, err
 	}
-	// The control-plane push connection is a Layer-V observation of the
+	// The control-plane push connection is a sealed-layer observation of the
 	// declared registry target: the identity verified on the one permitted
 	// dial and the DoT answers it was dialed from enter the observed-peer set
 	// under the declared authority.
@@ -478,9 +480,9 @@ func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.Run
 	// to the artifact fails before the lane state records it.
 	if attach != nil {
 		if err := registry.AttachStatementBundles(ctx, attach.ref, attach.subject, []registry.StatementBundle{
-			{Statement: "sealed", Bundle: signed.Sealed.Bundle},
-			{Statement: "engine-context", Bundle: signed.EngineContext.Bundle},
-			{Statement: "informational", Bundle: signed.Informational.Bundle},
+			{Statement: record.TrustLayerSealed, Bundle: signed.Sealed.Bundle},
+			{Statement: record.TrustLayerEngineDependent, Bundle: signed.EngineContext.Bundle},
+			{Statement: record.TrustLayerInformational, Bundle: signed.Informational.Bundle},
 		}, remote.WithTransport(attach.rt)); err != nil {
 			return nil, fmt.Errorf("step %q: attach statement bundles: %w", step.ID, err)
 		}
@@ -712,7 +714,7 @@ func (d *Deployer) captureOne(ctx context.Context, sc lane.Capture) (captureSnap
 type attachTarget struct {
 	subject    v1.Descriptor                           // pushed manifest descriptor (the referrer subject)
 	rt         http.RoundTripper                       // trust-anchored transport for referrer writes
-	observed   ObservedIdentity                        // validated push-connection identity (Layer V)
+	observed   ObservedIdentity                        // validated push-connection identity (sealed layer)
 	sboms      map[primitive.Identifier]record.SBOMSet // per-artifact SBOM document digests (ADR-051 D9)
 	ref        string                                  // deploy target repository (authority/name)
 	authority  endpoint.Authority                      // declared target authority (ObservedPeers key)

@@ -208,7 +208,7 @@ The full non-repudiation chain for a strike-produced artifact:
 5. **SBOM** -- generated in-process by cataloging the assembled image's
    flattened filesystem (npm lockfiles, dpkg status, Go buildinfo). Both
    CycloneDX and SPDX 2.3 are emitted as OCI referrers bound to the
-   artifact's digest. The SBOM is a sealed (layer V) claim: produced from
+   artifact's digest. The SBOM is a sealed-layer claim: produced from
    bytes the control plane holds, not from engine-relayed content.
 6. **Signature** -- ECDSA P-256 over manifest digest, recorded in Rekor
    transparency log. Signing metadata is captured in `#SignatureRecord`.
@@ -236,8 +236,9 @@ Source provenance and attestation signing close the original open ends:
   transparency log as `dsse` entries and timestamped by an RFC3161 TSA.
   The collect-model attestation is projected into three in-toto
   statements -- SLSA provenance, engine-context, and informational --
-  along the Layer V / Layer E boundary. Verification is offline, without
-  contacting strike or the original engine (ADR-039, ADR-040).
+  along the boundary between the sealed and the engine-dependent layer.
+  Verification is offline, without contacting strike or the original engine
+  (ADR-039, ADR-040).
 
 Together, these complete the chain from developer keystroke to verified
 production state.

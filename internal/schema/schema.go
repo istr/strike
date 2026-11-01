@@ -45,7 +45,7 @@ var (
 	// Deploy is the attest package instance: #Attestation, #Bundle, the
 	// published predicates and statements, and record.#Artifact.
 	Deploy = deployRoot
-	// TrustLayers is the trustlayers package instance (the V/E/informational map).
+	// TrustLayers is the trustlayers package instance (the trust-layer map).
 	TrustLayers = trustLayersRoot
 	// Crossval is the crossval package instance (the cross-validation vectors).
 	Crossval = crossvalRoot

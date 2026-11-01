@@ -50,7 +50,7 @@ const (
 
 // goldenNames are the fixture basenames, positionally aligned with the
 // statements ProjectStatements returns.
-var goldenNames = []string{"sealed", "engine-context", "informational"}
+var goldenNames = []string{"sealed", "engine-dependent", "informational"}
 
 func main() {
 	log.SetFlags(0)

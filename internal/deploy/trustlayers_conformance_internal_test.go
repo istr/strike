@@ -11,8 +11,8 @@ import (
 )
 
 // TestTrustLayerConformance asserts that contract/trustlayers/trust-layers.cue (the
-// single source for the V / E / informational classification) agrees with where
-// contract/attest/attestation.cue (internal collect-model) and
+// single source for the sealed / engine-dependent / informational classification)
+// agrees with where contract/attest/attestation.cue (internal collect-model) and
 // contract/attest/predicate.cue (published statements) actually place each field.
 // This is the machine-checkable form of
 // the soundness note's "no E-link recorded as a V-link": the schemas are
@@ -99,13 +99,13 @@ func TestTrustLayerConformance(t *testing.T) {
 func TestLayerDecisionProcedure(t *testing.T) {
 	layers := schema.TrustLayers
 
-	// The rules, restated independently of the CUE: V is CP-sealed canonical bytes
-	// or a CP-verified external observation; E is an engine chain assertion;
-	// everything else carries no trust claim.
+	// The rules, restated independently of the CUE: sealed is CP-sealed canonical
+	// bytes or a CP-verified external observation; engine-dependent is an engine
+	// chain assertion; everything else carries no trust claim.
 	wantLayerOf := map[string]string{
-		"cpSealed":             "V",
-		"cpObserved":           "V",
-		"engineChainAssertion": "E",
+		"cpSealed":             "sealed",
+		"cpObserved":           "sealed",
+		"engineChainAssertion": "engine-dependent",
 		"engineSelfReport":     "informational",
 		"containerProduced":    "informational",
 		"hostAsserted":         "informational",
@@ -164,7 +164,7 @@ func TestLayerDecisionProcedure(t *testing.T) {
 		}
 
 		// The derived layer must match the section the field occupies in the
-		// collect-model (sealed=V, engineDependent=E, informational=informational).
+		// collect-model; each section carries the layer of the same name.
 		// Skip fields absent from the collect-model (internal "-").
 		internal, err := entry.LookupPath(cue.ParsePath("internal")).String()
 		if err != nil {

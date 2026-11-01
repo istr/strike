@@ -25,11 +25,11 @@ const (
 // three output in-toto statements (ADR-040 D3, Fork A; the collect-model is not
 // mutated). The layer boundary is physical:
 //
-//   - sealed (Layer V) -> SLSA Provenance v1: lane identity, declared OIDC
+//   - sealed -> SLSA Provenance v1: lane identity, declared OIDC
 //     identity, declared and observed peers, observed resolver, and the
 //     CP-observed engine connection, in SLSA's typed externalParameters (Fork
 //     D). Sound without engine trust. No wall-clock (reproducible).
-//   - engine_dependent (Layer E) -> engine-context: the engine-asserted peer
+//   - engine_dependent -> engine-context: the engine-asserted peer
 //     attribution (peerAttribution). Sound only under trust(E). The engine's
 //     self-report (engineMetadata) is NOT here -- it carries no trust claim and
 //     projects to the informational statement below.

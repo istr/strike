@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"maps"
 
 	"github.com/google/go-containerregistry/pkg/authn"
@@ -16,6 +17,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/types"
 
 	"github.com/istr/strike/internal/primitive"
+	"github.com/istr/strike/internal/record"
 )
 
 // SigstoreBundleMediaType is the artifact type under which keylessly signed
@@ -23,9 +25,9 @@ import (
 // type cosign-compatible clients use to discover attestation referrers.
 const SigstoreBundleMediaType = "application/vnd.dev.sigstore.bundle.v0.3+json"
 
-// statementAnnotation names which projected statement a referrer carries:
-// sealed, engine-context, or informational. Discovery convenience only; the
-// authoritative type is the predicateType inside the signed statement.
+// statementAnnotation names the trust layer of the statement a referrer
+// carries: sealed, engine-dependent, or informational. Discovery convenience
+// only; the authoritative type is the predicateType inside the signed statement.
 const statementAnnotation = "dev.strike.statement"
 
 // maxBundleBytes bounds a single fetched referrer bundle. A real sigstore
@@ -34,10 +36,10 @@ const statementAnnotation = "dev.strike.statement"
 // cap on the keyless HTTP clients.
 const maxBundleBytes = 8 << 20 // 8 MiB
 
-// StatementBundle pairs one projected statement name with its sigstore
-// bundle bytes for referrer attachment.
+// StatementBundle pairs one projected statement's trust layer with its
+// sigstore bundle bytes for referrer attachment.
 type StatementBundle struct {
-	Statement string // sealed | engine-context | informational
+	Statement record.TrustLayer
 	Bundle    []byte
 }
 
@@ -94,7 +96,7 @@ func AttachStatementBundles(ctx context.Context, target string, subject v1.Descr
 	}, opts...)
 	for _, b := range bundles {
 		img, err := ArtifactImage(b.Bundle, SigstoreBundleMediaType, subject, map[string]string{
-			statementAnnotation: b.Statement,
+			statementAnnotation: string(b.Statement),
 		})
 		if err != nil {
 			return fmt.Errorf("referrer %s: %w", b.Statement, err)
@@ -113,10 +115,11 @@ func AttachStatementBundles(ctx context.Context, target string, subject v1.Descr
 // FetchStatementBundles is the consumer counterpart to AttachStatementBundles:
 // given a digest-pinned subject image, it discovers the sigstore statement
 // bundles attached as OCI 1.1 referrers, fetches each bundle's bytes, and
-// returns them paired with the projection name from the referrer's
-// dev.strike.statement annotation, in registry-listed order.
+// returns them paired with the trust layer from the referrer's
+// dev.strike.statement annotation, in registry-listed order. A referrer whose
+// annotation names no trust layer is skipped and reported.
 //
-// This is a Layer-V read: the bytes come from the registry at the subject's
+// This is a sealed-layer read: the bytes come from the registry at the subject's
 // own digest, independently of any engine, so a downstream verifier checks the
 // actual published payload rather than a relayed copy. The subject must be
 // digest-pinned -- name.NewDigest rejects a tag -- because a mutable reference
@@ -185,6 +188,16 @@ func fetchOneBundle(ctx context.Context, ref name.Digest) (*StatementBundle, err
 	if string(man.Config.MediaType) != SigstoreBundleMediaType {
 		return nil, nil
 	}
+	// The annotation names the statement's trust layer. A value outside the
+	// vocabulary is not a statement this reader knows: it is skipped before its
+	// bundle layer is read, so no foreign bundle bytes are fetched.
+	layer := record.TrustLayer(man.Annotations[statementAnnotation])
+	switch layer {
+	case record.TrustLayerSealed, record.TrustLayerEngineDependent, record.TrustLayerInformational:
+	default:
+		log.Print("INFO  ignored a statement bundle with an unknown layer annotation")
+		return nil, nil
+	}
 	layers, err := img.Layers()
 	if err != nil {
 		return nil, fmt.Errorf("layers: %w", err)
@@ -208,7 +221,7 @@ func fetchOneBundle(ctx context.Context, ref name.Digest) (*StatementBundle, err
 		return nil, fmt.Errorf("bundle exceeds %d bytes", maxBundleBytes)
 	}
 	return &StatementBundle{
-		Statement: man.Annotations[statementAnnotation],
+		Statement: layer,
 		Bundle:    bundle,
 	}, nil
 }

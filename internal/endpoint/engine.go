@@ -9,8 +9,8 @@ import (
 // discriminated union over the connection kind. The CUE disjunction
 // (#EngineUnix | #EngineTLS | #EngineMTLS) is annotated @go(-) so the generator
 // skips it; this hand-written interface provides the Go-side union, mirroring
-// Trust. Layer V (cpObserved): the control plane reads these facts off the TLS
-// handshake itself.
+// Trust. Sealed layer (cpObserved): the control plane reads these facts off
+// the TLS handshake itself.
 type Engine interface {
 	// ConnectionType returns the discriminator ("unix", "tls", "mtls").
 	ConnectionType() EngineType

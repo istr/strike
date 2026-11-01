@@ -55,16 +55,16 @@ func TestProjectStatements(t *testing.T) {
 		t.Errorf("subject digest = %q", slsa.Subject[0].Digest.SHA256)
 	}
 
-	// Sealed (V): declared OIDC identity carried; engine connection present.
+	// Sealed: declared OIDC identity carried; engine connection present.
 	ep := slsa.Predicate.BuildDefinition.ExternalParameters
 	if ep.OIDC.Issuer.URL() != "https://idp.example.com" || ep.OIDC.Identity != "deployer@example.com" {
 		t.Error("OIDC identity not carried into sealed externalParameters")
 	}
 	if ep.Engine == nil {
-		t.Error("engine connection (Layer V) missing from sealed externalParameters")
+		t.Error("engine connection (sealed layer) missing from sealed externalParameters")
 	}
 
-	// Engine-context (E): engine-asserted peer attribution only.
+	// Engine-context (engine-dependent): engine-asserted peer attribution only.
 	if len(engineCtx.Predicate.PeerAttribution) != 1 {
 		t.Error("peer attribution missing from engine-context")
 	}

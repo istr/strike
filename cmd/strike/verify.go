@@ -15,6 +15,7 @@ import (
 	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/primitive"
+	"github.com/istr/strike/internal/record"
 	"github.com/istr/strike/internal/registry"
 	"github.com/istr/strike/internal/verify"
 )
@@ -108,10 +109,10 @@ const (
 	informationalPredicateType = "https://istr.dev/strike/predicates/informational/v1"
 )
 
-var layerPredicateType = map[string]string{
-	"sealed":         sealedPredicateType,
-	"engine-context": engineContextPredicateType,
-	"informational":  informationalPredicateType,
+var layerPredicateType = map[record.TrustLayer]string{
+	record.TrustLayerSealed:          sealedPredicateType,
+	record.TrustLayerEngineDependent: engineContextPredicateType,
+	record.TrustLayerInformational:   informationalPredicateType,
 }
 
 // gateClass is how a layer's failure affects the verify exit under the current
@@ -119,32 +120,37 @@ var layerPredicateType = map[string]string{
 type gateClass int
 
 const (
-	gateNone gateClass = iota // never gates: informational, or engine-context under --no-engine-trust
-	gateV                     // Layer V: hard fail, no opt-out
-	gateE                     // Layer E: hard fail unless --no-engine-trust
+	// gateNone never gates: the informational layer, or the engine-dependent
+	// layer under --no-engine-trust.
+	gateNone gateClass = iota
+	// gateSealed is a hard fail with no opt-out.
+	gateSealed
+	// gateEngineDependent is a hard fail unless --no-engine-trust.
+	gateEngineDependent
 )
 
-// classifyLayer maps a bundle's layer to how its failure gates the exit under
-// the current trust mode (ADR-037 V/E model).
-func classifyLayer(layer string, noEngineTrust bool) gateClass {
+// classifyLayer maps a bundle's trust layer to how its failure gates the exit
+// under the current trust mode (ADR-037).
+func classifyLayer(layer record.TrustLayer, noEngineTrust bool) gateClass {
 	switch layer {
-	case "sealed":
-		return gateV
-	case "engine-context":
+	case record.TrustLayerSealed:
+		return gateSealed
+	case record.TrustLayerEngineDependent:
 		if noEngineTrust {
 			return gateNone
 		}
-		return gateE
-	default: // informational or any unrecognized layer
-		return gateNone
+		return gateEngineDependent
+	case record.TrustLayerInformational:
+		// The informational layer never gates.
 	}
+	return gateNone
 }
 
 // validatePredicate checks the verified statement's predicate for its layer: the
 // predicateType must match, and the sealed layer must carry a laneDigest --
 // which, in UC2 (laneDigest != ""), must equal the policy lane's digest. It does
 // not schema-validate the engine-context or informational bodies.
-func validatePredicate(layer string, statement []byte, laneDigest string) error {
+func validatePredicate(layer record.TrustLayer, statement []byte, laneDigest string) error {
 	var head struct {
 		PredicateType string `json:"predicateType"`
 	}
@@ -154,7 +160,7 @@ func validatePredicate(layer string, statement []byte, laneDigest string) error 
 	if want, known := layerPredicateType[layer]; known && head.PredicateType != want {
 		return fmt.Errorf("predicateType %q is not the expected %q for the %s layer", head.PredicateType, want, layer)
 	}
-	if layer != "sealed" {
+	if layer != record.TrustLayerSealed {
 		return nil
 	}
 	var s struct {
@@ -182,9 +188,9 @@ func validatePredicate(layer string, statement []byte, laneDigest string) error 
 // runVerify resolves the verification policy (UC1 explicit, or UC2 from the
 // lane), reads the attestation bundles attached to the subject, and verifies
 // each layer: the keyless chain via verify.New(...).Verify, the subject-artifact check,
-// and per-layer predicate validation. The exit follows the ADR-037 V/E trust
-// model: a Layer-V (sealed) failure or absence is a hard fail with no opt-out;
-// a Layer-E (engine-context) failure or absence is a hard fail unless
+// and per-layer predicate validation. The exit follows the ADR-037 trust
+// model: a sealed-layer failure or absence is a hard fail with no opt-out; an
+// engine-dependent-layer failure or absence is a hard fail unless
 // --no-engine-trust degrades it to informational; the informational layer
 // never gates. Verified statements are written to out.
 func runVerify(ctx context.Context, out io.Writer, opts verifyOptions) error {
@@ -212,19 +218,19 @@ func runVerify(ctx context.Context, out io.Writer, opts verifyOptions) error {
 	}
 
 	v := verify.New(tm, pol.identity.String(), pol.issuer)
-	seen := make(map[string]bool, len(bundles))
-	var vFail, eFail bool
+	seen := make(map[record.TrustLayer]bool, len(bundles))
+	var sealedFail, engineDependentFail bool
 	for _, b := range bundles {
 		seen[b.Statement] = true
 		gate := classifyLayer(b.Statement, opts.noEngineTrust)
 		if berr := verifyBundle(v, b, wantHex, pol.laneDigest, out); berr != nil {
 			switch gate {
-			case gateV:
+			case gateSealed:
 				log.Printf("FAIL  %s: %v", b.Statement, berr)
-				vFail = true
-			case gateE:
+				sealedFail = true
+			case gateEngineDependent:
 				log.Printf("FAIL  %s: %v", b.Statement, berr)
-				eFail = true
+				engineDependentFail = true
 			default:
 				log.Printf("INFO  %s: %v (not gating)", b.Statement, berr)
 			}
@@ -232,12 +238,12 @@ func runVerify(ctx context.Context, out io.Writer, opts verifyOptions) error {
 		}
 		log.Printf("OK    %s", b.Statement)
 	}
-	checkPresence(seen, opts.noEngineTrust, &vFail, &eFail)
-	if vFail {
-		return fmt.Errorf("verification failed: a Layer-V (sealed) check did not pass")
+	checkPresence(seen, opts.noEngineTrust, &sealedFail, &engineDependentFail)
+	if sealedFail {
+		return fmt.Errorf("verification failed: a sealed-layer check did not pass")
 	}
-	if eFail {
-		return fmt.Errorf("verification failed: a Layer-E (engine-context) check did not pass; re-run with --no-engine-trust to verify without engine trust")
+	if engineDependentFail {
+		return fmt.Errorf("verification failed: an engine-dependent-layer check did not pass; re-run with --no-engine-trust to verify without engine trust")
 	}
 	return nil
 }
@@ -266,22 +272,23 @@ func verifyBundle(v *verify.Verifier, b registry.StatementBundle, wantHex, laneD
 }
 
 // checkPresence enforces the layer presence rules: the sealed layer is
-// mandatory; engine-context is mandatory unless --no-engine-trust; a missing
-// engine-context (under the flag) or informational layer is reported, not gated.
-func checkPresence(seen map[string]bool, noEngineTrust bool, vFail, eFail *bool) {
-	if !seen["sealed"] {
-		*vFail = true
+// mandatory; engine-dependent is mandatory unless --no-engine-trust; a missing
+// engine-dependent (under the flag) or informational layer is reported, not
+// gated.
+func checkPresence(seen map[record.TrustLayer]bool, noEngineTrust bool, sealedFail, engineDependentFail *bool) {
+	if !seen[record.TrustLayerSealed] {
+		*sealedFail = true
 		log.Printf("FAIL  sealed: required statement is absent")
 	}
-	if !seen["engine-context"] {
+	if !seen[record.TrustLayerEngineDependent] {
 		if noEngineTrust {
-			log.Printf("INFO  engine-context: absent (engine trust disabled)")
+			log.Printf("INFO  engine-dependent: absent (engine trust disabled)")
 		} else {
-			*eFail = true
-			log.Printf("FAIL  engine-context: required statement is absent")
+			*engineDependentFail = true
+			log.Printf("FAIL  engine-dependent: required statement is absent")
 		}
 	}
-	if !seen["informational"] {
+	if !seen[record.TrustLayerInformational] {
 		log.Printf("INFO  informational: absent")
 	}
 }

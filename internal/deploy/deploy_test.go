@@ -550,7 +550,7 @@ func TestDeployerExecuteRegistryAttachesReferrers(t *testing.T) {
 	if len(manifest.Manifests) != 7 {
 		t.Fatalf("referrers = %d, want 7 (3 statement bundles, 2 image SBOMs, 2 region SBOMs)", len(manifest.Manifests))
 	}
-	wantStatements := map[string]bool{"sealed": false, "engine-context": false, "informational": false}
+	wantStatements := map[string]bool{"sealed": false, "engine-dependent": false, "informational": false}
 	wantSBOM := map[string]int{"application/vnd.cyclonedx+json": 0, "application/spdx+json": 0}
 	sbomArtifacts := map[string]bool{}
 	for _, desc := range manifest.Manifests {

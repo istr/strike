@@ -26,6 +26,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/types"
 
 	"github.com/istr/strike/internal/endpoint"
+	"github.com/istr/strike/internal/record"
 	"github.com/istr/strike/internal/registry"
 	"github.com/istr/strike/internal/verify"
 )
@@ -129,16 +130,16 @@ func attachGolden(t *testing.T, host, subjectHex string, bundle []byte) {
 	}
 	subject := v1.Descriptor{MediaType: types.OCIManifestSchema1, Size: 2, Digest: h}
 	if err := registry.AttachStatementBundles(context.Background(), host+"/app:v1", subject,
-		[]registry.StatementBundle{{Statement: "sealed", Bundle: bundle}}); err != nil {
+		[]registry.StatementBundle{{Statement: record.TrustLayerSealed, Bundle: bundle}}); err != nil {
 		t.Fatalf("AttachStatementBundles: %v", err)
 	}
 }
 
-// attachGoldenLayers attaches the named golden layers (e.g. "sealed",
-// "engine-context", "informational") as co-attached referrers of the subject
+// attachGoldenLayers attaches the named golden layers (e.g. sealed,
+// engine-dependent, informational) as co-attached referrers of the subject
 // digest, each carrying its golden bundle. The three goldens share one subject
 // (the 3a synthetic attestation), so any subset binds to the same digest.
-func attachGoldenLayers(t *testing.T, host, subjectHex string, layers ...string) {
+func attachGoldenLayers(t *testing.T, host, subjectHex string, layers ...record.TrustLayer) {
 	t.Helper()
 	h, err := v1.NewHash("sha256:" + subjectHex)
 	if err != nil {
@@ -147,7 +148,8 @@ func attachGoldenLayers(t *testing.T, host, subjectHex string, layers ...string)
 	subject := v1.Descriptor{MediaType: types.OCIManifestSchema1, Size: 2, Digest: h}
 	sb := make([]registry.StatementBundle, 0, len(layers))
 	for _, layer := range layers {
-		sb = append(sb, registry.StatementBundle{Statement: layer, Bundle: goldenFile(t, layer+".sigstore.json")})
+		file := string(layer) + ".sigstore.json"
+		sb = append(sb, registry.StatementBundle{Statement: layer, Bundle: goldenFile(t, file)})
 	}
 	if err := registry.AttachStatementBundles(context.Background(), host+"/app:v1", subject, sb); err != nil {
 		t.Fatalf("AttachStatementBundles: %v", err)
@@ -205,7 +207,7 @@ func TestRunVerifyHappyPathUC1(t *testing.T) {
 	subjectHex := goldenSubjectHex(t, goldenFile(t, "sealed.sigstore.json"))
 
 	host := localRegistry(t)
-	attachGoldenLayers(t, host, subjectHex, "sealed", "engine-context", "informational")
+	attachGoldenLayers(t, host, subjectHex, record.TrustLayerSealed, record.TrustLayerEngineDependent, record.TrustLayerInformational)
 
 	var out bytes.Buffer
 	opts := verifyOptions{
@@ -368,21 +370,21 @@ func TestValidatePredicate(t *testing.T) {
 	typed := func(pt string) []byte { return []byte(`{"predicateType":"` + pt + `"}`) }
 	tests := []struct {
 		name       string
-		layer      string
+		layer      record.TrustLayer
 		laneDigest string
 		statement  []byte
 		wantErr    bool
 	}{
-		{"sealed UC2 match", "sealed", dgA, sealedStmt(dgA), false},
-		{"sealed UC2 mismatch", "sealed", dgB, sealedStmt(dgA), true},
-		{"sealed absent laneDigest", "sealed", dgA, sealedStmt(""), true},
-		{"sealed UC1 present laneDigest", "sealed", "", sealedStmt(dgA), false},
-		{"sealed wrong predicateType", "sealed", "", typed("https://example.com/wrong"), true},
-		{"engine-context ok", "engine-context", "", typed(engineContextPredicateType), false},
-		{"engine-context wrong type", "engine-context", "", typed(sealedPredicateType), true},
-		{"informational ok", "informational", "", typed(informationalPredicateType), false},
-		{"informational wrong type", "informational", "", typed("https://example.com/wrong"), true},
-		{"malformed statement", "sealed", "", []byte("{not json"), true},
+		{"sealed UC2 match", record.TrustLayerSealed, dgA, sealedStmt(dgA), false},
+		{"sealed UC2 mismatch", record.TrustLayerSealed, dgB, sealedStmt(dgA), true},
+		{"sealed absent laneDigest", record.TrustLayerSealed, dgA, sealedStmt(""), true},
+		{"sealed UC1 present laneDigest", record.TrustLayerSealed, "", sealedStmt(dgA), false},
+		{"sealed wrong predicateType", record.TrustLayerSealed, "", typed("https://example.com/wrong"), true},
+		{"engine-dependent ok", record.TrustLayerEngineDependent, "", typed(engineContextPredicateType), false},
+		{"engine-dependent wrong type", record.TrustLayerEngineDependent, "", typed(sealedPredicateType), true},
+		{"informational ok", record.TrustLayerInformational, "", typed(informationalPredicateType), false},
+		{"informational wrong type", record.TrustLayerInformational, "", typed("https://example.com/wrong"), true},
+		{"malformed statement", record.TrustLayerSealed, "", []byte("{not json"), true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -394,20 +396,19 @@ func TestValidatePredicate(t *testing.T) {
 	}
 }
 
-// TestClassifyLayer covers the V/E gate mapping under both trust modes.
+// TestClassifyLayer covers the trust-layer gate mapping under both trust modes.
 func TestClassifyLayer(t *testing.T) {
 	tests := []struct {
 		name          string
-		layer         string
+		layer         record.TrustLayer
 		noEngineTrust bool
 		want          gateClass
 	}{
-		{"sealed gates V", "sealed", false, gateV},
-		{"sealed ignores the flag", "sealed", true, gateV},
-		{"engine-context gates E", "engine-context", false, gateE},
-		{"engine-context degraded by flag", "engine-context", true, gateNone},
-		{"informational never gates", "informational", false, gateNone},
-		{"unknown never gates", "speculative", false, gateNone},
+		{"sealed gates", record.TrustLayerSealed, false, gateSealed},
+		{"sealed ignores the flag", record.TrustLayerSealed, true, gateSealed},
+		{"engine-dependent gates", record.TrustLayerEngineDependent, false, gateEngineDependent},
+		{"engine-dependent degraded by flag", record.TrustLayerEngineDependent, true, gateNone},
+		{"informational never gates", record.TrustLayerInformational, false, gateNone},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -425,7 +426,7 @@ func TestClassifyLayer(t *testing.T) {
 func TestRunVerifyUC2HappyPath(t *testing.T) {
 	subjectHex := goldenSubjectHex(t, goldenFile(t, "sealed.sigstore.json"))
 	host := localRegistry(t)
-	attachGoldenLayers(t, host, subjectHex, "sealed", "engine-context", "informational")
+	attachGoldenLayers(t, host, subjectHex, record.TrustLayerSealed, record.TrustLayerEngineDependent, record.TrustLayerInformational)
 
 	opts := verifyOptions{
 		subjectRef:   host + "/app@sha256:" + subjectHex,
@@ -437,12 +438,12 @@ func TestRunVerifyUC2HappyPath(t *testing.T) {
 	}
 }
 
-// TestRunVerifyMissingEngineContext: an absent engine-context layer is an
-// E-violation without the flag, and a non-gating "absent" diagnostic with it.
-func TestRunVerifyMissingEngineContext(t *testing.T) {
+// TestRunVerifyMissingEngineDependent: an absent engine-dependent layer gates
+// without the flag, and is a non-gating "absent" diagnostic with it.
+func TestRunVerifyMissingEngineDependent(t *testing.T) {
 	subjectHex := goldenSubjectHex(t, goldenFile(t, "sealed.sigstore.json"))
 	host := localRegistry(t)
-	attachGoldenLayers(t, host, subjectHex, "sealed", "informational")
+	attachGoldenLayers(t, host, subjectHex, record.TrustLayerSealed, record.TrustLayerInformational)
 
 	base := verifyOptions{
 		subjectRef:   host + "/app@sha256:" + subjectHex,
@@ -451,7 +452,7 @@ func TestRunVerifyMissingEngineContext(t *testing.T) {
 		trustRootRef: goldenTrustRootRef(t, host),
 	}
 	if err := runVerify(context.Background(), io.Discard, base); err == nil {
-		t.Fatal("want error: an absent engine-context must gate without --no-engine-trust")
+		t.Fatal("want error: an absent engine-dependent layer must gate without --no-engine-trust")
 	}
 
 	logBuf := captureLog(t)
@@ -460,8 +461,8 @@ func TestRunVerifyMissingEngineContext(t *testing.T) {
 	if err := runVerify(context.Background(), io.Discard, withFlag); err != nil {
 		t.Fatalf("runVerify --no-engine-trust: %v", err)
 	}
-	if !strings.Contains(logBuf.String(), "engine-context: absent") {
-		t.Fatalf("want an engine-context absent diagnostic, got: %q", logBuf.String())
+	if !strings.Contains(logBuf.String(), "engine-dependent: absent") {
+		t.Fatalf("want an engine-dependent absent diagnostic, got: %q", logBuf.String())
 	}
 }
 
@@ -470,7 +471,7 @@ func TestRunVerifyMissingEngineContext(t *testing.T) {
 func TestRunVerifyMissingInformational(t *testing.T) {
 	subjectHex := goldenSubjectHex(t, goldenFile(t, "sealed.sigstore.json"))
 	host := localRegistry(t)
-	attachGoldenLayers(t, host, subjectHex, "sealed", "engine-context")
+	attachGoldenLayers(t, host, subjectHex, record.TrustLayerSealed, record.TrustLayerEngineDependent)
 
 	logBuf := captureLog(t)
 	opts := verifyOptions{

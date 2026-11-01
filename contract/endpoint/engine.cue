@@ -1,7 +1,8 @@
 // Engine connection identity: the control-plane-observed identity of the engine
 // transport, a discriminated union over the connection kind.
-// Consumed by the deploy attestation at sealed.engine. Layer V (cpObserved):
-// the control plane reads these facts off the TLS handshake itself.
+// Consumed by the deploy attestation at sealed.engine. Sealed layer
+// (cpObserved): the control plane reads these facts off the TLS handshake
+// itself.
 //
 // The discriminator is `type`. A Unix socket carries no certificate identity;
 // tls adds the observed server-cert identity and how it was trusted; mtls adds

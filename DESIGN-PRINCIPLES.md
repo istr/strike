@@ -281,9 +281,9 @@ The pattern recurs throughout the architecture:
 - A mediator certifies only what passed through it. Exhaustiveness of
   mediation is a declaration no record can support, so the attestation
   states observed passage, never a claim of completeness.
-- Engine-verified facts (Layer V) outrank engine-asserted ones (Layer E):
-  whether a fact was independently observed or merely declared by the
-  engine is exactly what sets the trust layer it occupies.
+- Engine-verified facts (the sealed layer) outrank engine-asserted ones (the
+  engine-dependent layer): whether a fact was independently observed or merely
+  declared by the engine is exactly what sets the trust layer it occupies.
 
 This is the epistemic floor under "runtime is attested": that principle says
 the runtime context is recorded; this one says the record is of the *observed*

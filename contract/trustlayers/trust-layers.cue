@@ -1,7 +1,8 @@
 // contract/trustlayers/trust-layers.cue
 //
-// Trust-layer map -- the single source of truth for the V / E / informational
-// classification of every attested field (the soundness note's three-way split).
+// Trust-layer map -- the single source of truth for the sealed /
+// engine-dependent / informational classification of every attested field (the
+// soundness note's three-way split, which writes the first two layers V and E).
 //
 // WHY THIS FILE EXISTS. The classification is one unit of meaning; per the
 // "Meaning is single-sourced" principle it has exactly one home. attestation.cue
@@ -33,7 +34,10 @@
 
 package trustlayers
 
-#TrustLayer: "V" | "E" | "informational"
+import "github.com/istr/strike/contract/record"
+
+// #TrustLayer is the trust-layer vocabulary, single-sourced in contract/record.
+#TrustLayer: record.#TrustLayer
 
 // Where a field surfaces in the published projection. "bundle" = carried in the
 // Sigstore bundle, never in a predicate payload (ADR-013). "none" = not emitted.
@@ -68,20 +72,20 @@ package trustlayers
 //                        today; YAGNI).
 #Provenance: "cpSealed" | "cpObserved" | "engineChainAssertion" | "engineSelfReport" | "containerProduced" | "hostAsserted"
 
-// layerOf -- the decision procedure AS DATA: the one place the V / E /
-// informational rules are encoded. Read it as the rule table:
-//   V             <- cpSealed | cpObserved
-//   E             <- engineChainAssertion
-//   informational <- engineSelfReport | containerProduced | hostAsserted
+// layerOf -- the decision procedure AS DATA: the one place the trust-layer rules
+// are encoded. Read it as the rule table:
+//   sealed           <- cpSealed | cpObserved
+//   engine-dependent <- engineChainAssertion
+//   informational    <- engineSelfReport | containerProduced | hostAsserted
 // A field's `layer` is layerOf[its provenance]. Declaration is NOT a key here, so a
-// declared-but-unobserved fact cannot reach V by construction. The pattern
+// declared-but-unobserved fact cannot reach sealed by construction. The pattern
 // constraint pins keys to #Provenance and values to #TrustLayer; the conformance
 // test pins the table to the rules above.
 layerOf: [#Provenance]: #TrustLayer
 layerOf: {
-	cpSealed:             "V"
-	cpObserved:           "V"
-	engineChainAssertion: "E"
+	cpSealed:             "sealed"
+	cpObserved:           "sealed"
+	engineChainAssertion: "engine-dependent"
 	engineSelfReport:     "informational"
 	containerProduced:    "informational"
 	hostAsserted:         "informational"
@@ -112,8 +116,8 @@ layerOf: {
 // per-field map below additionally pins each field's published home.
 sections: [string]: {layer: #TrustLayer, statement: #PublishedIn}
 sections: {
-	sealed: {layer: "V", statement: "slsa-provenance"}
-	engineDependent: {layer: "E", statement: "engine-context"}
+	sealed: {layer: "sealed", statement: "slsa-provenance"}
+	engineDependent: {layer: "engine-dependent", statement: "engine-context"}
 	informational: {layer: "informational", statement: "informational"}
 }
 

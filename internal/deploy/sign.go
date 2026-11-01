@@ -9,8 +9,8 @@ type SignedStatement struct {
 }
 
 // SignedStatements carries the three projected, keylessly signed in-toto
-// statements (ADR-040 D3): the sealed SLSA provenance (Layer V), the
-// engine-context statement (Layer E), and the informational statement (never
+// statements (ADR-040 D3): the sealed SLSA provenance, the engine-dependent
+// engine-context statement, and the informational statement (never
 // gates). Each is its own sigstore bundle; on registry deploys each becomes
 // its own OCI referrer of the pushed manifest digest. Replaces the single
 // SignedEnvelope.

@@ -348,3 +348,26 @@ That engine TLS defaults to system trust rather than failing closed
 on an unpinned TCP engine is decided by no ADR: ADR-012 records the
 mode; nothing ratifies the default. This amendment records the gap;
 it does not decide it.
+
+## Amendment 2026-11-01 -- the layers are named sealed and engine-dependent
+
+The open point "Naming" called "Layer V / Layer E" placeholder vocabulary.
+From this date the two layers are named **sealed** (Layer V) and
+**engine-dependent** (Layer E); the third stays **informational**. The names
+state what a verifier must trust to rely on a fact, and they are one
+vocabulary across the tree: `record.#TrustLayer`, which
+`contract/trustlayers` uses for every layer it derives, the
+`dev.strike.statement` annotation on each published statement bundle (whose
+engine-dependent value replaces `engine-context`), and the gate classes and
+diagnostics of `strike verify`. The collect-model section `engineDependent`
+already carried the name.
+
+Two things keep their spelling. The predicate names in `#PublishedIn` --
+`slsa-provenance`, `engine-context`, `informational` -- name the published
+predicate, not the layer, and match the predicateType URIs the attest wire
+freeze holds. `trust(E)` in this record and in
+ATTESTATION-SOUNDNESS-AND-THE-TRUST-BOUNDARY.md is the predicate "the
+engine is trusted", not a layer label, and that paper keeps its V / E
+notation for the zones and links it reasons about. Read "Layer V" and
+"Layer E" in this record and in earlier records as the sealed and the
+engine-dependent layer.

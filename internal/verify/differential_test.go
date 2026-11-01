@@ -28,7 +28,7 @@ const (
 	goldenIssuer   = "https://keycloak.127.0.0.1.sslip.io:8443/realms/sigstore"
 )
 
-var goldenNames = []string{"sealed", "engine-context", "informational"}
+var goldenNames = []string{"sealed", "engine-dependent", "informational"}
 
 func goldenDir(t *testing.T) string {
 	t.Helper()
@@ -139,10 +139,10 @@ func mutate(t *testing.T, golden []byte, fn func(*protobundle.Bundle)) []byte {
 
 func TestGoldenTamperMatrix(t *testing.T) {
 	sv := strikeVerifier(t)
-	// engine-context, not sealed: its inclusion proof carries a non-empty
+	// engine-dependent, not sealed: its inclusion proof carries a non-empty
 	// audit path, so the proof-hash mutation has a hash to flip (sealed is
 	// the single-leaf tree whose audit path is empty).
-	golden := readGolden(t, "engine-context")
+	golden := readGolden(t, "engine-dependent")
 
 	// Cryptographic mutations: BOTH strike and sigstore-go must reject.
 	cryptoCases := []struct {

@@ -6,8 +6,8 @@ cross-implementation contracts exported as JSON Schema (the Rust verifier,
 policy engines), and single-sourcing a canonical classification that other
 schemas project from -- exported as JSON *data*, not schema, and machine-checked
 by a conformance test. The worked example is the trust-layer map in
-`contract/trustlayers/trust-layers.cue`: the V / E / informational
-classification, with its `layerOf` derivation table, that
+`contract/trustlayers/trust-layers.cue`: the sealed / engine-dependent /
+informational classification, with its `layerOf` derivation table, that
 `contract/attest/attestation.cue` (internal collect-model) and
 `contract/attest/predicate.cue` (published statements) are both projections of.
 `make generate` exports it to `contract/trust-layers.json` for external

@@ -97,8 +97,8 @@ import (
 })
 
 // SBOMSigner is a trusted signer of a base-image SBOM (ADR-040 D1, option ii).
-// A base SBOM referrer is lifted to layer V only if its sigstore signature
-// verifies against one of the lane's declared signers: the Fulcio
+// A base SBOM referrer is lifted to the sealed layer only if its sigstore
+// signature verifies against one of the lane's declared signers: the Fulcio
 // certificate's OIDC issuer equals issuer and its SAN equals identity.
 // Declaring a provider once covers every base SBOM that provider signs -- no
 // per-SBOM digest pinning. The list is optional: a lane whose bases are fully
