@@ -46,7 +46,7 @@ const (
 	itestStatementAnnotation = "dev.strike.statement"
 	// itestSBOMReferrers is the number of SBOM referrers a registry deploy
 	// attaches (CycloneDX and SPDX), and itestBundleReferrers the number of
-	// projected statement bundles (sealed, engine-context, informational).
+	// projected statement bundles (sealed, engine-dependent, informational).
 	itestSBOMReferrers   = 2
 	itestBundleReferrers = 3
 	// itestBundleLimit bounds the bundle document read back from the registry.
