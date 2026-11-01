@@ -62,7 +62,7 @@ linters:
   settings:
     exhaustive:
       default-signifies-exhaustive: true
-      ignore-enum-types: "reflect\\.Kind|golang\\.org/x/net/dns/dnsmessage\\.Type"
+      ignore-types: "reflect\\.Kind|golang\\.org/x/net/dns/dnsmessage\\.Type"
     errcheck:
       check-type-assertions: true
       check-blank: true

@@ -25,8 +25,8 @@ import (
 
 // Digest-pinned image references.
 const (
-	goImage    = "cgr.dev/chainguard/go@sha256:0a0ba6cee2d535a4e9dcc63d4230be546d3c4c6631b23bc9989992711317649f"
-	staticBase = "cgr.dev/chainguard/static@sha256:2fdfacc8d61164aa9e20909dceec7cc28b9feb66580e8e1a65b9f2443c53b61b"
+	goImage    = "cgr.dev/chainguard/go@sha256:69f95ced617ff9de4283d8d97afd52c909052d496e9f3e15e4af6e4de1c9fd70"
+	staticBase = "cgr.dev/chainguard/static@sha256:fc42af33e643f20d08baf03cddcc1c02ba57052dfb02edb0d79f3fc47bcea8d9"
 )
 
 // ensureImage materializes an image through the production path if the

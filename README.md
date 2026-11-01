@@ -82,7 +82,7 @@ first (`make -C test/sigstore-local up`), then build stage_1 from the clone's
 root:
 
 ```sh
-GIT_COMMIT=f4501ea0a4347d83e25a0cb76d8589a0a1da0d46
+GIT_COMMIT=7c432d38e7fefe557c66c794ac0a09282775c506
 
 podman build -t strike:stage_1 \
   --build-arg GIT_COMMIT=${GIT_COMMIT} \
@@ -297,7 +297,7 @@ bootstrap/lane.cue                Bootstrap lane template
 
 ## Development
 
-For working on strike itself (not for using it), you need Go 1.26+,
+For working on strike itself (not for using it), you need Go 1.27+,
 golangci-lint 2.x, and govulncheck. Every change must pass before merge:
 
 ```sh

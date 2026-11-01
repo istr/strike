@@ -47,7 +47,9 @@ func startResolver(t *testing.T, allowlist []primitive.Host, synthAddr netip.Add
 
 	cleanup := func() {
 		cancel()
-		<-done
+		if serveErr := <-done; serveErr != nil {
+			t.Errorf("Serve returned error: %v", serveErr)
+		}
 		closer.Warn(udp, "test udp")
 		closer.Warn(tcp, "test tcp")
 	}
@@ -551,5 +553,7 @@ func TestTCPQuery_LengthPrefixed(t *testing.T) {
 	}
 
 	cancel()
-	<-done
+	if serveErr := <-done; serveErr != nil {
+		t.Errorf("Serve returned error: %v", serveErr)
+	}
 }

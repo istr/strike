@@ -24,7 +24,7 @@
 #
 # The run line that executes stage_1 is in README.md, section Bootstrap.
 #
-FROM docker.io/library/golang:1.26.10-alpine@sha256:d1f3216ef30257c850cc136ba42a359ccd9d3e75f19b2c276e520c0b4ef327ce AS builder
+FROM docker.io/library/golang:1.27.3-alpine@sha256:bff16a94c0b4b6d9642581e2a3aa81beb3edb940b2f5a3aac1d22c6a68cb7747 AS builder
 ARG GIT_COMMIT
 RUN ["apk", "add", "--no-cache", "git"]
 WORKDIR /src
@@ -42,7 +42,7 @@ COPY --from=builder /src/.git/HEAD /src/bootstrap/input/HEAD
 COPY --from=harness caddy-root.crt /src/bootstrap/input/caddy-root.crt
 RUN ["go", "tool", "cue", "export", "./bootstrap", "-e", "out", "--out", "yaml", "--outfile", "/src/bootstrap/lane.yaml"]
 
-FROM cgr.dev/chainguard/static@sha256:2fdfacc8d61164aa9e20909dceec7cc28b9feb66580e8e1a65b9f2443c53b61b
+FROM cgr.dev/chainguard/static@sha256:fc42af33e643f20d08baf03cddcc1c02ba57052dfb02edb0d79f3fc47bcea8d9
 COPY --from=builder /src/strike /usr/bin/strike
 COPY --from=render /src/bootstrap/lane.yaml /bootstrap/lane.yaml
 ENTRYPOINT ["/usr/bin/strike"]

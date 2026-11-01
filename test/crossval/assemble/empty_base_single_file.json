@@ -8,7 +8,7 @@
     "config_json_base64": "eyJhcmNoaXRlY3R1cmUiOiJhbWQ2NCIsImNyZWF0ZWQiOiIwMDAxLTAxLTAxVDAwOjAwOjAwWiIsImhpc3RvcnkiOlt7ImNyZWF0ZWQiOiIwMDAxLTAxLTAxVDAwOjAwOjAwWiJ9XSwib3MiOiJsaW51eCIsInJvb3RmcyI6eyJ0eXBlIjoibGF5ZXJzIiwiZGlmZl9pZHMiOlsic2hhMjU2OmFjMWZhMjY5NGEzZTcwYWFlYWFlNmE2NzBmNjkxN2UxYjE2ZTQxOGEzZmQ3NWMwY2I4OTk0OTExMmU0YzNlY2YiXX0sImNvbmZpZyI6eyJFbnRyeXBvaW50IjpbIi91c3IvYmluL2hlbGxvIl0sIlVzZXIiOiI2NTUzNDo2NTUzNCJ9fQ=="
   },
   "go_ggcr_reference": {
-    "manifest_digest": "sha256:f6fe8d759b588daf295afac9d5bd24fd20977659b3e49c0c0ddb7ed1cd35d47d",
+    "manifest_digest": "sha256:dc811bf35ab60b7942b1ca632127f516484f837551404cb95974733ba2538c12",
     "config_digest": "sha256:2214de67a2d2f3dfc870f628ef0fd72ed9e00014fce20b9edcf124bafc31ef52"
   },
   "inputs": {

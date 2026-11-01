@@ -12,7 +12,7 @@ import (
 	"github.com/istr/strike/internal/testutil"
 )
 
-const inspectTestImage = "cgr.dev/chainguard/static@sha256:2fdfacc8d61164aa9e20909dceec7cc28b9feb66580e8e1a65b9f2443c53b61b"
+const inspectTestImage = "cgr.dev/chainguard/static@sha256:fc42af33e643f20d08baf03cddcc1c02ba57052dfb02edb0d79f3fc47bcea8d9"
 
 // ensureImageLocal materializes an image in the engine store through the
 // production path if the store does not resolve it yet.

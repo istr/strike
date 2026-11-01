@@ -17,7 +17,7 @@ func TestWrapArchiveAsImage_RealSymlink(t *testing.T) {
 	ctx := context.Background()
 
 	// A minimal image with ln, pinned by digest (same as paper-1 integration test).
-	const img = "cgr.dev/chainguard/go@sha256:0a0ba6cee2d535a4e9dcc63d4230be546d3c4c6631b23bc9989992711317649f"
+	const img = "cgr.dev/chainguard/go@sha256:69f95ced617ff9de4283d8d97afd52c909052d496e9f3e15e4af6e4de1c9fd70"
 	if err := (&registry.Client{Engine: eng}).EnsureImage(ctx, primitive.NewImageRef(img)); err != nil {
 		t.Fatalf("EnsureImage %s: %v", img, err)
 	}

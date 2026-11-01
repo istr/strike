@@ -40,7 +40,7 @@ lint-doc:
 
 .PHONY: lint-arch
 lint-arch:
-	go run github.com/fe3dback/go-arch-lint@v1.14.0 check --project-path .
+	go run github.com/fe3dback/go-arch-lint@v1.19.1 check --project-path .
 
 lint-ci:
 	golangci-lint run ./...
@@ -53,7 +53,7 @@ lint-cue-fmt:
 # in-module form needs golang.org/x/telemetry in go.sum.
 .PHONY: lint-deadcode
 lint-deadcode:
-	out=$$(go run golang.org/x/tools/cmd/deadcode@v0.49.0 -test ./...) || exit 1; \
+	out=$$(go run golang.org/x/tools/cmd/deadcode@v0.52.0 -test ./...) || exit 1; \
 	if [ -n "$$out" ]; then echo "$$out"; exit 1; fi
 
 lint: lint-ci lint-type lint-arch lint-doc lint-cue-fmt lint-deadcode

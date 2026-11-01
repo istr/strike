@@ -47,7 +47,7 @@ single static binary (~16 MB) that drives podman over its REST API to run
 build steps in hardened containers. The codebase is intentionally small and
 must stay small.
 
-Module: `github.com/istr/strike`. Go 1.26+.
+Module: `github.com/istr/strike`. Go 1.27+.
 Build: `CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o strike ./cmd/strike`.
 
 ## Execution profile

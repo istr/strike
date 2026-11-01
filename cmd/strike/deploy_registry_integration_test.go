@@ -92,7 +92,7 @@ keyless:
 steps:
   - id: pack
     pack:
-      base: cgr.dev/chainguard/static@sha256:2fdfacc8d61164aa9e20909dceec7cc28b9feb66580e8e1a65b9f2443c53b61b
+      base: cgr.dev/chainguard/static@sha256:fc42af33e643f20d08baf03cddcc1c02ba57052dfb02edb0d79f3fc47bcea8d9
       files: []
     args: []
     env: {}
