@@ -115,16 +115,17 @@ the working tree belong to the endpoint user.
 The image is built from `.devcontainer/Containerfile`: the Go toolchain of
 the version `go.mod` demands, the C toolchain the race detector needs, `git`,
 `make`, `golangci-lint`, `govulncheck`, and the agent. The base image and the
-Go tools are pinned by digest and version.
+Go tools are pinned by digest and version. The agent is the native binary of
+its version-pinned linux-x64 package, fetched under a checksum; it needs no
+JavaScript runtime, so the image carries none. No Dev Containers feature is
+used, and the build consults no distribution package repository. The Go
+tools are built in a separate stage, so their module and build caches stay
+out of the image.
 
-The version in the tree at the time of writing is a measured first version
-and does not yet conform to ADR-055 D3: its Node.js runtime comes from a
-distribution repository and is past upstream end of life, and the agent
-arrives through a Dev Containers feature at a floating version. The
-Containerfile says so in its header. The conforming rework -- runtime copied
-from a digest-pinned image, agent at a pinned version, no feature, a
-`cgr.dev` base where one exists -- is owned by the roadmap. Until it lands,
-do not read the current file as a precedent for either practice.
+One part of ADR-055 D3 is still open: the base image comes from `docker.io`
+and has not been measured against a `cgr.dev` image carrying the Go minor
+`go.mod` demands and the C toolchain the race detector needs. The
+Containerfile says so in its header, and the roadmap owns the measurement.
 
 ## Two gates, and where each runs
 

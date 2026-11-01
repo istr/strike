@@ -14,7 +14,8 @@
   },
   "otherPortsAttributes": { "onAutoForward": "ignore" },
   "remoteUser": "dev",
-  "features": {
-    "ghcr.io/anthropics/devcontainer-features/claude-code:1.0": {}
+  "updateRemoteUserUID": false,
+  "customizations": {
+    "vscode": { "extensions": ["anthropic.claude-code"] }
   }
 }
