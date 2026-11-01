@@ -16,7 +16,7 @@ volumes:
 services:
   caddy:
     # TLS terminator + reverse proxy for Keycloak.
-    image: caddy:2.8@sha256:b95ed06fbc6d74d24a40902090c8cc6086ce7d08ba60a3a7e8e62bf164a9d7bb
+    image: caddy:2.11.7@sha256:04913b1da43339a40ad1ea87827d70a576ac5aa6cf674c6e24fdca675887533a
     volumes:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
@@ -50,7 +50,7 @@ services:
 
   keycloak:
     # HTTP-only behind Caddy.
-    image: quay.io/keycloak/keycloak:26.1@sha256:dc23dd938a5dc5dfaabc71e44d014928284fafff9122e0395659f1cdcf534da8
+    image: quay.io/keycloak/keycloak:26.8.1@sha256:de6ed510b59cfcd25f129ba4118696fa10d4165eee921a8d846178b6d35d30f7
     command:
       - start-dev
       - --import-realm
@@ -70,7 +70,7 @@ services:
     # No host port: only Caddy reaches Keycloak, in-network at keycloak:8080.
 
   fulcio:
-    image: gcr.io/projectsigstore/fulcio:v1.6.6@sha256:b0ae905e37ad34657c4aed425da649d73353859f1f302b318b6963d65c0e8a23
+    image: gcr.io/projectsigstore/fulcio:v1.9.1@sha256:7ca84b9e94fc56dc83f251e2e896371054656580a2a2e8f3613cefad270dcba8
     command:
       - serve
       - --port=5555
@@ -99,7 +99,7 @@ services:
 
   rekor:
     # Rekor v2 POSIX (tile/Tessera), no Trillian/DB.
-    image: ghcr.io/sigstore/rekor-tiles/posix:v2.2.1@sha256:df1795ee39802422c10d0f6b4803332ae4cfcc07a99556b8f1f59a2aa1aafb57
+    image: ghcr.io/sigstore/rekor-tiles/posix:v2.4.1@sha256:6e0495782d56f640c0c6a357762a92ff94f68b3446e57d358777a45a81d55a31
     command:
       - rekor-server
       - serve
@@ -126,7 +126,7 @@ services:
   probe:
     profiles: ["tools"]
     # Entrypoint is curl; args follow `run probe`.
-    image: curlimages/curl:8.11.1@sha256:ce8e655b562cf387752de7d2076ec3f81a4383c908f386b6724ec3571ce08b4a
+    image: curlimages/curl:8.23.0@sha256:3b8fde20978e330b401837f24b871ebe2c8d14ff7f07b87990bcd832588a1a75
     networks:
       - sigstore
 
@@ -144,8 +144,9 @@ services:
     # Rekor v2 supplies no integrated timestamp (Path 1); keyless bundles carry
     # an RFC3161 timestamp from this TSA. Memory signer: self-signed TSA cert,
     # chain fetched via `make tsa-certchain` (GET /api/v1/timestamp/certchain).
-    image: ghcr.io/sigstore/timestamp-server:v1.2.6@sha256:359b9c8b50c8e46455be8cc38cf455c9788aaf3d8e6d4e25284b85ff7e7a8b7e
+    image: ghcr.io/sigstore/timestamp-server:v2.2.0@sha256:77c615f0bef6ddd907b531099cd1a8cf8f698ca9a08b1abf7397b222c9352306
     command:
+      - timestamp-server
       - serve
       - --host=0.0.0.0
       - --port=3000
@@ -159,9 +160,8 @@ services:
     # only: cosign never dials it; the SCT is embedded in the leaf at issuance and
     # verified offline against the ctfe key in the trusted root. Distroless/nonroot
     # (no shell) -- no container healthcheck; /healthz is on the root mux and is
-    # polled functionally from `make up`. Image is digest-pinned (validated by the
-    # CT feasibility spike).
-    image: ghcr.io/transparency-dev/tesseract/posix@sha256:3f13c41877dc63995b0273604a54b61c5b573557c5b8f4466b30e523db0b100f
+    # polled functionally from `make up`.
+    image: ghcr.io/transparency-dev/tesseract/posix:v0.2.0@sha256:80059f05b7a02ce7d5d9730b66bc7e56035fc0e77f41fd76dd067af91bcdebce
     command:
       - --private_key=/pki/ctfe.key
       - --origin=strike-ct
@@ -185,7 +185,7 @@ services:
     # pushes return Oci-Subject, artifactType is derived from the config media
     # type, and no OCI 1.0 fallback tag is created. Storage is the container's
     # writable layer, so every bring-up starts from an empty registry.
-    image: ghcr.io/project-zot/zot-minimal-linux-amd64:v2.1.20@sha256:3cd7d694224f4d0a36b52cdc3eb66852ab01a6a68c53c8e5367a1984dc4dc2bb
+    image: ghcr.io/project-zot/zot-minimal-linux-amd64:v2.1.22@sha256:27729292c45f1dc0a323b69292d15cc13a5ca4b8bf05f81106e7f89a2b1abd08
     volumes:
       - ./zot/config.json:/etc/zot/config.json:ro
     networks:
@@ -197,7 +197,7 @@ services:
     # pki/resolver.crt -- a separate anchor from the Caddy internal root.
     # Serves a synthetic root zone with no forwarder and no root hints, which
     # is what lets the run-start NS . probe be answered with no egress.
-    image: docker.io/coredns/coredns:1.14.6@sha256:1ba6f47265602e2e50a9c4669e3a955e4298a0d30dc82f39293d4bf1a851e0ff
+    image: docker.io/coredns/coredns:1.15.0@sha256:3429e3bbffb1e839470c4a3541d4d78aca84a1394c75a539d0200c58c63196ac
     command:
       - -conf
       - /etc/coredns/Corefile
