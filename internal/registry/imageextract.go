@@ -136,7 +136,8 @@ func (l *memLayer) MediaType() (types.MediaType, error) { return l.desc.MediaTyp
 // archive from SaveImage. The diff_id is the per-layer key stable across an
 // engine load/save round-trip (ADR-046); a cache hit recovers each output's
 // LayerDiffID from this ordered list, bound to step.Outputs by the canonical
-// layer ordering the producer assembles.
+// layer ordering the producer assembles. The config is the engine's export,
+// so each diff_id is checked against the canonical digest grammar.
 func LayerDiffIDs(tarBytes []byte) ([]primitive.Digest, error) {
 	img, err := ImageFromOCITar(tarBytes)
 	if err != nil {
@@ -148,7 +149,11 @@ func LayerDiffIDs(tarBytes []byte) ([]primitive.Digest, error) {
 	}
 	ids := make([]primitive.Digest, len(cfg.RootFS.DiffIDs))
 	for i, h := range cfg.RootFS.DiffIDs {
-		ids[i] = v1HashToDigest(h)
+		id, parseErr := primitive.ParseDigest(v1HashToDigest(h))
+		if parseErr != nil {
+			return nil, fmt.Errorf("diff ids: layer %d: %w", i, parseErr)
+		}
+		ids[i] = id
 	}
 	return ids, nil
 }

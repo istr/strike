@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strings"
 	"testing"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
@@ -52,6 +53,30 @@ func TestSaveImage_PropagatesError(t *testing.T) {
 	_, err := registry.SaveImage(context.Background(), eng, "test:tag")
 	if err == nil {
 		t.Fatal("expected error")
+	}
+}
+
+// TestLayerDiffIDs_RejectsNonCanonicalDiffID: the image config is the
+// engine's export, and go-containerregistry parses a sha512 diff_id, so
+// LayerDiffIDs must reject one rather than hand it out as a digest.
+func TestLayerDiffIDs_RejectsNonCanonicalDiffID(t *testing.T) {
+	cfg, err := empty.Image.ConfigFile()
+	if err != nil {
+		t.Fatalf("empty config: %v", err)
+	}
+	cfg = cfg.DeepCopy()
+	cfg.RootFS.DiffIDs = []v1.Hash{{Algorithm: "sha512", Hex: strings.Repeat("0", 128)}}
+	img, err := mutate.ConfigFile(empty.Image, cfg)
+	if err != nil {
+		t.Fatalf("set config: %v", err)
+	}
+	data, err := regtest.LayoutTar(img)
+	if err != nil {
+		t.Fatalf("LayoutTar: %v", err)
+	}
+	_, err = registry.LayerDiffIDs(data)
+	if err == nil || !strings.Contains(err.Error(), "diff ids: layer 0") {
+		t.Fatalf("err = %v, want a \"diff ids: layer 0\" error", err)
 	}
 }
 

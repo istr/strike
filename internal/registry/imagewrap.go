@@ -204,10 +204,11 @@ func (c *Client) WrapOutputsAsImage(ctx context.Context, outs []OutputArchive, t
 	return WrapResult{Digest: digest, Size: total, LayerDiffIDs: diffIDs}, nil
 }
 
-// v1HashToDigest converts a go-containerregistry v1.Hash to a primitive.Digest.
-// go-containerregistry computes a Hash only as sha256 and parses one only as
-// sha256 with exactly 64 lowercase hex digits, so the String form of every
-// Hash it hands out is a canonical digest and is taken directly.
+// v1HashToDigest converts a go-containerregistry v1.Hash to a primitive.Digest
+// without validating it. That is sound for a Hash the library computed over
+// bytes strike holds, which is always sha256. A Hash parsed from foreign input,
+// such as an engine-exported image config, may carry another algorithm the
+// library supports, so its result must also pass primitive.ParseDigest.
 func v1HashToDigest(h v1.Hash) primitive.Digest {
 	return primitive.Digest(h.String())
 }
