@@ -2,6 +2,9 @@ package registry
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -10,10 +13,8 @@ import (
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
-	"github.com/google/go-containerregistry/pkg/v1/empty"
-	"github.com/google/go-containerregistry/pkg/v1/mutate"
+	"github.com/google/go-containerregistry/pkg/v1/partial"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
-	"github.com/google/go-containerregistry/pkg/v1/static"
 	"github.com/google/go-containerregistry/pkg/v1/types"
 
 	"github.com/istr/strike/internal/primitive"
@@ -43,45 +44,56 @@ type StatementBundle struct {
 	Bundle    []byte
 }
 
-// ArtifactImage builds a push-ready OCI 1.1 referrer of subject: a
-// single-layer artifact image whose layer media type and config media type
-// both carry artifactType, so a registry or client derives the artifact type
-// per the OCI 1.1 rule (manifest artifactType, else config media type). The
-// caller's annotations are merged over the reproducible created timestamp and
-// win on collision.
-//
-// The wrapper order is load-bearing. Layers are appended before the config
-// media type is set, because the config blob is recomputed from the appended
-// layers only while the config media type still denotes an image config.
-// Subject is applied last, because the manifest subject is always taken from
-// the outermost wrapper, so anything applied after it would erase it.
+// ArtifactImage builds a push-ready OCI 1.1 referrer of subject in the
+// artifact form the image specification gives for content without a
+// configuration, the form cosign uses: the manifest artifactType names
+// artifactType, the config is the OCI empty descriptor, and a single layer
+// carries content under the same media type. The manifest is assembled here
+// because go-containerregistry's mutate package cannot set an image
+// manifest's artifactType. The caller's annotations are merged over the
+// reproducible created timestamp and win on collision.
 func ArtifactImage(content []byte, artifactType string, subject v1.Descriptor, annotations map[string]string) (v1.Image, error) {
-	img := mutate.MediaType(empty.Image, types.OCIManifestSchema1)
-	img, err := mutate.AppendLayers(img, static.NewLayer(content, types.MediaType(artifactType)))
-	if err != nil {
-		return nil, err
-	}
-	img = mutate.ConfigMediaType(img, types.MediaType(artifactType))
+	config := []byte("{}")
+	configSum := sha256.Sum256(config)
+	layerSum := sha256.Sum256(content)
+	layerDigest := v1.Hash{Algorithm: "sha256", Hex: hex.EncodeToString(layerSum[:])}
 
 	ann := map[string]string{"org.opencontainers.image.created": "1970-01-01T00:00:00Z"}
 	maps.Copy(ann, annotations)
-	annotated, ok := mutate.Annotations(img, ann).(v1.Image)
-	if !ok {
-		return nil, fmt.Errorf("unexpected type from mutate.Annotations")
+	manifest := v1.Manifest{
+		SchemaVersion: 2,
+		MediaType:     types.OCIManifestSchema1,
+		Config: v1.Descriptor{
+			MediaType: types.OCIEmptyJSON,
+			Size:      int64(len(config)),
+			Digest:    v1.Hash{Algorithm: "sha256", Hex: hex.EncodeToString(configSum[:])},
+		},
+		Layers: []v1.Descriptor{{
+			MediaType: types.MediaType(artifactType),
+			Size:      int64(len(content)),
+			Digest:    layerDigest,
+		}},
+		Annotations:  ann,
+		Subject:      &subject,
+		ArtifactType: artifactType,
 	}
-
-	withSubject, ok := mutate.Subject(annotated, subject).(v1.Image)
-	if !ok {
-		return nil, fmt.Errorf("unexpected type from mutate.Subject")
+	raw, err := json.Marshal(manifest)
+	if err != nil {
+		return nil, fmt.Errorf("artifact manifest: %w", err)
 	}
-	return withSubject, nil
+	return partial.CompressedToImage(&memImage{
+		manifest: manifest,
+		raw:      raw,
+		config:   config,
+		blobs:    map[string][]byte{"blobs/sha256/" + layerDigest.Hex: content},
+	})
 }
 
 // AttachStatementBundles pushes each bundle as an OCI 1.1 referrer of the
 // subject manifest within the repository of target, in the caller's order.
-// go-containerregistry talks to the registry's referrers API and falls back
-// to the OCI referrers tag scheme on registries without it; no fallback
-// logic lives here. ArtifactImage owns the referrer wrapping, including how
+// The registry must serve the referrers API: the referrers tag fallback is
+// refused, so a registry without the API fails the push instead of receiving
+// a tag (ADR-058). ArtifactImage owns the referrer wrapping, including how
 // the artifact type is carried. Additional remote options -- for example a
 // trust-anchored transport -- apply to every write.
 func AttachStatementBundles(ctx context.Context, target string, subject v1.Descriptor, bundles []StatementBundle, opts ...remote.Option) error {
@@ -92,6 +104,7 @@ func AttachStatementBundles(ctx context.Context, target string, subject v1.Descr
 	repo := targetRef.Context()
 	writeOpts := append([]remote.Option{
 		remote.WithAuthFromKeychain(authn.DefaultKeychain),
+		remote.WithReferrersTagFallback(false),
 		remote.WithContext(ctx),
 	}, opts...)
 	for _, b := range bundles {
@@ -106,7 +119,7 @@ func AttachStatementBundles(ctx context.Context, target string, subject v1.Descr
 			return fmt.Errorf("referrer %s: digest: %w", b.Statement, err)
 		}
 		if err := remote.Write(repo.Digest(digest.String()), img, writeOpts...); err != nil {
-			return fmt.Errorf("referrer %s: push: %w", b.Statement, err)
+			return fmt.Errorf("referrer %s of %s: push: %w", b.Statement, subject.Digest, err)
 		}
 	}
 	return nil
@@ -127,8 +140,8 @@ func AttachStatementBundles(ctx context.Context, target string, subject v1.Descr
 //
 // Discovery is by artifact-type filter (the cosign-compatible referrers query);
 // identification and projection are read back from each fetched manifest (its
-// config media type and annotation), which is authoritative, rather than from
-// the index descriptor.
+// artifactType and annotation), which is authoritative, rather than from the
+// index descriptor.
 func FetchStatementBundles(ctx context.Context, subjectRef string) ([]StatementBundle, error) {
 	ref, err := name.NewDigest(subjectRef)
 	if err != nil {
@@ -142,12 +155,15 @@ func FetchStatementBundles(ctx context.Context, subjectRef string) ([]StatementB
 // cosign) are indexed under -- maps each referrer manifest through fetch, and
 // drops the nil results fetch returns for referrers it skips. It is shared by
 // FetchStatementBundles (strike's own bundles) and FetchBaseSBOMReferrers
-// (cosign base SBOMs), which differ only in the per-referrer reader.
+// (cosign base SBOMs), which differ only in the per-referrer reader. The
+// registry must serve the referrers API: the referrers tag fallback is
+// refused, so a registry without the API fails the read (ADR-058).
 func fetchReferrers[T any](ctx context.Context, ref name.Digest, fetch func(context.Context, name.Digest) (*T, error)) ([]T, error) {
 	repo := ref.Context()
 	idx, err := remote.Referrers(ref,
 		remote.WithFilter("artifactType", SigstoreBundleMediaType),
 		remote.WithAuthFromKeychain(authn.DefaultKeychain),
+		remote.WithReferrersTagFallback(false),
 		remote.WithContext(ctx))
 	if err != nil {
 		return nil, fmt.Errorf("list referrers of %s: %w", ref, err)
@@ -171,7 +187,9 @@ func fetchReferrers[T any](ctx context.Context, ref name.Digest, fetch func(cont
 
 // fetchOneBundle fetches a single referrer manifest and its bundle layer. It
 // returns nil (no error) when the referrer is not a strike statement bundle,
-// so the caller skips it rather than failing the whole read.
+// so the caller skips it rather than failing the whole read. A referrer that
+// selects as a strike statement bundle but is malformed -- wrong layer count
+// or a non-bundle layer media type -- is an error, not a skip.
 func fetchOneBundle(ctx context.Context, ref name.Digest) (*StatementBundle, error) {
 	img, err := remote.Image(ref,
 		remote.WithAuthFromKeychain(authn.DefaultKeychain),
@@ -183,9 +201,9 @@ func fetchOneBundle(ctx context.Context, ref name.Digest) (*StatementBundle, err
 	if err != nil {
 		return nil, fmt.Errorf("manifest: %w", err)
 	}
-	// Authoritative re-check: the artifact type the producer set lives in the
-	// config media type. Skip anything that is not a strike bundle.
-	if string(man.Config.MediaType) != SigstoreBundleMediaType {
+	// Authoritative re-check: the manifest names its own artifact type. Skip
+	// anything that is not a sigstore bundle.
+	if man.ArtifactType != SigstoreBundleMediaType {
 		return nil, nil
 	}
 	// The annotation names the statement's trust layer. A value outside the
@@ -198,12 +216,34 @@ func fetchOneBundle(ctx context.Context, ref name.Digest) (*StatementBundle, err
 		log.Print("INFO  ignored a statement bundle with an unknown layer annotation")
 		return nil, nil
 	}
+	bundle, err := readBundleLayer(img)
+	if err != nil {
+		return nil, err
+	}
+	return &StatementBundle{
+		Statement: layer,
+		Bundle:    bundle,
+	}, nil
+}
+
+// readBundleLayer reads the bundle a referrer carries: exactly one layer, of
+// the sigstore bundle media type, read up to maxBundleBytes so a hostile or
+// buggy registry cannot force an unbounded allocation. Both referrer readers
+// share it; which referrers they select stays with each reader.
+func readBundleLayer(img v1.Image) ([]byte, error) {
 	layers, err := img.Layers()
 	if err != nil {
 		return nil, fmt.Errorf("layers: %w", err)
 	}
 	if len(layers) != 1 {
 		return nil, fmt.Errorf("expected 1 layer, got %d", len(layers))
+	}
+	mt, err := layers[0].MediaType()
+	if err != nil {
+		return nil, fmt.Errorf("layer media type: %w", err)
+	}
+	if string(mt) != SigstoreBundleMediaType {
+		return nil, fmt.Errorf("layer media type %q is not %s", mt, SigstoreBundleMediaType)
 	}
 	rc, err := layers[0].Uncompressed()
 	if err != nil {
@@ -220,10 +260,7 @@ func fetchOneBundle(ctx context.Context, ref name.Digest) (*StatementBundle, err
 	if len(bundle) > maxBundleBytes {
 		return nil, fmt.Errorf("bundle exceeds %d bytes", maxBundleBytes)
 	}
-	return &StatementBundle{
-		Statement: layer,
-		Bundle:    bundle,
-	}, nil
+	return bundle, nil
 }
 
 // FetchTrustRoot pulls a sigstore trusted_root.json published as a single-layer
@@ -302,15 +339,15 @@ type BaseSBOMReferrer struct {
 // FetchBaseSBOMReferrers lists the SBOM attestations attached to a digest-pinned
 // base image as OCI referrers and returns each as raw bundle bytes plus its
 // referrer-manifest digest. Discovery uses the same artifactType filter as
-// strike's own bundles -- cosign sets that artifactType explicitly, strike via
-// the config fallback, and the registry indexes the effective type either way.
-// Unlike fetchOneBundle (strike's own producer), this does NOT re-check the
-// manifest config media type -- cosign leaves the OCI empty config there -- and
-// reads the bundle from the single layer, whose media type both producers set
-// to the bundle type, rather than from a strike-private annotation. Only the
-// SBOM predicate types are returned; other attestation referrers (for example a
-// SLSA provenance attestation) are skipped. Verification -- signer identity and
-// subject binding -- is the caller's responsibility; this is fetch only.
+// strike's own bundles. Unlike fetchOneBundle (strike's own producer), this
+// does NOT re-check the manifest artifactType -- a foreign publisher's
+// referrer is taken in whatever form the registry indexed under the filter --
+// and it selects by cosign's predicate-type annotation rather than a
+// strike-private one. The bundle is read from the single layer, whose media
+// type both producers set to the bundle type. Only the SBOM predicate types
+// are returned; other attestation referrers (for example a SLSA provenance
+// attestation) are skipped. Verification -- signer identity and subject
+// binding -- is the caller's responsibility; this is fetch only.
 //
 // The subject must be digest-pinned (name.NewDigest rejects a tag) because a
 // mutable reference cannot anchor a reproducible verification.
@@ -343,34 +380,9 @@ func fetchOneBaseSBOM(ctx context.Context, ref name.Digest) (*BaseSBOMReferrer, 
 	if pt != PredicateTypeCycloneDX && pt != PredicateTypeSPDX {
 		return nil, nil // not an SBOM attestation; skip
 	}
-	layers, err := img.Layers()
+	bundle, err := readBundleLayer(img)
 	if err != nil {
-		return nil, fmt.Errorf("layers: %w", err)
-	}
-	if len(layers) != 1 {
-		return nil, fmt.Errorf("expected 1 layer, got %d", len(layers))
-	}
-	mt, err := layers[0].MediaType()
-	if err != nil {
-		return nil, fmt.Errorf("layer media type: %w", err)
-	}
-	if string(mt) != SigstoreBundleMediaType {
-		return nil, fmt.Errorf("layer media type %q is not %s", mt, SigstoreBundleMediaType)
-	}
-	rc, err := layers[0].Uncompressed()
-	if err != nil {
-		return nil, fmt.Errorf("open layer: %w", err)
-	}
-	bundle, readErr := io.ReadAll(io.LimitReader(rc, maxBundleBytes+1))
-	closeErr := rc.Close()
-	if readErr != nil {
-		return nil, fmt.Errorf("read bundle: %w", readErr)
-	}
-	if closeErr != nil {
-		return nil, fmt.Errorf("close layer: %w", closeErr)
-	}
-	if len(bundle) > maxBundleBytes {
-		return nil, fmt.Errorf("bundle exceeds %d bytes", maxBundleBytes)
+		return nil, err
 	}
 	return &BaseSBOMReferrer{
 		Digest:        ref.DigestStr(),

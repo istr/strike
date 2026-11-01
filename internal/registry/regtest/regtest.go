@@ -8,14 +8,20 @@ package regtest
 import (
 	"archive/tar"
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"io/fs"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
+	"testing"
 
+	ggcrregistry "github.com/google/go-containerregistry/pkg/registry"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/empty"
 	"github.com/google/go-containerregistry/pkg/v1/layout"
@@ -26,7 +32,71 @@ import (
 	"github.com/istr/strike/internal/closer"
 	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/registry"
+	"github.com/istr/strike/internal/testutil"
 )
+
+// Registry returns an in-memory OCI registry for tests. With referrersAPI it
+// serves the referrers API and reports each listed referrer's artifactType by
+// the OCI distribution rule -- the manifest's own artifactType, else its
+// config media type -- where go-containerregistry's test registry reads the
+// config media type only. Without referrersAPI the referrers endpoint answers
+// 404, the shape of a registry that does not implement the API.
+func Registry(t *testing.T, referrersAPI bool) http.Handler {
+	t.Helper()
+	inner := ggcrregistry.New(ggcrregistry.WithReferrersSupport(referrersAPI))
+	if !referrersAPI {
+		return inner
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		elems := strings.Split(r.URL.Path, "/")
+		if r.Method != http.MethodGet || len(elems) < 5 || elems[len(elems)-2] != "referrers" {
+			inner.ServeHTTP(w, r)
+			return
+		}
+		rec := httptest.NewRecorder()
+		inner.ServeHTTP(rec, r)
+		if rec.Code != http.StatusOK {
+			for k, v := range rec.Header() {
+				w.Header()[k] = v
+			}
+			w.WriteHeader(rec.Code)
+			testutil.WriteBody(t, w, rec.Body.Bytes())
+			return
+		}
+		var idx v1.IndexManifest
+		if err := json.Unmarshal(rec.Body.Bytes(), &idx); err != nil {
+			t.Errorf("decode referrers index: %v", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		repo := strings.Join(elems[2:len(elems)-2], "/")
+		for i := range idx.Manifests {
+			idx.Manifests[i].ArtifactType = referrerArtifactType(t, inner, r, repo, idx.Manifests[i].Digest)
+		}
+		w.Header().Set("Content-Type", string(types.OCIImageIndex))
+		testutil.WriteJSON(t, w, idx)
+	})
+}
+
+// referrerArtifactType reads one referrer manifest from inner and returns its
+// artifact type by the OCI distribution rule.
+func referrerArtifactType(t *testing.T, inner http.Handler, r *http.Request, repo string, digest v1.Hash) string {
+	t.Helper()
+	req := r.Clone(r.Context())
+	req.URL.Path = "/v2/" + repo + "/manifests/" + digest.String()
+	req.URL.RawQuery = ""
+	rec := httptest.NewRecorder()
+	inner.ServeHTTP(rec, req)
+	var m v1.Manifest
+	if err := json.Unmarshal(rec.Body.Bytes(), &m); err != nil {
+		t.Errorf("decode referrer manifest %s: %v", digest, err)
+		return ""
+	}
+	if m.ArtifactType != "" {
+		return m.ArtifactType
+	}
+	return string(m.Config.MediaType)
+}
 
 // BuildImageTar builds a deterministic single-layer OCI image layout tar
 // containing exactly one file, and returns the tar bytes and the manifest

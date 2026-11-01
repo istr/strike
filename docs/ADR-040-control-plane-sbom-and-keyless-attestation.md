@@ -317,3 +317,40 @@ signing the sealed statements of a deploy -- identity is gated by hardware
 at the IdP, not by holding a key. For the approver of ADR-057, identity is
 a qualified certificate on a hardware signature-creation device, pinned
 in the lane as a leaf (ADR-057 D3)."
+
+## Amendment 2026-11-01 -- D3: strike's referrers take the OCI 1.1 artifact form; the tag fallback is retired
+
+D3 calls the attestations cosign-compatible OCI referrers. cosign found
+them, but strike carried the artifact type only in the config media type
+and left the manifest `artifactType` unset. A registry that derives no
+type from the config -- measured for quay.io and Google Artifact Registry
+([ADR-058](ADR-058-registry-client-identity-workload-token.md)) -- lists
+such a referrer without one, and a client that filters by artifact type
+drops it. From this date every referrer strike pushes, the statement
+bundles and the SBOM documents alike, is an OCI 1.1 artifact in the form
+the image specification gives for content without a configuration, the
+form cosign produces: the manifest `artifactType` names the media type,
+the config is the OCI empty descriptor (`application/vnd.oci.empty.v1+json`,
+content `{}`), and a single layer carries the document under the same
+media type. strike's reader selects its own bundles by the manifest
+`artifactType` and the layer media type; the `dev.strike.statement`
+annotation is unchanged.
+
+The referrers tag fallback is retired on every referrer write and read.
+As built, no cosign `.att` tag was ever read: the registry client's OCI
+referrers tag scheme was the only fallback, and a write through it
+creates a tag, which the digest-only model of
+[ADR-057](ADR-057-release-authorization-two-signatures.md) D6 excludes. A
+registry that does not answer the referrers API now fails the push and
+the read with an error naming the registry. For base-image SBOMs this
+narrows the resolution order of ADR-019 to the referrers API alone: "no
+SBOM" stays non-fatal only when the API answers and lists no SBOM
+referrer, and a base image held in a registry without the API fails the
+deploy when the lane declares base-SBOM signers.
+
+**Supersedes, in Supersedes and extends above:** "Retains ADR-019's
+referrer attachment (OCI 1.1 referrer primary, cosign tag fallback) and
+its base-image SBOM resolution order." is read as: "Retains ADR-019's
+referrer attachment as OCI 1.1 referrers through the referrers API,
+without a tag fallback, and its base-image SBOM resolution order reduced
+to the referrers API."

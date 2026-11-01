@@ -30,7 +30,6 @@ import (
 	"testing"
 
 	"github.com/google/go-containerregistry/pkg/name"
-	ggcrregistry "github.com/google/go-containerregistry/pkg/registry"
 	"github.com/google/go-containerregistry/pkg/v1/empty"
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
@@ -141,7 +140,7 @@ func newRegistryDeployFixture(t *testing.T) registryDeployFixture {
 		lifecycle(w, r)
 	}))
 
-	srv := httptest.NewTLSServer(ggcrregistry.New(ggcrregistry.WithReferrersSupport(true)))
+	srv := httptest.NewTLSServer(regtest.Registry(t, true))
 	t.Cleanup(srv.Close)
 
 	return registryDeployFixture{
@@ -438,7 +437,7 @@ func TestDeployerExecuteRegistryAttachesReferrers(t *testing.T) {
 		w.WriteHeader(http.StatusNotFound)
 	}))
 
-	srv := httptest.NewTLSServer(ggcrregistry.New(ggcrregistry.WithReferrersSupport(true)))
+	srv := httptest.NewTLSServer(regtest.Registry(t, true))
 	t.Cleanup(srv.Close)
 	authority := srv.Listener.Addr().String()
 	leafSum := sha256.Sum256(srv.Certificate().Raw)
@@ -1239,8 +1238,9 @@ func TestDeployExecute_StepTimeoutWithMediatedConnection(t *testing.T) {
 	}()
 
 	// Once the container's wait is in flight, open a mediated connection
-	// through that unit's capsule and leave it open. This is the state in
-	// which the deadline used to hang the lane inside capsule stop.
+	// through that unit's capsule and leave it open across the step
+	// deadline, so capsule stop meets a connection that never ends on its
+	// own.
 	startDeadline, startCancel := context.WithTimeout(context.Background(), 5*clock.Second)
 	defer startCancel()
 	select {

@@ -19,6 +19,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
+	"github.com/google/go-containerregistry/pkg/v1/types"
 
 	"github.com/istr/strike/internal/capsule"
 	"github.com/istr/strike/internal/clock"
@@ -187,6 +188,7 @@ func TestRegistryDeployLive_Integration(t *testing.T) {
 	subject := pushedSubjectDigest(ctx, t, engine, rc)
 	descs := referrerDescriptors(ctx, t, caddyRoot, repo, subject)
 	assertReferrerSet(t, descs)
+	assertBundleArtifactForm(ctx, t, caddyRoot, repo, subject)
 	assertBundleReadable(ctx, t, caddyRoot, repo, descs)
 }
 
@@ -350,6 +352,55 @@ func referrerDescriptors(ctx context.Context, t *testing.T, caddyRoot, repo stri
 		t.Fatalf("referrers index: %v", manifestErr)
 	}
 	return im.Manifests
+}
+
+// assertBundleArtifactForm lists the pushed subject's referrers the way a
+// verifier does -- filtered by the bundle artifact type, with the referrers
+// tag fallback refused -- and checks that every listed bundle referrer carries
+// the OCI 1.1 artifact form: the manifest artifactType and the OCI empty
+// config.
+func assertBundleArtifactForm(ctx context.Context, t *testing.T, caddyRoot, repo string, subject v1.Hash) {
+	t.Helper()
+	rt := itestTransport(t, caddyRoot)
+	ref, err := name.NewDigest(itestRegistryHost + "/" + repo + "@" + subject.String())
+	if err != nil {
+		t.Fatalf("subject reference: %v", err)
+	}
+	idx, refErr := remote.Referrers(ref,
+		remote.WithFilter("artifactType", registry.SigstoreBundleMediaType),
+		remote.WithReferrersTagFallback(false),
+		remote.WithTransport(rt),
+		remote.WithContext(ctx))
+	if refErr != nil {
+		t.Fatalf("list bundle referrers of %s: %v", ref, refErr)
+	}
+	im, manifestErr := idx.IndexManifest()
+	if manifestErr != nil {
+		t.Fatalf("bundle referrers index: %v", manifestErr)
+	}
+	if len(im.Manifests) != itestBundleReferrers {
+		t.Fatalf("filtered listing has %d bundle referrers, want %d", len(im.Manifests), itestBundleReferrers)
+	}
+	for _, d := range im.Manifests {
+		mref, mrefErr := name.NewDigest(itestRegistryHost + "/" + repo + "@" + d.Digest.String())
+		if mrefErr != nil {
+			t.Fatalf("referrer reference: %v", mrefErr)
+		}
+		img, imgErr := remote.Image(mref, remote.WithTransport(rt), remote.WithContext(ctx))
+		if imgErr != nil {
+			t.Fatalf("fetch referrer %s: %v", d.Digest, imgErr)
+		}
+		man, manErr := img.Manifest()
+		if manErr != nil {
+			t.Fatalf("referrer manifest %s: %v", d.Digest, manErr)
+		}
+		if man.ArtifactType != registry.SigstoreBundleMediaType {
+			t.Errorf("referrer %s artifactType = %q, want %q", d.Digest, man.ArtifactType, registry.SigstoreBundleMediaType)
+		}
+		if man.Config.MediaType != types.OCIEmptyJSON {
+			t.Errorf("referrer %s config media type = %q, want %q", d.Digest, man.Config.MediaType, types.OCIEmptyJSON)
+		}
+	}
 }
 
 // assertReferrerSet checks the published referrer set of a sealed registry

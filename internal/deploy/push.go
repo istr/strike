@@ -340,7 +340,7 @@ func pushSBOMPair(ctx context.Context, repo string, subject v1.Descriptor, rt ht
 			return record.SBOMSet{}, fmt.Errorf("sbom artifact digest: %w", dErr)
 		}
 		if pushErr := pushByDigest(ctx, repo, artDigest.String(), art, rt); pushErr != nil {
-			return record.SBOMSet{}, fmt.Errorf("attach sbom: %w", pushErr)
+			return record.SBOMSet{}, fmt.Errorf("attach sbom to %s: %w", subject.Digest, pushErr)
 		}
 	}
 	return record.SBOMSet{CycloneDX: docDigest(cdxBytes), SPDX: docDigest(spdxBytes)}, nil
@@ -353,12 +353,14 @@ func docDigest(doc []byte) primitive.Digest {
 }
 
 // pushByDigest writes img to repo at the given manifest digest through rt.
+// A manifest with a subject requires the registry's referrers API: the
+// referrers tag fallback is refused, so no write creates a tag (ADR-058).
 func pushByDigest(ctx context.Context, repo, digest string, img v1.Image, rt http.RoundTripper) error {
 	dst, err := name.NewDigest(repo + "@" + digest)
 	if err != nil {
 		return fmt.Errorf("target reference %q: %w", repo+"@"+digest, err)
 	}
-	return remote.Write(dst, img, remote.WithTransport(rt), remote.WithContext(ctx))
+	return remote.Write(dst, img, remote.WithTransport(rt), remote.WithReferrersTagFallback(false), remote.WithContext(ctx))
 }
 
 // pushIdentityCapture records the first validated push-connection identity

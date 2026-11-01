@@ -15,8 +15,6 @@ import (
 	"strings"
 	"testing"
 
-	ggcrregistry "github.com/google/go-containerregistry/pkg/registry"
-
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/empty"
@@ -29,6 +27,7 @@ import (
 	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/record"
 	"github.com/istr/strike/internal/registry"
+	"github.com/istr/strike/internal/registry/regtest"
 	"github.com/istr/strike/internal/verify"
 )
 
@@ -111,7 +110,7 @@ func goldenTrustRootRef(t *testing.T, host string) string {
 // returns its localhost:<port> host (ggcr dials plain HTTP for localhost).
 func localRegistry(t *testing.T) string {
 	t.Helper()
-	srv := httptest.NewServer(ggcrregistry.New(ggcrregistry.WithReferrersSupport(true)))
+	srv := httptest.NewServer(regtest.Registry(t, true))
 	t.Cleanup(srv.Close)
 	u, err := url.Parse(srv.URL)
 	if err != nil {

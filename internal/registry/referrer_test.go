@@ -10,8 +10,6 @@ import (
 	"strings"
 	"testing"
 
-	ggcrregistry "github.com/google/go-containerregistry/pkg/registry"
-
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/empty"
@@ -23,6 +21,7 @@ import (
 	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/record"
 	"github.com/istr/strike/internal/registry"
+	"github.com/istr/strike/internal/registry/regtest"
 	"github.com/istr/strike/internal/verify"
 )
 
@@ -31,7 +30,7 @@ import (
 // (and RFC1918) registries, never for 127.0.0.1.
 func localRegistry(t *testing.T, referrersAPI bool) string {
 	t.Helper()
-	srv := httptest.NewServer(ggcrregistry.New(ggcrregistry.WithReferrersSupport(referrersAPI)))
+	srv := httptest.NewServer(regtest.Registry(t, referrersAPI))
 	t.Cleanup(srv.Close)
 	u, err := url.Parse(srv.URL)
 	if err != nil {
@@ -70,9 +69,12 @@ func pushSubject(t *testing.T, ref string) v1.Descriptor {
 	return v1.Descriptor{MediaType: mt, Digest: digest, Size: size}
 }
 
-func testAttach(t *testing.T, referrersAPI bool) {
-	t.Helper()
-	host := localRegistry(t, referrersAPI)
+// TestAttachStatementBundles pushes the three statement bundles and reads
+// them back from the registry side: each referrer carries the OCI 1.1
+// artifact form -- the manifest artifactType and the OCI empty config -- and
+// its own bundle bytes under its statement annotation.
+func TestAttachStatementBundles(t *testing.T) {
+	host := localRegistry(t, true)
 	target := host + "/app:v1"
 	subject := pushSubject(t, target)
 
@@ -118,6 +120,12 @@ func testAttach(t *testing.T, referrersAPI bool) {
 		if err != nil {
 			t.Fatalf("referrer manifest %s: %v", desc.Digest, err)
 		}
+		if imgMfst.ArtifactType != registry.SigstoreBundleMediaType {
+			t.Errorf("manifest artifactType = %q, want %q", imgMfst.ArtifactType, registry.SigstoreBundleMediaType)
+		}
+		if imgMfst.Config.MediaType != types.OCIEmptyJSON || imgMfst.Config.Size != 2 {
+			t.Errorf("config = %s (%d bytes), want the OCI empty descriptor", imgMfst.Config.MediaType, imgMfst.Config.Size)
+		}
 		stmt := imgMfst.Annotations["dev.strike.statement"]
 		layers, err := img.Layers()
 		if err != nil || len(layers) != 1 {
@@ -149,17 +157,43 @@ func testAttach(t *testing.T, referrersAPI bool) {
 	}
 }
 
-func TestAttachStatementBundlesReferrersAPI(t *testing.T) {
-	testAttach(t, true)
+// TestAttachStatementBundlesRefusesTagFallback: a registry without the
+// referrers API fails the push with an error naming the registry and the
+// subject digest, and no referrers fallback tag is written.
+func TestAttachStatementBundlesRefusesTagFallback(t *testing.T) {
+	host := localRegistry(t, false)
+	target := host + "/app:v1"
+	subject := pushSubject(t, target)
+	err := registry.AttachStatementBundles(context.Background(), target, subject, []registry.StatementBundle{
+		{Statement: record.TrustLayerSealed, Bundle: []byte(`{"bundle":"sealed"}`)},
+	})
+	if err == nil {
+		t.Fatal("AttachStatementBundles succeeded without the referrers API, want error")
+	}
+	for _, want := range []string{"registry " + host + " does not support the Referrers API", subject.Digest.String()} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q does not contain %q", err, want)
+		}
+	}
+	repo, err := name.NewRepository(host + "/app")
+	if err != nil {
+		t.Fatalf("repo: %v", err)
+	}
+	tags, err := remote.List(repo)
+	if err != nil {
+		t.Fatalf("list tags: %v", err)
+	}
+	for _, tag := range tags {
+		if strings.HasPrefix(tag, "sha256-") {
+			t.Errorf("referrers fallback tag %q was written", tag)
+		}
+	}
 }
 
-func TestAttachStatementBundlesFallbackTag(t *testing.T) {
-	testAttach(t, false)
-}
-
-func testFetch(t *testing.T, referrersAPI bool) {
-	t.Helper()
-	host := localRegistry(t, referrersAPI)
+// TestFetchStatementBundles attaches the three statement bundles and reads
+// them back through the artifactType-filtered referrers listing.
+func TestFetchStatementBundles(t *testing.T) {
+	host := localRegistry(t, true)
 	target := host + "/app:v1"
 	subject := pushSubject(t, target)
 
@@ -196,12 +230,21 @@ func testFetch(t *testing.T, referrersAPI bool) {
 	}
 }
 
-func TestFetchStatementBundlesReferrersAPI(t *testing.T) {
-	testFetch(t, true)
-}
-
-func TestFetchStatementBundlesFallbackTag(t *testing.T) {
-	testFetch(t, false)
+// TestFetchStatementBundlesRefusesTagFallback: a registry without the
+// referrers API fails the read with an error naming the registry and the
+// subject digest, instead of reading a referrers fallback tag.
+func TestFetchStatementBundlesRefusesTagFallback(t *testing.T) {
+	host := localRegistry(t, false)
+	subject := pushSubject(t, host+"/app:v1")
+	_, err := registry.FetchStatementBundles(context.Background(), host+"/app@"+subject.Digest.String())
+	if err == nil {
+		t.Fatal("FetchStatementBundles succeeded without the referrers API, want error")
+	}
+	for _, want := range []string{"registry " + host + " does not support the Referrers API", subject.Digest.String()} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q does not contain %q", err, want)
+		}
+	}
 }
 
 func TestFetchStatementBundlesRejectsTag(t *testing.T) {
@@ -243,6 +286,35 @@ func TestFetchStatementBundlesSkipsUnknownLayer(t *testing.T) {
 	}
 	if len(got) != 1 || got[0].Statement != record.TrustLayerSealed {
 		t.Fatalf("fetched %d bundles, want only the sealed one", len(got))
+	}
+}
+
+// TestFetchStatementBundlesSkipsConfigTypedReferrer: a referrer that carries
+// the bundle type only in its config media type is listed under the
+// artifactType filter by the OCI fallback rule, but its manifest names no
+// artifactType, so the reader skips it and returns only strike's own bundle.
+func TestFetchStatementBundlesSkipsConfigTypedReferrer(t *testing.T) {
+	host := localRegistry(t, true)
+	target := host + "/app:v1"
+	subject := pushSubject(t, target)
+	repo, err := name.NewRepository(host + "/app")
+	if err != nil {
+		t.Fatalf("repo: %v", err)
+	}
+	pushConfigTypedReferrer(t, repo, subject, registry.SigstoreBundleMediaType, map[string]string{
+		"dev.strike.statement": "sealed",
+	})
+	if attachErr := registry.AttachStatementBundles(context.Background(), target, subject, []registry.StatementBundle{
+		{Statement: record.TrustLayerInformational, Bundle: []byte(`{"bundle":"informational"}`)},
+	}); attachErr != nil {
+		t.Fatalf("AttachStatementBundles: %v", attachErr)
+	}
+	got, err := registry.FetchStatementBundles(context.Background(), host+"/app@"+subject.Digest.String())
+	if err != nil {
+		t.Fatalf("FetchStatementBundles: %v", err)
+	}
+	if len(got) != 1 || got[0].Statement != record.TrustLayerInformational {
+		t.Fatalf("fetched %d bundles, want only the informational one", len(got))
 	}
 }
 
@@ -311,10 +383,37 @@ func pushBaseSBOMReferrer(t *testing.T, repo name.Repository, subject v1.Descrip
 	return digest.String()
 }
 
-// The cosign-faithful empty-config path (artifactType on the manifest field,
-// OCI empty config) is covered by the deferred live e2e (2c-ii / E4): the
-// in-memory ggcr registry indexes a referrer's artifactType from config.mediaType
-// only, so it cannot make such a referrer discoverable by the artifactType filter.
+// pushConfigTypedReferrer attaches a referrer of subject under repo that
+// carries the bundle type only in its config media type, with no manifest
+// artifactType, and a single layer of layerType under the given annotations.
+func pushConfigTypedReferrer(t *testing.T, repo name.Repository, subject v1.Descriptor, layerType types.MediaType, annotations map[string]string) {
+	t.Helper()
+	img := mutate.MediaType(empty.Image, types.OCIManifestSchema1)
+	img, err := mutate.AppendLayers(img, static.NewLayer([]byte(`{"bundle":"config-typed"}`), layerType))
+	if err != nil {
+		t.Fatalf("append layer: %v", err)
+	}
+	img = mutate.ConfigMediaType(img, registry.SigstoreBundleMediaType)
+	annotated, ok := mutate.Annotations(img, annotations).(v1.Image)
+	if !ok {
+		t.Fatal("unexpected type from mutate.Annotations")
+	}
+	withSubject, ok := mutate.Subject(annotated, subject).(v1.Image)
+	if !ok {
+		t.Fatal("unexpected type from mutate.Subject")
+	}
+	digest, err := withSubject.Digest()
+	if err != nil {
+		t.Fatalf("digest: %v", err)
+	}
+	if err := remote.Write(repo.Digest(digest.String()), withSubject); err != nil {
+		t.Fatalf("write referrer: %v", err)
+	}
+}
+
+// TestFetchBaseSBOMReferrers reads base SBOM referrers in the form cosign
+// produces -- manifest artifactType, OCI empty config -- through the
+// artifactType-filtered listing.
 func TestFetchBaseSBOMReferrers(t *testing.T) {
 	host := localRegistry(t, true)
 	target := host + "/base:v1"
@@ -378,6 +477,25 @@ func TestFetchBaseSBOMReferrersRejectsTag(t *testing.T) {
 	host := localRegistry(t, true)
 	if _, err := registry.FetchBaseSBOMReferrers(context.Background(), primitive.NewImageRef(host+"/base:v1")); err == nil {
 		t.Fatal("accepted a tag reference, want error")
+	}
+}
+
+// TestFetchBaseSBOMReferrersRejectsNonBundleLayer: a referrer that selects as
+// a base SBOM but carries its layer under another media type is malformed and
+// fails the read instead of vanishing.
+func TestFetchBaseSBOMReferrersRejectsNonBundleLayer(t *testing.T) {
+	host := localRegistry(t, true)
+	subject := pushSubject(t, host+"/base:v1")
+	repo, err := name.NewRepository(host + "/base")
+	if err != nil {
+		t.Fatalf("repo: %v", err)
+	}
+	pushConfigTypedReferrer(t, repo, subject, types.OCILayer, map[string]string{
+		"dev.sigstore.bundle.predicateType": registry.PredicateTypeCycloneDX,
+	})
+	_, err = registry.FetchBaseSBOMReferrers(context.Background(), primitive.NewImageRef(host+"/base@"+subject.Digest.String()))
+	if err == nil || !strings.Contains(err.Error(), "layer media type") {
+		t.Fatalf("err = %v, want a layer media type error", err)
 	}
 }
 
