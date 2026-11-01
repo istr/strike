@@ -8,6 +8,7 @@ import (
 
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/endpoint"
+	"github.com/istr/strike/internal/primitive"
 )
 
 // Fulcio issuer extensions: v2 (1.8) wraps the value in a DER UTF8String;
@@ -25,7 +26,7 @@ var (
 // SubjectPublicKeyInfo the SCT layer hashes into the precertificate it
 // reconstructs. The issuer is taken from the chain just verified rather than
 // looked up again, so both layers rest on one chain build.
-func Leaf(leafDER []byte, tm *TrustedMaterial, trustedTime clock.Time, identity string, issuer endpoint.Address) (*x509.Certificate, *x509.Certificate, error) {
+func Leaf(leafDER []byte, tm *TrustedMaterial, trustedTime clock.Time, identity primitive.StringOrURI, issuer endpoint.Address) (*x509.Certificate, *x509.Certificate, error) {
 	leaf, err := x509.ParseCertificate(leafDER)
 	if err != nil {
 		return nil, nil, fmt.Errorf("%w: parse: %w", ErrLeafChain, err)
@@ -55,14 +56,15 @@ func Leaf(leafDER []byte, tm *TrustedMaterial, trustedTime clock.Time, identity 
 	return leaf, chains[0][1], nil
 }
 
-func matchesIdentity(leaf *x509.Certificate, identity string) bool {
+func matchesIdentity(leaf *x509.Certificate, identity primitive.StringOrURI) bool {
+	want := identity.String()
 	for _, e := range leaf.EmailAddresses {
-		if e == identity {
+		if e == want {
 			return true
 		}
 	}
 	for _, u := range leaf.URIs {
-		if u.String() == identity {
+		if u.String() == want {
 			return true
 		}
 	}

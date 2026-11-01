@@ -22,6 +22,7 @@ import (
 
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/endpoint"
+	"github.com/istr/strike/internal/primitive"
 )
 
 // Sentinel errors. Every verification failure is or wraps one of these: a
@@ -52,11 +53,11 @@ type TrustedMaterial struct {
 	// rekorKeys maps the hex-encoded non-truncated C2SP signed-note key ID to
 	// the log's Ed25519 public key and the window the trusted root declares
 	// for it. Consumed by the inclusion layer.
-	rekorKeys map[string]rekorKey
+	rekorKeys map[primitive.Sha256]rekorKey
 	// ctKeys maps the hex-encoded RFC 6962 log ID -- sha256 over the DER
 	// SubjectPublicKeyInfo, which is not the C2SP derivation used above -- to
 	// the log's ECDSA P-256 key and its window. Consumed by the SCT layer.
-	ctKeys map[string]ctKey
+	ctKeys map[primitive.Sha256]ctKey
 }
 
 // rekorKey is a Rekor v2 transparency-log key with the validity window the
@@ -98,12 +99,12 @@ type ParsedBundle struct {
 type Verifier struct {
 	issuer   endpoint.Address
 	tm       *TrustedMaterial
-	identity string
+	identity primitive.StringOrURI
 }
 
 // New returns a Verifier bound to the parsed trusted material and the signer
 // identity (SAN) and OIDC issuer every accepted bundle must carry.
-func New(tm *TrustedMaterial, identity string, issuer endpoint.Address) *Verifier {
+func New(tm *TrustedMaterial, identity primitive.StringOrURI, issuer endpoint.Address) *Verifier {
 	return &Verifier{tm: tm, identity: identity, issuer: issuer}
 }
 

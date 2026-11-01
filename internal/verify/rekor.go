@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
-	"encoding/hex"
 	"fmt"
 	"strconv"
 	"strings"
@@ -100,9 +99,13 @@ func Inclusion(pb *ParsedBundle, tm *TrustedMaterial, leaf *x509.Certificate, tr
 func checkpointUnderTrustedKey(tm *TrustedMaterial, envelope string, logID []byte,
 	treeSize int64, rootHash []byte, trustedTime clock.Time,
 ) error {
-	key, ok := tm.rekorKeys[hex.EncodeToString(logID)]
+	if len(logID) != sha256.Size {
+		return fmt.Errorf("log ID is %d bytes, want %d", len(logID), sha256.Size)
+	}
+	id := logKeyID(logID)
+	key, ok := tm.rekorKeys[id]
 	if !ok {
-		return fmt.Errorf("no trusted log key for log ID %s", hex.EncodeToString(logID))
+		return fmt.Errorf("no trusted log key for log ID %s", id)
 	}
 	if !withinWindow(trustedTime, key.validFrom, key.validTo) {
 		return fmt.Errorf("log key outside its declared validity at the trusted time")

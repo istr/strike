@@ -188,17 +188,12 @@ func signCert(t *testing.T, tmpl *x509.Certificate, pub any, parent *x509.Certif
 
 func (p *testPKI) material(t *testing.T) *verify.TrustedMaterial {
 	t.Helper()
-	rekorDER, err := x509.MarshalPKIXPublicKey(p.rekorPub)
-	if err != nil {
-		t.Fatal(err)
-	}
-	logID := sha256.Sum256(rekorDER) // arbitrary stable ID for the test map
-	return verify.NewTestTrustedMaterial(p.fulcioRoot, p.tsaRoot, p.tsaLeaf, string(logID[:]), p.rekorPub)
+	return verify.NewTestTrustedMaterial(p.fulcioRoot, p.tsaRoot, p.tsaLeaf)
 }
 
 // trustedRootJSON round-trips the test material through the production
-// ParseTrustedRoot, exercising E2.
-func (p *testPKI) trustedRootJSON(t *testing.T) []byte {
+// ParseTrustedRoot, exercising E2, with the given tlog and ctlog key ids.
+func (p *testPKI) trustedRootJSON(t *testing.T, rekorID, ctID []byte) []byte {
 	t.Helper()
 	rekorDER, err := x509.MarshalPKIXPublicKey(p.rekorPub)
 	if err != nil {
@@ -226,13 +221,13 @@ func (p *testPKI) trustedRootJSON(t *testing.T) []byte {
 		Tlogs: []*trustrootpb.TransparencyLogInstance{
 			{
 				PublicKey: &commonpb.PublicKey{RawBytes: rekorDER},
-				LogId:     &commonpb.LogId{KeyId: []byte("test-log-id")},
+				LogId:     &commonpb.LogId{KeyId: rekorID},
 			},
 		},
 		Ctlogs: []*trustrootpb.TransparencyLogInstance{
 			{
 				PublicKey: &commonpb.PublicKey{RawBytes: ctDER},
-				LogId:     &commonpb.LogId{KeyId: []byte("test-ct-log-id")},
+				LogId:     &commonpb.LogId{KeyId: ctID},
 			},
 		},
 	}
@@ -245,8 +240,19 @@ func (p *testPKI) trustedRootJSON(t *testing.T) []byte {
 
 func TestParseTrustedRoot(t *testing.T) {
 	p := newTestPKI(t)
-	if _, err := verify.ParseTrustedRoot(p.trustedRootJSON(t)); err != nil {
+	full := make([]byte, sha256.Size)
+	if _, err := verify.ParseTrustedRoot(p.trustedRootJSON(t, full, full)); err != nil {
 		t.Fatalf("ParseTrustedRoot: %v", err)
+	}
+
+	// A log key id that is not a SHA-256 output names no key the root can
+	// declare, so the root fails closed with ErrTrustedRoot.
+	short := []byte("test-log-id")
+	if _, err := verify.ParseTrustedRoot(p.trustedRootJSON(t, short, full)); !errors.Is(err, verify.ErrTrustedRoot) {
+		t.Fatalf("short tlog key id: got %v, want ErrTrustedRoot", err)
+	}
+	if _, err := verify.ParseTrustedRoot(p.trustedRootJSON(t, full, short)); !errors.Is(err, verify.ErrTrustedRoot) {
+		t.Fatalf("short ctlog key id: got %v, want ErrTrustedRoot", err)
 	}
 
 	// Garbage JSON and a document without transparency-log keys must fail

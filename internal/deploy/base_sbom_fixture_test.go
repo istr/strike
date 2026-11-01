@@ -6,16 +6,17 @@ import (
 	"testing"
 
 	"github.com/istr/strike/internal/endpoint"
+	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/verify"
 )
 
 // fixtureMeta mirrors internal/deploy/testdata/base-sbom/meta.json.
 type fixtureMeta struct {
-	SubjectDigest          string `json:"subjectDigest"`
-	Identity               string `json:"identity"`
-	Issuer                 string `json:"issuer"`
-	CycloneDXPredicateType string `json:"cyclonedxPredicateType"`
-	SPDXPredicateType      string `json:"spdxPredicateType"`
+	SubjectDigest          string                `json:"subjectDigest"`
+	Identity               primitive.StringOrURI `json:"identity"`
+	Issuer                 string                `json:"issuer"`
+	CycloneDXPredicateType string                `json:"cyclonedxPredicateType"`
+	SPDXPredicateType      string                `json:"spdxPredicateType"`
 }
 
 func readFixtureMeta(t *testing.T) fixtureMeta {

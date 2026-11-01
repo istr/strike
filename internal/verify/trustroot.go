@@ -3,6 +3,7 @@ package verify
 import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
+	"crypto/sha256"
 	"crypto/x509"
 	"encoding/hex"
 	"errors"
@@ -12,6 +13,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/istr/strike/internal/clock"
+	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/wire"
 )
 
@@ -28,8 +30,8 @@ func ParseTrustedRoot(jsonBytes []byte) (*TrustedMaterial, error) {
 		fulcioIntermediates: x509.NewCertPool(),
 		tsaRoots:            x509.NewCertPool(),
 		tsaIntermediates:    x509.NewCertPool(),
-		rekorKeys:           map[string]rekorKey{},
-		ctKeys:              map[string]ctKey{},
+		rekorKeys:           map[primitive.Sha256]rekorKey{},
+		ctKeys:              map[primitive.Sha256]ctKey{},
 	}
 	if err := loadCAs(tr.GetCertificateAuthorities(), tm.fulcioRoots, tm.fulcioIntermediates); err != nil {
 		return nil, fmt.Errorf("%w: fulcio: %w", ErrTrustedRoot, err)
@@ -51,33 +53,61 @@ func ParseTrustedRoot(jsonBytes []byte) (*TrustedMaterial, error) {
 			tm.tsaLeaf = leaf
 		}
 	}
+	if err := loadLogKeys(tm, &tr); err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrTrustedRoot, err)
+	}
+	return tm, nil
+}
+
+// loadLogKeys fills rekorKeys and ctKeys from the trusted root's
+// transparency-log and certificate-transparency log entries. Each key id must
+// be sha256.Size bytes: both derivations, the C2SP signed-note key id and the
+// RFC 6962 log id, are SHA-256 outputs, and an id of any other length names no
+// key a bundle or an SCT can select. A root without a key of either kind is
+// not usable material.
+func loadLogKeys(tm *TrustedMaterial, tr *trustrootpb.TrustedRoot) error {
 	for _, tl := range tr.GetTlogs() {
 		edKey, err := wire.ParseEd25519PKIX(tl.GetPublicKey().GetRawBytes())
 		if err != nil {
-			return nil, fmt.Errorf("%w: tlog key: %w", ErrTrustedRoot, err)
+			return fmt.Errorf("tlog key: %w", err)
+		}
+		id := tl.GetLogId().GetKeyId()
+		if len(id) != sha256.Size {
+			return fmt.Errorf("tlog key id is %d bytes, want %d", len(id), sha256.Size)
 		}
 		from, to := keyWindow(tl)
-		tm.rekorKeys[hex.EncodeToString(tl.GetLogId().GetKeyId())] = rekorKey{
+		tm.rekorKeys[logKeyID(id)] = rekorKey{
 			validFrom: from, validTo: to, pub: edKey,
 		}
 	}
 	if len(tm.rekorKeys) == 0 {
-		return nil, fmt.Errorf("%w: no transparency-log keys", ErrTrustedRoot)
+		return errors.New("no transparency-log keys")
 	}
 	for _, cl := range tr.GetCtlogs() {
 		ecKey, err := parseECDSAP256PKIX(cl.GetPublicKey().GetRawBytes())
 		if err != nil {
-			return nil, fmt.Errorf("%w: ctlog key: %w", ErrTrustedRoot, err)
+			return fmt.Errorf("ctlog key: %w", err)
+		}
+		id := cl.GetLogId().GetKeyId()
+		if len(id) != sha256.Size {
+			return fmt.Errorf("ctlog key id is %d bytes, want %d", len(id), sha256.Size)
 		}
 		from, to := keyWindow(cl)
-		tm.ctKeys[hex.EncodeToString(cl.GetLogId().GetKeyId())] = ctKey{
+		tm.ctKeys[logKeyID(id)] = ctKey{
 			validFrom: from, validTo: to, pub: ecKey,
 		}
 	}
 	if len(tm.ctKeys) == 0 {
-		return nil, fmt.Errorf("%w: no certificate-transparency log keys", ErrTrustedRoot)
+		return errors.New("no certificate-transparency log keys")
 	}
-	return tm, nil
+	return nil
+}
+
+// logKeyID renders a transparency-log key id as the hex primitive that keys
+// rekorKeys and ctKeys. Every caller holds an id of sha256.Size bytes: checked
+// at the trusted root and at the bundle, fixed by the SCT encoding.
+func logKeyID(id []byte) primitive.Sha256 {
+	return primitive.Sha256(hex.EncodeToString(id))
 }
 
 // keyWindow reads the validity window a trusted-root log entry declares for

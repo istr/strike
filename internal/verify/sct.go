@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/asn1"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"math"
@@ -65,7 +64,7 @@ func SCT(leaf, issuer *x509.Certificate, tm *TrustedMaterial) error {
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrSCT, err)
 	}
-	logID := hex.EncodeToString(sct.logID)
+	logID := logKeyID(sct.logID)
 	key, ok := tm.ctKeys[logID]
 	if !ok {
 		return fmt.Errorf("%w: no trusted CT log for log ID %s", ErrSCT, logID)

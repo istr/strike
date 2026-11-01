@@ -121,7 +121,7 @@ var derBlobs = []derBlob{
 	},
 	{
 		digest: "bd79cd67f094e37695bcbd490092cb9c983998cda65dd0ac3425b2bdcfbc4d7e",
-		label:  "golden engine-context bundle: RFC3161 timestamp token",
+		label:  "golden engine-dependent bundle: RFC3161 timestamp token",
 	},
 	{
 		digest: "6f33ca6cd1c2c7c1671a9b3f97c9182cb6e110ac4b60b61085c40a834c63bfcb",

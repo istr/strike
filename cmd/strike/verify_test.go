@@ -26,6 +26,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/types"
 
 	"github.com/istr/strike/internal/endpoint"
+	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/record"
 	"github.com/istr/strike/internal/registry"
 	"github.com/istr/strike/internal/verify"
@@ -260,7 +261,8 @@ func TestRunVerifySubjectMismatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("golden bundle must verify under the golden policy: %v", err)
 	}
-	if !subjectMatches(stmt, subjectHex) {
+	wantHex := primitive.Sha256(subjectHex)
+	if !subjectMatches(stmt, wantHex) {
 		t.Fatalf("golden bundle subject is not %s", subjectHex)
 	}
 
@@ -285,21 +287,26 @@ func TestRunVerifySubjectMismatch(t *testing.T) {
 func TestRunVerifyModeValidation(t *testing.T) {
 	ref := "example.com/app@sha256:" + strings.Repeat("0", 64)
 	tests := []struct {
-		name string
-		opts verifyOptions
+		name    string
+		wantErr string
+		opts    verifyOptions
 	}{
-		{"identity with lane", verifyOptions{subjectRef: ref, identity: goldenIdentity, laneFile: "lane.yaml"}},
-		{"issuer with lane", verifyOptions{subjectRef: ref, issuer: goldenIssuer, laneFile: "lane.yaml"}},
-		{"neither mode", verifyOptions{subjectRef: ref}},
-		{"uc1 missing issuer", verifyOptions{subjectRef: ref, identity: goldenIdentity}},
-		{"uc1 missing identity", verifyOptions{subjectRef: ref, issuer: goldenIssuer}},
-		{"uc1 issuer with query", verifyOptions{subjectRef: ref, identity: goldenIdentity, issuer: goldenIssuer + "?a=b"}},
-		{"uc1 identity not a uri", verifyOptions{subjectRef: ref, identity: "1tester:example.com", issuer: goldenIssuer}},
+		{"identity with lane", "", verifyOptions{subjectRef: ref, identity: goldenIdentity, laneFile: "lane.yaml"}},
+		{"issuer with lane", "", verifyOptions{subjectRef: ref, issuer: goldenIssuer, laneFile: "lane.yaml"}},
+		{"neither mode", "", verifyOptions{subjectRef: ref}},
+		{"uc1 missing issuer", "", verifyOptions{subjectRef: ref, identity: goldenIdentity}},
+		{"uc1 missing identity", "", verifyOptions{subjectRef: ref, issuer: goldenIssuer}},
+		{"uc1 issuer with query", "--issuer:", verifyOptions{subjectRef: ref, identity: goldenIdentity, issuer: goldenIssuer + "?a=b"}},
+		{"uc1 identity not a uri", "--identity:", verifyOptions{subjectRef: ref, identity: "1tester:example.com", issuer: goldenIssuer}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := runVerify(context.Background(), io.Discard, tt.opts); err == nil {
+			err := runVerify(context.Background(), io.Discard, tt.opts)
+			if err == nil {
 				t.Fatal("want an error, got nil")
+			}
+			if tt.wantErr != "" && !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("err = %v, want substring %q", err, tt.wantErr)
 			}
 		})
 	}
@@ -334,6 +341,23 @@ func TestRunVerifyNoBundles(t *testing.T) {
 	}
 }
 
+// TestRunVerifyRejectsNonSha256Subject: a subject pinned under another
+// algorithm passes the reference parser but is not a strike digest, so the
+// subject check cannot be built and the verify fails before any bundle is read.
+func TestRunVerifyRejectsNonSha256Subject(t *testing.T) {
+	host := localRegistry(t)
+	opts := verifyOptions{
+		subjectRef:   host + "/app@sha512:" + strings.Repeat("0", 128),
+		identity:     goldenIdentity,
+		issuer:       goldenIssuer,
+		trustRootRef: goldenTrustRootRef(t, host),
+	}
+	err := runVerify(context.Background(), io.Discard, opts)
+	if err == nil || !strings.Contains(err.Error(), "subject digest:") {
+		t.Fatalf("err = %v, want a subject digest error", err)
+	}
+}
+
 func TestSubjectMatches(t *testing.T) {
 	const want = "0000000000000000000000000000000000000000000000000000000000000001"
 	tests := []struct {
@@ -361,17 +385,17 @@ func TestSubjectMatches(t *testing.T) {
 // must match the layer, and the sealed layer must carry a laneDigest (always
 // present, and equal to the policy lane's digest in UC2; unconstrained in UC1).
 func TestValidatePredicate(t *testing.T) {
-	dgA := "sha256:" + strings.Repeat("a", 64)
-	dgB := "sha256:" + strings.Repeat("b", 64)
-	sealedStmt := func(dg string) []byte {
+	dgA := primitive.DigestFromHex(strings.Repeat("a", 64))
+	dgB := primitive.DigestFromHex(strings.Repeat("b", 64))
+	sealedStmt := func(dg primitive.Digest) []byte {
 		return []byte(`{"predicateType":"` + sealedPredicateType +
-			`","predicate":{"buildDefinition":{"externalParameters":{"laneDigest":"` + dg + `"}}}}`)
+			`","predicate":{"buildDefinition":{"externalParameters":{"laneDigest":"` + dg.String() + `"}}}}`)
 	}
 	typed := func(pt string) []byte { return []byte(`{"predicateType":"` + pt + `"}`) }
 	tests := []struct {
 		name       string
 		layer      record.TrustLayer
-		laneDigest string
+		laneDigest primitive.Digest
 		statement  []byte
 		wantErr    bool
 	}{

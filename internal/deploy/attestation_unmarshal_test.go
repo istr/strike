@@ -10,7 +10,49 @@ import (
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/record"
+	"github.com/istr/strike/internal/testutil"
 )
+
+// TestStrikeExternalParameters_Unmarshal exercises the union dispatch on the
+// sealed statement's externalParameters: a declared peer and an engine
+// connection round-trip through their union decoders, and a malformed engine
+// discriminator or a malformed document surfaces as a decode error.
+func TestStrikeExternalParameters_Unmarshal(t *testing.T) {
+	orig := deploy.StrikeExternalParameters{
+		LaneID: "demo",
+		OIDC:   deploy.ProvenanceOIDC{Issuer: endpoint.MustParseURL("https://idp.example.com"), Identity: "deployer@example.com"},
+		Peers: map[primitive.Identifier][]lane.Peer{
+			"build": {endpoint.TLS{Type: "https", Address: endpoint.MustParseAuthority("localhost:5555"), Trust: testutil.AnchorTrust()}},
+		},
+		Engine: endpoint.EngineUnix{Type: "unix"},
+	}
+	data, err := json.Marshal(orig)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var got deploy.StrikeExternalParameters
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if _, ok := got.Engine.(endpoint.EngineUnix); !ok {
+		t.Errorf("Engine type = %T, want endpoint.EngineUnix", got.Engine)
+	}
+	if peers := got.Peers["build"]; len(peers) != 1 {
+		t.Errorf("peers[build] = %v, want one peer", peers)
+	} else if _, ok := peers[0].(endpoint.TLS); !ok {
+		t.Errorf("peer type = %T, want endpoint.TLS", peers[0])
+	}
+
+	for _, tc := range []struct{ in, want string }{
+		{`{"engine": {"type": "bogus"}}`, "externalParameters engine"},
+		{`{"peers": 5}`, "cannot unmarshal"},
+	} {
+		var p deploy.StrikeExternalParameters
+		if err := json.Unmarshal([]byte(tc.in), &p); err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%s: error = %v, want substring %q", tc.in, err, tc.want)
+		}
+	}
+}
 
 // TestSealed_UnmarshalEngine exercises the engine dispatch in
 // Sealed.UnmarshalJSON: a sealed record carrying an engine connection

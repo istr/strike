@@ -168,6 +168,18 @@ func TestGoldenTamperMatrix(t *testing.T) {
 		})
 	}
 
+	// A log id that is not a SHA-256 output names no trusted key; strike
+	// rejects it at the inclusion layer before it keys the trusted-key map.
+	t.Run("log-id-length", func(t *testing.T) {
+		bad := mutate(t, golden, func(b *protobundle.Bundle) {
+			logID := b.GetVerificationMaterial().GetTlogEntries()[0].GetLogId()
+			logID.KeyId = logID.GetKeyId()[:16]
+		})
+		if _, err := sv.Verify(bad); !errors.Is(err, verify.ErrInclusion) {
+			t.Errorf("got %v, want ErrInclusion", err)
+		}
+	})
+
 	// Policy mutations: strike's own checks.
 	t.Run("identity", func(t *testing.T) {
 		wrong := verify.New(goldenMaterial(t), "attacker@evil", endpoint.MustParseURL(goldenIssuer))

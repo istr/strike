@@ -8,10 +8,10 @@ import (
 	"io"
 	"log"
 	"os"
-	"strings"
 
 	"github.com/google/go-containerregistry/pkg/name"
 
+	"github.com/istr/strike/internal/deploy"
 	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/primitive"
@@ -27,7 +27,7 @@ type verifyOptions struct {
 	issuer        string
 	trustRootRef  string // --trust-root-ref override (digest-pinned OCI image); "" if none
 	laneFile      string // --lane (UC2); "" selects UC1
-	noEngineTrust bool   // --no-engine-trust: degrade the engine-context layer to informational
+	noEngineTrust bool   // --no-engine-trust: degrade the engine-dependent layer to informational
 }
 
 // cmdVerify parses the verify flags and runs the verification, exiting non-zero
@@ -40,7 +40,7 @@ func cmdVerify(args []string) {
 	fs.StringVar(&opts.issuer, "issuer", "", "expected OIDC issuer (UC1)")
 	fs.StringVar(&opts.trustRootRef, "trust-root-ref", "", "digest-pinned OCI image whose sole layer is a trusted_root.json (override)")
 	fs.StringVar(&opts.laneFile, "lane", "", "lane file as verification policy (UC2)")
-	fs.BoolVar(&opts.noEngineTrust, "no-engine-trust", false, "do not gate on the engine-context layer (treat it as informational)")
+	fs.BoolVar(&opts.noEngineTrust, "no-engine-trust", false, "do not gate on the engine-dependent layer (treat it as informational)")
 	if err := fs.Parse(args); err != nil {
 		os.Exit(2)
 	}
@@ -61,7 +61,7 @@ type verifyPolicy struct {
 	keyless    lane.Keyless
 	identity   primitive.StringOrURI
 	issuer     endpoint.Address
-	laneDigest string
+	laneDigest primitive.Digest
 }
 
 // resolveVerifyPolicy determines the policy the bundles are checked against:
@@ -84,7 +84,7 @@ func resolveVerifyPolicy(opts verifyOptions) (verifyPolicy, error) {
 		if err != nil {
 			return verifyPolicy{}, err
 		}
-		return verifyPolicy{keyless: p.Keyless, identity: p.OIDC.Identity, issuer: p.OIDC.Issuer, laneDigest: dg.String()}, nil
+		return verifyPolicy{keyless: p.Keyless, identity: p.OIDC.Identity, issuer: p.OIDC.Issuer, laneDigest: dg}, nil
 	}
 	if opts.identity == "" || opts.issuer == "" {
 		return verifyPolicy{}, fmt.Errorf("UC1 requires both --identity and --issuer")
@@ -110,7 +110,6 @@ const (
 )
 
 var layerPredicateType = map[record.TrustLayer]string{
-	record.TrustLayerSealed:          sealedPredicateType,
 	record.TrustLayerEngineDependent: engineContextPredicateType,
 	record.TrustLayerInformational:   informationalPredicateType,
 }
@@ -146,34 +145,38 @@ func classifyLayer(layer record.TrustLayer, noEngineTrust bool) gateClass {
 	return gateNone
 }
 
-// validatePredicate checks the verified statement's predicate for its layer: the
-// predicateType must match, and the sealed layer must carry a laneDigest --
-// which, in UC2 (laneDigest != ""), must equal the policy lane's digest. It does
-// not schema-validate the engine-context or informational bodies.
-func validatePredicate(layer record.TrustLayer, statement []byte, laneDigest string) error {
+// validatePredicate checks the verified statement's predicate for its layer.
+// The sealed statement is decoded whole into the generated SLSA provenance
+// statement (validateSealed); the engine-dependent and informational
+// statements are checked for their predicateType only, and their bodies are
+// not decoded.
+func validatePredicate(layer record.TrustLayer, statement []byte, laneDigest primitive.Digest) error {
+	if layer == record.TrustLayerSealed {
+		return validateSealed(statement, laneDigest)
+	}
 	var head struct {
 		PredicateType string `json:"predicateType"`
 	}
 	if err := json.Unmarshal(statement, &head); err != nil {
 		return fmt.Errorf("parse statement: %w", err)
 	}
-	if want, known := layerPredicateType[layer]; known && head.PredicateType != want {
+	if want := layerPredicateType[layer]; head.PredicateType != want {
 		return fmt.Errorf("predicateType %q is not the expected %q for the %s layer", head.PredicateType, want, layer)
 	}
-	if layer != record.TrustLayerSealed {
-		return nil
-	}
-	var s struct {
-		Predicate struct {
-			BuildDefinition struct {
-				ExternalParameters struct {
-					LaneDigest string `json:"laneDigest"`
-				} `json:"externalParameters"`
-			} `json:"buildDefinition"`
-		} `json:"predicate"`
-	}
+	return nil
+}
+
+// validateSealed decodes the sealed statement into the generated SLSA
+// provenance statement, so every field the contract types is decoded by its
+// type, and checks the predicateType and the laneDigest -- present, and in UC2
+// (laneDigest != "") equal to the policy lane's digest.
+func validateSealed(statement []byte, laneDigest primitive.Digest) error {
+	var s deploy.SLSAProvenanceStatement
 	if err := json.Unmarshal(statement, &s); err != nil {
-		return fmt.Errorf("parse sealed predicate: %w", err)
+		return fmt.Errorf("parse sealed statement: %w", err)
+	}
+	if s.PredicateType != sealedPredicateType {
+		return fmt.Errorf("predicateType %q is not the expected %q for the %s layer", s.PredicateType, sealedPredicateType, record.TrustLayerSealed)
 	}
 	got := s.Predicate.BuildDefinition.ExternalParameters.LaneDigest
 	if got == "" {
@@ -207,7 +210,12 @@ func runVerify(ctx context.Context, out io.Writer, opts verifyOptions) error {
 	if err != nil {
 		return fmt.Errorf("subject must be digest-pinned: %w", err)
 	}
-	wantHex := strings.TrimPrefix(d.DigestStr(), "sha256:")
+	rawDigest := primitive.Digest(d.DigestStr())
+	subjectDigest, err := primitive.ParseDigest(rawDigest)
+	if err != nil {
+		return fmt.Errorf("subject digest: %w", err)
+	}
+	wantHex := subjectDigest.Hex()
 
 	bundles, err := registry.FetchStatementBundles(ctx, opts.subjectRef)
 	if err != nil {
@@ -217,7 +225,7 @@ func runVerify(ctx context.Context, out io.Writer, opts verifyOptions) error {
 		return fmt.Errorf("no attestation bundles attached to %s", opts.subjectRef)
 	}
 
-	v := verify.New(tm, pol.identity.String(), pol.issuer)
+	v := verify.New(tm, pol.identity, pol.issuer)
 	seen := make(map[record.TrustLayer]bool, len(bundles))
 	var sealedFail, engineDependentFail bool
 	for _, b := range bundles {
@@ -251,7 +259,7 @@ func runVerify(ctx context.Context, out io.Writer, opts verifyOptions) error {
 // verifyBundle runs, for one bundle, the keyless verify, the subject-artifact
 // check, and predicate validation, writing the verified statement to out on
 // success.
-func verifyBundle(v *verify.Verifier, b registry.StatementBundle, wantHex, laneDigest string, out io.Writer) error {
+func verifyBundle(v *verify.Verifier, b registry.StatementBundle, wantHex primitive.Sha256, laneDigest primitive.Digest, out io.Writer) error {
 	stmt, err := v.Verify(b.Bundle)
 	if err != nil {
 		return err
@@ -294,21 +302,20 @@ func checkPresence(seen map[record.TrustLayer]bool, noEngineTrust bool, sealedFa
 }
 
 // subjectMatches reports whether the in-toto statement names the requested
-// artifact (by sha256) among its subjects. It parses only the subject, never
-// the predicate. This is the in-statement confirmation that closes a registry
-// substituting a validly signed bundle for a different artifact; the referrer
-// relationship is the other half of the binding.
-func subjectMatches(statement []byte, wantHex string) bool {
+// artifact (by sha256) among its subjects. It decodes only the subject, in the
+// generated subject shape, never the predicate. This is the in-statement
+// confirmation that closes a registry substituting a validly signed bundle for
+// a different artifact; the referrer relationship is the other half of the
+// binding.
+func subjectMatches(statement []byte, wantHex primitive.Sha256) bool {
 	var s struct {
-		Subject []struct {
-			Digest map[string]string `json:"digest"`
-		} `json:"subject"`
+		Subject []deploy.Subject `json:"subject"`
 	}
 	if err := json.Unmarshal(statement, &s); err != nil {
 		return false
 	}
 	for _, sub := range s.Subject {
-		if sub.Digest["sha256"] == wantHex {
+		if sub.Digest != nil && sub.Digest.SHA256 == wantHex {
 			return true
 		}
 	}

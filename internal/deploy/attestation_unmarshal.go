@@ -26,29 +26,65 @@ func (s *Sealed) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return err
 	}
-	if len(aux.Engine) != 0 && string(aux.Engine) != "null" {
-		conn, err := endpoint.UnmarshalEngine(aux.Engine)
+	engine, peers, err := decodeEngineAndPeers(aux.Engine, aux.Peers)
+	if err != nil {
+		return fmt.Errorf("attestation %w", err)
+	}
+	s.Engine, s.Peers = engine, peers
+	return nil
+}
+
+// UnmarshalJSON implements json.Unmarshaler for StrikeExternalParameters, the
+// externalParameters of the sealed statement. It carries the same two
+// hand-written unions as Sealed -- the declared peers and the engine
+// connection -- and dispatches them the same way; all other fields fall
+// through to the default decoder.
+func (p *StrikeExternalParameters) UnmarshalJSON(data []byte) error {
+	type alias StrikeExternalParameters
+	aux := struct {
+		*alias
+		Peers  map[primitive.Identifier][]json.RawMessage `json:"peers,omitempty"`
+		Engine json.RawMessage                            `json:"engine,omitempty"`
+	}{
+		alias: (*alias)(p),
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	engine, peers, err := decodeEngineAndPeers(aux.Engine, aux.Peers)
+	if err != nil {
+		return fmt.Errorf("externalParameters %w", err)
+	}
+	p.Engine, p.Peers = engine, peers
+	return nil
+}
+
+// decodeEngineAndPeers dispatches the engine connection and the declared peers
+// through their union decoders. An absent or null engine decodes to nil, and an
+// absent or empty peers map decodes to nil.
+func decodeEngineAndPeers(rawEngine json.RawMessage, rawPeers map[primitive.Identifier][]json.RawMessage) (endpoint.Engine, map[primitive.Identifier][]lane.Peer, error) {
+	var engine endpoint.Engine
+	if len(rawEngine) != 0 && string(rawEngine) != "null" {
+		conn, err := endpoint.UnmarshalEngine(rawEngine)
 		if err != nil {
-			return fmt.Errorf("attestation engine: %w", err)
+			return nil, nil, fmt.Errorf("engine: %w", err)
 		}
-		s.Engine = conn
+		engine = conn
 	}
-	if len(aux.Peers) == 0 {
-		s.Peers = nil
-		return nil
+	if len(rawPeers) == 0 {
+		return engine, nil, nil
 	}
-	out := make(map[primitive.Identifier][]lane.Peer, len(aux.Peers))
-	for stepID, rawPeers := range aux.Peers {
-		peers := make([]lane.Peer, len(rawPeers))
-		for i, raw := range rawPeers {
-			p, err := lane.UnmarshalPeer(raw)
+	out := make(map[primitive.Identifier][]lane.Peer, len(rawPeers))
+	for stepID, raws := range rawPeers {
+		peers := make([]lane.Peer, len(raws))
+		for i, raw := range raws {
+			peer, err := lane.UnmarshalPeer(raw)
 			if err != nil {
-				return fmt.Errorf("attestation peers[%q][%d]: %w", stepID, i, err)
+				return nil, nil, fmt.Errorf("peers[%q][%d]: %w", stepID, i, err)
 			}
-			peers[i] = p
+			peers[i] = peer
 		}
 		out[stepID] = peers
 	}
-	s.Peers = out
-	return nil
+	return engine, out, nil
 }
