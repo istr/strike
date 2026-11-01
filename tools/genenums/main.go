@@ -9,8 +9,10 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"go/format"
+	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
@@ -140,7 +142,9 @@ type enumDef struct {
 
 // emitEnums recovers each string-disjunction definition's values as unexported
 // typed constants beside the moved types, so switches over the type can be
-// exhaustiveness-checked. It writes nothing when a package has no such def.
+// exhaustiveness-checked. When a package has no such def it writes nothing and
+// removes an enum file an earlier run wrote, which would reference a type that
+// no longer exists.
 func emitEnums(tree *os.Root, name string) error {
 	ctx := cuecontext.New()
 	insts := load.Instances([]string{"./contract/" + name}, &load.Config{Dir: tree.Name()})
@@ -158,16 +162,20 @@ func emitEnums(tree *os.Root, name string) error {
 	if err != nil {
 		return err
 	}
+	dir, pkg := internalDir(name)
+	enumFile := filepath.Join(dir, filepath.Base(dir)+"_enum.gen.go")
 	if len(defs) == 0 {
+		if rmErr := tree.Remove(enumFile); rmErr != nil && !errors.Is(rmErr, fs.ErrNotExist) {
+			return rmErr
+		}
 		return nil
 	}
 	sort.Slice(defs, func(i, j int) bool { return defs[i].goType < defs[j].goType })
-	dir, pkg := internalDir(name)
 	formatted, err := format.Source(render(pkg, defs))
 	if err != nil {
 		return fmt.Errorf("format: %w", err)
 	}
-	return tree.WriteFile(filepath.Join(dir, filepath.Base(dir)+"_enum.gen.go"), formatted, 0o600)
+	return tree.WriteFile(enumFile, formatted, 0o600)
 }
 
 func collectEnums(pkgVal cue.Value) ([]enumDef, error) {

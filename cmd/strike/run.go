@@ -677,7 +677,7 @@ func (rc *runContext) buildInputDelivery(ctx context.Context, step *lane.Step, i
 // an input delivered outside the workdir. A single-file selection is rejected
 // in lane terms, statically for a type:file output, by walk otherwise.
 func buildImageMount(ctx context.Context, engine container.Engine, cache map[string][]byte, h output.FileHandle, inp lane.InputRef, out *lane.FileOutput) (container.ImageVolume, error) {
-	if out.Type.IsFile() && inp.Subpath == nil {
+	if out.Type == primitive.FileArtifactTypeFile && inp.Subpath == nil {
 		return container.ImageVolume{}, singleFileOutsideErr(inp)
 	}
 	tarBytes, cacheErr := producerTar(ctx, engine, cache, h.Ref, inp)
@@ -759,7 +759,7 @@ func archiveReroot(workdir primitive.AbsPath, out lane.FileOutput) (archivePath,
 	if out.Path != nil {
 		archivePath = path.Join(workdir.String(), out.Path.String())
 	}
-	if out.Type.IsFile() {
+	if out.Type == primitive.FileArtifactTypeFile {
 		return archivePath, "", ""
 	}
 	if out.Path == nil {

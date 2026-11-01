@@ -21,20 +21,20 @@ import (
 // ambientIDToken reads the OIDC identity token from the environment
 // (ADR-040 D-3b-4): the operator or CI injects a short-lived identity
 // token via SIGSTORE_ID_TOKEN; strike never runs an interactive flow.
-func ambientIDToken() (string, error) {
+func ambientIDToken() (lane.SecretString, error) {
 	tok := os.Getenv("SIGSTORE_ID_TOKEN")
 	if tok == "" {
-		return "", errors.New("keyless: SIGSTORE_ID_TOKEN is not set")
+		return lane.SecretString{}, errors.New("keyless: SIGSTORE_ID_TOKEN is not set")
 	}
-	return tok, nil
+	return lane.NewSecretString(tok), nil
 }
 
 // subjectFromIDToken extracts the subject Fulcio binds into the leaf
 // certificate: the email claim if present, else sub. The token is NOT
 // verified here -- Fulcio verifies it against the issuer; the subject is
 // needed client-side only for the proof of possession.
-func subjectFromIDToken(idToken string) (string, error) {
-	parts := strings.Split(idToken, ".")
+func subjectFromIDToken(idToken lane.SecretString) (string, error) {
+	parts := strings.Split(idToken.Expose(), ".")
 	if len(parts) < 2 {
 		return "", errors.New("keyless: malformed identity token")
 	}
@@ -67,7 +67,7 @@ func subjectFromIDToken(idToken string) (string, error) {
 // partial bundle. Returned bundles are positionally aligned with
 // statements. The endpoints are reached through dialer, so they resolve by
 // the lane's declared resolver like every other declared peer.
-func ProduceKeylessBundles(ctx context.Context, eps lane.KeylessEndpoints, dialer *transport.Dialer, idToken string, statements [][]byte) ([][]byte, error) {
+func ProduceKeylessBundles(ctx context.Context, eps lane.KeylessEndpoints, dialer *transport.Dialer, idToken lane.SecretString, statements [][]byte) ([][]byte, error) {
 	if len(statements) == 0 {
 		return nil, errors.New("keyless: no statements")
 	}

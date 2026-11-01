@@ -239,7 +239,7 @@ func unmarshalKeylessEndpoint(name string, data []byte) (endpoint.HTTPS, error) 
 	}
 	type alias struct {
 		Trust *endpoint.Certificate `json:"trust"`
-		URL   string                `json:"url"`
+		URL   endpoint.Address      `json:"url"`
 	}
 	var aux alias
 	if err := json.Unmarshal(data, &aux); err != nil {
@@ -248,11 +248,7 @@ func unmarshalKeylessEndpoint(name string, data []byte) (endpoint.HTTPS, error) 
 	if aux.Trust == nil {
 		return endpoint.HTTPS{}, fmt.Errorf("keyless %s: trust required", name)
 	}
-	addr, err := endpoint.ParseURL(aux.URL)
-	if err != nil {
-		return endpoint.HTTPS{}, fmt.Errorf("keyless %s: %w", name, err)
-	}
-	return endpoint.HTTPS{Address: addr, Trust: *aux.Trust}, nil
+	return endpoint.HTTPS{Address: aux.URL, Trust: *aux.Trust}, nil
 }
 
 // UnmarshalJSON implements json.Unmarshaler for Lane. It

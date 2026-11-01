@@ -250,7 +250,8 @@ func pushImageSBOM(ctx context.Context, repo string, subject v1.Descriptor, img 
 	if err != nil {
 		return record.SBOMSet{}, fmt.Errorf("flatten payload: %w", err)
 	}
-	return pushSBOMPair(ctx, repo, subject, rt, artName, fsys, subject.Digest.String())
+	subjectDigest := primitive.Digest(subject.Digest.String())
+	return pushSBOMPair(ctx, repo, subject, rt, artName, fsys, subjectDigest)
 }
 
 // regionSBOMs catalogs every file and directory region of the artifacts map
@@ -311,14 +312,14 @@ func (d *Deployer) regionSBOM(ctx context.Context, repo string, subject v1.Descr
 	if err != nil {
 		return record.SBOMSet{}, err
 	}
-	return pushSBOMPair(ctx, repo, subject, rt, artName, fsys, fh.LayerDiffID.String())
+	return pushSBOMPair(ctx, repo, subject, rt, artName, fsys, fh.LayerDiffID)
 }
 
 // pushSBOMPair catalogs fsys under subjectDigest, pushes the CycloneDX and
 // SPDX documents as OCI referrers of subject -- each annotated with the
 // artifacts-map name it belongs to -- and returns both document digests for
 // the artifact's sealed record (ADR-051 D9).
-func pushSBOMPair(ctx context.Context, repo string, subject v1.Descriptor, rt http.RoundTripper, artName primitive.Identifier, fsys fs.FS, subjectDigest string) (record.SBOMSet, error) {
+func pushSBOMPair(ctx context.Context, repo string, subject v1.Descriptor, rt http.RoundTripper, artName primitive.Identifier, fsys fs.FS, subjectDigest primitive.Digest) (record.SBOMSet, error) {
 	cdxBytes, spdxBytes, err := GenerateImageSBOM(fsys, subjectDigest, clock.Reproducible())
 	if err != nil {
 		return record.SBOMSet{}, fmt.Errorf("sbom: %w", err)

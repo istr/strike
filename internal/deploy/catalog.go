@@ -15,6 +15,7 @@ import (
 
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/closer"
+	"github.com/istr/strike/internal/primitive"
 
 	cdx "github.com/CycloneDX/cyclonedx-go"
 	packageurl "github.com/package-url/packageurl-go"
@@ -36,7 +37,7 @@ type component struct {
 // canonical CycloneDX and SPDX 2.3 JSON documents. buildTime must come
 // from clock.Reproducible, never clock.Wall. The returned documents are
 // deterministic: byte-identical inputs yield byte-identical outputs.
-func GenerateImageSBOM(fsys fs.FS, subjectDigest string, buildTime clock.Time) (cdxDoc, spdxDoc []byte, err error) {
+func GenerateImageSBOM(fsys fs.FS, subjectDigest primitive.Digest, buildTime clock.Time) (cdxDoc, spdxDoc []byte, err error) {
 	components, err := walkAndCatalog(fsys)
 	if err != nil {
 		return nil, nil, fmt.Errorf("catalog filesystem: %w", err)
@@ -344,7 +345,7 @@ func sortComponents(cs []component) {
 
 // deterministicUUID produces a UUIDv5 from the subject digest for the
 // CycloneDX serial number. Uses the URL namespace UUID as base.
-func deterministicUUID(subjectDigest string) string {
+func deterministicUUID(subjectDigest primitive.Digest) string {
 	// UUIDv5 namespace: URL (6ba7b811-9dad-11d1-80b4-00c04fd430c8)
 	nsURL := [16]byte{
 		0x6b, 0xa7, 0xb8, 0x11, 0x9d, 0xad, 0x11, 0xd1,
@@ -352,7 +353,7 @@ func deterministicUUID(subjectDigest string) string {
 	}
 	h := sha256.New()
 	h.Write(nsURL[:])
-	h.Write([]byte(subjectDigest))
+	h.Write([]byte(subjectDigest.String()))
 	sum := h.Sum(nil)
 
 	// Truncate to 16 bytes, set version 5 and variant bits.
@@ -378,7 +379,7 @@ func spdxID(purl string) string {
 }
 
 // renderCycloneDX builds a CycloneDX 1.6 JSON document.
-func renderCycloneDX(components []component, subjectDigest string, buildTime clock.Time) ([]byte, error) {
+func renderCycloneDX(components []component, subjectDigest primitive.Digest, buildTime clock.Time) ([]byte, error) {
 	cdxComponents := make([]cdx.Component, len(components))
 	for i, c := range components {
 		cdxComponents[i] = cdx.Component{
@@ -395,9 +396,9 @@ func renderCycloneDX(components []component, subjectDigest string, buildTime clo
 	bom.Metadata = &cdx.Metadata{
 		Timestamp: buildTime.Format(clock.RFC3339),
 		Component: &cdx.Component{
-			BOMRef:  subjectDigest,
+			BOMRef:  subjectDigest.String(),
 			Type:    cdx.ComponentTypeContainer,
-			Name:    subjectDigest,
+			Name:    subjectDigest.String(),
 			Version: "",
 		},
 		Tools: &cdx.ToolsChoice{
@@ -419,8 +420,8 @@ func renderCycloneDX(components []component, subjectDigest string, buildTime clo
 }
 
 // renderSPDX builds an SPDX 2.3 JSON document.
-func renderSPDX(components []component, subjectDigest string, buildTime clock.Time) ([]byte, error) {
-	h := sha256.Sum256([]byte(subjectDigest))
+func renderSPDX(components []component, subjectDigest primitive.Digest, buildTime clock.Time) ([]byte, error) {
+	h := sha256.Sum256([]byte(subjectDigest.String()))
 	namespace := fmt.Sprintf("https://strike.dev/spdx/%x", h[:16])
 
 	packages := make([]*spdx.Package, len(components))
@@ -451,7 +452,7 @@ func renderSPDX(components []component, subjectDigest string, buildTime clock.Ti
 		SPDXVersion:       spdx.Version,
 		DataLicense:       spdx.DataLicense,
 		SPDXIdentifier:    "DOCUMENT",
-		DocumentName:      subjectDigest,
+		DocumentName:      subjectDigest.String(),
 		DocumentNamespace: namespace,
 		CreationInfo: &spdx.CreationInfo{
 			Created: buildTime.Format(clock.RFC3339),

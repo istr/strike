@@ -27,6 +27,7 @@ import (
 
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/endpoint"
+	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/transport"
 )
@@ -138,7 +139,7 @@ func postKeyless(ctx context.Context, ep endpoint.HTTPS, dialer *transport.Diale
 // The proof of possession is an ASN.1 DER ECDSA signature over the SHA-256
 // digest of the token subject (Fulcio API v2; mirrors sigstore-go's
 // certificate request). Returns the DER-encoded leaf certificate.
-func fulcioCertificate(ctx context.Context, ep endpoint.HTTPS, dialer *transport.Dialer, idToken string, key *ecdsa.PrivateKey) ([]byte, error) {
+func fulcioCertificate(ctx context.Context, ep endpoint.HTTPS, dialer *transport.Dialer, idToken lane.SecretString, key *ecdsa.PrivateKey) ([]byte, error) {
 	subject, err := subjectFromIDToken(idToken)
 	if err != nil {
 		return nil, err
@@ -166,7 +167,7 @@ func fulcioCertificate(ctx context.Context, ep endpoint.HTTPS, dialer *transport
 		return nil, fmt.Errorf("keyless: marshal fulcio request: %w", err)
 	}
 	header := http.Header{}
-	header.Set("Authorization", "Bearer "+idToken)
+	header.Set("Authorization", "Bearer "+idToken.Expose())
 	respBody, err := postKeyless(ctx, ep, dialer, "/api/v2/signingCert", "application/json", reqBody, header, http.StatusOK)
 	if err != nil {
 		return nil, err

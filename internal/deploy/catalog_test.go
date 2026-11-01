@@ -8,6 +8,7 @@ import (
 
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/deploy"
+	"github.com/istr/strike/internal/primitive"
 )
 
 func TestGenerateImageSBOM(t *testing.T) {
@@ -26,7 +27,7 @@ func TestGenerateImageSBOM(t *testing.T) {
 		},
 	}
 
-	digest := "sha256:abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
+	digest := primitive.Digest("sha256:abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789")
 	buildTime := clock.Unix(1700000000, 0).UTC()
 
 	cdxDoc, spdxDoc, err := deploy.GenerateImageSBOM(fsys, digest, buildTime)

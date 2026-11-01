@@ -157,7 +157,7 @@ func statementBundles(ctx context.Context, eps lane.KeylessEndpoints, dialer *tr
 			return nil, fmt.Errorf("marshal %s statement: %w", goldenNames[i], err)
 		}
 	}
-	return deploy.ProduceKeylessBundles(ctx, eps, dialer, token, statements)
+	return deploy.ProduceKeylessBundles(ctx, eps, dialer, lane.NewSecretString(token), statements)
 }
 
 // syntheticAttestation builds a populated attestation for the golden fixtures:

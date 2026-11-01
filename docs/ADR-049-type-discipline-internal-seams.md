@@ -146,3 +146,20 @@ verification name are two parameters of one function and the foreign call,
 Rule (4) itself is unaffected. The conversion is still owned at the foreign
 call rather than at a judged boundary; `DialResolved` is where that call now
 sits. The entry records where the tree stood when this ADR was written.
+
+## Amendment 2026-11-01 -- generated enum constants are exported and named directly
+
+Consequences left the visibility of the constants `genenums` emits open,
+owned by item-0091. item-0091 settled it in `0f1e5a3` (2026-07-12) without
+recording the outcome here: `genenums` emits exported constants, named
+`<Type><Value>` (`CertificateModeLeaf`), and a consumer in any package names
+them directly. The `exhaustive` linter checks every switch over such a type,
+so a value added in CUE forces a case in Go. A discriminator of a
+hand-written `@go(-)` union may carry a named type of its own definition and
+use the same constants (`EngineType`, `CarriageType`).
+
+This supersedes the earlier policy of the type-safety decision forks of
+2026-07-09: unexported constants reached only through a method of the
+owning package, and discriminators left as literals. The one method of that
+form, `primitive.FileArtifactType.IsFile`, is removed in the same change;
+its two callers compare with `primitive.FileArtifactTypeFile`.
