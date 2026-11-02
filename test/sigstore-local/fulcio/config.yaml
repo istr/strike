@@ -1,8 +1,21 @@
 # Fulcio OIDC issuer config. The issuer URL must be byte-identical to the token
-# iss claim and to the client's --oidc-issuer. type email extracts the verified
-# email into the certificate SAN -- the identity ADR-040 D5 cross-checks.
+# iss claim and to the client's --oidc-issuer. type ci-provider renders the
+# certificate SAN and the source extensions from token claims through the
+# strike-harness templates below, so the harness stands in for a forge
+# workload identity (ADR-057 D12). Fulcio checks the proof of possession
+# against the token's sub for this issuer type.
 oidc-issuers:
   https://keycloak.127.0.0.1.sslip.io:8443/realms/sigstore:
     issuer-url: https://keycloak.127.0.0.1.sslip.io:8443/realms/sigstore
     client-id: sigstore
-    type: email
+    type: ci-provider
+    ci-provider: strike-harness
+ci-issuer-metadata:
+  strike-harness:
+    extension-templates:
+      source-repository-uri: "{{ .url }}/{{ .repository }}"
+      source-repository-ref: "ref"
+      source-repository-digest: "sha"
+      build-config-uri: "{{ .url }}/{{ .workflow_ref }}"
+      runner-environment: "runner_environment"
+    subject-alternative-name-template: "{{ .url }}/{{ .workflow_ref }}"

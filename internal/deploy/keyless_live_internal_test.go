@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	protobundle "github.com/sigstore/protobuf-specs/gen/pb-go/bundle/v1"
@@ -30,7 +31,7 @@ import (
 
 const (
 	liveIssuer   = "https://keycloak.127.0.0.1.sslip.io:8443/realms/sigstore"
-	liveIdentity = "tester@strike.localhost"
+	liveIdentity = "https://forge.strike.localhost/istr/strike/bootstrap/lane.cue@refs/heads/main"
 	// liveRekorOrigin is the checkpoint origin the harness Rekor signs
 	// (--hostname=rekor.localhost). sigstore-go matches it against the
 	// hostname of the trust root's BaseURL, so the BaseURL must use this
@@ -114,7 +115,8 @@ func TestKeylessLive(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	bundles, err := ProduceKeylessBundles(ctx, eps, dialer, token, statements)
+	liveOIDC := lane.OIDCConfig{Issuer: endpoint.MustParseURL(liveIssuer), Identity: liveIdentity}
+	bundles, err := ProduceKeylessBundles(ctx, eps, dialer, token, liveOIDC, statements)
 	if err != nil {
 		t.Fatalf("ProduceKeylessBundles: %v", err)
 	}
@@ -155,6 +157,14 @@ func TestKeylessLive(t *testing.T) {
 		if _, err := verifier.Verify(b, policy); err != nil {
 			t.Fatalf("bundle %d failed sigstore-go verification: %v", i, err)
 		}
+	}
+
+	// The producer refuses a certificate that does not bind the declared
+	// identity: Fulcio issues the harness identity, the declaration names
+	// another, and no bundle is produced.
+	foreign := lane.OIDCConfig{Issuer: endpoint.MustParseURL(liveIssuer), Identity: "https://forge.strike.localhost/istr/strike/other.cue@refs/heads/main"}
+	if _, err := ProduceKeylessBundles(ctx, eps, dialer, token, foreign, statements); err == nil || !strings.Contains(err.Error(), "keyless: issued certificate:") {
+		t.Fatalf("ProduceKeylessBundles under a foreign declared identity: err = %v, want an issued-certificate error", err)
 	}
 }
 

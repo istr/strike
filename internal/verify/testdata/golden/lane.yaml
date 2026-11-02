@@ -3,7 +3,7 @@
 # The golden generator parses this file to source the sealed predicate's lane
 # identity, declared OIDC, and lane digest; the operator verify path loads the
 # same file as its policy source (ADR-041). The OIDC issuer/identity are the
-# local sigstore harness signer (tester@strike.localhost), and the keyless
+# local sigstore harness builder (its ci-provider SAN), and the keyless
 # endpoints are the harness Fulcio, Rekor v2, and TSA the generator already
 # dials, trusted via the caddy root CA bundle. The lane is never executed --
 # only parsed -- so the build step image and registry refs are placeholders;
@@ -19,7 +19,7 @@ resolver:
 oidc:
   issuer: "https://keycloak.127.0.0.1.sslip.io:8443/realms/sigstore"
   audience: "sigstore"
-  identity: "tester@strike.localhost"
+  identity: "https://forge.strike.localhost/istr/strike/bootstrap/lane.cue@refs/heads/main"
   trust:
     cert: "MIIBuzCCAWGgAwIBAgIBATAKBggqhkjOPQQDAjBEMR0wGwYDVQQKDBRzdHJpa2UgdGVzdCBtYXRlcmlhbDEjMCEGA1UEAwwac3RyaWtlIGZpeHR1cmUgdGVzdCBhbmNob3IwIBcNMjYwMTAxMDAwMDAwWhgPOTk5OTEyMzEyMzU5NTlaMEQxHTAbBgNVBAoMFHN0cmlrZSB0ZXN0IG1hdGVyaWFsMSMwIQYDVQQDDBpzdHJpa2UgZml4dHVyZSB0ZXN0IGFuY2hvcjBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABEIlSPiPt4L/teyjdERSxyoeVY+9b3O+XkjpMjLMRcWxbEzRDEy41bihcTnpSILImSVymTQl9BQZq36QpCpJQnKjQjBAMA8GA1UdEwEB/wQFMAMBAf8wDgYDVR0PAQH/BAQDAgEGMB0GA1UdDgQWBBRbcKeYF/ef9jfS9+PcRGwhCde71DAKBggqhkjOPQQDAgNIADBFAiEAgS0Tvd1/A38U+EpMiaA1GtTjXCX11rqbLgUQf5iRhhgCIDnuZnbVCpcQjNQLMsrhhzlFRTlAWOVNlS0apM4uHD/E"
 keyless:

@@ -24,7 +24,7 @@ import (
 )
 
 const (
-	goldenIdentity = "tester@strike.localhost"
+	goldenIdentity = "https://forge.strike.localhost/istr/strike/bootstrap/lane.cue@refs/heads/main"
 	goldenIssuer   = "https://keycloak.127.0.0.1.sslip.io:8443/realms/sigstore"
 )
 

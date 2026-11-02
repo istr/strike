@@ -18,7 +18,7 @@ infrastructure -- not part of the strike binary.
 
     make up
     make check-issuer   # both lines must print the same issuer string
-    make token          # print an OIDC id_token for tester@strike.localhost
+    make token          # print an OIDC id_token for the harness builder identity
     make tsa-certchain  # fetch the TSA certificate chain to pki/tsa-certchain.pem
 
 `make up` on a harness whose containers already exist prints one
@@ -71,10 +71,14 @@ is not HTTP, so Caddy cannot front it; CoreDNS terminates TLS itself under
   zone within a minute of a write that increases the SOA serial, but only a
   write that keeps the file's inode; see the bind-mount note in
   `docs/DEVELOPMENT.md` section 2.5 before editing either file.
-- `fulcio/config.yaml` -- OIDC issuer (canonical issuer, type email).
-- `keycloak/realm-export.json` -- realm `sigstore`, public client `sigstore`,
-  direct access grant on, verified test user `tester` / `tester`,
-  email `tester@strike.localhost`.
+- `fulcio/config.yaml` -- OIDC issuer (canonical issuer, type ci-provider):
+  the certificate SAN and the source extensions are rendered from token
+  claims, so the harness stands in for a forge workload identity. The SAN
+  is `https://forge.strike.localhost/istr/strike/bootstrap/lane.cue@refs/heads/main`.
+- `keycloak/realm-export.json` -- realm `sigstore`, public client `sigstore`
+  with direct access grant on, no `email` scope and hardcoded claim mappers
+  for the forge stand-in (`url`, `repository`, `ref`, `sha`, `workflow_ref`,
+  `runner_environment`); test user `tester` / `tester`.
 - `pki/` -- generated ed25519 rekor signer key and its exported public key
   (`rekor-ed25519-pub.pem`), the persistent Fulcio fileca root
   (`fulcio-root.crt` + encrypted `fulcio-root.key`), the CT log (ctfe) signer
@@ -208,8 +212,9 @@ and the per-signing leaf still rotate.
 
 1. Issuer-URL consistency -- see "Canonical issuer and trust anchor".
 2. `aud` == client-id -- token audience must equal `sigstore`.
-3. `email` + `email_verified: true` -- present via the `email` scope and the
-   verified test user.
+3. No `email` claim -- for a ci-provider issuer Fulcio checks the proof of
+   possession against `sub`, while strike signs `email` when the token
+   carries one; the client therefore has no `email` scope.
 4. Client versions -- cosign >= v3.0.1 or >= v2.6.0 for Rekor v2 (used by
    `make conformance`; see "Conformance" below).
 
@@ -233,7 +238,8 @@ Requires cosign (>= v3.0.1 or >= v2.6.0 for Rekor v2).
 Once the harness stands, the runnable smoke lane's `lane.yaml` `oidc:` block
 takes the harness values: issuer
 `https://keycloak.127.0.0.1.sslip.io:8443/realms/sigstore`, client_id `sigstore`,
-identity `tester@strike.localhost`, and trust = the certificate in
+identity `https://forge.strike.localhost/istr/strike/bootstrap/lane.cue@refs/heads/main`,
+and trust = the certificate in
 `pki/caddy-root.crt`, inlined as base64 DER. The placeholder fixtures
 (example.com) are untouched; only
 lane.yaml couples. Instruction 5 (verify) must keep the trust root

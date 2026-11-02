@@ -73,7 +73,7 @@ resolver:
 oidc:
   issuer: "https://keycloak.127.0.0.1.sslip.io:8443/realms/sigstore"
   audience: "sigstore"
-  identity: "tester@strike.localhost"
+  identity: "https://forge.strike.localhost/istr/strike/bootstrap/lane.cue@refs/heads/main"
   trust:
     cert: "__CADDY_ROOT__"
 keyless:

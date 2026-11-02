@@ -6,6 +6,7 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/transport"
+	"github.com/istr/strike/internal/verify"
 	"github.com/istr/strike/internal/wire"
 )
 
@@ -29,25 +31,40 @@ func ambientIDToken() (lane.SecretString, error) {
 	return lane.NewSecretString(tok), nil
 }
 
-// subjectFromIDToken extracts the subject Fulcio binds into the leaf
-// certificate: the email claim if present, else sub. The token is NOT
-// verified here -- Fulcio verifies it against the issuer; the subject is
-// needed client-side only for the proof of possession.
-func subjectFromIDToken(idToken lane.SecretString) (string, error) {
+// idTokenClaims are the identity-token claims strike reads before any Fulcio
+// contact: the issuer for the fail-closed pre-check, and the subject the proof
+// of possession signs.
+type idTokenClaims struct {
+	Email string `json:"email"`
+	Iss   string `json:"iss"`
+	Sub   string `json:"sub"`
+}
+
+// decodeIDTokenClaims decodes the payload of the identity token. The token is
+// NOT verified here -- Fulcio verifies it against the issuer; the claims are
+// needed client-side only.
+func decodeIDTokenClaims(idToken lane.SecretString) (idTokenClaims, error) {
 	parts := strings.Split(idToken.Expose(), ".")
 	if len(parts) < 2 {
-		return "", errors.New("keyless: malformed identity token")
+		return idTokenClaims{}, errors.New("keyless: malformed identity token")
 	}
 	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
 	if err != nil {
-		return "", fmt.Errorf("keyless: decode token payload: %w", err)
+		return idTokenClaims{}, fmt.Errorf("keyless: decode token payload: %w", err)
 	}
-	var claims struct {
-		Email string `json:"email"`
-		Sub   string `json:"sub"`
-	}
+	var claims idTokenClaims
 	if err := json.Unmarshal(payload, &claims); err != nil {
-		return "", fmt.Errorf("keyless: parse token claims: %w", err)
+		return idTokenClaims{}, fmt.Errorf("keyless: parse token claims: %w", err)
+	}
+	return claims, nil
+}
+
+// subjectFromIDToken extracts the subject the proof of possession signs: the
+// email claim if present, else sub.
+func subjectFromIDToken(idToken lane.SecretString) (string, error) {
+	claims, err := decodeIDTokenClaims(idToken)
+	if err != nil {
+		return "", err
 	}
 	if claims.Email != "" {
 		return claims.Email, nil
@@ -61,13 +78,15 @@ func subjectFromIDToken(idToken lane.SecretString) (string, error) {
 // ProduceKeylessBundles runs the keyless chain for a set of projected
 // in-toto statements: one ephemeral P-256 key and one Fulcio certificate
 // for the set, then per statement DSSE sign -> RFC3161 timestamp ->
-// Rekor v2 inclusion -> sigstore v0.3 bundle. Every failure is fatal
+// Rekor v2 inclusion -> sigstore v0.3 bundle. The certificate Fulcio issued
+// must bind the identity and issuer oidc declares before the first signature
+// (ADR-041 decision 6 as amended by ADR-057 D2). Every failure is fatal
 // (fail-closed, ADR-040 D-3b-2): a statement that cannot obtain a
 // certificate, a timestamp, or an inclusion proof yields an error, never a
 // partial bundle. Returned bundles are positionally aligned with
 // statements. The endpoints are reached through dialer, so they resolve by
 // the lane's declared resolver like every other declared peer.
-func ProduceKeylessBundles(ctx context.Context, eps lane.KeylessEndpoints, dialer *transport.Dialer, idToken lane.SecretString, statements [][]byte) ([][]byte, error) {
+func ProduceKeylessBundles(ctx context.Context, eps lane.KeylessEndpoints, dialer *transport.Dialer, idToken lane.SecretString, oidc lane.OIDCConfig, statements [][]byte) ([][]byte, error) {
 	if len(statements) == 0 {
 		return nil, errors.New("keyless: no statements")
 	}
@@ -78,6 +97,13 @@ func ProduceKeylessBundles(ctx context.Context, eps lane.KeylessEndpoints, diale
 	leafDER, err := fulcioCertificate(ctx, eps.Fulcio, dialer, idToken, key)
 	if err != nil {
 		return nil, err
+	}
+	leaf, err := x509.ParseCertificate(leafDER)
+	if err != nil {
+		return nil, fmt.Errorf("keyless: parse issued certificate: %w", err)
+	}
+	if idErr := verify.Identity(leaf, oidc.Identity, oidc.Issuer); idErr != nil {
+		return nil, fmt.Errorf("keyless: issued certificate: %w", idErr)
 	}
 	bundles := make([][]byte, len(statements))
 	for i, stmt := range statements {

@@ -43,17 +43,29 @@ func Leaf(leafDER []byte, tm *TrustedMaterial, trustedTime clock.Time, identity 
 	if len(chains) == 0 || len(chains[0]) < 2 {
 		return nil, nil, fmt.Errorf("%w: verified chain carries no issuer", ErrLeafChain)
 	}
+	if idErr := Identity(leaf, identity, issuer); idErr != nil {
+		return nil, nil, idErr
+	}
+	return leaf, chains[0][1], nil
+}
+
+// Identity checks that the leaf binds exactly the expected SAN identity and
+// OIDC issuer. Leaf applies it after the chain verifies; the keyless producer
+// applies it to the certificate Fulcio issued, before the first signature
+// (ADR-041 decision 6 as amended by ADR-057 D2), so the producer refuses a
+// mismatch by the same check the verifier makes.
+func Identity(leaf *x509.Certificate, identity primitive.StringOrURI, issuer endpoint.Address) error {
 	if !matchesIdentity(leaf, identity) {
-		return nil, nil, fmt.Errorf("%w: SAN does not carry %q", ErrIdentity, identity)
+		return fmt.Errorf("%w: SAN does not carry %q", ErrIdentity, identity)
 	}
 	gotIssuer, err := certIssuer(leaf)
 	if err != nil {
-		return nil, nil, fmt.Errorf("%w: %w", ErrIdentity, err)
+		return fmt.Errorf("%w: %w", ErrIdentity, err)
 	}
 	if gotIssuer != issuer.URL() {
-		return nil, nil, fmt.Errorf("%w: issuer %q != %q", ErrIdentity, gotIssuer, issuer.URL())
+		return fmt.Errorf("%w: issuer %q != %q", ErrIdentity, gotIssuer, issuer.URL())
 	}
-	return leaf, chains[0][1], nil
+	return nil
 }
 
 func matchesIdentity(leaf *x509.Certificate, identity primitive.StringOrURI) bool {

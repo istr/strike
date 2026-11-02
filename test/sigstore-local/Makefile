@@ -2,6 +2,7 @@
 # docker compose. Not part of the strike trusted binary.
 COMPOSE   ?= podman compose
 ISSUER    := https://keycloak.127.0.0.1.sslip.io:8443/realms/sigstore
+IDENTITY  := https://forge.strike.localhost/istr/strike/bootstrap/lane.cue@refs/heads/main
 DISCOVERY := $(ISSUER)/.well-known/openid-configuration
 CADDY_ROOT := pki/caddy-root.crt
 
@@ -72,7 +73,7 @@ check-issuer: ## verify the issuer resolves identically from host and in-network
 	@echo "== in-network (same vantage as Fulcio) =="
 	$(COMPOSE) --profile tools run --rm probe -sk $(DISCOVERY) | grep -o '"issuer":"[^"]*"'
 
-token: $(CADDY_ROOT) ## print an OIDC id_token for tester@strike.localhost (aud sigstore)
+token: $(CADDY_ROOT) ## print an OIDC id_token for the harness builder identity (aud sigstore)
 	@curl --cacert $(CADDY_ROOT) -sf \
 	  -d grant_type=password -d client_id=sigstore \
 	  -d username=tester -d password=tester -d scope=openid \
@@ -127,7 +128,7 @@ conformance: ## cosign independent-verify of the golden bundles, offline (sealed
 	@if cosign verify-blob-attestation \
 	  --bundle ../../internal/verify/testdata/golden/sealed.sigstore.json \
 	  --trusted-root ../../internal/verify/testdata/golden/trusted_root.json \
-	  --certificate-identity tester@strike.localhost \
+	  --certificate-identity $(IDENTITY) \
 	  --certificate-oidc-issuer $(ISSUER) \
 	  --type https://slsa.dev/provenance/v1 \
 	  --check-claims=false >/dev/null 2>&1; then \
@@ -140,7 +141,7 @@ conformance: ## cosign independent-verify of the golden bundles, offline (sealed
 	  if cosign verify-blob-attestation \
 	      --bundle ../../internal/verify/testdata/golden/$$1.sigstore.json \
 	      --trusted-root ../../internal/verify/testdata/golden/trusted_root.json \
-	      --certificate-identity tester@strike.localhost \
+	      --certificate-identity $(IDENTITY) \
 	      --certificate-oidc-issuer $(ISSUER) \
 	      --type $$2 --check-claims=false >/dev/null 2>&1; then \
 	    echo "  OK   $$1 (reported, non-gating)"; \

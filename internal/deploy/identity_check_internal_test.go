@@ -12,44 +12,51 @@ import (
 	"github.com/istr/strike/internal/record"
 )
 
-// fakeIDToken builds an unsigned JWT whose payload carries the given email
-// claim. subjectFromIDToken does not verify tokens, so header and signature
+// fakeIDToken builds an unsigned JWT whose payload carries the given issuer
+// claim. decodeIDTokenClaims does not verify tokens, so header and signature
 // are placeholders.
-func fakeIDToken(email string) string {
-	payload := base64.RawURLEncoding.EncodeToString([]byte(`{"email":"` + email + `"}`))
+func fakeIDToken(iss string) string {
+	payload := base64.RawURLEncoding.EncodeToString([]byte(`{"iss":"` + iss + `"}`))
 	return "e30." + payload + ".x"
 }
 
-// TestSignStatementsRejectsMismatchedTokenIdentity proves the fail-closed
-// declared-identity check: a real-path deploy (produceBundles == nil) whose
-// ambient token subject differs from the lane-declared oidc identity aborts
-// before any keyless endpoint is contacted. Hermetic: the mismatch fires
-// before the produce closure exists, so no network is touched.
-func TestSignStatementsRejectsMismatchedTokenIdentity(t *testing.T) {
-	t.Setenv("SIGSTORE_ID_TOKEN", fakeIDToken("attacker@evil.example"))
-
-	d := &Deployer{
-		OIDC: lane.OIDCConfig{
-			Issuer:   endpoint.MustParseURL("https://idp.example.com"),
-			Identity: "strike@example.com",
-		},
+// TestSignStatementsRejectsTokenBeforeFulcio proves the fail-closed pre-check:
+// a real-path deploy (produceBundles == nil) whose ambient token is malformed
+// or names an issuer other than the lane-declared one aborts before any
+// keyless endpoint is contacted. Hermetic: the abort fires before the produce
+// closure exists, so no network is touched.
+func TestSignStatementsRejectsTokenBeforeFulcio(t *testing.T) {
+	tests := []struct {
+		name    string
+		token   string
+		wantErr string
+	}{
+		{name: "foreign issuer", token: fakeIDToken("https://evil.example"), wantErr: "does not match the lane-declared issuer"},
+		{name: "malformed token", token: "not-a-jwt", wantErr: "malformed identity token"},
 	}
-	att := &Attestation{
-		Sealed: Sealed{
-			LaneID:     "demo",
-			LaneDigest: "",
-			Artifacts: map[primitive.Identifier]record.Artifact{
-				"b-image": {Digest: primitive.DigestFromHex(strings.Repeat("b", 64))},
-			},
-			Peers: map[primitive.Identifier][]lane.Peer{},
-		},
-	}
-
-	_, err := d.signStatements(context.Background(), att, "deploy-step")
-	if err == nil {
-		t.Fatal("expected the mismatched token identity to abort signing")
-	}
-	if !strings.Contains(err.Error(), "does not match the lane-declared identity") {
-		t.Fatalf("wrong error: %v", err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("SIGSTORE_ID_TOKEN", tt.token)
+			d := &Deployer{
+				OIDC: lane.OIDCConfig{
+					Issuer:   endpoint.MustParseURL("https://idp.example.com"),
+					Identity: "strike@example.com",
+				},
+			}
+			att := &Attestation{
+				Sealed: Sealed{
+					LaneID:     "demo",
+					LaneDigest: "",
+					Artifacts: map[primitive.Identifier]record.Artifact{
+						"b-image": {Digest: primitive.DigestFromHex(strings.Repeat("b", 64))},
+					},
+					Peers: map[primitive.Identifier][]lane.Peer{},
+				},
+			}
+			_, err := d.signStatements(context.Background(), att, "deploy-step")
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("err = %v, want an error containing %q", err, tt.wantErr)
+			}
+		})
 	}
 }

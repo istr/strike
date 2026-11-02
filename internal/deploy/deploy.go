@@ -532,21 +532,22 @@ func (d *Deployer) signStatements(ctx context.Context, att *Attestation, stepID 
 		if tErr != nil {
 			return nil, fmt.Errorf("step %q: %w", stepID, tErr)
 		}
-		// Observation over declaration, fail-closed at the source: the
-		// token's subject is the observed signing identity, the lane's
-		// oidc.identity the declared one. A mismatch aborts the deploy
-		// before any Fulcio contact instead of producing a bundle the
-		// verifier rejects against the same declaration later.
-		subject, sErr := subjectFromIDToken(token)
-		if sErr != nil {
-			return nil, fmt.Errorf("step %q: %w", stepID, sErr)
+		// Fail-closed before any Fulcio contact: the token's issuer is the
+		// lane-declared issuer, or the deploy aborts. The identity is
+		// checked on the certificate Fulcio issues, before the first
+		// signature, because claim names differ per provider and the
+		// certificate is what the verifier sees (ADR-041 decision 6 as
+		// amended by ADR-057 D2).
+		claims, cErr := decodeIDTokenClaims(token)
+		if cErr != nil {
+			return nil, fmt.Errorf("step %q: %w", stepID, cErr)
 		}
-		if subject != d.OIDC.Identity.String() {
-			return nil, fmt.Errorf("step %q: keyless: token identity %q does not match the lane-declared identity %q",
-				stepID, subject, d.OIDC.Identity)
+		if claims.Iss != d.OIDC.Issuer.URL() {
+			return nil, fmt.Errorf("step %q: keyless: token issuer %q does not match the lane-declared issuer %q",
+				stepID, claims.Iss, d.OIDC.Issuer.URL())
 		}
 		produce = func(ctx context.Context, eps lane.KeylessEndpoints, stmts [][]byte) ([][]byte, error) {
-			return ProduceKeylessBundles(ctx, eps, d.Dialer, token, stmts)
+			return ProduceKeylessBundles(ctx, eps, d.Dialer, token, d.OIDC, stmts)
 		}
 	}
 	bundles, err := produce(ctx, d.Keyless.Endpoints, statements)
