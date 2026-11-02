@@ -112,19 +112,19 @@ var derBlobs = []derBlob{
 		label:  "golden trusted root: harness TSA timestamping leaf",
 	},
 	{
-		digest: "742e965ad7294d416b0a6f78f10e9598440d91739a3f7e696debd0e9376c2b0c",
+		digest: "bc426ee6f6f6dd7f2c6cfabd43be7ccabf71d8ab49caff11064333ede5f3d55f",
 		label:  "golden bundles: Fulcio leaf for the harness builder identity",
 	},
 	{
-		digest: "8e856654b45c3ba4772514974914accb07a99c6b47a70681196d6635fad025e0",
+		digest: "27b7e749c0e856548c100129ba1ecda61b8d6bbc6ba33a830c89b39981a7d195",
 		label:  "golden sealed bundle: RFC3161 timestamp token",
 	},
 	{
-		digest: "d661b3076ce5d65a1d5bd712787734cb675bc5cab54e68f934c4d4d3113fbb46",
+		digest: "d905c9d2b835d4359fe549f7105d314cc2ae8b0633ad2cb7082dd226f44b5fc1",
 		label:  "golden engine-dependent bundle: RFC3161 timestamp token",
 	},
 	{
-		digest: "e8616103204b54f37c2c24356a53be8b0d0f8e0fe6bc7921c42caeece93adc80",
+		digest: "e9793d6094e61c1c47d066f5de396d5056bad1e8ab5b85017f111611ae07e3fb",
 		label:  "golden informational bundle: RFC3161 timestamp token",
 	},
 
