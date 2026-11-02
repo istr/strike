@@ -46,7 +46,8 @@ const (
 // would restore it and skip the create the test is about.
 const materializeLaneTemplate = `name: materialize-itest
 id: materialize-itest
-secrets: {}
+secrets:
+  builder-token: "env://SIGSTORE_ID_TOKEN"
 resolver:
   adn: resolver.127.0.0.1.sslip.io
   ip: 127.0.0.1
@@ -57,6 +58,9 @@ oidc:
   issuer: "https://keycloak.127.0.0.1.sslip.io:8443/realms/sigstore"
   audience: "sigstore"
   identity: "https://forge.strike.localhost/istr/strike/bootstrap/lane.cue@refs/heads/main"
+  extensions:
+    sourceRepositoryRef: "refs/heads/main"
+  token: builder-token
   trust:
     cert: "__CADDY_ROOT__"
 keyless:

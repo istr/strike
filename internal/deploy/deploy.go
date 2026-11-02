@@ -16,6 +16,7 @@ import (
 	"log"
 	"net/http"
 	"net/netip"
+	"os"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
@@ -185,6 +186,7 @@ type Deployer struct {
 	Engine          container.Engine
 	DAG             *lane.DAG
 	Lane            *lane.Lane // full lane, for region output-declaration lookup (ADR-051 D9)
+	LaneRoot        *os.Root   // lane directory scope; resolves a file:// source of the oidc token (ADR-058 D4)
 	EngineID        *container.EngineIdentity
 	CA              *transport.EphemeralCA
 	Dialer          *transport.Dialer
@@ -528,23 +530,9 @@ func (d *Deployer) signStatements(ctx context.Context, att *Attestation, stepID 
 	}
 	produce := d.produceBundles
 	if produce == nil {
-		token, tErr := ambientIDToken()
+		token, tErr := d.builderToken()
 		if tErr != nil {
 			return nil, fmt.Errorf("step %q: %w", stepID, tErr)
-		}
-		// Fail-closed before any Fulcio contact: the token's issuer is the
-		// lane-declared issuer, or the deploy aborts. The identity is
-		// checked on the certificate Fulcio issues, before the first
-		// signature, because claim names differ per provider and the
-		// certificate is what the verifier sees (ADR-041 decision 6 as
-		// amended by ADR-057 D2).
-		claims, cErr := decodeIDTokenClaims(token)
-		if cErr != nil {
-			return nil, fmt.Errorf("step %q: %w", stepID, cErr)
-		}
-		if claims.Iss != d.OIDC.Issuer.URL() {
-			return nil, fmt.Errorf("step %q: keyless: token issuer %q does not match the lane-declared issuer %q",
-				stepID, claims.Iss, d.OIDC.Issuer.URL())
 		}
 		produce = func(ctx context.Context, eps lane.KeylessEndpoints, stmts [][]byte) ([][]byte, error) {
 			return ProduceKeylessBundles(ctx, eps, d.Dialer, token, d.OIDC, stmts)

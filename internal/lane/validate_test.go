@@ -1,6 +1,8 @@
 package lane_test
 
 import (
+	"io/fs"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -79,5 +81,74 @@ func TestValidateLane_Reject(t *testing.T) {
 					path, err.Error(), tc.wantContains)
 			}
 		})
+	}
+}
+
+// TestValidateLane_RejectOIDCDeclarations derives each case from the valid
+// deploy fixture by one text replacement and asserts the declaration check
+// that rejects it: the source-pin minimum, the URI-reference grammar of the
+// oidc and base-SBOM signer pins, and the builder token's declaration and
+// confinement to the deploy.
+func TestValidateLane_RejectOIDCDeclarations(t *testing.T) {
+	base, err := fs.ReadFile(os.DirFS("testdata"), "valid_deploy_minimal.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const refPin = "    sourceRepositoryRef: \"refs/heads/main\"\n"
+	tests := []struct {
+		name         string
+		old          string
+		new          string
+		wantContains string
+	}{
+		{"no source pin", refPin, "    runnerEnvironment: \"self-hosted\"\n", "declare sourceRepositoryRef or sourceRepositoryDigest"},
+		{"oidc uri pin with space", refPin, refPin + "    sourceRepositoryURI: \"https://forge.example/a b\"\n", "oidc extensions sourceRepositoryURI"},
+		{"oidc build config pin with space", refPin, refPin + "    sourceRepositoryURI: \"https://forge.example/o/r\"\n    buildConfigURI: \"https://forge.example/a b\"\n", "oidc extensions buildConfigURI"},
+		{"undeclared token", "  token: builder-token\n", "  token: other-token\n", "oidc token \"other-token\" is not declared"},
+		{"token reaches a step", "    secrets: []\n", "    secrets: [{name: builder-token, env: TOKEN}]\n", "is the oidc token"},
+		{"signer uri pin with space", "steps:\n", "baseSbomSigners:\n  - issuer: \"https://accounts.google.com\"\n    identity: \"sbom@example.com\"\n    extensions:\n      sourceRepositoryURI: \"https://forge.example/a b\"\nsteps:\n", "baseSbomSigners[0] extensions sourceRepositoryURI"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if !strings.Contains(string(base), tc.old) {
+				t.Fatalf("fixture does not contain %q", tc.old)
+			}
+			path := filepath.Join(t.TempDir(), "lane.yaml")
+			if err := os.WriteFile(path, []byte(strings.Replace(string(base), tc.old, tc.new, 1)), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			err := parseAndValidate(t, path)
+			if err == nil || !strings.Contains(err.Error(), tc.wantContains) {
+				t.Fatalf("err = %v, want an error containing %q", err, tc.wantContains)
+			}
+		})
+	}
+}
+
+// TestParse_OIDCExtensionGrammar proves the schema grammars of the pin types:
+// a ref outside git check-ref-format, a digest that is not a commit, and a
+// runner environment outside the label grammar fail at parse.
+func TestParse_OIDCExtensionGrammar(t *testing.T) {
+	base, err := fs.ReadFile(os.DirFS("testdata"), "valid_deploy_minimal.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const refPin = "    sourceRepositoryRef: \"refs/heads/main\"\n"
+	for _, pin := range []string{
+		"    sourceRepositoryRef: \"refs/heads/a..b\"\n",
+		refPin + "    sourceRepositoryDigest: \"abc123\"\n",
+		refPin + "    runnerEnvironment: \"Self-Hosted\"\n",
+	} {
+		path := filepath.Join(t.TempDir(), "lane.yaml")
+		if err := os.WriteFile(path, []byte(strings.Replace(string(base), refPin, pin, 1)), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		fp, err := lane.NewFilePath(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, _, _, err := lane.Parse(fp); err == nil || !strings.Contains(err.Error(), "validation") {
+			t.Errorf("pin %q: err = %v, want a schema validation error", pin, err)
+		}
 	}
 }

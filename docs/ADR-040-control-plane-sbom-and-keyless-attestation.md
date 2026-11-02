@@ -354,3 +354,35 @@ its base-image SBOM resolution order." is read as: "Retains ADR-019's
 referrer attachment as OCI 1.1 referrers through the referrers API,
 without a tag fallback, and its base-image SBOM resolution order reduced
 to the referrers API."
+
+## Amendment 2026-11-02 -- D2 and D5: the builder token is declared, the identity carries extension pins
+
+[ADR-057](ADR-057-release-authorization-two-signatures.md) D2 declares the
+builder's identity as issuer, SAN and a closed block of Fulcio extension
+pins, and [ADR-058](ADR-058-registry-client-identity-workload-token.md) D4
+bounds a delivered identity token by declaration and lifetime. The lane's
+`oidc` block now carries both. `oidc.extensions` pins
+`sourceRepositoryURI`, `sourceRepositoryDigest`, `sourceRepositoryRef`,
+`buildConfigURI` and `runnerEnvironment`, each matched verbatim where
+declared and ignored where not, and requires `sourceRepositoryRef` or
+`sourceRepositoryDigest`. The producer checks the pins on the certificate
+Fulcio issued, before the first signature, and `strike verify` checks
+them on every provenance bundle, decoded on the same path as the issuer
+extension. The sealed provenance keeps issuer and identity; the pins are
+verifier policy. `oidc.token` names the `lane.secrets` entry that
+delivers the builder token: the deploy reads it there, requires its
+issuer to be the declared issuer, and refuses it when its lifetime
+exceeds fifteen minutes, and no step may reference it. A base-SBOM
+signer may declare the same extension block, optional and without a
+minimum, because it admits a provider's SBOMs rather than binding a
+release to a source, and a digest pin would bind a single build.
+
+**Supersedes, in the 3b amendment of D2 above:** "the token is ambient
+(`SIGSTORE_ID_TOKEN`, D-3b-4), never interactive" is read as: "the token
+is delivered through the `lane.secrets` entry that `oidc.token` names,
+read at the deploy under the lifetime bound of ADR-058 D4, never
+interactive". **In D5 above:** "cert issuer equals declared issuer, and
+cert SAN equals declared identity" is read as: "cert issuer equals
+declared issuer, cert SAN equals declared identity, and every declared
+extension pin equals the certificate's extension of that name (ADR-057
+D2)".

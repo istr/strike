@@ -256,7 +256,7 @@ func TestRunVerifySubjectMismatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse golden trusted root: %v", err)
 	}
-	stmt, err := verify.New(tm, goldenIdentity, endpoint.MustParseURL(goldenIssuer)).Verify(bundle)
+	stmt, err := verify.New(tm, goldenIdentity, endpoint.MustParseURL(goldenIssuer), nil).Verify(bundle)
 	if err != nil {
 		t.Fatalf("golden bundle must verify under the golden policy: %v", err)
 	}

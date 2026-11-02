@@ -48,7 +48,8 @@ func TestResolver_ValidNoPort(t *testing.T) {
 	yaml := []byte(withAnchor(`
 name: resolver-ipv4
 id: resolver-ipv4
-secrets: {}
+secrets:
+  builder-token: "env://SIGSTORE_ID_TOKEN"
 resolver:
   adn: one.one.one.one
   ip: 1.1.1.1
@@ -58,6 +59,9 @@ oidc:
   issuer: "https://idp.example.com"
   audience: "strike"
   identity: "strike@example.com"
+  extensions:
+    sourceRepositoryRef: "refs/heads/main"
+  token: builder-token
   trust:
     cert: "@anchor@"
 keyless:
@@ -128,7 +132,8 @@ func TestResolver_ValidWithPort(t *testing.T) {
 	yaml := []byte(withAnchor(`
 name: resolver-ipv4-port
 id: resolver-ipv4-port
-secrets: {}
+secrets:
+  builder-token: "env://SIGSTORE_ID_TOKEN"
 resolver:
   adn: one.one.one.one
   ip: 1.1.1.1
@@ -139,6 +144,9 @@ oidc:
   issuer: "https://idp.example.com"
   audience: "strike"
   identity: "strike@example.com"
+  extensions:
+    sourceRepositoryRef: "refs/heads/main"
+  token: builder-token
   trust:
     cert: "@anchor@"
 keyless:

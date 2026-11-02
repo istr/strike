@@ -59,7 +59,7 @@ func goldenMaterial(t *testing.T) *verify.TrustedMaterial {
 
 func strikeVerifier(t *testing.T) *verify.Verifier {
 	t.Helper()
-	return verify.New(goldenMaterial(t), goldenIdentity, endpoint.MustParseURL(goldenIssuer))
+	return verify.New(goldenMaterial(t), goldenIdentity, endpoint.MustParseURL(goldenIssuer), nil)
 }
 
 // sigstoreAccepts runs the bundle through sigstore-go as the differential
@@ -182,13 +182,13 @@ func TestGoldenTamperMatrix(t *testing.T) {
 
 	// Policy mutations: strike's own checks.
 	t.Run("identity", func(t *testing.T) {
-		wrong := verify.New(goldenMaterial(t), "attacker@evil", endpoint.MustParseURL(goldenIssuer))
+		wrong := verify.New(goldenMaterial(t), "attacker@evil", endpoint.MustParseURL(goldenIssuer), nil)
 		if _, err := wrong.Verify(golden); err == nil {
 			t.Error("strike accepted a bundle under the wrong identity")
 		}
 	})
 	t.Run("issuer", func(t *testing.T) {
-		wrong := verify.New(goldenMaterial(t), goldenIdentity, endpoint.MustParseURL("https://evil.example"))
+		wrong := verify.New(goldenMaterial(t), goldenIdentity, endpoint.MustParseURL("https://evil.example"), nil)
 		if _, err := wrong.Verify(golden); err == nil {
 			t.Error("strike accepted a bundle under the wrong issuer")
 		}
@@ -314,7 +314,7 @@ func TestGoldenCTMutations(t *testing.T) {
 			if err != nil {
 				t.Fatalf("ParseTrustedRoot: %v", err)
 			}
-			_, verifyErr := verify.New(tm, goldenIdentity, endpoint.MustParseURL(goldenIssuer)).Verify(golden)
+			_, verifyErr := verify.New(tm, goldenIdentity, endpoint.MustParseURL(goldenIssuer), nil).Verify(golden)
 			if !errors.Is(verifyErr, verify.ErrSCT) {
 				t.Errorf("got %v, want ErrSCT", verifyErr)
 			}

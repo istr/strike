@@ -44,6 +44,23 @@ _sha256Hex: "[a-f0-9]{64}"
 // #GitCommit is a git object name: 40-hex SHA-1 or 64-hex SHA-256.
 #GitCommit: =~"^[a-f0-9]{40}$|^\(_sha256Hex)$"
 
+// #GitRef is a git reference name under the rules of git check-ref-format:
+// no ASCII control character, space, '~', '^', ':', '?', '*', '[' or '\',
+// no "..", no "@{", no component that begins with '.' or ends with
+// ".lock", no leading, trailing or doubled '/', no trailing '.', and not
+// the single character '@'. A "refs/" prefix is not required: a CI provider
+// that passes a raw claim may carry a short name.
+#GitRef: =~"^[^\\x00-\\x20\\x7f~^:?*\\[\\\\]+$" &
+	!~"\\.\\." &
+	!~"@\\{" &
+	!~"^/" &
+	!~"/$" &
+	!~"//" &
+	!~"(^|/)\\." &
+	!~"\\.lock(/|$)" &
+	!~"\\.$" &
+	!="@"
+
 // #Sha256 is a bare lowercase 64-hex sha256 digest (no algorithm prefix).
 // For the prefixed "sha256:<hex>" form use #Digest.
 #Sha256: =~"^\(_sha256Hex)$"
@@ -91,3 +108,15 @@ _sha256Hex: "[a-f0-9]{64}"
 // scheme. The colon-implies-URI rule and non-emptiness are not encoded here;
 // StringOrURI.Validate enforces them after parse.
 #StringOrURI: string
+
+// #URIReference is an RFC 3986 URI-reference, absolute or relative: the form
+// a Fulcio source-repository or build-config extension carries, which SHOULD
+// be a fully qualified URL but may omit the scheme. Non-emptiness, the
+// absence of whitespace and control characters, and parseability are not
+// encoded here; URIReference.Validate enforces them after parse.
+#URIReference: string
+
+// #RunnerEnvironment is a Fulcio runner-environment value: lowercase
+// alphanumeric words joined by '-', such as "github-hosted" or
+// "self-hosted".
+#RunnerEnvironment: =~"^[a-z0-9]+(-[a-z0-9]+)*$"

@@ -10,7 +10,8 @@
 # what matters is that lane.Parse accepts it and seals its digest.
 name: golden-lane
 id: golden-lane
-secrets: {}
+secrets:
+  builder-token: "env://SIGSTORE_ID_TOKEN"
 resolver:
   adn: one.one.one.one
   ip: 1.1.1.1
@@ -20,6 +21,13 @@ oidc:
   issuer: "https://keycloak.127.0.0.1.sslip.io:8443/realms/sigstore"
   audience: "sigstore"
   identity: "https://forge.strike.localhost/istr/strike/bootstrap/lane.cue@refs/heads/main"
+  extensions:
+    sourceRepositoryURI: "https://forge.strike.localhost/istr/strike"
+    sourceRepositoryDigest: "0000000000000000000000000000000000000000"
+    sourceRepositoryRef: "refs/heads/main"
+    buildConfigURI: "https://forge.strike.localhost/istr/strike/bootstrap/lane.cue@refs/heads/main"
+    runnerEnvironment: "self-hosted"
+  token: builder-token
   trust:
     cert: "MIIBuzCCAWGgAwIBAgIBATAKBggqhkjOPQQDAjBEMR0wGwYDVQQKDBRzdHJpa2UgdGVzdCBtYXRlcmlhbDEjMCEGA1UEAwwac3RyaWtlIGZpeHR1cmUgdGVzdCBhbmNob3IwIBcNMjYwMTAxMDAwMDAwWhgPOTk5OTEyMzEyMzU5NTlaMEQxHTAbBgNVBAoMFHN0cmlrZSB0ZXN0IG1hdGVyaWFsMSMwIQYDVQQDDBpzdHJpa2UgZml4dHVyZSB0ZXN0IGFuY2hvcjBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABEIlSPiPt4L/teyjdERSxyoeVY+9b3O+XkjpMjLMRcWxbEzRDEy41bihcTnpSILImSVymTQl9BQZq36QpCpJQnKjQjBAMA8GA1UdEwEB/wQFMAMBAf8wDgYDVR0PAQH/BAQDAgEGMB0GA1UdDgQWBBRbcKeYF/ef9jfS9+PcRGwhCde71DAKBggqhkjOPQQDAgNIADBFAiEAgS0Tvd1/A38U+EpMiaA1GtTjXCX11rqbLgUQf5iRhhgCIDnuZnbVCpcQjNQLMsrhhzlFRTlAWOVNlS0apM4uHD/E"
 keyless:

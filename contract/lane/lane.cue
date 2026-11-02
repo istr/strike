@@ -59,14 +59,33 @@ import (
 // IdP is a declared peer; trust pins its endpoints with the same
 // endpoint.#Certificate anchor endpoint.#TLS.trust carries. validate/dag check
 // declaration only and never contact the IdP; the live keyless flow runs at
-// the sign step of run.
+// the sign step of run. extensions pins the Fulcio extensions of the
+// certificate the builder's identity is checked on (ADR-057 D2); token names
+// the lane.secrets entry that delivers the builder's identity token to the
+// deploy, and no step may reference it (ADR-058 D4).
 #OIDCConfig: {
 	@go(OIDCConfig)
 
-	issuer:   endpoint.#URL          @go(Issuer,type="github.com/istr/strike/contract/endpoint".Address) // iss / issuer-url; config only, no IdP contact at validate/dag
-	audience: string                 @go(Audience)                                                       // aud
-	identity: primitive.#StringOrURI @go(Identity)                                                       // expected SAN subject Fulcio writes into the cert
-	trust:    endpoint.#Certificate  @go(Trust,type="github.com/istr/strike/contract/endpoint".Certificate)
+	issuer:     endpoint.#URL          @go(Issuer,type="github.com/istr/strike/contract/endpoint".Address) // iss / issuer-url; config only, no IdP contact at validate/dag
+	audience:   string                 @go(Audience)                                                       // aud
+	identity:   primitive.#StringOrURI @go(Identity)                                                       // expected SAN subject Fulcio writes into the cert
+	extensions: #FulcioExtensions      @go(Extensions)                                                     // sourceRepositoryRef or sourceRepositoryDigest required
+	token:      primitive.#Identifier  @go(Token)                                                          // lane.secrets key of the builder token
+	trust:      endpoint.#Certificate  @go(Trust,type="github.com/istr/strike/contract/endpoint".Certificate)
+}
+
+// FulcioExtensions pins source facts of a Fulcio certificate (ADR-057 D2):
+// each declared field must equal the certificate's extension of that name
+// verbatim, and an omitted field is not checked. The OIDs are Fulcio's
+// 1.3.6.1.4.1.57264.1.N, each value a DER UTF8String.
+#FulcioExtensions: {
+	@go(FulcioExtensions)
+
+	sourceRepositoryURI?:    primitive.#URIReference      @go(SourceRepositoryURI,optional=nillable)    // .12
+	sourceRepositoryDigest?: primitive.#GitCommit         @go(SourceRepositoryDigest,optional=nillable) // .13
+	sourceRepositoryRef?:    primitive.#GitRef            @go(SourceRepositoryRef,optional=nillable)    // .14
+	buildConfigURI?:         primitive.#URIReference      @go(BuildConfigURI,optional=nillable)         // .18
+	runnerEnvironment?:      primitive.#RunnerEnvironment @go(RunnerEnvironment,optional=nillable)      // .11
 }
 
 // KeylessEndpoints declares the sigstore services the keyless chain dials
@@ -99,7 +118,9 @@ import (
 // SBOMSigner is a trusted signer of a base-image SBOM (ADR-040 D1, option ii).
 // A base SBOM referrer is lifted to the sealed layer only if its sigstore
 // signature verifies against one of the lane's declared signers: the Fulcio
-// certificate's OIDC issuer equals issuer and its SAN equals identity.
+// certificate's OIDC issuer equals issuer, its SAN equals identity, and every
+// extension it pins matches. The extensions block is optional and has no
+// minimum: it admits a provider's SBOMs rather than binding one build.
 // Declaring a provider once covers every base SBOM that provider signs -- no
 // per-SBOM digest pinning. The list is optional: a lane whose bases are fully
 // catalogable in-process needs none. Fail-closed: a base SBOM matching no
@@ -109,8 +130,9 @@ import (
 #SBOMSigner: {
 	@go(SBOMSigner)
 
-	issuer:   endpoint.#URL          @go(Issuer,type="github.com/istr/strike/contract/endpoint".Address) // expected Fulcio cert OIDC issuer
-	identity: primitive.#StringOrURI @go(Identity)                                                       // expected cert SAN (exact match)
+	issuer:      endpoint.#URL          @go(Issuer,type="github.com/istr/strike/contract/endpoint".Address) // expected Fulcio cert OIDC issuer
+	identity:    primitive.#StringOrURI @go(Identity)                                                       // expected cert SAN (exact match)
+	extensions?: #FulcioExtensions      @go(Extensions,optional=nillable)                                   // optional extension pins, no minimum
 }
 
 // ---------------------------------------------------------------------------

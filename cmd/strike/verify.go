@@ -59,6 +59,7 @@ func cmdVerify(args []string) {
 // in UC1, where there is no lane to bind the attestation to).
 type verifyPolicy struct {
 	keyless    lane.Keyless
+	extensions *lane.FulcioExtensions
 	identity   primitive.StringOrURI
 	issuer     endpoint.Address
 	laneDigest primitive.Digest
@@ -84,7 +85,7 @@ func resolveVerifyPolicy(opts verifyOptions) (verifyPolicy, error) {
 		if err != nil {
 			return verifyPolicy{}, err
 		}
-		return verifyPolicy{keyless: p.Keyless, identity: p.OIDC.Identity, issuer: p.OIDC.Issuer, laneDigest: dg}, nil
+		return verifyPolicy{keyless: p.Keyless, extensions: &p.OIDC.Extensions, identity: p.OIDC.Identity, issuer: p.OIDC.Issuer, laneDigest: dg}, nil
 	}
 	if opts.identity == "" || opts.issuer == "" {
 		return verifyPolicy{}, fmt.Errorf("UC1 requires both --identity and --issuer")
@@ -225,7 +226,7 @@ func runVerify(ctx context.Context, out io.Writer, opts verifyOptions) error {
 		return fmt.Errorf("no attestation bundles attached to %s", opts.subjectRef)
 	}
 
-	v := verify.New(tm, pol.identity, pol.issuer)
+	v := verify.New(tm, pol.identity, pol.issuer, pol.extensions)
 	seen := make(map[record.TrustLayer]bool, len(bundles))
 	var sealedFail, engineDependentFail bool
 	for _, b := range bundles {

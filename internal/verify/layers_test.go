@@ -12,6 +12,7 @@ import (
 	"encoding/asn1"
 	"errors"
 	"math/big"
+	"strings"
 	"testing"
 
 	"github.com/digitorus/timestamp"
@@ -24,6 +25,8 @@ import (
 
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/endpoint"
+	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/verify"
 	"github.com/istr/strike/internal/wire"
 )
@@ -346,11 +349,91 @@ func TestParseBundle(t *testing.T) {
 	}
 }
 
+// TestIdentityExtensionPins covers the extension pins of verify.Identity on
+// self-signed leaves: Identity reads the leaf alone and verifies no chain.
+func TestIdentityExtensionPins(t *testing.T) {
+	utf8String := func(s string) []byte {
+		b, err := asn1.MarshalWithParams(s, "utf8")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return b
+	}
+	ext := func(n int, v []byte) pkix.Extension {
+		return pkix.Extension{Id: asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 57264, 1, n}, Value: v}
+	}
+	mint := func(exts ...pkix.Extension) *x509.Certificate {
+		key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		if err != nil {
+			t.Fatal(err)
+		}
+		now := clock.Wall()
+		return selfSign(t, &x509.Certificate{
+			SerialNumber:    big.NewInt(9),
+			NotBefore:       now.Add(-clock.Minute),
+			NotAfter:        now.Add(10 * clock.Minute),
+			EmailAddresses:  []string{testIdentity},
+			ExtraExtensions: append([]pkix.Extension{ext(8, utf8String(testIssuer))}, exts...),
+		}, key)
+	}
+	full := mint(
+		ext(11, utf8String("self-hosted")),
+		ext(12, utf8String("https://forge.example/o/r")),
+		ext(13, utf8String("0000000000000000000000000000000000000000")),
+		ext(14, utf8String("refs/heads/main")),
+		ext(18, utf8String("https://forge.example/o/r/build.yaml@refs/heads/main")),
+	)
+	bare := mint()
+	broken := mint(ext(14, []byte{0x0c, 0x05, 'x'}))
+
+	uri := primitive.URIReference("https://forge.example/o/r")
+	digest := primitive.GitCommit("0000000000000000000000000000000000000000")
+	ref := primitive.GitRef("refs/heads/main")
+	otherRef := primitive.GitRef("refs/heads/other")
+	build := primitive.URIReference("https://forge.example/o/r/build.yaml@refs/heads/main")
+	env := primitive.RunnerEnvironment("self-hosted")
+	all := &lane.FulcioExtensions{
+		SourceRepositoryURI:    &uri,
+		SourceRepositoryDigest: &digest,
+		SourceRepositoryRef:    &ref,
+		BuildConfigURI:         &build,
+		RunnerEnvironment:      &env,
+	}
+
+	tests := []struct {
+		leaf    *x509.Certificate
+		ext     *lane.FulcioExtensions
+		name    string
+		wantErr string
+	}{
+		{name: "no block", leaf: bare, ext: nil},
+		{name: "empty block", leaf: bare, ext: &lane.FulcioExtensions{}},
+		{name: "all five match", leaf: full, ext: all},
+		{name: "ref differs", leaf: full, ext: &lane.FulcioExtensions{SourceRepositoryRef: &otherRef}, wantErr: "sourceRepositoryRef"},
+		{name: "extension absent", leaf: bare, ext: &lane.FulcioExtensions{SourceRepositoryRef: &ref}, wantErr: "no sourceRepositoryRef extension"},
+		{name: "extension undecodable", leaf: broken, ext: &lane.FulcioExtensions{SourceRepositoryRef: &ref}, wantErr: "decode sourceRepositoryRef extension"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := verify.Identity(tt.leaf, testIdentity, endpoint.MustParseURL(testIssuer), tt.ext)
+			if tt.wantErr == "" {
+				if err != nil {
+					t.Fatalf("Identity: %v", err)
+				}
+				return
+			}
+			if !errors.Is(err, verify.ErrIdentity) || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("err = %v, want ErrIdentity containing %q", err, tt.wantErr)
+			}
+		})
+	}
+}
+
 func TestLeafAndDSSE(t *testing.T) {
 	p := newTestPKI(t)
 	tm := p.material(t)
 
-	leaf, ca, err := verify.Leaf(p.leaf.Raw, tm, p.now, testIdentity, endpoint.MustParseURL(testIssuer))
+	leaf, ca, err := verify.Leaf(p.leaf.Raw, tm, p.now, testIdentity, endpoint.MustParseURL(testIssuer), nil)
 	if err != nil {
 		t.Fatalf("Leaf (happy): %v", err)
 	}
@@ -366,14 +449,14 @@ func TestLeafAndDSSE(t *testing.T) {
 	}
 
 	// Wrong identity and wrong issuer must fail.
-	if _, _, gotErr := verify.Leaf(p.leaf.Raw, tm, p.now, "attacker@evil", endpoint.MustParseURL(testIssuer)); !errors.Is(gotErr, verify.ErrIdentity) {
+	if _, _, gotErr := verify.Leaf(p.leaf.Raw, tm, p.now, "attacker@evil", endpoint.MustParseURL(testIssuer), nil); !errors.Is(gotErr, verify.ErrIdentity) {
 		t.Fatalf("wrong identity: got %v, want ErrIdentity", gotErr)
 	}
-	if _, _, gotErr := verify.Leaf(p.leaf.Raw, tm, p.now, testIdentity, endpoint.MustParseURL("https://evil")); !errors.Is(gotErr, verify.ErrIdentity) {
+	if _, _, gotErr := verify.Leaf(p.leaf.Raw, tm, p.now, testIdentity, endpoint.MustParseURL("https://evil"), nil); !errors.Is(gotErr, verify.ErrIdentity) {
 		t.Fatalf("wrong issuer: got %v, want ErrIdentity", gotErr)
 	}
 	// Outside validity must fail on the chain.
-	if _, _, gotErr := verify.Leaf(p.leaf.Raw, tm, p.now.Add(clock.Hour), testIdentity, endpoint.MustParseURL(testIssuer)); !errors.Is(gotErr, verify.ErrLeafChain) {
+	if _, _, gotErr := verify.Leaf(p.leaf.Raw, tm, p.now.Add(clock.Hour), testIdentity, endpoint.MustParseURL(testIssuer), nil); !errors.Is(gotErr, verify.ErrLeafChain) {
 		t.Fatalf("expired: got %v, want ErrLeafChain", gotErr)
 	}
 

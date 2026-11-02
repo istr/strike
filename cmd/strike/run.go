@@ -164,6 +164,7 @@ func (rc *runContext) executeDeploy(ctx context.Context, step *lane.Step, stepID
 		BaseSBOMSigners: rc.lane.BaseSBOMSigners,
 		ArtifactRefs:    step.Deploy.Artifacts,
 		Lane:            rc.lane,
+		LaneRoot:        rc.laneRoot,
 		LaneID:          rc.lane.ID,
 		LaneDigest:      rc.laneDigest,
 		CA:              rc.ca,

@@ -76,19 +76,69 @@ func validateDeclarations(p *Lane) error {
 	if err := validateSignerIdentities(p); err != nil {
 		return err
 	}
+	if err := validateBuilderToken(p); err != nil {
+		return err
+	}
 	return validateTrustAnchors(p)
 }
 
 // validateSignerIdentities checks every declared signer identity -- the oidc
-// identity and each base-SBOM signer identity -- against the StringOrURI
-// grammar the schema documents but does not encode (RFC 7519).
+// identity and pins, and each base-SBOM signer's identity and pins -- against
+// the grammars the schema documents but does not encode: StringOrURI (RFC
+// 7519) for an identity, URIReference (RFC 3986) for a URI pin. The oidc pins
+// must name the source, sourceRepositoryRef or sourceRepositoryDigest
+// (ADR-057 D2); a base-SBOM signer's pins carry no minimum.
 func validateSignerIdentities(p *Lane) error {
 	if err := p.OIDC.Identity.Validate(); err != nil {
 		return fmt.Errorf("oidc identity %q: %w", p.OIDC.Identity, err)
 	}
+	if err := validateExtensionURIs(&p.OIDC.Extensions); err != nil {
+		return fmt.Errorf("oidc extensions %w", err)
+	}
+	if p.OIDC.Extensions.SourceRepositoryRef == nil && p.OIDC.Extensions.SourceRepositoryDigest == nil {
+		return fmt.Errorf("oidc extensions: declare sourceRepositoryRef or sourceRepositoryDigest")
+	}
 	for i, s := range p.BaseSBOMSigners {
 		if err := s.Identity.Validate(); err != nil {
 			return fmt.Errorf("baseSbomSigners[%d] identity %q: %w", i, s.Identity, err)
+		}
+		if s.Extensions == nil {
+			continue
+		}
+		if err := validateExtensionURIs(s.Extensions); err != nil {
+			return fmt.Errorf("baseSbomSigners[%d] extensions %w", i, err)
+		}
+	}
+	return nil
+}
+
+// validateExtensionURIs checks the URI-reference pins of an extension block.
+func validateExtensionURIs(ext *FulcioExtensions) error {
+	if ext.SourceRepositoryURI != nil {
+		if err := ext.SourceRepositoryURI.Validate(); err != nil {
+			return fmt.Errorf("sourceRepositoryURI %q: %w", *ext.SourceRepositoryURI, err)
+		}
+	}
+	if ext.BuildConfigURI != nil {
+		if err := ext.BuildConfigURI.Validate(); err != nil {
+			return fmt.Errorf("buildConfigURI %q: %w", *ext.BuildConfigURI, err)
+		}
+	}
+	return nil
+}
+
+// validateBuilderToken checks the builder token the oidc block names: it is a
+// declared lane.secrets entry, and no step references it, so it reaches the
+// deploy's keyless chain and never a step container (ADR-058 D1, D4).
+func validateBuilderToken(p *Lane) error {
+	if _, ok := p.Secrets[p.OIDC.Token]; !ok {
+		return fmt.Errorf("oidc token %q is not declared in lane.secrets", p.OIDC.Token)
+	}
+	for _, s := range p.Steps {
+		for _, ref := range s.Secrets {
+			if ref.Name == p.OIDC.Token {
+				return fmt.Errorf("step %q: secret %q is the oidc token and must not reach a step container", s.ID, ref.Name)
+			}
 		}
 	}
 	return nil

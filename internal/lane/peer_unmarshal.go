@@ -143,10 +143,12 @@ func (sc *Capture) UnmarshalJSON(data []byte) error {
 // here and the default decoder cannot tell an absent object from an empty one.
 func unmarshalOIDCConfig(data []byte) (OIDCConfig, error) {
 	type alias struct {
-		Trust    *endpoint.Certificate `json:"trust"`
-		Issuer   endpoint.Address      `json:"issuer"`
-		Audience string                `json:"audience"`
-		Identity primitive.StringOrURI `json:"identity"`
+		Trust      *endpoint.Certificate `json:"trust"`
+		Issuer     endpoint.Address      `json:"issuer"`
+		Extensions FulcioExtensions      `json:"extensions"`
+		Audience   string                `json:"audience"`
+		Identity   primitive.StringOrURI `json:"identity"`
+		Token      primitive.Identifier  `json:"token"`
 	}
 	var aux alias
 	if err := json.Unmarshal(data, &aux); err != nil {
@@ -156,10 +158,12 @@ func unmarshalOIDCConfig(data []byte) (OIDCConfig, error) {
 		return OIDCConfig{}, fmt.Errorf("oidc: trust required")
 	}
 	return OIDCConfig{
-		Issuer:   aux.Issuer,
-		Audience: aux.Audience,
-		Identity: aux.Identity,
-		Trust:    *aux.Trust,
+		Issuer:     aux.Issuer,
+		Audience:   aux.Audience,
+		Identity:   aux.Identity,
+		Extensions: aux.Extensions,
+		Token:      aux.Token,
+		Trust:      *aux.Trust,
 	}, nil
 }
 

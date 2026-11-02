@@ -50,7 +50,7 @@ func TestBaseSBOMFixtureVerifiesUnderStrike(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read bundle: %v", err)
 	}
-	payload, err := verify.New(tm, meta.Identity, endpoint.MustParseURL(meta.Issuer)).Verify(bundle)
+	payload, err := verify.New(tm, meta.Identity, endpoint.MustParseURL(meta.Issuer), nil).Verify(bundle)
 	if err != nil {
 		t.Fatalf("strike verify rejected the cosign CycloneDX bundle: %v", err)
 	}

@@ -84,7 +84,8 @@ func TestParse_ValidDeployOnly(t *testing.T) {
 	yaml := []byte(withAnchor(`
 name: deploy-only
 id: deploy-only
-secrets: {}
+secrets:
+  builder-token: "env://SIGSTORE_ID_TOKEN"
 resolver:
   adn: one.one.one.one
   ip: 1.1.1.1
@@ -94,6 +95,9 @@ oidc:
   issuer: "https://idp.example.com"
   audience: "strike"
   identity: "strike@example.com"
+  extensions:
+    sourceRepositoryRef: "refs/heads/main"
+  token: builder-token
   trust:
     cert: "@anchor@"
 keyless:
@@ -154,7 +158,8 @@ func TestParse_BaseSBOMSigners(t *testing.T) {
 	yaml := []byte(withAnchor(`
 name: sbom-signer-lane
 id: sbom-signer-lane
-secrets: {}
+secrets:
+  builder-token: "env://SIGSTORE_ID_TOKEN"
 resolver:
   adn: one.one.one.one
   ip: 1.1.1.1
@@ -164,6 +169,9 @@ oidc:
   issuer: "https://idp.example.com"
   audience: "strike"
   identity: "strike@example.com"
+  extensions:
+    sourceRepositoryRef: "refs/heads/main"
+  token: builder-token
   trust:
     cert: "@anchor@"
 keyless:
@@ -443,7 +451,8 @@ func TestParse_DisjunctionErrorIsReadable(t *testing.T) {
 	// current branch. Adjust if the lane schema has shifted.
 	bad := []byte(withAnchor(`
 name: test
-secrets: {}
+secrets:
+  builder-token: "env://SIGSTORE_ID_TOKEN"
 resolver:
   adn: one.one.one.one
   ip: 1.1.1.1
@@ -453,6 +462,9 @@ oidc:
   issuer: "https://idp.example.com"
   audience: "strike"
   identity: "strike@example.com"
+  extensions:
+    sourceRepositoryRef: "refs/heads/main"
+  token: builder-token
   trust:
     cert: "@anchor@"
 keyless:
@@ -504,7 +516,8 @@ func TestParse_RelPathValidation(t *testing.T) {
 	tmpl := `
 name: test
 id: test
-secrets: {}
+secrets:
+  builder-token: "env://SIGSTORE_ID_TOKEN"
 resolver:
   adn: one.one.one.one
   ip: 1.1.1.1
@@ -514,6 +527,9 @@ oidc:
   issuer: "https://idp.example.com"
   audience: "strike"
   identity: "strike@example.com"
+  extensions:
+    sourceRepositoryRef: "refs/heads/main"
+  token: builder-token
   trust:
     cert: "@anchor@"
 keyless:

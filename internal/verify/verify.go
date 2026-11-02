@@ -22,6 +22,7 @@ import (
 
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/endpoint"
+	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/primitive"
 )
 
@@ -97,15 +98,17 @@ type ParsedBundle struct {
 // an expected signer identity. Construct once with New, then Verify many
 // bundles. It holds no network client and contacts nothing.
 type Verifier struct {
-	issuer   endpoint.Address
-	tm       *TrustedMaterial
-	identity primitive.StringOrURI
+	issuer     endpoint.Address
+	tm         *TrustedMaterial
+	extensions *lane.FulcioExtensions
+	identity   primitive.StringOrURI
 }
 
 // New returns a Verifier bound to the parsed trusted material and the signer
-// identity (SAN) and OIDC issuer every accepted bundle must carry.
-func New(tm *TrustedMaterial, identity primitive.StringOrURI, issuer endpoint.Address) *Verifier {
-	return &Verifier{tm: tm, identity: identity, issuer: issuer}
+// identity (SAN), OIDC issuer and extension pins (nil pins none) every
+// accepted bundle must carry.
+func New(tm *TrustedMaterial, identity primitive.StringOrURI, issuer endpoint.Address, extensions *lane.FulcioExtensions) *Verifier {
+	return &Verifier{tm: tm, identity: identity, issuer: issuer, extensions: extensions}
 }
 
 // Verify checks a sigstore v0.3 bundle end to end and returns the verified
@@ -123,7 +126,7 @@ func (v *Verifier) Verify(bundleJSON []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	leaf, ca, err := Leaf(pb.LeafDER, v.tm, trustedTime, v.identity, v.issuer)
+	leaf, ca, err := Leaf(pb.LeafDER, v.tm, trustedTime, v.identity, v.issuer, v.extensions)
 	if err != nil {
 		return nil, err
 	}

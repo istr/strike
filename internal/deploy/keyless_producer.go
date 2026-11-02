@@ -11,7 +11,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/istr/strike/internal/lane"
@@ -20,24 +19,48 @@ import (
 	"github.com/istr/strike/internal/wire"
 )
 
-// ambientIDToken reads the OIDC identity token from the environment
-// (ADR-040 D-3b-4): the operator or CI injects a short-lived identity
-// token via SIGSTORE_ID_TOKEN; strike never runs an interactive flow.
-func ambientIDToken() (lane.SecretString, error) {
-	tok := os.Getenv("SIGSTORE_ID_TOKEN")
-	if tok == "" {
-		return lane.SecretString{}, errors.New("keyless: SIGSTORE_ID_TOKEN is not set")
+// builderTokenMaxLifetime bounds the builder token's exp - iat, in seconds
+// (ADR-058 D4).
+const builderTokenMaxLifetime = 15 * 60
+
+// builderToken reads the builder's identity token from the lane secret the
+// oidc block names (ADR-058 D4) and checks it before any Fulcio contact,
+// fail-closed: its issuer is the lane-declared issuer, and its lifetime,
+// exp - iat, stays within builderTokenMaxLifetime. The identity is checked on
+// the certificate Fulcio issues, before the first signature, because claim
+// names differ per provider and the certificate is what the verifier sees
+// (ADR-041 decision 6 as amended by ADR-057 D2). strike never runs an
+// interactive flow.
+func (d *Deployer) builderToken() (lane.SecretString, error) {
+	token, err := lane.ReadSecret(d.Lane.Secrets[d.OIDC.Token], d.LaneRoot)
+	if err != nil {
+		return lane.SecretString{}, fmt.Errorf("keyless: oidc token %q: %w", d.OIDC.Token, err)
 	}
-	return lane.NewSecretString(tok), nil
+	claims, err := decodeIDTokenClaims(token)
+	if err != nil {
+		return lane.SecretString{}, err
+	}
+	if claims.Iss != d.OIDC.Issuer.URL() {
+		return lane.SecretString{}, fmt.Errorf("keyless: token issuer %q does not match the lane-declared issuer %q", claims.Iss, d.OIDC.Issuer.URL())
+	}
+	if claims.Iat <= 0 || claims.Exp <= claims.Iat {
+		return lane.SecretString{}, errors.New("keyless: token carries no valid iat and exp")
+	}
+	if lifetime := claims.Exp - claims.Iat; lifetime > builderTokenMaxLifetime {
+		return lane.SecretString{}, fmt.Errorf("keyless: token lifetime %ds exceeds the %ds bound", lifetime, builderTokenMaxLifetime)
+	}
+	return token, nil
 }
 
 // idTokenClaims are the identity-token claims strike reads before any Fulcio
-// contact: the issuer for the fail-closed pre-check, and the subject the proof
-// of possession signs.
+// contact: the issuer and the lifetime for the fail-closed pre-check, and the
+// subject the proof of possession signs.
 type idTokenClaims struct {
 	Email string `json:"email"`
 	Iss   string `json:"iss"`
 	Sub   string `json:"sub"`
+	Exp   int64  `json:"exp"`
+	Iat   int64  `json:"iat"`
 }
 
 // decodeIDTokenClaims decodes the payload of the identity token. The token is
@@ -79,8 +102,9 @@ func subjectFromIDToken(idToken lane.SecretString) (string, error) {
 // in-toto statements: one ephemeral P-256 key and one Fulcio certificate
 // for the set, then per statement DSSE sign -> RFC3161 timestamp ->
 // Rekor v2 inclusion -> sigstore v0.3 bundle. The certificate Fulcio issued
-// must bind the identity and issuer oidc declares before the first signature
-// (ADR-041 decision 6 as amended by ADR-057 D2). Every failure is fatal
+// must bind the identity, issuer and extension pins oidc declares before the
+// first signature (ADR-041 decision 6 as amended by ADR-057 D2). Every
+// failure is fatal
 // (fail-closed, ADR-040 D-3b-2): a statement that cannot obtain a
 // certificate, a timestamp, or an inclusion proof yields an error, never a
 // partial bundle. Returned bundles are positionally aligned with
@@ -102,7 +126,7 @@ func ProduceKeylessBundles(ctx context.Context, eps lane.KeylessEndpoints, diale
 	if err != nil {
 		return nil, fmt.Errorf("keyless: parse issued certificate: %w", err)
 	}
-	if idErr := verify.Identity(leaf, oidc.Identity, oidc.Issuer); idErr != nil {
+	if idErr := verify.Identity(leaf, oidc.Identity, oidc.Issuer, &oidc.Extensions); idErr != nil {
 		return nil, fmt.Errorf("keyless: issued certificate: %w", idErr)
 	}
 	bundles := make([][]byte, len(statements))

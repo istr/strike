@@ -82,7 +82,7 @@ first (`make -C test/sigstore-local up`), then build stage_1 from the clone's
 root:
 
 ```sh
-GIT_COMMIT=ac2fa9b8b64695454e9e8de5cca075070b99beaf
+GIT_COMMIT=95137d650575df2aa103ae53038c350b1a99b18f
 
 podman build -t strike:stage_1 \
   --build-arg GIT_COMMIT=${GIT_COMMIT} \
@@ -158,6 +158,8 @@ Lanes are YAML files validated against an embedded CUE schema. Every
 external container image must be SHA-256 pinned:
 
 ```yaml
+secrets:
+  builder-token: "env://SIGSTORE_ID_TOKEN"
 resolver:
   adn: dns.example.com
   ip: 198.51.100.1
@@ -167,6 +169,9 @@ oidc:
   issuer: "https://idp.example.com"
   audience: "strike"
   identity: "strike@example.com"
+  extensions:
+    sourceRepositoryRef: "refs/heads/main"
+  token: builder-token
   trust:
     cert: "<base64 DER of the identity provider's root certificate>"
 keyless:

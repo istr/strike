@@ -24,6 +24,7 @@ import (
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/testutil"
 	"github.com/istr/strike/internal/transport"
 	"github.com/istr/strike/internal/wire"
@@ -103,9 +104,23 @@ func TestKeylessLive(t *testing.T) {
 		TSA:    endpoint.HTTPS{Address: endpoint.MustParseURL("https://tsa.127.0.0.1.sslip.io:3004"), Trust: trust},
 	}
 
-	token, err := ambientIDToken()
+	// The token goes through the deploy's own read and pre-check, and the
+	// producer checks the issued certificate against the identity and the
+	// ref pin the harness issuer fills.
+	ref := primitive.GitRef("refs/heads/main")
+	liveOIDC := lane.OIDCConfig{
+		Issuer:     endpoint.MustParseURL(liveIssuer),
+		Identity:   liveIdentity,
+		Extensions: lane.FulcioExtensions{SourceRepositoryRef: &ref},
+		Token:      "builder-token",
+	}
+	d := &Deployer{
+		OIDC: liveOIDC,
+		Lane: &lane.Lane{Secrets: map[primitive.Identifier]lane.SecretSource{liveOIDC.Token: "env://SIGSTORE_ID_TOKEN"}},
+	}
+	token, err := d.builderToken()
 	if err != nil {
-		t.Fatalf("ambientIDToken: %v", err)
+		t.Fatalf("builderToken: %v", err)
 	}
 
 	statements := make([][]byte, 3)
@@ -115,7 +130,6 @@ func TestKeylessLive(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	liveOIDC := lane.OIDCConfig{Issuer: endpoint.MustParseURL(liveIssuer), Identity: liveIdentity}
 	bundles, err := ProduceKeylessBundles(ctx, eps, dialer, token, liveOIDC, statements)
 	if err != nil {
 		t.Fatalf("ProduceKeylessBundles: %v", err)
