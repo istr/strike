@@ -677,3 +677,31 @@ the first digest. No step moves bytes; every step is a diff.
   Bundesportal Leistung 584864; BSI TR-03127 and Certificate Policy eID;
   Keycloak source (`ClientCredentialsGrantType`,
   `OAuth2GrantTypeBase`) and server administration guide; podman-run(1).
+
+## Amendment 2026-11-02 -- D10: the engine version is a self-report and stays informational
+
+D10 requires "the observed engine identity, and its version, in the
+sealed statement", and Consequences repeats the second half for the
+producer as "the engine version in the sealed statement if not already
+there". At 2185d60 the sealed statement carries what the control plane
+observes about the engine, its connection identity (`engine`, an
+`endpoint.#Engine`), and the version is recorded in
+`informational.engineMetadata`. The version is what the engine reports
+about itself: the control plane receives a string the engine supplies
+and observes nothing behind it, which is the class `contract/attest`
+assigns to the informational statement. Sealing it would change
+`contract/attest`, which the status of this record excludes, and would
+present a self-report as an observation. Nothing in this record gates on
+the version: integrity rests on reproducibility, and the version gate at
+start (`RequireVersion`) is enforced at run time and reads no record.
+What the recorded version serves is the diagnosis of a cross-host
+mismatch, and the informational statement, signed, logged and
+timestamped with the sealed one, serves it. The substrate-specific
+`builder.id` D10 requires is unaffected.
+
+**Supersedes, in D10 above:** "the observed engine identity, and its
+version, in the sealed statement" is read as: "the observed engine
+identity in the sealed statement, and the engine's self-reported version
+in the informational statement". **In Consequences, Producer:** "the
+engine version in the sealed statement if not already there;" is read as
+deleted.
