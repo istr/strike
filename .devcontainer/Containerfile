@@ -11,10 +11,27 @@ RUN ["go", "install", "golang.org/x/vuln/cmd/govulncheck@v1.9.0"]
 # the checksum pins the registry tarball whose sha512 integrity npm publishes.
 ADD --checksum=sha256:745e1b196eb475161a185a00f5e1144d7324ec6094e21149eae719fa42481000 https://registry.npmjs.org/@anthropic-ai/claude-code-linux-x64/-/claude-code-linux-x64-2.1.316.tgz /tmp/claude-code.tgz
 RUN ["tar", "-xzf", "/tmp/claude-code.tgz", "-C", "/tmp", "package/claude"]
+# The engine client and the compose provider the harness Makefile drives
+# through the mounted socket. Each package is fetched from a dated
+# snapshot.debian.org path under the checksum the trixie index publishes, so
+# the build consults no package repository and a rebuild fetches the same
+# bytes. The remote client carries no runtime; the full podman package would
+# bring one the container cannot use.
+ADD --checksum=sha256:d67c87f0d0d26b7e5a42bf09c9e2a5d8c3cfa1611b65f94b4ed774a0f3b067ca https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/p/podman/podman-remote_5.4.2+ds1-2+b2_amd64.deb /debs/
+ADD --checksum=sha256:7e8cdb41e2bcc66de139777fcc3278134997cd5630f5d41508110278bae593bf https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/p/podman-compose/podman-compose_1.3.0-1_all.deb /debs/
+ADD --checksum=sha256:0019c4e7848c83a0d6bcb78cca902b5cdb1714aa6370ba01955b1fed6f667056 https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/p/pyyaml/python3-yaml_6.0.2-1+b2_amd64.deb /debs/
+ADD --checksum=sha256:119670533dbc8e9e89ee1b09415879b70c30fd444f88da7d2fc2032adcd4be75 https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/p/python-dotenv/python3-dotenv_1.0.1-1_all.deb /debs/
+ADD --checksum=sha256:8a5475402801de445a17887bb72d03613565a6a84b216b4b606d1462c613eeb2 https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/liby/libyaml/libyaml-0-2_0.2.5-2_amd64.deb /debs/
 
 FROM docker.io/library/golang:1.27.3@sha256:5bbe76a31abbe0f1449d7820e550131c020b097c24d3bcfc5ad1231779982c1c
 COPY --from=tools /go/bin/golangci-lint /go/bin/govulncheck /go/bin/
 COPY --from=tools /tmp/package/claude /usr/local/bin/claude
+# Installed from a bind mount of the tools stage, so no package file lands in
+# a layer. dpkg resolves nothing: a dependency the base image lacks fails here.
+RUN --mount=type=bind,from=tools,source=/debs,target=/debs ["dpkg", "--install", "/debs/libyaml-0-2_0.2.5-2_amd64.deb", "/debs/python3-yaml_6.0.2-1+b2_amd64.deb", "/debs/python3-dotenv_1.0.1-1_all.deb", "/debs/podman-compose_1.3.0-1_all.deb", "/debs/podman-remote_5.4.2+ds1-2+b2_amd64.deb"]
+# The package installs only podman-remote; the compose provider and the
+# harness Makefile invoke podman by its plain name.
+RUN ["ln", "-s", "/usr/bin/podman-remote", "/usr/local/bin/podman"]
 RUN ["useradd", "--create-home", "--uid", "1000", "--user-group", "--shell", "/bin/bash", "dev"]
 USER dev
 # Mount point of the strike-claude volume; an empty volume copies this

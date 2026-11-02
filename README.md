@@ -82,7 +82,7 @@ first (`make -C test/sigstore-local up`), then build stage_1 from the clone's
 root:
 
 ```sh
-GIT_COMMIT=0f8b4447b2542cde5f46ef55f3e1f2a24e4404fe
+GIT_COMMIT=65dd6e5cd98bdbd6de1fba9953ba51319972a313
 
 podman build -t strike:stage_1 \
   --build-arg GIT_COMMIT=${GIT_COMMIT} \
@@ -308,6 +308,29 @@ govulncheck ./...                                                # vulnerability
 
 See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for the complete code quality,
 security, and style guidelines.
+
+### Dev container
+
+Instead of installing the toolchain on the host, you can work inside the dev
+container declared in `.devcontainer/`. It carries the Go toolchain, `make`,
+golangci-lint, govulncheck, and a podman remote client with the
+`podman-compose` provider. The host's podman socket is mounted into the
+container as `CONTAINER_HOST`, and every container started from inside runs as
+a sibling on the host engine. The premise behind this layout is
+[docs/DEVELOPMENT-ENDPOINT-PREMISES.md](docs/DEVELOPMENT-ENDPOINT-PREMISES.md).
+
+The local sigstore harness can be driven from inside the dev container:
+`make -C test/sigstore-local up`, `down`, and `token` work there as they do
+on the host. Bind mounts are resolved by the host engine, so the harness only
+works from the working tree, which the container mounts at its host path. A
+copy outside the working tree is invisible to the host.
+
+Building the image needs network access to `snapshot.debian.org`, in addition
+to `docker.io`, the Go module proxy, and the npm registry. The podman client
+and the compose provider are Debian packages, fetched from a dated snapshot
+path under pinned checksums. The build does not use a Debian package
+repository. If `snapshot.debian.org` is unreachable, the image cannot be
+rebuilt, but an image that has already been built keeps working.
 
 AI coding agents should read [AGENTS.md](AGENTS.md) before making changes.
 

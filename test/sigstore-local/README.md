@@ -21,6 +21,18 @@ infrastructure -- not part of the strike binary.
     make token          # print an OIDC id_token for tester@strike.localhost
     make tsa-certchain  # fetch the TSA certificate chain to pki/tsa-certchain.pem
 
+`make up` on a harness whose containers already exist prints one
+`the container name "strike-sigstore-local_<service>_1" is already in use`
+error per container and still succeeds. The errors are harmless. podman-compose
+1.3.0 issues `podman run` for every service on `up -d`, and when the name is
+taken it starts the existing container instead. A changed `compose.yaml` is
+still picked up: before that step podman-compose compares the
+`io.podman.compose.config-hash` label of each container with the hash of the
+current file, and on any difference it removes and recreates the stack. The
+named volumes are kept. Trust the `stack ready` line at the end, not the error
+lines. The output comes from podman-compose itself, so no setting in
+`compose.yaml` suppresses it.
+
 ## Endpoints
 
 Every HTTPS service is TLS-terminated by Caddy under one internal root
