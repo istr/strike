@@ -155,20 +155,15 @@ type alias struct {
 }
 ```
 
-## CUE-generated types
+## CUE-generated types are exempt
 
-Files like `internal/lane/lane.gen.go` are produced by `cue exp gengotypes`.
-`golangci-lint` skips generated files, so `make lint` never reports a
-generated struct; the standalone analyzer (see Discovery) does. To fix one:
-
-1. The fix is in the CUE schema (e.g., `contract/lane/lane.cue` or
-   `contract/primitive/scalars.cue`), not in the generated `.go` file.
-2. The generator emits Go fields in the declaration order of the CUE
-   definition. Reorder fields in the `.cue` source.
-3. Run `make generate`. Verify the regenerated Go matches the new order and
-   that the standalone analyzer no longer reports the struct.
-4. Never edit `*.gen.go` directly. The next `make generate` overwrites the
-   change. See `docs/CUE-WORKFLOW.md`.
+The rule does not apply to the structs `cue exp gengotypes` writes into
+`internal/*/*.gen.go`. Their field order is the CUE declaration order, which
+follows the domain. `golangci-lint` skips generated files, so `make lint`
+never reports one. The signing path canonicalizes JSON (RFC 8785,
+`internal/deploy/canonical.go`), so field order never reaches signed bytes.
+Reordering would gain garbage-collector scan bytes only; there is no security
+implication.
 
 ## Decision procedure when writing a new struct
 
@@ -216,33 +211,26 @@ mirrored declaration order is zero.
 
 `golangci-lint run ./...` -- look for `fieldalignment:` findings. A finding
 names the struct and the two byte counts but prints no order. To see the
-order, run the standalone analyzer with a diff preview, which writes nothing:
+order, run the standalone analyzer with a diff preview on the package that
+declares the flagged struct; it writes nothing:
 
 ```sh
-go run golang.org/x/tools/go/analysis/passes/fieldalignment/cmd/fieldalignment -fix -diff ./internal/lane/
+go run golang.org/x/tools/go/analysis/passes/fieldalignment/cmd/fieldalignment -fix -diff ./internal/<pkg>/
 ```
 
-The preview drops field comments; carry them over by hand. It also lists the
-generated structs `make lint` skips. Never run it with `-fix` alone: that
-rewrites every flagged struct in the package, generated files included.
+The preview drops field comments; carry them over by hand. Never run it with
+`-fix` alone: that rewrites every flagged struct in the package, generated
+files included.
 
 ## Allowed permanent exceptions
 
-See the allowed-permanent-annotations table at the top of
-`docs/CODE-STYLE.md`. Only `internal/executor.SETPayload` has a sanctioned
-`//nolint:govet` for fieldalignment: that struct's field order is part of the
-signed payload, so reordering would break the cross-implementation contract.
-A field order that is signed and must stay byte-stable is the
-`marshal-order-contract` pattern -- pin it with a reflection test rather than
-trusting the suppression's prose. Adding any other permanent fieldalignment
-exception requires an ADR.
+No struct carries a sanctioned `//nolint:govet` for fieldalignment, and the
+allowed-permanent-annotations table at the top of `docs/CODE-STYLE.md` lists
+none. Adding a permanent fieldalignment exception requires an ADR.
 
 ## See also
 
 - `docs/CODE-STYLE.md#fieldalignment-default` -- the catalog anchor and
   one-line rule.
-- `docs/CODE-STYLE.md#marshal-order-contract` -- signed, byte-stable field
-  order pinned by a reflection test.
 - `AGENTS.md` -- the operative rule that this layout is consulted before
   declaring a struct, not after the linter flags it.
-- `docs/CUE-WORKFLOW.md` -- fixing alignment on CUE-generated types.

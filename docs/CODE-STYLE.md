@@ -54,8 +54,8 @@ sanctions only the following long-lived annotation sites:
 
 | Helper                                            | Linter / code                | Reason                                      |
 |---------------------------------------------------|------------------------------|---------------------------------------------|
-| `internal/executor.SETPayload` declaration        | `govet` fieldalignment       | Field order is part of the signed payload   |
 | `internal/lane.FilePath.Read`                     | `gosec` G304 (optional)      | Validated CLI path chokepoint               |
+| `internal/probe.Stat`                             | `gosec` G703 (no annotation) | Env-supplied bootstrap discovery; path confinement does not apply |
 | `internal/testutil.ReadTemp`                      | `gosec` G304 (optional)      | `t.TempDir()` root contract                 |
 | `internal/testutil.WriteTestBinary`               | `gosec` G302                 | Test binary needs owner-exec; 0o700 is minimum viable mode |
 
@@ -412,78 +412,23 @@ written to `t.TempDir()` earlier in the test) use `testutil.ReadTemp`.
 
 ## Fieldalignment is mandatory; JSON tags map fields `fieldalignment-default`
 
-**Rule.** Structs are declared in fieldalignment-clean order: fields grouped
-by descending alignment, within each group by descending total size. For JSON
-unmarshaling, the JSON tag does the mapping; field order is irrelevant to
-behaviour. JSON-field-order mirroring ("matches the API response") is wrong
-about `json.Unmarshal` and is not a justification for a `//nolint:govet`.
+**Rule.** Structs are declared in a field order the `fieldalignment` analyzer
+accepts as optimal in both size and pointer bytes. For JSON unmarshaling, the
+JSON tag does the mapping; field order is irrelevant to behavior.
+JSON-field-order mirroring ("matches the API response") is wrong about
+`json.Unmarshal` and is not a justification for a `//nolint:govet`.
 
-The full reference -- the amd64/arm64 alignment-group table, the
-strike-specific cheat sheet, worked examples, the decision procedure for a new
-struct, the CUE-generated-types fix, and the allowed permanent exceptions --
+The full reference -- the amd64/arm64 field-class table, the strike-specific
+cheat sheet, worked examples, the decision procedure for a new struct, the
+exemption for CUE-generated types, and the allowed permanent exceptions --
 lives in `docs/FIELDALIGNMENT.md`. Consult it before declaring a struct, not
 after the linter flags it.
 
-**Discovery.** `golangci-lint run ./...`; the suggested "optimal" struct in a
-`fieldalignment:` message is the target.
+**Discovery.** `golangci-lint run ./...`. A `fieldalignment:` finding names
+the struct and two byte counts but prints no order; the `-fix -diff` preview
+in `docs/FIELDALIGNMENT.md#discovery` prints it.
 
 ---
-## Marshal-order-sensitive types: one source + reflection contract `marshal-order-contract`
-
-**Rule.** When a struct's field order *does* affect output bytes (e.g. a
-struct that is signed and whose canonical JSON serialization must be
-byte-stable across implementations), the type lives in exactly one
-package and a reflection test pins the field order as a contract. Test
-code that needs the same shape imports the production type; it does not
-declare a parallel copy.
-
-**Bad.**
-
-```go
-// internal/deploy/rekor_test_helper_test.go
-type setPayload struct { //nolint:govet // matches Rekor SET layout
-    Body           string `json:"body"`
-    IntegratedTime int64  `json:"integratedTime"`
-    LogID          string `json:"logID"`
-    LogIndex       int64  `json:"logIndex"`
-}
-```
-
-(Plus an identical second copy in another test file.)
-
-**Good.** Export the type once; pin field order with a reflection test:
-
-```go
-// internal/executor/rekor.go
-type SETPayload struct { //nolint:govet:fieldalignment // field order is signed; pinned by TestSETPayload_FieldOrder
-    Body           string `json:"body"`
-    IntegratedTime int64  `json:"integratedTime"`
-    LogID          string `json:"logID"`
-    LogIndex       int64  `json:"logIndex"`
-}
-```
-
-```go
-// internal/executor/rekor_test.go
-func TestSETPayload_FieldOrder(t *testing.T) {
-    want := []string{"Body", "IntegratedTime", "LogID", "LogIndex"}
-    typ := reflect.TypeOf(SETPayload{})
-    for i, name := range want {
-        if got := typ.Field(i).Name; got != name {
-            t.Errorf("Field %d = %q, want %q", i, got, name)
-        }
-    }
-}
-```
-
-Test files use `executor.SETPayload` directly; no duplicate type.
-
-**Rationale.** A field-order suppression that is not test-backed is a
-silent invariant -- easy to break, no signal when broken. Reflection turns
-the suppression's text rationale into an executable contract.
-
----
-
 ## `io.Copy` goroutines use `copier.Forward` `copier-helpers`
 
 **Rule.** Half-duplex forwarding (typical SSH-agent shape) goes through

@@ -90,8 +90,8 @@ Two categories of Go types coexist:
 **CUE-generated** (every package `make generate` runs gengotypes over):
 produced into `internal/<pkg>/<pkg>.gen.go`, and for `attest` into
 `internal/deploy/attest.gen.go`. Never hand-edit; the next `make generate`
-overwrites it. A fieldalignment finding on a generated struct is fixed in the
-CUE field order, then regenerated -- see `docs/FIELDALIGNMENT.md`.
+overwrites it. Generated structs are exempt from the fieldalignment rule; see
+`docs/FIELDALIGNMENT.md#cue-generated-types-are-exempt`.
 
 **CUE-validated** (the `@go(-)` disjunction glue hand-written beside the
 generated arms): validated at runtime against the embedded schema. JSON field

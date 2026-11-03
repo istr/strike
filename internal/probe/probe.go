@@ -1,6 +1,6 @@
-// Package probe wraps filesystem-probing primitives at a named
-// chokepoint so that gosec suppressions for env-supplied paths live
-// once, at the package boundary, instead of at every caller.
+// Package probe wraps filesystem-probing primitives for env-supplied
+// paths at a named chokepoint, so the safety argument for such a path
+// lives once, at the package boundary, instead of at every caller.
 //
 // The package is intentionally minimal. A new exported symbol
 // requires at least two call sites that benefit from it.
@@ -8,8 +8,10 @@ package probe
 
 import "os"
 
-// Stat returns os.Stat(path). The function adds no behaviour; its
-// purpose is to hold the G703 suppression at a single named site.
+// Stat returns os.Stat(path). The function adds no behavior. gosec's
+// G703 taint analysis flags os.Stat on a path a caller builds from the
+// environment, but it does not follow the path into this function, so
+// neither this function nor its callers carry a suppression.
 // The package contract is that the path is env-supplied bootstrap
 // discovery (socket paths, $KUBECONFIG, well-known config
 // locations) where path confinement does not apply -- the question
