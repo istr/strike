@@ -64,6 +64,13 @@ is not HTTP, so Caddy cannot front it; CoreDNS terminates TLS itself under
 - `zot/config.json` -- the OCI 1.1 registry. Minimal build: no extensions, no
   web UI. Referrers need no configuration and are served server-side. Storage
   is ephemeral, so each bring-up starts from an empty registry.
+  Authentication is `bearer.oidc`: zot validates the registry token
+  (`make registry-token`) against the harness issuer, whose keys it fetches
+  under the mounted Caddy root, and accepts the audience
+  `https://registry.127.0.0.1.sslip.io:5443` only. The realm is an https URL
+  on the registry's own host. The pinned harness identity, `iss + "/" + sub`,
+  may read and push `istr/strike` and `strike-itest-*`; no repository admits
+  anonymous access.
 - `coredns/Corefile`, `coredns/root.zone` -- the DoT resolver. Serves a
   synthetic root zone with no forwarder and no root hints, so the strike
   run-start `NS .` pre-flight probe is answerable with no network egress. The

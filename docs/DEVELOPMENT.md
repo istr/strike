@@ -301,16 +301,16 @@ needed on a fresh clone, after `down` or `clean`, after a container has been
 removed by hand, and after any structural edit to `compose.yaml`.
 
 Bind-mount contents divide into two cases that behave differently. The four
-directory mounts, all of them `pki/`, are picked up live. The seven
-single-file mounts -- the two CoreDNS configs, the Caddyfile, the Fulcio and
-zot configs, the Keycloak realm export, and the exported Caddy root that Fulcio
-trusts -- bind the inode rather than the directory entry. A write that replaces
-the file instead of truncating it in place is therefore invisible to the
-running container for as long as it keeps running, with no log line anywhere,
-because the service sees an unchanged file rather than a failed reload. Most
-editing tools and `git checkout` replace the file, so this is the common case
-and not an exotic one. Stop and start the container to re-bind the mount to the
-current file.
+directory mounts, all of them `pki/`, are picked up live. The eight single-file
+mounts -- the two CoreDNS configs, the Caddyfile, the Fulcio and zot configs,
+the Keycloak realm export, and the exported Caddy root, mounted once for Fulcio
+and once for zot -- bind the inode rather than the directory entry. A write
+that replaces the file instead of truncating it in place is therefore invisible
+to the running container for as long as it keeps running, with no log line
+anywhere, because the service sees an unchanged file rather than a failed
+reload. Most editing tools and `git checkout` replace the file, so this is the
+common case and not an exotic one. Stop and start the container to re-bind the
+mount to the current file.
 
 ### 2.6 Fuzz testing
 

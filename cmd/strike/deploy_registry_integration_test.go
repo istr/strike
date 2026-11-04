@@ -16,6 +16,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
@@ -162,7 +163,8 @@ func TestRegistryDeployLive_Integration(t *testing.T) {
 		}
 	}
 	t.Setenv("SIGSTORE_ID_TOKEN", testutil.MintIDToken(t, itestIssuer, testutil.HarnessBuilderClient, caddyRoot))
-	t.Setenv("REGISTRY_ID_TOKEN", testutil.MintIDToken(t, itestIssuer, testutil.HarnessRegistryClient, caddyRoot))
+	registryToken := testutil.MintIDToken(t, itestIssuer, testutil.HarnessRegistryClient, caddyRoot)
+	t.Setenv("REGISTRY_ID_TOKEN", registryToken)
 
 	repo := fmt.Sprintf("strike-itest-%d", clock.Wall().UnixNano())
 	lanePath := writeFixtureLane(t, caddyRoot, resolverCert, repo)
@@ -195,10 +197,23 @@ func TestRegistryDeployLive_Integration(t *testing.T) {
 	}
 
 	subject := pushedSubjectDigest(ctx, t, engine, rc)
-	descs := referrerDescriptors(ctx, t, caddyRoot, repo, subject)
+
+	// The harness repositories are private (ADR-058 D6): an anonymous read
+	// of the pushed subject is refused, and every read-back presents the
+	// registry token the run was given.
+	pushed, pushedErr := name.NewDigest(itestRegistryHost + "/" + repo + "@" + subject.String())
+	if pushedErr != nil {
+		t.Fatalf("subject reference: %v", pushedErr)
+	}
+	if _, anonErr := remote.Head(pushed, remote.WithTransport(itestTransport(t, caddyRoot)), remote.WithContext(ctx)); anonErr == nil {
+		t.Errorf("anonymous read of %s succeeded; no harness repository admits anonymous access", pushed)
+	}
+	auth := &authn.Bearer{Token: registryToken}
+
+	descs := referrerDescriptors(ctx, t, caddyRoot, repo, subject, auth)
 	assertReferrerSet(t, descs)
-	assertBundleArtifactForm(ctx, t, caddyRoot, repo, subject)
-	assertBundleReadable(ctx, t, caddyRoot, repo, descs)
+	assertBundleArtifactForm(ctx, t, caddyRoot, repo, subject, auth)
+	assertBundleReadable(ctx, t, caddyRoot, repo, descs, auth)
 }
 
 // writeFixtureLane renders the fixture lane into a temp directory and returns
@@ -344,7 +359,7 @@ func pushedSubjectDigest(ctx context.Context, t *testing.T, engine container.Eng
 // referrerDescriptors lists the referrers of the pushed subject from the
 // registry side, unfiltered, so SBOM and statement-bundle referrers are seen
 // in one index.
-func referrerDescriptors(ctx context.Context, t *testing.T, caddyRoot, repo string, subject v1.Hash) []v1.Descriptor {
+func referrerDescriptors(ctx context.Context, t *testing.T, caddyRoot, repo string, subject v1.Hash, auth authn.Authenticator) []v1.Descriptor {
 	t.Helper()
 	ref, err := name.NewDigest(itestRegistryHost + "/" + repo + "@" + subject.String())
 	if err != nil {
@@ -352,6 +367,7 @@ func referrerDescriptors(ctx context.Context, t *testing.T, caddyRoot, repo stri
 	}
 	idx, refErr := remote.Referrers(ref,
 		remote.WithTransport(itestTransport(t, caddyRoot)),
+		remote.WithAuth(auth),
 		remote.WithContext(ctx))
 	if refErr != nil {
 		t.Fatalf("list referrers of %s: %v", ref, refErr)
@@ -368,7 +384,7 @@ func referrerDescriptors(ctx context.Context, t *testing.T, caddyRoot, repo stri
 // tag fallback refused -- and checks that every listed bundle referrer carries
 // the OCI 1.1 artifact form: the manifest artifactType and the OCI empty
 // config.
-func assertBundleArtifactForm(ctx context.Context, t *testing.T, caddyRoot, repo string, subject v1.Hash) {
+func assertBundleArtifactForm(ctx context.Context, t *testing.T, caddyRoot, repo string, subject v1.Hash, auth authn.Authenticator) {
 	t.Helper()
 	rt := itestTransport(t, caddyRoot)
 	ref, err := name.NewDigest(itestRegistryHost + "/" + repo + "@" + subject.String())
@@ -379,6 +395,7 @@ func assertBundleArtifactForm(ctx context.Context, t *testing.T, caddyRoot, repo
 		remote.WithFilter("artifactType", registry.SigstoreBundleMediaType),
 		remote.WithReferrersTagFallback(false),
 		remote.WithTransport(rt),
+		remote.WithAuth(auth),
 		remote.WithContext(ctx))
 	if refErr != nil {
 		t.Fatalf("list bundle referrers of %s: %v", ref, refErr)
@@ -395,7 +412,7 @@ func assertBundleArtifactForm(ctx context.Context, t *testing.T, caddyRoot, repo
 		if mrefErr != nil {
 			t.Fatalf("referrer reference: %v", mrefErr)
 		}
-		img, imgErr := remote.Image(mref, remote.WithTransport(rt), remote.WithContext(ctx))
+		img, imgErr := remote.Image(mref, remote.WithTransport(rt), remote.WithAuth(auth), remote.WithContext(ctx))
 		if imgErr != nil {
 			t.Fatalf("fetch referrer %s: %v", d.Digest, imgErr)
 		}
@@ -446,7 +463,7 @@ func assertReferrerSet(t *testing.T, descs []v1.Descriptor) {
 // statement records the registry target as an observed peer together with the
 // DoT answers the push dialed from. Cryptographic verification of the bundle
 // is the verifier's job, not this test's.
-func assertBundleReadable(ctx context.Context, t *testing.T, caddyRoot, repo string, descs []v1.Descriptor) {
+func assertBundleReadable(ctx context.Context, t *testing.T, caddyRoot, repo string, descs []v1.Descriptor, auth authn.Authenticator) {
 	t.Helper()
 	var bundleDigest string
 	for _, d := range descs {
@@ -464,6 +481,7 @@ func assertBundleReadable(ctx context.Context, t *testing.T, caddyRoot, repo str
 	}
 	img, imgErr := remote.Image(ref,
 		remote.WithTransport(itestTransport(t, caddyRoot)),
+		remote.WithAuth(auth),
 		remote.WithContext(ctx))
 	if imgErr != nil {
 		t.Fatalf("fetch bundle referrer: %v", imgErr)
