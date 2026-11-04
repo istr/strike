@@ -287,6 +287,27 @@ Secrets are wrapped in a `SecretString` type that overrides `String()`,
 logging, fmt.Printf, or JSON serialization of a secret value always
 produces `[REDACTED]` instead of the plaintext.
 
+## Known limitations
+
+- **Engine-socket holders can read the per-run tokens.** The builder and
+  registry tokens reach strike through the engine invocation, and no channel
+  hides a value from a holder of the engine socket (inspect, `showsecret`,
+  exec); the bound is the fifteen-minute token lifetime strike enforces and
+  `--rm` ([ADR-058](docs/ADR-058-registry-client-identity-workload-token.md)
+  D4).
+- **A token realm on another host is unsupported.** strike presents the
+  registry token to the declared `host:port` only and dials no token realm,
+  so a registry that needs a token exchange at a realm on another host
+  cannot be a deploy target (ADR-058 D5).
+- **A credential cluster is linked but never invoked.** go-containerregistry's
+  `authn` package, which the registry client needs, links
+  `github.com/docker/cli` and `github.com/docker/docker-credential-helpers`;
+  strike consults no keychain, so no `docker-credential-*` helper can run.
+  `go list -deps ./cmd/strike` shows the linked packages (ADR-058 D6).
+- **The secret zero is delivered.** Each per-run token is a credential the
+  invocation delivers; no attested workload identity replaces it yet
+  (ADR-058 D7).
+
 ## Security toolchain
 
 The following tools run in CI on every change:

@@ -193,3 +193,10 @@ column above is the snapshot at ratification.
 > 3. The items that carry this amendment into rows 6 and 14 follow the
 >    roadmap revision against the commit that lands ADR-057; the Items
 >    column above is not edited here.
+
+> **2026-11-04, riding [ADR-058](ADR-058-registry-client-identity-workload-token.md):**
+>
+> Every deferral beyond the Deferrals list above is parked as its own
+> roadmap item and is not listed in this record. Row 14 holds for it as for
+> the listed ones: its one-sentence limitation is in the shipped
+> documentation before the beta tag.
