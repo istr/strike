@@ -485,3 +485,48 @@ of the two conventions of D2.
 - Spike reports (ephemeral): registry client identity against zot and
   quay.io (2026-10-29); public registry candidates GAR, ACR (2026-10-30/31)
   with two addenda on the ACR referrers listing.
+
+## Amendment 2026-11-03 -- D2 lands with one convention, D3 is checked before use, D4's override waits for the forge, D9's registry client is its audience
+
+**D2.** Before the beta cut only the bearer convention has a target;
+whether the quayRobot arm with its hermetic stand-in, or the declared
+exchange-endpoint arm, is built is decided with the publication model
+D9 defers (item-0174). Until a second convention lands,
+`#RegistryCredential` is the bearer arm itself: a closed definition with
+its `type` discriminator and the `lane.secrets` key of the registry
+token, decoded by the generated type. The disjunction with `@go(-)`, the
+hand-written interface and the hand-written unmarshal of D2 arrive with
+the second arm, because a union of one arm is an interface with one
+implementation. The wire shape of a bearer credential does not change
+when the union arrives.
+
+**D3.** "A token minted for one peer is never presented to another" is
+checked, not assumed. Before any use the deploy refuses a registry token
+whose `aud` contains the lane's `oidc.audience`, and lane validation
+refuses a credential that names the builder token's `lane.secrets`
+entry. A builder token presented to a registry could be redeemed at
+Fulcio for the builder identity by whoever reads it there.
+
+**D1, the log clause.** The registry token stays a `SecretString` until
+go-containerregistry asks for it: the deploy hands the client an
+authenticator over the secret type, never a string-typed credential. A
+push error is scrubbed of the token value before it leaves the deploy,
+because a registry's error body is text the registry controls.
+
+**D4.** The per-credential lifetime override is deferred, with the
+builder token's, to item-0063; the fixed fifteen-minute bound applies to
+both tokens. Measured on 2026-11-03 on scratch repositories: GitHub
+Actions mints id tokens of 300 seconds, GitLab CI of 3600 seconds, so the
+override is needed exactly if the forge is GitLab.
+
+**D9 and Consequences, Harness.** Keycloak sets an id token's `aud` to the
+client id of the requesting client. The second public client therefore
+carries the registry audience as its client id,
+`https://registry.127.0.0.1.sslip.io:5443`, and needs no audience mapper;
+the token's `aud` is that one string. The test user's id is pinned in the
+realm export, so zot's identity `iss + "/" + sub` is fixed, and the
+harness zot grants `read` and `create` on exactly the repositories the
+bootstrap lane and the integration tests push to. Measured on 2026-11-03
+at `876fb38` by delegate spike against Keycloak 26.8.1 and zot 2.1.22;
+GitHub Actions and GitLab CI both mint the same URL audience as one
+string.
