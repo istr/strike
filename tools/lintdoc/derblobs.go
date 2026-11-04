@@ -100,31 +100,31 @@ var derBlobs = []derBlob{
 		label:  "golden trusted root: harness Fulcio CA",
 	},
 	{
-		digest: "d2d4005cc89ce204da87506d7199ac00ce3b1c99377e24e046410358c0cb89e6",
+		digest: "c20adfb04c7e1bbf9465ad7be905f8c899db4af4335c5bae3def683a966d197b",
 		label:  "golden trusted root: harness TSA root",
 	},
 	{
-		digest: "67a5d88f3187a7f7ffc311dbedcc69e195a65a5198170eef28dd4e75387656d3",
+		digest: "a31abd090d7a659d152e62dd2a8b0926b10614afc55ed1e1c25b486120d43c37",
 		label:  "golden trusted root: harness TSA intermediate",
 	},
 	{
-		digest: "5a3f6bcb17a54bf7e6ad5e3a7d892aa82d8329cb0bb776ab338e922ea42b94f2",
+		digest: "efed62b3c5c9d722628de656c51d94da39908728097432c81545496887fc28fe",
 		label:  "golden trusted root: harness TSA timestamping leaf",
 	},
 	{
-		digest: "bc426ee6f6f6dd7f2c6cfabd43be7ccabf71d8ab49caff11064333ede5f3d55f",
+		digest: "a565fc2609270c67c897812c86031ac4219d583b32e8c22dcdeefdefa98ac493",
 		label:  "golden bundles: Fulcio leaf for the harness builder identity",
 	},
 	{
-		digest: "27b7e749c0e856548c100129ba1ecda61b8d6bbc6ba33a830c89b39981a7d195",
+		digest: "904b74eb9bb71d832a1cfc302b510162db6eef304c8d39a949580ea13dce4835",
 		label:  "golden sealed bundle: RFC3161 timestamp token",
 	},
 	{
-		digest: "d905c9d2b835d4359fe549f7105d314cc2ae8b0633ad2cb7082dd226f44b5fc1",
+		digest: "4fb97056cb82d0ea2285a37674c4c5a7f397ccbb08c78ce3e0035c55c2929e47",
 		label:  "golden engine-dependent bundle: RFC3161 timestamp token",
 	},
 	{
-		digest: "e9793d6094e61c1c47d066f5de396d5056bad1e8ab5b85017f111611ae07e3fb",
+		digest: "67947e68d733ff642c16894a2c26bceb25b869b86a5c54d66bfd6e1965067fa2",
 		label:  "golden informational bundle: RFC3161 timestamp token",
 	},
 
