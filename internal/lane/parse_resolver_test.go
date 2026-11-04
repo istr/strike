@@ -50,6 +50,7 @@ name: resolver-ipv4
 id: resolver-ipv4
 secrets:
   builder-token: "env://SIGSTORE_ID_TOKEN"
+  registry-token: "env://REGISTRY_ID_TOKEN"
 resolver:
   adn: one.one.one.one
   ip: 1.1.1.1
@@ -99,6 +100,9 @@ steps:
           trust:
             cert: "@anchor@"
           name: app
+          credential:
+            type: bearer
+            token: registry-token
       recording:
         preState:
           required: false
@@ -134,6 +138,7 @@ name: resolver-ipv4-port
 id: resolver-ipv4-port
 secrets:
   builder-token: "env://SIGSTORE_ID_TOKEN"
+  registry-token: "env://REGISTRY_ID_TOKEN"
 resolver:
   adn: one.one.one.one
   ip: 1.1.1.1
@@ -184,6 +189,9 @@ steps:
           trust:
             cert: "@anchor@"
           name: app
+          credential:
+            type: bearer
+            token: registry-token
       recording:
         preState:
           required: false

@@ -2,16 +2,20 @@ package deploy
 
 import (
 	"context"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"testing/fstest"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
+	"github.com/google/go-containerregistry/pkg/v1/empty"
 	"github.com/google/go-containerregistry/pkg/v1/types"
 
+	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/registry/regtest"
+	"github.com/istr/strike/internal/testutil"
 )
 
 // TestNewRegistryTransport_RejectsNilDialer pins that the push transport
@@ -41,7 +45,7 @@ func TestPushSBOMPairRefusesTagFallback(t *testing.T) {
 		Digest:    v1.Hash{Algorithm: "sha256", Hex: subjectHex},
 		Size:      2,
 	}
-	_, err := pushSBOMPair(context.Background(), host+"/app", subject, srv.Client().Transport, "image", fstest.MapFS{}, primitive.DigestFromHex(subjectHex))
+	_, err := pushSBOMPair(context.Background(), host+"/app", subject, registryClient{rt: srv.Client().Transport}, "image", fstest.MapFS{}, primitive.DigestFromHex(subjectHex))
 	if err == nil {
 		t.Fatal("expected an error for a registry without the referrers API, got nil")
 	}
@@ -49,5 +53,87 @@ func TestPushSBOMPairRefusesTagFallback(t *testing.T) {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error %q must contain %q", err, want)
 		}
+	}
+}
+
+// TestRegistryTokenChecksBeforeUse proves the fail-closed checks on the
+// registry token (ADR-058 D3, D4): a token that cannot be read, is malformed,
+// carries no lifetime, outlives the bound, carries an aud claim of neither
+// form, or names the lane's oidc audience in either form of the claim is
+// refused; a token minted for another audience is returned unchanged.
+func TestRegistryTokenChecksBeforeUse(t *testing.T) {
+	tests := []struct {
+		name    string
+		source  lane.SecretSource
+		token   string
+		wantErr string
+	}{
+		{name: "unset variable", source: "env://STRIKE_TEST_UNSET_REGISTRY_TOKEN", wantErr: "registry token \"registry-token\""},
+		{name: "malformed token", source: "env://REGISTRY_ID_TOKEN", token: "not-a-jwt", wantErr: "malformed identity token"},
+		{name: "no lifetime", source: "env://REGISTRY_ID_TOKEN", token: fakeIDToken(`{"aud":"https://registry.example.com"}`), wantErr: "no valid iat and exp"},
+		{name: "lifetime over bound", source: "env://REGISTRY_ID_TOKEN", token: fakeIDToken(`{"aud":"https://registry.example.com","iat":1000,"exp":1901}`), wantErr: "exceeds the 900s bound"},
+		{name: "aud of neither form", source: "env://REGISTRY_ID_TOKEN", token: fakeIDToken(`{"aud":7,"iat":1000,"exp":1600}`), wantErr: "aud claim"},
+		{name: "oidc audience", source: "env://REGISTRY_ID_TOKEN", token: fakeIDToken(`{"aud":"sigstore","iat":1000,"exp":1600}`), wantErr: "its audience contains the oidc audience \"sigstore\""},
+		{name: "oidc audience among others", source: "env://REGISTRY_ID_TOKEN", token: fakeIDToken(`{"aud":["https://registry.example.com","sigstore"],"iat":1000,"exp":1600}`), wantErr: "its audience contains the oidc audience \"sigstore\""},
+		{name: "registry audience", source: "env://REGISTRY_ID_TOKEN", token: fakeIDToken(`{"aud":["https://registry.example.com"],"iat":1000,"exp":1600}`)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("REGISTRY_ID_TOKEN", tt.token)
+			d := &Deployer{
+				OIDC: lane.OIDCConfig{Audience: "sigstore"},
+				Lane: &lane.Lane{Secrets: map[primitive.Identifier]lane.SecretSource{"registry-token": tt.source}},
+			}
+			token, err := d.registryToken(lane.RegistryCredential{Type: "bearer", Token: "registry-token"})
+			if tt.wantErr == "" {
+				if err != nil {
+					t.Fatalf("registryToken: %v", err)
+				}
+				if token.Expose() != tt.token {
+					t.Error("registryToken did not return the token it read")
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("err = %v, want an error containing %q", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+// TestPushByDigestScrubsTheToken proves the log clause of ADR-058 D1: a
+// registry that echoes the presented credential into its error body does not
+// carry the token into the error the push returns; the redaction placeholder
+// stands in its place.
+func TestPushByDigestScrubsTheToken(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		auth := r.Header.Get("Authorization")
+		switch {
+		case auth == "":
+			w.Header().Set("WWW-Authenticate", `Bearer realm="https://`+r.Host+`/token",service="`+r.Host+`"`)
+			w.WriteHeader(http.StatusUnauthorized)
+		case r.Method == http.MethodHead:
+			w.WriteHeader(http.StatusNotFound)
+		default:
+			w.WriteHeader(http.StatusForbidden)
+			testutil.WriteBody(t, w, []byte(`{"errors":[{"code":"DENIED","message":"refused `+auth+`"}]}`))
+		}
+	}))
+	t.Cleanup(srv.Close)
+	const presented = "header.payload.signature"
+	digest, err := empty.Image.Digest()
+	if err != nil {
+		t.Fatalf("digest: %v", err)
+	}
+	client := registryClient{rt: srv.Client().Transport, token: lane.NewSecretString(presented)}
+	err = pushByDigest(context.Background(), srv.Listener.Addr().String()+"/app", digest.String(), empty.Image, client)
+	if err == nil {
+		t.Fatal("expected the registry's refusal, got nil")
+	}
+	if strings.Contains(err.Error(), presented) {
+		t.Errorf("push error carries the token: %v", err)
+	}
+	if !strings.Contains(err.Error(), "refused Bearer [REDACTED]") {
+		t.Errorf("push error %q must carry the registry's message with the token redacted", err)
 	}
 }

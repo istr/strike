@@ -115,8 +115,9 @@ func TestDeploySpec_UnmarshalJSON_Discriminator(t *testing.T) {
 	}
 }
 
-// Round-trip test: marshalling the unmarshalled spec must produce
-// JSON whose method.type matches the original.
+// Round-trip test: marshalling the unmarshalled spec must produce JSON whose
+// method.type matches the original, whose registry target host is the packed
+// authority it was declared as, and whose credential is carried as declared.
 func TestDeploySpec_RoundTrip(t *testing.T) {
 	original := `{
 		"method": {
@@ -124,7 +125,8 @@ func TestDeploySpec_RoundTrip(t *testing.T) {
 			"target": {
 				"host": "dst.io",
 				"trust": {"cert": "@anchor@"},
-				"name": "app"
+				"name": "app",
+				"credential": {"type": "bearer", "token": "registry-token"}
 			}
 		},
 		"artifacts": {},
@@ -156,5 +158,16 @@ func TestDeploySpec_RoundTrip(t *testing.T) {
 	}
 	if method["type"] != "registry" {
 		t.Errorf("round-tripped method.type = %v, want registry", method["type"])
+	}
+	target, ok := method["target"].(map[string]any)
+	if !ok {
+		t.Fatal("method.target missing or not an object after marshal")
+	}
+	if target["host"] != "dst.io" {
+		t.Errorf("round-tripped target.host = %v, want the packed authority dst.io", target["host"])
+	}
+	credential, ok := target["credential"].(map[string]any)
+	if !ok || credential["type"] != "bearer" || credential["token"] != "registry-token" {
+		t.Errorf("round-tripped target.credential = %v, want bearer registry-token", target["credential"])
 	}
 }

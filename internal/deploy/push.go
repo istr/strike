@@ -3,6 +3,7 @@ package deploy
 import (
 	"context"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io/fs"
 	"log"
@@ -11,8 +12,10 @@ import (
 	"net/http"
 	"net/netip"
 	"slices"
+	"strings"
 	"sync"
 
+	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
@@ -36,13 +39,14 @@ const artifactAnnotation = "dev.strike.artifact"
 // registry target and seals it (ADR-051 D2/D3/D4/D9): the control plane
 // exports the image from the engine, checks the export against the produced
 // content identity, writes it with remote.Write through the trust-anchored
-// transport, catalogs the whole pushed image and every named region into
-// CycloneDX and SPDX SBOMs, and attaches all documents as OCI referrers of
-// the pushed manifest digest, each annotated with its artifacts-map name.
-// The returned attach target carries the pushed descriptor, the transport
-// for the statement-bundle referrers, the validated push-connection identity
-// for Sealed.ObservedPeers, and the per-artifact SBOM digest sets for the
-// sealed records.
+// transport under the declared credential, catalogs the whole pushed image
+// and every named region into CycloneDX and SPDX SBOMs, and attaches all
+// documents as OCI referrers of the pushed manifest digest, each annotated
+// with its artifacts-map name. The registry token is read and checked before
+// the first dial to the target. The returned attach target carries the pushed
+// descriptor, the transport and credential for the statement-bundle
+// referrers, the validated push-connection identity for Sealed.ObservedPeers,
+// and the per-artifact SBOM digest sets for the sealed records.
 func (d *Deployer) executeRegistryDeploy(ctx context.Context, m lane.DeployRegistry, state *lane.Runtime) (*attachTarget, error) {
 	imageName, imageRef, err := selectImageArm(d.ArtifactRefs)
 	if err != nil {
@@ -70,27 +74,32 @@ func (d *Deployer) executeRegistryDeploy(ctx context.Context, m lane.DeployRegis
 		return nil, fmt.Errorf("registry deploy: %w", verifyErr)
 	}
 
+	token, err := d.registryToken(m.Target.Credential)
+	if err != nil {
+		return nil, fmt.Errorf("registry deploy: %w", err)
+	}
 	rt, obs, err := newRegistryTransport(m.Target, d.Dialer)
 	if err != nil {
 		return nil, fmt.Errorf("registry deploy: %w", err)
 	}
+	client := registryClient{rt: rt, token: token}
 	subject, err := payloadDescriptor(img)
 	if err != nil {
 		return nil, fmt.Errorf("registry deploy: %w", err)
 	}
 
 	repo := string(m.Target.Address.Authority()) + "/" + string(m.Target.Name)
-	if pushErr := pushByDigest(ctx, repo, subject.Digest.String(), img, rt); pushErr != nil {
+	if pushErr := pushByDigest(ctx, repo, subject.Digest.String(), img, client); pushErr != nil {
 		return nil, fmt.Errorf("registry deploy: push payload: %w", pushErr)
 	}
 
 	sboms := map[primitive.Identifier]record.SBOMSet{}
-	imgSet, sbomErr := pushImageSBOM(ctx, repo, subject, img, rt, imageName)
+	imgSet, sbomErr := pushImageSBOM(ctx, repo, subject, img, client, imageName)
 	if sbomErr != nil {
 		return nil, fmt.Errorf("registry deploy: %w", sbomErr)
 	}
 	sboms[imageName] = imgSet
-	regionSets, regionErr := d.regionSBOMs(ctx, repo, subject, rt, state)
+	regionSets, regionErr := d.regionSBOMs(ctx, repo, subject, client, state)
 	if regionErr != nil {
 		return nil, fmt.Errorf("registry deploy: %w", regionErr)
 	}
@@ -102,7 +111,7 @@ func (d *Deployer) executeRegistryDeploy(ctx context.Context, m lane.DeployRegis
 	}
 	return &attachTarget{
 		subject:    subject,
-		rt:         rt,
+		client:     client,
 		observed:   ObservedTLS{Type: "https", ServerCertFingerprint: id.LeafFingerprint},
 		resolved:   resolved,
 		sboms:      sboms,
@@ -245,13 +254,13 @@ func payloadDescriptor(img v1.Image) (v1.Descriptor, error) {
 // SBOMs over the pushed manifest digest -- the image arm's whole-image
 // catalog (ADR-051 D3/D9) -- and pushes both as OCI referrers of subject,
 // annotated with the image arm's artifacts name.
-func pushImageSBOM(ctx context.Context, repo string, subject v1.Descriptor, img v1.Image, rt http.RoundTripper, artName primitive.Identifier) (record.SBOMSet, error) {
+func pushImageSBOM(ctx context.Context, repo string, subject v1.Descriptor, img v1.Image, client registryClient, artName primitive.Identifier) (record.SBOMSet, error) {
 	fsys, err := flattenImageToFS(img)
 	if err != nil {
 		return record.SBOMSet{}, fmt.Errorf("flatten payload: %w", err)
 	}
 	subjectDigest := primitive.Digest(subject.Digest.String())
-	return pushSBOMPair(ctx, repo, subject, rt, artName, fsys, subjectDigest)
+	return pushSBOMPair(ctx, repo, subject, client, artName, fsys, subjectDigest)
 }
 
 // regionSBOMs catalogs every file and directory region of the artifacts map
@@ -261,7 +270,7 @@ func pushImageSBOM(ctx context.Context, repo string, subject v1.Descriptor, img 
 // own coordinates, and the region's SBOM pair is pushed as referrers of the
 // pushed subject. Regions run in sorted name order so the referrer writes
 // are deterministic.
-func (d *Deployer) regionSBOMs(ctx context.Context, repo string, subject v1.Descriptor, rt http.RoundTripper, state *lane.Runtime) (map[primitive.Identifier]record.SBOMSet, error) {
+func (d *Deployer) regionSBOMs(ctx context.Context, repo string, subject v1.Descriptor, client registryClient, state *lane.Runtime) (map[primitive.Identifier]record.SBOMSet, error) {
 	sets := map[primitive.Identifier]record.SBOMSet{}
 	exported := map[string][]byte{}
 	for _, artName := range slices.Sorted(maps.Keys(d.ArtifactRefs)) {
@@ -269,7 +278,7 @@ func (d *Deployer) regionSBOMs(ctx context.Context, repo string, subject v1.Desc
 		if ref.Output == nil {
 			continue
 		}
-		set, err := d.regionSBOM(ctx, repo, subject, rt, state, artName, ref, exported)
+		set, err := d.regionSBOM(ctx, repo, subject, client, state, artName, ref, exported)
 		if err != nil {
 			return nil, fmt.Errorf("region %q: %w", artName, err)
 		}
@@ -282,7 +291,7 @@ func (d *Deployer) regionSBOMs(ctx context.Context, repo string, subject v1.Desc
 // producer image (deduplicated across regions of the same producer through
 // exported), select and content-check the layer, read it at the output's own
 // coordinates, and push the SBOM pair under the region's diff_id subject.
-func (d *Deployer) regionSBOM(ctx context.Context, repo string, subject v1.Descriptor, rt http.RoundTripper, state *lane.Runtime, artName primitive.Identifier, ref lane.ArtifactRef, exported map[string][]byte) (record.SBOMSet, error) {
+func (d *Deployer) regionSBOM(ctx context.Context, repo string, subject v1.Descriptor, client registryClient, state *lane.Runtime, artName primitive.Identifier, ref lane.ArtifactRef, exported map[string][]byte) (record.SBOMSet, error) {
 	handle, err := state.Resolve(lane.OutputRef{Step: ref.Step, Output: *ref.Output})
 	if err != nil {
 		return record.SBOMSet{}, err
@@ -312,14 +321,14 @@ func (d *Deployer) regionSBOM(ctx context.Context, repo string, subject v1.Descr
 	if err != nil {
 		return record.SBOMSet{}, err
 	}
-	return pushSBOMPair(ctx, repo, subject, rt, artName, fsys, fh.LayerDiffID)
+	return pushSBOMPair(ctx, repo, subject, client, artName, fsys, fh.LayerDiffID)
 }
 
 // pushSBOMPair catalogs fsys under subjectDigest, pushes the CycloneDX and
 // SPDX documents as OCI referrers of subject -- each annotated with the
 // artifacts-map name it belongs to -- and returns both document digests for
 // the artifact's sealed record (ADR-051 D9).
-func pushSBOMPair(ctx context.Context, repo string, subject v1.Descriptor, rt http.RoundTripper, artName primitive.Identifier, fsys fs.FS, subjectDigest primitive.Digest) (record.SBOMSet, error) {
+func pushSBOMPair(ctx context.Context, repo string, subject v1.Descriptor, client registryClient, artName primitive.Identifier, fsys fs.FS, subjectDigest primitive.Digest) (record.SBOMSet, error) {
 	cdxBytes, spdxBytes, err := GenerateImageSBOM(fsys, subjectDigest, clock.Reproducible())
 	if err != nil {
 		return record.SBOMSet{}, fmt.Errorf("sbom: %w", err)
@@ -339,7 +348,7 @@ func pushSBOMPair(ctx context.Context, repo string, subject v1.Descriptor, rt ht
 		if dErr != nil {
 			return record.SBOMSet{}, fmt.Errorf("sbom artifact digest: %w", dErr)
 		}
-		if pushErr := pushByDigest(ctx, repo, artDigest.String(), art, rt); pushErr != nil {
+		if pushErr := pushByDigest(ctx, repo, artDigest.String(), art, client); pushErr != nil {
 			return record.SBOMSet{}, fmt.Errorf("attach sbom to %s: %w", subject.Digest, pushErr)
 		}
 	}
@@ -352,15 +361,57 @@ func docDigest(doc []byte) primitive.Digest {
 	return primitive.DigestFromHex(hex.EncodeToString(sha256Sum(doc)))
 }
 
-// pushByDigest writes img to repo at the given manifest digest through rt.
-// A manifest with a subject requires the registry's referrers API: the
-// referrers tag fallback is refused, so no write creates a tag (ADR-058).
-func pushByDigest(ctx context.Context, repo, digest string, img v1.Image, rt http.RoundTripper) error {
+// pushByDigest writes img to repo at the given manifest digest through the
+// client's transport, under its credential. A manifest with a subject
+// requires the registry's referrers API: the referrers tag fallback is
+// refused, so no write creates a tag (ADR-058). The error is scrubbed of the
+// token.
+func pushByDigest(ctx context.Context, repo, digest string, img v1.Image, client registryClient) error {
 	dst, err := name.NewDigest(repo + "@" + digest)
 	if err != nil {
 		return fmt.Errorf("target reference %q: %w", repo+"@"+digest, err)
 	}
-	return remote.Write(dst, img, remote.WithTransport(rt), remote.WithReferrersTagFallback(false), remote.WithContext(ctx))
+	return scrub(remote.Write(dst, img, remote.WithTransport(client.rt), remote.WithAuth(client), remote.WithReferrersTagFallback(false), remote.WithContext(ctx)), client.token)
+}
+
+// registryClient is what every write to the declared registry target
+// carries: the trust-anchored transport, and the registry token the target's
+// credential names, presented as the bearer (ADR-058 D2).
+type registryClient struct {
+	rt    http.RoundTripper
+	token lane.SecretString
+}
+
+// Authorization implements authn.Authenticator. The token stays on the
+// redacting secret type until go-containerregistry asks for it (ADR-058 D1).
+func (c registryClient) Authorization() (*authn.AuthConfig, error) {
+	return &authn.AuthConfig{RegistryToken: c.token.Expose()}, nil
+}
+
+// registryToken reads the registry token the target's credential names and
+// checks it before any use, fail-closed: its lifetime stays within the bound
+// (readIDToken), and its audience does not contain the lane's oidc audience,
+// because a token minted for Fulcio is never presented to a registry
+// (ADR-058 D3).
+func (d *Deployer) registryToken(cred lane.RegistryCredential) (lane.SecretString, error) {
+	token, claims, err := d.readIDToken(cred.Token)
+	if err != nil {
+		return lane.SecretString{}, fmt.Errorf("registry token %q: %w", cred.Token, err)
+	}
+	if slices.Contains(claims.Aud, d.OIDC.Audience) {
+		return lane.SecretString{}, fmt.Errorf("registry token %q: its audience contains the oidc audience %q, and a token minted for Fulcio is never presented to a registry", cred.Token, d.OIDC.Audience)
+	}
+	return token, nil
+}
+
+// scrub removes the token from err's text. go-containerregistry carries a
+// registry's error body into the error it returns, and that body is text the
+// registry controls; the token must not reach a log through it (ADR-058 D1).
+func scrub(err error, token lane.SecretString) error {
+	if err == nil || token.Expose() == "" || !strings.Contains(err.Error(), token.Expose()) {
+		return err
+	}
+	return errors.New(strings.ReplaceAll(err.Error(), token.Expose(), token.String()))
 }
 
 // pushIdentityCapture records the first validated push-connection identity

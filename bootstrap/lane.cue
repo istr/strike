@@ -97,7 +97,10 @@ _pack: {
 out: lane.#Lane & {
 	name: "strike-bootstrap"
 	id:   "strike-bootstrap"
-	secrets: "builder-token": "env://SIGSTORE_ID_TOKEN"
+	secrets: {
+		"builder-token":  "env://SIGSTORE_ID_TOKEN"
+		"registry-token": "env://REGISTRY_ID_TOKEN"
+	}
 
 	resolver: {
 		adn: "one.one.one.one"
@@ -188,6 +191,7 @@ out: lane.#Lane & {
 						host: "registry.127.0.0.1.sslip.io:5443"
 						trust: cert: _caddyRoot
 						name: "istr/strike"
+						credential: {type: "bearer", token: "registry-token"}
 					}
 				}
 				artifacts: strike: step: "build-image"

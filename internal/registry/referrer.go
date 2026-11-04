@@ -10,7 +10,6 @@ import (
 	"log"
 	"maps"
 
-	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/partial"
@@ -94,8 +93,9 @@ func ArtifactImage(content []byte, artifactType string, subject v1.Descriptor, a
 // The registry must serve the referrers API: the referrers tag fallback is
 // refused, so a registry without the API fails the push instead of receiving
 // a tag (ADR-058). ArtifactImage owns the referrer wrapping, including how
-// the artifact type is carried. Additional remote options -- for example a
-// trust-anchored transport -- apply to every write.
+// the artifact type is carried. The caller's remote options -- the
+// trust-anchored transport and the authenticator -- apply to every write;
+// no ambient credential is consulted (ADR-058 D6).
 func AttachStatementBundles(ctx context.Context, target string, subject v1.Descriptor, bundles []StatementBundle, opts ...remote.Option) error {
 	targetRef, err := name.ParseReference(target)
 	if err != nil {
@@ -103,7 +103,6 @@ func AttachStatementBundles(ctx context.Context, target string, subject v1.Descr
 	}
 	repo := targetRef.Context()
 	writeOpts := append([]remote.Option{
-		remote.WithAuthFromKeychain(authn.DefaultKeychain),
 		remote.WithReferrersTagFallback(false),
 		remote.WithContext(ctx),
 	}, opts...)
@@ -157,12 +156,13 @@ func FetchStatementBundles(ctx context.Context, subjectRef string) ([]StatementB
 // FetchStatementBundles (strike's own bundles) and FetchBaseSBOMReferrers
 // (cosign base SBOMs), which differ only in the per-referrer reader. The
 // registry must serve the referrers API: the referrers tag fallback is
-// refused, so a registry without the API fails the read (ADR-058).
+// refused, so a registry without the API fails the read (ADR-058). Every
+// read is anonymous over go-containerregistry's default transport; no
+// ambient credential is consulted (ADR-058 D6).
 func fetchReferrers[T any](ctx context.Context, ref name.Digest, fetch func(context.Context, name.Digest) (*T, error)) ([]T, error) {
 	repo := ref.Context()
 	idx, err := remote.Referrers(ref,
 		remote.WithFilter("artifactType", SigstoreBundleMediaType),
-		remote.WithAuthFromKeychain(authn.DefaultKeychain),
 		remote.WithReferrersTagFallback(false),
 		remote.WithContext(ctx))
 	if err != nil {
@@ -191,9 +191,7 @@ func fetchReferrers[T any](ctx context.Context, ref name.Digest, fetch func(cont
 // selects as a strike statement bundle but is malformed -- wrong layer count
 // or a non-bundle layer media type -- is an error, not a skip.
 func fetchOneBundle(ctx context.Context, ref name.Digest) (*StatementBundle, error) {
-	img, err := remote.Image(ref,
-		remote.WithAuthFromKeychain(authn.DefaultKeychain),
-		remote.WithContext(ctx))
+	img, err := remote.Image(ref, remote.WithContext(ctx))
 	if err != nil {
 		return nil, fmt.Errorf("fetch: %w", err)
 	}
@@ -276,9 +274,7 @@ func FetchTrustRoot(ctx context.Context, ref primitive.ImageRef) ([]byte, error)
 	if err != nil {
 		return nil, fmt.Errorf("trust root ref must be digest-pinned: %w", err)
 	}
-	img, err := remote.Image(d,
-		remote.WithAuthFromKeychain(authn.DefaultKeychain),
-		remote.WithContext(ctx))
+	img, err := remote.Image(d, remote.WithContext(ctx))
 	if err != nil {
 		return nil, fmt.Errorf("fetch trust root %s: %w", ref, err)
 	}
@@ -366,9 +362,7 @@ func FetchBaseSBOMReferrers(ctx context.Context, baseRef primitive.ImageRef) ([]
 // malformed -- wrong layer count or a non-bundle layer media type -- is an
 // error, not a skip, so a broken base SBOM surfaces rather than vanishing.
 func fetchOneBaseSBOM(ctx context.Context, ref name.Digest) (*BaseSBOMReferrer, error) {
-	img, err := remote.Image(ref,
-		remote.WithAuthFromKeychain(authn.DefaultKeychain),
-		remote.WithContext(ctx))
+	img, err := remote.Image(ref, remote.WithContext(ctx))
 	if err != nil {
 		return nil, fmt.Errorf("fetch: %w", err)
 	}

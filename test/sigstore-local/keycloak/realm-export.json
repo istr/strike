@@ -105,10 +105,22 @@
           }
         }
       ]
+    },
+    {
+      "clientId": "https://registry.127.0.0.1.sslip.io:5443",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "fullScopeAllowed": true,
+      "defaultClientScopes": [
+        "profile"
+      ]
     }
   ],
   "users": [
     {
+      "id": "5f0c7a2e-3b1d-4e8a-9c6f-0a1b2c3d4e5f",
       "username": "tester",
       "enabled": true,
       "email": "tester@strike.localhost",

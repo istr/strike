@@ -61,13 +61,14 @@ func (s *DeploySpec) UnmarshalJSON(data []byte) error {
 
 // UnmarshalJSON decodes the registry push target: the packed authority host
 // projects into endpoint.Address and trust decodes by field, mirroring the
-// resolver decode (unmarshalDNSResolver). The https carriage type is fixed and
-// set here, not read from the wire.
+// resolver decode (unmarshalDNSResolver); the credential decodes as declared.
+// The https carriage type is fixed and set here, not read from the wire.
 func (t *DeployRegistryTarget) UnmarshalJSON(data []byte) error {
 	var aux struct {
-		Trust *endpoint.Certificate `json:"trust"`
-		Host  string                `json:"host"`
-		Name  primitive.OCIName     `json:"name"`
+		Trust      *endpoint.Certificate `json:"trust"`
+		Host       string                `json:"host"`
+		Name       primitive.OCIName     `json:"name"`
+		Credential RegistryCredential    `json:"credential"`
 	}
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return fmt.Errorf("decode registry target: %w", err)
@@ -84,5 +85,19 @@ func (t *DeployRegistryTarget) UnmarshalJSON(data []byte) error {
 	t.Address = addr
 	t.Trust = tr
 	t.Name = aux.Name
+	t.Credential = aux.Credential
 	return nil
+}
+
+// MarshalJSON projects the host to its packed authority wire form, as
+// endpoint.TLS does: a bare endpoint.Address marshals to its https URL form,
+// which is not this field's wire grammar.
+func (t DeployRegistryTarget) MarshalJSON() ([]byte, error) {
+	return json.Marshal(struct {
+		Trust      endpoint.Certificate  `json:"trust"`
+		Type       endpoint.CarriageType `json:"type"`
+		Host       endpoint.Authority    `json:"host"`
+		Name       primitive.OCIName     `json:"name"`
+		Credential RegistryCredential    `json:"credential"`
+	}{Trust: t.Trust, Type: t.Type, Host: t.Address.Authority(), Name: t.Name, Credential: t.Credential})
 }

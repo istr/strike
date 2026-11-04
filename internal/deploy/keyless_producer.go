@@ -14,70 +14,104 @@ import (
 	"strings"
 
 	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/transport"
 	"github.com/istr/strike/internal/verify"
 	"github.com/istr/strike/internal/wire"
 )
 
-// builderTokenMaxLifetime bounds the builder token's exp - iat, in seconds
-// (ADR-058 D4).
-const builderTokenMaxLifetime = 15 * 60
+// tokenMaxLifetime bounds exp - iat of every identity token a deploy reads,
+// the builder token and the registry token, in seconds (ADR-058 D4).
+const tokenMaxLifetime = 15 * 60
 
-// builderToken reads the builder's identity token from the lane secret the
-// oidc block names (ADR-058 D4) and checks it before any Fulcio contact,
-// fail-closed: its issuer is the lane-declared issuer, and its lifetime,
-// exp - iat, stays within builderTokenMaxLifetime. The identity is checked on
-// the certificate Fulcio issues, before the first signature, because claim
-// names differ per provider and the certificate is what the verifier sees
-// (ADR-041 decision 6 as amended by ADR-057 D2). strike never runs an
-// interactive flow.
-func (d *Deployer) builderToken() (lane.SecretString, error) {
-	token, err := lane.ReadSecret(d.Lane.Secrets[d.OIDC.Token], d.LaneRoot)
+// readIDToken reads the identity token the named lane.secrets entry delivers
+// and decodes its claims, fail-closed: a token whose lifetime, exp - iat, is
+// not positive or exceeds tokenMaxLifetime is refused before any use
+// (ADR-058 D4). The token is not verified here; the peer it is minted for
+// verifies it.
+func (d *Deployer) readIDToken(name primitive.Identifier) (lane.SecretString, idTokenClaims, error) {
+	token, err := lane.ReadSecret(d.Lane.Secrets[name], d.LaneRoot)
 	if err != nil {
-		return lane.SecretString{}, fmt.Errorf("keyless: oidc token %q: %w", d.OIDC.Token, err)
+		return lane.SecretString{}, idTokenClaims{}, err
 	}
 	claims, err := decodeIDTokenClaims(token)
 	if err != nil {
-		return lane.SecretString{}, err
+		return lane.SecretString{}, idTokenClaims{}, err
+	}
+	if claims.Iat <= 0 || claims.Exp <= claims.Iat {
+		return lane.SecretString{}, idTokenClaims{}, errors.New("token carries no valid iat and exp")
+	}
+	if lifetime := claims.Exp - claims.Iat; lifetime > tokenMaxLifetime {
+		return lane.SecretString{}, idTokenClaims{}, fmt.Errorf("token lifetime %ds exceeds the %ds bound", lifetime, tokenMaxLifetime)
+	}
+	return token, claims, nil
+}
+
+// builderToken reads the builder's identity token from the lane secret the
+// oidc block names and checks it before any Fulcio contact, fail-closed: its
+// lifetime stays within the bound (readIDToken), and its issuer is the
+// lane-declared issuer. The identity is checked on the certificate Fulcio
+// issues, before the first signature, because claim names differ per
+// provider and the certificate is what the verifier sees (ADR-041 decision 6
+// as amended by ADR-057 D2). strike never runs an interactive flow.
+func (d *Deployer) builderToken() (lane.SecretString, error) {
+	token, claims, err := d.readIDToken(d.OIDC.Token)
+	if err != nil {
+		return lane.SecretString{}, fmt.Errorf("keyless: oidc token %q: %w", d.OIDC.Token, err)
 	}
 	if claims.Iss != d.OIDC.Issuer.URL() {
 		return lane.SecretString{}, fmt.Errorf("keyless: token issuer %q does not match the lane-declared issuer %q", claims.Iss, d.OIDC.Issuer.URL())
 	}
-	if claims.Iat <= 0 || claims.Exp <= claims.Iat {
-		return lane.SecretString{}, errors.New("keyless: token carries no valid iat and exp")
-	}
-	if lifetime := claims.Exp - claims.Iat; lifetime > builderTokenMaxLifetime {
-		return lane.SecretString{}, fmt.Errorf("keyless: token lifetime %ds exceeds the %ds bound", lifetime, builderTokenMaxLifetime)
-	}
 	return token, nil
 }
 
-// idTokenClaims are the identity-token claims strike reads before any Fulcio
-// contact: the issuer and the lifetime for the fail-closed pre-check, and the
-// subject the proof of possession signs.
+// idTokenClaims are the identity-token claims strike reads before any use:
+// the lifetime for the bound, the issuer for the builder token's pre-check,
+// the audience for the registry token's, and the subject the proof of
+// possession signs.
 type idTokenClaims struct {
-	Email string `json:"email"`
-	Iss   string `json:"iss"`
-	Sub   string `json:"sub"`
-	Exp   int64  `json:"exp"`
-	Iat   int64  `json:"iat"`
+	Email string   `json:"email"`
+	Iss   string   `json:"iss"`
+	Sub   string   `json:"sub"`
+	Aud   audience `json:"aud"`
+	Exp   int64    `json:"exp"`
+	Iat   int64    `json:"iat"`
+}
+
+// audience is the JWT aud claim, which RFC 7519 section 4.1.3 admits as one
+// string or as an array of strings.
+type audience []string
+
+// UnmarshalJSON decodes either form of the claim.
+func (a *audience) UnmarshalJSON(data []byte) error {
+	var one string
+	if err := json.Unmarshal(data, &one); err == nil {
+		*a = audience{one}
+		return nil
+	}
+	var many []string
+	if err := json.Unmarshal(data, &many); err != nil {
+		return fmt.Errorf("aud claim: %w", err)
+	}
+	*a = many
+	return nil
 }
 
 // decodeIDTokenClaims decodes the payload of the identity token. The token is
-// NOT verified here -- Fulcio verifies it against the issuer; the claims are
+// NOT verified here -- the peer it is minted for verifies it; the claims are
 // needed client-side only.
 func decodeIDTokenClaims(idToken lane.SecretString) (idTokenClaims, error) {
 	parts := strings.Split(idToken.Expose(), ".")
 	if len(parts) < 2 {
-		return idTokenClaims{}, errors.New("keyless: malformed identity token")
+		return idTokenClaims{}, errors.New("malformed identity token")
 	}
 	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
 	if err != nil {
-		return idTokenClaims{}, fmt.Errorf("keyless: decode token payload: %w", err)
+		return idTokenClaims{}, fmt.Errorf("decode token payload: %w", err)
 	}
 	var claims idTokenClaims
 	if err := json.Unmarshal(payload, &claims); err != nil {
-		return idTokenClaims{}, fmt.Errorf("keyless: parse token claims: %w", err)
+		return idTokenClaims{}, fmt.Errorf("parse token claims: %w", err)
 	}
 	return claims, nil
 }
@@ -87,7 +121,7 @@ func decodeIDTokenClaims(idToken lane.SecretString) (idTokenClaims, error) {
 func subjectFromIDToken(idToken lane.SecretString) (string, error) {
 	claims, err := decodeIDTokenClaims(idToken)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("keyless: %w", err)
 	}
 	if claims.Email != "" {
 		return claims.Email, nil

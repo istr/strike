@@ -57,9 +57,10 @@ func ValidateLane(p *Lane, index map[primitive.Identifier]*Step) error {
 
 // validateDeclarations runs the checks that read the lane's declarations
 // alone and need nothing from the step index or the DAG: the step kind, the
-// deploy presence and method, the resolver, every signer identity, and every
-// trust anchor. They come first so a bad declaration is reported as such
-// rather than as whatever a later validator happens to reach.
+// deploy presence and method, the resolver, every signer identity, every
+// token a deploy reads, and every trust anchor. They come first so a bad
+// declaration is reported as such rather than as whatever a later validator
+// happens to reach.
 func validateDeclarations(p *Lane) error {
 	if err := validateStepKindDisjointness(p); err != nil {
 		return err
@@ -76,7 +77,10 @@ func validateDeclarations(p *Lane) error {
 	if err := validateSignerIdentities(p); err != nil {
 		return err
 	}
-	if err := validateBuilderToken(p); err != nil {
+	if err := validateDeployToken(p, p.OIDC.Token, "oidc token"); err != nil {
+		return err
+	}
+	if err := validateRegistryCredentials(p); err != nil {
 		return err
 	}
 	return validateTrustAnchors(p)
@@ -127,18 +131,43 @@ func validateExtensionURIs(ext *FulcioExtensions) error {
 	return nil
 }
 
-// validateBuilderToken checks the builder token the oidc block names: it is a
-// declared lane.secrets entry, and no step references it, so it reaches the
-// deploy's keyless chain and never a step container (ADR-058 D1, D4).
-func validateBuilderToken(p *Lane) error {
-	if _, ok := p.Secrets[p.OIDC.Token]; !ok {
-		return fmt.Errorf("oidc token %q is not declared in lane.secrets", p.OIDC.Token)
+// validateDeployToken checks a token the control plane reads from
+// lane.secrets at the deploy: it is declared, and no step references it, so
+// it reaches the deploy and never a step container (ADR-058 D1, D4). role
+// names the token in the errors.
+func validateDeployToken(p *Lane, name primitive.Identifier, role string) error {
+	if _, ok := p.Secrets[name]; !ok {
+		return fmt.Errorf("%s %q is not declared in lane.secrets", role, name)
 	}
 	for _, s := range p.Steps {
 		for _, ref := range s.Secrets {
-			if ref.Name == p.OIDC.Token {
-				return fmt.Errorf("step %q: secret %q is the oidc token and must not reach a step container", s.ID, ref.Name)
+			if ref.Name == name {
+				return fmt.Errorf("step %q: secret %q is the %s and must not reach a step container", s.ID, ref.Name, role)
 			}
+		}
+	}
+	return nil
+}
+
+// validateRegistryCredentials checks the token every registry deploy's
+// credential names, as validateDeployToken does, and refuses the oidc token:
+// the registry token is minted for the registry's own audience, and the
+// builder token is never presented to a registry (ADR-058 D3).
+func validateRegistryCredentials(p *Lane) error {
+	for _, s := range p.Steps {
+		if s.Deploy == nil {
+			continue
+		}
+		reg, ok := s.Deploy.Method.(DeployRegistry)
+		if !ok {
+			continue
+		}
+		token := reg.Target.Credential.Token
+		if token == p.OIDC.Token {
+			return fmt.Errorf("deploy step %q: the registry credential names the oidc token %q, which is never presented to a registry", s.ID, token)
+		}
+		if err := validateDeployToken(p, token, "registry token"); err != nil {
+			return fmt.Errorf("deploy step %q: %w", s.ID, err)
 		}
 	}
 	return nil

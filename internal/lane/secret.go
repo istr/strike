@@ -33,7 +33,8 @@ func NewSecretString(value string) SecretString {
 }
 
 // Expose returns the plaintext value. Call only when passing to a container
-// environment variable or a cryptographic operation.
+// environment variable, a cryptographic operation, or the peer the token
+// authenticates to.
 func (s SecretString) Expose() string {
 	return s.value
 }

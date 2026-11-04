@@ -351,16 +351,17 @@ import (
 }
 
 // DeployRegistryTarget is the registry push destination: the https authority
-// and server-trust anchor of the target registry plus the repository name the
-// payload is written under (ADR-051 D6). The field set restates the
-// endpoint.#TLS wire shape (type, host, trust) rather than embedding it:
-// gengotypes emits @go type overrides verbatim and #TLS carries bare
-// same-package overrides (type=Address, type=Trust), so an embedded
+// and server-trust anchor of the target registry, the repository name the
+// payload is written under (ADR-051 D6), and the client credential the push
+// authenticates with, declared beside the anchor (ADR-058 D1). The field set
+// restates the endpoint.#TLS wire shape (type, host, trust) rather than
+// embedding it: gengotypes emits @go type overrides verbatim and #TLS carries
+// bare same-package overrides (type=Address, type=Trust), so an embedded
 // cross-package definition would emit unqualified type names into this
 // package; the restatement carries package-qualified overrides and produces
 // the identical wire shape and the identical flat Go struct. name is the OCI
-// distribution-spec repository name -- no tag, no digest: the pushed digest
-// is the result of the push, bound afterward in the attestation.
+// distribution-spec repository name -- no tag, no digest: the pushed digest is
+// the result of the push, bound afterward in the attestation.
 #DeployRegistryTarget: {
 	@go(DeployRegistryTarget)
 	type: "https" @go(Type,type="github.com/istr/strike/contract/endpoint".CarriageType)
@@ -369,6 +370,22 @@ import (
 	host:  endpoint.#Authority   @go(Address,type="github.com/istr/strike/contract/endpoint".Address)
 	trust: endpoint.#Certificate @go(Trust,type="github.com/istr/strike/contract/endpoint".Certificate)
 	name:  primitive.#OCIName    @go(Name)
+	// credential is the client identity of the push, declared beside the
+	// server-trust anchor and never inside it (ADR-007, ADR-058 D1).
+	credential: #RegistryCredential @go(Credential)
+}
+
+// #CredentialType is the registry credential discriminator vocabulary.
+#CredentialType: "bearer"
+
+// RegistryCredential: the registry validates the token itself and strike
+// presents it as the bearer; no token realm is dialed (ADR-058 D2). token
+// names the lane.secrets entry that delivers it; no step references it, and
+// it is not the oidc token.
+#RegistryCredential: {
+	@go(RegistryCredential)
+	type:  "bearer"              @go(Type,type=CredentialType)
+	token: primitive.#Identifier @go(Token)
 }
 
 // ---------------------------------------------------------------------------

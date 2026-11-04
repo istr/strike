@@ -14,7 +14,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"net/http"
 	"net/netip"
 	"os"
 
@@ -485,8 +484,8 @@ func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.Run
 			{Statement: record.TrustLayerSealed, Bundle: signed.Sealed.Bundle},
 			{Statement: record.TrustLayerEngineDependent, Bundle: signed.EngineContext.Bundle},
 			{Statement: record.TrustLayerInformational, Bundle: signed.Informational.Bundle},
-		}, remote.WithTransport(attach.rt)); err != nil {
-			return nil, fmt.Errorf("step %q: attach statement bundles: %w", step.ID, err)
+		}, remote.WithTransport(attach.client.rt), remote.WithAuth(attach.client)); err != nil {
+			return nil, fmt.Errorf("step %q: attach statement bundles: %w", step.ID, scrub(err, attach.client.token))
 		}
 	}
 
@@ -697,12 +696,13 @@ func (d *Deployer) captureOne(ctx context.Context, sc lane.Capture) (captureSnap
 
 // attachTarget identifies where the signed statement bundles are attached
 // after signing: the pushed manifest descriptor within the deploy target
-// repository (ADR-040 D3), the trust-anchored transport every referrer
-// write reuses, and the validated push-connection identity for
-// Sealed.ObservedPeers. Nil for deploy methods without a registry push.
+// repository (ADR-040 D3), the trust-anchored transport and the declared
+// credential every referrer write reuses, and the validated push-connection
+// identity for Sealed.ObservedPeers. Nil for deploy methods without a
+// registry push.
 type attachTarget struct {
 	subject    v1.Descriptor                           // pushed manifest descriptor (the referrer subject)
-	rt         http.RoundTripper                       // trust-anchored transport for referrer writes
+	client     registryClient                          // trust-anchored transport and declared credential for referrer writes
 	observed   ObservedIdentity                        // validated push-connection identity (sealed layer)
 	sboms      map[primitive.Identifier]record.SBOMSet // per-artifact SBOM document digests (ADR-051 D9)
 	ref        string                                  // deploy target repository (authority/name)

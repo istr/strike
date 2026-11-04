@@ -86,6 +86,7 @@ name: deploy-only
 id: deploy-only
 secrets:
   builder-token: "env://SIGSTORE_ID_TOKEN"
+  registry-token: "env://REGISTRY_ID_TOKEN"
 resolver:
   adn: one.one.one.one
   ip: 1.1.1.1
@@ -124,6 +125,9 @@ steps:
           trust:
             cert: "@anchor@"
           name: app
+          credential:
+            type: bearer
+            token: registry-token
       recording:
         preState:
           required: false
@@ -160,6 +164,7 @@ name: sbom-signer-lane
 id: sbom-signer-lane
 secrets:
   builder-token: "env://SIGSTORE_ID_TOKEN"
+  registry-token: "env://REGISTRY_ID_TOKEN"
 resolver:
   adn: one.one.one.one
   ip: 1.1.1.1
@@ -201,6 +206,9 @@ steps:
           trust:
             cert: "@anchor@"
           name: app
+          credential:
+            type: bearer
+            token: registry-token
       recording:
         preState:
           required: false
@@ -518,6 +526,7 @@ name: test
 id: test
 secrets:
   builder-token: "env://SIGSTORE_ID_TOKEN"
+  registry-token: "env://REGISTRY_ID_TOKEN"
 resolver:
   adn: one.one.one.one
   ip: 1.1.1.1
@@ -579,6 +588,9 @@ steps:
           trust:
             cert: "@anchor@"
           name: app
+          credential:
+            type: bearer
+            token: registry-token
       recording:
         preState:
           required: false

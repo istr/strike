@@ -82,7 +82,7 @@ first (`make -C test/sigstore-local up`), then build stage_1 from the clone's
 root:
 
 ```sh
-GIT_COMMIT=13f40f79638469f2874486c8cc4e904064a0e1b3
+GIT_COMMIT=ef4e6b544e620809d425dd8648ece41347351879
 
 podman build -t strike:stage_1 \
   --build-arg GIT_COMMIT=${GIT_COMMIT} \
@@ -102,6 +102,7 @@ stage_1 runs as a sibling of its own steps:
 
 ```sh
 SIGSTORE_ID_TOKEN=$(make -s -C test/sigstore-local token) \
+REGISTRY_ID_TOKEN=$(make -s -C test/sigstore-local registry-token) \
 podman run --rm \
   --userns=keep-id:uid=65532,gid=65532 \
   --network=host \
@@ -109,14 +110,16 @@ podman run --rm \
   -v "$XDG_RUNTIME_DIR/podman.sock:/run/podman/podman.sock" \
   -e CONTAINER_HOST=unix:///run/podman/podman.sock \
   -e SIGSTORE_ID_TOKEN \
+  -e REGISTRY_ID_TOKEN \
   strike:stage_1
 ```
 
 Your engine starts it with the engine socket bound in and named through
 `CONTAINER_HOST`, host networking, and the keep-id mapping that places your
 user on the image's user (plain `--userns=keep-id` leaves the process on the
-image's user, which cannot open your socket). The harness token is minted for
-this one run. strike drives that same engine to run the bootstrap lane:
+image's user, which cannot open your socket). The two harness tokens, the
+builder's for Fulcio and the registry's for the push, are minted for this one
+run. strike drives that same engine to run the bootstrap lane:
 
 1. **source** -- fetches the commit in a digest-pinned git image; its only
    peer is `github.com`.
@@ -132,9 +135,10 @@ this one run. strike drives that same engine to run the bootstrap lane:
 6. **build-binary-2**, **build-image-2** -- the same build and pack again, in
    the same run, with the cache bypassed. This image is stage_3.
 7. **publish** -- a registry deploy of stage_2 to the harness registry,
-   signed under the harness keyless chain. Its `reproducedBy` gate names
-   stage_3: before anything is pushed, the deploy asserts that stage_2 and
-   stage_3 are byte-identical and fails on a mismatch.
+   pushed under the registry token and signed under the harness keyless
+   chain. Its `reproducedBy` gate names stage_3: before anything is pushed,
+   the deploy asserts that stage_2 and stage_3 are byte-identical and fails
+   on a mismatch.
 
 A passing run logs `GATE   reproducedBy: build-image and build-image-2 built
 sha256:...` and then `OK     publish ->

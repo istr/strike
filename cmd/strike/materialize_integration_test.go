@@ -48,6 +48,7 @@ const materializeLaneTemplate = `name: materialize-itest
 id: materialize-itest
 secrets:
   builder-token: "env://SIGSTORE_ID_TOKEN"
+  registry-token: "env://REGISTRY_ID_TOKEN"
 resolver:
   adn: resolver.127.0.0.1.sslip.io
   ip: 127.0.0.1
@@ -111,6 +112,9 @@ steps:
           trust:
             cert: "__CADDY_ROOT__"
           name: __REPO__
+          credential:
+            type: bearer
+            token: registry-token
       artifacts:
         app:
           step: pack
@@ -239,7 +243,8 @@ func TestMaterializeStepImageLive_Integration(t *testing.T) {
 	ctx := context.Background()
 	caddyRoot, resolverCert := materializeHarness(t, engine)
 	client := materializeEngineClient(t)
-	t.Setenv("SIGSTORE_ID_TOKEN", testutil.MintIDToken(t, itestIssuer, caddyRoot))
+	t.Setenv("SIGSTORE_ID_TOKEN", testutil.MintIDToken(t, itestIssuer, testutil.HarnessBuilderClient, caddyRoot))
+	t.Setenv("REGISTRY_ID_TOKEN", testutil.MintIDToken(t, itestIssuer, testutil.HarnessRegistryClient, caddyRoot))
 
 	removeImageByName(ctx, t, client, materializeFixture)
 	present, err := engine.ImageExists(ctx, materializeFixture)

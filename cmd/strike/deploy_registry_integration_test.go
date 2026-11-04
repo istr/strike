@@ -65,6 +65,7 @@ const itestLaneTemplate = `name: registry-deploy-itest
 id: registry-deploy-itest
 secrets:
   builder-token: "env://SIGSTORE_ID_TOKEN"
+  registry-token: "env://REGISTRY_ID_TOKEN"
 resolver:
   adn: resolver.127.0.0.1.sslip.io
   ip: 127.0.0.1
@@ -113,6 +114,9 @@ steps:
           trust:
             cert: "__CADDY_ROOT__"
           name: __REPO__
+          credential:
+            type: bearer
+            token: registry-token
       artifacts:
         app:
           step: pack
@@ -157,7 +161,8 @@ func TestRegistryDeployLive_Integration(t *testing.T) {
 			t.Fatalf("harness material missing (run make up in test/sigstore-local): %v", statErr)
 		}
 	}
-	t.Setenv("SIGSTORE_ID_TOKEN", testutil.MintIDToken(t, itestIssuer, caddyRoot))
+	t.Setenv("SIGSTORE_ID_TOKEN", testutil.MintIDToken(t, itestIssuer, testutil.HarnessBuilderClient, caddyRoot))
+	t.Setenv("REGISTRY_ID_TOKEN", testutil.MintIDToken(t, itestIssuer, testutil.HarnessRegistryClient, caddyRoot))
 
 	repo := fmt.Sprintf("strike-itest-%d", clock.Wall().UnixNano())
 	lanePath := writeFixtureLane(t, caddyRoot, resolverCert, repo)

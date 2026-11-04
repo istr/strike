@@ -5,8 +5,10 @@ ISSUER    := https://keycloak.127.0.0.1.sslip.io:8443/realms/sigstore
 IDENTITY  := https://forge.strike.localhost/istr/strike/bootstrap/lane.cue@refs/heads/main
 DISCOVERY := $(ISSUER)/.well-known/openid-configuration
 CADDY_ROOT := pki/caddy-root.crt
+# The registry audience: Keycloak sets an id token's aud to the client id.
+REGISTRY_CLIENT := https://registry.127.0.0.1.sslip.io:5443
 
-.PHONY: keys up down clean caddy-root check-issuer preflight token tsa-certchain rekor-pubkey ctlog-pubkey conformance
+.PHONY: keys up down clean caddy-root check-issuer preflight token registry-token tsa-certchain rekor-pubkey ctlog-pubkey conformance
 
 keys: pki/rekor-ed25519.pem pki/rekor-ed25519-pub.pem pki/fulcio-root.crt pki/fulcio-root.key pki/ctfe.key pki/ctfe-pub.pem pki/resolver.crt pki/resolver.key ## generate signing keys: rekor ed25519, the Fulcio fileca root, the CT log (ctfe) key, and the DoT resolver certificate
 
@@ -76,6 +78,13 @@ check-issuer: ## verify the issuer resolves identically from host and in-network
 token: $(CADDY_ROOT) ## print an OIDC id_token for the harness builder identity (aud sigstore)
 	@curl --cacert $(CADDY_ROOT) -sf \
 	  -d grant_type=password -d client_id=sigstore \
+	  -d username=tester -d password=tester -d scope=openid \
+	  $(ISSUER)/protocol/openid-connect/token \
+	  | grep -o '"id_token":"[^"]*"' | sed 's/.*:"//;s/"$$//'
+
+registry-token: $(CADDY_ROOT) ## print an OIDC id_token for the harness registry (aud $(REGISTRY_CLIENT))
+	@curl --cacert $(CADDY_ROOT) -sf \
+	  -d grant_type=password --data-urlencode client_id=$(REGISTRY_CLIENT) \
 	  -d username=tester -d password=tester -d scope=openid \
 	  $(ISSUER)/protocol/openid-connect/token \
 	  | grep -o '"id_token":"[^"]*"' | sed 's/.*:"//;s/"$$//'

@@ -109,14 +109,22 @@ func ModuleRoot() (string, error) {
 	}
 }
 
+// The harness Keycloak clients id tokens are minted from. Keycloak sets an id
+// token's aud to the client id: the builder token is minted for Fulcio's
+// audience, the registry token for the harness registry's.
+const (
+	HarnessBuilderClient  = "sigstore"
+	HarnessRegistryClient = "https://registry.127.0.0.1.sslip.io:5443"
+)
+
 // MintIDToken obtains an OIDC id_token from the harness Keycloak, mirroring
-// the harness Makefile token target: password grant for user tester with
-// client sigstore, TLS pinned to the exported caddy root at caCertPath. Any
+// the harness Makefile token targets: password grant for user tester with the
+// given client, TLS pinned to the exported caddy root at caCertPath. Any
 // failure is fatal with the opt-out hint -- the harness is a prerequisite,
 // not a skip condition.
-func MintIDToken(t *testing.T, issuer, caCertPath string) string {
+func MintIDToken(t *testing.T, issuer, clientID, caCertPath string) string {
 	t.Helper()
-	token, err := FetchIDToken(t.Context(), issuer, caCertPath)
+	token, err := FetchIDToken(t.Context(), issuer, clientID, caCertPath)
 	if err != nil {
 		t.Fatalf("%v; set STRIKE_INTEGRATION=0 to skip integration tests", err)
 	}
@@ -126,14 +134,14 @@ func MintIDToken(t *testing.T, issuer, caCertPath string) string {
 // FetchIDToken performs the Keycloak password grant and returns the id_token,
 // with bare errors. The STRIKE_INTEGRATION hint lives in MintIDToken, not here:
 // a standalone command cannot act on it, and a wrong hint is worse than none.
-func FetchIDToken(ctx context.Context, issuer, caCertPath string) (string, error) {
+func FetchIDToken(ctx context.Context, issuer, clientID, caCertPath string) (string, error) {
 	client, err := pinnedClient(caCertPath, harnessHTTPTimeout)
 	if err != nil {
 		return "", fmt.Errorf("keycloak tls config: %w", err)
 	}
 	form := url.Values{
 		"grant_type": {"password"},
-		"client_id":  {"sigstore"},
+		"client_id":  {clientID},
 		"username":   {"tester"},
 		"password":   {"tester"},
 		"scope":      {"openid"},

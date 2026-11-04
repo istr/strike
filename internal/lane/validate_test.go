@@ -87,8 +87,9 @@ func TestValidateLane_Reject(t *testing.T) {
 // TestValidateLane_RejectOIDCDeclarations derives each case from the valid
 // deploy fixture by one text replacement and asserts the declaration check
 // that rejects it: the source-pin minimum, the URI-reference grammar of the
-// oidc and base-SBOM signer pins, and the builder token's declaration and
-// confinement to the deploy.
+// oidc and base-SBOM signer pins, the builder token's declaration and
+// confinement to the deploy, and the same for the token the registry
+// credential names, which is never the builder token (ADR-058 D3).
 func TestValidateLane_RejectOIDCDeclarations(t *testing.T) {
 	base, err := fs.ReadFile(os.DirFS("testdata"), "valid_deploy_minimal.yaml")
 	if err != nil {
@@ -106,6 +107,9 @@ func TestValidateLane_RejectOIDCDeclarations(t *testing.T) {
 		{"oidc build config pin with space", refPin, refPin + "    sourceRepositoryURI: \"https://forge.example/o/r\"\n    buildConfigURI: \"https://forge.example/a b\"\n", "oidc extensions buildConfigURI"},
 		{"undeclared token", "  token: builder-token\n", "  token: other-token\n", "oidc token \"other-token\" is not declared"},
 		{"token reaches a step", "    secrets: []\n", "    secrets: [{name: builder-token, env: TOKEN}]\n", "is the oidc token"},
+		{"undeclared registry token", "            token: registry-token\n", "            token: other-token\n", "registry token \"other-token\" is not declared"},
+		{"registry token reaches a step", "    secrets: []\n", "    secrets: [{name: registry-token, env: TOKEN}]\n", "is the registry token"},
+		{"registry credential names the oidc token", "            token: registry-token\n", "            token: builder-token\n", "names the oidc token \"builder-token\""},
 		{"signer uri pin with space", "steps:\n", "baseSbomSigners:\n  - issuer: \"https://accounts.google.com\"\n    identity: \"sbom@example.com\"\n    extensions:\n      sourceRepositoryURI: \"https://forge.example/a b\"\nsteps:\n", "baseSbomSigners[0] extensions sourceRepositoryURI"},
 	}
 	for _, tc := range tests {
@@ -149,6 +153,37 @@ func TestParse_OIDCExtensionGrammar(t *testing.T) {
 		}
 		if _, _, _, err := lane.Parse(fp); err == nil || !strings.Contains(err.Error(), "validation") {
 			t.Errorf("pin %q: err = %v, want a schema validation error", pin, err)
+		}
+	}
+}
+
+// TestParse_RegistryCredentialGrammar proves the credential's schema: a
+// registry target without one, a credential type outside the vocabulary, and
+// a credential without the name of its token fail at parse (ADR-058 D1, D2).
+func TestParse_RegistryCredentialGrammar(t *testing.T) {
+	base, err := fs.ReadFile(os.DirFS("testdata"), "valid_deploy_minimal.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const credential = "          credential:\n            type: bearer\n            token: registry-token\n"
+	if !strings.Contains(string(base), credential) {
+		t.Fatalf("fixture does not contain %q", credential)
+	}
+	for _, replacement := range []string{
+		"",
+		"          credential:\n            type: basic\n            token: registry-token\n",
+		"          credential:\n            type: bearer\n",
+	} {
+		path := filepath.Join(t.TempDir(), "lane.yaml")
+		if err := os.WriteFile(path, []byte(strings.Replace(string(base), credential, replacement, 1)), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		fp, err := lane.NewFilePath(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, _, _, err := lane.Parse(fp); err == nil || !strings.Contains(err.Error(), "validation") {
+			t.Errorf("credential %q: err = %v, want a schema validation error", replacement, err)
 		}
 	}
 }

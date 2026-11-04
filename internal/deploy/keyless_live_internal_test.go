@@ -87,7 +87,7 @@ func TestKeylessLive(t *testing.T) {
 			t.Fatalf("harness material missing (run make up / rekor-pubkey / tsa-certchain / ctlog-pubkey): %v", statErr)
 		}
 	}
-	t.Setenv("SIGSTORE_ID_TOKEN", testutil.MintIDToken(t, liveIssuer, caddyRoot))
+	t.Setenv("SIGSTORE_ID_TOKEN", testutil.MintIDToken(t, liveIssuer, testutil.HarnessBuilderClient, caddyRoot))
 
 	dialer, dialerErr := testutil.HarnessDialer(harness)
 	if dialerErr != nil {

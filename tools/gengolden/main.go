@@ -93,7 +93,7 @@ func run(ctx context.Context) error {
 		Rekor:  endpoint.HTTPS{Address: endpoint.MustParseURL(rekorURL), Trust: trust},
 		TSA:    endpoint.HTTPS{Address: endpoint.MustParseURL(tsaURL), Trust: trust},
 	}
-	token, err := testutil.FetchIDToken(ctx, harnessIssuer, caddyRoot)
+	token, err := testutil.FetchIDToken(ctx, harnessIssuer, testutil.HarnessBuilderClient, caddyRoot)
 	if err != nil {
 		return err
 	}

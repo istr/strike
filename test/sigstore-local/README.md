@@ -19,6 +19,7 @@ infrastructure -- not part of the strike binary.
     make up
     make check-issuer   # both lines must print the same issuer string
     make token          # print an OIDC id_token for the harness builder identity
+    make registry-token # print an OIDC id_token for the harness registry audience
     make tsa-certchain  # fetch the TSA certificate chain to pki/tsa-certchain.pem
 
 `make up` on a harness whose containers already exist prints one
@@ -78,7 +79,12 @@ is not HTTP, so Caddy cannot front it; CoreDNS terminates TLS itself under
 - `keycloak/realm-export.json` -- realm `sigstore`, public client `sigstore`
   with direct access grant on, no `email` scope and hardcoded claim mappers
   for the forge stand-in (`url`, `repository`, `ref`, `sha`, `workflow_ref`,
-  `runner_environment`); test user `tester` / `tester`.
+  `runner_environment`); public client
+  `https://registry.127.0.0.1.sslip.io:5443` with direct access grant on and
+  no mappers, whose id is the registry audience, because Keycloak sets an id
+  token's `aud` to the client id; test user `tester` / `tester` with a pinned
+  id, so the token `sub` is fixed. The registry token is the id token: the
+  access token carries neither `sub` nor `aud`.
 - `pki/` -- generated ed25519 rekor signer key and its exported public key
   (`rekor-ed25519-pub.pem`), the persistent Fulcio fileca root
   (`fulcio-root.crt` + encrypted `fulcio-root.key`), the CT log (ctfe) signer

@@ -183,9 +183,10 @@ needs no scratch directory that the endpoint engine can see and no
 The dev container protects the endpoint. It does not protect what lies
 inside it: the agent can read anything mounted or injected into the
 container. No long-lived secret is mounted into it -- not an SSH key, not a
-cloud credential file. The OIDC token a registry deploy needs is minted for
-one lane run, injected into that run's environment, and never persisted in
-the container or the tree.
+cloud credential file. The two OIDC tokens a registry deploy needs, the
+builder's for Fulcio and the registry's for the push, are minted for one
+lane run, injected into that run's environment, and never persisted in the
+container or the tree.
 
 ## Bootstrapping strike on the endpoint
 
@@ -207,6 +208,7 @@ podman run --rm \
   -v "$XDG_RUNTIME_DIR/podman.sock:/run/podman/podman.sock" \
   -e CONTAINER_HOST=unix:///run/podman/podman.sock \
   -e SIGSTORE_ID_TOKEN \
+  -e REGISTRY_ID_TOKEN \
   strike:stage_1
 ```
 
@@ -220,10 +222,10 @@ Each part is load-bearing:
   controller's loopback, and pasta forwards every step to the endpoint's
   loopback. Without host networking the two are different loopbacks and
   every step's name resolution times out.
-- **The token.** `SIGSTORE_ID_TOKEN` is read at the deploy, and steps do not
-  inherit it. Any holder of the engine socket can read it in the container's
-  inspect until the container is removed, so mint it for one run and keep
-  `--rm`.
+- **The tokens.** `SIGSTORE_ID_TOKEN` and `REGISTRY_ID_TOKEN` are read at
+  the deploy, and steps do not inherit them. Any holder of the engine socket
+  can read them in the container's inspect until the container is removed,
+  so mint them for one run and keep `--rm`.
 
 Run one strike controller per endpoint at a time until item-0161 lands: all
 controllers share the loopback, and their resolver and mediator ports
