@@ -8,22 +8,13 @@ package main
 
 import (
 	"context"
-	"crypto/sha256"
-	"crypto/x509"
 	"encoding/json"
-	"encoding/pem"
-	"errors"
 	"fmt"
 	"log"
-	"net/http"
 	"os"
 	"path/filepath"
 
-	protocommon "github.com/sigstore/protobuf-specs/gen/pb-go/common/v1"
-	trustrootpb "github.com/sigstore/protobuf-specs/gen/pb-go/trustroot/v1"
-	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
+	"github.com/istr/strike/internal/closer"
 	"github.com/istr/strike/internal/deploy"
 	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/lane"
@@ -31,21 +22,16 @@ import (
 	"github.com/istr/strike/internal/record"
 	"github.com/istr/strike/internal/testutil"
 	"github.com/istr/strike/internal/transport"
-	"github.com/istr/strike/internal/wire"
 )
 
-// Harness coordinates. These mirror test/sigstore-local's Caddy routes and the
-// checkpoint origin its Rekor signs; they are configuration of that harness,
-// not a rule the producer and verifier must agree on.
+// Harness coordinates. These mirror test/sigstore-local's Caddy routes; they
+// are configuration of that harness, not a rule the producer and verifier must
+// agree on.
 const (
-	harnessIssuer    = "https://keycloak.127.0.0.1.sslip.io:8443/realms/sigstore"
-	rekorOrigin      = "rekor.localhost"
-	rekorBaseURL     = "https://" + rekorOrigin
-	ctBaseURL        = "https://ct.127.0.0.1.sslip.io:6962/strike-ct"
-	fulcioURL        = "https://fulcio.127.0.0.1.sslip.io:5555"
-	rekorURL         = "https://rekor.127.0.0.1.sslip.io:3003"
-	tsaURL           = "https://tsa.127.0.0.1.sslip.io:3004"
-	trustedRootMedia = "application/vnd.dev.sigstore.trustedroot+json;version=0.1"
+	harnessIssuer = "https://keycloak.127.0.0.1.sslip.io:8443/realms/sigstore"
+	fulcioURL     = "https://fulcio.127.0.0.1.sslip.io:5555"
+	rekorURL      = "https://rekor.127.0.0.1.sslip.io:3003"
+	tsaURL        = "https://tsa.127.0.0.1.sslip.io:3004"
 )
 
 // goldenNames are the fixture basenames, positionally aligned with the
@@ -103,7 +89,11 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	trustedRoot, err := assembleTrustedRoot(ctx, eps.Fulcio, dialer, rekorPub, tsaChain, ctfePub)
+	fulcioClient, err := deploy.HTTPClientFor(eps.Fulcio, dialer)
+	if err != nil {
+		return fmt.Errorf("fulcio client: %w", err)
+	}
+	trustedRoot, err := testutil.HarnessTrustedRoot(ctx, fulcioClient, eps.Fulcio.Address.URL(), harness)
 	if err != nil {
 		return err
 	}
@@ -114,11 +104,7 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("open golden dir: %w", err)
 	}
-	defer func() {
-		if closeErr := tree.Close(); closeErr != nil {
-			log.Printf("WARN close golden dir: %v", closeErr)
-		}
-	}()
+	defer closer.Warn(tree, "golden dir")
 	for i, name := range goldenNames {
 		if writeErr := tree.WriteFile(name+".sigstore.json", bundles[i], 0o600); writeErr != nil {
 			return fmt.Errorf("write %s bundle: %w", name, writeErr)
@@ -184,205 +170,4 @@ func syntheticAttestation(laneDigest primitive.Digest) *deploy.Attestation {
 			PostStateDigest: primitive.DigestFromHex(artifactDigest),
 		},
 	}
-}
-
-// trustMaterials are the harness inputs the trust root is assembled from,
-// grouped so the proto construction stays one readable literal.
-type trustMaterials struct {
-	fulcioURI   string
-	fulcioCerts []*x509.Certificate
-	tsaCerts    []*x509.Certificate
-	rekorKeyDER []byte
-	rekorLogID  []byte
-	ctfeKeyDER  []byte
-	ctfeLogID   []byte
-}
-
-// assembleTrustedRoot builds the trusted_root.json the verifier consumes from
-// the same harness materials the live keyless test uses -- the Fulcio chain via
-// GET /api/v2/trustBundle over the pinned TLS client, the exported Rekor log
-// public key, and the fetched TSA certificate chain.
-func assembleTrustedRoot(ctx context.Context, fulcioEp endpoint.HTTPS, dialer *transport.Dialer, rekorPubPath, tsaChainPath, ctfePubPath string) ([]byte, error) {
-	fulcioCerts, err := fulcioChain(ctx, fulcioEp, dialer)
-	if err != nil {
-		return nil, err
-	}
-	rekorBlock, err := readPEM(rekorPubPath, "rekor public key")
-	if err != nil {
-		return nil, err
-	}
-	edPub, err := wire.ParseEd25519PKIX(rekorBlock.Bytes)
-	if err != nil {
-		return nil, fmt.Errorf("parse rekor public key: %w", err)
-	}
-	tsaCerts, err := certChain(tsaChainPath, "tsa")
-	if err != nil {
-		return nil, err
-	}
-	if len(tsaCerts) < 2 {
-		return nil, fmt.Errorf("tsa chain has %d certificates, want >= 2", len(tsaCerts))
-	}
-	ctfeBlock, err := readPEM(ctfePubPath, "ctfe public key")
-	if err != nil {
-		return nil, err
-	}
-	// RFC6962 CT log id is sha256(DER SubjectPublicKeyInfo), i.e. the PEM body
-	// of an openssl `ec -pubout` PUBLIC KEY block. This differs from the Rekor
-	// v2 C2SP signed-note key id computed by wire.NoteKeyID.
-	ctLogID := sha256.Sum256(ctfeBlock.Bytes)
-
-	out, err := protojson.Marshal(trustedRootProto(trustMaterials{
-		fulcioURI:   fulcioEp.Address.URL(),
-		fulcioCerts: fulcioCerts,
-		tsaCerts:    tsaCerts,
-		rekorKeyDER: rekorBlock.Bytes,
-		rekorLogID:  wire.NoteKeyID(rekorOrigin, edPub),
-		ctfeKeyDER:  ctfeBlock.Bytes,
-		ctfeLogID:   ctLogID[:],
-	}))
-	if err != nil {
-		return nil, fmt.Errorf("marshal trusted root: %w", err)
-	}
-	return out, nil
-}
-
-// trustedRootProto lays out the sigstore TrustedRoot. The last certificate of
-// each chain is the trust anchor. Neither log key has a certificate validity of
-// its own, and sigstore-go's trusted-root loader requires a start, so the Fulcio
-// root NotBefore is used as a lower bound -- it precedes any entry this harness
-// can have signed.
-func trustedRootProto(m trustMaterials) *trustrootpb.TrustedRoot {
-	fulcioRoot := m.fulcioCerts[len(m.fulcioCerts)-1]
-	tsaRoot := m.tsaCerts[len(m.tsaCerts)-1]
-	return &trustrootpb.TrustedRoot{
-		MediaType: trustedRootMedia,
-		CertificateAuthorities: []*trustrootpb.CertificateAuthority{{
-			Uri:       m.fulcioURI,
-			CertChain: &protocommon.X509CertificateChain{Certificates: rawCertificates(m.fulcioCerts)},
-			ValidFor: &protocommon.TimeRange{
-				Start: timestamppb.New(fulcioRoot.NotBefore),
-				End:   timestamppb.New(fulcioRoot.NotAfter),
-			},
-		}},
-		TimestampAuthorities: []*trustrootpb.CertificateAuthority{{
-			CertChain: &protocommon.X509CertificateChain{Certificates: rawCertificates(m.tsaCerts)},
-			ValidFor: &protocommon.TimeRange{
-				Start: timestamppb.New(tsaRoot.NotBefore),
-				End:   timestamppb.New(tsaRoot.NotAfter),
-			},
-		}},
-		Tlogs: []*trustrootpb.TransparencyLogInstance{{
-			BaseUrl:       rekorBaseURL,
-			HashAlgorithm: protocommon.HashAlgorithm_SHA2_256,
-			PublicKey: &protocommon.PublicKey{
-				RawBytes:   m.rekorKeyDER,
-				KeyDetails: protocommon.PublicKeyDetails_PKIX_ED25519,
-				ValidFor:   &protocommon.TimeRange{Start: timestamppb.New(fulcioRoot.NotBefore)},
-			},
-			LogId: &protocommon.LogId{KeyId: m.rekorLogID},
-		}},
-		Ctlogs: []*trustrootpb.TransparencyLogInstance{{
-			BaseUrl:       ctBaseURL,
-			HashAlgorithm: protocommon.HashAlgorithm_SHA2_256,
-			PublicKey: &protocommon.PublicKey{
-				RawBytes:   m.ctfeKeyDER,
-				KeyDetails: protocommon.PublicKeyDetails_PKIX_ECDSA_P256_SHA_256,
-				ValidFor:   &protocommon.TimeRange{Start: timestamppb.New(fulcioRoot.NotBefore)},
-			},
-			LogId: &protocommon.LogId{KeyId: m.ctfeLogID},
-		}},
-	}
-}
-
-// fulcioChain fetches and parses the Fulcio certificate chain via
-// GET /api/v2/trustBundle. The returned order is the served order (leaf-most
-// first, trust anchor last).
-func fulcioChain(ctx context.Context, fulcioEp endpoint.HTTPS, dialer *transport.Dialer) ([]*x509.Certificate, error) {
-	client, err := deploy.HTTPClientFor(fulcioEp, dialer)
-	if err != nil {
-		return nil, fmt.Errorf("fulcio client: %w", err)
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fulcioEp.Address.URL()+"/api/v2/trustBundle", nil)
-	if err != nil {
-		return nil, fmt.Errorf("trustBundle request: %w", err)
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("trustBundle fetch: %w", err)
-	}
-	defer func() {
-		if closeErr := resp.Body.Close(); closeErr != nil {
-			log.Printf("WARN close response body: %v", closeErr)
-		}
-	}()
-	var tb struct {
-		Chains []struct {
-			Certificates []string `json:"certificates"`
-		} `json:"chains"`
-	}
-	if decErr := json.NewDecoder(resp.Body).Decode(&tb); decErr != nil {
-		return nil, fmt.Errorf("trustBundle decode: %w", decErr)
-	}
-	if len(tb.Chains) == 0 || len(tb.Chains[0].Certificates) == 0 {
-		return nil, errors.New("trustBundle has no certificates")
-	}
-	var chain []*x509.Certificate
-	for _, p := range tb.Chains[0].Certificates {
-		block, _ := pem.Decode([]byte(p))
-		if block == nil {
-			return nil, errors.New("trustBundle certificate is not PEM")
-		}
-		cert, certErr := x509.ParseCertificate(block.Bytes)
-		if certErr != nil {
-			return nil, fmt.Errorf("parse fulcio certificate: %w", certErr)
-		}
-		chain = append(chain, cert)
-	}
-	return chain, nil
-}
-
-// readPEM reads a single-block PEM file, naming it in any error.
-func readPEM(path, what string) (*pem.Block, error) {
-	raw, err := os.ReadFile(filepath.Clean(path))
-	if err != nil {
-		return nil, fmt.Errorf("read %s: %w", what, err)
-	}
-	block, _ := pem.Decode(raw)
-	if block == nil {
-		return nil, fmt.Errorf("%s is not PEM", what)
-	}
-	return block, nil
-}
-
-// certChain reads a concatenated PEM certificate chain in file order.
-func certChain(path, what string) ([]*x509.Certificate, error) {
-	raw, err := os.ReadFile(filepath.Clean(path))
-	if err != nil {
-		return nil, fmt.Errorf("read %s chain: %w", what, err)
-	}
-	var certs []*x509.Certificate
-	rest := raw
-	for {
-		var b *pem.Block
-		b, rest = pem.Decode(rest)
-		if b == nil {
-			break
-		}
-		cert, certErr := x509.ParseCertificate(b.Bytes)
-		if certErr != nil {
-			return nil, fmt.Errorf("parse %s certificate: %w", what, certErr)
-		}
-		certs = append(certs, cert)
-	}
-	return certs, nil
-}
-
-// rawCertificates converts parsed certificates to the proto chain entries,
-// preserving order.
-func rawCertificates(certs []*x509.Certificate) []*protocommon.X509Certificate {
-	out := make([]*protocommon.X509Certificate, len(certs))
-	for i, c := range certs {
-		out[i] = &protocommon.X509Certificate{RawBytes: c.Raw}
-	}
-	return out
 }

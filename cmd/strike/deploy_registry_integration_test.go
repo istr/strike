@@ -6,6 +6,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -19,13 +20,17 @@ import (
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
+	"github.com/google/go-containerregistry/pkg/v1/empty"
+	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
+	"github.com/google/go-containerregistry/pkg/v1/static"
 	"github.com/google/go-containerregistry/pkg/v1/types"
 
 	"github.com/istr/strike/internal/capsule"
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/deploy"
+	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/front"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/output"
@@ -33,6 +38,7 @@ import (
 	"github.com/istr/strike/internal/registry"
 	"github.com/istr/strike/internal/testutil"
 	"github.com/istr/strike/internal/transport"
+	"github.com/istr/strike/internal/verify"
 )
 
 const (
@@ -53,6 +59,14 @@ const (
 	itestBundleReferrers = 3
 	// itestBundleLimit bounds the bundle document read back from the registry.
 	itestBundleLimit = 8 << 20
+	// itestFulcioURL is the harness Fulcio behind Caddy, the source of the
+	// certificate chain in the published trusted root.
+	itestFulcioURL = "https://fulcio.127.0.0.1.sslip.io:5555"
+	// itestTrustRootRepo is the harness repository the trusted-root image is
+	// published to. The name is fixed: the image is content-addressed and
+	// written by digest without a tag, so a republication of the same
+	// document is idempotent.
+	itestTrustRootRepo = "strike-itest-trust-root"
 )
 
 // itestLaneTemplate is the fixture lane: a pack step with no files, so the
@@ -148,7 +162,8 @@ steps:
 // it is down; set STRIKE_INTEGRATION=0 to skip. The repository name carries a
 // per-run suffix, because the three statement bundles are freshly signed on
 // every run and would otherwise accumulate as extra referrers of the same
-// reproducible subject digest.
+// reproducible subject digest. The test also publishes the running harness's
+// trusted root as a digest-pinned single-layer image and reads it back.
 func TestRegistryDeployLive_Integration(t *testing.T) {
 	engine := testutil.RequireEngine(t)
 	ctx := context.Background()
@@ -214,6 +229,9 @@ func TestRegistryDeployLive_Integration(t *testing.T) {
 	assertReferrerSet(t, descs)
 	assertBundleArtifactForm(ctx, t, caddyRoot, repo, subject, auth)
 	assertBundleReadable(ctx, t, caddyRoot, repo, descs, auth)
+
+	trustRoot, trustDoc := publishHarnessTrustRoot(ctx, t, harness, caddyRoot, auth)
+	assertTrustRootReadable(ctx, t, caddyRoot, trustRoot, trustDoc, auth)
 }
 
 // writeFixtureLane renders the fixture lane into a temp directory and returns
@@ -534,6 +552,88 @@ func assertBundleReadable(ctx context.Context, t *testing.T, caddyRoot, repo str
 	}
 	if len(peer.Resolved) == 0 {
 		t.Errorf("sealed observedPeers[%s].resolved is empty; the push resolved the target through the lane resolver", itestRegistryHost)
+	}
+}
+
+// publishHarnessTrustRoot assembles the running harness's trusted root and
+// pushes it by digest, without a tag, under auth into the harness registry,
+// as the single-layer image a trust-root reference names. The harness
+// registry starts empty and the timestamp authority mints a fresh chain on
+// every harness start, so the image is published per run. It returns the
+// digest-pinned reference and the document it carries.
+func publishHarnessTrustRoot(ctx context.Context, t *testing.T, harness, caddyRoot string, auth authn.Authenticator) (name.Digest, []byte) {
+	t.Helper()
+	dialer, err := testutil.HarnessDialer(harness)
+	if err != nil {
+		t.Fatalf("harness dialer: %v", err)
+	}
+	trust, err := testutil.CertificateFromPEMFile(caddyRoot)
+	if err != nil {
+		t.Fatalf("harness root anchor: %v", err)
+	}
+	fulcio := endpoint.HTTPS{Address: endpoint.MustParseURL(itestFulcioURL), Trust: trust}
+	client, err := deploy.HTTPClientFor(fulcio, dialer)
+	if err != nil {
+		t.Fatalf("fulcio client: %v", err)
+	}
+	doc, err := testutil.HarnessTrustedRoot(ctx, client, fulcio.Address.URL(), harness)
+	if err != nil {
+		t.Fatalf("harness trusted root: %v", err)
+	}
+	img, err := mutate.AppendLayers(mutate.MediaType(empty.Image, types.OCIManifestSchema1), static.NewLayer(doc, types.OCILayer))
+	if err != nil {
+		t.Fatalf("trusted-root image: %v", err)
+	}
+	digest, err := img.Digest()
+	if err != nil {
+		t.Fatalf("trusted-root image digest: %v", err)
+	}
+	ref, err := name.NewDigest(itestRegistryHost + "/" + itestTrustRootRepo + "@" + digest.String())
+	if err != nil {
+		t.Fatalf("trusted-root reference: %v", err)
+	}
+	if writeErr := remote.Write(ref, img,
+		remote.WithTransport(itestTransport(t, caddyRoot)),
+		remote.WithAuth(auth),
+		remote.WithContext(ctx)); writeErr != nil {
+		t.Fatalf("push trusted-root image: %v", writeErr)
+	}
+	return ref, doc
+}
+
+// assertTrustRootReadable reads the published trusted-root image back under
+// auth and checks that its sole layer is the assembled document, byte for
+// byte, and parses as a trusted root.
+func assertTrustRootReadable(ctx context.Context, t *testing.T, caddyRoot string, ref name.Digest, want []byte, auth authn.Authenticator) {
+	t.Helper()
+	img, err := remote.Image(ref,
+		remote.WithTransport(itestTransport(t, caddyRoot)),
+		remote.WithAuth(auth),
+		remote.WithContext(ctx))
+	if err != nil {
+		t.Fatalf("fetch trusted-root image: %v", err)
+	}
+	layers, err := img.Layers()
+	if err != nil {
+		t.Fatalf("trusted-root layers: %v", err)
+	}
+	if len(layers) != 1 {
+		t.Fatalf("trusted-root image has %d layers, want 1", len(layers))
+	}
+	body, err := layers[0].Uncompressed()
+	if err != nil {
+		t.Fatalf("open trusted-root layer: %v", err)
+	}
+	defer testutil.CloseLog(t, body, "trusted-root layer")
+	got, err := io.ReadAll(io.LimitReader(body, itestBundleLimit))
+	if err != nil {
+		t.Fatalf("read trusted-root layer: %v", err)
+	}
+	if !bytes.Equal(got, want) {
+		t.Errorf("trusted-root layer differs from the published document")
+	}
+	if _, parseErr := verify.ParseTrustedRoot(got); parseErr != nil {
+		t.Errorf("published trusted root does not parse: %v", parseErr)
 	}
 }
 
