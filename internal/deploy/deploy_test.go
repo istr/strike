@@ -346,7 +346,7 @@ func TestDeployerExecute(t *testing.T) {
 				PreState: lane.CaptureSet{
 					Captures: []lane.Capture{{
 						ID:      "version",
-						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+						Image:   "images.example.com/alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 						Command: []string{"cat", "/version"},
 						Peers:   []lane.Peer{endpoint.TLS{Type: "https", Address: endpoint.MustParseAuthority("localhost:5555"), Trust: testutil.AnchorTrust()}},
 					}},
@@ -354,7 +354,7 @@ func TestDeployerExecute(t *testing.T) {
 				PostState: lane.CaptureSet{
 					Captures: []lane.Capture{{
 						ID:      "version",
-						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+						Image:   "images.example.com/alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 						Command: []string{"cat", "/version"},
 						Peers:   []lane.Peer{endpoint.TLS{Type: "https", Address: endpoint.MustParseAuthority("localhost:5555"), Trust: testutil.AnchorTrust()}},
 					}},
@@ -908,7 +908,7 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 				PreState: lane.CaptureSet{
 					Captures: []lane.Capture{{
 						ID:      "version",
-						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+						Image:   "images.example.com/alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 						Command: []string{"cat", "/version"},
 						Peers:   []lane.Peer{endpoint.TLS{Type: "https", Address: endpoint.MustParseAuthority("localhost:5555"), Trust: testutil.AnchorTrust()}},
 					}},
@@ -916,7 +916,7 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 				PostState: lane.CaptureSet{
 					Captures: []lane.Capture{{
 						ID:      "version",
-						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+						Image:   "images.example.com/alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 						Command: []string{"cat", "/version"},
 						Peers:   []lane.Peer{endpoint.TLS{Type: "https", Address: endpoint.MustParseAuthority("localhost:5555"), Trust: testutil.AnchorTrust()}},
 					}},
@@ -1032,7 +1032,7 @@ func TestDeployerExecute_RequiredPreStateFails(t *testing.T) {
 					Required: true,
 					Captures: []lane.Capture{{
 						ID:      "version",
-						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+						Image:   "images.example.com/alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 						Command: []string{"cat", "/version"},
 					}},
 				},
@@ -1184,7 +1184,7 @@ func deployStep(t *testing.T, method lane.DeployMethod) *lane.Step {
 				PreState: lane.CaptureSet{
 					Captures: []lane.Capture{{
 						ID:      "version",
-						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+						Image:   "images.example.com/alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 						Command: []string{"cat", "/version"},
 						Peers:   []lane.Peer{endpoint.TLS{Type: "https", Address: endpoint.MustParseAuthority("localhost:5555"), Trust: testutil.AnchorTrust()}},
 					}},
@@ -1192,7 +1192,7 @@ func deployStep(t *testing.T, method lane.DeployMethod) *lane.Step {
 				PostState: lane.CaptureSet{
 					Captures: []lane.Capture{{
 						ID:      "version",
-						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+						Image:   "images.example.com/alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 						Command: []string{"cat", "/version"},
 						Peers:   []lane.Peer{endpoint.TLS{Type: "https", Address: endpoint.MustParseAuthority("localhost:5555"), Trust: testutil.AnchorTrust()}},
 					}},
@@ -1318,7 +1318,7 @@ func TestDeployExecute_StepTimeoutWithMediatedConnection(t *testing.T) {
 					Required: true,
 					Captures: []lane.Capture{{
 						ID:      "probe",
-						Image:   "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+						Image:   "images.example.com/alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
 						Command: []string{"cat", "/version"},
 						Peers:   []lane.Peer{peer},
 					}},

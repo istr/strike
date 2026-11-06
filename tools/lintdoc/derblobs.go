@@ -176,7 +176,9 @@ var derBlobs = []derBlob{
 	},
 
 	// Public roots the bootstrap lane template bootstrap/lane.cue declares,
-	// each measured as the sole root that verifies its live endpoint.
+	// each measured as the sole root that verifies its live endpoint. The two
+	// GTS roots are also carried by internal/testutil for the integration
+	// lanes that read from cgr.dev.
 	{
 		digest: "b75b7fd33261f2ddc4e7d97f2bbf3d76eb97b87ed77850e6c41dc5e7f7630d0b",
 		label:  "bootstrap lane: SSL.com Root Certification Authority ECC (one.one.one.one)",
@@ -187,7 +189,11 @@ var derBlobs = []derBlob{
 	},
 	{
 		digest: "f4537865ce0125ee212eed13990e4c75abe9eaeaa205c8dc1c4b4fc1b2e44719",
-		label:  "bootstrap lane: GTS Root R4 (proxy.golang.org, storage.googleapis.com)",
+		label:  "bootstrap lane: GTS Root R4 (proxy.golang.org, storage.googleapis.com, cgr.dev blob storage)",
+	},
+	{
+		digest: "9bd02b0f448429ab1f1daf20bc9a9797954ca31782fc47b8f4d915137d4984a3",
+		label:  "bootstrap lane: GTS Root R1 (cgr.dev)",
 	},
 }
 

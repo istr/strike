@@ -25,7 +25,7 @@ func TestRunStep_CacheHitMaterializesNothing(t *testing.T) {
 	rc.runtime = runtimeForSteps(t, "step1")
 	step := &lane.Step{
 		ID:      "step1",
-		Image:   primitive.ImageRefPtr("docker.io/library/alpine@sha256:abababababababababababababababababababababababababababababababab"),
+		Image:   primitive.ImageRefPtr("images.example.com/library/alpine@sha256:abababababababababababababababababababababababababababababababab"),
 		Args:    []string{"true"},
 		Env:     map[string]string{},
 		Outputs: []lane.FileOutput{{ID: "bin", Type: "file", Path: primitive.RelPathPtr("bin")}},

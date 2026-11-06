@@ -78,6 +78,15 @@ keyless:
       url: "https://tsa.127.0.0.1.sslip.io:3004"
       trust:
         cert: "__CADDY_ROOT__"
+registries:
+  - registry:
+      host: cgr.dev
+      trust:
+        cert: "__GTS_ROOT_R1__"
+    storages:
+      - host: 9236a389bd48b984df91adc1bc924620.r2.cloudflarestorage.com
+        trust:
+          cert: "__GTS_ROOT_R4__"
 steps:
   - id: run
     image: __IMAGE__
@@ -225,6 +234,8 @@ func writeMaterializeLane(t *testing.T, caddyRoot, resolverCert, image, repo str
 	content := strings.NewReplacer(
 		"__CADDY_ROOT__", caddy.Cert.String(),
 		"__RESOLVER_CERT__", resolver.Cert.String(),
+		"__GTS_ROOT_R1__", testutil.GTSRootR1B64,
+		"__GTS_ROOT_R4__", testutil.GTSRootR4B64,
 		"__IMAGE__", image,
 		"__REPO__", repo,
 	).Replace(materializeLaneTemplate)

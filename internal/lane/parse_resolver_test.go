@@ -79,9 +79,14 @@ keyless:
       url: "https://tsa.example:3004"
       trust:
         cert: "@anchor@"
+registries:
+  - registry:
+      host: images.example.com
+      trust:
+        cert: "@anchor@"
 steps:
   - id: build
-    image: docker.io/library/alpine@sha256:abababababababababababababababababababababababababababababababab
+    image: images.example.com/library/alpine@sha256:abababababababababababababababababababababababababababababababab
     args: ["true"]
     workdir: /work
     env: {}
@@ -168,9 +173,14 @@ keyless:
       url: "https://tsa.example:3004"
       trust:
         cert: "@anchor@"
+registries:
+  - registry:
+      host: images.example.com
+      trust:
+        cert: "@anchor@"
 steps:
   - id: build
-    image: docker.io/library/alpine@sha256:abababababababababababababababababababababababababababababababab
+    image: images.example.com/library/alpine@sha256:abababababababababababababababababababababababababababababababab
     args: ["true"]
     workdir: /work
     env: {}

@@ -17,7 +17,7 @@ import (
 // path cannot reappear. A digest-pinned reference passes the guard and reaches
 // the later capsule check, proving the guard does not reject the valid form.
 func TestExecute_DigestGuard(t *testing.T) {
-	const digest = "alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+	const digest = "images.example.com/alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000"
 	tests := []struct {
 		image       *primitive.ImageRef
 		name        string

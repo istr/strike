@@ -749,7 +749,7 @@ func TestCheckCache_EngineError(t *testing.T) {
 
 func TestResolveImageDigest_FromRef(t *testing.T) {
 	rc := newTestRC(t, &mockEngine{})
-	step := &lane.Step{Image: primitive.ImageRefPtr("docker.io/lib/golang@sha256:abcdef1234567890000000000000000000000000000000000000000000000000")}
+	step := &lane.Step{Image: primitive.ImageRefPtr("images.example.com/lib/golang@sha256:abcdef1234567890000000000000000000000000000000000000000000000000")}
 
 	digest, err := rc.resolveImageDigest(step, "test", stepInputs{})
 	if err != nil {
@@ -958,7 +958,7 @@ func TestRunStep_InvalidTimeout(t *testing.T) {
 	rc := newTestRC(t, &mockEngine{})
 	rc.stepIndex["bad"] = &lane.Step{
 		Timeout: primitive.DurationPtr("not-a-duration"),
-		Image:   primitive.ImageRefPtr("img@sha256:abc0000000000000000000000000000000000000000000000000000000000000"),
+		Image:   primitive.ImageRefPtr("images.example.com/img@sha256:abc0000000000000000000000000000000000000000000000000000000000000"),
 		Args:    []string{"run"},
 		Env:     map[string]string{},
 	}
@@ -976,7 +976,7 @@ func TestRunStep_TimeoutFromLaneDefaults(t *testing.T) {
 	rc := newTestRC(t, &mockEngine{})
 	rc.lane.Defaults = &lane.LaneDefaults{Timeout: "invalid"}
 	rc.stepIndex["bad"] = &lane.Step{
-		Image: primitive.ImageRefPtr("img@sha256:abc0000000000000000000000000000000000000000000000000000000000000"),
+		Image: primitive.ImageRefPtr("images.example.com/img@sha256:abc0000000000000000000000000000000000000000000000000000000000000"),
 		Args:  []string{"run"},
 		Env:   map[string]string{},
 	}

@@ -642,9 +642,14 @@ keyless:
       url: "https://tsa.example:3004"
       trust:
         cert: "@anchor@"
+registries:
+  - registry:
+      host: images.example.com
+      trust:
+        cert: "@anchor@"
 steps:
   - id: src
-    image: img@sha256:abababababababababababababababababababababababababababababababab
+    image: images.example.com/img@sha256:abababababababababababababababababababababababababababababababab
     args: ["true"]
     workdir: /work
     env: {}
@@ -655,7 +660,7 @@ steps:
         type: directory
         path: tree
   - id: consumer
-    image: img@sha256:cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd
+    image: images.example.com/img@sha256:cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd
     args: ["true"]
     env: {}
     inputs:
