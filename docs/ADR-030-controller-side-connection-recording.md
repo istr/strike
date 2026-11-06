@@ -306,3 +306,18 @@ against the declared pin. Of the two reasons section 3 gives for not recording
 the registry connection, one has lapsed -- the registry's TLS identity is now
 observable by the controller -- and the other decides alone: the identity
 contributes nothing to trust, so it is not recorded.
+
+## Amendment 2026-11-06 -- registry locations are declared, their connections are not recorded
+
+Section 3 and the Consequences state that OCI registries are not declared
+with trust anchors. Under ADR-029's amendment of this date, every
+registry and storage host the controller reads from inside a lane run is
+declared at lane level with a server-trust anchor, and the controller
+verifies the presented chain against it. That declaration bounds where a
+run resolves and dials; in the terms of "Routing declaration vs.
+trust-anchor declaration" it is a routing declaration made verifiable,
+not a trust anchor for the content, which remains the digest pin.
+
+The decision of this ADR is unchanged: the registry connection identity
+contributes nothing to the trust chain and is not recorded. The deploy
+attestation gains no registry record, and its schema is untouched.

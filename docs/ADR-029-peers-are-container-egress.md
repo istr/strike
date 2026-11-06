@@ -121,3 +121,27 @@ variant remaining.
 - **Code is liability.** The peer discriminated union loses a branch; the
   schema, Go types, JSON dispatch, and attestation re-export all drop the
   OCI variant.
+
+## Amendment 2026-11-06 -- the controller-side read locations are a lane-level field
+
+"Alternatives considered" set aside a controller-pull registry allowlist
+and placed it, if ever wanted, in a distinct lane-level field rather than
+a peer. That field now exists. The lane-level `registries` list declares
+every registry the controller reads from inside a lane run -- step and
+capture images, pack bases, base-image SBOM referrers and the keyless
+trust root -- each as an endpoint with its server-trust anchor, together
+with the storage hosts that registry redirects blob reads to. A deploy
+target's host counts as declared.
+
+The reason is not integrity, which stays with the digest pin exactly as
+the Decision states. It is that a lane run resolves and dials only what
+it declares: the controller resolves each declared host through the
+lane's DoT resolver and verifies the presented chain against the
+declared anchor, so no read in a run falls back to the system resolver
+or the system roots. A storage host is reached only as the redirect
+target of a blob read of its own registry.
+
+Peers are unchanged. They remain container-egress contracts over HTTPS
+and SSH, independent of the registry declarations, and a registry
+declaration widens no step's egress. strike verify declares nothing
+about registry identity and is not covered by this field.
