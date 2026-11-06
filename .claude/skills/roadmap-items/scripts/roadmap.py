@@ -46,6 +46,10 @@ ID_RE = re.compile(r"^item-(\d+)$")
 ORDER_LINE_RE = re.compile(r"^-\s+(item-\d+)\s*$")
 RANK_STEP = 10
 RANK_WIDTH = 4
+# Two arcs carry scheduling meaning beyond a query tag (see "Item classes" in
+# references/schema.md): every open item is beta, post-beta or parked.
+BETA_ARC = "beta-readiness"
+PARKED_ARC = "parked"
 
 
 # --------------------------------------------------------------------------
@@ -614,6 +618,7 @@ def _deps_check(items, order_ids):
                                      % (mid, pos[mid] + 1, d, dm["status"])))
     for cyc in find_cycles(dmap):
         problems.append(("cycle", " -> ".join(cyc)))
+    problems.extend(_class_problems(items, order_ids))
     if not problems:
         print("dependency check: clean (%d items, %d edges)"
               % (len(items), sum(len(v) for v in dmap.values())))
@@ -626,6 +631,54 @@ def _deps_check(items, order_ids):
         print("  %s" % msg)
     print("\n%d problem(s)." % len(problems))
     return 1
+
+
+def _class_problems(items, order_ids):
+    """Report every open item that is not in exactly one class.
+
+    Classes: beta (BETA_ARC, a closed prefix of the order), post-beta
+    (scheduled, not BETA_ARC) and parked (PARKED_ARC, never scheduled).
+    """
+    def in_arc(mid, arc):
+        return arc in items[mid][0]["arcs"]
+
+    def is_open(mid):
+        return mid in items and items[mid][0]["status"] != "done"
+
+    problems = []
+    scheduled = set(order_ids)
+    for mid in sorted(items):
+        if not is_open(mid):
+            continue
+        m = items[mid][0]
+        beta, parked = in_arc(mid, BETA_ARC), in_arc(mid, PARKED_ARC)
+        if m["status"] == "ratified" and mid not in scheduled and not parked:
+            problems.append(("class", "%s is ratified but neither scheduled "
+                                      "nor %s" % (mid, PARKED_ARC)))
+        if parked and mid in scheduled:
+            problems.append(("class", "%s is %s but scheduled" % (mid, PARKED_ARC)))
+        if beta and parked:
+            problems.append(("class", "%s is both %s and %s"
+                                      % (mid, BETA_ARC, PARKED_ARC)))
+        if beta:
+            for d in deps_of(m):
+                if is_open(d) and not in_arc(d, BETA_ARC):
+                    problems.append(("class", "%s is %s but blocker %s is not"
+                                              % (mid, BETA_ARC, d)))
+    first_post = None
+    for i, mid in enumerate(order_ids):
+        if not is_open(mid):
+            continue
+        if not in_arc(mid, BETA_ARC):
+            if first_post is None:
+                first_post = (i, mid)
+        elif first_post is not None:
+            problems.append(("class", "%s (%s) is scheduled at #%d, after "
+                                      "post-beta %s at #%d"
+                                      % (mid, BETA_ARC, i + 1, first_post[1],
+                                         first_post[0] + 1)))
+            break
+    return problems
 
 
 def _deps_dot(items):

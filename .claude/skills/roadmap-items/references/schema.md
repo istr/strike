@@ -123,6 +123,25 @@ Items run top to bottom; order is line order. Each line is `- <item-id>`.
 `reorder` maintains this file: `--before`/`--after` an anchor, `--to-position N`,
 or `--remove` to unschedule. `done` drops the id automatically.
 
+## Item classes
+
+Two arcs carry scheduling meaning beyond a query tag, so every open item is in
+exactly one of three classes:
+
+- **Beta** -- arc `beta-readiness`. The arc is closed under `depends_on`: no
+  beta item has an open blocker outside it. Beta items form a closed prefix of
+  `_order.md`; no post-beta item is scheduled ahead of one.
+- **Post-beta** -- scheduled in `_order.md`, not in `beta-readiness`.
+- **Parked** -- arc `parked`. Never scheduled, never also `beta-readiness`.
+  Parked is an arc, not a status: a parked item may be `proposed` or
+  `ratified` (ratification records the decision, parking only its timing).
+
+A `ratified` item is scheduled or parked; "ratified but unscheduled" is not a
+state. A `proposed` item may be unscheduled. `deps --check` enforces all of
+this under the `class` category. Which items the beta must contain is not
+derivable from the store; the check sees only that the arc is closed and
+ordered.
+
 ## The dependency model
 
 `depends_on` is the third ordering input, and the only one that expresses a *hard*
@@ -159,6 +178,7 @@ supposed to live. It reports:
 | `cycle` | A loop in the edge set, printed as the chain. |
 | `order` | An item is scheduled before a blocker, or before a blocker that is unscheduled and not done. |
 | `status-inversion` | A `ratified` item whose blocker is still `proposed`; or a `done` item whose blocker is not done. |
+| `class` | An open item breaks the item classes above: a `ratified` item neither scheduled nor `parked`; a `parked` item that is scheduled; an item that is both `beta-readiness` and `parked`; a `beta-readiness` item with an open blocker outside that arc; or a `beta-readiness` item scheduled after a post-beta item. |
 
 `order --topo` proposes a dependency-legal re-sort of `_order.md` as a diff and
 **writes nothing**. The sort is stable -- keyed on each item's current position --

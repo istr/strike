@@ -158,7 +158,7 @@ chosen invocation as `roadmap.py`.
 | One item's blockers and dependents | `deps ID [--transitive]` |
 | What is actually runnable now | `deps --ready` |
 | What is waiting, and on what | `deps --blocked` |
-| Validate the graph (CI-usable) | `deps --check` (exits non-zero on problems) |
+| Validate the graph and the item classes (CI-usable) | `deps --check` (exits non-zero on problems) |
 | Graphviz emit of the open subgraph | `deps --dot` |
 | Print one item verbatim | `show ID` |
 | Advance status | `set-status ID ratified` |
@@ -218,7 +218,7 @@ non-blocking pointer field, so a query can trust the edge:
 roadmap.py update item-0042 --add-dep item-0031
 roadmap.py deps item-0042            # blockers + derived dependents + READY/BLOCKED
 roadmap.py deps --ready              # ratified items with every blocker done
-roadmap.py deps --check              # dangling / cycles / order violations / inversions
+roadmap.py deps --check              # dangling / cycles / order / inversions / class
 ```
 
 The edge is stored one-way, on the dependent item -- there is no `blocks:` field,
@@ -240,6 +240,12 @@ so the human ordering judgement that is not expressible as an edge survives. It
 writes nothing on purpose -- the operator applies it, and that commit stays the
 single handover. `deps --check` exits non-zero, so it is the natural CI check on
 a roadmap PR.
+
+Every open item is beta (arc `beta-readiness`), post-beta (scheduled, not in
+that arc) or parked (arc `parked`, never scheduled). A ratified item is never
+left unscheduled: to "park this for later", add the `parked` arc and
+`reorder --remove` it. `deps --check` reports any breach under `class`; the
+rules are in references/schema.md ("Item classes").
 
 Ask what to execute next, get the planning context, then author the byte-exact
 instruction ephemerally (do **not** write it back into the item):
