@@ -28,7 +28,11 @@ func unmarshalPeer(data []byte) (Peer, error) {
 
 	switch probe.Type {
 	case endpoint.CarriageTypeHttps:
-		return unmarshalHTTPSPeer(data)
+		ep, err := unmarshalTLS(data)
+		if err != nil {
+			return nil, err
+		}
+		return ep, nil
 	case endpoint.CarriageTypeSsh:
 		return unmarshalSSHPeer(data)
 	case "":
@@ -38,24 +42,25 @@ func unmarshalPeer(data []byte) (Peer, error) {
 	}
 }
 
-// unmarshalHTTPSPeer decodes an https peer into an endpoint.TLS, decoding the
+// unmarshalTLS decodes an endpoint in the endpoint TLS shape -- an https peer,
+// or a registry or storage endpoint of the lane's registries -- decoding the
 // trust anchor by field and parsing the packed authority host. Trust is
 // required; missing trust is an error.
-func unmarshalHTTPSPeer(data []byte) (Peer, error) {
+func unmarshalTLS(data []byte) (endpoint.TLS, error) {
 	var aux struct {
 		Trust *endpoint.Certificate `json:"trust"`
 		Type  endpoint.CarriageType `json:"type"`
 		Host  string                `json:"host"`
 	}
 	if err := json.Unmarshal(data, &aux); err != nil {
-		return nil, fmt.Errorf("decode https peer: %w", err)
+		return endpoint.TLS{}, fmt.Errorf("decode https endpoint: %w", err)
 	}
 	if aux.Trust == nil {
-		return nil, fmt.Errorf("https peer: trust required")
+		return endpoint.TLS{}, fmt.Errorf("https endpoint: trust required")
 	}
 	addr, err := endpoint.ParseAuthority(aux.Host)
 	if err != nil {
-		return nil, fmt.Errorf("https peer: %w", err)
+		return endpoint.TLS{}, fmt.Errorf("https endpoint: %w", err)
 	}
 	return endpoint.TLS{Type: aux.Type, Address: addr, Trust: *aux.Trust}, nil
 }
@@ -305,4 +310,33 @@ func (p *Lane) UnmarshalJSON(data []byte) error {
 // when their containing struct declares peers as []lane.Peer.
 func UnmarshalPeer(data []byte) (Peer, error) {
 	return unmarshalPeer(data)
+}
+
+// UnmarshalJSON decodes one entry of the lane's registries: the registry
+// endpoint and its storage endpoints, each through the decoder an https peer
+// uses, because a bare endpoint.Address decodes the URL form, not the packed
+// authority the endpoint TLS shape carries.
+func (r *Registry) UnmarshalJSON(data []byte) error {
+	var aux struct {
+		Registry json.RawMessage   `json:"registry"`
+		Storages []json.RawMessage `json:"storages"`
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return fmt.Errorf("decode registry: %w", err)
+	}
+	reg, err := unmarshalTLS(aux.Registry)
+	if err != nil {
+		return fmt.Errorf("registry: %w", err)
+	}
+	storages := make([]endpoint.TLS, len(aux.Storages))
+	for i, raw := range aux.Storages {
+		s, sErr := unmarshalTLS(raw)
+		if sErr != nil {
+			return fmt.Errorf("registry %s storages[%d]: %w", reg.Address.Authority(), i, sErr)
+		}
+		storages[i] = s
+	}
+	r.Registry = reg
+	r.Storages = storages
+	return nil
 }

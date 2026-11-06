@@ -45,12 +45,29 @@ import (
 	// anchor MUST come from --trust-root-ref, with NO implicit default.
 	keyless: #Keyless @go(Keyless)
 	baseSbomSigners?: [...#SBOMSigner] @go(BaseSBOMSigners,optional=nillable)
+	// registries declares every registry the controller reads from inside a
+	// lane run, each with the storage hosts it redirects blob reads to. A
+	// deploy target's host counts as declared and is not repeated here.
+	registries?: [...#Registry] @go(Registries)
 	defaults?: #LaneDefaults @go(Defaults,optional=nillable)
 }
 
 #LaneDefaults: {
 	@go(LaneDefaults)
 	timeout: *"10m" | primitive.#Duration @go(Timeout,type="github.com/istr/strike/contract/primitive".Duration)
+}
+
+// Registry is a registry the controller reads from inside a lane run: the
+// registry endpoint and the storage endpoints it redirects blob reads to, each
+// in the endpoint TLS shape with its own server-trust anchor (ADR-029
+// amendment 2026-11-06). A storage is reached only as the redirect target of a
+// blob read of its own registry and is never the registry of a reference. The
+// anchors bound where a run resolves and dials; integrity stays with the
+// digest pin (ADR-030 amendment 2026-11-06).
+#Registry: {
+	@go(Registry)
+	registry: endpoint.#TLS @go(Registry)
+	storages?: [...endpoint.#TLS] @go(Storages)
 }
 
 // OIDCConfig declares the lane-wide keyless signing identity (ADR-040 D5).

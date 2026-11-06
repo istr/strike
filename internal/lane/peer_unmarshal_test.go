@@ -226,3 +226,90 @@ func TestUnmarshalPeer_OCIRejected(t *testing.T) {
 		t.Errorf("error %q does not mention the rejected type", err)
 	}
 }
+
+// TestRegistry_UnmarshalJSON exercises the decode of one registries entry:
+// the registry and its storages decode to endpoint.TLS through the packed
+// authority, an absent storages list decodes empty, and a malformed entry,
+// registry or storage is an error that names where it failed.
+func TestRegistry_UnmarshalJSON(t *testing.T) {
+	tests := []struct {
+		name         string
+		input        string
+		wantErr      string
+		wantRegistry endpoint.Authority
+		wantStorages []endpoint.Authority
+	}{
+		{
+			name: "registry with storages",
+			input: `{
+				"registry": {"type": "https", "host": "images.example.com", "trust": {"cert": "@anchor@"}},
+				"storages": [
+					{"type": "https", "host": "blobs.example.com", "trust": {"cert": "@anchor@"}},
+					{"type": "https", "host": "blobs.example.net:8443", "trust": {"mode": "leaf", "cert": "@anchor@"}}
+				]
+			}`,
+			wantRegistry: "images.example.com",
+			wantStorages: []endpoint.Authority{"blobs.example.com", "blobs.example.net:8443"},
+		},
+		{
+			name:         "registry without storages",
+			input:        `{"registry": {"type": "https", "host": "images.example.com", "trust": {"cert": "@anchor@"}}}`,
+			wantRegistry: "images.example.com",
+		},
+		{
+			name:    "entry not an object",
+			input:   `["images.example.com"]`,
+			wantErr: "decode registry",
+		},
+		{
+			name:    "registry missing trust",
+			input:   `{"registry": {"type": "https", "host": "images.example.com"}}`,
+			wantErr: "registry: https endpoint: trust required",
+		},
+		{
+			name:    "registry with empty host",
+			input:   `{"registry": {"type": "https", "host": "", "trust": {"cert": "@anchor@"}}}`,
+			wantErr: "empty host",
+		},
+		{
+			name: "storage missing trust",
+			input: `{
+				"registry": {"type": "https", "host": "images.example.com", "trust": {"cert": "@anchor@"}},
+				"storages": [{"type": "https", "host": "blobs.example.com"}]
+			}`,
+			wantErr: "registry images.example.com storages[0]: https endpoint: trust required",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var r lane.Registry
+			err := json.Unmarshal([]byte(withAnchor(tc.input)), &r)
+			if tc.wantErr != "" {
+				if err == nil {
+					t.Fatalf("expected error containing %q, got nil", tc.wantErr)
+				}
+				if !strings.Contains(err.Error(), tc.wantErr) {
+					t.Errorf("error = %v, want substring %q", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Registry UnmarshalJSON: %v", err)
+			}
+			if got := r.Registry.Address.Authority(); got != tc.wantRegistry {
+				t.Errorf("registry authority = %q, want %q", got, tc.wantRegistry)
+			}
+			if r.Registry.Trust.Cert == "" {
+				t.Error("registry trust cert is empty")
+			}
+			if len(r.Storages) != len(tc.wantStorages) {
+				t.Fatalf("storages len = %d, want %d", len(r.Storages), len(tc.wantStorages))
+			}
+			for i, want := range tc.wantStorages {
+				if got := r.Storages[i].Address.Authority(); got != want {
+					t.Errorf("storages[%d] authority = %q, want %q", i, got, want)
+				}
+			}
+		})
+	}
+}

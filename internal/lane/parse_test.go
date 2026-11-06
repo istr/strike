@@ -243,6 +243,93 @@ steps:
 	}
 }
 
+// TestParse_Registries pins the lane-level registries field through the
+// schema and the decode: a registry with one storage parses, and the schema
+// materializes each endpoint's carriage type and the anchor's default mode.
+func TestParse_Registries(t *testing.T) {
+	yaml := []byte(withAnchor(`
+name: registries-lane
+id: registries-lane
+secrets:
+  builder-token: "env://SIGSTORE_ID_TOKEN"
+resolver:
+  adn: one.one.one.one
+  ip: 1.1.1.1
+  trust:
+    cert: "@anchor@"
+oidc:
+  issuer: "https://idp.example.com"
+  audience: "strike"
+  identity: "strike@example.com"
+  extensions:
+    sourceRepositoryRef: "refs/heads/main"
+  token: builder-token
+  trust:
+    cert: "@anchor@"
+keyless:
+  endpoints:
+    fulcio:
+      url: "https://fulcio.example:5555"
+      trust:
+        cert: "@anchor@"
+    rekor:
+      url: "https://rekor.example:3003"
+      trust:
+        cert: "@anchor@"
+    tsa:
+      url: "https://tsa.example:3004"
+      trust:
+        cert: "@anchor@"
+registries:
+  - registry:
+      host: images.example.com
+      trust:
+        cert: "@anchor@"
+    storages:
+      - host: blobs.example.com
+        trust:
+          cert: "@anchor@"
+steps:
+  - id: build
+    image: images.example.com/library/golang@sha256:abababababababababababababababababababababababababababababababab
+    args: []
+    env: {}
+    inputs: []
+    secrets: []
+`))
+	dir := t.TempDir()
+	path := filepath.Join(dir, "lane.yaml")
+	if err := os.WriteFile(path, yaml, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	p, _, _, err := lane.Parse(mustFilePath(t, path))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if len(p.Registries) != 1 {
+		t.Fatalf("Registries length = %d, want 1", len(p.Registries))
+	}
+	reg := p.Registries[0]
+	if got := reg.Registry.Address.Authority(); got != "images.example.com" {
+		t.Errorf("registry authority = %q, want images.example.com", got)
+	}
+	if reg.Registry.Type != endpoint.CarriageTypeHttps {
+		t.Errorf("registry type = %q, want https", reg.Registry.Type)
+	}
+	if reg.Registry.Trust.Mode != endpoint.CertificateModeRootca {
+		t.Errorf("registry trust mode = %q, want rootca", reg.Registry.Trust.Mode)
+	}
+	if len(reg.Storages) != 1 {
+		t.Fatalf("Storages length = %d, want 1", len(reg.Storages))
+	}
+	if got := reg.Storages[0].Address.Authority(); got != "blobs.example.com" {
+		t.Errorf("storage authority = %q, want blobs.example.com", got)
+	}
+	if reg.Storages[0].Trust.Mode != endpoint.CertificateModeRootca {
+		t.Errorf("storage trust mode = %q, want rootca", reg.Storages[0].Trust.Mode)
+	}
+}
+
 func TestParse_NonPinnedImageRejected(t *testing.T) {
 	_, _, _, err := lane.Parse(mustFilePath(t, "testdata/invalid_image_not_pinned.yaml"))
 	if err == nil {
