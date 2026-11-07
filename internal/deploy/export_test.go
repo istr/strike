@@ -6,7 +6,6 @@ import (
 
 	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/lane"
-	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/testutil"
 )
 
@@ -49,13 +48,14 @@ func DeployRegistryForTest() lane.DeployRegistry {
 // FakeIDToken exposes fakeIDToken for the external test package.
 var FakeIDToken = fakeIDToken
 
-// RegistryTokenForTest delivers a registry token through REGISTRY_ID_TOKEN,
-// for tests whose deploy reaches the push, and returns the lane.secrets entry
-// that declares it under the name every test target's credential uses. The
-// token is unsigned, because nothing in strike verifies it; it lives within
-// the bound, and its audience is a registry's, not the oidc audience.
-func RegistryTokenForTest(t *testing.T) map[primitive.Identifier]lane.SecretSource {
+// RegistryTokensForTest delivers a registry token for the deploy target at
+// authority the way the run start hands it to the Deployer, and through
+// REGISTRY_ID_TOKEN for a test handler that compares against it. The token
+// is unsigned, because nothing in strike verifies it; it lives within the
+// bound, and its audience is a registry's, not the oidc audience.
+func RegistryTokensForTest(t *testing.T, authority string) map[string]lane.SecretString {
 	t.Helper()
-	t.Setenv("REGISTRY_ID_TOKEN", fakeIDToken(`{"aud":"https://registry.example.com","iat":1000,"exp":1600}`))
-	return map[primitive.Identifier]lane.SecretSource{DeployRegistryForTest().Target.Credential.Token: "env://REGISTRY_ID_TOKEN"}
+	token := fakeIDToken(`{"aud":"https://registry.example.com","iat":1000,"exp":1600}`)
+	t.Setenv("REGISTRY_ID_TOKEN", token)
+	return map[string]lane.SecretString{authority: lane.NewSecretString(token)}
 }

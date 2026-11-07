@@ -30,24 +30,28 @@ import (
 
 // runContext bundles everything needed to execute steps.
 type runContext struct {
-	ctx        context.Context
-	engine     container.Engine
-	runtime    *lane.Runtime // per-step record store and fire-at-zero scheduler
-	regClient  *registry.Client
-	engineID   *container.EngineIdentity
-	ca         *transport.EphemeralCA
-	front      *front.Front
-	dialer     *transport.Dialer
-	reads      registry.Transports // the run's registry reads (ADR-029 amendment 2026-11-06)
-	lane       *lane.Lane
-	laneDigest primitive.Digest
-	dag        *lane.DAG
-	stepIndex  map[primitive.Identifier]*lane.Step
-	capsules   map[primitive.Identifier]*capsule.NetworkCapsule // run-step name -> pre-built capsule
-	laneRoot   *os.Root
-	trust      trustVolumes
-	laneDir    string
-	resolverID transport.ConnectionIdentity
+	ctx       context.Context
+	engine    container.Engine
+	runtime   *lane.Runtime // per-step record store and fire-at-zero scheduler
+	regClient *registry.Client
+	engineID  *container.EngineIdentity
+	ca        *transport.EphemeralCA
+	front     *front.Front
+	dialer    *transport.Dialer
+	reads     registry.Transports // the run's registry reads (ADR-029 amendment 2026-11-06)
+	// registryTokens holds the registry token of each deploy target's
+	// authority, read and checked once at run start (ADR-058 amendment
+	// 2026-11-08).
+	registryTokens map[string]lane.SecretString
+	lane           *lane.Lane
+	laneDigest     primitive.Digest
+	dag            *lane.DAG
+	stepIndex      map[primitive.Identifier]*lane.Step
+	capsules       map[primitive.Identifier]*capsule.NetworkCapsule // run-step name -> pre-built capsule
+	laneRoot       *os.Root
+	trust          trustVolumes
+	laneDir        string
+	resolverID     transport.ConnectionIdentity
 }
 
 // stepInputs carries a step's direct-predecessor data, resolved once before
@@ -171,6 +175,7 @@ func (rc *runContext) executeDeploy(ctx context.Context, step *lane.Step, stepID
 		CA:              rc.ca,
 		Dialer:          rc.dialer,
 		Reads:           rc.reads,
+		RegistryTokens:  rc.registryTokens,
 		CAVolume:        rc.trust.ca,
 		StepID:          stepID,
 	}

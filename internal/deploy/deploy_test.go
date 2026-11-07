@@ -88,14 +88,14 @@ func deployCapsuleFields(t *testing.T) (ca *transport.EphemeralCA, dialer *trans
 // registryDeployFixture is the shared setup for the tests that must run a
 // deploy through executeMethod: a single-layer pushable image, an engine that
 // serves it as a layout tar, a live registry the control plane may write to
-// under a pinned leaf fingerprint, and the lane.secrets entry of the registry
-// token the target's credential names, delivered through the environment.
-// Callers supply their own captures.
+// under a pinned leaf fingerprint, and the registry token of the target's
+// authority as the run start hands it to the Deployer. Callers supply their
+// own captures.
 type registryDeployFixture struct {
-	engine  container.Engine
-	secrets map[primitive.Identifier]lane.SecretSource
-	method  lane.DeployRegistry
-	handle  output.ImageHandle
+	engine container.Engine
+	tokens map[string]lane.SecretString
+	method lane.DeployRegistry
+	handle output.ImageHandle
 }
 
 // newRegistryDeployFixture builds the fixture. The image is minimal but
@@ -170,7 +170,7 @@ func newRegistryDeployFixtureServing(t *testing.T, handler http.Handler) registr
 			Ref:          "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000",
 			ConfigDigest: primitive.Digest(configHash.String()),
 		},
-		secrets: deploy.RegistryTokenForTest(t),
+		tokens: deploy.RegistryTokensForTest(t, srv.Listener.Addr().String()),
 	}
 }
 
@@ -366,16 +366,16 @@ func TestDeployerExecute(t *testing.T) {
 	ca, dialer, caPath := deployCapsuleFields(t)
 
 	d := &deploy.Deployer{
-		Engine:       fx.engine,
-		LaneDigest:   "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-		ArtifactRefs: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
-		LaneID:       "test-lane",
-		CA:           ca,
-		Dialer:       dialer,
-		CAVolume:     caPath,
-		StepID:       "deploy-prod",
-		Resolver:     probedResolver(),
-		Lane:         &lane.Lane{Secrets: fx.secrets},
+		Engine:         fx.engine,
+		LaneDigest:     "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+		ArtifactRefs:   map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
+		LaneID:         "test-lane",
+		CA:             ca,
+		Dialer:         dialer,
+		CAVolume:       caPath,
+		StepID:         "deploy-prod",
+		Resolver:       probedResolver(),
+		RegistryTokens: fx.tokens,
 	}
 	deploy.SetProduceBundles(d, stubProduceBundles())
 	att, err := d.Execute(context.Background(), step, state)
@@ -500,9 +500,10 @@ func TestDeployerExecuteRegistryAttachesReferrers(t *testing.T) {
 	ca, dialer, caPath := deployCapsuleFields(t)
 
 	d := &deploy.Deployer{
-		Engine:     eng,
-		LaneDigest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-		Lane:       &lane.Lane{Steps: []lane.Step{{ID: "web", Outputs: []lane.FileOutput{{ID: "dist"}}}}, Secrets: deploy.RegistryTokenForTest(t)},
+		Engine:         eng,
+		LaneDigest:     "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+		Lane:           &lane.Lane{Steps: []lane.Step{{ID: "web", Outputs: []lane.FileOutput{{ID: "dist"}}}}},
+		RegistryTokens: deploy.RegistryTokensForTest(t, authority),
 		ArtifactRefs: map[primitive.Identifier]lane.ArtifactRef{
 			"image": {Step: "build"},
 			"web":   {Step: "web", Output: &distOut},
@@ -731,19 +732,16 @@ func TestDeployerExecuteRegistryRejectsUnverifiedExport(t *testing.T) {
 }
 
 // TestDeployerExecuteRegistryPresentsTheBearer proves the declared credential
-// on the wire (ADR-058 D2): against a target that challenges for a bearer,
-// every request after the challenge ping carries the registry token -- the
-// payload push, the image SBOM referrers and the statement-bundle referrers
-// alike -- and nothing is sent to a token realm, which would arrive without
-// it.
+// on the wire (ADR-058 D2, amendment 2026-11-08): every request to the
+// target, the ping included, carries the registry token -- the payload push,
+// the image SBOM referrers and the statement-bundle referrers alike -- so
+// the target never has to challenge and nothing is sent to a token realm.
 func TestDeployerExecuteRegistryPresentsTheBearer(t *testing.T) {
 	inner := regtest.Registry(t, true)
 	var manifests atomic.Int32
 	fx := newRegistryDeployFixtureServing(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer "+os.Getenv("REGISTRY_ID_TOKEN") {
-			if r.URL.Path != "/v2/" {
-				t.Errorf("request without the registry token: %s %s", r.Method, r.URL.Path)
-			}
+			t.Errorf("request without the registry token: %s %s", r.Method, r.URL.Path)
 			w.Header().Set("WWW-Authenticate", `Bearer realm="https://`+r.Host+`/token",service="`+r.Host+`"`)
 			w.WriteHeader(http.StatusUnauthorized)
 			return
@@ -760,16 +758,16 @@ func TestDeployerExecuteRegistryPresentsTheBearer(t *testing.T) {
 	}
 	ca, dialer, caPath := deployCapsuleFields(t)
 	d := &deploy.Deployer{
-		Engine:       fx.engine,
-		LaneDigest:   "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-		ArtifactRefs: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
-		LaneID:       "test-lane",
-		CA:           ca,
-		Dialer:       dialer,
-		CAVolume:     caPath,
-		StepID:       "deploy-prod",
-		Resolver:     probedResolver(),
-		Lane:         &lane.Lane{Secrets: fx.secrets},
+		Engine:         fx.engine,
+		LaneDigest:     "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+		ArtifactRefs:   map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
+		LaneID:         "test-lane",
+		CA:             ca,
+		Dialer:         dialer,
+		CAVolume:       caPath,
+		StepID:         "deploy-prod",
+		Resolver:       probedResolver(),
+		RegistryTokens: fx.tokens,
 	}
 	deploy.SetProduceBundles(d, stubProduceBundles())
 	if _, err := d.Execute(context.Background(), deployStep(t, fx.method), state); err != nil {
@@ -777,46 +775,6 @@ func TestDeployerExecuteRegistryPresentsTheBearer(t *testing.T) {
 	}
 	if got := manifests.Load(); got != 6 {
 		t.Errorf("manifest pushes under the registry token = %d, want 6 (payload, two image SBOMs, three statement bundles)", got)
-	}
-}
-
-// TestDeployerExecuteRegistryRefusesBuilderAudience proves the audience check
-// before use (ADR-058 D3): a registry token whose audience contains the
-// lane's oidc audience fails the deploy before the first request to the
-// target, so a token minted for Fulcio never reaches a registry.
-func TestDeployerExecuteRegistryRefusesBuilderAudience(t *testing.T) {
-	var requests atomic.Int32
-	fx := newRegistryDeployFixtureServing(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		requests.Add(1)
-		w.WriteHeader(http.StatusForbidden)
-	}))
-	t.Setenv("REGISTRY_ID_TOKEN", deploy.FakeIDToken(`{"aud":["https://registry.example.com","sigstore"],"iat":1000,"exp":1600}`))
-
-	state := newRuntime(t, "build", "deploy-prod")
-	if err := state.Register("build", "", fx.handle); err != nil {
-		t.Fatal(err)
-	}
-	ca, dialer, caPath := deployCapsuleFields(t)
-	d := &deploy.Deployer{
-		Engine:       fx.engine,
-		LaneDigest:   "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-		ArtifactRefs: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
-		LaneID:       "test-lane",
-		CA:           ca,
-		Dialer:       dialer,
-		CAVolume:     caPath,
-		StepID:       "deploy-prod",
-		Resolver:     probedResolver(),
-		OIDC:         lane.OIDCConfig{Audience: "sigstore"},
-		Lane:         &lane.Lane{Secrets: fx.secrets},
-	}
-	deploy.SetProduceBundles(d, stubProduceBundles())
-	_, err := d.Execute(context.Background(), deployStep(t, fx.method), state)
-	if err == nil || !strings.Contains(err.Error(), `its audience contains the oidc audience "sigstore"`) {
-		t.Fatalf("Execute error = %v, want the audience refusal", err)
-	}
-	if n := requests.Load(); n != 0 {
-		t.Errorf("requests to the target = %d, want 0: the token is refused before the first dial", n)
 	}
 }
 
@@ -929,15 +887,15 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 
 	d := &deploy.Deployer{
 		Engine: fx.engine, EngineID: fx.engine.Identity(),
-		LaneDigest:   "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-		ArtifactRefs: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
-		LaneID:       "test-lane",
-		CA:           ca,
-		Dialer:       dialer,
-		CAVolume:     caPath,
-		StepID:       "deploy-prod",
-		Resolver:     probedResolver(),
-		Lane:         &lane.Lane{Secrets: fx.secrets},
+		LaneDigest:     "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+		ArtifactRefs:   map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
+		LaneID:         "test-lane",
+		CA:             ca,
+		Dialer:         dialer,
+		CAVolume:       caPath,
+		StepID:         "deploy-prod",
+		Resolver:       probedResolver(),
+		RegistryTokens: fx.tokens,
 	}
 	deploy.SetProduceBundles(d, stubProduceBundles())
 	att, err := d.Execute(context.Background(), step, state)
@@ -1089,17 +1047,17 @@ func TestDeployerExecute_KeylessBundles(t *testing.T) {
 
 	step := deployStep(t, fx.method)
 	d := &deploy.Deployer{
-		Engine:       fx.engine,
-		EngineID:     fx.engine.Identity(),
-		LaneDigest:   "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-		ArtifactRefs: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
-		LaneID:       "test-lane",
-		CA:           ca,
-		Dialer:       dialer,
-		CAVolume:     caPath,
-		StepID:       "deploy-prod",
-		Resolver:     probedResolver(),
-		Lane:         &lane.Lane{Secrets: fx.secrets},
+		Engine:         fx.engine,
+		EngineID:       fx.engine.Identity(),
+		LaneDigest:     "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+		ArtifactRefs:   map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
+		LaneID:         "test-lane",
+		CA:             ca,
+		Dialer:         dialer,
+		CAVolume:       caPath,
+		StepID:         "deploy-prod",
+		Resolver:       probedResolver(),
+		RegistryTokens: fx.tokens,
 	}
 	var producedBundles [][]byte
 	stub := stubProduceBundles()
@@ -1146,16 +1104,16 @@ func TestDeployerExecute_KeylessFailureIsFatal(t *testing.T) {
 
 	step := deployStep(t, fx.method)
 	d := &deploy.Deployer{
-		Engine:       fx.engine,
-		LaneDigest:   "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-		ArtifactRefs: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
-		LaneID:       "test-lane",
-		CA:           ca,
-		Dialer:       dialer,
-		CAVolume:     caPath,
-		StepID:       "deploy-prod",
-		Resolver:     probedResolver(),
-		Lane:         &lane.Lane{Secrets: fx.secrets},
+		Engine:         fx.engine,
+		LaneDigest:     "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+		ArtifactRefs:   map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
+		LaneID:         "test-lane",
+		CA:             ca,
+		Dialer:         dialer,
+		CAVolume:       caPath,
+		StepID:         "deploy-prod",
+		Resolver:       probedResolver(),
+		RegistryTokens: fx.tokens,
 	}
 	wantErr := errors.New("keyless: fulcio unreachable")
 	deploy.SetProduceBundles(d, func(_ context.Context, _ lane.KeylessEndpoints, _ [][]byte) ([][]byte, error) {

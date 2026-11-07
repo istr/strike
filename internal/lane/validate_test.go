@@ -66,6 +66,8 @@ func TestValidateLane_Reject(t *testing.T) {
 		{"invalid_registry_anchor_not_ca.yaml", "registries[0].registry \"images.example.com\": rootca anchor is not a CA certificate"},
 		{"invalid_registry_capture_undeclared.yaml", "step \"deploy\" capture \"version\" image"},
 		{"invalid_registry_unparseable_ref.yaml", "pack base \"images.example.com/library/Golang"},
+		{"invalid_registry_target_token_differs.yaml", "deploy step \"deploy-2\" target registry.example.com declares another credential token (\"registry-token-2\") than deploy step \"deploy\""},
+		{"invalid_registry_target_anchor_differs.yaml", "deploy step \"deploy-2\" target registry.example.com declares another trust anchor than deploy step \"deploy\""},
 	}
 
 	matches, err := filepath.Glob("testdata/validate/invalid_*.yaml")

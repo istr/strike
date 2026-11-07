@@ -42,17 +42,22 @@ func (SystemTransports) Transport(primitive.ImageRef) (http.RoundTripper, error)
 // that registry redirects blob reads to. Every connection resolves through
 // the run's DoT resolver and verifies against the declared anchor of the host
 // it reaches. A read connection's identity is not recorded: the digest pin
-// carries the integrity (ADR-030 amendment 2026-11-06).
+// carries the integrity (ADR-030 amendment 2026-11-06). A read of a deploy
+// target's authority carries that target's registry token (ADR-058 amendment
+// 2026-11-08).
 type Reads struct {
 	dialer     *transport.Dialer
 	registries map[string]lane.Registry
+	tokens     map[string]lane.SecretString
 }
 
 // NewReads collects the lane's registry declarations by written authority. A
-// deploy target counts as a registry without storages. Lane validation keeps
-// every registry and storage authority unique, so no declaration shadows
-// another.
-func NewReads(dialer *transport.Dialer, p *lane.Lane) *Reads {
+// deploy target counts as a registry without storages; tokens holds the
+// registry token of each deploy target's authority, read once when the run
+// starts. Lane validation keeps every registry and storage authority unique,
+// and the deploy targets of one authority on one anchor and one token, so no
+// declaration shadows another.
+func NewReads(dialer *transport.Dialer, p *lane.Lane, tokens map[string]lane.SecretString) *Reads {
 	registries := make(map[string]lane.Registry, len(p.Registries))
 	for _, r := range p.Registries {
 		registries[string(r.Registry.Address.Authority())] = r
@@ -68,7 +73,7 @@ func NewReads(dialer *transport.Dialer, p *lane.Lane) *Reads {
 			}
 		}
 	}
-	return &Reads{dialer: dialer, registries: registries}
+	return &Reads{dialer: dialer, registries: registries, tokens: tokens}
 }
 
 // Transport returns the round tripper a read of ref goes through. It admits a
@@ -77,7 +82,9 @@ func NewReads(dialer *transport.Dialer, p *lane.Lane) *Reads {
 // registry; every other request fails before it is dialed, a token realm on
 // another host included (go-containerregistry itself refuses a realm on a
 // private, link-local or loopback IP literal before any request, ahead of
-// this policy). Requests leave on https only.
+// this policy). Requests leave on https only. A read of a deploy target's
+// authority carries its registry token through CredentialTransport, so any
+// redirect of it fails.
 func (r *Reads) Transport(ref primitive.ImageRef) (http.RoundTripper, error) {
 	if r.dialer == nil {
 		return nil, errors.New("registry read: dialer required")
@@ -96,11 +103,15 @@ func (r *Reads) Transport(ref primitive.ImageRef) (http.RoundTripper, error) {
 	for _, s := range reg.Storages {
 		storages[string(s.Address.Authority())] = true
 	}
-	return transport.HTTPSOnly(readPolicy{
+	var rt http.RoundTripper = readPolicy{
 		inner:    r.dialTransport(authority, append([]endpoint.TLS{reg.Registry}, reg.Storages...)),
 		storages: storages,
 		registry: authority,
-	}), nil
+	}
+	if token, ok := r.tokens[authority]; ok {
+		rt = CredentialTransport(rt, authority, token)
+	}
+	return transport.HTTPSOnly(rt), nil
 }
 
 // dialTransport opens every connection through the run's dialer: the dialed

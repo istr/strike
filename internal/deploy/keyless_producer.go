@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/istr/strike/internal/lane"
@@ -24,13 +25,13 @@ import (
 // the builder token and the registry token, in seconds (ADR-058 D4).
 const tokenMaxLifetime = 15 * 60
 
-// readIDToken reads the identity token the named lane.secrets entry delivers
-// and decodes its claims, fail-closed: a token whose lifetime, exp - iat, is
-// not positive or exceeds tokenMaxLifetime is refused before any use
-// (ADR-058 D4). The token is not verified here; the peer it is minted for
-// verifies it.
-func (d *Deployer) readIDToken(name primitive.Identifier) (lane.SecretString, idTokenClaims, error) {
-	token, err := lane.ReadSecret(d.Lane.Secrets[name], d.LaneRoot)
+// readIDToken reads the identity token the named entry of secrets delivers,
+// resolving a file:// source through root, and decodes its claims,
+// fail-closed: a token whose lifetime, exp - iat, is not positive or exceeds
+// tokenMaxLifetime is refused before any use (ADR-058 D4). The token is not
+// verified here; the peer it is minted for verifies it.
+func readIDToken(secrets map[primitive.Identifier]lane.SecretSource, root *os.Root, name primitive.Identifier) (lane.SecretString, idTokenClaims, error) {
+	token, err := lane.ReadSecret(secrets[name], root)
 	if err != nil {
 		return lane.SecretString{}, idTokenClaims{}, err
 	}
@@ -55,7 +56,7 @@ func (d *Deployer) readIDToken(name primitive.Identifier) (lane.SecretString, id
 // provider and the certificate is what the verifier sees (ADR-041 decision 6
 // as amended by ADR-057 D2). strike never runs an interactive flow.
 func (d *Deployer) builderToken() (lane.SecretString, error) {
-	token, claims, err := d.readIDToken(d.OIDC.Token)
+	token, claims, err := readIDToken(d.Lane.Secrets, d.LaneRoot, d.OIDC.Token)
 	if err != nil {
 		return lane.SecretString{}, fmt.Errorf("keyless: oidc token %q: %w", d.OIDC.Token, err)
 	}

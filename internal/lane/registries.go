@@ -1,6 +1,7 @@
 package lane
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -37,13 +38,17 @@ func validateRegistries(p *Lane) error {
 }
 
 // collectRegistryHosts gathers the deploy targets first, so a registry or
-// storage that repeats a target's host is reported as such.
+// storage that repeats a target's host is reported as such. Deploy targets
+// that share an authority declare the same anchor and the same credential
+// token: every connection of a run to that authority carries one anchor and
+// one token (ADR-058 amendment 2026-11-08).
 func collectRegistryHosts(p *Lane) (registryHosts, error) {
 	h := registryHosts{
 		registries: map[string]bool{},
 		storages:   map[string]string{},
 		targets:    map[string][]primitive.Identifier{},
 	}
+	first := map[string]DeployRegistryTarget{}
 	for _, s := range p.Steps {
 		if s.Deploy == nil {
 			continue
@@ -56,6 +61,12 @@ func collectRegistryHosts(p *Lane) (registryHosts, error) {
 			return h, err
 		}
 		auth := string(reg.Target.Address.Authority())
+		prev, seen := first[auth]
+		if !seen {
+			first[auth] = reg.Target
+		} else if err := sameRegistryTarget(prev, reg.Target); err != nil {
+			return h, fmt.Errorf("deploy step %q target %s declares %w than deploy step %q; deploy targets that share a registry declare one anchor and one credential", s.ID, auth, err, h.targets[auth][0])
+		}
 		h.targets[auth] = append(h.targets[auth], s.ID)
 	}
 	for i, r := range p.Registries {
@@ -73,6 +84,19 @@ func collectRegistryHosts(p *Lane) (registryHosts, error) {
 		}
 	}
 	return h, nil
+}
+
+// sameRegistryTarget reports which declaration of cur differs from prev, a
+// deploy target of the same authority: its trust anchor or its credential
+// token.
+func sameRegistryTarget(prev, cur DeployRegistryTarget) error {
+	if prev.Trust != cur.Trust {
+		return errors.New("another trust anchor")
+	}
+	if prev.Credential.Token != cur.Credential.Token {
+		return fmt.Errorf("another credential token (%q)", cur.Credential.Token)
+	}
+	return nil
 }
 
 // declare admits one registry or storage authority: written without the

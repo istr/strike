@@ -14,6 +14,7 @@ import (
 
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/primitive"
+	"github.com/istr/strike/internal/registry"
 	"github.com/istr/strike/internal/registry/regtest"
 	"github.com/istr/strike/internal/testutil"
 )
@@ -23,7 +24,7 @@ import (
 // mediator constructors do. Without the check a Deployer built without one
 // fails inside the dial callback, long after the point that can report it.
 func TestNewRegistryTransport_RejectsNilDialer(t *testing.T) {
-	_, _, err := newRegistryTransport(DeployRegistryForTest().Target, nil)
+	_, _, err := newRegistryTransport(DeployRegistryForTest().Target, nil, lane.SecretString{})
 	if err == nil {
 		t.Fatal("expected an error for a nil dialer, got nil")
 	}
@@ -56,12 +57,13 @@ func TestPushSBOMPairRefusesTagFallback(t *testing.T) {
 	}
 }
 
-// TestRegistryTokenChecksBeforeUse proves the fail-closed checks on the
-// registry token (ADR-058 D3, D4): a token that cannot be read, is malformed,
-// carries no lifetime, outlives the bound, carries an aud claim of neither
-// form, or names the lane's oidc audience in either form of the claim is
-// refused; a token minted for another audience is returned unchanged.
-func TestRegistryTokenChecksBeforeUse(t *testing.T) {
+// TestReadRegistryTokensChecksBeforeUse proves the fail-closed checks on the
+// registry token at run start (ADR-058 D3, D4, amendment 2026-11-08): a token
+// that cannot be read, is malformed, carries no lifetime, outlives the bound,
+// carries an aud claim of neither form, or names the lane's oidc audience in
+// either form of the claim is refused; a token minted for another audience is
+// returned unchanged, keyed by the target authority.
+func TestReadRegistryTokensChecksBeforeUse(t *testing.T) {
 	tests := []struct {
 		name    string
 		source  lane.SecretSource
@@ -80,17 +82,19 @@ func TestRegistryTokenChecksBeforeUse(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Setenv("REGISTRY_ID_TOKEN", tt.token)
-			d := &Deployer{
-				OIDC: lane.OIDCConfig{Audience: "sigstore"},
-				Lane: &lane.Lane{Secrets: map[primitive.Identifier]lane.SecretSource{"registry-token": tt.source}},
+			method := DeployRegistryForTest()
+			p := &lane.Lane{
+				OIDC:    lane.OIDCConfig{Audience: "sigstore"},
+				Secrets: map[primitive.Identifier]lane.SecretSource{"registry-token": tt.source},
+				Steps:   []lane.Step{{ID: "deploy", Deploy: &lane.DeploySpec{Method: method}}},
 			}
-			token, err := d.registryToken(lane.RegistryCredential{Type: "bearer", Token: "registry-token"})
+			tokens, err := ReadRegistryTokens(p, nil)
 			if tt.wantErr == "" {
 				if err != nil {
-					t.Fatalf("registryToken: %v", err)
+					t.Fatalf("ReadRegistryTokens: %v", err)
 				}
-				if token.Expose() != tt.token {
-					t.Error("registryToken did not return the token it read")
+				if got := tokens[string(method.Target.Address.Authority())]; got.Expose() != tt.token {
+					t.Error("ReadRegistryTokens did not return the token it read under the target authority")
 				}
 				return
 			}
@@ -125,7 +129,8 @@ func TestPushByDigestScrubsTheToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("digest: %v", err)
 	}
-	client := registryClient{rt: srv.Client().Transport, token: lane.NewSecretString(presented)}
+	token := lane.NewSecretString(presented)
+	client := registryClient{rt: registry.CredentialTransport(srv.Client().Transport, srv.Listener.Addr().String(), token), token: token}
 	err = pushByDigest(context.Background(), srv.Listener.Addr().String()+"/app", digest.String(), empty.Image, client)
 	if err == nil {
 		t.Fatal("expected the registry's refusal, got nil")

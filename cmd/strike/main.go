@@ -14,6 +14,7 @@ import (
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/closer"
 	"github.com/istr/strike/internal/container"
+	"github.com/istr/strike/internal/deploy"
 	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/front"
 	"github.com/istr/strike/internal/lane"
@@ -209,6 +210,11 @@ func cmdRun(ctx context.Context, path string, engine container.Engine) error {
 	}
 	defer closer.Warn(laneRoot, "lane root")
 
+	registryTokens, err := deploy.ReadRegistryTokens(p, laneRoot)
+	if err != nil {
+		return err
+	}
+
 	ca, caCleanup, caErr := initLaneCA(p)
 	if caErr != nil {
 		return caErr
@@ -222,23 +228,24 @@ func cmdRun(ctx context.Context, path string, engine container.Engine) error {
 	defer frontCleanup()
 
 	rc := &runContext{
-		ctx:        ctx,
-		engine:     engine,
-		lane:       p,
-		laneDigest: laneDigest,
-		dag:        dag,
-		stepIndex:  idx,
-		regClient:  &registry.Client{Engine: engine},
-		engineID:   engine.Identity(),
-		ca:         ca,
-		front:      ft,
-		dialer:     dialer,
-		reads:      registry.NewReads(dialer, p),
-		runtime:    lane.NewRuntime(dag),
-		capsules:   map[primitive.Identifier]*capsule.NetworkCapsule{},
-		laneRoot:   laneRoot,
-		resolverID: resolverID,
-		laneDir:    laneDir,
+		ctx:            ctx,
+		engine:         engine,
+		lane:           p,
+		laneDigest:     laneDigest,
+		dag:            dag,
+		stepIndex:      idx,
+		regClient:      &registry.Client{Engine: engine},
+		engineID:       engine.Identity(),
+		ca:             ca,
+		front:          ft,
+		dialer:         dialer,
+		reads:          registry.NewReads(dialer, p, registryTokens),
+		registryTokens: registryTokens,
+		runtime:        lane.NewRuntime(dag),
+		capsules:       map[primitive.Identifier]*capsule.NetworkCapsule{},
+		laneRoot:       laneRoot,
+		resolverID:     resolverID,
+		laneDir:        laneDir,
 	}
 
 	if capsErr := rc.buildCapsules(ctx); capsErr != nil {

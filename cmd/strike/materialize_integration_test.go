@@ -286,6 +286,7 @@ func TestMaterializeMissingDigestLive_Integration(t *testing.T) {
 	ctx := context.Background()
 	caddyRoot := materializeHarness(t, engine)
 	client := materializeEngineClient(t)
+	t.Setenv("REGISTRY_ID_TOKEN", testutil.MintIDToken(t, itestIssuer, testutil.HarnessRegistryClient, caddyRoot))
 
 	repo := fmt.Sprintf("strike-itest-materialize-missing-%d", clock.Wall().UnixNano())
 	lanePath := writeMaterializeLane(t, caddyRoot, materializeMissing, repo)

@@ -296,6 +296,11 @@ func newLiveRunContext(ctx context.Context, t *testing.T, engine container.Engin
 	}
 	t.Cleanup(func() { testutil.CloseLog(t, laneRoot, "lane root") })
 
+	registryTokens, tokErr := deploy.ReadRegistryTokens(p, laneRoot)
+	if tokErr != nil {
+		t.Fatalf("read registry tokens: %v", tokErr)
+	}
+
 	ca, caErr := transport.New(p.ID)
 	if caErr != nil {
 		t.Fatalf("ephemeral CA: %v", caErr)
@@ -309,23 +314,24 @@ func newLiveRunContext(ctx context.Context, t *testing.T, engine container.Engin
 	t.Cleanup(func() { testutil.CloseLog(t, ft, "front") })
 
 	rc := &runContext{
-		ctx:        ctx,
-		engine:     engine,
-		lane:       p,
-		laneDigest: laneDigest,
-		dag:        dag,
-		stepIndex:  idx,
-		regClient:  &registry.Client{Engine: engine},
-		engineID:   engine.Identity(),
-		ca:         ca,
-		front:      ft,
-		dialer:     dialer,
-		reads:      registry.NewReads(dialer, p),
-		runtime:    lane.NewRuntime(dag),
-		capsules:   map[primitive.Identifier]*capsule.NetworkCapsule{},
-		laneRoot:   laneRoot,
-		resolverID: resolverID,
-		laneDir:    laneDir,
+		ctx:            ctx,
+		engine:         engine,
+		lane:           p,
+		laneDigest:     laneDigest,
+		dag:            dag,
+		stepIndex:      idx,
+		regClient:      &registry.Client{Engine: engine},
+		engineID:       engine.Identity(),
+		ca:             ca,
+		front:          ft,
+		dialer:         dialer,
+		reads:          registry.NewReads(dialer, p, registryTokens),
+		registryTokens: registryTokens,
+		runtime:        lane.NewRuntime(dag),
+		capsules:       map[primitive.Identifier]*capsule.NetworkCapsule{},
+		laneRoot:       laneRoot,
+		resolverID:     resolverID,
+		laneDir:        laneDir,
 	}
 
 	if capsErr := rc.buildCapsules(ctx); capsErr != nil {

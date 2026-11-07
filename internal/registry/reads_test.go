@@ -135,7 +135,7 @@ func (f readFixture) reads(t *testing.T, withStorage bool) *registry.Reads {
 		reg.Storages = []endpoint.TLS{{Type: "https", Address: endpoint.MustParseAuthority(f.storage), Trust: f.trust}}
 	}
 	dialer := testutil.StartDoTResolver(t, netip.MustParseAddr("127.0.0.1"))
-	return registry.NewReads(dialer, &lane.Lane{Registries: []lane.Registry{reg}})
+	return registry.NewReads(dialer, &lane.Lane{Registries: []lane.Registry{reg}}, nil)
 }
 
 // readImage reads ref through src in full: the manifest, the config, and every
@@ -219,7 +219,7 @@ func TestReads_Policy(t *testing.T) {
 // Reads without a dialer.
 func TestReads_TransportRefusals(t *testing.T) {
 	dialer := testutil.StartDoTResolver(t, netip.MustParseAddr("127.0.0.1"))
-	declared := registry.NewReads(dialer, &lane.Lane{})
+	declared := registry.NewReads(dialer, &lane.Lane{}, nil)
 	pinned := primitive.ImageRef("images.example.com/x@sha256:" + strings.Repeat("ab", 32))
 	tests := []struct {
 		reads   *registry.Reads
@@ -229,7 +229,7 @@ func TestReads_TransportRefusals(t *testing.T) {
 	}{
 		{name: "unparseable reference", reads: declared, ref: "images.example.com/x@sha256:abc", wantErr: "registry read images.example.com/x@sha256:abc"},
 		{name: "undeclared registry", reads: declared, ref: pinned, wantErr: "registry images.example.com is not declared"},
-		{name: "no dialer", reads: registry.NewReads(nil, &lane.Lane{}), ref: pinned, wantErr: "dialer required"},
+		{name: "no dialer", reads: registry.NewReads(nil, &lane.Lane{}, nil), ref: pinned, wantErr: "dialer required"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -245,7 +245,7 @@ func TestReads_TransportRefusals(t *testing.T) {
 // and base-SBOM reads each refuse a reference whose registry the lane does not
 // declare, before any request.
 func TestReads_UndeclaredRegistryFailsEveryRead(t *testing.T) {
-	undeclared := registry.NewReads(testutil.StartDoTResolver(t, netip.MustParseAddr("127.0.0.1")), &lane.Lane{})
+	undeclared := registry.NewReads(testutil.StartDoTResolver(t, netip.MustParseAddr("127.0.0.1")), &lane.Lane{}, nil)
 	ref := primitive.ImageRef("images.example.com/x@sha256:" + strings.Repeat("ab", 32))
 	ctx := context.Background()
 	tests := []struct {
@@ -291,8 +291,47 @@ func TestNewReads_DeployTargetIsARegistry(t *testing.T) {
 			},
 		}},
 	}}}
-	if _, err := registry.NewReads(dialer, p).Transport(primitive.NewImageRef("registry.example.com/app@sha256:" + strings.Repeat("ab", 32))); err != nil {
+	if _, err := registry.NewReads(dialer, p, nil).Transport(primitive.NewImageRef("registry.example.com/app@sha256:" + strings.Repeat("ab", 32))); err != nil {
 		t.Fatalf("Transport for the deploy target: %v", err)
+	}
+}
+
+// TestReadsDeployTargetCarriesCredential pins that a read of a deploy
+// target's authority goes through CredentialTransport: the registry's blob
+// redirect fails with the credential's refusal, not with the storage policy
+// of a declared registry (ADR-058 amendment 2026-11-08).
+func TestReadsDeployTargetCarriesCredential(t *testing.T) {
+	f := newReadFixture(t, redirectBlobs)
+	p := &lane.Lane{Steps: []lane.Step{{
+		ID: "deploy",
+		Deploy: &lane.DeploySpec{Method: lane.DeployRegistry{
+			Type: "registry",
+			Target: lane.DeployRegistryTarget{
+				Type:       "https",
+				Address:    endpoint.MustParseAuthority(f.registry),
+				Trust:      f.trust,
+				Name:       "t/img",
+				Credential: lane.RegistryCredential{Type: "bearer", Token: "registry-token"},
+			},
+		}},
+	}}}
+	dialer := testutil.StartDoTResolver(t, netip.MustParseAddr("127.0.0.1"))
+	tokens := map[string]lane.SecretString{f.registry: lane.NewSecretString("header.payload.signature")}
+	rt, err := registry.NewReads(dialer, p, tokens).Transport(f.ref)
+	if err != nil {
+		t.Fatalf("Transport: %v", err)
+	}
+	written := string(f.ref)
+	ref, err := name.NewDigest(written)
+	if err != nil {
+		t.Fatalf("parse ref: %v", err)
+	}
+	img, err := remote.Image(ref, remote.WithTransport(rt), remote.WithContext(context.Background()))
+	if err != nil {
+		t.Fatalf("manifest read: %v", err)
+	}
+	if _, err := img.ConfigFile(); err == nil || !strings.Contains(err.Error(), "a request carrying the declared credential is never redirected") {
+		t.Fatalf("config read error = %v, want the credential's redirect refusal", err)
 	}
 }
 

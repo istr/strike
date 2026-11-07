@@ -11,11 +11,11 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"os"
 	"slices"
 	"strings"
 	"sync"
 
-	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
@@ -42,8 +42,8 @@ const artifactAnnotation = "dev.strike.artifact"
 // transport under the declared credential, catalogs the whole pushed image
 // and every named region into CycloneDX and SPDX SBOMs, and attaches all
 // documents as OCI referrers of the pushed manifest digest, each annotated
-// with its artifacts-map name. The registry token is read and checked before
-// the first dial to the target. The returned attach target carries the pushed
+// with its artifacts-map name. The registry token was read and checked when
+// the run started. The returned attach target carries the pushed
 // descriptor, the transport and credential for the statement-bundle
 // referrers, the validated push-connection identity for Sealed.ObservedPeers,
 // and the per-artifact SBOM digest sets for the sealed records.
@@ -74,11 +74,11 @@ func (d *Deployer) executeRegistryDeploy(ctx context.Context, m lane.DeployRegis
 		return nil, fmt.Errorf("registry deploy: %w", verifyErr)
 	}
 
-	token, err := d.registryToken(m.Target.Credential)
-	if err != nil {
-		return nil, fmt.Errorf("registry deploy: %w", err)
+	token, ok := d.RegistryTokens[string(m.Target.Address.Authority())]
+	if !ok {
+		return nil, fmt.Errorf("registry deploy: no registry token was read for target %s", m.Target.Address.Authority())
 	}
-	rt, obs, err := newRegistryTransport(m.Target, d.Dialer)
+	rt, obs, err := newRegistryTransport(m.Target, d.Dialer, token)
 	if err != nil {
 		return nil, fmt.Errorf("registry deploy: %w", err)
 	}
@@ -362,46 +362,59 @@ func docDigest(doc []byte) primitive.Digest {
 }
 
 // pushByDigest writes img to repo at the given manifest digest through the
-// client's transport, under its credential. A manifest with a subject
-// requires the registry's referrers API: the referrers tag fallback is
-// refused, so no write creates a tag (ADR-058). The error is scrubbed of the
-// token.
+// client's transport, which carries the credential. A manifest with a
+// subject requires the registry's referrers API: the referrers tag fallback
+// is refused, so no write creates a tag (ADR-058). The error is scrubbed of
+// the token.
 func pushByDigest(ctx context.Context, repo, digest string, img v1.Image, client registryClient) error {
 	dst, err := name.NewDigest(repo + "@" + digest)
 	if err != nil {
 		return fmt.Errorf("target reference %q: %w", repo+"@"+digest, err)
 	}
-	return scrub(remote.Write(dst, img, remote.WithTransport(client.rt), remote.WithAuth(client), remote.WithReferrersTagFallback(false), remote.WithContext(ctx)), client.token)
+	return scrub(remote.Write(dst, img, remote.WithTransport(client.rt), remote.WithReferrersTagFallback(false), remote.WithContext(ctx)), client.token)
 }
 
 // registryClient is what every write to the declared registry target
-// carries: the trust-anchored transport, and the registry token the target's
-// credential names, presented as the bearer (ADR-058 D2).
+// carries: the trust-anchored transport, which presents the registry token
+// the target's credential names as the bearer (ADR-058 D2, amendment
+// 2026-11-08), and the token itself, which scrub removes from errors.
 type registryClient struct {
 	rt    http.RoundTripper
 	token lane.SecretString
 }
 
-// Authorization implements authn.Authenticator. The token stays on the
-// redacting secret type until go-containerregistry asks for it (ADR-058 D1).
-func (c registryClient) Authorization() (*authn.AuthConfig, error) {
-	return &authn.AuthConfig{RegistryToken: c.token.Expose()}, nil
-}
-
-// registryToken reads the registry token the target's credential names and
-// checks it before any use, fail-closed: its lifetime stays within the bound
-// (readIDToken), and its audience does not contain the lane's oidc audience,
-// because a token minted for Fulcio is never presented to a registry
-// (ADR-058 D3).
-func (d *Deployer) registryToken(cred lane.RegistryCredential) (lane.SecretString, error) {
-	token, claims, err := d.readIDToken(cred.Token)
-	if err != nil {
-		return lane.SecretString{}, fmt.Errorf("registry token %q: %w", cred.Token, err)
+// ReadRegistryTokens reads the registry token of every registry deploy of p
+// once, when the run starts, keyed by the target's written authority, and
+// checks each before any use, fail-closed: its lifetime stays within the
+// bound (readIDToken), and its audience does not contain the lane's oidc
+// audience, because a token minted for Fulcio is never presented to a
+// registry (ADR-058 D3, amendment 2026-11-08). Lane validation gives the
+// deploy targets of one authority one token, so each authority is read once.
+func ReadRegistryTokens(p *lane.Lane, root *os.Root) (map[string]lane.SecretString, error) {
+	tokens := map[string]lane.SecretString{}
+	for _, s := range p.Steps {
+		if s.Deploy == nil {
+			continue
+		}
+		reg, ok := s.Deploy.Method.(lane.DeployRegistry)
+		if !ok {
+			continue
+		}
+		auth := string(reg.Target.Address.Authority())
+		if _, done := tokens[auth]; done {
+			continue
+		}
+		cred := reg.Target.Credential.Token
+		token, claims, err := readIDToken(p.Secrets, root, cred)
+		if err != nil {
+			return nil, fmt.Errorf("deploy step %q: registry token %q: %w", s.ID, cred, err)
+		}
+		if slices.Contains(claims.Aud, p.OIDC.Audience) {
+			return nil, fmt.Errorf("deploy step %q: registry token %q: its audience contains the oidc audience %q, and a token minted for Fulcio is never presented to a registry", s.ID, cred, p.OIDC.Audience)
+		}
+		tokens[auth] = token
 	}
-	if slices.Contains(claims.Aud, d.OIDC.Audience) {
-		return lane.SecretString{}, fmt.Errorf("registry token %q: its audience contains the oidc audience %q, and a token minted for Fulcio is never presented to a registry", cred.Token, d.OIDC.Audience)
-	}
-	return token, nil
+	return tokens, nil
 }
 
 // scrub removes the token from err's text. go-containerregistry carries a
@@ -444,7 +457,9 @@ func (c *pushIdentityCapture) get() (transport.ConnectionIdentity, []netip.Addr,
 
 // newRegistryTransport builds the trust-anchored round tripper every write
 // to the declared registry target dials through: the payload push, the SBOM
-// referrers, and the statement-bundle referrers. Enforcement is structural
+// referrers, and the statement-bundle referrers. It carries token as the
+// bearer through registry.CredentialTransport, so a redirect of any write
+// fails (ADR-058 amendment 2026-11-08). Enforcement is structural
 // (ADR-051 D4): the declared target name is resolved through the lane's own
 // DoT resolver and the TLS dial verifies the declared endpoint.Certificate anchor
 // against that name, a dial to any address other than the declared authority
@@ -452,7 +467,7 @@ func (c *pushIdentityCapture) get() (transport.ConnectionIdentity, []netip.Addr,
 // followed -- and a plaintext dial is rejected outright. The identity
 // observed on the verified handshake with the one permitted host is captured
 // for Sealed.ObservedPeers: the final dialed host is the attested host.
-func newRegistryTransport(target lane.DeployRegistryTarget, dialer *transport.Dialer) (http.RoundTripper, *pushIdentityCapture, error) {
+func newRegistryTransport(target lane.DeployRegistryTarget, dialer *transport.Dialer, token lane.SecretString) (http.RoundTripper, *pushIdentityCapture, error) {
 	if target.Address.Host == "" {
 		return nil, nil, fmt.Errorf("registry target: host required")
 	}
@@ -488,5 +503,6 @@ func newRegistryTransport(target lane.DeployRegistryTarget, dialer *transport.Di
 			return nil, fmt.Errorf("registry push: plaintext dial to %q rejected; the target is https-only", addr)
 		},
 	}
-	return transport.HTTPSOnly(base), capture, nil
+	authority := string(target.Address.Authority())
+	return transport.HTTPSOnly(registry.CredentialTransport(base, authority, token)), capture, nil
 }

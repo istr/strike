@@ -190,6 +190,7 @@ type Deployer struct {
 	CA              *transport.EphemeralCA
 	Dialer          *transport.Dialer
 	Reads           registry.Transports                                                                         // where a capture image and a base SBOM are read from (ADR-029 amendment 2026-11-06)
+	RegistryTokens  map[string]lane.SecretString                                                                // registry token per deploy target authority, read at run start (ADR-058 amendment 2026-11-08)
 	ArtifactRefs    map[primitive.Identifier]lane.ArtifactRef                                                   // deploy artifacts map: name -> image arm or region (ADR-051 D9)
 	produceBundles  func(ctx context.Context, eps lane.KeylessEndpoints, statements [][]byte) ([][]byte, error) // test seam; nil selects the real keyless chain
 	Keyless         lane.Keyless                                                                                // lane-declared keyless config (ADR-040 D2, ADR-041); .Endpoints dials Fulcio, Rekor v2, TSA; .TrustRoot/.TrustRootRef carry the verify anchor
@@ -485,7 +486,7 @@ func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.Run
 			{Statement: record.TrustLayerSealed, Bundle: signed.Sealed.Bundle},
 			{Statement: record.TrustLayerEngineDependent, Bundle: signed.EngineContext.Bundle},
 			{Statement: record.TrustLayerInformational, Bundle: signed.Informational.Bundle},
-		}, remote.WithTransport(attach.client.rt), remote.WithAuth(attach.client)); err != nil {
+		}, remote.WithTransport(attach.client.rt)); err != nil {
 			return nil, fmt.Errorf("step %q: attach statement bundles: %w", step.ID, scrub(err, attach.client.token))
 		}
 	}
