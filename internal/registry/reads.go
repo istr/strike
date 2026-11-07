@@ -75,7 +75,9 @@ func NewReads(dialer *transport.Dialer, p *lane.Lane) *Reads {
 // request to the registry ref names, and a request to one of that registry's
 // storages only on a redirect chain that began with a blob GET of the
 // registry; every other request fails before it is dialed, a token realm on
-// another host included. Requests leave on https only.
+// another host included (go-containerregistry itself refuses a realm on a
+// private, link-local or loopback IP literal before any request, ahead of
+// this policy). Requests leave on https only.
 func (r *Reads) Transport(ref primitive.ImageRef) (http.RoundTripper, error) {
 	if r.dialer == nil {
 		return nil, errors.New("registry read: dialer required")

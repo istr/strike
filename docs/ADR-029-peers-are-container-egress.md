@@ -139,7 +139,12 @@ it declares: the controller resolves each declared host through the
 lane's DoT resolver and verifies the presented chain against the
 declared anchor, so no read in a run falls back to the system resolver
 or the system roots. A storage host is reached only as the redirect
-target of a blob read of its own registry.
+target of a blob read of its own registry, and a request to any other
+host, a bearer token realm included, fails before it is dialed.
+go-containerregistry refuses a token realm on a private, link-local or
+loopback IP literal before it sends any request, so for that address
+class the refusal is the library's and the lane's policy is never
+consulted.
 
 Peers are unchanged. They remain container-egress contracts over HTTPS
 and SSH, independent of the registry declarations, and a registry
