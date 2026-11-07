@@ -1,24 +1,24 @@
 {
   "boundary": "ValidateAttestation",
   "description": "missing lane_id fails validation",
+  "expected": {
+    "error_contains": "laneId",
+    "valid": false
+  },
   "inputs": {
     "attestation": {
+      "engineDependent": {},
+      "informational": {
+        "postStateDigest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "preStateDigest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "provenance": [],
+        "timestamp": "2024-01-01T00:00:00Z"
+      },
       "sealed": {
         "artifacts": {},
         "laneDigest": "sha256:abc0000000000000000000000000000000000000000000000000000000000000",
         "peers": {}
-      },
-      "engineDependent": {},
-      "informational": {
-        "timestamp": "2024-01-01T00:00:00Z",
-        "preStateDigest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-        "postStateDigest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-        "provenance": []
       }
     }
-  },
-  "expected": {
-    "valid": false,
-    "error_contains": "laneId"
   }
 }

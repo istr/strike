@@ -45,6 +45,15 @@ boundaries whose runners live in `internal/executor`. The `state_digest`
 and `attestation` vectors are exercised from `internal/deploy` and their
 expectations are hand-maintained.
 
-A regenerated block's keys come back in the Go struct's field order, so
-the diff may reorder keys without changing a value. If a Rust verifier
+The regeneration writes every vector it touches in the canonical form
+below, so it changes a file only where a value changes. If a Rust verifier
 disagrees on a *value*, the discrepancy is a bug in one implementation.
+
+## Canonical form
+
+Every vector is stored in one canonical JSON form: object keys sorted at
+every level, arrays in their given order, numbers in their literal form, no
+HTML escaping, two-space indentation, and one trailing newline. The form
+depends on the values alone, never on the field order of a Go struct. A
+hand-maintained vector is written in the same form, and a test in
+`internal/executor` rejects any vector that is not in it.

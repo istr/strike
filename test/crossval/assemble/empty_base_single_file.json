@@ -2,48 +2,48 @@
   "boundary": "AssembleImage",
   "description": "single binary on a zero-layer linux/amd64 OCI base with entrypoint and user",
   "expected": {
+    "config_json_base64": "eyJhcmNoaXRlY3R1cmUiOiJhbWQ2NCIsImNyZWF0ZWQiOiIwMDAxLTAxLTAxVDAwOjAwOjAwWiIsImhpc3RvcnkiOlt7ImNyZWF0ZWQiOiIwMDAxLTAxLTAxVDAwOjAwOjAwWiJ9XSwib3MiOiJsaW51eCIsInJvb3RmcyI6eyJ0eXBlIjoibGF5ZXJzIiwiZGlmZl9pZHMiOlsic2hhMjU2OmFjMWZhMjY5NGEzZTcwYWFlYWFlNmE2NzBmNjkxN2UxYjE2ZTQxOGEzZmQ3NWMwY2I4OTk0OTExMmU0YzNlY2YiXX0sImNvbmZpZyI6eyJFbnRyeXBvaW50IjpbIi91c3IvYmluL2hlbGxvIl0sIlVzZXIiOiI2NTUzNDo2NTUzNCJ9fQ==",
     "diff_ids": [
       "sha256:ac1fa2694a3e70aaeaae6a670f6917e1b16e418a3fd75c0cb89949112e4c3ecf"
-    ],
-    "config_json_base64": "eyJhcmNoaXRlY3R1cmUiOiJhbWQ2NCIsImNyZWF0ZWQiOiIwMDAxLTAxLTAxVDAwOjAwOjAwWiIsImhpc3RvcnkiOlt7ImNyZWF0ZWQiOiIwMDAxLTAxLTAxVDAwOjAwOjAwWiJ9XSwib3MiOiJsaW51eCIsInJvb3RmcyI6eyJ0eXBlIjoibGF5ZXJzIiwiZGlmZl9pZHMiOlsic2hhMjU2OmFjMWZhMjY5NGEzZTcwYWFlYWFlNmE2NzBmNjkxN2UxYjE2ZTQxOGEzZmQ3NWMwY2I4OTk0OTExMmU0YzNlY2YiXX0sImNvbmZpZyI6eyJFbnRyeXBvaW50IjpbIi91c3IvYmluL2hlbGxvIl0sIlVzZXIiOiI2NTUzNDo2NTUzNCJ9fQ=="
+    ]
   },
   "go_ggcr_reference": {
-    "manifest_digest": "sha256:dc811bf35ab60b7942b1ca632127f516484f837551404cb95974733ba2538c12",
-    "config_digest": "sha256:2214de67a2d2f3dfc870f628ef0fd72ed9e00014fce20b9edcf124bafc31ef52"
+    "config_digest": "sha256:2214de67a2d2f3dfc870f628ef0fd72ed9e00014fce20b9edcf124bafc31ef52",
+    "manifest_digest": "sha256:dc811bf35ab60b7942b1ca632127f516484f837551404cb95974733ba2538c12"
   },
   "inputs": {
     "base": {
-      "manifest_media_type": "application/vnd.oci.image.manifest.v1+json",
-      "config_media_type": "application/vnd.oci.image.config.v1+json",
       "config_json_base64": "eyJhcmNoaXRlY3R1cmUiOiJhbWQ2NCIsImNyZWF0ZWQiOiIwMDAxLTAxLTAxVDAwOjAwOjAwWiIsIm9zIjoibGludXgiLCJyb290ZnMiOnsidHlwZSI6ImxheWVycyIsImRpZmZfaWRzIjpudWxsfSwiY29uZmlnIjp7fX0=",
-      "layers": []
-    },
-    "spec": {
-      "files": [
-        {
-          "from": {
-            "step": "build",
-            "output": "binary"
-          },
-          "dest": "/usr/bin/hello",
-          "mode": 493
-        }
-      ],
-      "config": {
-        "entrypoint": [
-          "/usr/bin/hello"
-        ],
-        "user": "65534:65534"
-      },
-      "annotations": {
-        "org.opencontainers.image.source": "https://github.com/istr/strike"
-      }
+      "config_media_type": "application/vnd.oci.image.config.v1+json",
+      "layers": [],
+      "manifest_media_type": "application/vnd.oci.image.manifest.v1+json"
     },
     "files": {
       "build.binary": {
         "content_base64": "IyEvYmluL3NoCmVjaG8gaGVsbG8K",
         "mode": 493
       }
+    },
+    "spec": {
+      "annotations": {
+        "org.opencontainers.image.source": "https://github.com/istr/strike"
+      },
+      "config": {
+        "entrypoint": [
+          "/usr/bin/hello"
+        ],
+        "user": "65534:65534"
+      },
+      "files": [
+        {
+          "dest": "/usr/bin/hello",
+          "from": {
+            "output": "binary",
+            "step": "build"
+          },
+          "mode": 493
+        }
+      ]
     }
   }
 }

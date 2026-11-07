@@ -1,6 +1,7 @@
 package executor_test
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"io/fs"
@@ -36,16 +37,11 @@ func loadVector[T any](t *testing.T, subdir, name string) T {
 }
 
 // updateVectorBlocks reads a vector file, replaces the named top-level blocks
-// with the provided values, and writes it back. The "inputs" block is never
+// with the provided values, and writes the whole vector back in the form
+// canonicalVector renders. The values of the "inputs" block are never
 // modified. A caller passes every block it replaces in one call: reads come
 // from the embedded FS, so a second call would re-read the pre-update bytes
 // and undo the first write.
-//
-// A replaced block's key order is the Go struct's field order, which an
-// alignment linter may change at any time, so a committed vector is not
-// expected to be a byte-exact fixed point of this path. JSON objects are
-// unordered and no consumer depends on the order; what the golden tests
-// compare are the values.
 func updateVectorBlocks(t *testing.T, subdir, name string, blocks map[string]any) {
 	t.Helper()
 	data, readErr := crossval.FS.ReadFile(subdir + "/" + name)
@@ -64,11 +60,14 @@ func updateVectorBlocks(t *testing.T, subdir, name string, blocks map[string]any
 		raw[key] = blockJSON
 	}
 
-	out, indentErr := json.MarshalIndent(raw, "", "  ")
-	if indentErr != nil {
-		t.Fatalf("marshal vector for update %s/%s: %v", subdir, name, indentErr)
+	merged, mergeErr := json.Marshal(raw)
+	if mergeErr != nil {
+		t.Fatalf("marshal vector for update %s/%s: %v", subdir, name, mergeErr)
 	}
-	out = append(out, '\n')
+	out, canonErr := canonicalVector(merged)
+	if canonErr != nil {
+		t.Fatalf("render vector for update %s/%s: %v", subdir, name, canonErr)
+	}
 
 	root, rootErr := os.OpenRoot(filepath.Join(crossvalDir, subdir))
 	if rootErr != nil {
@@ -87,6 +86,74 @@ func updateVectorBlocks(t *testing.T, subdir, name string, blocks map[string]any
 		t.Fatalf("close vector %s/%s: %v", subdir, name, closeErr)
 	}
 	t.Logf("updated vector: %s/%s", subdir, name)
+}
+
+// canonicalVector renders a vector in the one form every file under
+// test/crossval is stored in: object keys sorted at every level, arrays in
+// their given order, numbers in their literal form, no HTML escaping,
+// two-space indentation, and one trailing newline. The form depends on the
+// values alone, never on a Go struct's field order.
+func canonicalVector(data []byte) ([]byte, error) {
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.UseNumber()
+	var v any
+	if decodeErr := dec.Decode(&v); decodeErr != nil {
+		return nil, decodeErr
+	}
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	enc.SetIndent("", "  ")
+	if encodeErr := enc.Encode(v); encodeErr != nil {
+		return nil, encodeErr
+	}
+	return buf.Bytes(), nil
+}
+
+// TestCanonicalVector pins the canonical form on an input that violates
+// every rule it orders: unsorted keys at two levels, an array that must keep
+// its order, and characters an HTML-safe encoder would escape.
+func TestCanonicalVector(t *testing.T) {
+	got, err := canonicalVector([]byte(`{"b":[3,1],"a":{"d":"<&>","c":493}}`))
+	if err != nil {
+		t.Fatalf("canonicalVector: %v", err)
+	}
+	want := "{\n  \"a\": {\n    \"c\": 493,\n    \"d\": \"<&>\"\n  },\n  \"b\": [\n    3,\n    1\n  ]\n}\n"
+	if string(got) != want {
+		t.Errorf("canonical form:\n  got:  %q\n  want: %q", got, want)
+	}
+	if _, truncErr := canonicalVector([]byte(`{"a":`)); truncErr == nil {
+		t.Error("canonicalVector accepted truncated JSON")
+	}
+}
+
+// TestCrossvalVectorsCanonical asserts that every vector is stored in the
+// form canonicalVector renders, so regenerating the vectors changes a file
+// only where a value changes.
+func TestCrossvalVectorsCanonical(t *testing.T) {
+	files, err := fs.Glob(crossval.FS, "*/*.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) == 0 {
+		t.Fatal("no vector files found")
+	}
+
+	for _, f := range files {
+		t.Run(f, func(t *testing.T) {
+			data, readErr := crossval.FS.ReadFile(f)
+			if readErr != nil {
+				t.Fatalf("read vector: %v", readErr)
+			}
+			canonical, canonErr := canonicalVector(data)
+			if canonErr != nil {
+				t.Fatalf("render canonical form: %v", canonErr)
+			}
+			if !bytes.Equal(data, canonical) {
+				t.Error("vector is not in canonical form; see test/crossval/README.md")
+			}
+		})
+	}
 }
 
 // decodeBase64 decodes a base64 string or fails the test.

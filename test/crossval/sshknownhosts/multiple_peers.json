@@ -1,45 +1,45 @@
 {
   "boundary": "RenderKnownHosts",
   "description": "three ssh peers declared in reverse-alphabetical order render sorted by host",
+  "expected": {
+    "content_base64": "YWxwaGEuZXhhbXBsZSBzc2gtZWQyNTUxOSBBQUFBQzNOemFDMWxaREkxTlRFNUFBQUFJR1ptWm1abVptWm1abVptWm1abVptWm1abVptWm1abVptWm1abVptWm1abQptdS5leGFtcGxlIHNzaC1lZDI1NTE5IEFBQUFDM056YUMxbFpESTFOVEU1QUFBQUlHWm1abVptWm1abVptWm1abVptWm1abVptWm1abVptWm1abVptWm1abVptCnpldGEuZXhhbXBsZSBzc2gtZWQyNTUxOSBBQUFBQzNOemFDMWxaREkxTlRFNUFBQUFJR1ptWm1abVptWm1abVptWm1abVptWm1abVptWm1abVptWm1abVptWm1abQo="
+  },
   "inputs": {
     "front_key": {
-      "keyType": "ssh-ed25519",
-      "key": "AAAAC3NzaC1lZDI1NTE5AAAAIGZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZm"
+      "key": "AAAAC3NzaC1lZDI1NTE5AAAAIGZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZm",
+      "keyType": "ssh-ed25519"
     },
     "peers": [
       {
-        "type": "ssh",
         "host": "zeta.example",
         "knownHosts": [
           {
-            "keyType": "ssh-ed25519",
-            "key": "AAAAC3NzaC1lZDI1NTE5AAAAIHp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6"
+            "key": "AAAAC3NzaC1lZDI1NTE5AAAAIHp6enp6enp6enp6enp6enp6enp6enp6enp6enp6enp6",
+            "keyType": "ssh-ed25519"
           }
-        ]
+        ],
+        "type": "ssh"
       },
       {
-        "type": "ssh",
         "host": "mu.example",
         "knownHosts": [
           {
-            "keyType": "ssh-ed25519",
-            "key": "AAAAC3NzaC1lZDI1NTE5AAAAIG1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1t"
+            "key": "AAAAC3NzaC1lZDI1NTE5AAAAIG1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1t",
+            "keyType": "ssh-ed25519"
           }
-        ]
+        ],
+        "type": "ssh"
       },
       {
-        "type": "ssh",
         "host": "alpha.example",
         "knownHosts": [
           {
-            "keyType": "ssh-ed25519",
-            "key": "AAAAC3NzaC1lZDI1NTE5AAAAIGFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFh"
+            "key": "AAAAC3NzaC1lZDI1NTE5AAAAIGFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFh",
+            "keyType": "ssh-ed25519"
           }
-        ]
+        ],
+        "type": "ssh"
       }
     ]
-  },
-  "expected": {
-    "content_base64": "YWxwaGEuZXhhbXBsZSBzc2gtZWQyNTUxOSBBQUFBQzNOemFDMWxaREkxTlRFNUFBQUFJR1ptWm1abVptWm1abVptWm1abVptWm1abVptWm1abVptWm1abVptWm1abQptdS5leGFtcGxlIHNzaC1lZDI1NTE5IEFBQUFDM056YUMxbFpESTFOVEU1QUFBQUlHWm1abVptWm1abVptWm1abVptWm1abVptWm1abVptWm1abVptWm1abVptCnpldGEuZXhhbXBsZSBzc2gtZWQyNTUxOSBBQUFBQzNOemFDMWxaREkxTlRFNUFBQUFJR1ptWm1abVptWm1abVptWm1abVptWm1abVptWm1abVptWm1abVptWm1abQo="
   }
 }

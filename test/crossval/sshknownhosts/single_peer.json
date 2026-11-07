@@ -1,25 +1,25 @@
 {
   "boundary": "RenderKnownHosts",
   "description": "one ssh peer renders one line carrying the front key, not the peer key",
+  "expected": {
+    "content_base64": "Z2l0LmV4YW1wbGUuY29tIHNzaC1lZDI1NTE5IEFBQUFDM056YUMxbFpESTFOVEU1QUFBQUlHWm1abVptWm1abVptWm1abVptWm1abVptWm1abVptWm1abVptWm1abVptCg=="
+  },
   "inputs": {
     "front_key": {
-      "keyType": "ssh-ed25519",
-      "key": "AAAAC3NzaC1lZDI1NTE5AAAAIGZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZm"
+      "key": "AAAAC3NzaC1lZDI1NTE5AAAAIGZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZm",
+      "keyType": "ssh-ed25519"
     },
     "peers": [
       {
-        "type": "ssh",
         "host": "git.example.com",
         "knownHosts": [
           {
-            "keyType": "ssh-ed25519",
-            "key": "AAAAC3NzaC1lZDI1NTE5AAAAIGdnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dn"
+            "key": "AAAAC3NzaC1lZDI1NTE5AAAAIGdnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dnZ2dn",
+            "keyType": "ssh-ed25519"
           }
-        ]
+        ],
+        "type": "ssh"
       }
     ]
-  },
-  "expected": {
-    "content_base64": "Z2l0LmV4YW1wbGUuY29tIHNzaC1lZDI1NTE5IEFBQUFDM056YUMxbFpESTFOVEU1QUFBQUlHWm1abVptWm1abVptWm1abVptWm1abVptWm1abVptWm1abVptWm1abVptCg=="
   }
 }

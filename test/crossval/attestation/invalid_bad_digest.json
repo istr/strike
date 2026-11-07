@@ -1,25 +1,25 @@
 {
   "boundary": "ValidateAttestation",
   "description": "pre_state_digest not matching #Digest pattern fails validation",
+  "expected": {
+    "error_contains": "digest",
+    "valid": false
+  },
   "inputs": {
     "attestation": {
-      "sealed": {
-        "laneId": "test-lane",
-        "artifacts": {},
-        "laneDigest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-        "peers": {}
-      },
       "engineDependent": {},
       "informational": {
-        "timestamp": "2024-01-01T00:00:00Z",
-        "preStateDigest": "not-a-valid-digest",
         "postStateDigest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-        "provenance": []
+        "preStateDigest": "not-a-valid-digest",
+        "provenance": [],
+        "timestamp": "2024-01-01T00:00:00Z"
+      },
+      "sealed": {
+        "artifacts": {},
+        "laneDigest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "laneId": "test-lane",
+        "peers": {}
       }
     }
-  },
-  "expected": {
-    "valid": false,
-    "error_contains": "digest"
   }
 }
