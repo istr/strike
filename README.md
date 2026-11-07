@@ -82,7 +82,7 @@ first (`make -C test/sigstore-local up`), then build stage_1 from the clone's
 root:
 
 ```sh
-GIT_COMMIT=cdd04f3ada62917f29466e767c2db5983d2d09d4
+GIT_COMMIT=32442535b22dcf7760ea9f41e3e3f43408835d26
 
 podman build -t strike:stage_1 \
   --build-arg GIT_COMMIT=${GIT_COMMIT} \

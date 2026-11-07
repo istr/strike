@@ -530,3 +530,37 @@ bootstrap lane and the integration tests push to. Measured on 2026-11-03
 at `876fb38` by delegate spike against Keycloak 26.8.1 and zot 2.1.22;
 GitHub Actions and GitLab CI both mint the same URL audience as one
 string.
+
+## Amendment 2026-11-08 -- D1: the credential rides one transport, a redirect fails closed, D4: the token is read at run start
+
+**D1, the log clause.** One round tripper carries the declared registry
+credential, for the push and for every in-run read of a target authority.
+It holds the token as a `SecretString`, sets it as the bearer only on a
+request to the declared target authority, and exposes it nowhere else;
+go-containerregistry receives no authenticator. With a bearer on the ping,
+the client uses the caller's transport as is, so the wire form of the push
+is unchanged. The scrub of push errors stays.
+
+**Supersedes, in the amendment of 2026-11-03 above:** "the deploy hands the
+client an authenticator over the secret type, never a string-typed
+credential" is read as: "the deploy hands the client a transport that
+holds the secret type and sets the bearer itself, never a string-typed
+credential".
+
+**D1, redirects.** A request carrying the declared credential fails
+closed on any redirect, on any host, before it is sent. Measured on
+2026-11-05: zot, GAR and ACR redirect no write and no manifest, referrers
+or ping request; GAR redirects a large blob read to its own host with the
+bearer, and ACR every blob read to a storage host. A registry that needs a
+redirect for a credentialed read is therefore unusable for that read until
+an opt-in is decided with the publication model (D9). The rule keys on the
+declared credential, never on a token a registry's realm issues to an
+anonymous read.
+
+**D4, when the token is read.** The registry token of every registry
+deploy is read and checked once, when the lane run starts, with the
+checks D3 and D4 name. The anchor of a deploy target already serves every
+read of its authority inside the run (ADR-029 amendment 2026-11-06), so
+the credential does too. Deploy targets that share an authority declare
+the same anchor and the same token; lane validation refuses a lane where
+they differ.
