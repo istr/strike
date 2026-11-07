@@ -52,7 +52,7 @@ func ValidateLane(p *Lane, index map[primitive.Identifier]*Step) error {
 	if err := validateBaseSBOMTrustAnchor(p); err != nil {
 		return err
 	}
-	return nil
+	return validateRegistries(p)
 }
 
 // validateDeclarations runs the checks that read the lane's declarations
@@ -740,6 +740,18 @@ func validateTrustAnchors(p *Lane) error {
 			anchor endpoint.Certificate
 			where  string
 		}{anchor: reg.Target.Trust, where: fmt.Sprintf("step %q registry target", s.ID)})
+	}
+	for i, r := range p.Registries {
+		sites = append(sites, struct {
+			anchor endpoint.Certificate
+			where  string
+		}{anchor: r.Registry.Trust, where: fmt.Sprintf("registries[%d].registry %q", i, r.Registry.Address.Authority())})
+		for j, st := range r.Storages {
+			sites = append(sites, struct {
+				anchor endpoint.Certificate
+				where  string
+			}{anchor: st.Trust, where: fmt.Sprintf("registries[%d].storages[%d] %q", i, j, st.Address.Authority())})
+		}
 	}
 	for _, site := range sites {
 		if err := checkTrustAnchor(site.anchor, site.where); err != nil {

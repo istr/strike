@@ -52,6 +52,19 @@ func TestValidateLane_Reject(t *testing.T) {
 		{"invalid_reproduced_by_image_arm.yaml", `reproducedBy "build" names the image arm`},
 		{"invalid_oidc_identity_not_uri.yaml", "oidc identity"},
 		{"invalid_sbom_signer_identity_not_uri.yaml", "baseSbomSigners[0] identity"},
+		{"invalid_registry_undeclared.yaml", "registry images.example.com is not declared in registries or as a deploy target"},
+		{"invalid_registry_declared_default_port.yaml", "registries[0].registry: write images.example.com, not images.example.com:443"},
+		{"invalid_registry_ref_default_port.yaml", "pack base \"images.example.com:443/library/golang"},
+		{"invalid_registry_target_default_port.yaml", "deploy step \"deploy\" target: write registry.example.com, not registry.example.com:443"},
+		{"invalid_registry_uppercase_ref.yaml", "the registry host in an image reference must be lowercase"},
+		{"invalid_registry_docker_io.yaml", "the registry dialed is index.docker.io"},
+		{"invalid_registry_no_host.yaml", "step \"clone\" image \"alpine@sha256:"},
+		{"invalid_registry_storage_ref.yaml", "a storage of registry images.example.com"},
+		{"invalid_registry_target_declared.yaml", "registries[1].registry: registry registry.example.com already declared as target in step(s) \"deploy\""},
+		{"invalid_registry_duplicate.yaml", "registries[0].storages[0]: images.example.com is declared more than once"},
+		{"invalid_registry_anchor_not_ca.yaml", "registries[0].registry \"images.example.com\": rootca anchor is not a CA certificate"},
+		{"invalid_registry_capture_undeclared.yaml", "step \"deploy\" capture \"version\" image"},
+		{"invalid_registry_unparseable_ref.yaml", "pack base \"images.example.com/library/Golang"},
 	}
 
 	matches, err := filepath.Glob("testdata/validate/invalid_*.yaml")
