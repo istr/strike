@@ -223,10 +223,11 @@ Each part is load-bearing:
   controller's loopback, and pasta forwards every step to the endpoint's
   loopback. Without host networking the two are different loopbacks and
   every step's name resolution times out.
-- **The tokens.** `SIGSTORE_ID_TOKEN` and `REGISTRY_ID_TOKEN` are read at
-  the deploy, and steps do not inherit them. Any holder of the engine socket
-  can read them in the container's inspect until the container is removed,
-  so mint them for one run and keep `--rm`.
+- **The tokens.** `REGISTRY_ID_TOKEN` is read and checked once when the run
+  starts, and a run whose token is missing or invalid fails before any step.
+  `SIGSTORE_ID_TOKEN` is read at the deploy. Steps inherit neither. Any
+  holder of the engine socket can read them in the container's inspect until
+  the container is removed, so mint them for one run and keep `--rm`.
 
 Run one strike controller per endpoint at a time until item-0161 lands: all
 controllers share the loopback, and their resolver and mediator ports
