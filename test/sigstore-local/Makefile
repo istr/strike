@@ -134,6 +134,7 @@ ctlog-pubkey: pki/ctfe-pub.pem ## export the CT log (ctfe) public key (for trust
 
 conformance: ## cosign independent-verify of the golden bundles, offline (sealed gates exit; engine-dependent/informational reported)
 	@echo "== conformance: cosign independent verification of golden bundles (no insecure flags) =="
+	@command -v cosign >/dev/null 2>&1 || { echo "  FAIL cosign not found on PATH; the conformance target needs the cosign binary" >&2; exit 1; }
 	@if cosign verify-blob-attestation \
 	  --bundle ../../internal/verify/testdata/golden/sealed.sigstore.json \
 	  --trusted-root ../../internal/verify/testdata/golden/trusted_root.json \
