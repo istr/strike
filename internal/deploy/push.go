@@ -442,32 +442,6 @@ func (c *pushIdentityCapture) get() (transport.ConnectionIdentity, []netip.Addr,
 	return c.id, c.resolved, c.ok
 }
 
-// HTTPSOnly wraps inner so every request is rewritten onto the https scheme
-// before it reaches the dial layer. Both directions of a registry deploy need
-// it: go-containerregistry resolves a localhost-style registry name to the
-// http scheme on its own, so without the rewrite a request never reaches the
-// TLS dial at all and the write side's plaintext rejection fires on traffic
-// that was meant to be encrypted.
-func HTTPSOnly(inner http.RoundTripper) http.RoundTripper {
-	return httpsOnlyTransport{inner: inner}
-}
-
-// httpsOnlyTransport forces every request onto https before it reaches the
-// dial layer. go-containerregistry resolves localhost-style registries to
-// the http scheme on its own; the deploy path owns its addressing (ADR-051
-// D4), so the scheme is pinned here and the plaintext dial below stays a
-// structurally unreachable rejection.
-type httpsOnlyTransport struct {
-	inner http.RoundTripper
-}
-
-// RoundTrip implements http.RoundTripper.
-func (t httpsOnlyTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	r := req.Clone(req.Context())
-	r.URL.Scheme = "https"
-	return t.inner.RoundTrip(r)
-}
-
 // newRegistryTransport builds the trust-anchored round tripper every write
 // to the declared registry target dials through: the payload push, the SBOM
 // referrers, and the statement-bundle referrers. Enforcement is structural
@@ -514,5 +488,5 @@ func newRegistryTransport(target lane.DeployRegistryTarget, dialer *transport.Di
 			return nil, fmt.Errorf("registry push: plaintext dial to %q rejected; the target is https-only", addr)
 		},
 	}
-	return HTTPSOnly(base), capture, nil
+	return transport.HTTPSOnly(base), capture, nil
 }

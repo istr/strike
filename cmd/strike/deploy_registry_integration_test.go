@@ -662,5 +662,5 @@ func itestTransport(t *testing.T, caddyRoot string) http.RoundTripper {
 	if err != nil {
 		t.Fatalf("registry tls config: %v", err)
 	}
-	return deploy.HTTPSOnly(&http.Transport{TLSClientConfig: cfg})
+	return transport.HTTPSOnly(&http.Transport{TLSClientConfig: cfg})
 }
