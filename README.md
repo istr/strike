@@ -82,7 +82,7 @@ first (`make -C test/sigstore-local up`), then build stage_1 from the clone's
 root:
 
 ```sh
-GIT_COMMIT=51cff78d4bd0d82d6d600b493f5a516173cb92c3
+GIT_COMMIT=938103738c9c16130172037939735f36ee608b65
 
 podman build -t strike:stage_1 \
   --build-arg GIT_COMMIT=${GIT_COMMIT} \
@@ -192,9 +192,18 @@ keyless:
       url: "https://tsa.example.com"
       trust:
         cert: "<base64 DER of the TSA root certificate>"
+registries:
+  - registry:
+      host: cgr.dev
+      trust:
+        cert: "<base64 DER of the registry's root certificate>"
+    storages:
+      - host: 9236a389bd48b984df91adc1bc924620.r2.cloudflarestorage.com
+        trust:
+          cert: "<base64 DER of the storage host's root certificate>"
 steps:
   - id: source
-    image: docker.io/library/alpine/git@sha256:abc123...
+    image: cgr.dev/chainguard/git@sha256:abc123...
     args: [git, clone, --depth, "1", "https://example.com/repo.git", /out/tree]
     peers:
       - type: https
@@ -234,10 +243,10 @@ connection attempt is refused. See
 
 Steps resolve their execution image in one of two ways:
 
-| Field           | Use case                  | Pinning                        |
-|-----------------|---------------------------|--------------------------------|
-| `image`         | External registry image   | Must contain `@sha256:` digest |
-| `imageFromStep` | Output of a previous step | Digest extracted at load time  |
+| Field           | Use case                  | Pinning                                           |
+|-----------------|---------------------------|---------------------------------------------------|
+| `image`         | External registry image   | Must contain `@sha256:` digest; registry declared |
+| `imageFromStep` | Output of a previous step | Digest extracted at load time                     |
 
 `imageFromStep` names an earlier step whose output is an image; an image
 output is addressed by its producing step alone. The executor loads the tar
@@ -252,6 +261,26 @@ creating an implicit DAG edge:
       - from: { step: src, output: tree }
         mount: /src
 ```
+
+### Registry reads
+
+The controller fetches every external image a lane run reads -- step and
+capture images, the pack base, the base image's SBOM referrers, and the
+keyless trust root -- itself; the container engine never pulls. Each read
+reaches only what the lane declares in `registries`: the registry a
+reference names, and the storage hosts that registry redirects blob
+downloads to. A storage is reached only by a redirect of a blob read of its
+own registry; a request to any other host, a token realm on another host
+included, fails. Every connection resolves through the lane's DoT resolver,
+uses https only, and verifies against the declared root. A deploy target
+counts as a declared registry without storages.
+
+A reference names its registry exactly as dialed: `cgr.dev/chainguard/git@...`
+is accepted, while `alpine@...` and `docker.io/library/alpine@...` are
+rejected, because go-containerregistry would dial `index.docker.io` instead.
+The anchors bound where a run connects; integrity stays with the digest. See
+[ADR-029](docs/ADR-029-peers-are-container-egress.md) and
+[ADR-030](docs/ADR-030-controller-side-connection-recording.md).
 
 ### Content-addressable caching
 
