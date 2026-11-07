@@ -20,6 +20,9 @@ type Run struct {
 	Capsule *capsule.NetworkCapsule // non-nil for HTTPS-mediated steps
 	Secrets map[string]lane.SecretString
 	Step    *lane.Step
+	// Reads is where an external image the store does not resolve is fetched
+	// from (ADR-029 amendment 2026-11-06).
+	Reads registry.Transports
 	// VolumeName is the engine-managed writable workdir volume. Empty for a
 	// step with no workdir (no writable surface, no outputs). The caller
 	// owns the volume lifecycle (create before, remove after extraction).
@@ -124,7 +127,7 @@ func (r Run) Execute(ctx context.Context) (string, error) {
 	// digest, verified, loaded. A lane-generated image (ImageRef set) was
 	// placed by its producer.
 	if r.ImageRef == "" {
-		if err := (&registry.Client{Engine: r.Engine}).EnsureImage(ctx, opts.Image); err != nil {
+		if err := (&registry.Client{Engine: r.Engine}).EnsureImage(ctx, opts.Image, r.Reads); err != nil {
 			return "", err
 		}
 	}

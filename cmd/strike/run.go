@@ -38,6 +38,7 @@ type runContext struct {
 	ca         *transport.EphemeralCA
 	front      *front.Front
 	dialer     *transport.Dialer
+	reads      registry.Transports // the run's registry reads (ADR-029 amendment 2026-11-06)
 	lane       *lane.Lane
 	laneDigest primitive.Digest
 	dag        *lane.DAG
@@ -169,6 +170,7 @@ func (rc *runContext) executeDeploy(ctx context.Context, step *lane.Step, stepID
 		LaneDigest:      rc.laneDigest,
 		CA:              rc.ca,
 		Dialer:          rc.dialer,
+		Reads:           rc.reads,
 		CAVolume:        rc.trust.ca,
 		StepID:          stepID,
 	}
@@ -383,6 +385,7 @@ func (rc *runContext) executePack(ctx context.Context, step *lane.Step, stepID p
 	result, err := executor.Pack(ctx, executor.PackOpts{
 		Spec:      step.Pack,
 		InputTars: inputTars,
+		Reads:     rc.reads,
 		Platform:  platform,
 	})
 	if err != nil {
@@ -495,6 +498,7 @@ func (rc *runContext) executeContainerStep(ctx context.Context, step *lane.Step,
 
 	run := executor.Run{
 		Engine:       rc.engine,
+		Reads:        rc.reads,
 		Step:         step,
 		Seeds:        inputSeeds,
 		ImageVolumes: inputMounts,

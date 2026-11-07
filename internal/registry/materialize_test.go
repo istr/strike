@@ -240,7 +240,7 @@ func TestEnsureImage_IndexLoadsDeclaredDigest(t *testing.T) {
 	})
 	eng := &storeEngine{identity: amd64Engine(), inspectID: configHex(t, amd)}
 
-	if err := (&registry.Client{Engine: eng}).EnsureImage(context.Background(), ref); err != nil {
+	if err := (&registry.Client{Engine: eng}).EnsureImage(context.Background(), ref, registry.SystemTransports{}); err != nil {
 		t.Fatalf("EnsureImage: %v", err)
 	}
 	if len(eng.loaded) != 1 {
@@ -300,7 +300,7 @@ func TestEnsureImage_ManifestDigestNamesTheManifest(t *testing.T) {
 	ref, manifestDigest := pushImage(t, host+"/t/single", img)
 	eng := &storeEngine{identity: amd64Engine(), inspectID: configHex(t, img)}
 
-	if err := (&registry.Client{Engine: eng}).EnsureImage(context.Background(), ref); err != nil {
+	if err := (&registry.Client{Engine: eng}).EnsureImage(context.Background(), ref, registry.SystemTransports{}); err != nil {
 		t.Fatalf("EnsureImage: %v", err)
 	}
 	names, files := layoutEntries(t, eng.loaded[0])
@@ -334,7 +334,7 @@ func TestEnsureImage_PresentFetchesNothing(t *testing.T) {
 	declared := host + "/t/img@sha256:0000000000000000000000000000000000000000000000000000000000000000"
 	eng := &storeEngine{present: map[string]bool{declared: true}}
 
-	if err := (&registry.Client{Engine: eng}).EnsureImage(context.Background(), primitive.NewImageRef(declared)); err != nil {
+	if err := (&registry.Client{Engine: eng}).EnsureImage(context.Background(), primitive.NewImageRef(declared), registry.SystemTransports{}); err != nil {
 		t.Fatalf("EnsureImage: %v", err)
 	}
 	if len(eng.loaded) != 0 || len(eng.inspected) != 0 {
@@ -442,7 +442,7 @@ func TestEnsureImage_Failures(t *testing.T) {
 			other := testImage(t, "other rootfs "+tt.name)
 			ref := tt.declare(host, amd, other)
 			eng := tt.engine(amd)
-			err := (&registry.Client{Engine: eng}).EnsureImage(context.Background(), ref)
+			err := (&registry.Client{Engine: eng}).EnsureImage(context.Background(), ref, registry.SystemTransports{})
 			if err == nil {
 				t.Fatalf("EnsureImage = nil error, want %q", tt.wantErr)
 			}
@@ -479,7 +479,7 @@ func TestEnsureImage_CorruptBlobAbortsTheStream(t *testing.T) {
 	ref, _ := pushImage(t, host+"/t/badblob", amd)
 	eng := &storeEngine{identity: amd64Engine(), inspectID: configHex(t, amd)}
 
-	err = (&registry.Client{Engine: eng}).EnsureImage(context.Background(), ref)
+	err = (&registry.Client{Engine: eng}).EnsureImage(context.Background(), ref, registry.SystemTransports{})
 	if err == nil {
 		t.Fatal("EnsureImage = nil error on a corrupted layer")
 	}
@@ -507,7 +507,7 @@ func TestEnsureImage_VariantDecides(t *testing.T) {
 		identity:  &container.EngineIdentity{Runtime: &container.RuntimeInfo{OS: "linux", Arch: "arm", Variant: "v7"}},
 		inspectID: configHex(t, v7),
 	}
-	if err := (&registry.Client{Engine: eng}).EnsureImage(context.Background(), ref); err != nil {
+	if err := (&registry.Client{Engine: eng}).EnsureImage(context.Background(), ref, registry.SystemTransports{}); err != nil {
 		t.Fatalf("EnsureImage: %v", err)
 	}
 	_, files := layoutEntries(t, eng.loaded[0])

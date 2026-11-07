@@ -20,6 +20,7 @@ import (
 
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/primitive"
+	"github.com/istr/strike/internal/registry"
 	"github.com/istr/strike/internal/verify"
 )
 
@@ -65,7 +66,7 @@ func pushGoldenTrustRoot(t *testing.T) string {
 }
 
 func TestResolveOverride(t *testing.T) {
-	tm, err := verify.ResolveTrustedMaterial(context.Background(), primitive.NewImageRef(pushGoldenTrustRoot(t)), lane.Keyless{})
+	tm, err := verify.ResolveTrustedMaterial(context.Background(), primitive.NewImageRef(pushGoldenTrustRoot(t)), lane.Keyless{}, registry.SystemTransports{})
 	if err != nil {
 		t.Fatalf("ResolveTrustedMaterial: %v", err)
 	}
@@ -79,7 +80,7 @@ func TestResolveInlineRoundTrip(t *testing.T) {
 	if err := json.Unmarshal(readTrustRootGolden(t), &replica); err != nil {
 		t.Fatalf("unmarshal golden into replica: %v", err)
 	}
-	tm, err := verify.ResolveTrustedMaterial(context.Background(), "", lane.Keyless{TrustRoot: &replica})
+	tm, err := verify.ResolveTrustedMaterial(context.Background(), "", lane.Keyless{TrustRoot: &replica}, registry.SystemTransports{})
 	if err != nil {
 		t.Fatalf("inline round-trip: %v", err)
 	}
@@ -90,7 +91,7 @@ func TestResolveInlineRoundTrip(t *testing.T) {
 
 func TestResolveRef(t *testing.T) {
 	k := lane.Keyless{TrustRootRef: primitive.ImageRef(pushGoldenTrustRoot(t))}
-	tm, err := verify.ResolveTrustedMaterial(context.Background(), "", k)
+	tm, err := verify.ResolveTrustedMaterial(context.Background(), "", k, registry.SystemTransports{})
 	if err != nil {
 		t.Fatalf("ResolveTrustedMaterial: %v", err)
 	}
@@ -100,7 +101,7 @@ func TestResolveRef(t *testing.T) {
 }
 
 func TestResolveNoDefault(t *testing.T) {
-	_, err := verify.ResolveTrustedMaterial(context.Background(), "", lane.Keyless{})
+	_, err := verify.ResolveTrustedMaterial(context.Background(), "", lane.Keyless{}, registry.SystemTransports{})
 	if !errors.Is(err, verify.ErrNoTrustRoot) {
 		t.Fatalf("err = %v, want ErrNoTrustRoot", err)
 	}
@@ -110,7 +111,7 @@ func TestResolvePrecedenceOverrideShortCircuits(t *testing.T) {
 	// A deliberately invalid inline replica: if the override did not short-
 	// circuit, marshalling and parsing this would fail.
 	k := lane.Keyless{TrustRoot: &lane.TrustedRootReplica{}}
-	tm, err := verify.ResolveTrustedMaterial(context.Background(), primitive.NewImageRef(pushGoldenTrustRoot(t)), k)
+	tm, err := verify.ResolveTrustedMaterial(context.Background(), primitive.NewImageRef(pushGoldenTrustRoot(t)), k, registry.SystemTransports{})
 	if err != nil {
 		t.Fatalf("override should short-circuit invalid inline: %v", err)
 	}

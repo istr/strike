@@ -39,8 +39,9 @@ type fetched struct {
 // store names the image as a pull by that reference would, and the step
 // executes the declared reference unchanged (ADR-045). The engine never
 // pulls. A verification failure aborts the stream before the layout is
-// complete, so the engine imports nothing.
-func (c *Client) EnsureImage(ctx context.Context, ref primitive.ImageRef) error {
+// complete, so the engine imports nothing. src hands out the transport the
+// fetch reads through (ADR-029 amendment 2026-11-06).
+func (c *Client) EnsureImage(ctx context.Context, ref primitive.ImageRef, src Transports) error {
 	declared := string(ref)
 	present, err := c.Engine.ImageExists(ctx, declared)
 	if err != nil {
@@ -54,7 +55,7 @@ func (c *Client) EnsureImage(ctx context.Context, ref primitive.ImageRef) error 
 		return fmt.Errorf("image %s: %w", ref, err)
 	}
 	log.Printf("FETCH  %s", ref)
-	f, err := fetchByDigest(ctx, ref, platform)
+	f, err := fetchByDigest(ctx, ref, platform, src)
 	if err != nil {
 		return fmt.Errorf("image %s: fetch: %w", ref, err)
 	}
@@ -107,21 +108,22 @@ func EnginePlatform(e container.Engine) (v1.Platform, error) {
 // verified as fetchByDigest verifies it: the index or manifest against the
 // declared digest on fetch, every blob as it is read. It is the pack base
 // fetch, so a lane-generated image is assembled on the base of the platform
-// that runs it (ADR-046).
-func FetchImage(ctx context.Context, ref primitive.ImageRef, platform v1.Platform) (v1.Image, error) {
-	f, err := fetchByDigest(ctx, ref, platform)
+// that runs it (ADR-046). src hands out the transport the fetch reads through.
+func FetchImage(ctx context.Context, ref primitive.ImageRef, platform v1.Platform, src Transports) (v1.Image, error) {
+	f, err := fetchByDigest(ctx, ref, platform, src)
 	if err != nil {
 		return nil, err
 	}
 	return f.image, nil
 }
 
-// fetchByDigest resolves ref at its registry. go-containerregistry verifies
-// the object the digest names against the digest on fetch and every blob of
-// the returned image against its descriptor as it is read; the registry's
-// identity contributes nothing (ADR-030). For an index, the entry of
-// platform is selected and the raw index bytes are returned for the layout.
-func fetchByDigest(ctx context.Context, ref primitive.ImageRef, platform v1.Platform) (fetched, error) {
+// fetchByDigest resolves ref at its registry, through the transport src hands
+// out for it. go-containerregistry verifies the object the digest names
+// against the digest on fetch and every blob of the returned image against
+// its descriptor as it is read; the registry's identity contributes nothing
+// (ADR-030). For an index, the entry of platform is selected and the raw index
+// bytes are returned for the layout.
+func fetchByDigest(ctx context.Context, ref primitive.ImageRef, platform v1.Platform, src Transports) (fetched, error) {
 	declared := string(ref)
 	nameRef, err := name.ParseReference(declared)
 	if err != nil {
@@ -130,7 +132,11 @@ func fetchByDigest(ctx context.Context, ref primitive.ImageRef, platform v1.Plat
 	if _, ok := nameRef.(name.Digest); !ok {
 		return fetched{}, errors.New("reference is not pinned by digest")
 	}
-	desc, err := remote.Get(nameRef, remote.WithContext(ctx))
+	rt, err := src.Transport(ref)
+	if err != nil {
+		return fetched{}, err
+	}
+	desc, err := remote.Get(nameRef, remote.WithContext(ctx), remote.WithTransport(rt))
 	if err != nil {
 		return fetched{}, err
 	}

@@ -203,7 +203,7 @@ func runVerify(ctx context.Context, out io.Writer, opts verifyOptions) error {
 		return err
 	}
 	ref := primitive.ImageRef(opts.trustRootRef)
-	tm, err := verify.ResolveTrustedMaterial(ctx, ref, pol.keyless)
+	tm, err := verify.ResolveTrustedMaterial(ctx, ref, pol.keyless, registry.SystemTransports{})
 	if err != nil {
 		return err
 	}

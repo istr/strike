@@ -233,6 +233,7 @@ func cmdRun(ctx context.Context, path string, engine container.Engine) error {
 		ca:         ca,
 		front:      ft,
 		dialer:     dialer,
+		reads:      registry.NewReads(dialer, p),
 		runtime:    lane.NewRuntime(dag),
 		capsules:   map[primitive.Identifier]*capsule.NetworkCapsule{},
 		laneRoot:   laneRoot,

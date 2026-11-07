@@ -27,6 +27,7 @@ import (
 type PackOpts struct {
 	InputTars map[string][]byte
 	Spec      *lane.PackSpec
+	Reads     registry.Transports // where the base image is fetched from (ADR-029 amendment 2026-11-06)
 	Platform  v1.Platform
 }
 
@@ -114,7 +115,7 @@ func AssembleImage(base v1.Image, spec *lane.PackSpec, inputTars map[string][]by
 // the pure AssembleImage for the security-critical computation.
 func Pack(ctx context.Context, opts PackOpts) (*PackResult, error) {
 	// 1. Fetch and verify the base image of the requested platform (network I/O)
-	base, err := registry.FetchImage(ctx, opts.Spec.Base, opts.Platform)
+	base, err := registry.FetchImage(ctx, opts.Spec.Base, opts.Platform, opts.Reads)
 	if err != nil {
 		return nil, fmt.Errorf("pack: fetch base image %s: %w", opts.Spec.Base, err)
 	}

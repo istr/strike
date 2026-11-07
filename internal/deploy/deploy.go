@@ -189,6 +189,7 @@ type Deployer struct {
 	EngineID        *container.EngineIdentity
 	CA              *transport.EphemeralCA
 	Dialer          *transport.Dialer
+	Reads           registry.Transports                                                                         // where a capture image and a base SBOM are read from (ADR-029 amendment 2026-11-06)
 	ArtifactRefs    map[primitive.Identifier]lane.ArtifactRef                                                   // deploy artifacts map: name -> image arm or region (ADR-051 D9)
 	produceBundles  func(ctx context.Context, eps lane.KeylessEndpoints, statements [][]byte) ([][]byte, error) // test seam; nil selects the real keyless chain
 	Keyless         lane.Keyless                                                                                // lane-declared keyless config (ADR-040 D2, ADR-041); .Endpoints dials Fulcio, Rekor v2, TSA; .TrustRoot/.TrustRootRef carry the verify anchor
@@ -640,7 +641,7 @@ func (d *Deployer) captureOne(ctx context.Context, sc lane.Capture) (captureSnap
 	// The capture image is a lane-declared external image like a step's
 	// (ADR-045): materialized by the control plane when the store does not
 	// resolve it, before the capsule binds and the container is created.
-	if err := (&registry.Client{Engine: d.Engine}).EnsureImage(ctx, sc.Image); err != nil {
+	if err := (&registry.Client{Engine: d.Engine}).EnsureImage(ctx, sc.Image, d.Reads); err != nil {
 		return captureSnap{}, fmt.Errorf("capture %q: %w", sc.ID, err)
 	}
 

@@ -20,6 +20,7 @@ import (
 	"github.com/istr/strike/internal/executor"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/primitive"
+	"github.com/istr/strike/internal/registry"
 )
 
 // orderEngine records, in order, the engine calls the step execution makes
@@ -101,6 +102,7 @@ func runStep(t *testing.T, eng *orderEngine, image primitive.ImageRef, imageRef 
 		Capsule:  caps,
 		CAVolume: caVolume,
 		ImageRef: imageRef,
+		Reads:    registry.SystemTransports{},
 		Step:     &lane.Step{ID: "step", Image: &image, Args: []string{"true"}},
 	}
 	_, err := r.Execute(context.Background())

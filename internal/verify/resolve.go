@@ -29,10 +29,14 @@ var ErrNoTrustRoot = errors.New("verify: no trust root; declare keyless.trustRoo
 // The override ref is the operator's explicit anchor, distinct from the lane's:
 // it always wins, and being digest-pinned it carries the same content-addressed
 // guarantee as the lane-declared ref.
-func ResolveTrustedMaterial(ctx context.Context, overrideRef primitive.ImageRef, k lane.Keyless) (*TrustedMaterial, error) {
+//
+// src hands out the transport an image source is read through: a deploy in a
+// lane run reads through the run's declared registries, strike verify through
+// the system transport.
+func ResolveTrustedMaterial(ctx context.Context, overrideRef primitive.ImageRef, k lane.Keyless, src registry.Transports) (*TrustedMaterial, error) {
 	switch {
 	case overrideRef != "":
-		data, err := registry.FetchTrustRoot(ctx, overrideRef)
+		data, err := registry.FetchTrustRoot(ctx, overrideRef, src)
 		if err != nil {
 			return nil, err
 		}
@@ -44,7 +48,7 @@ func ResolveTrustedMaterial(ctx context.Context, overrideRef primitive.ImageRef,
 		}
 		return ParseTrustedRoot(data)
 	case k.TrustRootRef != "":
-		data, err := registry.FetchTrustRoot(ctx, k.TrustRootRef)
+		data, err := registry.FetchTrustRoot(ctx, k.TrustRootRef, src)
 		if err != nil {
 			return nil, err
 		}

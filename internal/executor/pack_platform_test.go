@@ -19,6 +19,7 @@ import (
 	"github.com/istr/strike/internal/executor"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/primitive"
+	"github.com/istr/strike/internal/registry"
 )
 
 // baseEntry is one platform image of a pushed base index.
@@ -125,6 +126,7 @@ func TestPack_BaseResolvesToTheRequestedPlatform(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result, err := executor.Pack(context.Background(), executor.PackOpts{
 				Spec:     &lane.PackSpec{Base: ref, Files: []lane.PackFile{}},
+				Reads:    registry.SystemTransports{},
 				Platform: tt.platform,
 			})
 			if tt.wantErr != "" {

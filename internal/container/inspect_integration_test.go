@@ -19,7 +19,7 @@ const inspectTestImage = "cgr.dev/chainguard/static@sha256:fc42af33e643f20d08baf
 func ensureImageLocal(ctx context.Context, t *testing.T, eng container.Engine, ref string) {
 	t.Helper()
 	c := &registry.Client{Engine: eng}
-	if err := c.EnsureImage(ctx, primitive.NewImageRef(ref)); err != nil {
+	if err := c.EnsureImage(ctx, primitive.NewImageRef(ref), registry.SystemTransports{}); err != nil {
 		t.Fatalf("EnsureImage %s: %v", ref, err)
 	}
 }

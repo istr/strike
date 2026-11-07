@@ -24,7 +24,7 @@ func (d *Deployer) verifyBaseSBOMs(ctx context.Context, stepID primitive.Identif
 	if len(d.BaseSBOMSigners) == 0 {
 		return nil, nil
 	}
-	tm, err := verify.ResolveTrustedMaterial(ctx, "", d.Keyless)
+	tm, err := verify.ResolveTrustedMaterial(ctx, "", d.Keyless, d.Reads)
 	if err != nil {
 		return nil, fmt.Errorf("base SBOM: resolve trust root: %w", err)
 	}
@@ -35,7 +35,7 @@ func (d *Deployer) verifyBaseSBOMs(ctx context.Context, stepID primitive.Identif
 		if !ok {
 			return nil, fmt.Errorf("base SBOM: base %q is not digest-pinned", base)
 		}
-		referrers, err := registry.FetchBaseSBOMReferrers(ctx, base)
+		referrers, err := registry.FetchBaseSBOMReferrers(ctx, base, d.Reads)
 		if err != nil {
 			return nil, fmt.Errorf("base SBOM: fetch referrers of %s: %w", base, err)
 		}

@@ -34,7 +34,7 @@ const (
 func ensureImage(t *testing.T, engine container.Engine, ref string) {
 	t.Helper()
 	c := &registry.Client{Engine: engine}
-	if err := c.EnsureImage(context.Background(), primitive.NewImageRef(ref)); err != nil {
+	if err := c.EnsureImage(context.Background(), primitive.NewImageRef(ref), registry.SystemTransports{}); err != nil {
 		t.Fatalf("EnsureImage %s: %v", ref, err)
 	}
 }
@@ -162,6 +162,7 @@ func packTestImage(t *testing.T, engine container.Engine, bin []byte) *executor.
 			},
 		},
 		InputTars: packInputTars(t, bin),
+		Reads:     registry.SystemTransports{},
 		Platform:  platform,
 	})
 	if packErr != nil {

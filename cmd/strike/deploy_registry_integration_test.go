@@ -73,20 +73,21 @@ const (
 // assembled image is the digest-pinned base alone, and a registry deploy step
 // that seals and pushes it. No step declares peers, so no step container and
 // no capsule egress is involved -- the only network the lane itself opens is
-// the control-plane push and the keyless chain, both anchored by declaration.
-// Trust anchors are the harness certificates, rendered into the template at
-// run time from the PKI files the harness minted.
+// the control-plane base read, push and keyless chain, all anchored by
+// declaration. The lane resolves through the public DoT resolver, which
+// answers the harness names under sslip.io with the loopback; its anchor and
+// the cgr.dev anchors are public roots, every other anchor is a harness
+// certificate rendered into the template at run time.
 const itestLaneTemplate = `name: registry-deploy-itest
 id: registry-deploy-itest
 secrets:
   builder-token: "env://SIGSTORE_ID_TOKEN"
   registry-token: "env://REGISTRY_ID_TOKEN"
 resolver:
-  adn: resolver.127.0.0.1.sslip.io
-  ip: 127.0.0.1
-  port: 8853
+  adn: one.one.one.one
+  ip: 1.1.1.1
   trust:
-    cert: "__RESOLVER_CERT__"
+    cert: "__DOT_ROOT__"
 oidc:
   issuer: "https://keycloak.127.0.0.1.sslip.io:8443/realms/sigstore"
   audience: "sigstore"
@@ -180,18 +181,15 @@ func TestRegistryDeployLive_Integration(t *testing.T) {
 	harness := testutil.HarnessDir(t)
 	testutil.RequireHarness(t, engine, harness)
 	caddyRoot := filepath.Join(harness, "pki", "caddy-root.crt")
-	resolverCert := filepath.Join(harness, "pki", "resolver.crt")
-	for _, f := range []string{caddyRoot, resolverCert} {
-		if _, statErr := os.Stat(f); statErr != nil {
-			t.Fatalf("harness material missing (run make up in test/sigstore-local): %v", statErr)
-		}
+	if _, statErr := os.Stat(caddyRoot); statErr != nil {
+		t.Fatalf("harness material missing (run make up in test/sigstore-local): %v", statErr)
 	}
 	t.Setenv("SIGSTORE_ID_TOKEN", testutil.MintIDToken(t, itestIssuer, testutil.HarnessBuilderClient, caddyRoot))
 	registryToken := testutil.MintIDToken(t, itestIssuer, testutil.HarnessRegistryClient, caddyRoot)
 	t.Setenv("REGISTRY_ID_TOKEN", registryToken)
 
 	repo := fmt.Sprintf("strike-itest-%d", clock.Wall().UnixNano())
-	lanePath := writeFixtureLane(t, caddyRoot, resolverCert, repo)
+	lanePath := writeFixtureLane(t, caddyRoot, repo)
 
 	rc := newLiveRunContext(ctx, t, engine, lanePath)
 
@@ -244,23 +242,19 @@ func TestRegistryDeployLive_Integration(t *testing.T) {
 }
 
 // writeFixtureLane renders the fixture lane into a temp directory and returns
-// its path. The anchors are read from the harness PKI files, because a lane
-// that dials the harness has to trust what the harness presents; the temp
-// directory becomes the lane root, so nothing in the repository tree is
+// its path. The harness anchor is read from the harness PKI file, because a
+// lane that dials the harness has to trust what the harness presents; the
+// temp directory becomes the lane root, so nothing in the repository tree is
 // written.
-func writeFixtureLane(t *testing.T, caddyRoot, resolverCert, repo string) string {
+func writeFixtureLane(t *testing.T, caddyRoot, repo string) string {
 	t.Helper()
 	caddy, caddyErr := testutil.CertificateFromPEMFile(caddyRoot)
 	if caddyErr != nil {
 		t.Fatalf("harness root anchor: %v", caddyErr)
 	}
-	resolver, resolverErr := testutil.CertificateFromPEMFile(resolverCert)
-	if resolverErr != nil {
-		t.Fatalf("harness resolver anchor: %v", resolverErr)
-	}
 	content := strings.NewReplacer(
 		"__CADDY_ROOT__", caddy.Cert.String(),
-		"__RESOLVER_CERT__", resolver.Cert.String(),
+		"__DOT_ROOT__", testutil.SSLComRootECCB64,
 		"__GTS_ROOT_R1__", testutil.GTSRootR1B64,
 		"__GTS_ROOT_R4__", testutil.GTSRootR4B64,
 		"__REPO__", repo,
@@ -326,6 +320,7 @@ func newLiveRunContext(ctx context.Context, t *testing.T, engine container.Engin
 		ca:         ca,
 		front:      ft,
 		dialer:     dialer,
+		reads:      registry.NewReads(dialer, p),
 		runtime:    lane.NewRuntime(dag),
 		capsules:   map[primitive.Identifier]*capsule.NetworkCapsule{},
 		laneRoot:   laneRoot,

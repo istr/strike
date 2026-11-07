@@ -50,11 +50,10 @@ secrets:
   builder-token: "env://SIGSTORE_ID_TOKEN"
   registry-token: "env://REGISTRY_ID_TOKEN"
 resolver:
-  adn: resolver.127.0.0.1.sslip.io
-  ip: 127.0.0.1
-  port: 8853
+  adn: one.one.one.one
+  ip: 1.1.1.1
   trust:
-    cert: "__RESOLVER_CERT__"
+    cert: "__DOT_ROOT__"
 oidc:
   issuer: "https://keycloak.127.0.0.1.sslip.io:8443/realms/sigstore"
   audience: "sigstore"
@@ -204,36 +203,29 @@ func containerCount(ctx context.Context, t *testing.T, client *http.Client) int 
 	return len(list)
 }
 
-// materializeHarness requires the harness and returns its two anchor files.
-func materializeHarness(t *testing.T, engine container.Engine) (caddyRoot, resolverCert string) {
+// materializeHarness requires the harness and returns its root anchor file.
+func materializeHarness(t *testing.T, engine container.Engine) string {
 	t.Helper()
 	harness := testutil.HarnessDir(t)
 	testutil.RequireHarness(t, engine, harness)
-	caddyRoot = filepath.Join(harness, "pki", "caddy-root.crt")
-	resolverCert = filepath.Join(harness, "pki", "resolver.crt")
-	for _, f := range []string{caddyRoot, resolverCert} {
-		if _, statErr := os.Stat(f); statErr != nil {
-			t.Fatalf("harness material missing (run make up in test/sigstore-local): %v", statErr)
-		}
+	caddyRoot := filepath.Join(harness, "pki", "caddy-root.crt")
+	if _, statErr := os.Stat(caddyRoot); statErr != nil {
+		t.Fatalf("harness material missing (run make up in test/sigstore-local): %v", statErr)
 	}
-	return caddyRoot, resolverCert
+	return caddyRoot
 }
 
 // writeMaterializeLane renders the fixture lane for image and repo into a
 // temp directory and returns its path.
-func writeMaterializeLane(t *testing.T, caddyRoot, resolverCert, image, repo string) string {
+func writeMaterializeLane(t *testing.T, caddyRoot, image, repo string) string {
 	t.Helper()
 	caddy, caddyErr := testutil.CertificateFromPEMFile(caddyRoot)
 	if caddyErr != nil {
 		t.Fatalf("harness root anchor: %v", caddyErr)
 	}
-	resolver, resolverErr := testutil.CertificateFromPEMFile(resolverCert)
-	if resolverErr != nil {
-		t.Fatalf("harness resolver anchor: %v", resolverErr)
-	}
 	content := strings.NewReplacer(
 		"__CADDY_ROOT__", caddy.Cert.String(),
-		"__RESOLVER_CERT__", resolver.Cert.String(),
+		"__DOT_ROOT__", testutil.SSLComRootECCB64,
 		"__GTS_ROOT_R1__", testutil.GTSRootR1B64,
 		"__GTS_ROOT_R4__", testutil.GTSRootR4B64,
 		"__IMAGE__", image,
@@ -252,7 +244,7 @@ func writeMaterializeLane(t *testing.T, caddyRoot, resolverCert, image, repo str
 func TestMaterializeStepImageLive_Integration(t *testing.T) {
 	engine := testutil.RequireEngine(t)
 	ctx := context.Background()
-	caddyRoot, resolverCert := materializeHarness(t, engine)
+	caddyRoot := materializeHarness(t, engine)
 	client := materializeEngineClient(t)
 	t.Setenv("SIGSTORE_ID_TOKEN", testutil.MintIDToken(t, itestIssuer, testutil.HarnessBuilderClient, caddyRoot))
 	t.Setenv("REGISTRY_ID_TOKEN", testutil.MintIDToken(t, itestIssuer, testutil.HarnessRegistryClient, caddyRoot))
@@ -267,7 +259,7 @@ func TestMaterializeStepImageLive_Integration(t *testing.T) {
 	}
 
 	repo := fmt.Sprintf("strike-itest-materialize-%d", clock.Wall().UnixNano())
-	lanePath := writeMaterializeLane(t, caddyRoot, resolverCert, materializeFixture, repo)
+	lanePath := writeMaterializeLane(t, caddyRoot, materializeFixture, repo)
 	rc := newLiveRunContext(ctx, t, engine, lanePath)
 	if runErr := rc.runtime.Run(rc.runStep); runErr != nil {
 		t.Fatalf("lane run with the image absent: %v", runErr)
@@ -292,11 +284,11 @@ func TestMaterializeStepImageLive_Integration(t *testing.T) {
 func TestMaterializeMissingDigestLive_Integration(t *testing.T) {
 	engine := testutil.RequireEngine(t)
 	ctx := context.Background()
-	caddyRoot, resolverCert := materializeHarness(t, engine)
+	caddyRoot := materializeHarness(t, engine)
 	client := materializeEngineClient(t)
 
 	repo := fmt.Sprintf("strike-itest-materialize-missing-%d", clock.Wall().UnixNano())
-	lanePath := writeMaterializeLane(t, caddyRoot, resolverCert, materializeMissing, repo)
+	lanePath := writeMaterializeLane(t, caddyRoot, materializeMissing, repo)
 	rc := newLiveRunContext(ctx, t, engine, lanePath)
 	before := containerCount(ctx, t, client)
 	runErr := rc.runtime.Run(rc.runStep)

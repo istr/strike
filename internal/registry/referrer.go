@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"maps"
+	"net/http"
 
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
@@ -140,13 +141,14 @@ func AttachStatementBundles(ctx context.Context, target string, subject v1.Descr
 // Discovery is by artifact-type filter (the cosign-compatible referrers query);
 // identification and projection are read back from each fetched manifest (its
 // artifactType and annotation), which is authoritative, rather than from the
-// index descriptor.
+// index descriptor. It is strike verify's read, which declares no registry, so
+// it reads through go-containerregistry's default transport.
 func FetchStatementBundles(ctx context.Context, subjectRef string) ([]StatementBundle, error) {
 	ref, err := name.NewDigest(subjectRef)
 	if err != nil {
 		return nil, fmt.Errorf("subject must be digest-pinned: %w", err)
 	}
-	return fetchReferrers(ctx, ref, fetchOneBundle)
+	return fetchReferrers(ctx, ref, remote.DefaultTransport, fetchOneBundle)
 }
 
 // fetchReferrers discovers the sigstore-bundle referrers of a digest-pinned
@@ -157,14 +159,15 @@ func FetchStatementBundles(ctx context.Context, subjectRef string) ([]StatementB
 // (cosign base SBOMs), which differ only in the per-referrer reader. The
 // registry must serve the referrers API: the referrers tag fallback is
 // refused, so a registry without the API fails the read (ADR-058). Every
-// read is anonymous over go-containerregistry's default transport; no
-// ambient credential is consulted (ADR-058 D6).
-func fetchReferrers[T any](ctx context.Context, ref name.Digest, fetch func(context.Context, name.Digest) (*T, error)) ([]T, error) {
+// read is anonymous, over the transport rt the caller hands in; no ambient
+// credential is consulted (ADR-058 D6).
+func fetchReferrers[T any](ctx context.Context, ref name.Digest, rt http.RoundTripper, fetch func(context.Context, name.Digest, http.RoundTripper) (*T, error)) ([]T, error) {
 	repo := ref.Context()
 	idx, err := remote.Referrers(ref,
 		remote.WithFilter("artifactType", SigstoreBundleMediaType),
 		remote.WithReferrersTagFallback(false),
-		remote.WithContext(ctx))
+		remote.WithContext(ctx),
+		remote.WithTransport(rt))
 	if err != nil {
 		return nil, fmt.Errorf("list referrers of %s: %w", ref, err)
 	}
@@ -174,7 +177,7 @@ func fetchReferrers[T any](ctx context.Context, ref name.Digest, fetch func(cont
 	}
 	var out []T
 	for _, d := range im.Manifests {
-		v, err := fetch(ctx, repo.Digest(d.Digest.String()))
+		v, err := fetch(ctx, repo.Digest(d.Digest.String()), rt)
 		if err != nil {
 			return nil, fmt.Errorf("referrer %s: %w", d.Digest, err)
 		}
@@ -190,8 +193,8 @@ func fetchReferrers[T any](ctx context.Context, ref name.Digest, fetch func(cont
 // so the caller skips it rather than failing the whole read. A referrer that
 // selects as a strike statement bundle but is malformed -- wrong layer count
 // or a non-bundle layer media type -- is an error, not a skip.
-func fetchOneBundle(ctx context.Context, ref name.Digest) (*StatementBundle, error) {
-	img, err := remote.Image(ref, remote.WithContext(ctx))
+func fetchOneBundle(ctx context.Context, ref name.Digest, rt http.RoundTripper) (*StatementBundle, error) {
+	img, err := remote.Image(ref, remote.WithContext(ctx), remote.WithTransport(rt))
 	if err != nil {
 		return nil, fmt.Errorf("fetch: %w", err)
 	}
@@ -267,14 +270,19 @@ func readBundleLayer(img v1.Image) ([]byte, error) {
 // rejects a tag -- because the digest is the trust anchor: the operator pins the
 // exact bytes they trust. The image is a plain artifact, not a referrer of
 // anything; its sole layer is the document. The read is bounded by maxBundleBytes
-// against a hostile or buggy registry.
-func FetchTrustRoot(ctx context.Context, ref primitive.ImageRef) ([]byte, error) {
+// against a hostile or buggy registry. src hands out the transport the read
+// goes through.
+func FetchTrustRoot(ctx context.Context, ref primitive.ImageRef, src Transports) ([]byte, error) {
 	s := string(ref)
 	d, err := name.NewDigest(s)
 	if err != nil {
 		return nil, fmt.Errorf("trust root ref must be digest-pinned: %w", err)
 	}
-	img, err := remote.Image(d, remote.WithContext(ctx))
+	rt, err := src.Transport(ref)
+	if err != nil {
+		return nil, err
+	}
+	img, err := remote.Image(d, remote.WithContext(ctx), remote.WithTransport(rt))
 	if err != nil {
 		return nil, fmt.Errorf("fetch trust root %s: %w", ref, err)
 	}
@@ -346,14 +354,19 @@ type BaseSBOMReferrer struct {
 // binding -- is the caller's responsibility; this is fetch only.
 //
 // The subject must be digest-pinned (name.NewDigest rejects a tag) because a
-// mutable reference cannot anchor a reproducible verification.
-func FetchBaseSBOMReferrers(ctx context.Context, baseRef primitive.ImageRef) ([]BaseSBOMReferrer, error) {
+// mutable reference cannot anchor a reproducible verification. src hands out
+// the transport the read goes through.
+func FetchBaseSBOMReferrers(ctx context.Context, baseRef primitive.ImageRef, src Transports) ([]BaseSBOMReferrer, error) {
 	s := string(baseRef)
 	ref, err := name.NewDigest(s)
 	if err != nil {
 		return nil, fmt.Errorf("base image must be digest-pinned: %w", err)
 	}
-	return fetchReferrers(ctx, ref, fetchOneBaseSBOM)
+	rt, err := src.Transport(baseRef)
+	if err != nil {
+		return nil, err
+	}
+	return fetchReferrers(ctx, ref, rt, fetchOneBaseSBOM)
 }
 
 // fetchOneBaseSBOM fetches a single referrer and returns it when it is an
@@ -361,8 +374,8 @@ func FetchBaseSBOMReferrers(ctx context.Context, baseRef primitive.ImageRef) ([]
 // attestation to be skipped. A referrer that selects as an SBOM but is
 // malformed -- wrong layer count or a non-bundle layer media type -- is an
 // error, not a skip, so a broken base SBOM surfaces rather than vanishing.
-func fetchOneBaseSBOM(ctx context.Context, ref name.Digest) (*BaseSBOMReferrer, error) {
-	img, err := remote.Image(ref, remote.WithContext(ctx))
+func fetchOneBaseSBOM(ctx context.Context, ref name.Digest, rt http.RoundTripper) (*BaseSBOMReferrer, error) {
+	img, err := remote.Image(ref, remote.WithContext(ctx), remote.WithTransport(rt))
 	if err != nil {
 		return nil, fmt.Errorf("fetch: %w", err)
 	}
