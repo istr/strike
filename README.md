@@ -82,7 +82,7 @@ first (`make -C test/sigstore-local up`), then build stage_1 from the clone's
 root:
 
 ```sh
-GIT_COMMIT=d385d4771fffc350a40fbb663e5f3a20a7255f05
+GIT_COMMIT=f51fb6211fc03e112820717890b5b5adc6a34115
 
 podman build -t strike:stage_1 \
   --build-arg GIT_COMMIT=${GIT_COMMIT} \
@@ -322,7 +322,7 @@ security, and style guidelines.
 
 Instead of installing the toolchain on the host, you can work inside the dev
 container declared in `.devcontainer/`. It carries the Go toolchain, `make`,
-golangci-lint, govulncheck, and a podman remote client with the
+golangci-lint, govulncheck, cosign, and a podman remote client with the
 `podman-compose` provider. The host's podman socket is mounted into the
 container as `CONTAINER_HOST`, and every container started from inside runs as
 a sibling on the host engine. The premise behind this layout is

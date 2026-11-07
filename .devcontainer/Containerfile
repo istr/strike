@@ -4,12 +4,16 @@
 # Transitional: the base image comes from docker.io and has not been measured
 # against a cgr.dev image carrying the Go minor go.mod demands and the C
 # toolchain the race detector needs (ADR-055 D3). It is not a precedent.
-FROM docker.io/library/golang:1.27.3@sha256:5bbe76a31abbe0f1449d7820e550131c020b097c24d3bcfc5ad1231779982c1c AS tools
+FROM docker.io/library/golang:1.27.3@sha256:e519d3b0a5b285e5aa53ab9eef02bc6bbb9cb04608389b743a136a9ce75f0d1e AS tools
 RUN ["go", "install", "github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0"]
 RUN ["go", "install", "golang.org/x/vuln/cmd/govulncheck@v1.9.0"]
+# The independent verifier make -C test/sigstore-local conformance drives.
+# Built from source like the tools above, so the checksum database pins every
+# module; stripped, because the symbol table alone is tens of megabytes.
+RUN ["go", "install", "-ldflags=-s -w", "github.com/sigstore/cosign/v3/cmd/cosign@v3.1.4"]
 # The agent's linux-x64 platform package is a self-contained native binary;
 # the checksum pins the registry tarball whose sha512 integrity npm publishes.
-ADD --checksum=sha256:745e1b196eb475161a185a00f5e1144d7324ec6094e21149eae719fa42481000 https://registry.npmjs.org/@anthropic-ai/claude-code-linux-x64/-/claude-code-linux-x64-2.1.316.tgz /tmp/claude-code.tgz
+ADD --checksum=sha256:9b7b53954b8ffb886fafeefe9ef1e0e9e5c15e8aaf2f54d65ba64d0cca795dc7 https://registry.npmjs.org/@anthropic-ai/claude-code-linux-x64/-/claude-code-linux-x64-2.1.319.tgz /tmp/claude-code.tgz
 RUN ["tar", "-xzf", "/tmp/claude-code.tgz", "-C", "/tmp", "package/claude"]
 # The engine client and the compose provider the harness Makefile drives
 # through the mounted socket. Each package is fetched from a dated
@@ -23,8 +27,8 @@ ADD --checksum=sha256:0019c4e7848c83a0d6bcb78cca902b5cdb1714aa6370ba01955b1fed6f
 ADD --checksum=sha256:119670533dbc8e9e89ee1b09415879b70c30fd444f88da7d2fc2032adcd4be75 https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/p/python-dotenv/python3-dotenv_1.0.1-1_all.deb /debs/
 ADD --checksum=sha256:8a5475402801de445a17887bb72d03613565a6a84b216b4b606d1462c613eeb2 https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/liby/libyaml/libyaml-0-2_0.2.5-2_amd64.deb /debs/
 
-FROM docker.io/library/golang:1.27.3@sha256:5bbe76a31abbe0f1449d7820e550131c020b097c24d3bcfc5ad1231779982c1c
-COPY --from=tools /go/bin/golangci-lint /go/bin/govulncheck /go/bin/
+FROM docker.io/library/golang:1.27.3@sha256:e519d3b0a5b285e5aa53ab9eef02bc6bbb9cb04608389b743a136a9ce75f0d1e
+COPY --from=tools /go/bin/golangci-lint /go/bin/govulncheck /go/bin/cosign /go/bin/
 COPY --from=tools /tmp/package/claude /usr/local/bin/claude
 # Installed from a bind mount of the tools stage, so no package file lands in
 # a layer. dpkg resolves nothing: a dependency the base image lacks fails here.

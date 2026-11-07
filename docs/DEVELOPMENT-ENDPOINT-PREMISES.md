@@ -114,12 +114,13 @@ the working tree belong to the endpoint user.
 
 The image is built from `.devcontainer/Containerfile`: the Go toolchain of
 the version `go.mod` demands, the C toolchain the race detector needs, `git`,
-`make`, `golangci-lint`, `govulncheck`, the agent, and a podman remote client
-with the `podman-compose` provider, which reach the host engine through the
-mounted socket. The base image and the Go tools are pinned by digest and
-version. The agent is the native binary of its version-pinned linux-x64
-package, fetched under a checksum; it needs no JavaScript runtime, so the
-image carries none. The podman client, the compose provider, and the three
+`make`, `golangci-lint`, `govulncheck`, `cosign`, the agent, and a podman
+remote client with the `podman-compose` provider, which reach the host engine
+through the mounted socket. The base image and the Go tools are pinned by
+digest and version; the Go tools, `cosign` among them, are built from source,
+so the Go checksum database pins every module. The agent is the native binary
+of its version-pinned linux-x64 package, fetched under a checksum; it needs
+no JavaScript runtime, so the image carries none. The podman client, the compose provider, and the three
 packages the provider needs are Debian packages fetched from a dated
 `snapshot.debian.org` path under checksums and installed with `dpkg`. No Dev
 Containers feature is used, and the build consults no distribution package
