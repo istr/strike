@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/testutil"
 )
 
 // parseAndValidate runs the full lane-structure gate -- Parse then
@@ -198,5 +199,55 @@ func TestParse_RegistryCredentialGrammar(t *testing.T) {
 		if _, _, _, err := lane.Parse(fp); err == nil || !strings.Contains(err.Error(), "validation") {
 			t.Errorf("credential %q: err = %v, want a schema validation error", replacement, err)
 		}
+	}
+}
+
+// TestValidateLane_RejectPeerDefaultPort pins that a step or deploy capture
+// peer spelling out the default port of its protocol is rejected: 443 for
+// https, 22 for ssh.
+func TestValidateLane_RejectPeerDefaultPort(t *testing.T) {
+	base, err := fs.ReadFile(os.DirFS("testdata"), "valid_force_run_minimal.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const forceRun = "    forceRun: true\n"
+	const preState = "        preState:\n          required: false\n          captures: []\n"
+	cert := "\"" + testutil.AnchorCertB64 + "\"\n"
+	tests := []struct {
+		name         string
+		old          string
+		new          string
+		wantContains string
+	}{
+		{
+			"https step peer on 443", forceRun,
+			forceRun + "    peers:\n      - type: https\n        host: example.com:443\n        trust:\n          cert: " + cert,
+			`step "clone" peer: write example.com, not example.com:443`,
+		},
+		{
+			"ssh step peer on 22", forceRun,
+			forceRun + "    peers:\n      - type: ssh\n        host: git.example.com:22\n        knownHosts:\n          - keyType: ssh-ed25519\n            key: AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl\n",
+			`step "clone" peer: write git.example.com, not git.example.com:22`,
+		},
+		{
+			"https capture peer on 443", preState,
+			"        preState:\n          required: false\n          captures:\n            - id: version\n              image: images.example.com/library/busybox@sha256:" + strings.Repeat("ab", 32) + "\n              command: [\"version\"]\n              peers:\n                - type: https\n                  host: example.com:443\n                  trust:\n                    cert: " + cert,
+			`step "deploy" capture "version" peer: write example.com, not example.com:443`,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if !strings.Contains(string(base), tc.old) {
+				t.Fatalf("fixture does not contain %q", tc.old)
+			}
+			path := filepath.Join(t.TempDir(), "lane.yaml")
+			if err := os.WriteFile(path, []byte(strings.Replace(string(base), tc.old, tc.new, 1)), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			err := parseAndValidate(t, path)
+			if err == nil || !strings.Contains(err.Error(), tc.wantContains) {
+				t.Fatalf("err = %v, want an error containing %q", err, tc.wantContains)
+			}
+		})
 	}
 }

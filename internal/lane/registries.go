@@ -52,7 +52,7 @@ func collectRegistryHosts(p *Lane) (registryHosts, error) {
 		if !ok {
 			continue
 		}
-		if err := checkDefaultPort(reg.Target.Address, fmt.Sprintf("deploy step %q target", s.ID)); err != nil {
+		if err := checkDefaultPort(reg.Target.Address, 443, fmt.Sprintf("deploy step %q target", s.ID)); err != nil {
 			return h, err
 		}
 		auth := string(reg.Target.Address.Authority())
@@ -79,7 +79,7 @@ func collectRegistryHosts(p *Lane) (registryHosts, error) {
 // default port, not yet declared as a registry or storage, and not a deploy
 // target's host, which counts as declared on its own.
 func (h registryHosts) declare(a endpoint.Address, kind, where string) (string, error) {
-	if err := checkDefaultPort(a, where); err != nil {
+	if err := checkDefaultPort(a, 443, where); err != nil {
 		return "", err
 	}
 	auth := string(a.Authority())
@@ -96,11 +96,11 @@ func (h registryHosts) declare(a endpoint.Address, kind, where string) (string, 
 	return auth, nil
 }
 
-// checkDefaultPort refuses an authority that spells out the default https
-// port. Declarations and references are compared as written, so one host has
-// one spelling.
-func checkDefaultPort(a endpoint.Address, where string) error {
-	if a.Port != nil && *a.Port == 443 {
+// checkDefaultPort refuses an authority that spells out def, the default port
+// of its protocol. Declarations and references are compared as written, so one
+// host has one spelling.
+func checkDefaultPort(a endpoint.Address, def primitive.Port, where string) error {
+	if a.Port != nil && *a.Port == def {
 		return fmt.Errorf("%s: write %s, not %s", where, a.Host, a.Authority())
 	}
 	return nil

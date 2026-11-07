@@ -46,6 +46,9 @@ func ValidateLane(p *Lane, index map[primitive.Identifier]*Step) error {
 	if err := validateMountDisjointness(p); err != nil {
 		return err
 	}
+	if err := validatePeerPorts(p); err != nil {
+		return err
+	}
 	if err := validatePeerAnchors(p); err != nil {
 		return err
 	}
@@ -519,6 +522,41 @@ func validatePeerAnchors(p *Lane) error {
 				continue
 			}
 			seen[auth] = anchor
+		}
+	}
+	return nil
+}
+
+// validatePeerPorts refuses a step or deploy capture peer that spells out the
+// default port of its protocol: 443 for https, 22 for ssh. Peers are keyed by
+// host:port as written, so one endpoint has one spelling, and two spellings
+// of one endpoint cannot slip past the anchor comparison.
+func validatePeerPorts(p *Lane) error {
+	for _, s := range p.Steps {
+		if err := checkPeerPorts(s.Peers, fmt.Sprintf("step %q peer", s.ID)); err != nil {
+			return err
+		}
+		if s.Deploy == nil {
+			continue
+		}
+		for _, c := range slices.Concat(s.Deploy.Recording.PreState.Captures, s.Deploy.Recording.PostState.Captures) {
+			if err := checkPeerPorts(c.Peers, fmt.Sprintf("step %q capture %q peer", s.ID, c.ID)); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// checkPeerPorts holds each peer to the default port of its own protocol.
+func checkPeerPorts(peers []Peer, where string) error {
+	for _, peer := range peers {
+		def := primitive.Port(443)
+		if _, ssh := peer.(endpoint.SSH); ssh {
+			def = 22
+		}
+		if err := checkDefaultPort(peer.Addr(), def, where); err != nil {
+			return err
 		}
 	}
 	return nil
