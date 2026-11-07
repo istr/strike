@@ -121,7 +121,12 @@ else, a value is typed end to end.
 assignment (`s := string(id); f(s)`), a composite-literal field
 (`T{Name: string(id)}`), a method call on the type (`f(id.String())`), or a bare
 return (`return string(id)`). These own or defer the boundary explicitly and are
-allowed; the call-argument form is not.
+allowed; the call-argument form is not. The same holds in the other direction:
+building a value of the type for a call goes through the constructor the
+owning package provides (`f(primitive.NewImageRef(raw))`,
+`primitive.NewAbsPath`), never through a conversion in the argument
+(`f(primitive.ImageRef(raw))`); a type without a constructor takes a named
+assignment (`ref := primitive.ImageRef(raw); f(ref)`).
 
 **Enforcement.** `tools/linttype` walks the type-checked AST and fails the
 build on any conversion of a strike named type sitting in a call argument, except
