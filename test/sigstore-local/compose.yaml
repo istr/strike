@@ -186,9 +186,11 @@ services:
     # type, and no OCI 1.0 fallback tag is created. Storage is the container's
     # writable layer, so every bring-up starts from an empty registry.
     # Authentication is bearer.oidc against the harness issuer: zot validates
-    # the registry token itself, its realm is an https URL on the registry's
-    # own host, and only the pinned harness identity may read or push. The
-    # mounted Caddy root lets zot fetch the issuer's keys over TLS.
+    # the registry token itself and advertises no realm, so a client presents
+    # the token or reads anonymously, and never exchanges a token. Only the
+    # pinned harness identity may push; public/** also admits anonymous reads,
+    # every other repository none. The mounted Caddy root lets zot fetch the
+    # issuer's keys over TLS.
     image: ghcr.io/project-zot/zot-minimal-linux-amd64:v2.1.22@sha256:27729292c45f1dc0a323b69292d15cc13a5ca4b8bf05f81106e7f89a2b1abd08
     volumes:
       - ./zot/config.json:/etc/zot/config.json:ro

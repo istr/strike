@@ -7,8 +7,6 @@
     "port": "5000",
     "auth": {
       "bearer": {
-        "realm": "https://registry.127.0.0.1.sslip.io:5443/v2/token",
-        "service": "zot",
         "oidc": [
           {
             "issuer": "https://keycloak.127.0.0.1.sslip.io:8443/realms/sigstore",
@@ -29,6 +27,15 @@
           ]
         },
         "strike-itest-*": {
+          "policies": [
+            {
+              "users": ["https://keycloak.127.0.0.1.sslip.io:8443/realms/sigstore/5f0c7a2e-3b1d-4e8a-9c6f-0a1b2c3d4e5f"],
+              "actions": ["read", "create"]
+            }
+          ]
+        },
+        "public/**": {
+          "anonymousPolicy": ["read"],
           "policies": [
             {
               "users": ["https://keycloak.127.0.0.1.sslip.io:8443/realms/sigstore/5f0c7a2e-3b1d-4e8a-9c6f-0a1b2c3d4e5f"],

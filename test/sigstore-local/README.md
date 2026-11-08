@@ -67,10 +67,12 @@ is not HTTP, so Caddy cannot front it; CoreDNS terminates TLS itself under
   Authentication is `bearer.oidc`: zot validates the registry token
   (`make registry-token`) against the harness issuer, whose keys it fetches
   under the mounted Caddy root, and accepts the audience
-  `https://registry.127.0.0.1.sslip.io:5443` only. The realm is an https URL
-  on the registry's own host. The pinned harness identity, `iss + "/" + sub`,
-  may read and push `istr/strike` and `strike-itest-*`; no repository admits
-  anonymous access.
+  `https://registry.127.0.0.1.sslip.io:5443` only. zot advertises no realm:
+  a client presents the token on every request or reads anonymously, and no
+  token is ever exchanged. The pinned harness identity, `iss + "/" + sub`,
+  may read and push `istr/strike`, `strike-itest-*` and `public/**`.
+  `public/**` alone admits anonymous reads, so a deployment copied there
+  verifies the way a consumer reads a public registry.
 - `coredns/Corefile`, `coredns/root.zone` -- the DoT resolver. Serves a
   synthetic root zone with no forwarder and no root hints, so the strike
   run-start `NS .` pre-flight probe is answerable with no network egress. The
