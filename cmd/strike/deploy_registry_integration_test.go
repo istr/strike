@@ -239,6 +239,39 @@ func TestRegistryDeployLive_Integration(t *testing.T) {
 
 	trustRoot, trustDoc := publishHarnessTrustRoot(ctx, t, harness, caddyRoot, auth)
 	assertTrustRootReadable(ctx, t, caddyRoot, trustRoot, trustDoc, auth)
+	assertVerifies(ctx, t, lanePath, pushed, trustRoot)
+}
+
+// assertVerifies runs strike verify in UC2 against the deployment (ADR-041
+// amendment 2026-11-08). Under the registry token it reads the private
+// repository pinned to the deploy target's anchor, and the published trust
+// root on the same registry under the same token, and every layer verifies.
+// Without the token it reads anonymously, the default, and the private
+// registry refuses it. The harness registry serves every write at once, so
+// the read does not wait.
+func assertVerifies(ctx context.Context, t *testing.T, lanePath string, subject, trustRoot name.Digest) {
+	t.Helper()
+	source := "env://REGISTRY_ID_TOKEN"
+	opts := verifyOptions{
+		subjectRef:    subject.String(),
+		laneFile:      lanePath,
+		trustRootRef:  trustRoot.String(),
+		registryToken: source,
+	}
+	logBuf := captureLog(t)
+	if err := runVerify(ctx, io.Discard, opts, failOnWait(t)); err != nil {
+		t.Fatalf("verify under the registry token: %v\n%s", err, logBuf.String())
+	}
+	for _, layer := range []string{"sealed", "engine-dependent", "informational"} {
+		if !strings.Contains(logBuf.String(), "OK    "+layer+"\n") {
+			t.Errorf("want an OK verdict for %s, got: %q", layer, logBuf.String())
+		}
+	}
+	anonymous := opts
+	anonymous.registryToken = ""
+	if err := runVerify(ctx, io.Discard, anonymous, failOnWait(t)); err == nil {
+		t.Error("an anonymous verify read the private harness registry")
+	}
 }
 
 // writeFixtureLane renders the fixture lane into a temp directory and returns

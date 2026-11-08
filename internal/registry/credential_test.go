@@ -1,14 +1,20 @@
 package registry_test
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
 
+	"github.com/google/go-containerregistry/pkg/v1/remote"
+
+	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/registry"
+	"github.com/istr/strike/internal/testutil"
 )
 
 // TestCredentialTransport pins the three rules of the credential transport
@@ -77,5 +83,83 @@ func TestCredentialTransport(t *testing.T) {
 	}
 	if _, sent := seen["/target"]; sent {
 		t.Error("the redirected request reached the server")
+	}
+}
+
+// TestTargetTransports pins strike verify's transports under a registry
+// token (ADR-041 amendment 2026-11-08): a read of the target authority
+// carries the bearer and verifies the target against the declared anchor,
+// so a target that presents another chain is refused; a read of any other
+// registry is anonymous through go-containerregistry's default transport; an
+// anchor of no known mode is refused when the transports are built.
+func TestTargetTransports(t *testing.T) {
+	const token = "header.payload.signature"
+	var (
+		mu   sync.Mutex
+		seen []string
+	)
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		seen = append(seen, r.Header.Get("Authorization"))
+		mu.Unlock()
+	}))
+	t.Cleanup(srv.Close)
+	host := srv.Listener.Addr().String()
+	secret := lane.NewSecretString(token)
+
+	get := func(src registry.TargetTransports) error {
+		rt, err := src.Transport(primitive.NewImageRef(host + "/app@sha256:" + strings.Repeat("ab", 32)))
+		if err != nil {
+			return err
+		}
+		req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://"+host+"/v2/", http.NoBody)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		resp, err := rt.RoundTrip(req)
+		if err != nil {
+			return err
+		}
+		return resp.Body.Close()
+	}
+
+	pinned, err := registry.NewTargetTransports(host, endpoint.CertificateFromDER(srv.Certificate().Raw, endpoint.CertificateModeRootca), secret)
+	if err != nil {
+		t.Fatalf("NewTargetTransports: %v", err)
+	}
+	if getErr := get(pinned); getErr != nil {
+		t.Fatalf("read of the target: %v", getErr)
+	}
+	mu.Lock()
+	got := append([]string(nil), seen...)
+	mu.Unlock()
+	if len(got) != 1 || got[0] != "Bearer "+token {
+		t.Errorf("Authorization on the target = %q, want the bearer once", got)
+	}
+
+	anchor, err := testutil.AnchorTrust().Parse()
+	if err != nil {
+		t.Fatalf("fixture anchor: %v", err)
+	}
+	wrong, err := registry.NewTargetTransports(host, endpoint.CertificateFromDER(anchor.Raw, endpoint.CertificateModeLeaf), secret)
+	if err != nil {
+		t.Fatalf("NewTargetTransports: %v", err)
+	}
+	if getErr := get(wrong); getErr == nil {
+		t.Error("a target that presents another certificate than the anchor was read")
+	}
+
+	rt, err := pinned.Transport(primitive.NewImageRef("other.example.com/root@sha256:" + strings.Repeat("cd", 32)))
+	if err != nil {
+		t.Fatalf("Transport of another registry: %v", err)
+	}
+	if rt != remote.DefaultTransport {
+		t.Errorf("Transport of another registry = %v, want remote.DefaultTransport", rt)
+	}
+	if _, err := pinned.Transport(primitive.NewImageRef("Not A Reference")); err == nil {
+		t.Error("Transport accepted a malformed reference")
+	}
+	if _, err := registry.NewTargetTransports(host, endpoint.Certificate{Cert: endpoint.CertificateFromDER(srv.Certificate().Raw, endpoint.CertificateModeRootca).Cert}, secret); err == nil {
+		t.Error("NewTargetTransports accepted an anchor of no known mode")
 	}
 }

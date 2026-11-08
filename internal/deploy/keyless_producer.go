@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/istr/strike/internal/lane"
@@ -35,17 +36,45 @@ func readIDToken(secrets map[primitive.Identifier]lane.SecretSource, root *os.Ro
 	if err != nil {
 		return lane.SecretString{}, idTokenClaims{}, err
 	}
-	claims, err := decodeIDTokenClaims(token)
+	claims, err := checkIDToken(token)
 	if err != nil {
 		return lane.SecretString{}, idTokenClaims{}, err
 	}
+	return token, claims, nil
+}
+
+// checkIDToken decodes the claims of an identity token and refuses it,
+// fail-closed, when its lifetime, exp - iat, is not positive or exceeds
+// tokenMaxLifetime (ADR-058 D4).
+func checkIDToken(token lane.SecretString) (idTokenClaims, error) {
+	claims, err := decodeIDTokenClaims(token)
+	if err != nil {
+		return idTokenClaims{}, err
+	}
 	if claims.Iat <= 0 || claims.Exp <= claims.Iat {
-		return lane.SecretString{}, idTokenClaims{}, errors.New("token carries no valid iat and exp")
+		return idTokenClaims{}, errors.New("token carries no valid iat and exp")
 	}
 	if lifetime := claims.Exp - claims.Iat; lifetime > tokenMaxLifetime {
-		return lane.SecretString{}, idTokenClaims{}, fmt.Errorf("token lifetime %ds exceeds the %ds bound", lifetime, tokenMaxLifetime)
+		return idTokenClaims{}, fmt.Errorf("token lifetime %ds exceeds the %ds bound", lifetime, tokenMaxLifetime)
 	}
-	return token, claims, nil
+	return claims, nil
+}
+
+// CheckRegistryToken checks a registry token before any use, fail-closed:
+// its lifetime stays within the bound, and, when oidcAudience is not empty,
+// its audience does not contain it, because a token minted for Fulcio is
+// never presented to a registry (ADR-058 D3, D4, amendment 2026-11-08). The
+// lane run and strike verify check every registry token through it; each
+// reads the token its own way.
+func CheckRegistryToken(token lane.SecretString, oidcAudience string) error {
+	claims, err := checkIDToken(token)
+	if err != nil {
+		return err
+	}
+	if oidcAudience != "" && slices.Contains(claims.Aud, oidcAudience) {
+		return fmt.Errorf("its audience contains the oidc audience %q, and a token minted for Fulcio is never presented to a registry", oidcAudience)
+	}
+	return nil
 }
 
 // builderToken reads the builder's identity token from the lane secret the

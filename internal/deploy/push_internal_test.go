@@ -105,6 +105,20 @@ func TestReadRegistryTokensChecksBeforeUse(t *testing.T) {
 	}
 }
 
+// TestCheckRegistryTokenWithoutAudience pins the check strike verify runs
+// on a registry token in UC1, where no lane names an oidc audience: the
+// lifetime bound still holds, and no audience is refused.
+func TestCheckRegistryTokenWithoutAudience(t *testing.T) {
+	sigstore := lane.NewSecretString(fakeIDToken(`{"aud":"sigstore","iat":1000,"exp":1600}`))
+	if err := CheckRegistryToken(sigstore, ""); err != nil {
+		t.Errorf("CheckRegistryToken without an oidc audience: %v", err)
+	}
+	long := lane.NewSecretString(fakeIDToken(`{"aud":"https://registry.example.com","iat":1000,"exp":1901}`))
+	if err := CheckRegistryToken(long, ""); err == nil || !strings.Contains(err.Error(), "exceeds the 900s bound") {
+		t.Errorf("err = %v, want the lifetime bound", err)
+	}
+}
+
 // TestPushByDigestScrubsTheToken proves the log clause of ADR-058 D1: a
 // registry that echoes the presented credential into its error body does not
 // carry the token into the error the push returns; the redaction placeholder

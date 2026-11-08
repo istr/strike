@@ -397,10 +397,10 @@ type registryClient struct {
 
 // ReadRegistryTokens reads the registry token of every registry deploy of p
 // once, when the run starts, keyed by the target's written authority, and
-// checks each before any use, fail-closed: its lifetime stays within the
-// bound (readIDToken), and its audience does not contain the lane's oidc
-// audience, because a token minted for Fulcio is never presented to a
-// registry (ADR-058 D3, amendment 2026-11-08). Lane validation gives the
+// checks each before any use through CheckRegistryToken, fail-closed: its
+// lifetime stays within the bound, and its audience does not contain the
+// lane's oidc audience, because a token minted for Fulcio is never presented
+// to a registry (ADR-058 D3, amendment 2026-11-08). Lane validation gives the
 // deploy targets of one authority one token, so each authority is read once.
 func ReadRegistryTokens(p *lane.Lane, root *os.Root) (map[string]lane.SecretString, error) {
 	tokens := map[string]lane.SecretString{}
@@ -417,12 +417,12 @@ func ReadRegistryTokens(p *lane.Lane, root *os.Root) (map[string]lane.SecretStri
 			continue
 		}
 		cred := reg.Target.Credential.Token
-		token, claims, err := readIDToken(p.Secrets, root, cred)
+		token, err := lane.ReadSecret(p.Secrets[cred], root)
+		if err == nil {
+			err = CheckRegistryToken(token, p.OIDC.Audience)
+		}
 		if err != nil {
 			return nil, fmt.Errorf("deploy step %q: registry token %q: %w", s.ID, cred, err)
-		}
-		if slices.Contains(claims.Aud, p.OIDC.Audience) {
-			return nil, fmt.Errorf("deploy step %q: registry token %q: its audience contains the oidc audience %q, and a token minted for Fulcio is never presented to a registry", s.ID, cred, p.OIDC.Audience)
 		}
 		tokens[auth] = token
 	}
