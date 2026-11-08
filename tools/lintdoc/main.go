@@ -1,14 +1,15 @@
-// Command lintdoc gates the five tree-wide source checks that need no Go type
+// Command lintdoc gates the six tree-wide source checks that need no Go type
 // information: every non-test Markdown, Go, CUE and SVG file in the module
 // tree is printable ASCII; every ADR file on disk is referenced from the ADR
 // index; every base64-encoded DER blob embedded in a source, fixture or
 // documentation file is one the allowlist in derblobs.go names;
 // docs/FIXTURE-TRUST-ANCHOR.md records exactly the fixture half of that
-// allowlist; and every Containerfile, compose file and dev container
+// allowlist; every Containerfile, compose file and dev container
 // configuration takes its images by digest and every Containerfile starts only
-// the programs its policy in containers.go names. They walk the module tree
-// from the directory holding go.mod, because most of the covered files sit in
-// directories that hold no Go package at all.
+// the programs its policy in containers.go names; and every relative link in a
+// Markdown file names a file or directory in the tree. They walk the module
+// tree from the directory holding go.mod, because most of the covered files
+// sit in directories that hold no Go package at all.
 //
 // The command takes no arguments: what it checks is the module tree it is run
 // in, not a package pattern. A finding is rendered as file:line:column against
@@ -43,6 +44,9 @@ func main() {
 	}
 	if containerErr := g.checkContainers(); containerErr != nil {
 		log.Fatal(containerErr)
+	}
+	if linkErr := g.checkLinks(); linkErr != nil {
+		log.Fatal(linkErr)
 	}
 	for _, f := range g.found {
 		log.Print(f)
