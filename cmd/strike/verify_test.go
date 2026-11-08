@@ -290,11 +290,15 @@ func TestRunVerifySubjectMismatch(t *testing.T) {
 		issuer:       goldenIssuer,
 		trustRootRef: goldenTrustRootRef(t, host),
 	}
+	logBuf := captureLog(t)
 	if err := runVerify(context.Background(), &out, opts, noWait); err == nil {
 		t.Fatal("runVerify accepted a bundle whose subject is not the requested artifact")
 	}
 	if out.Len() != 0 {
 		t.Fatalf("a mismatched statement must not be written; got %q", out.String())
+	}
+	if !strings.Contains(logBuf.String(), "FAIL  sealed: statement subject is not the requested artifact") {
+		t.Fatalf("want a sealed subject-mismatch verdict, got: %q", logBuf.String())
 	}
 }
 
@@ -493,6 +497,9 @@ func TestRunVerifyMissingEngineDependent(t *testing.T) {
 	logBuf := captureLog(t)
 	if err := runVerify(context.Background(), io.Discard, base, noWait); err == nil {
 		t.Fatal("want error: an absent engine-dependent layer must gate without --no-engine-trust")
+	}
+	if !strings.Contains(logBuf.String(), "FAIL  engine-dependent: required statement is absent") {
+		t.Fatalf("want a gating engine-dependent absent verdict, got: %q", logBuf.String())
 	}
 
 	withFlag := base
