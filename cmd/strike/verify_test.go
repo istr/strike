@@ -231,8 +231,14 @@ func TestRunVerifyHappyPathUC1(t *testing.T) {
 		issuer:       goldenIssuer,
 		trustRootRef: goldenTrustRootRef(t, host),
 	}
+	logBuf := captureLog(t)
 	if err := runVerify(context.Background(), &out, opts, failOnWait(t)); err != nil {
 		t.Fatalf("runVerify: %v", err)
+	}
+	for _, layer := range []record.TrustLayer{record.TrustLayerSealed, record.TrustLayerEngineDependent, record.TrustLayerInformational} {
+		if !strings.Contains(logBuf.String(), "OK    "+string(layer)+"\n") {
+			t.Errorf("want an OK verdict for %s, got: %q", layer, logBuf.String())
+		}
 	}
 	// Each verified in-toto statement, not arbitrary text, reaches stdout, one
 	// per line; the first must name the requested artifact.
@@ -475,8 +481,14 @@ func TestRunVerifyUC2HappyPath(t *testing.T) {
 		laneFile:     filepath.Join("..", "..", "internal", "verify", "testdata", "golden", "lane.yaml"),
 		trustRootRef: goldenTrustRootRef(t, host),
 	}
+	logBuf := captureLog(t)
 	if err := runVerify(context.Background(), io.Discard, opts, failOnWait(t)); err != nil {
 		t.Fatalf("runVerify UC2: %v", err)
+	}
+	for _, layer := range []record.TrustLayer{record.TrustLayerSealed, record.TrustLayerEngineDependent, record.TrustLayerInformational} {
+		if !strings.Contains(logBuf.String(), "OK    "+string(layer)+"\n") {
+			t.Errorf("want an OK verdict for %s, got: %q", layer, logBuf.String())
+		}
 	}
 }
 
