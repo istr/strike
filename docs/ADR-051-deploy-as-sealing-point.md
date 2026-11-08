@@ -330,3 +330,37 @@ method's push destination, no target type beside the method enum, and no target
 namespace beside the kubernetes method namespace. The kubernetes dialed-target
 representation is unaffected -- it is the observed cluster peer -- and any
 refinement belongs to the kubernetes rewiring (cf. D9), not this amendment.
+
+## Amendment 2026-11-08 -- D4: the deploy confirms that the registry serves what it pushed
+
+D4 makes the control plane the pusher and the pushed registry digest the
+signed subject. A registry may acknowledge a write before every read path
+serves it. Microsoft documents eventual consistency for a geo-replicated
+Azure Container Registry and recommends a retry with backoff; on
+2026-10-31 a single-region Azure Container Registry served its referrers
+listing from a cache that a write invalidated, which Microsoft does not
+document. The OCI distribution specification promises no visibility after
+a write. A deploy that ends at its last acknowledged write can therefore
+report a subject a verifier does not find yet.
+
+After it attaches the statement bundles, the deploy confirms by
+read-after-write, through the push transport and under the declared
+credential, that the registry serves what the deploy pushed: the payload
+manifest and every referrer the deploy attached -- the SBOM documents of
+every artifact and the three statement bundles -- answer a manifest HEAD,
+and the filtered referrers listing of each attached artifact type holds
+every attached referrer of that type. A read that finds a manifest not
+served yet, a HEAD answering 404 or a referrer missing from its listing,
+is repeated after a wait that starts at one second and doubles, the waits
+adding up to sixty seconds at most. Any other failure ends the
+confirmation at once: a refusal, or a registry without the referrers API,
+is not a manifest served late. The wait is interruptible and handed to the
+confirmation, so a test hands in a wait that returns at once.
+
+A deploy that cannot confirm fails closed and names the registry, the
+subject and every digest not served. Nothing is rolled back: every write
+is by digest and untagged, and only the register commit makes a candidate
+a release (ADR-057). The confirmation shows what the read path the
+producer reaches serves; a verifier routed to another replica of a
+geo-replicated registry may still find less, which the publication model
+of ADR-058 D9 decides.
