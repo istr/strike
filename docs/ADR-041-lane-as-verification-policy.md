@@ -242,3 +242,39 @@ extensions -- must match the lane-declared identity tuple of ADR-057 D2,
 or the deploy aborts. The certificate is the observation, the declaration
 the expectation; a mismatch is caught at the producer rather than hours
 later at the verifier."
+
+## Amendment 2026-11-08 -- strike verify reads anonymously by default; a registry token is presented to its target only
+
+strike verify reads the subject's referrers, and a trust-root image when one
+is named, from a registry. By default, in UC1 and in UC2, it reads
+anonymously, through the system resolver and the system roots. This is the
+design, not a fallback. verify is the consumer's act, outside any lane run:
+the lane is its verification policy (decision 3), not a declaration of its
+network, and nothing about registry identity is declared for it. The
+resolver and the anchors a lane declares bound a lane run only
+([ADR-029](ADR-029-peers-are-container-egress.md) amendment 2026-11-06).
+What verify reads is trusted through the digest pins of the subject and the
+trust root and through the keyless verification of every bundle, never
+through the transport.
+
+A private repository is read under a registry token the invocation names,
+never one the lane names: `--registry-token` takes a source, `env://NAME`
+or `file://path`, and verify reads no lane secret. The token is checked
+before any use against the lifetime bound of
+[ADR-058](ADR-058-registry-client-identity-workload-token.md) D4, and in
+UC2 its audience must not contain the lane's oidc audience (ADR-058 D3). It
+is presented to one registry, the target, through the credential transport
+of the ADR-058 amendment of 2026-11-08, so any redirect of a request
+carrying it fails, and the subject must live on the target. The target's
+chain is verified against an anchor, still through the system resolver: in
+UC2 the anchor of the registry deploy `--deploy-step` selects, a flag that
+may be omitted when the lane has one registry deploy; in UC1 the root CA
+certificate `--registry-ca` names, one certificate that signed itself.
+Every other registry, a trust root on another host included, is read
+anonymously, as without a token.
+
+A registry may list a referrer late
+([ADR-051](ADR-051-deploy-as-sealing-point.md) amendment 2026-11-08).
+verify repeats its referrer read, with the backoff and the bound of the
+deploy's read-after-write, while a layer whose absence would fail the
+verdict is not listed, and never waits for a layer whose absence would not.
