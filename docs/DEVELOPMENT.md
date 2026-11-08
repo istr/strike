@@ -561,6 +561,12 @@ Format: `<type>(<optional scope>): <description>`
   disclose any other detail of the AI interaction: no session links or ids
   (e.g. a `Claude-Session:` trailer), no prompts, transcripts, or tool
   metadata.
+- Every commit is GPG-signed: the operator's global git configuration sets
+  `commit.gpgsign`, and the key lives on the host, reached from the
+  devcontainer through the forwarded gpg-agent socket. A commit from an
+  agent shell fails with `gpg: signing failed: Timeout` while the key is
+  locked; the agent stops and asks the operator to unlock it, then retries
+  the identical commit, and never commits with `--no-gpg-sign`.
 
 Examples:
 
