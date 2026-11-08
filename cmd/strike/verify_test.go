@@ -232,7 +232,7 @@ func TestRunVerifyHappyPathUC1(t *testing.T) {
 		trustRootRef: goldenTrustRootRef(t, host),
 	}
 	logBuf := captureLog(t)
-	if err := runVerify(context.Background(), &out, opts, failOnWait(t)); err != nil {
+	if err := runVerify(context.Background(), &out, opts, registry.SystemTransports{}, failOnWait(t)); err != nil {
 		t.Fatalf("runVerify: %v", err)
 	}
 	for _, layer := range []record.TrustLayer{record.TrustLayerSealed, record.TrustLayerEngineDependent, record.TrustLayerInformational} {
@@ -297,7 +297,7 @@ func TestRunVerifySubjectMismatch(t *testing.T) {
 		trustRootRef: goldenTrustRootRef(t, host),
 	}
 	logBuf := captureLog(t)
-	if err := runVerify(context.Background(), &out, opts, noWait); err == nil {
+	if err := runVerify(context.Background(), &out, opts, registry.SystemTransports{}, noWait); err == nil {
 		t.Fatal("runVerify accepted a bundle whose subject is not the requested artifact")
 	}
 	if out.Len() != 0 {
@@ -325,7 +325,7 @@ func TestRunVerifyModeValidation(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := runVerify(context.Background(), io.Discard, tt.opts, noWait)
+			err := runVerify(context.Background(), io.Discard, tt.opts, registry.SystemTransports{}, noWait)
 			if err == nil {
 				t.Fatal("want an error, got nil")
 			}
@@ -344,7 +344,7 @@ func TestRunVerifyNoTrustRoot(t *testing.T) {
 		identity:   goldenIdentity,
 		issuer:     goldenIssuer,
 	}
-	if err := runVerify(context.Background(), io.Discard, opts, noWait); !errors.Is(err, verify.ErrNoTrustRoot) {
+	if err := runVerify(context.Background(), io.Discard, opts, registry.SystemTransports{}, noWait); !errors.Is(err, verify.ErrNoTrustRoot) {
 		t.Fatalf("err = %v, want ErrNoTrustRoot", err)
 	}
 }
@@ -359,7 +359,7 @@ func TestRunVerifyNoBundles(t *testing.T) {
 		issuer:       goldenIssuer,
 		trustRootRef: goldenTrustRootRef(t, host),
 	}
-	err := runVerify(context.Background(), io.Discard, opts, noWait)
+	err := runVerify(context.Background(), io.Discard, opts, registry.SystemTransports{}, noWait)
 	if err == nil || !strings.Contains(err.Error(), "no attestation bundles") {
 		t.Fatalf("err = %v, want a no-bundles error", err)
 	}
@@ -376,7 +376,7 @@ func TestRunVerifyRejectsNonSha256Subject(t *testing.T) {
 		issuer:       goldenIssuer,
 		trustRootRef: goldenTrustRootRef(t, host),
 	}
-	err := runVerify(context.Background(), io.Discard, opts, noWait)
+	err := runVerify(context.Background(), io.Discard, opts, registry.SystemTransports{}, noWait)
 	if err == nil || !strings.Contains(err.Error(), "subject digest:") {
 		t.Fatalf("err = %v, want a subject digest error", err)
 	}
@@ -482,7 +482,7 @@ func TestRunVerifyUC2HappyPath(t *testing.T) {
 		trustRootRef: goldenTrustRootRef(t, host),
 	}
 	logBuf := captureLog(t)
-	if err := runVerify(context.Background(), io.Discard, opts, failOnWait(t)); err != nil {
+	if err := runVerify(context.Background(), io.Discard, opts, registry.SystemTransports{}, failOnWait(t)); err != nil {
 		t.Fatalf("runVerify UC2: %v", err)
 	}
 	for _, layer := range []record.TrustLayer{record.TrustLayerSealed, record.TrustLayerEngineDependent, record.TrustLayerInformational} {
@@ -507,7 +507,7 @@ func TestRunVerifyMissingEngineDependent(t *testing.T) {
 		trustRootRef: goldenTrustRootRef(t, host),
 	}
 	logBuf := captureLog(t)
-	if err := runVerify(context.Background(), io.Discard, base, noWait); err == nil {
+	if err := runVerify(context.Background(), io.Discard, base, registry.SystemTransports{}, noWait); err == nil {
 		t.Fatal("want error: an absent engine-dependent layer must gate without --no-engine-trust")
 	}
 	if !strings.Contains(logBuf.String(), "FAIL  engine-dependent: required statement is absent") {
@@ -516,7 +516,7 @@ func TestRunVerifyMissingEngineDependent(t *testing.T) {
 
 	withFlag := base
 	withFlag.noEngineTrust = true
-	if err := runVerify(context.Background(), io.Discard, withFlag, failOnWait(t)); err != nil {
+	if err := runVerify(context.Background(), io.Discard, withFlag, registry.SystemTransports{}, failOnWait(t)); err != nil {
 		t.Fatalf("runVerify --no-engine-trust: %v", err)
 	}
 	if !strings.Contains(logBuf.String(), "engine-dependent: absent") {
@@ -539,7 +539,7 @@ func TestRunVerifyMissingInformational(t *testing.T) {
 		issuer:       goldenIssuer,
 		trustRootRef: goldenTrustRootRef(t, host),
 	}
-	if err := runVerify(context.Background(), io.Discard, opts, failOnWait(t)); err != nil {
+	if err := runVerify(context.Background(), io.Discard, opts, registry.SystemTransports{}, failOnWait(t)); err != nil {
 		t.Fatalf("runVerify: %v", err)
 	}
 	if !strings.Contains(logBuf.String(), "informational: absent") {

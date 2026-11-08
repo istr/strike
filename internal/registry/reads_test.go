@@ -2,6 +2,7 @@ package registry_test
 
 import (
 	"context"
+	"crypto/x509"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -336,13 +337,42 @@ func TestReadsDeployTargetCarriesCredential(t *testing.T) {
 }
 
 // TestSystemTransports pins that strike verify reads through
-// go-containerregistry's default transport.
+// go-containerregistry's default transport, and that roots a test hands in
+// replace the system roots: a chain to them verifies, and with the system
+// roots the same server is refused.
 func TestSystemTransports(t *testing.T) {
-	rt, err := registry.SystemTransports{}.Transport(primitive.NewImageRef("images.example.com/x@sha256:" + strings.Repeat("ab", 32)))
+	ref := primitive.NewImageRef("images.example.com/x@sha256:" + strings.Repeat("ab", 32))
+	rt, err := registry.SystemTransports{}.Transport(ref)
 	if err != nil {
 		t.Fatalf("Transport: %v", err)
 	}
 	if rt != remote.DefaultTransport {
 		t.Errorf("Transport = %v, want remote.DefaultTransport", rt)
+	}
+
+	srv := httptest.NewTLSServer(http.NotFoundHandler())
+	t.Cleanup(srv.Close)
+	roots := x509.NewCertPool()
+	roots.AddCert(srv.Certificate())
+	get := func(rt http.RoundTripper) error {
+		req, reqErr := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL+"/v2/", http.NoBody)
+		if reqErr != nil {
+			t.Fatalf("request: %v", reqErr)
+		}
+		resp, rtErr := rt.RoundTrip(req)
+		if rtErr != nil {
+			return rtErr
+		}
+		return resp.Body.Close()
+	}
+	pinned, err := registry.SystemTransports{Roots: roots}.Transport(ref)
+	if err != nil {
+		t.Fatalf("Transport with roots: %v", err)
+	}
+	if getErr := get(pinned); getErr != nil {
+		t.Errorf("read under the handed-in roots: %v", getErr)
+	}
+	if getErr := get(remote.DefaultTransport); getErr == nil {
+		t.Error("the system roots accepted the test server's self-signed chain")
 	}
 }

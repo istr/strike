@@ -8,6 +8,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -62,6 +63,13 @@ const (
 	// itestFulcioURL is the harness Fulcio behind Caddy, the source of the
 	// certificate chain in the published trusted root.
 	itestFulcioURL = "https://fulcio.127.0.0.1.sslip.io:5555"
+	// itestIdentity is the fixture lane's oidc identity, the harness builder's,
+	// which UC1 names explicitly.
+	itestIdentity = "https://forge.strike.localhost/istr/strike/bootstrap/lane.cue@refs/heads/main"
+	// itestPublicPrefix is the harness repository prefix that admits anonymous
+	// reads (test/sigstore-local/zot/config.json); the public copy of a
+	// deployment keeps its repository names under it.
+	itestPublicPrefix = "public/"
 	// itestTrustRootRepo is the harness repository the trusted-root image is
 	// published to. The name is fixed: the image is content-addressed and
 	// written by digest without a tag, so a republication of the same
@@ -220,15 +228,15 @@ func TestRegistryDeployLive_Integration(t *testing.T) {
 
 	subject := pushedSubjectDigest(ctx, t, engine, rc)
 
-	// The harness repositories are private (ADR-058 D6): an anonymous read
-	// of the pushed subject is refused, and every read-back presents the
-	// registry token the run was given.
+	// The harness repositories outside the public prefix are private
+	// (ADR-058 D6): an anonymous read of the pushed subject is refused, and
+	// every read-back presents the registry token the run was given.
 	pushed, pushedErr := name.NewDigest(itestRegistryHost + "/" + repo + "@" + subject.String())
 	if pushedErr != nil {
 		t.Fatalf("subject reference: %v", pushedErr)
 	}
 	if _, anonErr := remote.Head(pushed, remote.WithTransport(itestTransport(t, caddyRoot)), remote.WithContext(ctx)); anonErr == nil {
-		t.Errorf("anonymous read of %s succeeded; no harness repository admits anonymous access", pushed)
+		t.Errorf("anonymous read of %s succeeded; only repositories under %s admit anonymous reads", pushed, itestPublicPrefix)
 	}
 	auth := &authn.Bearer{Token: registryToken}
 
@@ -239,17 +247,38 @@ func TestRegistryDeployLive_Integration(t *testing.T) {
 
 	trustRoot, trustDoc := publishHarnessTrustRoot(ctx, t, harness, caddyRoot, auth)
 	assertTrustRootReadable(ctx, t, caddyRoot, trustRoot, trustDoc, auth)
-	assertVerifies(ctx, t, lanePath, pushed, trustRoot)
+	anonymous := registry.SystemTransports{Roots: harnessRoots(t, caddyRoot)}
+	assertVerifies(ctx, t, lanePath, pushed, trustRoot, anonymous)
+	publicSubject, publicTrustRoot := copyToPublic(ctx, t, caddyRoot, repo, subject, descs, trustRoot, auth)
+	assertVerifiesAnonymously(ctx, t, lanePath, publicSubject, publicTrustRoot, anonymous)
+}
+
+// harnessRoots is the pool of the harness's Caddy root, which every harness
+// endpoint chains to. A test hands it to strike verify's anonymous reads,
+// because the root is in no system store.
+func harnessRoots(t *testing.T, caddyRoot string) *x509.CertPool {
+	t.Helper()
+	trust, err := testutil.CertificateFromPEMFile(caddyRoot)
+	if err != nil {
+		t.Fatalf("harness root anchor: %v", err)
+	}
+	cert, err := trust.Parse()
+	if err != nil {
+		t.Fatalf("harness root certificate: %v", err)
+	}
+	pool := x509.NewCertPool()
+	pool.AddCert(cert)
+	return pool
 }
 
 // assertVerifies runs strike verify in UC2 against the deployment (ADR-041
 // amendment 2026-11-08). Under the registry token it reads the private
 // repository pinned to the deploy target's anchor, and the published trust
 // root on the same registry under the same token, and every layer verifies.
-// Without the token it reads anonymously, the default, and the private
-// registry refuses it. The harness registry serves every write at once, so
-// the read does not wait.
-func assertVerifies(ctx context.Context, t *testing.T, lanePath string, subject, trustRoot name.Digest) {
+// Without the token it reads anonymously, the default, over TLS under the
+// harness root, and the private registry refuses it. The harness registry
+// serves every write at once, so the read does not wait.
+func assertVerifies(ctx context.Context, t *testing.T, lanePath string, subject, trustRoot name.Digest, anonymous registry.SystemTransports) {
 	t.Helper()
 	source := "env://REGISTRY_ID_TOKEN"
 	opts := verifyOptions{
@@ -259,7 +288,7 @@ func assertVerifies(ctx context.Context, t *testing.T, lanePath string, subject,
 		registryToken: source,
 	}
 	logBuf := captureLog(t)
-	if err := runVerify(ctx, io.Discard, opts, failOnWait(t)); err != nil {
+	if err := runVerify(ctx, io.Discard, opts, anonymous, failOnWait(t)); err != nil {
 		t.Fatalf("verify under the registry token: %v\n%s", err, logBuf.String())
 	}
 	for _, layer := range []string{"sealed", "engine-dependent", "informational"} {
@@ -267,10 +296,73 @@ func assertVerifies(ctx context.Context, t *testing.T, lanePath string, subject,
 			t.Errorf("want an OK verdict for %s, got: %q", layer, logBuf.String())
 		}
 	}
-	anonymous := opts
-	anonymous.registryToken = ""
-	if err := runVerify(ctx, io.Discard, anonymous, failOnWait(t)); err == nil {
+	withoutToken := opts
+	withoutToken.registryToken = ""
+	err := runVerify(ctx, io.Discard, withoutToken, anonymous, failOnWait(t))
+	switch {
+	case err == nil:
 		t.Error("an anonymous verify read the private harness registry")
+	case strings.Contains(err.Error(), "x509:"):
+		t.Errorf("the anonymous verify failed on TLS, not on the private registry: %v", err)
+	}
+}
+
+// copyToPublic copies the deployed subject, every referrer it carries and the
+// published trust root by digest from their private harness repositories to
+// the same names under the public prefix, under the registry token, and
+// returns the public subject and trust-root references.
+func copyToPublic(ctx context.Context, t *testing.T, caddyRoot, repo string, subject v1.Hash, referrers []v1.Descriptor, trustRoot name.Digest, auth authn.Authenticator) (publicSubject, publicTrustRoot name.Digest) {
+	t.Helper()
+	opts := []remote.Option{remote.WithTransport(itestTransport(t, caddyRoot)), remote.WithAuth(auth), remote.WithContext(ctx)}
+	copyImage := func(fromRepo, digest string) name.Digest {
+		from, err := name.NewDigest(itestRegistryHost + "/" + fromRepo + "@" + digest)
+		if err != nil {
+			t.Fatalf("source reference: %v", err)
+		}
+		to, err := name.NewDigest(itestRegistryHost + "/" + itestPublicPrefix + fromRepo + "@" + digest)
+		if err != nil {
+			t.Fatalf("public reference: %v", err)
+		}
+		img, err := remote.Image(from, opts...)
+		if err != nil {
+			t.Fatalf("read %s: %v", from, err)
+		}
+		if writeErr := remote.Write(to, img, append(opts, remote.WithReferrersTagFallback(false))...); writeErr != nil {
+			t.Fatalf("copy %s to %s: %v", from, to, writeErr)
+		}
+		return to
+	}
+	publicSubject = copyImage(repo, subject.String())
+	for _, d := range referrers {
+		copyImage(repo, d.Digest.String())
+	}
+	return publicSubject, copyImage(trustRoot.Context().RepositoryStr(), trustRoot.DigestStr())
+}
+
+// assertVerifiesAnonymously runs strike verify with no registry token
+// against the public copy of the deployment (ADR-041 amendment 2026-11-08):
+// in UC2 with the fixture lane as the policy, and in UC1 with the fixture
+// lane's identity and issuer given explicitly. Both read anonymously over
+// TLS under the harness root, and every layer verifies without a wait.
+func assertVerifiesAnonymously(ctx context.Context, t *testing.T, lanePath string, subject, trustRoot name.Digest, anonymous registry.SystemTransports) {
+	t.Helper()
+	cases := []struct {
+		name string
+		opts verifyOptions
+	}{
+		{name: "UC2", opts: verifyOptions{subjectRef: subject.String(), laneFile: lanePath, trustRootRef: trustRoot.String()}},
+		{name: "UC1", opts: verifyOptions{subjectRef: subject.String(), identity: itestIdentity, issuer: itestIssuer, trustRootRef: trustRoot.String()}},
+	}
+	for _, c := range cases {
+		logBuf := captureLog(t)
+		if err := runVerify(ctx, io.Discard, c.opts, anonymous, failOnWait(t)); err != nil {
+			t.Fatalf("%s: anonymous verify of the public copy: %v\n%s", c.name, err, logBuf.String())
+		}
+		for _, layer := range []string{"sealed", "engine-dependent", "informational"} {
+			if !strings.Contains(logBuf.String(), "OK    "+layer+"\n") {
+				t.Errorf("%s: want an OK verdict for %s, got: %q", c.name, layer, logBuf.String())
+			}
+		}
 	}
 }
 

@@ -6,7 +6,6 @@ import (
 	"net/http"
 
 	"github.com/google/go-containerregistry/pkg/name"
-	"github.com/google/go-containerregistry/pkg/v1/remote"
 
 	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/lane"
@@ -56,23 +55,24 @@ func (t credentialTransport) RoundTrip(req *http.Request) (*http.Response, error
 // authority resolves through the system resolver, verifies the presented
 // chain against the declared anchor, and carries the registry token through
 // CredentialTransport, so any redirect of it fails. A read of any other
-// registry, a trust root elsewhere included, is anonymous through the system
-// resolver and roots, as every read of verify is without a credential.
+// registry, a trust root elsewhere included, goes through anonymous, the
+// transports every read of verify goes through without a credential.
 type TargetTransports struct {
 	config    *tls.Config
+	anonymous SystemTransports
 	token     lane.SecretString
 	authority string
 }
 
 // NewTargetTransports returns the TargetTransports of a registry token for
 // the registry at authority, its written authority, that presents a chain
-// anchor verifies.
-func NewTargetTransports(authority string, anchor endpoint.Certificate, token lane.SecretString) (TargetTransports, error) {
+// anchor verifies; every other registry is read through anonymous.
+func NewTargetTransports(authority string, anchor endpoint.Certificate, token lane.SecretString, anonymous SystemTransports) (TargetTransports, error) {
 	config, err := transport.BuildTLSConfig(anchor)
 	if err != nil {
 		return TargetTransports{}, fmt.Errorf("registry %s: %w", authority, err)
 	}
-	return TargetTransports{config: config, token: token, authority: authority}, nil
+	return TargetTransports{config: config, anonymous: anonymous, token: token, authority: authority}, nil
 }
 
 // Transport implements Transports.
@@ -83,7 +83,7 @@ func (t TargetTransports) Transport(ref primitive.ImageRef) (http.RoundTripper, 
 		return nil, fmt.Errorf("registry read %s: %w", ref, err)
 	}
 	if nameRef.Context().RegistryStr() != t.authority {
-		return remote.DefaultTransport, nil
+		return t.anonymous.Transport(ref)
 	}
 	base := &http.Transport{Proxy: http.ProxyFromEnvironment, TLSClientConfig: t.config}
 	return transport.HTTPSOnly(CredentialTransport(base, t.authority, t.token)), nil

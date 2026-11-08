@@ -169,7 +169,7 @@ func TestVerifyTransports(t *testing.T) {
 				}
 				p = parsed
 			}
-			src, err := verifyTransports(tt.opts, p)
+			src, err := verifyTransports(tt.opts, p, registry.SystemTransports{})
 			if len(tt.wantErr) > 0 {
 				if err == nil {
 					t.Fatal("want an error, got nil")
@@ -245,7 +245,7 @@ func TestRunVerifyUC1RegistryToken(t *testing.T) {
 		registryCA:    writeFile(t, dir, "root.pem", certPEM(srv.Certificate())),
 	}
 	logBuf := captureLog(t)
-	if runErr := runVerify(context.Background(), io.Discard, opts, failOnWait(t)); runErr != nil {
+	if runErr := runVerify(context.Background(), io.Discard, opts, registry.SystemTransports{}, failOnWait(t)); runErr != nil {
 		t.Fatalf("runVerify under the registry token: %v", runErr)
 	}
 	for _, layer := range layers {
@@ -260,7 +260,7 @@ func TestRunVerifyUC1RegistryToken(t *testing.T) {
 	}
 	wrong := opts
 	wrong.registryCA = writeFile(t, dir, "other-root.pem", certPEM(anchor))
-	if err := runVerify(context.Background(), io.Discard, wrong, failOnWait(t)); err == nil {
+	if err := runVerify(context.Background(), io.Discard, wrong, registry.SystemTransports{}, failOnWait(t)); err == nil {
 		t.Error("runVerify read a registry that does not chain to the declared root")
 	}
 }

@@ -2,6 +2,8 @@ package registry
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"net"
@@ -26,14 +28,27 @@ type Transports interface {
 	Transport(ref primitive.ImageRef) (http.RoundTripper, error)
 }
 
-// SystemTransports reads through go-containerregistry's default transport:
-// the system resolver and the system roots. strike verify reads with it; a
-// lane run never does (ADR-029 amendment 2026-11-06).
-type SystemTransports struct{}
+// SystemTransports reads anonymously through the system resolver. With Roots
+// nil it reads through go-containerregistry's default transport and the
+// system roots, which is how strike verify reads without a registry token;
+// a lane run never does (ADR-029 amendment 2026-11-06, ADR-041 amendment
+// 2026-11-08). Roots, when set, replaces the system roots as the roots every
+// chain is verified against. Production leaves it nil; a test sets it to a
+// local CA its registry chains to, so the anonymous path runs over TLS
+// without that CA in the system store.
+type SystemTransports struct {
+	Roots *x509.CertPool
+}
 
 // Transport implements Transports.
-func (SystemTransports) Transport(primitive.ImageRef) (http.RoundTripper, error) {
-	return remote.DefaultTransport, nil
+func (s SystemTransports) Transport(primitive.ImageRef) (http.RoundTripper, error) {
+	if s.Roots == nil {
+		return remote.DefaultTransport, nil
+	}
+	return &http.Transport{
+		Proxy:           http.ProxyFromEnvironment,
+		TLSClientConfig: &tls.Config{RootCAs: s.Roots, MinVersion: tls.VersionTLS12},
+	}, nil
 }
 
 // Reads is the registry read capability of one lane run (ADR-029 amendment

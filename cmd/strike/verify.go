@@ -61,7 +61,7 @@ func cmdVerify(args []string) {
 		log.Fatal("usage: strike verify [--lane file | --identity id --issuer iss] [--trust-root-ref root-image@digest] [--registry-token env://NAME|file://path [--deploy-step id | --registry-ca file://root.pem]] <image@digest>")
 	}
 	opts.subjectRef = rest[0]
-	if err := runVerify(context.Background(), fatalWriter{os.Stdout}, opts, clock.Wait); err != nil {
+	if err := runVerify(context.Background(), fatalWriter{os.Stdout}, opts, registry.SystemTransports{}, clock.Wait); err != nil {
 		log.Fatalf("error: %v", err)
 	}
 }
@@ -121,14 +121,14 @@ func resolveVerifyPolicy(opts verifyOptions) (verifyPolicy, error) {
 // without one they are refused. With a token, the token is checked and
 // presented to the target authority only, whose chain is verified against
 // the target's anchor (registryTarget); the subject must live there. Every
-// other registry, a trust root elsewhere included, is still read
-// anonymously.
-func verifyTransports(opts verifyOptions, p *lane.Lane) (registry.Transports, error) {
+// other registry, a trust root elsewhere included, is still read through
+// anonymous.
+func verifyTransports(opts verifyOptions, p *lane.Lane, anonymous registry.SystemTransports) (registry.Transports, error) {
 	if opts.registryToken == "" {
 		if opts.deployStep != "" || opts.registryCA != "" {
 			return nil, errors.New("--deploy-step and --registry-ca say where a registry token is presented and need --registry-token; without it verify reads anonymously, which is the expected default")
 		}
-		return registry.SystemTransports{}, nil
+		return anonymous, nil
 	}
 	subject, err := name.NewDigest(opts.subjectRef)
 	if err != nil {
@@ -149,7 +149,7 @@ func verifyTransports(opts verifyOptions, p *lane.Lane) (registry.Transports, er
 	if checkErr := deploy.CheckRegistryToken(token, audience); checkErr != nil {
 		return nil, fmt.Errorf("--registry-token: %w", checkErr)
 	}
-	src, err := registry.NewTargetTransports(authority, anchor, token)
+	src, err := registry.NewTargetTransports(authority, anchor, token, anonymous)
 	if err != nil {
 		return nil, err
 	}
@@ -373,16 +373,18 @@ func validateSealed(statement []byte, laneDigest primitive.Digest) error {
 // model: a sealed-layer failure or absence is a hard fail with no opt-out; an
 // engine-dependent-layer failure or absence is a hard fail unless
 // --no-engine-trust degrades it to informational; the informational layer
-// never gates. Every read goes through verifyTransports: anonymous unless a
-// registry token is given. The read waits, through wait, for a layer whose
-// absence would fail the verdict and never for one whose absence would not
-// (ADR-051 amendment 2026-11-08). Verified statements are written to out.
-func runVerify(ctx context.Context, out io.Writer, opts verifyOptions, wait func(context.Context, clock.Duration) error) error {
+// never gates. Every read goes through verifyTransports: through anonymous
+// unless a registry token is given. cmdVerify hands the zero
+// SystemTransports, the system roots; a test hands roots of its own. The
+// read waits, through wait, for a layer whose absence would fail the verdict
+// and never for one whose absence would not (ADR-051 amendment 2026-11-08).
+// Verified statements are written to out.
+func runVerify(ctx context.Context, out io.Writer, opts verifyOptions, anonymous registry.SystemTransports, wait func(context.Context, clock.Duration) error) error {
 	pol, err := resolveVerifyPolicy(opts)
 	if err != nil {
 		return err
 	}
-	src, err := verifyTransports(opts, pol.policyLane)
+	src, err := verifyTransports(opts, pol.policyLane, anonymous)
 	if err != nil {
 		return err
 	}

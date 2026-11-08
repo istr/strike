@@ -123,7 +123,7 @@ func TestTargetTransports(t *testing.T) {
 		return resp.Body.Close()
 	}
 
-	pinned, err := registry.NewTargetTransports(host, endpoint.CertificateFromDER(srv.Certificate().Raw, endpoint.CertificateModeRootca), secret)
+	pinned, err := registry.NewTargetTransports(host, endpoint.CertificateFromDER(srv.Certificate().Raw, endpoint.CertificateModeRootca), secret, registry.SystemTransports{})
 	if err != nil {
 		t.Fatalf("NewTargetTransports: %v", err)
 	}
@@ -141,7 +141,7 @@ func TestTargetTransports(t *testing.T) {
 	if err != nil {
 		t.Fatalf("fixture anchor: %v", err)
 	}
-	wrong, err := registry.NewTargetTransports(host, endpoint.CertificateFromDER(anchor.Raw, endpoint.CertificateModeLeaf), secret)
+	wrong, err := registry.NewTargetTransports(host, endpoint.CertificateFromDER(anchor.Raw, endpoint.CertificateModeLeaf), secret, registry.SystemTransports{})
 	if err != nil {
 		t.Fatalf("NewTargetTransports: %v", err)
 	}
@@ -159,7 +159,7 @@ func TestTargetTransports(t *testing.T) {
 	if _, err := pinned.Transport(primitive.NewImageRef("Not A Reference")); err == nil {
 		t.Error("Transport accepted a malformed reference")
 	}
-	if _, err := registry.NewTargetTransports(host, endpoint.Certificate{Cert: endpoint.CertificateFromDER(srv.Certificate().Raw, endpoint.CertificateModeRootca).Cert}, secret); err == nil {
+	if _, err := registry.NewTargetTransports(host, endpoint.Certificate{Cert: endpoint.CertificateFromDER(srv.Certificate().Raw, endpoint.CertificateModeRootca).Cert}, secret, registry.SystemTransports{}); err == nil {
 		t.Error("NewTargetTransports accepted an anchor of no known mode")
 	}
 }
