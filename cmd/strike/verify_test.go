@@ -23,6 +23,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/static"
 	"github.com/google/go-containerregistry/pkg/v1/types"
 
+	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/record"
@@ -167,6 +168,20 @@ func captureLog(t *testing.T) *bytes.Buffer {
 	return buf
 }
 
+// noWait is the wait a test hands runVerify when a required layer may be
+// absent: it returns at once, so the read is repeated without waiting.
+func noWait(context.Context, clock.Duration) error { return nil }
+
+// failOnWait is the wait of a verification that must not wait, because every
+// required layer is attached: it fails the test when it is asked to wait.
+func failOnWait(t *testing.T) func(context.Context, clock.Duration) error {
+	t.Helper()
+	return func(context.Context, clock.Duration) error {
+		t.Error("runVerify waited, want no wait")
+		return nil
+	}
+}
+
 // pushSubject pushes a minimal OCI image to ref and returns its descriptor,
 // mirroring internal/registry's referrer_test helper.
 func pushSubject(t *testing.T, ref string) v1.Descriptor {
@@ -216,7 +231,7 @@ func TestRunVerifyHappyPathUC1(t *testing.T) {
 		issuer:       goldenIssuer,
 		trustRootRef: goldenTrustRootRef(t, host),
 	}
-	if err := runVerify(context.Background(), &out, opts); err != nil {
+	if err := runVerify(context.Background(), &out, opts, failOnWait(t)); err != nil {
 		t.Fatalf("runVerify: %v", err)
 	}
 	// Each verified in-toto statement, not arbitrary text, reaches stdout, one
@@ -275,7 +290,7 @@ func TestRunVerifySubjectMismatch(t *testing.T) {
 		issuer:       goldenIssuer,
 		trustRootRef: goldenTrustRootRef(t, host),
 	}
-	if err := runVerify(context.Background(), &out, opts); err == nil {
+	if err := runVerify(context.Background(), &out, opts, noWait); err == nil {
 		t.Fatal("runVerify accepted a bundle whose subject is not the requested artifact")
 	}
 	if out.Len() != 0 {
@@ -300,7 +315,7 @@ func TestRunVerifyModeValidation(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := runVerify(context.Background(), io.Discard, tt.opts)
+			err := runVerify(context.Background(), io.Discard, tt.opts, noWait)
 			if err == nil {
 				t.Fatal("want an error, got nil")
 			}
@@ -319,7 +334,7 @@ func TestRunVerifyNoTrustRoot(t *testing.T) {
 		identity:   goldenIdentity,
 		issuer:     goldenIssuer,
 	}
-	if err := runVerify(context.Background(), io.Discard, opts); !errors.Is(err, verify.ErrNoTrustRoot) {
+	if err := runVerify(context.Background(), io.Discard, opts, noWait); !errors.Is(err, verify.ErrNoTrustRoot) {
 		t.Fatalf("err = %v, want ErrNoTrustRoot", err)
 	}
 }
@@ -334,7 +349,7 @@ func TestRunVerifyNoBundles(t *testing.T) {
 		issuer:       goldenIssuer,
 		trustRootRef: goldenTrustRootRef(t, host),
 	}
-	err := runVerify(context.Background(), io.Discard, opts)
+	err := runVerify(context.Background(), io.Discard, opts, noWait)
 	if err == nil || !strings.Contains(err.Error(), "no attestation bundles") {
 		t.Fatalf("err = %v, want a no-bundles error", err)
 	}
@@ -351,7 +366,7 @@ func TestRunVerifyRejectsNonSha256Subject(t *testing.T) {
 		issuer:       goldenIssuer,
 		trustRootRef: goldenTrustRootRef(t, host),
 	}
-	err := runVerify(context.Background(), io.Discard, opts)
+	err := runVerify(context.Background(), io.Discard, opts, noWait)
 	if err == nil || !strings.Contains(err.Error(), "subject digest:") {
 		t.Fatalf("err = %v, want a subject digest error", err)
 	}
@@ -456,13 +471,14 @@ func TestRunVerifyUC2HappyPath(t *testing.T) {
 		laneFile:     filepath.Join("..", "..", "internal", "verify", "testdata", "golden", "lane.yaml"),
 		trustRootRef: goldenTrustRootRef(t, host),
 	}
-	if err := runVerify(context.Background(), io.Discard, opts); err != nil {
+	if err := runVerify(context.Background(), io.Discard, opts, failOnWait(t)); err != nil {
 		t.Fatalf("runVerify UC2: %v", err)
 	}
 }
 
 // TestRunVerifyMissingEngineDependent: an absent engine-dependent layer gates
-// without the flag, and is a non-gating "absent" diagnostic with it.
+// without the flag, and is a non-gating "absent" diagnostic with it, which
+// the read does not wait for.
 func TestRunVerifyMissingEngineDependent(t *testing.T) {
 	subjectHex := goldenSubjectHex(t, goldenFile(t, "sealed.sigstore.json"))
 	host := localRegistry(t)
@@ -474,14 +490,14 @@ func TestRunVerifyMissingEngineDependent(t *testing.T) {
 		issuer:       goldenIssuer,
 		trustRootRef: goldenTrustRootRef(t, host),
 	}
-	if err := runVerify(context.Background(), io.Discard, base); err == nil {
+	if err := runVerify(context.Background(), io.Discard, base, noWait); err == nil {
 		t.Fatal("want error: an absent engine-dependent layer must gate without --no-engine-trust")
 	}
 
 	logBuf := captureLog(t)
 	withFlag := base
 	withFlag.noEngineTrust = true
-	if err := runVerify(context.Background(), io.Discard, withFlag); err != nil {
+	if err := runVerify(context.Background(), io.Discard, withFlag, failOnWait(t)); err != nil {
 		t.Fatalf("runVerify --no-engine-trust: %v", err)
 	}
 	if !strings.Contains(logBuf.String(), "engine-dependent: absent") {
@@ -490,7 +506,8 @@ func TestRunVerifyMissingEngineDependent(t *testing.T) {
 }
 
 // TestRunVerifyMissingInformational: an absent informational layer never gates;
-// it is reported and the verify still succeeds.
+// it is reported, the read does not wait for it, and the verify still
+// succeeds.
 func TestRunVerifyMissingInformational(t *testing.T) {
 	subjectHex := goldenSubjectHex(t, goldenFile(t, "sealed.sigstore.json"))
 	host := localRegistry(t)
@@ -503,7 +520,7 @@ func TestRunVerifyMissingInformational(t *testing.T) {
 		issuer:       goldenIssuer,
 		trustRootRef: goldenTrustRootRef(t, host),
 	}
-	if err := runVerify(context.Background(), io.Discard, opts); err != nil {
+	if err := runVerify(context.Background(), io.Discard, opts, failOnWait(t)); err != nil {
 		t.Fatalf("runVerify: %v", err)
 	}
 	if !strings.Contains(logBuf.String(), "informational: absent") {

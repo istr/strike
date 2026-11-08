@@ -18,6 +18,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/static"
 	"github.com/google/go-containerregistry/pkg/v1/types"
 
+	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/record"
 	"github.com/istr/strike/internal/registry"
@@ -37,6 +38,16 @@ func localRegistry(t *testing.T, referrersAPI bool) string {
 		t.Fatalf("parse server url: %v", err)
 	}
 	return "localhost:" + u.Port()
+}
+
+// mustNotWait is the wait of a read that finds every required layer at once:
+// it fails the test when it is asked to wait.
+func mustNotWait(t *testing.T) func(context.Context, clock.Duration) error {
+	t.Helper()
+	return func(context.Context, clock.Duration) error {
+		t.Error("the read waited, want every required layer at once")
+		return nil
+	}
 }
 
 // pushSubject pushes a minimal OCI image to ref and returns its descriptor.
@@ -203,7 +214,8 @@ func TestAttachStatementBundlesRefusesTagFallback(t *testing.T) {
 }
 
 // TestFetchStatementBundles attaches the three statement bundles and reads
-// them back through the artifactType-filtered referrers listing.
+// them back through the artifactType-filtered referrers listing; the two
+// required layers are listed at once, so the read does not wait.
 func TestFetchStatementBundles(t *testing.T) {
 	host := localRegistry(t, true)
 	target := host + "/app:v1"
@@ -219,7 +231,8 @@ func TestFetchStatementBundles(t *testing.T) {
 	}
 
 	subjectDigestRef := host + "/app@" + subject.Digest.String()
-	got, err := registry.FetchStatementBundles(context.Background(), subjectDigestRef)
+	got, err := registry.FetchStatementBundles(context.Background(), subjectDigestRef, registry.SystemTransports{},
+		[]record.TrustLayer{record.TrustLayerSealed, record.TrustLayerEngineDependent}, mustNotWait(t))
 	if err != nil {
 		t.Fatalf("FetchStatementBundles: %v", err)
 	}
@@ -248,7 +261,7 @@ func TestFetchStatementBundles(t *testing.T) {
 func TestFetchStatementBundlesRefusesTagFallback(t *testing.T) {
 	host := localRegistry(t, false)
 	subject := pushSubject(t, host+"/app:v1")
-	_, err := registry.FetchStatementBundles(context.Background(), host+"/app@"+subject.Digest.String())
+	_, err := registry.FetchStatementBundles(context.Background(), host+"/app@"+subject.Digest.String(), registry.SystemTransports{}, nil, mustNotWait(t))
 	if err == nil {
 		t.Fatal("FetchStatementBundles succeeded without the referrers API, want error")
 	}
@@ -261,7 +274,7 @@ func TestFetchStatementBundlesRefusesTagFallback(t *testing.T) {
 
 func TestFetchStatementBundlesRejectsTag(t *testing.T) {
 	host := localRegistry(t, true)
-	if _, err := registry.FetchStatementBundles(context.Background(), host+"/app:v1"); err == nil {
+	if _, err := registry.FetchStatementBundles(context.Background(), host+"/app:v1", registry.SystemTransports{}, nil, mustNotWait(t)); err == nil {
 		t.Fatal("FetchStatementBundles accepted a tag reference, want error")
 	}
 }
@@ -270,7 +283,7 @@ func TestFetchStatementBundlesNoReferrers(t *testing.T) {
 	host := localRegistry(t, true)
 	target := host + "/app:v1"
 	subject := pushSubject(t, target)
-	got, err := registry.FetchStatementBundles(context.Background(), host+"/app@"+subject.Digest.String())
+	got, err := registry.FetchStatementBundles(context.Background(), host+"/app@"+subject.Digest.String(), registry.SystemTransports{}, nil, mustNotWait(t))
 	if err != nil {
 		t.Fatalf("FetchStatementBundles: %v", err)
 	}
@@ -292,7 +305,7 @@ func TestFetchStatementBundlesSkipsUnknownLayer(t *testing.T) {
 	if _, err := registry.AttachStatementBundles(context.Background(), target, subject, bundles); err != nil {
 		t.Fatalf("AttachStatementBundles: %v", err)
 	}
-	got, err := registry.FetchStatementBundles(context.Background(), host+"/app@"+subject.Digest.String())
+	got, err := registry.FetchStatementBundles(context.Background(), host+"/app@"+subject.Digest.String(), registry.SystemTransports{}, nil, mustNotWait(t))
 	if err != nil {
 		t.Fatalf("FetchStatementBundles: %v", err)
 	}
@@ -321,7 +334,7 @@ func TestFetchStatementBundlesSkipsConfigTypedReferrer(t *testing.T) {
 	}); attachErr != nil {
 		t.Fatalf("AttachStatementBundles: %v", attachErr)
 	}
-	got, err := registry.FetchStatementBundles(context.Background(), host+"/app@"+subject.Digest.String())
+	got, err := registry.FetchStatementBundles(context.Background(), host+"/app@"+subject.Digest.String(), registry.SystemTransports{}, nil, mustNotWait(t))
 	if err != nil {
 		t.Fatalf("FetchStatementBundles: %v", err)
 	}

@@ -40,6 +40,13 @@ line with the layer sentinel on failure is written to stderr. Exit status is 0
 when every attached bundle verifies and names the requested artifact, 1
 otherwise.
 
+A registry may list a referrer late. While a layer whose absence would fail
+the verification -- sealed, and engine-dependent unless `--no-engine-trust` --
+is not listed, verify reads the referrers again after a wait of one second
+that doubles, up to sixty seconds in all, with a `WAIT` line on stderr before
+each wait; then it reports the absence. An absent informational layer is never
+waited for.
+
 What verify checks today: the keyless chain (DSSE signature, Fulcio leaf chain
 and bound identity, RFC3161 trusted time, Rekor v2 inclusion) and that the
 statement's subject is the requested artifact. Per-layer predicate validation

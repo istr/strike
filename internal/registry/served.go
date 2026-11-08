@@ -21,42 +21,55 @@ import (
 // 2026-11-08).
 const servedBound = clock.Minute
 
+// untilServed runs read until it reports nothing missing, and returns what
+// the last read reported missing: nothing when everything is served. A
+// registry may serve a write late (ADR-051 amendment 2026-11-08), so a read
+// that finds something not served yet is repeated after a wait that starts at
+// one second and doubles, the last wait cut so the waits add up to
+// servedBound. wait is the interruptible wait between reads, clock.Wait in
+// production. An error of read or of wait ends it at once. Every wait is
+// logged with host and what is not served yet.
+func untilServed(ctx context.Context, wait func(context.Context, clock.Duration) error, host string, read func() ([]string, error)) ([]string, error) {
+	backoff, waited := clock.Second, clock.Duration(0)
+	for {
+		missing, err := read()
+		if err != nil || len(missing) == 0 || waited >= servedBound {
+			return missing, err
+		}
+		d := min(backoff, servedBound-waited)
+		log.Printf("WAIT   registry %s: not served yet: %s, next read in %s", host, strings.Join(missing, ", "), d)
+		if waitErr := wait(ctx, d); waitErr != nil {
+			return missing, waitErr
+		}
+		waited += d
+		backoff *= 2
+	}
+}
+
 // ConfirmServed confirms by read-after-write that the registry serves what a
 // deploy pushed to repo (ADR-051 amendment 2026-11-08): the subject manifest
 // and every referrer in referrers answer a manifest HEAD, and the filtered
 // referrers listing of each artifact type among referrers holds every
-// referrer of that type. A registry may serve a write late, so a read that
-// finds a manifest not served yet is repeated after a wait that starts at one
-// second and doubles, the last wait cut so the waits add up to servedBound.
-// wait is the interruptible wait between reads, clock.Wait in production. Any
-// other failure ends the confirmation at once: a refusal is not a manifest
-// served late. Every read goes through rt.
+// referrer of that type. A manifest not served yet is read again through
+// untilServed; one still not served after servedBound fails the
+// confirmation. Any other failure ends the confirmation at once: a refusal
+// is not a manifest served late. Every read goes through rt.
 func ConfirmServed(ctx context.Context, rt http.RoundTripper, repo string, subject v1.Hash, referrers []v1.Descriptor, wait func(context.Context, clock.Duration) error) error {
 	r, err := name.NewRepository(repo)
 	if err != nil {
 		return fmt.Errorf("read-after-write %s: %w", repo, err)
 	}
 	reg := r.RegistryStr()
-	backoff, waited := clock.Second, clock.Duration(0)
-	for {
-		missing, readErr := unserved(ctx, rt, r, subject, referrers)
-		if readErr != nil {
-			return fmt.Errorf("registry %s: subject %s: read-after-write: %w", reg, subject, readErr)
-		}
-		if len(missing) == 0 {
-			return nil
-		}
-		if waited >= servedBound {
-			return fmt.Errorf("registry %s: subject %s: not served after %s: %s", reg, subject, servedBound, strings.Join(missing, ", "))
-		}
-		d := min(backoff, servedBound-waited)
-		log.Printf("WAIT   registry %s: %d of %d manifests not served yet, next read in %s", reg, len(missing), len(referrers)+1, d)
-		if waitErr := wait(ctx, d); waitErr != nil {
-			return fmt.Errorf("registry %s: subject %s: read-after-write: %w", reg, subject, waitErr)
-		}
-		waited += d
-		backoff *= 2
+	missing, err := untilServed(ctx, wait, reg, func() ([]string, error) {
+		return unserved(ctx, rt, r, subject, referrers)
+	})
+	if err != nil {
+		return fmt.Errorf("registry %s: subject %s: read-after-write: %w", reg, subject, err)
 	}
+	if len(missing) > 0 {
+		return fmt.Errorf("registry %s: subject %s: not served after %s: %s", reg, subject, servedBound, strings.Join(missing, ", "))
+	}
+	return nil
 }
 
 // unserved reads once what ConfirmServed confirms and returns, each once and

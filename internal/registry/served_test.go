@@ -2,6 +2,7 @@ package registry_test
 
 import (
 	"context"
+	"errors"
 	"math"
 	"net/http"
 	"net/http/httptest"
@@ -18,6 +19,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/types"
 
 	"github.com/istr/strike/internal/clock"
+	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/record"
 	"github.com/istr/strike/internal/registry"
 	"github.com/istr/strike/internal/registry/regtest"
@@ -181,5 +183,90 @@ func TestConfirmServedRejectsMalformedRepository(t *testing.T) {
 	err := registry.ConfirmServed(context.Background(), http.DefaultTransport, "Not/A/Repository", v1.Hash{}, nil, nil)
 	if err == nil || !strings.Contains(err.Error(), "read-after-write Not/A/Repository") {
 		t.Fatalf("err = %v, want a read-after-write error naming the repository", err)
+	}
+}
+
+// TestFetchStatementBundlesWaitsForRequiredLayers pins verify's read
+// (ADR-051 amendment 2026-11-08): a required layer listed late is read again
+// after a wait of one second that doubles; one never listed is waited for up
+// to one minute, after which the read returns what it found, without an
+// error, for the verdict to report; nothing is waited for when no layer is
+// required. The wait is a fake that records what it is asked to wait, so no
+// case waits.
+func TestFetchStatementBundlesWaitsForRequiredLayers(t *testing.T) {
+	full := []clock.Duration{clock.Second, 2 * clock.Second, 4 * clock.Second, 8 * clock.Second, 16 * clock.Second, 29 * clock.Second}
+	sealed := []record.TrustLayer{record.TrustLayerSealed}
+	tests := []struct {
+		name      string
+		required  []record.TrustLayer
+		wantWaits []clock.Duration
+		wantFound int
+		lateLists int32
+	}{
+		{name: "listed late", required: sealed, lateLists: 2, wantWaits: full[:2], wantFound: 1},
+		{name: "never listed", required: sealed, lateLists: math.MaxInt32, wantWaits: full, wantFound: 0},
+		{name: "required layer absent", required: []record.TrustLayer{record.TrustLayerSealed, record.TrustLayerEngineDependent}, wantWaits: full, wantFound: 1},
+		{name: "nothing required", lateLists: math.MaxInt32, wantFound: 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			host, armed := lateServer(t, servedCase{lateLists: tt.lateLists})
+			subject := pushSubject(t, host+"/app:v1")
+			if _, err := registry.AttachStatementBundles(context.Background(), host+"/app:v1", subject, []registry.StatementBundle{
+				{Statement: record.TrustLayerSealed, Bundle: []byte(`{"bundle":"sealed"}`)},
+			}); err != nil {
+				t.Fatalf("AttachStatementBundles: %v", err)
+			}
+			armed.Store(true)
+			var waits []clock.Duration
+			wait := func(_ context.Context, d clock.Duration) error {
+				waits = append(waits, d)
+				return nil
+			}
+			got, err := registry.FetchStatementBundles(context.Background(), host+"/app@"+subject.Digest.String(), registry.SystemTransports{}, tt.required, wait)
+			if err != nil {
+				t.Fatalf("FetchStatementBundles: %v", err)
+			}
+			if len(got) != tt.wantFound {
+				t.Errorf("fetched %d bundles, want %d", len(got), tt.wantFound)
+			}
+			if !slices.Equal(waits, tt.wantWaits) {
+				t.Errorf("waits = %v, want %v", waits, tt.wantWaits)
+			}
+		})
+	}
+}
+
+// TestFetchStatementBundlesEndsOnInterruptedWait pins that an interrupted
+// wait ends verify's read at once with the wait's error.
+func TestFetchStatementBundlesEndsOnInterruptedWait(t *testing.T) {
+	host, armed := lateServer(t, servedCase{lateLists: math.MaxInt32})
+	subject := pushSubject(t, host+"/app:v1")
+	armed.Store(true)
+	wait := func(context.Context, clock.Duration) error { return context.Canceled }
+	_, err := registry.FetchStatementBundles(context.Background(), host+"/app@"+subject.Digest.String(), registry.SystemTransports{},
+		[]record.TrustLayer{record.TrustLayerSealed}, wait)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want context.Canceled", err)
+	}
+}
+
+// refusingTransports hands out no transport, as a Transports whose policy
+// refuses the reference does.
+type refusingTransports struct{}
+
+// Transport implements registry.Transports.
+func (refusingTransports) Transport(primitive.ImageRef) (http.RoundTripper, error) {
+	return nil, errors.New("transport refused")
+}
+
+// TestFetchStatementBundlesReadsThroughTransports pins that verify's read
+// takes its transport from the Transports it is handed: one that refuses the
+// subject fails the read before any request.
+func TestFetchStatementBundlesReadsThroughTransports(t *testing.T) {
+	_, err := registry.FetchStatementBundles(context.Background(), "localhost:1/app@sha256:"+strings.Repeat("ab", 32), refusingTransports{},
+		[]record.TrustLayer{record.TrustLayerSealed}, nil)
+	if err == nil || !strings.Contains(err.Error(), "transport refused") {
+		t.Fatalf("err = %v, want the Transports refusal", err)
 	}
 }

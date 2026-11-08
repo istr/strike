@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/go-containerregistry/pkg/name"
 
+	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/deploy"
 	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/lane"
@@ -49,7 +50,7 @@ func cmdVerify(args []string) {
 		log.Fatal("usage: strike verify [--lane file | --identity id --issuer iss] [--trust-root-ref root-image@digest] <image@digest>")
 	}
 	opts.subjectRef = rest[0]
-	if err := runVerify(context.Background(), fatalWriter{os.Stdout}, opts); err != nil {
+	if err := runVerify(context.Background(), fatalWriter{os.Stdout}, opts, clock.Wait); err != nil {
 		log.Fatalf("error: %v", err)
 	}
 }
@@ -196,8 +197,10 @@ func validateSealed(statement []byte, laneDigest primitive.Digest) error {
 // model: a sealed-layer failure or absence is a hard fail with no opt-out; an
 // engine-dependent-layer failure or absence is a hard fail unless
 // --no-engine-trust degrades it to informational; the informational layer
-// never gates. Verified statements are written to out.
-func runVerify(ctx context.Context, out io.Writer, opts verifyOptions) error {
+// never gates. The read waits, through wait, for a layer whose absence would
+// fail the verdict and never for one whose absence would not (ADR-051
+// amendment 2026-11-08). Verified statements are written to out.
+func runVerify(ctx context.Context, out io.Writer, opts verifyOptions, wait func(context.Context, clock.Duration) error) error {
 	pol, err := resolveVerifyPolicy(opts)
 	if err != nil {
 		return err
@@ -218,7 +221,11 @@ func runVerify(ctx context.Context, out io.Writer, opts verifyOptions) error {
 	}
 	wantHex := subjectDigest.Hex()
 
-	bundles, err := registry.FetchStatementBundles(ctx, opts.subjectRef)
+	required := []record.TrustLayer{record.TrustLayerSealed}
+	if !opts.noEngineTrust {
+		required = append(required, record.TrustLayerEngineDependent)
+	}
+	bundles, err := registry.FetchStatementBundles(ctx, opts.subjectRef, registry.SystemTransports{}, required, wait)
 	if err != nil {
 		return err
 	}

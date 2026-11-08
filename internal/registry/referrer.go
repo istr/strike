@@ -10,6 +10,7 @@ import (
 	"log"
 	"maps"
 	"net/http"
+	"slices"
 
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
@@ -17,6 +18,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/go-containerregistry/pkg/v1/types"
 
+	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/record"
 )
@@ -145,14 +147,52 @@ func AttachStatementBundles(ctx context.Context, target string, subject v1.Descr
 // Discovery is by artifact-type filter (the cosign-compatible referrers query);
 // identification and projection are read back from each fetched manifest (its
 // artifactType and annotation), which is authoritative, rather than from the
-// index descriptor. It is strike verify's read, which declares no registry, so
-// it reads through go-containerregistry's default transport.
-func FetchStatementBundles(ctx context.Context, subjectRef string) ([]StatementBundle, error) {
+// index descriptor. It is strike verify's read; src hands out the transport
+// it goes through.
+//
+// A registry may list a referrer late (ADR-051 amendment 2026-11-08), so
+// while a layer in required is absent from what the read yields, the read is
+// repeated through untilServed, as the deploy's read-after-write repeats its
+// own. After the bound the bundles found are returned as they are, and the
+// caller's verdict reports the absent layer; an optional layer is never
+// waited for. wait is the interruptible wait between reads, clock.Wait in
+// production.
+func FetchStatementBundles(ctx context.Context, subjectRef string, src Transports, required []record.TrustLayer, wait func(context.Context, clock.Duration) error) ([]StatementBundle, error) {
 	ref, err := name.NewDigest(subjectRef)
 	if err != nil {
 		return nil, fmt.Errorf("subject must be digest-pinned: %w", err)
 	}
-	return fetchReferrers(ctx, ref, remote.DefaultTransport, fetchOneBundle)
+	rt, err := src.Transport(primitive.NewImageRef(subjectRef))
+	if err != nil {
+		return nil, err
+	}
+	var bundles []StatementBundle
+	_, err = untilServed(ctx, wait, ref.RegistryStr(), func() ([]string, error) {
+		got, fetchErr := fetchReferrers(ctx, ref, rt, fetchOneBundle)
+		if fetchErr != nil {
+			return nil, fetchErr
+		}
+		bundles = got
+		return absentLayers(got, required), nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return bundles, nil
+}
+
+// absentLayers returns, in the order of required, every layer of required no
+// bundle carries.
+func absentLayers(bundles []StatementBundle, required []record.TrustLayer) []string {
+	var absent []string
+	for _, layer := range required {
+		if slices.ContainsFunc(bundles, func(b StatementBundle) bool { return b.Statement == layer }) {
+			continue
+		}
+		layerName := string(layer)
+		absent = append(absent, layerName)
+	}
+	return absent
 }
 
 // fetchReferrers discovers the sigstore-bundle referrers of a digest-pinned
