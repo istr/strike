@@ -149,6 +149,10 @@ Run in CI on every change:
 | govulncheck | Reachable vulnerability detection | `govulncheck ./...` |
 | go test -race | Data race detection | Always enabled in CI |
 
+The dev container carries these tools as part of a fixed tool set, listed in
+docs/DEVELOPMENT-ENDPOINT-PREMISES.md, section "The dev container"; a tool
+missing from it is added by a reviewed change to the Containerfile.
+
 gosec rules to watch for:
 - G101: Hardcoded credentials
 - G107: SSRF via variable URL
