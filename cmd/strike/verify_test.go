@@ -490,11 +490,11 @@ func TestRunVerifyMissingEngineDependent(t *testing.T) {
 		issuer:       goldenIssuer,
 		trustRootRef: goldenTrustRootRef(t, host),
 	}
+	logBuf := captureLog(t)
 	if err := runVerify(context.Background(), io.Discard, base, noWait); err == nil {
 		t.Fatal("want error: an absent engine-dependent layer must gate without --no-engine-trust")
 	}
 
-	logBuf := captureLog(t)
 	withFlag := base
 	withFlag.noEngineTrust = true
 	if err := runVerify(context.Background(), io.Discard, withFlag, failOnWait(t)); err != nil {
