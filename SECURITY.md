@@ -92,8 +92,9 @@ affects two concrete security surfaces:
   certificate's expiry could cause strike to accept an
   otherwise-correctly-pinned but revoked-then-expired certificate.
 - **Ephemeral CA validity windows.** strike issues short-lived
-  certificates (per [ADR-015](docs/adr/ADR-015-internal-clock-dispatch.md)
-  and the per-lane-run ephemeral CA introduced in PR-18) with
+  certificates (per [ADR-015](docs/ADR-015-internal-clock-dispatch.md)
+  and the per-lane-run ephemeral CA of
+  [ADR-028](docs/ADR-028-step-container-egress-mediation.md)) with
   timestamps from the host clock. A skew large enough that
   container processes see strike's certificates as not-yet-valid
   or already-expired causes denial-of-service rather than
@@ -307,6 +308,14 @@ produces `[REDACTED]` instead of the plaintext.
 - **The secret zero is delivered.** Each per-run token is a credential the
   invocation delivers; no attested workload identity replaces it yet
   (ADR-058 D7).
+- **Deploy steps reject SSH peers.** The transport deploy family (rsync,
+  scp, sftp, and git over SSH) is named but not built; it waits for the
+  protocol-mediated front of ADR-038 D1
+  ([ADR-051](docs/ADR-051-deploy-as-sealing-point.md) D5).
+- **DNS-over-TLS resolution and TLS mediation run per step.** Each
+  network-enabled step gets its own resolver and mediator listeners in
+  its capsule context; they are not centralized on the run-level front
+  of [ADR-038](docs/ADR-038-protocol-mediated-ssh.md) D2.
 
 ## Security toolchain
 

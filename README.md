@@ -50,8 +50,10 @@ compliance analysis, and trust boundary model.
 
 You need exactly two things:
 
-1. **Podman (rootless) with socket enabled** -- the only host dependency.
-   Enable the socket: `systemctl --user enable --now podman.socket`
+1. **Podman (rootless) with its API socket served** -- the only host
+   dependency. strike talks to the socket `CONTAINER_HOST` names, or finds
+   it at podman's default paths; how podman serves it, with or without
+   systemd, does not matter to strike.
 2. **A git-capable IDE** (e.g. VS Code, JetBrains) -- for cloning and editing
    the repository. You do not need a local `git` CLI; your IDE handles that.
 
@@ -82,7 +84,7 @@ first (`make -C test/sigstore-local up`), then build stage_1 from the clone's
 root:
 
 ```sh
-GIT_COMMIT=617abac968350ac5edc8e9a3e7216bd44f3611a5
+GIT_COMMIT=effb9475a122dac7a123cf462935d8e8b3873c37
 
 podman build -t strike:stage_1 \
   --build-arg GIT_COMMIT=${GIT_COMMIT} \
@@ -220,7 +222,7 @@ steps:
     image: cgr.dev/chainguard/go@sha256:def456...
     args: [go, build, -C, /src, -o, /out/binary, .]
     inputs:
-      - { name: tree, from: source.tree, mount: /src }
+      - { from: { step: source, output: tree }, mount: /src }
     outputs:
       - { id: binary, type: file, path: /out/binary }
 ```
@@ -302,46 +304,29 @@ Secrets are passed as environment variables, never written to process arguments.
 ## Project structure
 
 ```
-cmd/strike/main.go               CLI entry point (run, validate, dag, verify)
-contract/
-  lane/lane.cue                   CUE schema (source of truth)
-internal/
-  container/
-    engine.go                     Engine interface, types, socket detection
-    transport.go                  Unix socket and HTTPS transport
-    podman.go                     Podman libpod REST API implementation
-  lane/
-    cue_types_lane_gen.go         Generated Go types (generated, not in git)
-    parse.go                      YAML parsing and CUE validation
-    dag.go                        DAG construction and topological sort
-    state.go                      Artifact and step result tracking
-    digest.go                     Content hashing and cache key computation
-    deploy_method.go              DeployMethod accessor helpers
-    secret.go                     Secret resolution
-  executor/
-    podman.go                     Container execution via Engine API
-    validate.go                   Output validation (magic bytes, size bounds)
-    pack.go                       OCI image assembly (native Go, no container)
-    catalog.go                    Native SBOM cataloger (CycloneDX + SPDX 2.3)
-    flatten.go                    In-memory image flattening (image -> fs.FS)
-  registry/
-    cache.go                      Spec hashing and cache tagging
-    client.go                     Registry operations (Engine API, go-containerregistry)
-  deploy/
-    deploy.go                     Deploy with mandatory state attestation
-bootstrap/Containerfile           Self-contained bootstrap image
-bootstrap/lane.cue                Bootstrap lane template
+.claude/          The roadmap-items skill that manages roadmap/
+.devcontainer/    Development container
+.github/          Workflow that updates the README bootstrap hash on a tag
+bootstrap/        Bootstrap Containerfile and lane template
+cmd/strike/       CLI entry point (run, validate, dag, verify)
+contract/         CUE contracts, the single source of truth for every type
+cue.mod/          CUE module definition
+docs/             ADRs (indexed in docs/ADR-INDEX.md) and reference docs
+internal/         Go packages; generated types are *.gen.go, not in git
+roadmap/          Planning items and their execution order
+test/             Cross-validation vectors, integration tests, sigstore harness
+tools/            Linters and code generators the gates run
 ```
 
 ## Development
 
-For working on strike itself (not for using it), you need Go 1.27+,
-golangci-lint 2.x, and govulncheck. Every change must pass before merge:
+Work on strike itself (not on using it) happens inside the dev container
+below, not with a toolchain on the host
+([ADR-055](docs/ADR-055-hardened-endpoint-development-premise.md)). Every
+change must pass the one pre-commit gate:
 
 ```sh
-golangci-lint run ./...                                         # lint and security
-go test -race -coverprofile=coverage.out -covermode=atomic ./...  # tests
-govulncheck ./...                                                # vulnerability scan
+make check
 ```
 
 See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for the complete code quality,
@@ -349,10 +334,10 @@ security, and style guidelines.
 
 ### Dev container
 
-Instead of installing the toolchain on the host, you can work inside the dev
-container declared in `.devcontainer/`. It carries the Go toolchain, `make`,
-git, python3, golangci-lint, govulncheck, cosign, the agent, and a podman
-remote client with `docker-compose` as the compose provider; `make test` runs
+The dev container declared in `.devcontainer/` carries the Go toolchain,
+`make`, git, python3, golangci-lint, govulncheck, cosign, the agent, and a
+podman remote client with `docker-compose` as the compose provider;
+`make test` runs
 the race detector in a sibling race image. The host's podman socket is mounted into the
 container as `CONTAINER_HOST`, and every container started from inside runs as
 a sibling on the host engine. The premise behind this layout is

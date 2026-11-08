@@ -8,7 +8,7 @@ DER encoding were ratified on 2026-09-06 before any instruction was
 authored.
 
 Reinforces rather than revises
-[ADR-021](ADR-021-system-trust-store-deferral.md): its deferral of the
+[ADR-021](ADR-021-deferred-extensions.md): its deferral of the
 system trust store stands, and this record makes it structural, because
 no anchor in this scheme can name a store at all. Displaces the
 trust-anchor vocabulary clause of
