@@ -46,7 +46,7 @@ func TestPushSBOMPairRefusesTagFallback(t *testing.T) {
 		Digest:    v1.Hash{Algorithm: "sha256", Hex: subjectHex},
 		Size:      2,
 	}
-	_, err := pushSBOMPair(context.Background(), host+"/app", subject, registryClient{rt: srv.Client().Transport}, "image", fstest.MapFS{}, primitive.DigestFromHex(subjectHex))
+	_, _, err := pushSBOMPair(context.Background(), host+"/app", subject, registryClient{rt: srv.Client().Transport}, "image", fstest.MapFS{}, primitive.DigestFromHex(subjectHex))
 	if err == nil {
 		t.Fatal("expected an error for a registry without the referrers API, got nil")
 	}

@@ -72,7 +72,8 @@ func pushSubject(t *testing.T, ref string) v1.Descriptor {
 // TestAttachStatementBundles pushes the three statement bundles and reads
 // them back from the registry side: each referrer carries the OCI 1.1
 // artifact form -- the manifest artifactType and the OCI empty config -- and
-// its own bundle bytes under its statement annotation.
+// its own bundle bytes under its statement annotation -- and the push returns
+// the descriptor of every referrer it pushed, each one the listing holds.
 func TestAttachStatementBundles(t *testing.T) {
 	host := localRegistry(t, true)
 	target := host + "/app:v1"
@@ -83,7 +84,8 @@ func TestAttachStatementBundles(t *testing.T) {
 		{Statement: record.TrustLayerEngineDependent, Bundle: []byte(`{"bundle":"engine-dependent"}`)},
 		{Statement: record.TrustLayerInformational, Bundle: []byte(`{"bundle":"informational"}`)},
 	}
-	if err := registry.AttachStatementBundles(context.Background(), target, subject, bundles); err != nil {
+	attached, err := registry.AttachStatementBundles(context.Background(), target, subject, bundles)
+	if err != nil {
 		t.Fatalf("AttachStatementBundles: %v", err)
 	}
 
@@ -103,7 +105,9 @@ func TestAttachStatementBundles(t *testing.T) {
 		t.Fatalf("referrers = %d, want %d", len(manifest.Manifests), len(bundles))
 	}
 	seen := map[string][]byte{}
+	listed := map[v1.Hash]bool{}
 	for _, desc := range manifest.Manifests {
+		listed[desc.Digest] = true
 		if desc.ArtifactType != registry.SigstoreBundleMediaType {
 			t.Errorf("artifactType = %q, want %q", desc.ArtifactType, registry.SigstoreBundleMediaType)
 		}
@@ -144,6 +148,14 @@ func TestAttachStatementBundles(t *testing.T) {
 		}
 		seen[stmt] = content
 	}
+	if len(attached) != len(bundles) {
+		t.Fatalf("attached = %d descriptors, want %d", len(attached), len(bundles))
+	}
+	for _, a := range attached {
+		if a.ArtifactType != registry.SigstoreBundleMediaType || !listed[a.Digest] {
+			t.Errorf("attached %s (artifactType %q) is not a listed sigstore bundle referrer", a.Digest, a.ArtifactType)
+		}
+	}
 	for _, b := range bundles {
 		stmt := string(b.Statement)
 		got, ok := seen[stmt]
@@ -164,7 +176,7 @@ func TestAttachStatementBundlesRefusesTagFallback(t *testing.T) {
 	host := localRegistry(t, false)
 	target := host + "/app:v1"
 	subject := pushSubject(t, target)
-	err := registry.AttachStatementBundles(context.Background(), target, subject, []registry.StatementBundle{
+	_, err := registry.AttachStatementBundles(context.Background(), target, subject, []registry.StatementBundle{
 		{Statement: record.TrustLayerSealed, Bundle: []byte(`{"bundle":"sealed"}`)},
 	})
 	if err == nil {
@@ -202,7 +214,7 @@ func TestFetchStatementBundles(t *testing.T) {
 		{Statement: record.TrustLayerEngineDependent, Bundle: []byte(`{"bundle":"engine-dependent"}`)},
 		{Statement: record.TrustLayerInformational, Bundle: []byte(`{"bundle":"informational"}`)},
 	}
-	if err := registry.AttachStatementBundles(context.Background(), target, subject, bundles); err != nil {
+	if _, err := registry.AttachStatementBundles(context.Background(), target, subject, bundles); err != nil {
 		t.Fatalf("AttachStatementBundles: %v", err)
 	}
 
@@ -277,7 +289,7 @@ func TestFetchStatementBundlesSkipsUnknownLayer(t *testing.T) {
 		{Statement: record.TrustLayerSealed, Bundle: []byte(`{"bundle":"sealed"}`)},
 		{Statement: "speculative", Bundle: []byte(`{"bundle":"speculative"}`)},
 	}
-	if err := registry.AttachStatementBundles(context.Background(), target, subject, bundles); err != nil {
+	if _, err := registry.AttachStatementBundles(context.Background(), target, subject, bundles); err != nil {
 		t.Fatalf("AttachStatementBundles: %v", err)
 	}
 	got, err := registry.FetchStatementBundles(context.Background(), host+"/app@"+subject.Digest.String())
@@ -304,7 +316,7 @@ func TestFetchStatementBundlesSkipsConfigTypedReferrer(t *testing.T) {
 	pushConfigTypedReferrer(t, repo, subject, registry.SigstoreBundleMediaType, map[string]string{
 		"dev.strike.statement": "sealed",
 	})
-	if attachErr := registry.AttachStatementBundles(context.Background(), target, subject, []registry.StatementBundle{
+	if _, attachErr := registry.AttachStatementBundles(context.Background(), target, subject, []registry.StatementBundle{
 		{Statement: record.TrustLayerInformational, Bundle: []byte(`{"bundle":"informational"}`)},
 	}); attachErr != nil {
 		t.Fatalf("AttachStatementBundles: %v", attachErr)
@@ -459,7 +471,7 @@ func TestFetchBaseSBOMReferrersSkipsStrikeOwnBundle(t *testing.T) {
 	subject := pushSubject(t, target)
 	// strike's own producer convention: discoverable, but no SBOM predicate-type
 	// annotation, so it is not a base SBOM and must be skipped.
-	if err := registry.AttachStatementBundles(context.Background(), target, subject, []registry.StatementBundle{
+	if _, err := registry.AttachStatementBundles(context.Background(), target, subject, []registry.StatementBundle{
 		{Statement: record.TrustLayerSealed, Bundle: []byte("strike-bundle")},
 	}); err != nil {
 		t.Fatalf("attach: %v", err)

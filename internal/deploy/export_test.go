@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/testutil"
@@ -27,6 +28,12 @@ var AssembleKeylessBundle = assembleKeylessBundle
 // chain in tests (the live test covers the real chain).
 func SetProduceBundles(d *Deployer, f func(ctx context.Context, eps lane.KeylessEndpoints, statements [][]byte) ([][]byte, error)) {
 	d.produceBundles = f
+}
+
+// SetWait injects the wait the read-after-write takes between reads,
+// replacing clock.Wait, so no test waits.
+func SetWait(d *Deployer, f func(context.Context, clock.Duration) error) {
+	d.wait = f
 }
 
 // DeployRegistryForTest returns a registry deploy method with a syntactically

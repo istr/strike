@@ -11,6 +11,7 @@
 package clock
 
 import (
+	"context"
 	"os"
 	"strconv"
 	"time"
@@ -71,6 +72,22 @@ func Reproducible() Time {
 // so callers measuring an interval do not need to import "time".
 func Since(t Time) Duration {
 	return time.Since(t)
+}
+
+// Wait blocks until d has elapsed or ctx is done, whichever comes first, and
+// returns ctx's error in the second case. It is the only wait in strike, and
+// it is interruptible. A caller that waits takes its wait as a parameter and
+// is handed Wait in production, so a test hands in a wait that returns at
+// once instead of sitting the duration out.
+func Wait(ctx context.Context, d Duration) error {
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-t.C:
+		return nil
+	}
 }
 
 // Unix converts a Unix timestamp to Time. Use when parsing external

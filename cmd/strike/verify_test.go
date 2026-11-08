@@ -129,7 +129,7 @@ func attachGolden(t *testing.T, host, subjectHex string, bundle []byte) {
 		t.Fatalf("subject hash: %v", err)
 	}
 	subject := v1.Descriptor{MediaType: types.OCIManifestSchema1, Size: 2, Digest: h}
-	if err := registry.AttachStatementBundles(context.Background(), host+"/app:v1", subject,
+	if _, err := registry.AttachStatementBundles(context.Background(), host+"/app:v1", subject,
 		[]registry.StatementBundle{{Statement: record.TrustLayerSealed, Bundle: bundle}}); err != nil {
 		t.Fatalf("AttachStatementBundles: %v", err)
 	}
@@ -151,7 +151,7 @@ func attachGoldenLayers(t *testing.T, host, subjectHex string, layers ...record.
 		file := string(layer) + ".sigstore.json"
 		sb = append(sb, registry.StatementBundle{Statement: layer, Bundle: goldenFile(t, file)})
 	}
-	if err := registry.AttachStatementBundles(context.Background(), host+"/app:v1", subject, sb); err != nil {
+	if _, err := registry.AttachStatementBundles(context.Background(), host+"/app:v1", subject, sb); err != nil {
 		t.Fatalf("AttachStatementBundles: %v", err)
 	}
 }

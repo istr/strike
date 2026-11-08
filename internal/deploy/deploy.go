@@ -16,6 +16,7 @@ import (
 	"log"
 	"net/netip"
 	"os"
+	"slices"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
@@ -193,6 +194,7 @@ type Deployer struct {
 	RegistryTokens  map[string]lane.SecretString                                                                // registry token per deploy target authority, read at run start (ADR-058 amendment 2026-11-08)
 	ArtifactRefs    map[primitive.Identifier]lane.ArtifactRef                                                   // deploy artifacts map: name -> image arm or region (ADR-051 D9)
 	produceBundles  func(ctx context.Context, eps lane.KeylessEndpoints, statements [][]byte) ([][]byte, error) // test seam; nil selects the real keyless chain
+	wait            func(ctx context.Context, d clock.Duration) error                                           // test seam; nil selects clock.Wait, the wait between the reads of the read-after-write
 	Keyless         lane.Keyless                                                                                // lane-declared keyless config (ADR-040 D2, ADR-041); .Endpoints dials Fulcio, Rekor v2, TSA; .TrustRoot/.TrustRootRef carry the verify anchor
 	LaneID          primitive.Identifier
 	LaneDigest      primitive.Digest     // prefixed "sha256:<hex>" over the lane file bytes; sealed as lane_digest
@@ -478,16 +480,14 @@ func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.Run
 	}
 
 	// 8b. Attach the three statement bundles as OCI 1.1 referrers of the
-	// pushed manifest digest (ADR-040 D3), registry deploys only.
-	// Fail-closed: a deploy whose transparency artifacts cannot be bound
-	// to the artifact fails before the lane state records it.
+	// pushed manifest digest (ADR-040 D3) and confirm that the registry
+	// serves everything the deploy pushed (ADR-051 amendment 2026-11-08),
+	// registry deploys only. Fail-closed: a deploy whose transparency
+	// artifacts cannot be bound to the artifact, or are not served, fails
+	// before the lane state records it.
 	if attach != nil {
-		if err := registry.AttachStatementBundles(ctx, attach.ref, attach.subject, []registry.StatementBundle{
-			{Statement: record.TrustLayerSealed, Bundle: signed.Sealed.Bundle},
-			{Statement: record.TrustLayerEngineDependent, Bundle: signed.EngineContext.Bundle},
-			{Statement: record.TrustLayerInformational, Bundle: signed.Informational.Bundle},
-		}, remote.WithTransport(attach.client.rt)); err != nil {
-			return nil, fmt.Errorf("step %q: attach statement bundles: %w", step.ID, scrub(err, attach.client.token))
+		if err := d.attachAndConfirm(ctx, attach, signed); err != nil {
+			return nil, fmt.Errorf("step %q: %w", step.ID, err)
 		}
 	}
 
@@ -497,6 +497,31 @@ func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.Run
 	}
 
 	return att, nil
+}
+
+// attachAndConfirm attaches the three statement bundles as referrers of the
+// pushed subject, then confirms by read-after-write that the registry serves
+// the payload and every referrer the deploy attached (ADR-051 amendment
+// 2026-11-08). Nothing is rolled back when the confirmation fails: every
+// write is by digest and untagged. Errors are scrubbed of the token.
+func (d *Deployer) attachAndConfirm(ctx context.Context, attach *attachTarget, signed *SignedStatements) error {
+	bundles, err := registry.AttachStatementBundles(ctx, attach.ref, attach.subject, []registry.StatementBundle{
+		{Statement: record.TrustLayerSealed, Bundle: signed.Sealed.Bundle},
+		{Statement: record.TrustLayerEngineDependent, Bundle: signed.EngineContext.Bundle},
+		{Statement: record.TrustLayerInformational, Bundle: signed.Informational.Bundle},
+	}, remote.WithTransport(attach.client.rt))
+	if err != nil {
+		return fmt.Errorf("attach statement bundles: %w", scrub(err, attach.client.token))
+	}
+	wait := d.wait
+	if wait == nil {
+		wait = clock.Wait
+	}
+	referrers := slices.Concat(attach.referrers, bundles)
+	if confirmErr := registry.ConfirmServed(ctx, attach.client.rt, attach.ref, attach.subject.Digest, referrers, wait); confirmErr != nil {
+		return scrub(confirmErr, attach.client.token)
+	}
+	return nil
 }
 
 // signStatements projects the attestation into the three output in-toto
@@ -699,9 +724,10 @@ func (d *Deployer) captureOne(ctx context.Context, sc lane.Capture) (captureSnap
 // attachTarget identifies where the signed statement bundles are attached
 // after signing: the pushed manifest descriptor within the deploy target
 // repository (ADR-040 D3), the trust-anchored transport and the declared
-// credential every referrer write reuses, and the validated push-connection
-// identity for Sealed.ObservedPeers. Nil for deploy methods without a
-// registry push.
+// credential every referrer write reuses, the validated push-connection
+// identity for Sealed.ObservedPeers, and the SBOM referrers already pushed,
+// which the read-after-write confirms with the statement bundles. Nil for
+// deploy methods without a registry push.
 type attachTarget struct {
 	subject    v1.Descriptor                           // pushed manifest descriptor (the referrer subject)
 	client     registryClient                          // trust-anchored transport and declared credential for referrer writes
@@ -710,6 +736,7 @@ type attachTarget struct {
 	ref        string                                  // deploy target repository (authority/name)
 	authority  endpoint.Authority                      // declared target authority (ObservedPeers key)
 	repository primitive.OCIName                       // declared target repository name (Sealed.Pushed)
+	referrers  []v1.Descriptor                         // SBOM referrers already pushed, confirmed with the statement bundles (ADR-051 amendment 2026-11-08)
 	resolved   []netip.Addr                            // DoT answers for the target across the push connections
 }
 

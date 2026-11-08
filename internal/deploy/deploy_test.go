@@ -25,6 +25,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -775,6 +776,61 @@ func TestDeployerExecuteRegistryPresentsTheBearer(t *testing.T) {
 	}
 	if got := manifests.Load(); got != 6 {
 		t.Errorf("manifest pushes under the registry token = %d, want 6 (payload, two image SBOMs, three statement bundles)", got)
+	}
+}
+
+// TestDeployerExecuteRegistryConfirmsServed proves the deploy's
+// read-after-write (ADR-051 amendment 2026-11-08): a registry that never
+// lists what the deploy attached fails the deploy after waits that add up to
+// one minute, and the error names the step, the registry and what is not
+// served. The wait is a fake that records what it is asked to wait, so the
+// test does not wait.
+func TestDeployerExecuteRegistryConfirmsServed(t *testing.T) {
+	inner := regtest.Registry(t, true)
+	fx := newRegistryDeployFixtureServing(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/referrers/") {
+			w.Header().Set("Content-Type", string(types.OCIImageIndex))
+			testutil.WriteBody(t, w, []byte(`{"schemaVersion":2,"mediaType":"application/vnd.oci.image.index.v1+json","manifests":[]}`))
+			return
+		}
+		inner.ServeHTTP(w, r)
+	}))
+
+	state := newRuntime(t, "build", "deploy-prod")
+	if err := state.Register("build", "", fx.handle); err != nil {
+		t.Fatal(err)
+	}
+	ca, dialer, caPath := deployCapsuleFields(t)
+	d := &deploy.Deployer{
+		Engine:         fx.engine,
+		LaneDigest:     "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+		ArtifactRefs:   map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
+		LaneID:         "test-lane",
+		CA:             ca,
+		Dialer:         dialer,
+		CAVolume:       caPath,
+		StepID:         "deploy-prod",
+		Resolver:       probedResolver(),
+		RegistryTokens: fx.tokens,
+	}
+	deploy.SetProduceBundles(d, stubProduceBundles())
+	var waits []clock.Duration
+	deploy.SetWait(d, func(_ context.Context, w clock.Duration) error {
+		waits = append(waits, w)
+		return nil
+	})
+	_, err := d.Execute(context.Background(), deployStep(t, fx.method), state)
+	if err == nil {
+		t.Fatal("Execute succeeded over a registry that never lists the referrers, want an error")
+	}
+	for _, want := range []string{`step "deploy-prod"`, "registry 127.0.0.1:", "not served after 1m0s"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q must contain %q", err, want)
+		}
+	}
+	want := []clock.Duration{clock.Second, 2 * clock.Second, 4 * clock.Second, 8 * clock.Second, 16 * clock.Second, 29 * clock.Second}
+	if !slices.Equal(waits, want) {
+		t.Errorf("waits = %v, want %v", waits, want)
 	}
 }
 

@@ -90,39 +90,43 @@ func ArtifactImage(content []byte, artifactType string, subject v1.Descriptor, a
 }
 
 // AttachStatementBundles pushes each bundle as an OCI 1.1 referrer of the
-// subject manifest within the repository of target, in the caller's order.
-// The registry must serve the referrers API: the referrers tag fallback is
+// subject manifest within the repository of target, in the caller's order,
+// and returns the descriptor of every referrer it pushed, in the same order,
+// for the read-after-write that follows (ADR-051 amendment 2026-11-08). The
+// registry must serve the referrers API: the referrers tag fallback is
 // refused, so a registry without the API fails the push instead of receiving
 // a tag (ADR-058). ArtifactImage owns the referrer wrapping, including how
 // the artifact type is carried. The caller's remote options -- the
-// trust-anchored transport and the authenticator -- apply to every write;
-// no ambient credential is consulted (ADR-058 D6).
-func AttachStatementBundles(ctx context.Context, target string, subject v1.Descriptor, bundles []StatementBundle, opts ...remote.Option) error {
+// trust-anchored transport that carries the declared credential -- apply to
+// every write; no ambient credential is consulted (ADR-058 D6).
+func AttachStatementBundles(ctx context.Context, target string, subject v1.Descriptor, bundles []StatementBundle, opts ...remote.Option) ([]v1.Descriptor, error) {
 	targetRef, err := name.ParseReference(target)
 	if err != nil {
-		return fmt.Errorf("parse target %q: %w", target, err)
+		return nil, fmt.Errorf("parse target %q: %w", target, err)
 	}
 	repo := targetRef.Context()
 	writeOpts := append([]remote.Option{
 		remote.WithReferrersTagFallback(false),
 		remote.WithContext(ctx),
 	}, opts...)
+	attached := make([]v1.Descriptor, 0, len(bundles))
 	for _, b := range bundles {
 		img, err := ArtifactImage(b.Bundle, SigstoreBundleMediaType, subject, map[string]string{
 			statementAnnotation: string(b.Statement),
 		})
 		if err != nil {
-			return fmt.Errorf("referrer %s: %w", b.Statement, err)
+			return nil, fmt.Errorf("referrer %s: %w", b.Statement, err)
 		}
-		digest, err := img.Digest()
+		desc, err := partial.Descriptor(img)
 		if err != nil {
-			return fmt.Errorf("referrer %s: digest: %w", b.Statement, err)
+			return nil, fmt.Errorf("referrer %s: digest: %w", b.Statement, err)
 		}
-		if err := remote.Write(repo.Digest(digest.String()), img, writeOpts...); err != nil {
-			return fmt.Errorf("referrer %s of %s: push: %w", b.Statement, subject.Digest, err)
+		if err := remote.Write(repo.Digest(desc.Digest.String()), img, writeOpts...); err != nil {
+			return nil, fmt.Errorf("referrer %s of %s: push: %w", b.Statement, subject.Digest, err)
 		}
+		attached = append(attached, *desc)
 	}
-	return nil
+	return attached, nil
 }
 
 // FetchStatementBundles is the consumer counterpart to AttachStatementBundles:

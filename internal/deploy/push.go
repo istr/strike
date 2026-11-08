@@ -18,6 +18,7 @@ import (
 
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
+	"github.com/google/go-containerregistry/pkg/v1/partial"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 
 	"github.com/istr/strike/internal/clock"
@@ -46,7 +47,9 @@ const artifactAnnotation = "dev.strike.artifact"
 // the run started. The returned attach target carries the pushed
 // descriptor, the transport and credential for the statement-bundle
 // referrers, the validated push-connection identity for Sealed.ObservedPeers,
-// and the per-artifact SBOM digest sets for the sealed records.
+// the per-artifact SBOM digest sets for the sealed records, and the
+// descriptor of every SBOM referrer pushed, which the read-after-write
+// confirms (ADR-051 amendment 2026-11-08).
 func (d *Deployer) executeRegistryDeploy(ctx context.Context, m lane.DeployRegistry, state *lane.Runtime) (*attachTarget, error) {
 	imageName, imageRef, err := selectImageArm(d.ArtifactRefs)
 	if err != nil {
@@ -94,12 +97,12 @@ func (d *Deployer) executeRegistryDeploy(ctx context.Context, m lane.DeployRegis
 	}
 
 	sboms := map[primitive.Identifier]record.SBOMSet{}
-	imgSet, sbomErr := pushImageSBOM(ctx, repo, subject, img, client, imageName)
+	imgSet, imgReferrers, sbomErr := pushImageSBOM(ctx, repo, subject, img, client, imageName)
 	if sbomErr != nil {
 		return nil, fmt.Errorf("registry deploy: %w", sbomErr)
 	}
 	sboms[imageName] = imgSet
-	regionSets, regionErr := d.regionSBOMs(ctx, repo, subject, client, state)
+	regionSets, regionReferrers, regionErr := d.regionSBOMs(ctx, repo, subject, client, state)
 	if regionErr != nil {
 		return nil, fmt.Errorf("registry deploy: %w", regionErr)
 	}
@@ -115,6 +118,7 @@ func (d *Deployer) executeRegistryDeploy(ctx context.Context, m lane.DeployRegis
 		observed:   ObservedTLS{Type: "https", ServerCertFingerprint: id.LeafFingerprint},
 		resolved:   resolved,
 		sboms:      sboms,
+		referrers:  slices.Concat(imgReferrers, regionReferrers),
 		ref:        repo,
 		authority:  m.Target.Address.Authority(),
 		repository: m.Target.Name,
@@ -253,11 +257,12 @@ func payloadDescriptor(img v1.Image) (v1.Descriptor, error) {
 // pushImageSBOM flattens the pushed image, generates the CycloneDX and SPDX
 // SBOMs over the pushed manifest digest -- the image arm's whole-image
 // catalog (ADR-051 D3/D9) -- and pushes both as OCI referrers of subject,
-// annotated with the image arm's artifacts name.
-func pushImageSBOM(ctx context.Context, repo string, subject v1.Descriptor, img v1.Image, client registryClient, artName primitive.Identifier) (record.SBOMSet, error) {
+// annotated with the image arm's artifacts name. It returns what
+// pushSBOMPair returns.
+func pushImageSBOM(ctx context.Context, repo string, subject v1.Descriptor, img v1.Image, client registryClient, artName primitive.Identifier) (record.SBOMSet, []v1.Descriptor, error) {
 	fsys, err := flattenImageToFS(img)
 	if err != nil {
-		return record.SBOMSet{}, fmt.Errorf("flatten payload: %w", err)
+		return record.SBOMSet{}, nil, fmt.Errorf("flatten payload: %w", err)
 	}
 	subjectDigest := primitive.Digest(subject.Digest.String())
 	return pushSBOMPair(ctx, repo, subject, client, artName, fsys, subjectDigest)
@@ -269,57 +274,61 @@ func pushImageSBOM(ctx context.Context, repo string, subject v1.Descriptor, img 
 // (checked courier, ADR-051 D4), the layer content is read at the output's
 // own coordinates, and the region's SBOM pair is pushed as referrers of the
 // pushed subject. Regions run in sorted name order so the referrer writes
-// are deterministic.
-func (d *Deployer) regionSBOMs(ctx context.Context, repo string, subject v1.Descriptor, client registryClient, state *lane.Runtime) (map[primitive.Identifier]record.SBOMSet, error) {
+// are deterministic. It returns the SBOM digest set of every region and the
+// descriptor of every SBOM referrer pushed.
+func (d *Deployer) regionSBOMs(ctx context.Context, repo string, subject v1.Descriptor, client registryClient, state *lane.Runtime) (map[primitive.Identifier]record.SBOMSet, []v1.Descriptor, error) {
 	sets := map[primitive.Identifier]record.SBOMSet{}
+	var referrers []v1.Descriptor
 	exported := map[string][]byte{}
 	for _, artName := range slices.Sorted(maps.Keys(d.ArtifactRefs)) {
 		ref := d.ArtifactRefs[artName]
 		if ref.Output == nil {
 			continue
 		}
-		set, err := d.regionSBOM(ctx, repo, subject, client, state, artName, ref, exported)
+		set, pushed, err := d.regionSBOM(ctx, repo, subject, client, state, artName, ref, exported)
 		if err != nil {
-			return nil, fmt.Errorf("region %q: %w", artName, err)
+			return nil, nil, fmt.Errorf("region %q: %w", artName, err)
 		}
 		sets[artName] = set
+		referrers = append(referrers, pushed...)
 	}
-	return sets, nil
+	return sets, referrers, nil
 }
 
 // regionSBOM catalogs one region: resolve the file handle, export the
 // producer image (deduplicated across regions of the same producer through
 // exported), select and content-check the layer, read it at the output's own
-// coordinates, and push the SBOM pair under the region's diff_id subject.
-func (d *Deployer) regionSBOM(ctx context.Context, repo string, subject v1.Descriptor, client registryClient, state *lane.Runtime, artName primitive.Identifier, ref lane.ArtifactRef, exported map[string][]byte) (record.SBOMSet, error) {
+// coordinates, and push the SBOM pair under the region's diff_id subject. It
+// returns what pushSBOMPair returns.
+func (d *Deployer) regionSBOM(ctx context.Context, repo string, subject v1.Descriptor, client registryClient, state *lane.Runtime, artName primitive.Identifier, ref lane.ArtifactRef, exported map[string][]byte) (record.SBOMSet, []v1.Descriptor, error) {
 	handle, err := state.Resolve(lane.OutputRef{Step: ref.Step, Output: *ref.Output})
 	if err != nil {
-		return record.SBOMSet{}, err
+		return record.SBOMSet{}, nil, err
 	}
 	fh, ok := handle.(output.FileHandle)
 	if !ok {
-		return record.SBOMSet{}, fmt.Errorf("not a file output")
+		return record.SBOMSet{}, nil, fmt.Errorf("not a file output")
 	}
 	tarBytes, cached := exported[fh.Ref]
 	if !cached {
 		saved, saveErr := registry.SaveImage(ctx, d.Engine, fh.Ref)
 		if saveErr != nil {
-			return record.SBOMSet{}, saveErr
+			return record.SBOMSet{}, nil, saveErr
 		}
 		exported[fh.Ref] = saved
 		tarBytes = saved
 	}
 	layerBytes, err := registry.OutputLayer(tarBytes, fh.LayerDiffID)
 	if err != nil {
-		return record.SBOMSet{}, err
+		return record.SBOMSet{}, nil, err
 	}
 	out := d.Lane.Output(ref.Step, *ref.Output)
 	if out == nil {
-		return record.SBOMSet{}, fmt.Errorf("output %s.%s not declared", ref.Step, *ref.Output)
+		return record.SBOMSet{}, nil, fmt.Errorf("output %s.%s not declared", ref.Step, *ref.Output)
 	}
 	fsys, err := fsFromTarBuffer(layerBytes, lane.OutputContentPrefix(*out).String())
 	if err != nil {
-		return record.SBOMSet{}, err
+		return record.SBOMSet{}, nil, err
 	}
 	return pushSBOMPair(ctx, repo, subject, client, artName, fsys, fh.LayerDiffID)
 }
@@ -327,12 +336,14 @@ func (d *Deployer) regionSBOM(ctx context.Context, repo string, subject v1.Descr
 // pushSBOMPair catalogs fsys under subjectDigest, pushes the CycloneDX and
 // SPDX documents as OCI referrers of subject -- each annotated with the
 // artifacts-map name it belongs to -- and returns both document digests for
-// the artifact's sealed record (ADR-051 D9).
-func pushSBOMPair(ctx context.Context, repo string, subject v1.Descriptor, client registryClient, artName primitive.Identifier, fsys fs.FS, subjectDigest primitive.Digest) (record.SBOMSet, error) {
+// the artifact's sealed record (ADR-051 D9) and both referrer descriptors
+// for the read-after-write (ADR-051 amendment 2026-11-08).
+func pushSBOMPair(ctx context.Context, repo string, subject v1.Descriptor, client registryClient, artName primitive.Identifier, fsys fs.FS, subjectDigest primitive.Digest) (record.SBOMSet, []v1.Descriptor, error) {
 	cdxBytes, spdxBytes, err := GenerateImageSBOM(fsys, subjectDigest, clock.Reproducible())
 	if err != nil {
-		return record.SBOMSet{}, fmt.Errorf("sbom: %w", err)
+		return record.SBOMSet{}, nil, fmt.Errorf("sbom: %w", err)
 	}
+	referrers := make([]v1.Descriptor, 0, 2)
 	for _, doc := range []struct {
 		mediaType string
 		content   []byte
@@ -342,17 +353,18 @@ func pushSBOMPair(ctx context.Context, repo string, subject v1.Descriptor, clien
 	} {
 		art, artErr := registry.ArtifactImage(doc.content, doc.mediaType, subject, map[string]string{artifactAnnotation: string(artName)})
 		if artErr != nil {
-			return record.SBOMSet{}, fmt.Errorf("sbom artifact: %w", artErr)
+			return record.SBOMSet{}, nil, fmt.Errorf("sbom artifact: %w", artErr)
 		}
-		artDigest, dErr := art.Digest()
+		desc, dErr := partial.Descriptor(art)
 		if dErr != nil {
-			return record.SBOMSet{}, fmt.Errorf("sbom artifact digest: %w", dErr)
+			return record.SBOMSet{}, nil, fmt.Errorf("sbom artifact digest: %w", dErr)
 		}
-		if pushErr := pushByDigest(ctx, repo, artDigest.String(), art, client); pushErr != nil {
-			return record.SBOMSet{}, fmt.Errorf("attach sbom to %s: %w", subject.Digest, pushErr)
+		if pushErr := pushByDigest(ctx, repo, desc.Digest.String(), art, client); pushErr != nil {
+			return record.SBOMSet{}, nil, fmt.Errorf("attach sbom to %s: %w", subject.Digest, pushErr)
 		}
+		referrers = append(referrers, *desc)
 	}
-	return record.SBOMSet{CycloneDX: docDigest(cdxBytes), SPDX: docDigest(spdxBytes)}, nil
+	return record.SBOMSet{CycloneDX: docDigest(cdxBytes), SPDX: docDigest(spdxBytes)}, referrers, nil
 }
 
 // docDigest is the prefixed sha256 content digest of one SBOM document, the

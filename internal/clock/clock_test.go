@@ -1,6 +1,8 @@
 package clock_test
 
 import (
+	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -49,6 +51,31 @@ func TestSinceReturnsPositiveDuration(t *testing.T) {
 	start := clock.Wall().Add(-clock.Hour)
 	if d := clock.Since(start); d < clock.Hour {
 		t.Errorf("Since(an hour ago) = %v, want at least 1h", d)
+	}
+}
+
+// TestWait pins both ends of the one wait: a duration that elapses returns
+// nil, and a done context returns its error without sitting the duration
+// out. No case waits: the elapsing case waits zero, and the done case is
+// canceled before the call.
+func TestWait(t *testing.T) {
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	tests := []struct {
+		ctx  context.Context
+		want error
+		name string
+		d    clock.Duration
+	}{
+		{name: "elapsed", ctx: context.Background(), d: 0, want: nil},
+		{name: "context done", ctx: canceled, d: clock.Hour, want: context.Canceled},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := clock.Wait(tt.ctx, tt.d); !errors.Is(err, tt.want) {
+				t.Errorf("Wait() = %v, want %v", err, tt.want)
+			}
+		})
 	}
 }
 
