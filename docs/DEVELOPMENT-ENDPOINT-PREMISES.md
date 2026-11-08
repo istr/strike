@@ -127,6 +127,8 @@ The image carries exactly this tool set:
 - `python3`, for the roadmap script;
 - `make`;
 - `git`, reading remotes over HTTPS;
+- `gpg`, signing commits through the host's gpg-agent, which the editor
+  forwards into the container; the key stays on the host;
 - `go` and `gofmt`, `golangci-lint`, `govulncheck`, `cosign`;
 - `claude`, the agent;
 - `podman`, a static remote client, and `docker-compose`, the provider
