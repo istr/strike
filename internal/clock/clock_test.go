@@ -39,19 +39,16 @@ func TestReproducibleFallsBackOnMalformed(t *testing.T) {
 
 func TestWallIsMonotonicWithinTest(t *testing.T) {
 	a := clock.Wall()
-	time.Sleep(time.Millisecond)
 	b := clock.Wall()
-	if !b.After(a) {
-		t.Errorf("Wall() not increasing: a=%v b=%v", a, b)
+	if b.Before(a) {
+		t.Errorf("Wall() went backwards: a=%v b=%v", a, b)
 	}
 }
 
 func TestSinceReturnsPositiveDuration(t *testing.T) {
-	start := clock.Wall()
-	time.Sleep(time.Millisecond)
-	d := clock.Since(start)
-	if d <= 0 {
-		t.Errorf("Since(start) = %v, want > 0", d)
+	start := clock.Wall().Add(-clock.Hour)
+	if d := clock.Since(start); d < clock.Hour {
+		t.Errorf("Since(an hour ago) = %v, want at least 1h", d)
 	}
 }
 
