@@ -29,9 +29,10 @@ lint-type:
 lint-cue:
 	go tool lintcue ./...
 
-# Gate for the four tree-wide source checks that need no Go type information:
+# Gate for the five tree-wide source checks that need no Go type information:
 # printable-ASCII source, ADR-index coverage, the base64 DER blob allowlist,
-# and the fixture record that mirrors its fixture half. All walk the module
+# the fixture record that mirrors its fixture half, and the digest pins and
+# Containerfile programs of the container declarations. All walk the module
 # tree from the directory holding go.mod, so the command takes no package
 # pattern; it is run from the repository root.
 .PHONY: lint-doc
