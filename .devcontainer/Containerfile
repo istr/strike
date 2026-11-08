@@ -43,7 +43,7 @@ COPY --from=cgr.dev/chainguard/git@sha256:b2cf28a09c75a54eada959623af5aa93a9edf3
 COPY --from=cgr.dev/chainguard/git@sha256:b2cf28a09c75a54eada959623af5aa93a9edf302fd0889ef6fe2f8e4cf7a102e /usr/share/git-core /usr/share/git-core
 COPY --from=cgr.dev/chainguard/go@sha256:69f95ced617ff9de4283d8d97afd52c909052d496e9f3e15e4af6e4de1c9fd70 /usr/lib/go /usr/lib/go
 COPY --from=cgr.dev/chainguard/go@sha256:69f95ced617ff9de4283d8d97afd52c909052d496e9f3e15e4af6e4de1c9fd70 /usr/bin/make /usr/bin/make
-COPY --from=cgr.dev/chainguard/go@sha256:bf1d2822d808104a060b1cbe993d8cd4ce1ca19d0ad15c61577becd8116a578b /usr/bin/bash /usr/bin/bash
+COPY --from=cgr.dev/chainguard/python@sha256:bb16be8b36c2a339bc8567fdcbba83a88b899430acd6252214cb5a5df0cd5b2a /usr/bin/bash /usr/bin/bash
 COPY --from=cgr.dev/chainguard/busybox@sha256:85537d06d46a0ecca2747e67d801bd96c9d9e78fc4e3c52f7232f5f82a336379 /usr/bin/busybox /usr/bin/busybox
 COPY --from=cgr.dev/chainguard/python@sha256:bb16be8b36c2a339bc8567fdcbba83a88b899430acd6252214cb5a5df0cd5b2a /usr/bin/python3.15 /usr/bin/python3.15
 COPY --from=cgr.dev/chainguard/python@sha256:bb16be8b36c2a339bc8567fdcbba83a88b899430acd6252214cb5a5df0cd5b2a /usr/lib/python3.15 /usr/lib/python3.15
@@ -51,7 +51,7 @@ COPY --from=tools /go/bin/golangci-lint /go/bin/govulncheck /go/bin/cosign /usr/
 COPY --from=unpack /tmp/package/claude /usr/bin/claude
 COPY --from=unpack /tmp/bin/podman-remote-static-linux_amd64 /usr/bin/podman
 ADD --checksum=sha256:7758048ad38e580f22559603312874fec8bb638d021a9e64182385fc17cc12a2 --chmod=755 https://github.com/docker/compose/releases/download/v5.7.0/docker-compose-linux-x86_64 /usr/bin/docker-compose
-COPY --from=cgr.dev/chainguard/go@sha256:bf1d2822d808104a060b1cbe993d8cd4ce1ca19d0ad15c61577becd8116a578b /etc/terminfo /etc/terminfo
+COPY --from=cgr.dev/chainguard/python@sha256:bb16be8b36c2a339bc8567fdcbba83a88b899430acd6252214cb5a5df0cd5b2a /etc/terminfo /etc/terminfo
 USER 0
 # bash is sh; python3, go and gofmt are relative links; the busybox applets
 # stand in for coreutils, grep and find. busybox --install keeps every name
