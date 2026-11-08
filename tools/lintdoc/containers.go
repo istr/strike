@@ -54,7 +54,7 @@ type containerfilePolicy struct {
 // path relative to its module root. A Containerfile that is not listed may
 // start no program and read no named context.
 var containerfilePolicies = map[string]containerfilePolicy{
-	".devcontainer/Containerfile": {programs: []string{"dpkg", "go", "ln", "mkdir", "tar", "useradd"}},
+	".devcontainer/Containerfile": {programs: []string{"/usr/bin/busybox", "go"}},
 	"bootstrap/Containerfile":     {programs: []string{"git", "go"}, contexts: []string{"harness"}},
 }
 

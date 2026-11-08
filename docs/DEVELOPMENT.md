@@ -492,7 +492,9 @@ mutual-exclusion primitive. `sync.Mutex`, `sync.RWMutex`, `sync.Map`,
   spawned, and every blocking call a worker makes is bound to its
   context so that cancellation is an unblocking event.
 
-Run `go test -race ./...` in CI -- always, no exceptions. `-race` is
+Run `go test -race ./...` in CI -- always, no exceptions. In the dev
+container `make test` runs it in the race image, because the dev container
+carries no C compiler (docs/DEVELOPMENT-ENDPOINT-PREMISES.md). `-race` is
 necessary but is not the certificate: the structural gate is zero
 banned declarations (ADR-052 D7). Do not use `init()` functions.
 

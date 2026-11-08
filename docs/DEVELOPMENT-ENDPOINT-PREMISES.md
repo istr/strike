@@ -112,26 +112,45 @@ the working tree belong to the endpoint user.
 
 ### What the image contains
 
-The image is built from `.devcontainer/Containerfile`: the Go toolchain of
-the version `go.mod` demands, the C toolchain the race detector needs, `git`,
-`make`, `golangci-lint`, `govulncheck`, `cosign`, the agent, and a podman
-remote client with the `podman-compose` provider, which reach the host engine
-through the mounted socket. The base image and the Go tools are pinned by
-digest and version; the Go tools, `cosign` among them, are built from source,
-so the Go checksum database pins every module. The agent is the native binary
-of its version-pinned linux-x64 package, fetched under a checksum; it needs
-no JavaScript runtime, so the image carries none. The podman client, the compose provider, and the three
-packages the provider needs are Debian packages fetched from a dated
-`snapshot.debian.org` path under checksums and installed with `dpkg`. No Dev
-Containers feature is used, and the build consults no distribution package
-repository. The Go
-tools are built in a separate stage, so their module and build caches stay
-out of the image.
+The image is built from `.devcontainer/Containerfile` and is composed, not
+pulled (ADR-055 D3). Every stage starts from the `cgr.dev` static base and
+takes its files by `COPY` from `cgr.dev` images or by `ADD` under a checksum;
+every source is pinned by its linux/amd64 manifest digest. No package manager
+runs, and no Dev Containers feature is used. A `cgr.dev` Go image is a copy
+source only: it sets `GODEBUG=tarinsecurepath=0,zipinsecurepath=0`, which
+changes how strike reads archives, and no image the tree builds sets GODEBUG.
 
-One part of ADR-055 D3 is still open: the base image comes from `docker.io`
-and has not been measured against a `cgr.dev` image carrying the Go minor
-`go.mod` demands and the C toolchain the race detector needs. The
-Containerfile says so in its header, and the roadmap owns the measurement.
+The image carries exactly this tool set:
+
+- `bash`, which is also `sh`, and the busybox applets standing in for
+  coreutils, `grep` and `find`;
+- `python3`, for the roadmap script;
+- `make`;
+- `git`, reading remotes over HTTPS;
+- `go` and `gofmt`, `golangci-lint`, `govulncheck`, `cosign`;
+- `claude`, the agent;
+- `podman`, a static remote client, and `docker-compose`, the provider
+  `podman compose` finds, both reaching the endpoint engine through the
+  mounted socket;
+- a CA bundle and terminfo.
+
+It carries no C toolchain, so cgo fails inside it. The Go tools are built
+from source in a separate stage, so the Go checksum database pins every
+module and their caches stay out of the image. The agent is the native binary
+of its version-pinned linux-x64 package; the podman client and the compose
+provider are static release binaries; all three are fetched under checksums.
+A tool the work needs and the image lacks is added to the Containerfile by a
+reviewed change, never installed into a running container.
+
+The race detector needs cgo and a C compiler, so `go test -race` does not run
+in the dev container. `make test` and `make integration` build the race image
+from `.devcontainer/race/Containerfile` -- the same Go toolchain plus the C
+toolchain, composed the same way, without GODEBUG -- and run the tests in it
+as a sibling: the working tree at its endpoint path, host networking, the
+engine socket at the endpoint path the engine reports for itself, and the
+named volumes `strike-race-gomod` and `strike-race-gocache` as its caches.
+The race image runs as root, which under a rootless engine is the endpoint
+user; that is what reaches the socket.
 
 ## Two gates, and where each runs
 

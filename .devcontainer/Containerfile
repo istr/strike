@@ -1,43 +1,65 @@
 # Dev container for the hardened-endpoint premise; see
-# docs/ADR-055-hardened-endpoint-development-premise.md.
+# docs/ADR-055-hardened-endpoint-development-premise.md, D3, and
+# docs/DEVELOPMENT-ENDPOINT-PREMISES.md for the tool set it carries.
 #
-# Transitional: the base image comes from docker.io and has not been measured
-# against a cgr.dev image carrying the Go minor go.mod demands and the C
-# toolchain the race detector needs (ADR-055 D3). It is not a precedent.
-FROM docker.io/library/golang:1.27.3@sha256:e519d3b0a5b285e5aa53ab9eef02bc6bbb9cb04608389b743a136a9ce75f0d1e AS tools
+# Composed, not pulled: every stage starts from the cgr.dev static base and
+# takes its files by COPY from cgr.dev images or by ADD under a checksum, and
+# every source is pinned by its linux/amd64 manifest digest. No package
+# manager runs. A cgr.dev Go image is a copy source only: it sets GODEBUG, and
+# no stage here does. The final stage carries no C toolchain, so cgo fails;
+# the race detector runs in the image of race/Containerfile.
+
+# Tools stage: the static base and the Go toolchain; no C compiler, so cgo is
+# off.
+FROM cgr.dev/chainguard/static@sha256:939754fefdbdb198356dc3187310417777d4dd8561be000885e224d49a4ce727 AS tools
+COPY --from=cgr.dev/chainguard/go@sha256:69f95ced617ff9de4283d8d97afd52c909052d496e9f3e15e4af6e4de1c9fd70 /usr/lib/go /usr/lib/go
+USER 0
+ENV PATH=/usr/lib/go/bin:/usr/bin GOPATH=/go
 RUN ["go", "install", "github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0"]
 RUN ["go", "install", "golang.org/x/vuln/cmd/govulncheck@v1.9.0"]
-# The independent verifier make -C test/sigstore-local conformance drives.
-# Built from source like the tools above, so the checksum database pins every
-# module; stripped, because the symbol table alone is tens of megabytes.
 RUN ["go", "install", "-ldflags=-s -w", "github.com/sigstore/cosign/v3/cmd/cosign@v3.1.4"]
-# The agent's linux-x64 platform package is a self-contained native binary;
-# the checksum pins the registry tarball whose sha512 integrity npm publishes.
-ADD --checksum=sha256:9b7b53954b8ffb886fafeefe9ef1e0e9e5c15e8aaf2f54d65ba64d0cca795dc7 https://registry.npmjs.org/@anthropic-ai/claude-code-linux-x64/-/claude-code-linux-x64-2.1.319.tgz /tmp/claude-code.tgz
-RUN ["tar", "-xzf", "/tmp/claude-code.tgz", "-C", "/tmp", "package/claude"]
-# The engine client and the compose provider the harness Makefile drives
-# through the mounted socket. Each package is fetched from a dated
-# snapshot.debian.org path under the checksum the trixie index publishes, so
-# the build consults no package repository and a rebuild fetches the same
-# bytes. The remote client carries no runtime; the full podman package would
-# bring one the container cannot use.
-ADD --checksum=sha256:d67c87f0d0d26b7e5a42bf09c9e2a5d8c3cfa1611b65f94b4ed774a0f3b067ca https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/p/podman/podman-remote_5.4.2+ds1-2+b2_amd64.deb /debs/
-ADD --checksum=sha256:7e8cdb41e2bcc66de139777fcc3278134997cd5630f5d41508110278bae593bf https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/p/podman-compose/podman-compose_1.3.0-1_all.deb /debs/
-ADD --checksum=sha256:0019c4e7848c83a0d6bcb78cca902b5cdb1714aa6370ba01955b1fed6f667056 https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/p/pyyaml/python3-yaml_6.0.2-1+b2_amd64.deb /debs/
-ADD --checksum=sha256:119670533dbc8e9e89ee1b09415879b70c30fd444f88da7d2fc2032adcd4be75 https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/p/python-dotenv/python3-dotenv_1.0.1-1_all.deb /debs/
-ADD --checksum=sha256:8a5475402801de445a17887bb72d03613565a6a84b216b4b606d1462c613eeb2 https://snapshot.debian.org/archive/debian/20261101T000000Z/pool/main/liby/libyaml/libyaml-0-2_0.2.5-2_amd64.deb /debs/
 
-FROM docker.io/library/golang:1.27.3@sha256:e519d3b0a5b285e5aa53ab9eef02bc6bbb9cb04608389b743a136a9ce75f0d1e
-COPY --from=tools /go/bin/golangci-lint /go/bin/govulncheck /go/bin/cosign /go/bin/
-COPY --from=tools /tmp/package/claude /usr/local/bin/claude
-# Installed from a bind mount of the tools stage, so no package file lands in
-# a layer. dpkg resolves nothing: a dependency the base image lacks fails here.
-RUN --mount=type=bind,from=tools,source=/debs,target=/debs ["dpkg", "--install", "/debs/libyaml-0-2_0.2.5-2_amd64.deb", "/debs/python3-yaml_6.0.2-1+b2_amd64.deb", "/debs/python3-dotenv_1.0.1-1_all.deb", "/debs/podman-compose_1.3.0-1_all.deb", "/debs/podman-remote_5.4.2+ds1-2+b2_amd64.deb"]
-# The package installs only podman-remote; the compose provider and the
-# harness Makefile invoke podman by its plain name.
-RUN ["ln", "-s", "/usr/bin/podman-remote", "/usr/local/bin/podman"]
-RUN ["useradd", "--create-home", "--uid", "1000", "--user-group", "--shell", "/bin/bash", "dev"]
+# Unpack stage: the static base and busybox, only to extract two release
+# tarballs.
+FROM cgr.dev/chainguard/static@sha256:939754fefdbdb198356dc3187310417777d4dd8561be000885e224d49a4ce727 AS unpack
+COPY --from=cgr.dev/chainguard/busybox@sha256:85537d06d46a0ecca2747e67d801bd96c9d9e78fc4e3c52f7232f5f82a336379 /usr/bin/busybox /usr/bin/busybox
+COPY --from=cgr.dev/chainguard/busybox@sha256:85537d06d46a0ecca2747e67d801bd96c9d9e78fc4e3c52f7232f5f82a336379 /usr/lib/ld-linux-x86-64.so.2 /usr/lib/libc.so.6 /usr/lib/libm.so.6 /usr/lib/libcrypt.so.1 /usr/lib/libcrypt.so.1.1.0 /usr/lib/
+USER 0
+ADD --checksum=sha256:9b7b53954b8ffb886fafeefe9ef1e0e9e5c15e8aaf2f54d65ba64d0cca795dc7 https://registry.npmjs.org/@anthropic-ai/claude-code-linux-x64/-/claude-code-linux-x64-2.1.319.tgz /tmp/claude-code.tgz
+RUN ["/usr/bin/busybox", "tar", "-xzf", "/tmp/claude-code.tgz", "-C", "/tmp", "package/claude"]
+ADD --checksum=sha256:74982bdab99befa705bea477cb997b7203ac6b7d4bcc1b4dba7dcab6c359f5f7 https://github.com/containers/podman/releases/download/v5.4.2/podman-remote-static-linux_amd64.tar.gz /tmp/podman-remote.tgz
+RUN ["/usr/bin/busybox", "tar", "-xzf", "/tmp/podman-remote.tgz", "-C", "/tmp", "bin/podman-remote-static-linux_amd64"]
+
+# Final stage.
+FROM cgr.dev/chainguard/static@sha256:939754fefdbdb198356dc3187310417777d4dd8561be000885e224d49a4ce727
+# git and the git-remote-https closure from the git image, without the C
+# library.
+COPY --from=cgr.dev/chainguard/git@sha256:b2cf28a09c75a54eada959623af5aa93a9edf302fd0889ef6fe2f8e4cf7a102e /usr/lib/libpcre2-8.so.0 /usr/lib/libpcre2-8.so.0.16.1 /usr/lib/libcurl.so.4 /usr/lib/libcurl.so.4.8.0 /usr/lib/libnghttp3.so.9 /usr/lib/libnghttp3.so.9.9.0 /usr/lib/libngtcp2_crypto_ossl.so.0 /usr/lib/libngtcp2_crypto_ossl.so.0.3.1 /usr/lib/libngtcp2.so.16 /usr/lib/libngtcp2.so.16.11.0 /usr/lib/libnghttp2.so.14 /usr/lib/libnghttp2.so.14.29.5 /usr/lib/libidn2.so.0 /usr/lib/libidn2.so.0.4.0 /usr/lib/libldap.so.2 /usr/lib/libldap.so.2.0.201 /usr/lib/liblber.so.2 /usr/lib/liblber.so.2.0.201 /usr/lib/libpsl.so.5 /usr/lib/libpsl.so.5.3.8 /usr/lib/libgssapi_krb5.so.2 /usr/lib/libgssapi_krb5.so.2.2 /usr/lib/libunistring.so.5 /usr/lib/libunistring.so.5.2.2 /usr/lib/libsasl2.so.3 /usr/lib/libsasl2.so.3.0.0 /usr/lib/libkrb5.so.3 /usr/lib/libkrb5.so.3.3 /usr/lib/libk5crypto.so.3 /usr/lib/libk5crypto.so.3.1 /usr/lib/libcom_err.so.2 /usr/lib/libcom_err.so.2.1 /usr/lib/libkrb5support.so.0 /usr/lib/libkrb5support.so.0.1 /usr/lib/libkeyutils.so.1 /usr/lib/libkeyutils.so.1.10 /usr/lib/
+# C library, libcrypt and the python3 closure from the python image; it also
+# covers the libraries git, bash, busybox, make and claude share with it.
+COPY --from=cgr.dev/chainguard/python@sha256:bb16be8b36c2a339bc8567fdcbba83a88b899430acd6252214cb5a5df0cd5b2a /usr/lib/ld-linux-x86-64.so.2 /usr/lib/libc.so.6 /usr/lib/libm.so.6 /usr/lib/libpthread.so.0 /usr/lib/libdl.so.2 /usr/lib/librt.so.1 /usr/lib/libresolv.so.2 /usr/lib/libcrypt.so.1 /usr/lib/libcrypt.so.1.1.0 /usr/lib/libpython3.15.so.1.0 /usr/lib/libbz2.so.1 /usr/lib/libbz2.so.1.0.8 /usr/lib/libcrypto.so.4 /usr/lib/libssl.so.4 /usr/lib/libexpat.so.1 /usr/lib/libexpat.so.1.13.1 /usr/lib/libffi.so.8 /usr/lib/libffi.so.8.5.0 /usr/lib/libgdbm.so.6 /usr/lib/libgdbm.so.6.0.0 /usr/lib/libgdbm_compat.so.4 /usr/lib/libgdbm_compat.so.4.0.0 /usr/lib/liblzma.so.5 /usr/lib/liblzma.so.5.8.4 /usr/lib/libmpdec.so.4 /usr/lib/libmpdec.so.4.0.1 /usr/lib/libncursesw.so.6 /usr/lib/libncursesw.so.6.6 /usr/lib/libpanelw.so.6 /usr/lib/libpanelw.so.6.6 /usr/lib/libreadline.so.8 /usr/lib/libreadline.so.8.3 /usr/lib/libsqlite3.so.0 /usr/lib/libsqlite3.so.3.54.1 /usr/lib/libtinfo.so.6 /usr/lib/libtinfo.so.6.6 /usr/lib/libuuid.so.1 /usr/lib/libuuid.so.1.3.0 /usr/lib/libz.so.1 /usr/lib/libz.so.1.3.2.1-motley /usr/lib/libzstd.so.1 /usr/lib/libzstd.so.1.5.7 /usr/lib/libbrotlicommon.so.1 /usr/lib/libbrotlicommon.so.1.2.1 /usr/lib/libbrotlidec.so.1 /usr/lib/libbrotlidec.so.1.2.1 /usr/lib/libbrotlienc.so.1 /usr/lib/libbrotlienc.so.1.2.1 /usr/lib/
+COPY --from=cgr.dev/chainguard/git@sha256:b2cf28a09c75a54eada959623af5aa93a9edf302fd0889ef6fe2f8e4cf7a102e /usr/bin/git /usr/bin/git
+COPY --from=cgr.dev/chainguard/git@sha256:b2cf28a09c75a54eada959623af5aa93a9edf302fd0889ef6fe2f8e4cf7a102e /usr/libexec/git-core /usr/libexec/git-core
+COPY --from=cgr.dev/chainguard/git@sha256:b2cf28a09c75a54eada959623af5aa93a9edf302fd0889ef6fe2f8e4cf7a102e /usr/share/git-core /usr/share/git-core
+COPY --from=cgr.dev/chainguard/go@sha256:69f95ced617ff9de4283d8d97afd52c909052d496e9f3e15e4af6e4de1c9fd70 /usr/lib/go /usr/lib/go
+COPY --from=cgr.dev/chainguard/go@sha256:69f95ced617ff9de4283d8d97afd52c909052d496e9f3e15e4af6e4de1c9fd70 /usr/bin/make /usr/bin/make
+COPY --from=cgr.dev/chainguard/go@sha256:bf1d2822d808104a060b1cbe993d8cd4ce1ca19d0ad15c61577becd8116a578b /usr/bin/bash /usr/bin/bash
+COPY --from=cgr.dev/chainguard/busybox@sha256:85537d06d46a0ecca2747e67d801bd96c9d9e78fc4e3c52f7232f5f82a336379 /usr/bin/busybox /usr/bin/busybox
+COPY --from=cgr.dev/chainguard/python@sha256:bb16be8b36c2a339bc8567fdcbba83a88b899430acd6252214cb5a5df0cd5b2a /usr/bin/python3.15 /usr/bin/python3.15
+COPY --from=cgr.dev/chainguard/python@sha256:bb16be8b36c2a339bc8567fdcbba83a88b899430acd6252214cb5a5df0cd5b2a /usr/lib/python3.15 /usr/lib/python3.15
+COPY --from=tools /go/bin/golangci-lint /go/bin/govulncheck /go/bin/cosign /usr/bin/
+COPY --from=unpack /tmp/package/claude /usr/bin/claude
+COPY --from=unpack /tmp/bin/podman-remote-static-linux_amd64 /usr/bin/podman
+ADD --checksum=sha256:7758048ad38e580f22559603312874fec8bb638d021a9e64182385fc17cc12a2 --chmod=755 https://github.com/docker/compose/releases/download/v5.7.0/docker-compose-linux-x86_64 /usr/bin/docker-compose
+COPY --from=cgr.dev/chainguard/go@sha256:bf1d2822d808104a060b1cbe993d8cd4ce1ca19d0ad15c61577becd8116a578b /etc/terminfo /etc/terminfo
+USER 0
+# bash is sh; python3, go and gofmt are relative links; the busybox applets
+# stand in for coreutils, grep and find. busybox --install keeps every name
+# that already exists.
+RUN ["/usr/bin/busybox", "ln", "-s", "bash", "/usr/bin/sh"]
+RUN ["/usr/bin/busybox", "ln", "-s", "python3.15", "/usr/bin/python3"]
+RUN ["/usr/bin/busybox", "ln", "-s", "../lib/go/bin/go", "../lib/go/bin/gofmt", "/usr/bin/"]
+RUN ["/usr/bin/busybox", "--install", "-s", "/usr/bin"]
+COPY passwd group /etc/
+COPY --chown=1000:1000 home/dev/ /home/dev/
 USER dev
-# Mount point of the strike-claude volume; an empty volume copies this
-# directory's ownership on first mount, so the agent's state stays writable.
-RUN ["mkdir", "-p", "/home/dev/.claude"]

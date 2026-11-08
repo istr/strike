@@ -82,7 +82,7 @@ first (`make -C test/sigstore-local up`), then build stage_1 from the clone's
 root:
 
 ```sh
-GIT_COMMIT=7dbd1f7ae4e1e708bc803f54588519ba64d3e760
+GIT_COMMIT=54b865cd654a9bb3e0d7d633e06760f295d64d1a
 
 podman build -t strike:stage_1 \
   --build-arg GIT_COMMIT=${GIT_COMMIT} \
@@ -351,8 +351,9 @@ security, and style guidelines.
 
 Instead of installing the toolchain on the host, you can work inside the dev
 container declared in `.devcontainer/`. It carries the Go toolchain, `make`,
-golangci-lint, govulncheck, cosign, and a podman remote client with the
-`podman-compose` provider. The host's podman socket is mounted into the
+git, python3, golangci-lint, govulncheck, cosign, the agent, and a podman
+remote client with `docker-compose` as the compose provider; `make test` runs
+the race detector in a sibling race image. The host's podman socket is mounted into the
 container as `CONTAINER_HOST`, and every container started from inside runs as
 a sibling on the host engine. The premise behind this layout is
 [docs/DEVELOPMENT-ENDPOINT-PREMISES.md](docs/DEVELOPMENT-ENDPOINT-PREMISES.md).
@@ -363,12 +364,10 @@ on the host. Bind mounts are resolved by the host engine, so the harness only
 works from the working tree, which the container mounts at its host path. A
 copy outside the working tree is invisible to the host.
 
-Building the image needs network access to `snapshot.debian.org`, in addition
-to `docker.io`, the Go module proxy, and the npm registry. The podman client
-and the compose provider are Debian packages, fetched from a dated snapshot
-path under pinned checksums. The build does not use a Debian package
-repository. If `snapshot.debian.org` is unreachable, the image cannot be
-rebuilt, but an image that has already been built keeps working.
+Building the image needs network access to `cgr.dev`, the Go module proxy,
+the npm registry, and GitHub's release downloads for the podman client and
+docker compose. It installs no package: every file comes from a
+digest-pinned image or from a download under a pinned checksum.
 
 AI coding agents should read [AGENTS.md](AGENTS.md) before making changes.
 

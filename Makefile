@@ -59,13 +59,29 @@ lint-deadcode:
 
 lint: lint-ci lint-type lint-arch lint-doc lint-cue-fmt lint-deadcode
 
-test:
-	go test -race -coverprofile=coverage.out -covermode=atomic ./...
+# The race detector needs cgo and a C compiler, which the dev container does
+# not carry. test and integration run go test in a sibling from the race image
+# (docs/DEVELOPMENT-ENDPOINT-PREMISES.md). A sibling's bind mounts resolve on
+# the endpoint, so the socket path is the one the engine reports for itself.
+RACE_IMAGE = localhost/strike-race
+ENGINE_SOCKET = $(patsubst unix://%,%,$(shell podman info --format '{{.Host.RemoteSocket.Path}}'))
+RACE_RUN = podman run --rm --network=host \
+	-v $(ENGINE_SOCKET):/run/podman/podman.sock -e CONTAINER_HOST=unix:///run/podman/podman.sock \
+	-e STRIKE_INTEGRATION -v $(CURDIR):$(CURDIR) -w $(CURDIR) \
+	-v strike-race-gomod:/gomod -e GOMODCACHE=/gomod -v strike-race-gocache:/gocache -e GOCACHE=/gocache \
+	-e GOTOOLCHAIN=local $(RACE_IMAGE)
+
+.PHONY: race-image
+race-image:
+	podman build -q -t $(RACE_IMAGE) .devcontainer/race
+
+test: race-image
+	$(RACE_RUN) go test -race -coverprofile=coverage.out -covermode=atomic ./...
 	@go tool cover -func=coverage.out | tail -1
 
 # Integration tests (auto-detects podman socket; set STRIKE_INTEGRATION=0 to skip).
-integration:
-	go test -race -v -count=1 ./...
+integration: race-image
+	$(RACE_RUN) go test -race -v -count=1 ./...
 
 vuln:
 	govulncheck ./...

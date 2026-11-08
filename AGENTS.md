@@ -229,7 +229,9 @@ Environment: `CONTAINER_HOST` (engine address, `unix://` or `https://`),
 (reproducible builds), `STRIKE_AUDIT` (request audit to stderr),
 `STRIKE_INTEGRATION=0` (skip integration tests). On the development machine
 the engine is always up and reachable through `CONTAINER_HOST`; check
-availability only through that socket.
+availability only through that socket. The dev container carries the tool set
+`docs/DEVELOPMENT-ENDPOINT-PREMISES.md` lists; report a tool you need and do
+not find to the operator, never install or fetch one.
 
 Two integration tests additionally need the local sigstore harness under
 `test/sigstore-local`. A harness that exists but is stopped is restarted by
