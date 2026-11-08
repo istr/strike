@@ -134,6 +134,15 @@ The image carries exactly this tool set:
   mounted socket;
 - a CA bundle and terminfo.
 
+It also carries the libraries the editor's server needs and the static base
+lacks: the C++ runtime, `libgcc_s` and `libutil`, copied from the `cgr.dev` Go
+image. The editor installs that server into the container when it attaches,
+and no digest pins it; the closure was measured against server version
+1.145.2, and an editor update can need more. The native broker of the editor's
+Microsoft authentication extension stays unloadable: it needs GTK 3,
+WebKitGTK, libsoup, libsecret, GLib, X11, D-Bus and OpenSSL 3, which no
+`cgr.dev` source carries, and the server starts without it.
+
 It carries no C toolchain, so cgo fails inside it. The Go tools are built
 from source in a separate stage, so the Go checksum database pins every
 module and their caches stay out of the image. The agent is the native binary

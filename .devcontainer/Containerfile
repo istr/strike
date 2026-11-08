@@ -60,6 +60,9 @@ RUN ["/usr/bin/busybox", "ln", "-s", "bash", "/usr/bin/sh"]
 RUN ["/usr/bin/busybox", "ln", "-s", "python3.15", "/usr/bin/python3"]
 RUN ["/usr/bin/busybox", "ln", "-s", "../lib/go/bin/go", "../lib/go/bin/gofmt", "/usr/bin/"]
 RUN ["/usr/bin/busybox", "--install", "-s", "/usr/bin"]
+# The C++ runtime, libgcc_s and libutil the editor's server needs, from the
+# Go image; see docs/DEVELOPMENT-ENDPOINT-PREMISES.md.
+COPY --from=cgr.dev/chainguard/go@sha256:69f95ced617ff9de4283d8d97afd52c909052d496e9f3e15e4af6e4de1c9fd70 /usr/lib/libstdc++.so.6 /usr/lib/libstdc++.so.6.0.36 /usr/lib/libgcc_s.so.1 /usr/lib/libutil.so.1 /usr/lib/
 COPY passwd group /etc/
 COPY --chown=1000:1000 home/dev/ /home/dev/
 USER dev
