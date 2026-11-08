@@ -36,7 +36,6 @@ const (
 	continuationMessage     = "line continuation; write one instruction per line"
 	featuresMessage         = "dev container declares features; the image arrives through its Containerfile"
 	devcontainerJSONMessage = "dev container configuration is not plain JSON"
-	staleExceptionMessage   = "Containerfile exception matches no offending instruction"
 )
 
 // containerfilePolicy is what one Containerfile may use besides images pinned
@@ -58,34 +57,6 @@ var containerfilePolicies = map[string]containerfilePolicy{
 	"bootstrap/Containerfile":     {programs: []string{"git", "go"}, contexts: []string{"harness"}},
 }
 
-// containerfileException is one Containerfile instruction the check tolerates
-// although it breaks a rule: the file and the instruction as written, the
-// roadmap item that removes it, and why it stands until then. An exception
-// that matches no offending instruction is itself a finding, so the change
-// that fixes the instruction also removes the entry.
-type containerfileException struct {
-	file        string
-	instruction string
-	owner       string
-	reason      string
-}
-
-// containerfileExceptions are the instructions the check tolerates.
-var containerfileExceptions = []containerfileException{
-	{
-		file:        "bootstrap/Containerfile",
-		instruction: `RUN ["apk", "add", "--no-cache", "git"]`,
-		owner:       "item-0151",
-		reason:      "the builder stage installs git from the distribution index until its base image carries what the build needs",
-	},
-	{
-		file:        "bootstrap/Containerfile",
-		instruction: "RUN git fetch --depth 1 https://github.com/istr/strike ${GIT_COMMIT}",
-		owner:       "item-0151",
-		reason:      "the residual GIT_COMMIT shell expansion, a stage_0 debt (docs/ADR-009-bootstrap-reproducibility-proof.md)",
-	},
-}
-
 // instruction is one Containerfile instruction: its text without surrounding
 // space and the offset of the line it starts on.
 type instruction struct {
@@ -101,14 +72,12 @@ type containerfileScan struct {
 }
 
 // checkContainers reads every Containerfile, compose file and dev container
-// configuration in the tree, then reports each exception no offending
-// instruction used.
+// configuration in the tree.
 func (g *gate) checkContainers() error {
-	used := make([]bool, len(containerfileExceptions))
-	err := g.walkTree(func(name string, d fs.DirEntry) error {
+	return g.walkTree(func(name string, d fs.DirEntry) error {
 		switch base := d.Name(); {
 		case containerfileNames[base]:
-			return g.scanContainerfile(name, used)
+			return g.scanContainerfile(name)
 		case composeNames[base]:
 			return g.scanCompose(name)
 		case devcontainerNames[base]:
@@ -116,20 +85,10 @@ func (g *gate) checkContainers() error {
 		}
 		return nil
 	})
-	if err != nil {
-		return err
-	}
-	for i, e := range containerfileExceptions {
-		if !used[i] {
-			g.found = append(g.found, fmt.Sprintf("%s: %s: %s (owner %s)", e.file, staleExceptionMessage, e.instruction, e.owner))
-		}
-	}
-	return nil
 }
 
-// scanContainerfile checks one Containerfile instruction by instruction and
-// marks the exceptions its offending instructions match.
-func (g *gate) scanContainerfile(name string, used []bool) error {
+// scanContainerfile checks one Containerfile instruction by instruction.
+func (g *gate) scanContainerfile(name string) error {
 	content, err := fs.ReadFile(g.root.FS(), name)
 	if err != nil {
 		return err
@@ -140,10 +99,6 @@ func (g *gate) scanContainerfile(name string, used []bool) error {
 	for _, ins := range containerfileInstructions(content) {
 		msgs := scan.check(ins.text)
 		if len(msgs) == 0 {
-			continue
-		}
-		if i := exceptionIndex(key, ins.text); i >= 0 {
-			used[i] = true
 			continue
 		}
 		if file == nil {
@@ -343,12 +298,4 @@ func moduleRelative(fsys fs.FS, name string) string {
 		}
 	}
 	return name
-}
-
-// exceptionIndex returns the index of the exception for one instruction of the
-// Containerfile at key, or -1.
-func exceptionIndex(key, text string) int {
-	return slices.IndexFunc(containerfileExceptions, func(e containerfileException) bool {
-		return e.file == key && e.instruction == text
-	})
 }

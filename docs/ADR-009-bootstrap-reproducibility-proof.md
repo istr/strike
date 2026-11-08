@@ -405,3 +405,32 @@ tree the Containerfile bakes is read for the lane file alone." is read as:
 "From stage_2 on, the source enters only through the lane's source step; the
 tree the Containerfile fetches is read to build the binary and to render the
 lane, and does not enter stage_1."
+
+## Amendment 2026-11-08 -- the residual shell expansion of stage_0 is retired
+
+stage_0 no longer runs a shell. The builder stage passed the pinned commit to
+`git fetch` through the one shell-form instruction of the Containerfile,
+because a build argument is expanded in `ENV` but not in `RUN`. It now sets
+git's configuration from the environment instead -- `GIT_CONFIG_COUNT`,
+`GIT_CONFIG_KEY_n` and `GIT_CONFIG_VALUE_n` name the remote URL and a fetch
+refspec equal to the commit -- and runs `git fetch --depth 1 origin` in exec
+form. Measured against the operator's engine: the same strike bytes as with
+the shell-form fetch, `.git/HEAD` still the bare commit id the render stage
+reads, and an unknown commit failing the fetch closed (`not our ref`). A git
+source in `ADD` was measured as well and set aside: the engine clones on its
+own host, accepts no checksum for the source, builds a different layer each
+time, and on an unknown commit copied the engine host's home directory into
+the image.
+
+The builder stage is composed rather than pulled (ADR-055, amendment of this
+date): the cgr.dev static base with the Go toolchain and git taken by `COPY`
+from cgr.dev images, so it carries no shell and no package manager.
+
+**Supersedes, in the Consequences above:** "The path to fix the residual
+`${GIT_COMMIT}` shell expansion is to rebuild stage_1 once strike itself can
+fetch a commit (e.g. via a containerized git step), eliminating the last
+shell-touched surface in the bootstrap." is read as: "The residual
+`${GIT_COMMIT}` shell expansion is retired by passing the commit through
+git's configuration from the environment; no shell touches the bootstrap."
+The stage_0 debt named in the Consequences of the amendment of 2026-09-14 is
+closed with it; stage_0 stays "dirty" only as a legacy Containerfile.

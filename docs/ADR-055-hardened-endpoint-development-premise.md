@@ -929,3 +929,38 @@ the reader device through the pcscd sidecar beside the engine socket -- is
 the single entry point of the workflow and the only place where a host
 path or a host device is bound." The 2026-09-14 reading of D5's first
 sentence is unchanged.
+
+## Amendment 2026-11-08 -- D3 is met by composition
+
+D3 is met for `.devcontainer/` and for the builder stage of
+`bootstrap/Containerfile`. Measured on the operator's engine: anonymous
+`cgr.dev` offers its Go image only with gcc, so a Go image without a C
+toolchain cannot be pulled. Both images are therefore composed: every stage
+starts from the `cgr.dev` static base and takes its files by `COPY` from
+`cgr.dev` images, or by `ADD` under a checksum, each source pinned by its
+linux/amd64 manifest digest. No package manager runs at build time. apko
+and Wolfi package installs were considered and set aside, because they
+install from a package repository at build time.
+
+A `cgr.dev` Go image is a copy source only. It sets
+`GODEBUG=tarinsecurepath=0,zipinsecurepath=0`, which changes how strike reads
+archives and fails one of its tests. No image the tree builds sets GODEBUG,
+and no `cgr.dev` Go image is used directly by `bootstrap/Containerfile`, the
+dev container or the race image. `bootstrap/lane.cue` still runs one as a step
+image, because a lane step cannot run an image as a copy tool; item-0189 owns
+that departure. The GODEBUG setting reaches only the `go` process of those
+steps, not the binary they build.
+
+The dev container's final stage carries exactly the tool set
+`docs/DEVELOPMENT-ENDPOINT-PREMISES.md` lists, and no C toolchain, so cgo
+fails inside it. The race detector needs cgo and a C compiler, so `-race`
+runs in a sibling started from a race image composed the same way. The
+transitional comment D3 required is removed. The builder stage of
+`bootstrap/Containerfile` carries Go and git and no shell (ADR-009, amendment
+of this date).
+
+**Supersedes, in the Consequences above:** "The bootstrap Containerfile's
+builder stage is on `docker.io`; D3's `cgr.dev` rule reaches it through
+item-0062, subject to the same availability measurement." is read as: "The
+bootstrap Containerfile's builder stage is composed from `cgr.dev` images
+under D3, measured and applied together with the dev container (item-0151)."

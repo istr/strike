@@ -119,25 +119,10 @@ func TestModuleRelative(t *testing.T) {
 	}
 }
 
-func TestContainerfileTablesWellFormed(t *testing.T) {
-	for _, e := range containerfileExceptions {
-		if _, ok := containerfilePolicies[e.file]; !ok {
-			t.Errorf("exception for %s names a Containerfile without a policy", e.file)
-		}
-		if e.instruction == "" || e.owner == "" || e.reason == "" {
-			t.Errorf("exception %+v is incomplete", e)
-		}
-	}
-}
-
 func TestCheckContainers(t *testing.T) {
 	g, dir := tempGate(t)
 	pinned := "FROM img" + testDigest + "\n"
-	var exceptions strings.Builder
-	for _, e := range containerfileExceptions {
-		exceptions.WriteString(e.instruction + "\n")
-	}
-	writeFile(t, dir, "bootstrap/Containerfile", pinned+exceptions.String())
+	writeFile(t, dir, "bootstrap/Containerfile", pinned+`RUN ["git", "init"]`+"\n"+"COPY --from=harness a /b\n")
 	writeFile(t, dir, "wt/go.mod", "module wt\n")
 	writeFile(t, dir, "wt/bootstrap/Containerfile", pinned+`RUN ["git", "init"]`+"\n")
 	writeFile(t, dir, "other/Containerfile", pinned+`RUN ["go", "build"]`+"\n")
@@ -159,20 +144,5 @@ func TestCheckContainers(t *testing.T) {
 	got := slices.Sorted(slices.Values(g.found))
 	if !slices.Equal(got, want) {
 		t.Fatalf("findings = %q, want %q", got, want)
-	}
-}
-
-func TestCheckContainersStaleException(t *testing.T) {
-	g, _ := tempGate(t)
-	if err := g.checkContainers(); err != nil {
-		t.Fatalf("checkContainers: %v", err)
-	}
-	if len(g.found) != len(containerfileExceptions) {
-		t.Fatalf("findings = %q, want one per exception", g.found)
-	}
-	for _, f := range g.found {
-		if !strings.Contains(f, staleExceptionMessage) {
-			t.Errorf("finding = %q, want the stale-exception message", f)
-		}
 	}
 }

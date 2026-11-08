@@ -1,9 +1,16 @@
 # Bootstrap the strike ci/cd tool: stage_0 of the reproducibility proof in
 # docs/ADR-009-bootstrap-reproducibility-proof.md.
 #
-# Stage 0 is "dirty" in two aspects:
-# - it uses a legacy Containerfile
-# - it still needs an implicit shell expansion in one of the Containerfile steps
+# Stage 0 is "dirty" in one aspect: it uses a legacy Containerfile. It runs no
+# shell. The builder passes the pinned commit to git through git's
+# configuration from the environment, which ENV expands from the build
+# argument, and fetches in exec form.
+#
+# Every stage is composed, not pulled
+# (docs/ADR-055-hardened-endpoint-development-premise.md, D3): the cgr.dev
+# static base, with the Go toolchain and git taken by COPY from cgr.dev images,
+# each pinned by its linux/amd64 manifest digest. A cgr.dev Go image is a copy
+# source only, and no stage sets GODEBUG.
 #
 # The builder stage fetches the pinned commit and builds the strike binary.
 # The render stage renders the bootstrap lane from its template
@@ -24,13 +31,22 @@
 #
 # The run line that executes stage_1 is in README.md, section Bootstrap.
 #
-FROM docker.io/library/golang:1.27.3-alpine@sha256:bff16a94c0b4b6d9642581e2a3aa81beb3edb940b2f5a3aac1d22c6a68cb7747 AS builder
+FROM cgr.dev/chainguard/static@sha256:939754fefdbdb198356dc3187310417777d4dd8561be000885e224d49a4ce727 AS builder
 ARG GIT_COMMIT
-RUN ["apk", "add", "--no-cache", "git"]
+COPY --from=cgr.dev/chainguard/go@sha256:69f95ced617ff9de4283d8d97afd52c909052d496e9f3e15e4af6e4de1c9fd70 /usr/lib/go /usr/lib/go
+COPY --from=cgr.dev/chainguard/git@sha256:b2cf28a09c75a54eada959623af5aa93a9edf302fd0889ef6fe2f8e4cf7a102e /usr/lib/ld-linux-x86-64.so.2 /usr/lib/libc.so.6 /usr/lib/libm.so.6 /usr/lib/libresolv.so.2 /usr/lib/libpcre2-8.so.0 /usr/lib/libpcre2-8.so.0.16.1 /usr/lib/libz.so.1 /usr/lib/libz.so.1.3.2.1-motley /usr/lib/libcurl.so.4 /usr/lib/libcurl.so.4.8.0 /usr/lib/libnghttp3.so.9 /usr/lib/libnghttp3.so.9.9.0 /usr/lib/libngtcp2_crypto_ossl.so.0 /usr/lib/libngtcp2_crypto_ossl.so.0.3.1 /usr/lib/libngtcp2.so.16 /usr/lib/libngtcp2.so.16.11.0 /usr/lib/libnghttp2.so.14 /usr/lib/libnghttp2.so.14.29.5 /usr/lib/libidn2.so.0 /usr/lib/libidn2.so.0.4.0 /usr/lib/libldap.so.2 /usr/lib/libldap.so.2.0.201 /usr/lib/liblber.so.2 /usr/lib/liblber.so.2.0.201 /usr/lib/libpsl.so.5 /usr/lib/libpsl.so.5.3.8 /usr/lib/libssl.so.4 /usr/lib/libcrypto.so.4 /usr/lib/libgssapi_krb5.so.2 /usr/lib/libgssapi_krb5.so.2.2 /usr/lib/libbrotlidec.so.1 /usr/lib/libbrotlidec.so.1.2.1 /usr/lib/libbrotlienc.so.1 /usr/lib/libbrotlienc.so.1.2.1 /usr/lib/libbrotlicommon.so.1 /usr/lib/libbrotlicommon.so.1.2.1 /usr/lib/libunistring.so.5 /usr/lib/libunistring.so.5.2.2 /usr/lib/libsasl2.so.3 /usr/lib/libsasl2.so.3.0.0 /usr/lib/libkrb5.so.3 /usr/lib/libkrb5.so.3.3 /usr/lib/libk5crypto.so.3 /usr/lib/libk5crypto.so.3.1 /usr/lib/libcom_err.so.2 /usr/lib/libcom_err.so.2.1 /usr/lib/libkrb5support.so.0 /usr/lib/libkrb5support.so.0.1 /usr/lib/libkeyutils.so.1 /usr/lib/libkeyutils.so.1.10 /usr/lib/
+COPY --from=cgr.dev/chainguard/git@sha256:b2cf28a09c75a54eada959623af5aa93a9edf302fd0889ef6fe2f8e4cf7a102e /usr/bin/git /usr/bin/git
+COPY --from=cgr.dev/chainguard/git@sha256:b2cf28a09c75a54eada959623af5aa93a9edf302fd0889ef6fe2f8e4cf7a102e /usr/libexec/git-core /usr/libexec/git-core
+COPY --from=cgr.dev/chainguard/git@sha256:b2cf28a09c75a54eada959623af5aa93a9edf302fd0889ef6fe2f8e4cf7a102e /usr/share/git-core /usr/share/git-core
+USER 0
+ENV PATH=/usr/lib/go/bin:/usr/local/sbin:/usr/local/bin:/usr/bin:/usr/sbin:/sbin:/bin
 WORKDIR /src
 RUN ["git", "init"]
-# We want no-sh. However, we cannot pass GIT_COMMIT to git using ARG/ENV combination.
-RUN git fetch --depth 1 https://github.com/istr/strike ${GIT_COMMIT}
+# ENV expands the build argument, RUN does not: the commit reaches git
+# through its configuration from the environment, and the fetch runs in
+# exec form. An unknown commit fails the fetch.
+ENV GIT_CONFIG_COUNT=2 GIT_CONFIG_KEY_0=remote.origin.url GIT_CONFIG_VALUE_0=https://github.com/istr/strike GIT_CONFIG_KEY_1=remote.origin.fetch GIT_CONFIG_VALUE_1=${GIT_COMMIT}
+RUN ["git", "fetch", "--depth", "1", "origin"]
 RUN ["git", "checkout", "FETCH_HEAD"]
 RUN ["go", "mod", "download"]
 RUN ["go", "generate", "./contract"]
@@ -42,7 +58,7 @@ COPY --from=builder /src/.git/HEAD /src/bootstrap/input/HEAD
 COPY --from=harness caddy-root.crt /src/bootstrap/input/caddy-root.crt
 RUN ["go", "tool", "cue", "export", "./bootstrap", "-e", "out", "--out", "yaml", "--outfile", "/src/bootstrap/lane.yaml"]
 
-FROM cgr.dev/chainguard/static@sha256:fc42af33e643f20d08baf03cddcc1c02ba57052dfb02edb0d79f3fc47bcea8d9
+FROM cgr.dev/chainguard/static@sha256:939754fefdbdb198356dc3187310417777d4dd8561be000885e224d49a4ce727
 COPY --from=builder /src/strike /usr/bin/strike
 COPY --from=render /src/bootstrap/lane.yaml /bootstrap/lane.yaml
 ENTRYPOINT ["/usr/bin/strike"]
