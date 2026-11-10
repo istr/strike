@@ -10,7 +10,8 @@
   ],
   "containerEnv": {
     "CONTAINER_HOST": "unix:///run/podman/podman.sock",
-    "CLAUDE_CONFIG_DIR": "/home/dev/.claude"
+    "CLAUDE_CONFIG_DIR": "/home/dev/.claude",
+    "CLR_OPENSSL_VERSION_OVERRIDE": "4"
   },
   "otherPortsAttributes": { "onAutoForward": "ignore" },
   "remoteUser": "dev",

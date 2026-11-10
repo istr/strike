@@ -145,6 +145,23 @@ Microsoft authentication extension stays unloadable: it needs GTK 3,
 WebKitGTK, libsoup, libsecret, GLib, X11, D-Bus and OpenSSL 3, which no
 `cgr.dev` source carries, and the server starts without it.
 
+The image's OpenSSL is version 4, from the `cgr.dev` python image. The
+editor's server checks the signature of every extension it installs with a
+bundled .NET binary, `vsce-sign`, whose runtime looks up `libssl.so.3` and
+older names only and aborts when it finds none; the server then reports
+`UnknownError`, and the editor downloads the extension on the workstation and
+installs it from there. `.devcontainer/devcontainer.json` therefore sets
+`CLR_OPENSSL_VERSION_OVERRIDE=4`, the .NET runtime's switch for the `libssl`
+version it loads, so the check runs inside the container against the image's
+OpenSSL. OpenSSL 4 is outside the versions .NET supports. Measured against
+server version 1.145.2 and extension version 2.1.322, the check accepts the
+published package and rejects both a package with one changed byte and a
+signature archive whose manifest carries one changed digest; a required
+OpenSSL function that is missing aborts the check at startup instead of
+passing it. The value is the major version of the image's `libssl`: when an
+image update moves that version, the value moves with it, or the check aborts
+again and installs fall back to the workstation.
+
 It carries no C toolchain, so cgo fails inside it. The Go tools are built
 from source in a separate stage, so the Go checksum database pins every
 module and their caches stay out of the image. The agent is the native binary
