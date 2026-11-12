@@ -28,6 +28,7 @@ excludeFiles:
   - "_test\\.go$"
 exclude:
   - tools                     # custom tooling (lintfrom), not the product
+  - .claude                   # agent settings and worktrees, not the product
   - test                      # integration/crossval packages + testdata fixtures
   - internal/testutil         # test scaffolding
   - internal/registry/regtest # test double
