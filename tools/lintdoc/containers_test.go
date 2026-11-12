@@ -5,7 +5,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"testing/fstest"
 )
 
 // testDigest is a well-formed digest suffix that names no real image.
@@ -93,38 +92,16 @@ func TestContainerfileCheck(t *testing.T) {
 	}
 }
 
-func TestModuleRelative(t *testing.T) {
-	fsys := fstest.MapFS{
-		"go.mod":                     {},
-		"bootstrap/Containerfile":    {},
-		"wt/go.mod":                  {},
-		"wt/bootstrap/Containerfile": {},
-		"x/y/Containerfile":          {},
-	}
-	tests := []struct {
-		name string
-		want string
-	}{
-		{name: "bootstrap/Containerfile", want: "bootstrap/Containerfile"},
-		{name: "wt/bootstrap/Containerfile", want: "bootstrap/Containerfile"},
-		{name: "x/y/Containerfile", want: "x/y/Containerfile"},
-		{name: "Containerfile", want: "Containerfile"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := moduleRelative(fsys, tt.name); got != tt.want {
-				t.Fatalf("moduleRelative(%q) = %q, want %q", tt.name, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestCheckContainers(t *testing.T) {
 	g, dir := tempGate(t)
 	pinned := "FROM img" + testDigest + "\n"
 	writeFile(t, dir, "bootstrap/Containerfile", pinned+`RUN ["git", "init"]`+"\n"+"COPY --from=harness a /b\n")
-	writeFile(t, dir, "wt/go.mod", "module wt\n")
+	writeFile(t, dir, "wt/.git", "gitdir: ../.git/worktrees/wt\n")
 	writeFile(t, dir, "wt/bootstrap/Containerfile", pinned+`RUN ["git", "init"]`+"\n")
+	writeFile(t, dir, "clone/.git/HEAD", "ref: refs/heads/main\n")
+	writeFile(t, dir, "clone/Containerfile", "FROM img:1.0\n")
+	writeFile(t, dir, "mod/go.mod", "module mod\n")
+	writeFile(t, dir, "mod/bootstrap/Containerfile", pinned+`RUN ["git", "init"]`+"\n")
 	writeFile(t, dir, "other/Containerfile", pinned+`RUN ["go", "build"]`+"\n")
 	writeFile(t, dir, "test/compose.yaml", "services:\n  a:\n    image: \"img"+testDigest+"\"\n  b:\n    image: img:1.0\n")
 	writeFile(t, dir, ".devcontainer/devcontainer.json", `{"build": {"dockerfile": "Containerfile"}}`)
@@ -138,6 +115,7 @@ func TestCheckContainers(t *testing.T) {
 		"feat/.devcontainer.json:1:1: " + featuresMessage,
 		"img/devcontainer.json:1:1: " + notPinnedMessage,
 		"jsonc/devcontainer.json:1:1: " + devcontainerJSONMessage,
+		"mod/bootstrap/Containerfile:2:1: " + programMessage + ": git",
 		"other/Containerfile:2:1: " + programMessage + ": go",
 		"test/compose.yaml:5:1: " + notPinnedMessage,
 	}

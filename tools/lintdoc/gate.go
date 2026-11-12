@@ -72,20 +72,27 @@ func moduleRoot() (*os.Root, error) {
 	}
 }
 
-// walkTree calls visit for every file under the module root. Only .git is
-// skipped: it holds nothing any check covers, while other dot-directories do.
+// walkTree calls visit for every file under the module root. It skips .git,
+// which holds nothing any check covers while other dot-directories do, and
+// every directory below the root that holds a .git entry: a git worktree or
+// clone nested in the tree is another checkout, not content of this one. A
+// .git entry that cannot be read keeps its directory in the walk.
 func (g *gate) walkTree(visit func(name string, d fs.DirEntry) error) error {
-	return fs.WalkDir(g.root.FS(), ".", func(name string, d fs.DirEntry, walkErr error) error {
+	fsys := g.root.FS()
+	return fs.WalkDir(fsys, ".", func(name string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
-		if d.IsDir() {
-			if d.Name() == ".git" {
-				return fs.SkipDir
-			}
-			return nil
+		if !d.IsDir() {
+			return visit(name, d)
 		}
-		return visit(name, d)
+		if d.Name() == ".git" {
+			return fs.SkipDir
+		}
+		if _, err := fs.Stat(fsys, path.Join(name, ".git")); name != "." && err == nil {
+			return fs.SkipDir
+		}
+		return nil
 	})
 }
 

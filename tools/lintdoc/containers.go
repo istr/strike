@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"go/token"
 	"io/fs"
-	"path"
 	"slices"
 	"strings"
 )
@@ -50,7 +49,7 @@ type containerfilePolicy struct {
 }
 
 // containerfilePolicies holds the policy of each Containerfile, keyed by its
-// path relative to its module root. A Containerfile that is not listed may
+// path relative to the module root. A Containerfile that is not listed may
 // start no program and read no named context.
 var containerfilePolicies = map[string]containerfilePolicy{
 	".devcontainer/Containerfile": {programs: []string{"/usr/bin/busybox", "go"}},
@@ -93,8 +92,7 @@ func (g *gate) scanContainerfile(name string) error {
 	if err != nil {
 		return err
 	}
-	key := moduleRelative(g.root.FS(), name)
-	scan := containerfileScan{stages: map[string]bool{}, policy: containerfilePolicies[key]}
+	scan := containerfileScan{stages: map[string]bool{}, policy: containerfilePolicies[name]}
 	var file *token.File
 	for _, ins := range containerfileInstructions(content) {
 		msgs := scan.check(ins.text)
@@ -285,17 +283,4 @@ func (g *gate) scanDevcontainer(name string) error {
 func hasDigest(ref string) bool {
 	_, digest, ok := strings.Cut(ref, "@sha256:")
 	return ok && len(digest) == 64 && strings.Trim(digest, "0123456789abcdef") == ""
-}
-
-// moduleRelative returns name relative to the closest directory above it that
-// holds a go.mod, so a checkout nested in the tree -- a git worktree, say --
-// is keyed like the tree itself. name is relative to the module root, which
-// is not consulted.
-func moduleRelative(fsys fs.FS, name string) string {
-	for dir := path.Dir(name); dir != "."; dir = path.Dir(dir) {
-		if _, err := fs.Stat(fsys, path.Join(dir, "go.mod")); err == nil {
-			return strings.TrimPrefix(name, dir+"/")
-		}
-	}
-	return name
 }
