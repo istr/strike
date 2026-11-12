@@ -19,7 +19,7 @@ import (
 // Redeclared here because that package (integration_test) is not
 // importable from cmd/strike (package main).
 const (
-	mountGoImage = "cgr.dev/chainguard/go@sha256:69f95ced617ff9de4283d8d97afd52c909052d496e9f3e15e4af6e4de1c9fd70"
+	mountGoImage = "cgr.dev/chainguard/go@sha256:806b06607f346ed94cbf0c7e0821502f8a048b22f30bbd9a0e46cc28bfe2146d"
 )
 
 // mountEnsureImage materializes an image through the production path if the

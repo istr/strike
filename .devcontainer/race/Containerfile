@@ -6,16 +6,16 @@
 # under a rootless engine is the endpoint user and is what reaches the engine
 # socket.
 FROM cgr.dev/chainguard/static@sha256:939754fefdbdb198356dc3187310417777d4dd8561be000885e224d49a4ce727
-COPY --from=cgr.dev/chainguard/go@sha256:69f95ced617ff9de4283d8d97afd52c909052d496e9f3e15e4af6e4de1c9fd70 /usr/lib/go /usr/lib/go
+COPY --from=cgr.dev/chainguard/go@sha256:806b06607f346ed94cbf0c7e0821502f8a048b22f30bbd9a0e46cc28bfe2146d /usr/lib/go /usr/lib/go
 # Runtime closure of gcc, cc1, collect2, as and ld, and the NSS compat module
 # the static base's nsswitch.conf names.
-COPY --from=cgr.dev/chainguard/go@sha256:69f95ced617ff9de4283d8d97afd52c909052d496e9f3e15e4af6e4de1c9fd70 /usr/lib/ld-linux-x86-64.so.2 /usr/lib/libc.so.6 /usr/lib/libnss_compat.so.2 /usr/lib/libm.so.6 /usr/lib/libz.so.1 /usr/lib/libz.so.1.3.2.1-motley /usr/lib/libzstd.so.1 /usr/lib/libzstd.so.1.5.7 /usr/lib/libisl.so.23 /usr/lib/libisl.so.23.5.0 /usr/lib/libmpc.so.3 /usr/lib/libmpc.so.3.4.1 /usr/lib/libmpfr.so.6 /usr/lib/libmpfr.so.6.2.2 /usr/lib/libgmp.so.10 /usr/lib/libgmp.so.10.5.0 /usr/lib/
+COPY --from=cgr.dev/chainguard/go@sha256:806b06607f346ed94cbf0c7e0821502f8a048b22f30bbd9a0e46cc28bfe2146d /usr/lib/ld-linux-x86-64.so.2 /usr/lib/libc.so.6 /usr/lib/libnss_compat.so.2 /usr/lib/libm.so.6 /usr/lib/libz.so.1 /usr/lib/libz.so.1.3.2.1-motley /usr/lib/libzstd.so.1 /usr/lib/libzstd.so.1.5.7 /usr/lib/libisl.so.23 /usr/lib/libisl.so.23.5.0 /usr/lib/libmpc.so.3 /usr/lib/libmpc.so.3.4.1 /usr/lib/libmpfr.so.6 /usr/lib/libmpfr.so.6.2.2 /usr/lib/libgmp.so.10 /usr/lib/libgmp.so.10.5.0 /usr/lib/
 # Link-time C runtime: crt objects, the libc.so and libm.so linker scripts
 # with the files they name, and the libraries cgo links with -l.
-COPY --from=cgr.dev/chainguard/go@sha256:69f95ced617ff9de4283d8d97afd52c909052d496e9f3e15e4af6e4de1c9fd70 /usr/lib/crt1.o /usr/lib/crti.o /usr/lib/crtn.o /usr/lib/Scrt1.o /usr/lib/rcrt1.o /usr/lib/gcrt1.o /usr/lib/grcrt1.o /usr/lib/Mcrt1.o /usr/lib/libc.so /usr/lib/libc.so-2.44 /usr/lib/libc_nonshared.a /usr/lib/libm.so /usr/lib/libm.so-2.44 /usr/lib/libmvec.so /usr/lib/libmvec.so.1 /usr/lib/libpthread.a /usr/lib/libpthread.so.0 /usr/lib/libdl.a /usr/lib/libdl.so.2 /usr/lib/librt.a /usr/lib/librt.so.1 /usr/lib/libutil.a /usr/lib/libutil.so.1 /usr/lib/libresolv.a /usr/lib/libresolv.so /usr/lib/libresolv.so.2 /usr/lib/libgcc_s.so /usr/lib/libgcc_s.so.1 /usr/lib/libgcc_s_asneeded.so /usr/lib/libatomic_asneeded.so /usr/lib/libatomic.so /usr/lib/libatomic.so.1 /usr/lib/
-COPY --from=cgr.dev/chainguard/go@sha256:69f95ced617ff9de4283d8d97afd52c909052d496e9f3e15e4af6e4de1c9fd70 /usr/bin/gcc /usr/bin/as /usr/bin/ld /usr/bin/
-COPY --from=cgr.dev/chainguard/go@sha256:69f95ced617ff9de4283d8d97afd52c909052d496e9f3e15e4af6e4de1c9fd70 /usr/libexec/gcc /usr/libexec/gcc
-COPY --from=cgr.dev/chainguard/go@sha256:69f95ced617ff9de4283d8d97afd52c909052d496e9f3e15e4af6e4de1c9fd70 /usr/lib/gcc /usr/lib/gcc
-COPY --from=cgr.dev/chainguard/go@sha256:69f95ced617ff9de4283d8d97afd52c909052d496e9f3e15e4af6e4de1c9fd70 /usr/include /usr/include
+COPY --from=cgr.dev/chainguard/go@sha256:806b06607f346ed94cbf0c7e0821502f8a048b22f30bbd9a0e46cc28bfe2146d /usr/lib/crt1.o /usr/lib/crti.o /usr/lib/crtn.o /usr/lib/Scrt1.o /usr/lib/rcrt1.o /usr/lib/gcrt1.o /usr/lib/grcrt1.o /usr/lib/Mcrt1.o /usr/lib/libc.so /usr/lib/libc.so-2.44 /usr/lib/libc_nonshared.a /usr/lib/libm.so /usr/lib/libm.so-2.44 /usr/lib/libmvec.so /usr/lib/libmvec.so.1 /usr/lib/libpthread.a /usr/lib/libpthread.so.0 /usr/lib/libdl.a /usr/lib/libdl.so.2 /usr/lib/librt.a /usr/lib/librt.so.1 /usr/lib/libutil.a /usr/lib/libutil.so.1 /usr/lib/libresolv.a /usr/lib/libresolv.so /usr/lib/libresolv.so.2 /usr/lib/libgcc_s.so /usr/lib/libgcc_s.so.1 /usr/lib/libgcc_s_asneeded.so /usr/lib/libatomic_asneeded.so /usr/lib/libatomic.so /usr/lib/libatomic.so.1 /usr/lib/
+COPY --from=cgr.dev/chainguard/go@sha256:806b06607f346ed94cbf0c7e0821502f8a048b22f30bbd9a0e46cc28bfe2146d /usr/bin/gcc /usr/bin/as /usr/bin/ld /usr/bin/
+COPY --from=cgr.dev/chainguard/go@sha256:806b06607f346ed94cbf0c7e0821502f8a048b22f30bbd9a0e46cc28bfe2146d /usr/libexec/gcc /usr/libexec/gcc
+COPY --from=cgr.dev/chainguard/go@sha256:806b06607f346ed94cbf0c7e0821502f8a048b22f30bbd9a0e46cc28bfe2146d /usr/lib/gcc /usr/lib/gcc
+COPY --from=cgr.dev/chainguard/go@sha256:806b06607f346ed94cbf0c7e0821502f8a048b22f30bbd9a0e46cc28bfe2146d /usr/include /usr/include
 USER 0
 ENV PATH=/usr/lib/go/bin:/usr/bin
