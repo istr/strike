@@ -153,6 +153,11 @@ Why the exactness: `AI-ORCHESTRATION.md#why-the-instruction-file-is-a-contract`.
    file there outside fenced code. A link dictated for a file under `docs/`
    resolves from there, not from the root, so unfenced it turns the gate red
    for every commit made while the instruction is present.
+7. **Gates run on the endpoint's tools.** Every gate command runs as
+   written with the tool set `docs/DEVELOPMENT-ENDPOINT-PREMISES.md` lists,
+   where `grep` is a busybox applet without `-P`. An invariant a `make`
+   target already checks is gated by that target, not restated as a grep:
+   printable ASCII is `make lint-doc`.
 
 ## The execution profile is part of the contract
 
