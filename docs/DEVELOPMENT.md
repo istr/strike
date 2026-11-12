@@ -562,8 +562,10 @@ It starts no process and no shell. The registry is read over HTTPS, and the
    manifest digest becomes the linux/amd64 manifest of the new index. A digest
    does not record its tag, so the `tags` table in `tools/upgrade` names every
    repository that follows another tag than `latest`. A digest the registry
-   does not know is a test fixture and stays as written. Markdown is never
-   rewritten: it records what was pinned when.
+   does not know is a test fixture and stays as written, and so does every
+   reference in a file the `pinnedByHand` table names: a fixture that must
+   stay an image no other pin names. Markdown is never rewritten: it records
+   what was pinned when.
 2. Every path a Containerfile copies out of a moved image is checked against
    the layers of the new image. A library file that only changed its version
    suffix is renamed in place; any other missing path is a finding.

@@ -3,9 +3,10 @@
 // does three things:
 //
 //   - every cgr.dev/chainguard image reference in a Containerfile, a Go file
-//     or a CUE file moves to the image its repository's tag names now, each
-//     in the form it already has: an index digest stays an index digest, a
-//     manifest digest becomes the linux/amd64 manifest of the new index;
+//     or a CUE file, outside the files pinnedByHand names, moves to the image
+//     its repository's tag names now, each in the form it already has: an
+//     index digest stays an index digest, a manifest digest becomes the
+//     linux/amd64 manifest of the new index;
 //   - every path a Containerfile copies out of a moved image is checked
 //     against the layers of that image, and a file that only changed its
 //     version suffix is renamed in place;
@@ -71,6 +72,11 @@ const (
 // tags names the tag a repository's references follow where that is not
 // latest. A digest does not record the tag it was read from.
 var tags = map[string]string{"python": "latest-dev"}
+
+// pinnedByHand names the files whose references only the operator moves. A
+// test fixture there must stay an image no other pin names, and following its
+// tag would make it the image another pin of the repository names as well.
+var pinnedByHand = map[string]bool{"cmd/strike/materialize_integration_test.go": true}
 
 // statedVersion matches the release in the content of versionFile.
 var statedVersion = regexp.MustCompile("const version = `go([0-9.]+)`")
@@ -224,8 +230,12 @@ func skipDir(tree fs.FS, name string) error {
 
 // rewrite returns content with every followed reference moved to its
 // successor. In a Containerfile it first checks the sources of every COPY
-// that reads from a reference that moves.
+// that reads from a reference that moves. A file pinned by hand comes back
+// as it is.
 func (u *upgrader) rewrite(name, content string) (string, error) {
+	if pinnedByHand[name] {
+		return content, nil
+	}
 	for _, m := range u.pin.FindAllStringSubmatch(content, -1) {
 		if err := u.follow(m[0], m[1], m[2]); err != nil {
 			return "", err

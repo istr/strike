@@ -169,6 +169,9 @@ func TestPlanMovesEachReferenceInItsForm(t *testing.T) {
 		"nested/go.mod":        {Data: []byte("module nested\n")},
 		"nested/Containerfile": {Data: stale},
 	}
+	for name := range pinnedByHand {
+		tree[name] = &fstest.MapFile{Data: stale}
+	}
 	got, goImage, err := planned(t, ns, tree, "1.2.3")
 	if err != nil {
 		t.Fatalf("plan: %v", err)
