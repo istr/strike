@@ -138,8 +138,8 @@ referrers: two SBOMs and three statement bundles.
 | Reading | Time | Subject | Referrers by digest | Listing | Tag list |
 |---|---|---|---|---|---|
 | intermediate | 2026-11-10T08:36:32Z (t0 + 10 h 47 min) | 200 | 5 of 5 at 200 | all five | the retention tag |
-| t0 + 25 h | 2026-11-10T23:14:06Z (t0 + 25 h 24 min) | 200 | 5 of 5 at 200 | all five | the retention tag |
-| t0 + 49 h | 2026-11-12T08:44:01Z (t0 + 58 h 54 min) | 200 | 5 of 5 at 200 | all five | the retention tag |
+| due t0 + 25 h | 2026-11-10T23:14:06Z (t0 + 25 h 24 min) | 200 | 5 of 5 at 200 | all five | the retention tag |
+| due t0 + 49 h | 2026-11-12T08:44:01Z (t0 + 58 h 54 min) | 200 | 5 of 5 at 200 | all five | the retention tag |
 
 The intermediate reading does not separate tagged from tagless
 retention, because the tagless payload above was collected only within

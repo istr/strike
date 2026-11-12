@@ -600,11 +600,11 @@ there is no second authority.
 
 **D2, the second arm.** The arm the target needs is built: `quayRobot`,
 with its hermetic stand-in. The declared exchange-endpoint arm stays a
-documented reference shape, without code or stand-in. As the amendment of 2026-11-03 states, the disjunction, the
-hand-written interface and the hand-written unmarshal arrive with that
-arm. The schema change is ratified separately when the forge item is
-authored. The real federated exchange is measured there first, with the
-chosen forge.
+documented reference shape, without code or stand-in. As the amendment
+of 2026-11-03 states, the disjunction, the hand-written interface and
+the hand-written unmarshal arrive with that arm. The schema change is
+ratified separately when the forge item is authored. The real federated
+exchange is measured there first, with the chosen forge.
 
 D9's first qualification, "keeps a tagless manifest and its referrers for
 the measured retention window", is read as: keeps a subject that carries
