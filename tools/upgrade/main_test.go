@@ -744,8 +744,9 @@ func TestPlanFlagsDynamicExecutables(t *testing.T) {
 	push(t, ns+"go:latest", goRoot(nil))
 	_, oldGit := push(t, ns+"git:latest", map[string]string{"old": ""})
 	push(t, ns+"git:latest", map[string]string{
-		"usr/bin/git":                     elfExecutable(t, "/lib/ld.so", "libz.so.1", "libc.so.6"),
-		"usr/lib/libz.so.1":               elfExecutable(t, "", "libc.so.6"),
+		"usr/bin/git":                     elfExecutable(t, "/lib/ld.so", "libz.so.1", "libpcre2-8.so.0", "libc.so.6"),
+		"usr/lib/libz.so.1":               elfExecutable(t, "", "libzstd.so.1"),
+		"usr/lib/libc.so.6":               elfExecutable(t, "/lib/ld.so", "ld.so"),
 		"usr/libexec/git-core/":           "",
 		"usr/libexec/git-core/git":        hardLink + "usr/bin/git",
 		"usr/libexec/git-core/git-remote": elfExecutable(t, "/lib/ld.so", "libcurl.so.4", "libc.so.6"),
@@ -754,20 +755,24 @@ func TestPlanFlagsDynamicExecutables(t *testing.T) {
 		"usr/libexec/git-core/short":      "ab",
 	})
 	output := captured(t)
-	tree := fstest.MapFS{"Containerfile": {Data: []byte("COPY --from=" + ns + "git@" + oldGit + " /usr/bin/git /usr/lib/libz.so.1 /usr/libexec/git-core /usr/\n")}}
+	tree := fstest.MapFS{"Containerfile": {Data: []byte(
+		"COPY --from=" + ns + "git@" + oldGit + " /usr/bin/git /usr/lib/libz.so.1 /usr/lib/libc.so.6 /usr/libexec/git-core /usr/\n" +
+			"COPY --from=loader /lib/ld.so /lib/\n")}}
 	if _, _, err := planned(t, ns, tree, "1.2.3"); err != nil {
 		t.Fatalf("plan: %v", err)
 	}
-	got := output()
-	for _, want := range []string{
-		"Containerfile:1: /usr/bin/git is dynamically linked and needs libc.so.6, libz.so.1\n",
-		"Containerfile:1: /usr/libexec/git-core holds 2 dynamically linked executables, which need libc.so.6, libcurl.so.4, libz.so.1\n",
-	} {
-		if !strings.Contains(got, want) {
-			t.Errorf("log = %q, want it to contain %q", got, want)
+	var got []string
+	for _, line := range strings.SplitAfter(output(), "\n") {
+		if i := strings.Index(line, "Containerfile:"); i >= 0 && strings.Contains(line, " needs ") {
+			got = append(got, line[i:])
 		}
 	}
-	if strings.Contains(got, "/usr/lib/libz.so.1 is") || strings.Contains(got, "/usr/lib/libz.so.1 holds") {
-		t.Errorf("log = %q, want no flag for a shared library", got)
+	want := []string{
+		"Containerfile:1: /usr/bin/git needs libpcre2-8.so.0, which no COPY in this file copies\n",
+		"Containerfile:1: /usr/libexec/git-core/git needs libpcre2-8.so.0, which no COPY in this file copies\n",
+		"Containerfile:1: /usr/libexec/git-core/git-remote needs libcurl.so.4, which no COPY in this file copies\n",
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("flags = %q, want %q", got, want)
 	}
 }

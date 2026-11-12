@@ -10,7 +10,8 @@
 //   - every path a Containerfile copies out of a moved image is checked
 //     against the layers of that image, a file that only changed its version
 //     suffix is renamed in place, and every dynamically linked binary the
-//     copy carries is named with the libraries it needs;
+//     copy carries is named with each library it needs that no COPY of the
+//     Containerfile copies;
 //   - every Go tool those files pin as package path and module version moves
 //     to the latest release of its module on the Go module proxy;
 //   - every download a Containerfile pins with ADD --checksum moves to the
@@ -325,8 +326,9 @@ func (u *upgrader) rewrite(name, content string) (string, error) {
 			}
 		}
 		lines := strings.SplitAfter(content, "\n")
+		copies := copiedNames(lines)
 		for i := range lines {
-			checked, err := u.checkCopy(fmt.Sprintf("%s:%d", name, i+1), lines[i])
+			checked, err := u.checkCopy(fmt.Sprintf("%s:%d", name, i+1), lines[i], copies)
 			if err != nil {
 				return "", err
 			}
@@ -690,29 +692,12 @@ func (i *image) readELF(name string, size int64, r io.Reader) error {
 	return nil
 }
 
-// linked returns how many dynamically linked executables src is or holds,
-// and the libraries they need.
-func (i *image) linked(src string) (int, []string) {
-	needed := map[string]bool{}
-	count := 0
-	for name, libs := range i.dynamic {
-		if name != src && !strings.HasPrefix(name, src+"/") {
-			continue
-		}
-		count++
-		for _, lib := range libs {
-			needed[lib] = true
-		}
-	}
-	return count, slices.Sorted(maps.Keys(needed))
-}
-
-// checkCopy checks one Containerfile line. A COPY that reads from a reference
-// that moves must name only paths its new image has.
-func (u *upgrader) checkCopy(pos, line string) (string, error) {
+// copySources returns the image or stage a COPY line reads from and the paths
+// it copies, or nothing for any other line.
+func copySources(line string) (string, []string) {
 	fields := strings.Fields(line)
 	if len(fields) < 3 || !strings.EqualFold(fields[0], "COPY") {
-		return line, nil
+		return "", nil
 	}
 	var from string
 	var srcs []string
@@ -723,6 +708,26 @@ func (u *upgrader) checkCopy(pos, line string) (string, error) {
 			srcs = append(srcs, field)
 		}
 	}
+	return from, srcs
+}
+
+// copiedNames returns the base name of every path a COPY among lines copies.
+func copiedNames(lines []string) map[string]bool {
+	copies := map[string]bool{}
+	for _, line := range lines {
+		_, srcs := copySources(line)
+		for _, src := range srcs {
+			copies[path.Base(src)] = true
+		}
+	}
+	return copies
+}
+
+// checkCopy checks one Containerfile line. A COPY that reads from a reference
+// that moves must name only paths its new image has. copies holds the base
+// name of every path a COPY of the file copies.
+func (u *upgrader) checkCopy(pos, line string, copies map[string]bool) (string, error) {
+	from, srcs := copySources(line)
 	m := u.pin.FindStringSubmatch(from)
 	if m == nil || m[0] != from || u.successors[from] == "" {
 		return line, nil
@@ -732,7 +737,7 @@ func (u *upgrader) checkCopy(pos, line string) (string, error) {
 		return "", err
 	}
 	for _, src := range srcs {
-		line = u.copySource(pos, line, m[1], img, srcs, src)
+		line = u.copySource(pos, line, m[1], img, srcs, src, copies)
 	}
 	return line, nil
 }
@@ -740,10 +745,11 @@ func (u *upgrader) checkCopy(pos, line string) (string, error) {
 // copySource checks the source src of the COPY line at pos against img, the
 // new image of repo. A missing path that renamed finds a successor for is
 // replaced in the returned line; any other is a finding. A dynamically linked
-// executable the source is or holds is named, with the libraries it needs,
-// for a check after the rebuild: the command does not check that the stage
-// copies them.
-func (u *upgrader) copySource(pos, line, repo string, img *image, srcs []string, src string) string {
+// executable the source is or holds is named with every library it needs
+// whose name is not in copies, for a check after the rebuild: the command
+// does not check which stage copies a library, nor that it is the one the
+// executable loads.
+func (u *upgrader) copySource(pos, line, repo string, img *image, srcs []string, src string, copies map[string]bool) string {
 	copied := src
 	if !img.files[src] {
 		copied = renamed(img.files, srcs, src)
@@ -754,11 +760,19 @@ func (u *upgrader) copySource(pos, line, repo string, img *image, srcs []string,
 		log.Printf("%s: %s -> %s", pos, src, copied)
 		line = strings.Replace(line, " "+src+" ", " "+copied+" ", 1)
 	}
-	count, libs := img.linked(copied)
-	if _, self := img.dynamic[copied]; self {
-		log.Printf("%s: %s is dynamically linked and needs %s", pos, copied, strings.Join(libs, ", "))
-	} else if count > 0 {
-		log.Printf("%s: %s holds %d dynamically linked executables, which need %s", pos, copied, count, strings.Join(libs, ", "))
+	for _, exe := range slices.Sorted(maps.Keys(img.dynamic)) {
+		if exe != copied && !strings.HasPrefix(exe, copied+"/") {
+			continue
+		}
+		var missing []string
+		for _, lib := range img.dynamic[exe] {
+			if !copies[lib] {
+				missing = append(missing, lib)
+			}
+		}
+		if len(missing) > 0 {
+			log.Printf("%s: %s needs %s, which no COPY in this file copies", pos, exe, strings.Join(missing, ", "))
+		}
 	}
 	return line
 }
