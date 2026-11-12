@@ -145,6 +145,14 @@ Why the exactness: `AI-ORCHESTRATION.md#why-the-instruction-file-is-a-contract`.
    restricted so its value cannot depend on whether generated or ignored
    artifacts are present on disk: a bare checkout and a working tree must
    agree.
+6. **Dictated Markdown sits in a fence.** Every block of Markdown an
+   instruction dictates -- a before-snippet, an after-snippet, an appended
+   section, a whole new file -- sits inside a fence, with its extraction
+   markers inside the fence too. The instruction file lies under the module
+   root while it is executed, and lintdoc checks the links of every Markdown
+   file there outside fenced code. A link dictated for a file under `docs/`
+   resolves from there, not from the root, so unfenced it turns the gate red
+   for every commit made while the instruction is present.
 
 ## The execution profile is part of the contract
 
