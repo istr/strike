@@ -84,7 +84,7 @@ first (`make -C test/sigstore-local up`), then build stage_1 from the clone's
 root:
 
 ```sh
-GIT_COMMIT=68911eace9a651fd26e0a4289f6e0bda84c1e978
+GIT_COMMIT=b6eceff2e15b86a22b1eefe63987d859f40ae6bd
 
 podman build -t strike:stage_1 \
   --build-arg GIT_COMMIT=${GIT_COMMIT} \
@@ -315,7 +315,7 @@ docs/             ADRs (indexed in docs/ADR-INDEX.md) and reference docs
 internal/         Go packages; generated types are *.gen.go, not in git
 roadmap/          Planning items and their execution order
 test/             Cross-validation vectors, integration tests, sigstore harness
-tools/            Linters and code generators the gates run
+tools/            Linters, code generators, and the upgrade helper
 ```
 
 ## Development

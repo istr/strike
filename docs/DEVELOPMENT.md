@@ -543,6 +543,49 @@ Adding a dependency requires:
 
 Run `go mod verify` in CI to ensure dependency integrity. Commit `go.sum`.
 
+### 5.1 Upgrading the toolchain, the modules and the image pins
+
+One command moves the module to a Go release together with everything the
+tree pins beside the toolchain:
+
+```sh
+go tool upgrade -n 1.27.4   # print what would change
+go tool upgrade 1.27.4      # change it
+```
+
+It starts no process and no shell. The registry is read over HTTPS, and the
+`go` commands run through the engine API in a container from the Go image.
+
+1. Every `cgr.dev/chainguard` image reference in a Containerfile, a Go file
+   or a CUE file moves to the image its repository's tag names now. Each
+   reference keeps its form: an index digest stays an index digest, and a
+   manifest digest becomes the linux/amd64 manifest of the new index. A digest
+   does not record its tag, so the `tags` table in `tools/upgrade` names every
+   repository that follows another tag than `latest`. A digest the registry
+   does not know is a test fixture and stays as written. Markdown is never
+   rewritten: it records what was pinned when.
+2. Every path a Containerfile copies out of a moved image is checked against
+   the layers of the new image. A library file that only changed its version
+   suffix is renamed in place; any other missing path is a finding.
+3. `go get -u -t go@<release> ./... tool` and `go mod tidy` run in the new Go
+   image with the tree mounted, and move the `go` directive and every module
+   requirement.
+
+The command fails before it changes anything when the Go image does not carry
+the requested release -- the free `cgr.dev` tier has no version tags, so a
+release exists for this tree once the image under `latest` carries it -- and
+when a finding remains. Settle a finding in the Containerfile and run the
+command again; the check reads the new image, not the pinned one.
+
+Afterwards the dev container still carries the old toolchain and refuses the
+module. Rebuild the dev container, then run `make check`; what a moved
+dependency breaks is fixed there.
+
+The command does not move the versions of the gate tools
+(`.devcontainer/Containerfile`, `Makefile`), the release archives the dev
+container adds under a checksum, or the harness images in
+`test/sigstore-local/compose.yaml`.
+
 ## 6. Commit messages
 
 This project uses [Conventional Commits](https://www.conventionalcommits.org)

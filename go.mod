@@ -117,4 +117,5 @@ tool (
 	github.com/istr/strike/tools/lintcue
 	github.com/istr/strike/tools/lintdoc
 	github.com/istr/strike/tools/linttype
+	github.com/istr/strike/tools/upgrade
 )
