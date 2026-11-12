@@ -564,3 +564,111 @@ read of its authority inside the run (ADR-029 amendment 2026-11-06), so
 the credential does too. Deploy targets that share an authority declare
 the same anchor and the same token; lane validation refuses a lane where
 they differ.
+
+## Amendment 2026-11-12 -- D9: the publication model; D2: the second arm; D1: no redirect opt-in; D6: verify reads anonymously
+
+**D9, the model.** The measurements D9 waited for are recorded in
+`docs/research/adr-058-publication-measurements.md`. A pull-through cache
+does not serve the referrers API:
+
+- the Google Artifact Registry remote repository answers it with no
+  manifests in every state measured;
+- the Azure Container Registry artifact cache accepts no custom upstream.
+
+Verification discovers the bundles through the referrers API at the
+publication point, so the model with an origin zot and a public cache is
+excluded.
+
+The candidate is pushed directly to a public registry by the forge build,
+under the forge's federated workload identity. If the forge-side exchange
+proves too costly, the named fallback is an operator-run public zot under
+`bearer.oidc`. Before the beta cut nothing changes: the endpoint pushes to
+the harness zot.
+
+The target is quay.io.
+
+- It kept a subject that carries the retention tag, together with its
+  five untagged referrers, through every reading; the last was 58 hours
+  54 minutes after the tag was written.
+- It serves the explicit `artifactType` and filters the referrers
+  listing on the server side.
+- cosign verifies all three layers there.
+- Public repositories are free.
+
+The convention is `quayRobot` (D2): federation on the registry host, so
+there is no second authority.
+
+**D2, the second arm.** The arm the target needs is built: `quayRobot`,
+with its hermetic stand-in. The declared exchange-endpoint arm stays a
+documented reference shape, without code or stand-in. As the amendment of 2026-11-03 states, the disjunction, the
+hand-written interface and the hand-written unmarshal arrive with that
+arm. The schema change is ratified separately when the forge item is
+authored. The real federated exchange is measured there first, with the
+chosen forge.
+
+D9's first qualification, "keeps a tagless manifest and its referrers for
+the measured retention window", is read as: keeps a subject that carries
+the retention tag of the
+[ADR-057](ADR-057-release-authorization-two-signatures.md) amendment of
+this date, together with its untagged referrers, for the measured
+retention window. quay.io and zot collect a tagless subject while its
+tagless referrers remain.
+
+**D1, redirects.** No opt-in is added. Credential-bearing reads remain
+only inside a run:
+
+- the deploy's read-after-write, which reads manifest HEADs and filtered
+  referrers listings and no blob;
+- the in-run reads of a target authority.
+
+strike verify reads anonymously (D6 below), and an anonymous read follows
+redirects. One limitation remains, a candidate for Beta DoD row 14. In a
+run, a deploy target's host counts as declared
+([ADR-029](ADR-029-peers-are-container-egress.md) amendment 2026-11-06),
+but without storage hosts, and lane validation admits each host once. A
+lane therefore cannot read blobs from its own deploy target's host when
+that registry redirects blob reads to another host, as quay.io and Azure
+Container Registry do.
+
+**D6, the read clause.** "reads authenticate with the declared credential
+in UC2, with explicit inputs in UC1" no longer applies to strike verify.
+verify reads anonymously in UC1 and UC2 and holds no secret
+([ADR-041](ADR-041-lane-as-verification-policy.md) amendment of this
+date). The declared credential authenticates the writes and the in-run
+reads of a target authority. Before the beta cut the harness zot serves
+the release repository to anonymous reads beside authenticated writes, as
+it already serves `public/**`.
+
+**Geo-replication** of the publication registry is admitted. A replica
+that lags is withholding in the sense of ADR-057 D7: it yields a failed
+or a candidate verdict, never a false pass. The read-after-write of the
+[ADR-051](ADR-051-deploy-as-sealing-point.md) amendment of 2026-11-08
+proves visibility at the replica the producer reaches, and nothing more.
+
+**The approver's attach.** After the cut the reference endpoint holds no
+identity a public registry accepts. The harness Keycloak is loopback, the
+endpoint has no browser, and no static credential exists. Attaching the
+authorization bundle is a registry write under this record, so it runs
+where a write identity lives:
+
+- before the cut, on the endpoint with the harness token;
+- after the cut, as a forge job with the forge's workload identity,
+  through the same credential as the builder's push.
+
+The forge carries the bundle; it can withhold it, not forge it. ADR-057
+D6 and D9 receive the dated amendment that separates signing from
+attaching, with the signer.
+
+**Supersedes, in Context:** "No tag exists anywhere" is read as: "One tag
+exists per subject, the retention tag, which is never moved and never
+read". **In Alternatives considered:** the quay.io entry is withdrawn.
+The retention tag answers the retention it measured, and quay.io is the
+target.
+
+**Known limitations, candidates for Beta DoD row 14.**
+
+- A private repository cannot be verified with strike verify.
+- In a run, a lane cannot read blobs from its own deploy target's host
+  when that host redirects blob reads.
+- Under geo-replication, the read-after-write covers only the replica
+  the producer reaches.

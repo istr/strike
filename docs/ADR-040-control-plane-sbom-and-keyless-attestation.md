@@ -386,3 +386,20 @@ cert SAN equals declared identity" is read as: "cert issuer equals
 declared issuer, cert SAN equals declared identity, and every declared
 extension pin equals the certificate's extension of that name (ADR-057
 D2)".
+
+## Amendment 2026-11-12 -- D3: the tag fallback stays retired, for its tag's mutability
+
+The amendment of 2026-11-01 retired the referrers tag fallback because
+"a write through it creates a tag, which the digest-only model of ADR-057
+D6 excludes". From this date the model admits one tag per subject: the
+retention tag of the
+[ADR-057](ADR-057-release-authorization-two-signatures.md) amendment of
+this date, never moved and never read. The fallback stays retired. Its
+tag names an index that every referrer write rewrites and every
+discovery read resolves, which puts a mutable reference on the discovery
+path.
+
+**Supersedes, in the amendment of 2026-11-01 above:** the sentence is
+read as: "a write through it creates a tag that every referrer write
+moves and every discovery read resolves, which the digest-only model of
+ADR-057 D6 excludes".

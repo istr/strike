@@ -364,3 +364,21 @@ a release (ADR-057). The confirmation shows what the read path the
 producer reaches serves; a verifier routed to another replica of a
 geo-replicated registry may still find less, which the publication model
 of ADR-058 D9 decides.
+
+## Amendment 2026-11-12 -- D6: the push destination carries no tag; D4: the one tag is the retention tag
+
+D6 describes the push destination as a "repository name with a tag". The
+lane schema's repository grammar, the distribution-spec repository path,
+rejects a tag and a digest by construction, and
+`#DeployRegistryTarget.name` is a repository name only. The destination
+has been tagless since that grammar landed, and no amendment recorded it.
+From this date D6 is read as follows. The push destination is a host, an
+optional port and a repository name, without tag or digest. The digest
+is the result of the push. The one tag a deploy writes is derived, not
+declared: it is the retention tag of the
+[ADR-057](ADR-057-release-authorization-two-signatures.md) amendment of
+this date.
+
+**Supersedes, in the D4 amendment of 2026-11-08 above:** "every write is
+by digest and untagged" is read as: "every write is by digest, and the
+only tag is the retention tag, written once and never moved".

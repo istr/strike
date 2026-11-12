@@ -278,3 +278,28 @@ A registry may list a referrer late
 verify repeats its referrer read, with the backoff and the bound of the
 deploy's read-after-write, while a layer whose absence would fail the
 verdict is not listed, and never waits for a layer whose absence would not.
+
+## Amendment 2026-11-12 -- strike verify reads anonymously, without exception, and confirms the subject is served
+
+**Supersedes, in the amendment of 2026-11-08 above:** the paragraph that
+begins "A private repository is read under a registry token the
+invocation names" is withdrawn.
+
+strike verify reads anonymously in UC1 and UC2, from every registry, and
+holds no secret. `--registry-token` is removed, and with it
+`--deploy-step` and `--registry-ca`, which said where the token is
+presented. The first paragraph of that amendment says why this costs no
+trust: what verify reads is trusted through the digest pins and the
+keyless verification, never through the transport. A private repository
+cannot be verified with strike verify. Its provenance layers stay
+verifiable with cosign under the consumer's own registry credentials.
+
+verify also confirms that the subject manifest is served. It sends an
+anonymous HEAD of the subject, repeated with the backoff and the bound
+of the retry paragraph while the HEAD answers 404. A subject that is not
+served is FAIL. A registry may keep listing the referrers of a subject
+it no longer serves; this was measured on zot v2.1.22
+(`docs/research/adr-058-publication-measurements.md`). Without the HEAD,
+a pass would say nothing about whether the digest can still be pulled.
+
+The retry paragraph stands.

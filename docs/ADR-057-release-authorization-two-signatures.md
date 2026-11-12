@@ -705,3 +705,31 @@ identity in the sealed statement, and the engine's self-reported version
 in the informational statement". **In Consequences, Producer:** "the
 engine version in the sealed statement if not already there;" is read as
 deleted.
+
+## Amendment 2026-11-12 -- D6: the candidate carries one retention tag
+
+D6 pushes the candidate by digest, and "Nothing is moved or re-pushed".
+A digest alone does not keep a subject on every registry. Measured
+(`docs/research/adr-058-publication-measurements.md`):
+
+- quay.io collects a tagless subject within 18.5 hours;
+- zot collects it at its first garbage-collection run after the delay,
+  one to two hours at its defaults;
+- in both, the tagless referrers remain;
+- a tag keeps the subject, and on zot its untagged referrers as well.
+
+From this date the registry deploy writes one tag on the subject besides
+the push by digest. The tag is `strike-` followed by the 64 hexadecimal
+digits of the subject's sha256 digest.
+
+- **Written once.** The tag is derived from the content, written once
+  and never moved.
+- **Never used by strike.** strike never reads, resolves or records it,
+  and verification never uses it. The digest stays the only reference,
+  and the register in the tree stays what names a release.
+- **Tag immutability.** Where the registry offers it, the publication
+  repository enables it.
+- **Candidates that are never released** keep their tag until the
+  operator removes it. Retraction stays the register commit.
+
+"Nothing is moved or re-pushed" stands.
