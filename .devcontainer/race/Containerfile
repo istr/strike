@@ -20,6 +20,8 @@ COPY --from=cgr.dev/chainguard/go@sha256:806b06607f346ed94cbf0c7e0821502f8a048b2
 # gcc's startup files, libgcc, headers and specs, without the plugins only
 # -fplugin loads.
 COPY --from=cgr.dev/chainguard/go@sha256:806b06607f346ed94cbf0c7e0821502f8a048b22f30bbd9a0e46cc28bfe2146d --exclude=**/plugin /usr/lib/gcc /usr/lib/gcc
-COPY --from=cgr.dev/chainguard/go@sha256:806b06607f346ed94cbf0c7e0821502f8a048b22f30bbd9a0e46cc28bfe2146d /usr/include /usr/include
+# The C headers, without libstdc++'s in c++, which only cc1plus reads. The
+# engine reads an exclude as a regular expression and stops on a bare +.
+COPY --from=cgr.dev/chainguard/go@sha256:806b06607f346ed94cbf0c7e0821502f8a048b22f30bbd9a0e46cc28bfe2146d --exclude=**/c[+][+] /usr/include /usr/include
 USER 0
 ENV PATH=/usr/lib/go/bin:/usr/bin
