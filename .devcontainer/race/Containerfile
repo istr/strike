@@ -14,7 +14,9 @@ COPY --from=cgr.dev/chainguard/go@sha256:806b06607f346ed94cbf0c7e0821502f8a048b2
 # linker script with the files it names, and the libraries cgo links with -l.
 COPY --from=cgr.dev/chainguard/go@sha256:806b06607f346ed94cbf0c7e0821502f8a048b22f30bbd9a0e46cc28bfe2146d /usr/lib/crt1.o /usr/lib/crti.o /usr/lib/crtn.o /usr/lib/libc.so /usr/lib/libc.so-2.44 /usr/lib/libc_nonshared.a /usr/lib/libpthread.a /usr/lib/libresolv.so /usr/lib/libresolv.so.2 /usr/lib/libgcc_s.so /usr/lib/libgcc_s.so.1 /usr/lib/libgcc_s_asneeded.so /usr/lib/libatomic_asneeded.so /usr/lib/libatomic.so /usr/lib/
 COPY --from=cgr.dev/chainguard/go@sha256:806b06607f346ed94cbf0c7e0821502f8a048b22f30bbd9a0e46cc28bfe2146d /usr/bin/gcc /usr/bin/as /usr/bin/ld /usr/bin/
-COPY --from=cgr.dev/chainguard/go@sha256:806b06607f346ed94cbf0c7e0821502f8a048b22f30bbd9a0e46cc28bfe2146d /usr/libexec/gcc /usr/libexec/gcc
+# gcc's programs without cc1plus and lto1: the image has no g++, and cgo
+# passes no -flto.
+COPY --from=cgr.dev/chainguard/go@sha256:806b06607f346ed94cbf0c7e0821502f8a048b22f30bbd9a0e46cc28bfe2146d --exclude=**/cc1plus --exclude=**/lto1 /usr/libexec/gcc /usr/libexec/gcc
 # gcc's startup files, libgcc, headers and specs, without the plugins only
 # -fplugin loads.
 COPY --from=cgr.dev/chainguard/go@sha256:806b06607f346ed94cbf0c7e0821502f8a048b22f30bbd9a0e46cc28bfe2146d --exclude=**/plugin /usr/lib/gcc /usr/lib/gcc
