@@ -130,7 +130,7 @@ The image carries exactly this tool set:
 - `gpg`, signing commits through the host's gpg-agent, which the editor
   forwards into the container; the key stays on the host;
 - `go` and `gofmt`, `golangci-lint`, `govulncheck`, `cosign`;
-- `claude`, the agent;
+- `claude` and `vibe-acp`, the agents;
 - `podman`, a static remote client, and `docker-compose`, the provider
   `podman compose` finds, both reaching the endpoint engine through the
   mounted socket;

@@ -6,17 +6,19 @@
   "workspaceFolder": "${localWorkspaceFolder}",
   "mounts": [
     "source=${localEnv:XDG_RUNTIME_DIR}/podman.sock,target=/run/podman/podman.sock,type=bind",
-    "source=strike-claude,target=/home/dev/.claude,type=volume"
+    "source=strike-claude,target=/home/dev/.claude,type=volume",
+    "source=strike-mistral,target=/home/dev/.mistral,type=volume"
   ],
   "containerEnv": {
     "CONTAINER_HOST": "unix:///run/podman/podman.sock",
     "CLAUDE_CONFIG_DIR": "/home/dev/.claude",
+    "VIBE_HOME": "/home/dev/.mistral",
     "CLR_OPENSSL_VERSION_OVERRIDE": "4"
   },
   "otherPortsAttributes": { "onAutoForward": "ignore" },
   "remoteUser": "dev",
   "updateRemoteUserUID": false,
   "customizations": {
-    "vscode": { "extensions": ["anthropic.claude-code"] }
+    "vscode": { "extensions": ["anthropic.claude-code", "mistralai.mistral-vibe-code"] }
   }
 }

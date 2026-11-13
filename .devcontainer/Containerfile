@@ -19,8 +19,8 @@ RUN ["go", "install", "github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2
 RUN ["go", "install", "golang.org/x/vuln/cmd/govulncheck@v1.9.0"]
 RUN ["go", "install", "-ldflags=-s -w", "github.com/sigstore/cosign/v3/cmd/cosign@v3.1.4"]
 
-# Unpack stage: the static base and busybox, only to extract two release
-# tarballs.
+# Unpack stage: the static base and busybox, only to extract release
+# tarballs (claude, podman-remote, vibe-acp).
 FROM cgr.dev/chainguard/static@sha256:939754fefdbdb198356dc3187310417777d4dd8561be000885e224d49a4ce727 AS unpack
 COPY --from=cgr.dev/chainguard/busybox@sha256:f3b75a16b79f84171c013c802721b0f2b38e33ab1461e0c55f8909424294f34f /usr/bin/busybox /usr/bin/busybox
 COPY --from=cgr.dev/chainguard/busybox@sha256:f3b75a16b79f84171c013c802721b0f2b38e33ab1461e0c55f8909424294f34f /usr/lib/ld-linux-x86-64.so.2 /usr/lib/libc.so.6 /usr/lib/libm.so.6 /usr/lib/libcrypt.so.1 /usr/lib/
@@ -29,6 +29,11 @@ ADD --checksum=sha256:9b7b53954b8ffb886fafeefe9ef1e0e9e5c15e8aaf2f54d65ba64d0cca
 RUN ["/usr/bin/busybox", "tar", "-xzf", "/tmp/claude-code.tgz", "-C", "/tmp", "package/claude"]
 ADD --checksum=sha256:74982bdab99befa705bea477cb997b7203ac6b7d4bcc1b4dba7dcab6c359f5f7 https://github.com/containers/podman/releases/download/v5.4.2/podman-remote-static-linux_amd64.tar.gz /tmp/podman-remote.tgz
 RUN ["/usr/bin/busybox", "tar", "-xzf", "/tmp/podman-remote.tgz", "-C", "/tmp", "bin/podman-remote-static-linux_amd64"]
+# Mistral Vibe CLI (vibe-acp) - ACP server for IDE integrations. The
+# tarball is a PyInstaller bundle: the binary loads _internal/ relative to
+# itself, so both halves must land in /usr/bin.
+ADD --checksum=sha256:cc63ca1ac92990f4e39724559710a3303bdb20fa4b4dc377cf544a023de7bdee https://github.com/mistralai/mistral-vibe/releases/download/v3.1.2/vibe-acp-linux-x86_64-3.1.2.tar.gz /tmp/vibe-acp.tgz
+RUN ["/usr/bin/busybox", "tar", "-xzf", "/tmp/vibe-acp.tgz", "-C", "/tmp", "./vibe-acp", "./_internal"]
 
 # Final stage.
 FROM cgr.dev/chainguard/static@sha256:939754fefdbdb198356dc3187310417777d4dd8561be000885e224d49a4ce727
@@ -54,6 +59,8 @@ COPY --from=cgr.dev/chainguard/python@sha256:4a4bb4a2b468aaa396e85b5c443855fb00d
 COPY --from=tools /go/bin/golangci-lint /go/bin/govulncheck /go/bin/cosign /usr/bin/
 COPY --from=unpack /tmp/package/claude /usr/bin/claude
 COPY --from=unpack /tmp/bin/podman-remote-static-linux_amd64 /usr/bin/podman
+COPY --from=unpack /tmp/vibe-acp /usr/bin/vibe-acp
+COPY --from=unpack /tmp/_internal /usr/bin/_internal
 ADD --checksum=sha256:7758048ad38e580f22559603312874fec8bb638d021a9e64182385fc17cc12a2 --chmod=755 https://github.com/docker/compose/releases/download/v5.7.0/docker-compose-linux-x86_64 /usr/bin/docker-compose
 COPY --from=cgr.dev/chainguard/python@sha256:4a4bb4a2b468aaa396e85b5c443855fb00d34256ab947c6df9430637cfb0a2d4 /etc/terminfo /etc/terminfo
 USER 0
