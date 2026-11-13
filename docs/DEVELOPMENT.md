@@ -568,12 +568,11 @@ container from the Go image.
    stay an image no other pin names. Markdown is never rewritten: it records
    what was pinned when.
 2. Every path a Containerfile copies out of a moved image is checked against
-   the layers of the new image. A library file that only changed its version
-   suffix is renamed in place; any other missing path is a finding. Every
-   dynamically linked executable such a copy carries is printed with each
-   library it needs that no `COPY` of the same Containerfile copies under that
-   name. The command does not check which stage copies a library, nor what an
-   executable loads at run time; check both after the rebuild.
+   the layers of the new image; a missing path is a finding. Every dynamically
+   linked executable such a copy carries is printed with each library it needs
+   that no `COPY` of the same Containerfile copies under that name. The command
+   does not check which stage copies a library, nor what an executable loads
+   at run time; check both after the rebuild.
 3. Every Go tool those files pin as `<package>@<version>` -- the gate tools in
    `.devcontainer/Containerfile` and `Makefile` -- moves to the latest release
    of its module on the Go module proxy.

@@ -243,41 +243,23 @@ func TestPlanChecksCopySources(t *testing.T) {
 	tests := []struct {
 		name    string
 		sources string
-		want    string
 		wantErr []string
 	}{
 		{
 			name:    "present paths stay",
 			sources: "/usr/lib/go /usr/lib/libz.so.1",
-			want:    "/usr/lib/go /usr/lib/libz.so.1",
-		},
-		{
-			name:    "version suffix is renamed",
-			sources: "/usr/lib/libz.so.1 /usr/lib/libz.so.1.3.2",
-			want:    "/usr/lib/libz.so.1 /usr/lib/libz.so.1.3.3",
 		},
 		{
 			name:    "missing paths are all reported",
 			sources: "/usr/bin/gone /usr/lib/libz.so.1 /usr/lib/libq.so.5",
 			wantErr: []string{"a/Containerfile:1: ", "go has no /usr/bin/gone", "go has no /usr/lib/libq.so.5"},
 		},
-		{
-			name:    "two candidates are no rename",
-			sources: "/usr/lib/libc.so /usr/lib/libc.so-2.44",
-			wantErr: []string{"go has no /usr/lib/libc.so-2.44"},
-		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ns := testNamespace(t, nil)
 			_, oldManifest := push(t, ns+"go:latest", goRoot(map[string]string{"old": ""}))
-			_, newManifest := push(t, ns+"go:latest", goRoot(map[string]string{
-				"usr/lib/libz.so.1":     "",
-				"usr/lib/libz.so.1.3.3": "",
-				"usr/lib/libc.so":       "",
-				"usr/lib/libc.so-2.45":  "",
-				"usr/lib/libc.so.6":     "",
-			}))
+			_, newManifest := push(t, ns+"go:latest", goRoot(map[string]string{"usr/lib/libz.so.1": ""}))
 			line := "COPY --from=" + ns + "go@%s " + tt.sources + " /usr/lib/\n"
 			tree := fstest.MapFS{"a/Containerfile": {Data: []byte(strings.Replace(line, "%s", oldManifest, 1))}}
 			got, _, err := planned(t, ns, tree, "1.2.3")
@@ -292,7 +274,7 @@ func TestPlanChecksCopySources(t *testing.T) {
 			if err != nil {
 				t.Fatalf("plan: %v", err)
 			}
-			want := "COPY --from=" + ns + "go@" + newManifest + " " + tt.want + " /usr/lib/\n"
+			want := "COPY --from=" + ns + "go@" + newManifest + " " + tt.sources + " /usr/lib/\n"
 			if got["a/Containerfile"] != want {
 				t.Errorf("Containerfile = %q, want %q", got["a/Containerfile"], want)
 			}
@@ -405,39 +387,6 @@ func TestPlanFailsOnTheTree(t *testing.T) {
 	}
 	if _, err := u.image("UPPER"); err == nil {
 		t.Error("image of a malformed repository succeeded, want an error")
-	}
-}
-
-func TestRenamed(t *testing.T) {
-	files := map[string]bool{
-		"/usr/lib/libz.so.1":         true,
-		"/usr/lib/libz.so.1.3.3":     true,
-		"/usr/lib/libm.so":           true,
-		"/usr/lib/libm.so.6":         true,
-		"/usr/lib/libm.so-2.45":      true,
-		"/usr/lib/sub/libz.so.1.9":   true,
-		"/usr/lib/libq.so.5":         true,
-		"/usr/lib/libq.so.5.1":       true,
-		"/usr/lib/libq.so.5.1.debug": true,
-	}
-	tests := []struct {
-		name string
-		src  string
-		want string
-		srcs []string
-	}{
-		{name: "soname and full version", src: "/usr/lib/libz.so.1.3.2", srcs: []string{"/usr/lib/libz.so.1", "/usr/lib/libz.so.1.3.2"}, want: "/usr/lib/libz.so.1.3.3"},
-		{name: "longest prefix wins", src: "/usr/lib/libm.so-2.44", srcs: []string{"/usr/lib/libm.so", "/usr/lib/libm.so.6", "/usr/lib/libm.so-2.44"}, want: "/usr/lib/libm.so-2.45"},
-		{name: "no other source is a prefix", src: "/usr/lib/libz.so.1.3.2", srcs: []string{"/usr/lib/libz.so.1.3.2"}},
-		{name: "two candidates", src: "/usr/lib/libq.so.5.0", srcs: []string{"/usr/lib/libq.so.5", "/usr/lib/libq.so.5.0"}},
-		{name: "no candidate", src: "/usr/lib/libx.so.1.0", srcs: []string{"/usr/lib/libx.so.1", "/usr/lib/libx.so.1.0"}},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := renamed(files, tt.srcs, tt.src); got != tt.want {
-				t.Errorf("renamed(%s) = %q, want %q", tt.src, got, tt.want)
-			}
-		})
 	}
 }
 

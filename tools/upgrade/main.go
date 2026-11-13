@@ -8,10 +8,9 @@
 //     has: an index digest stays an index digest, a manifest digest becomes
 //     the linux/amd64 manifest of the new index;
 //   - every path a Containerfile copies out of a moved image is checked
-//     against the layers of that image, a file that only changed its version
-//     suffix is renamed in place, and every dynamically linked binary the
-//     copy carries is named with each library it needs that no COPY of the
-//     Containerfile copies;
+//     against the layers of that image, and every dynamically linked binary
+//     the copy carries is named with each library it needs that no COPY of
+//     the Containerfile copies;
 //   - every Go tool those files pin as package path and module version moves
 //     to the latest release of its module on the Go module proxy;
 //   - every download a Containerfile pins with ADD --checksum moves to the
@@ -24,11 +23,10 @@
 //
 // The Go image is the toolchain, so the command fails before it changes
 // anything when that image does not state the requested release, and likewise
-// when a copied path is gone and no rename is unambiguous, or when a download
-// does not match what its source publishes. It starts no process: the
-// registries and release sources are read over HTTPS and the go commands run
-// through the engine API. With -n it prints what would change and touches
-// neither the tree nor the engine.
+// when a copied path is gone, or when a download does not match what its
+// source publishes. It starts no process: the registries and release sources
+// are read over HTTPS and the go commands run through the engine API. With -n
+// it prints what would change and touches neither the tree nor the engine.
 //
 // Afterwards the dev container still carries the old toolchain: rebuild it,
 // then run make check.
@@ -327,14 +325,12 @@ func (u *upgrader) rewrite(name, content string) (string, error) {
 		}
 		lines := strings.SplitAfter(content, "\n")
 		copies := copiedNames(lines)
-		for i := range lines {
-			checked, err := u.checkCopy(fmt.Sprintf("%s:%d", name, i+1), lines[i], copies)
-			if err != nil {
+		for i, line := range lines {
+			if err := u.checkCopy(fmt.Sprintf("%s:%d", name, i+1), line, copies); err != nil {
 				return "", err
 			}
-			lines[i] = checked
 		}
-		content = download.ReplaceAllStringFunc(strings.Join(lines, ""), u.moveDownload)
+		content = download.ReplaceAllStringFunc(content, u.moveDownload)
 	}
 	return toolPin.ReplaceAllStringFunc(u.pin.ReplaceAllStringFunc(content, u.move), u.move), nil
 }
@@ -726,42 +722,34 @@ func copiedNames(lines []string) map[string]bool {
 // checkCopy checks one Containerfile line. A COPY that reads from a reference
 // that moves must name only paths its new image has. copies holds the base
 // name of every path a COPY of the file copies.
-func (u *upgrader) checkCopy(pos, line string, copies map[string]bool) (string, error) {
+func (u *upgrader) checkCopy(pos, line string, copies map[string]bool) error {
 	from, srcs := copySources(line)
 	m := u.pin.FindStringSubmatch(from)
 	if m == nil || m[0] != from || u.successors[from] == "" {
-		return line, nil
+		return nil
 	}
 	img := u.images[m[1]]
 	if err := img.read(); err != nil {
-		return "", err
+		return err
 	}
 	for _, src := range srcs {
-		line = u.copySource(pos, line, m[1], img, srcs, src, copies)
+		u.copySource(pos, m[1], img, src, copies)
 	}
-	return line, nil
+	return nil
 }
 
-// copySource checks the source src of the COPY line at pos against img, the
-// new image of repo. A missing path that renamed finds a successor for is
-// replaced in the returned line; any other is a finding. A dynamically linked
-// executable the source is or holds is named with every library it needs
-// whose name is not in copies, for a check after the rebuild: the command
-// does not check which stage copies a library, nor that it is the one the
-// executable loads.
-func (u *upgrader) copySource(pos, line, repo string, img *image, srcs []string, src string, copies map[string]bool) string {
-	copied := src
+// copySource checks the source src of the COPY at pos against img, the new
+// image of repo. A missing path is a finding. A dynamically linked executable
+// the source is or holds is named with every library it needs whose name is
+// not in copies, for a check after the rebuild: the command does not check
+// which stage copies a library, nor that it is the one the executable loads.
+func (u *upgrader) copySource(pos, repo string, img *image, src string, copies map[string]bool) {
 	if !img.files[src] {
-		copied = renamed(img.files, srcs, src)
-		if copied == "" {
-			u.findings = append(u.findings, fmt.Sprintf("%s: %s%s has no %s", pos, u.namespace, repo, src))
-			return line
-		}
-		log.Printf("%s: %s -> %s", pos, src, copied)
-		line = strings.Replace(line, " "+src+" ", " "+copied+" ", 1)
+		u.findings = append(u.findings, fmt.Sprintf("%s: %s%s has no %s", pos, u.namespace, repo, src))
+		return
 	}
 	for _, exe := range slices.Sorted(maps.Keys(img.dynamic)) {
-		if exe != copied && !strings.HasPrefix(exe, copied+"/") {
+		if exe != src && !strings.HasPrefix(exe, src+"/") {
 			continue
 		}
 		var missing []string
@@ -774,37 +762,6 @@ func (u *upgrader) copySource(pos, line, repo string, img *image, srcs []string,
 			log.Printf("%s: %s needs %s, which no COPY in this file copies", pos, exe, strings.Join(missing, ", "))
 		}
 	}
-	return line
-}
-
-// renamed returns the path that took the place of src, a COPY source its
-// image no longer has, or "" when there is not exactly one. A library is
-// copied under its soname and under its full version, libz.so.1 and
-// libz.so.1.3.2, and a patch release keeps the first and renames the second.
-// So the candidates are the files beside src whose name starts with the
-// longest other source that is a prefix of src, without the sources
-// themselves.
-func renamed(files map[string]bool, srcs []string, src string) string {
-	stem := ""
-	for _, other := range srcs {
-		if other != src && strings.HasPrefix(src, other) && len(other) > len(stem) {
-			stem = other
-		}
-	}
-	if stem == "" {
-		return ""
-	}
-	found := ""
-	for file := range files {
-		if !strings.HasPrefix(file, stem) || path.Dir(file) != path.Dir(src) || slices.Contains(srcs, file) {
-			continue
-		}
-		if found != "" {
-			return ""
-		}
-		found = file
-	}
-	return found
 }
 
 // apply writes the planned files and then runs the go commands. The commands
