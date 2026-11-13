@@ -31,9 +31,11 @@ ADD --checksum=sha256:74982bdab99befa705bea477cb997b7203ac6b7d4bcc1b4dba7dcab6c3
 RUN ["/usr/bin/busybox", "tar", "-xzf", "/tmp/podman-remote.tgz", "-C", "/tmp", "bin/podman-remote-static-linux_amd64"]
 # Mistral Vibe CLI (vibe-acp) - ACP server for IDE integrations. The
 # tarball is a PyInstaller bundle: the binary loads _internal/ relative to
-# itself, so both halves must land in /usr/bin.
+# itself, so both halves must land in /usr/bin. The bundle's own vibe CLI
+# binary (_internal/vibe/_bin) and the wheels' dist-info bookkeeping (sboms,
+# licenses, RECORD and friends) are not used by the ACP server and stay out.
 ADD --checksum=sha256:cc63ca1ac92990f4e39724559710a3303bdb20fa4b4dc377cf544a023de7bdee https://github.com/mistralai/mistral-vibe/releases/download/v3.1.2/vibe-acp-linux-x86_64-3.1.2.tar.gz /tmp/vibe-acp.tgz
-RUN ["/usr/bin/busybox", "tar", "-xzf", "/tmp/vibe-acp.tgz", "-C", "/tmp", "./vibe-acp", "./_internal"]
+RUN ["/usr/bin/busybox", "tar", "-xzf", "/tmp/vibe-acp.tgz", "-C", "/tmp", "--exclude=./_internal/vibe/_bin", "--exclude=./_internal/*.dist-info/sboms", "--exclude=./_internal/*.dist-info/licenses", "--exclude=./_internal/*.dist-info/RECORD", "--exclude=./_internal/*.dist-info/INSTALLER", "--exclude=./_internal/*.dist-info/REQUESTED", "--exclude=./_internal/*.dist-info/direct_url.json", "--exclude=./_internal/*.dist-info/uv_cache.json", "--exclude=./_internal/*.dist-info/uv_build.json", "./vibe-acp", "./_internal"]
 
 # Final stage.
 FROM cgr.dev/chainguard/static@sha256:939754fefdbdb198356dc3187310417777d4dd8561be000885e224d49a4ce727
