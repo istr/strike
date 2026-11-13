@@ -14,7 +14,10 @@
 //
 // It also lints the CUE source under contract/: an inline string disjunction in
 // a field (ADR-049 rule 5), a field that re-inlines a primitive grammar, and a
-// map whose constrained key is redirected to a plain-string Go key.
+// map whose constrained key is redirected to a plain-string Go key. It also
+// gates a cross-package import that points up the package tier order, and a
+// list field declared without the optional marker but written in the open
+// form.
 package main
 
 import (
@@ -108,6 +111,11 @@ func run(patterns []string) ([]string, error) {
 		return nil, fmt.Errorf("contract syntax lint: %w", err)
 	}
 	findings = append(findings, synFindings...)
+	gateFindings, err := contractGateFindings(".")
+	if err != nil {
+		return nil, fmt.Errorf("contract gate lint: %w", err)
+	}
+	findings = append(findings, gateFindings...)
 	sort.Strings(findings)
 	return findings, nil
 }

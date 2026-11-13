@@ -161,14 +161,14 @@ import (
 	id:             primitive.#Identifier @go(ID)
 	image?:         primitive.#ImageRef   @go(Image,optional=nillable)
 	imageFromStep?: primitive.#Identifier @go(ImageFromStep,optional=nillable)
-	args: [...string] @go(Args)
+	args?: [...string] @go(Args)
 	env: {
 		[string]: string @go(Env)
 	}
-	inputs: [...#InputRef] @go(Inputs)
+	inputs?: [...#InputRef] @go(Inputs)
 	output?: "image" @go(Output)
 	outputs?: [...#FileOutput] @go(Outputs)
-	secrets: [...#SecretRef] @go(Secrets)
+	secrets?: [...#SecretRef] @go(Secrets)
 	workdir?: primitive.#AbsPath @go(Workdir,optional=nillable)
 	peers?: [...#Peer] @go(Peers)
 	// forceRun: when true, strike bypasses the cache check
@@ -288,7 +288,7 @@ import (
 #PackSpec: {
 	@go(PackSpec)
 	base: primitive.#ImageRef @go(Base)
-	files: [...#PackFile] @go(Files)
+	files?: [...#PackFile] @go(Files)
 	config?: #ImageConfig @go(Config,optional=nillable)
 	annotations?: {
 		[string]: string @go(Annotations)
@@ -424,14 +424,14 @@ import (
 	// valid -- execution success, not a drift reaction. strike takes no action
 	// on state differences (ADR-016); do not add policy fields here.
 	required: *true | bool @go(Required)
-	captures: [...#Capture] @go(Captures)
+	captures?: [...#Capture] @go(Captures)
 }
 
 #Capture: {
 	@go(Capture)
 	id:    primitive.#Identifier @go(ID)
 	image: primitive.#ImageRef   @go(Image)
-	command: [...string] @go(Command)
+	command: [string, ...string] @go(Command)
 	peers?: [...#Peer] @go(Peers)
 	mounts?: [...#CaptureMount] @go(Mounts)
 }

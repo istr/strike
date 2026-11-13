@@ -70,7 +70,7 @@ import (
 
 #SLSAProvenanceStatement: {
 	"_type": "https://in-toto.io/Statement/v1" @go(Type)
-	subject: [...#Subject]
+	subject: [#Subject, ...#Subject]
 	predicateType: "https://slsa.dev/provenance/v1"
 	predicate:     #SLSAProvenancePredicate
 }
@@ -149,7 +149,7 @@ import (
 
 #EngineContextStatement: {
 	"_type": "https://in-toto.io/Statement/v1" @go(Type)
-	subject: [...#Subject]
+	subject: [#Subject, ...#Subject]
 	predicateType: "https://istr.dev/strike/predicates/engine-context/v1"
 	predicate:     #EngineContextPredicate
 }
@@ -177,7 +177,7 @@ import (
 
 #InformationalStatement: {
 	"_type": "https://in-toto.io/Statement/v1" @go(Type)
-	subject: [...#Subject]
+	subject: [#Subject, ...#Subject]
 	predicateType: "https://istr.dev/strike/predicates/informational/v1"
 	predicate:     #InformationalPredicate
 }
@@ -199,7 +199,7 @@ import (
 	// provenance collects validated provenance records from transitive
 	// predecessor steps; each is container-written at step exit and
 	// engine-relayed. Recorded for audit and IoC, never gating.
-	provenance: [...provenancepkg.#Record]
+	provenance?: [...provenancepkg.#Record]
 
 	// engineMetadata is the engine's self-report about itself (version, rootless
 	// mode). It carries no trust claim -- the engine asserting facts about

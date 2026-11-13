@@ -76,8 +76,8 @@ func primitiveConstraints(root string) map[string]string {
 				if !ok {
 					continue
 				}
-				name := labelName(field.Label)
-				if !isDefinitionLabel(name) {
+				name := primitiveDefName(field)
+				if name == "" {
 					continue
 				}
 				if c := renderConstraint(field.Value); c != "" {
@@ -87,6 +87,23 @@ func primitiveConstraints(root string) map[string]string {
 		}
 	}
 	return out
+}
+
+// primitiveDefName returns the definition name when field declares a
+// primitive whose constraint is a real grammar. A bare identifier (e.g.
+// `string`) is not a grammar: the primitive names a type whose constraint
+// lives in Go's post-parse Validate, not in CUE syntax (#UserSpec,
+// #StringOrURI, #URIReference). Mapping it here matched every plain-string
+// field as a "re-inlined grammar".
+func primitiveDefName(field *ast.Field) string {
+	name := labelName(field.Label)
+	if !isDefinitionLabel(name) {
+		return ""
+	}
+	if _, ok := field.Value.(*ast.Ident); ok {
+		return ""
+	}
+	return name
 }
 
 func appendFieldFindings(fs []string, field *ast.Field, prims map[string]string) []string {

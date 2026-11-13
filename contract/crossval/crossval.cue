@@ -46,7 +46,7 @@ import (
 		}
 		// PackSpec fields (subset used by AssembleImage).
 		spec: {
-			files: [...lane.#PackFile]
+			files?: [...lane.#PackFile]
 			config?: lane.#ImageConfig
 			annotations?: {
 				[string]: string
@@ -64,7 +64,7 @@ import (
 		// key that survives a re-encoding (ADR-046). It is also carried inside
 		// config_json_base64; the separate list localizes a failure to tar
 		// canonicalization rather than to config serialization.
-		diff_ids: [...primitive.#Digest]
+		diff_ids?: [...primitive.#Digest]
 		// config_json_base64 is the assembled config blob, byte-exact. It
 		// encodes reference decisions a second implementation must reproduce,
 		// among them the zero creation timestamp and one empty history entry
@@ -90,7 +90,7 @@ import (
 	description: string
 	inputs: {
 		step: {
-			args: [...string]
+			args?: [...string]
 			env: [string]: string
 		}
 		image_digest: primitive.#Digest
@@ -124,7 +124,7 @@ import (
 		// Go fixture still decodes name and image as plain strings because
 		// deploy.NewCaptureSnap takes them that way; typing that producer is
 		// item-0080, and the contract leads.
-		captures: [...{
+		captures?: [...{
 			name:          primitive.#Identifier
 			image:         primitive.#ImageRef
 			output_base64: primitive.#Base64
@@ -144,7 +144,7 @@ import (
 		// output is undefined without it and it is an input to the boundary
 		// rather than a property of the harness.
 		front_key: endpoint.#HostKey
-		peers: [...lane.#Peer]
+		peers?: [...lane.#Peer]
 	}
 	expected: {
 		// Empty output is the defined result for a peer set with no ssh peer,
