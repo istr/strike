@@ -143,7 +143,9 @@ and no digest pins it; the closure was measured against server version
 1.145.2, and an editor update can need more. The native broker of the editor's
 Microsoft authentication extension stays unloadable: it needs GTK 3,
 WebKitGTK, libsoup, libsecret, GLib, X11, D-Bus and OpenSSL 3, which no
-`cgr.dev` source carries, and the server starts without it.
+`cgr.dev` source carries, and the server starts without it. The native audio
+capture of the Claude Code extension stays unloadable as well: it needs ALSA's
+`libasound.so.2`, and the container has no sound device for it to read.
 
 The image's OpenSSL is version 4, from the `cgr.dev` python image. The
 editor's server checks the signature of every extension it installs with a
