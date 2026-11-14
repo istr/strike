@@ -15,9 +15,10 @@ import (
 
 // ValidateLane is the lane-structure validation phase. It runs between Parse
 // and Build over the parsed lane and its step index: the pure-lane validators
-// and the reference-integrity checks that Build's resolve methods used to carry
-// inline. Build assumes a lane that has passed this gate. The leaf-topology
-// validators need the built graph and stay on the DAG.
+// and the reference-integrity checks, which hold every imageFromStep, input,
+// pack-file and deploy-artifact reference to a known step and output. Build
+// assumes a lane that has passed this gate. The leaf-topology validators need
+// the built graph and stay on the DAG.
 func ValidateLane(p *Lane, index map[primitive.Identifier]*Step) error {
 	if err := validateDeclarations(p); err != nil {
 		return err

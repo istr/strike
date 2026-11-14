@@ -654,7 +654,7 @@ func TestCheckCache_ForceRunBypass(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if hit {
-		t.Error("expected cache miss with force_run")
+		t.Error("expected cache miss with forceRun")
 	}
 }
 
@@ -852,12 +852,12 @@ func TestImageFromRef(t *testing.T) {
 		wantRef string
 	}{
 		{
-			name:    "resolves image_from edge",
+			name:    "resolves imageFromStep edge",
 			wantRef: wantRef,
 			step:    &lane.Step{ID: "run", ImageFromStep: primitive.IdentifierPtr("pack")},
 		},
 		{
-			name: "empty for no image_from edge",
+			name: "empty for no imageFromStep edge",
 			step: &lane.Step{ID: "plain", Image: primitive.ImageRefPtr("img")},
 		},
 	}

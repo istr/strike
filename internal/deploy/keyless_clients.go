@@ -228,9 +228,9 @@ func tsaTimestamp(ctx context.Context, ep endpoint.HTTPS, dialer *transport.Dial
 // rekorSubmitKeyless submits the DSSE signature to Rekor v2 as a
 // hashedrekord over the signed digest (Rekor v2 records DSSE uploads this
 // way) and returns the transparency log entry, which carries the inclusion
-// proof and signed checkpoint. Hand-rolled HTTP POST per ratified R2: only
-// the generated proto types are imported, so rekor-tiles' pkg/client (and
-// its docker/otel dependency cluster) stays out of the compile graph.
+// proof and signed checkpoint. The HTTP POST is hand-rolled (ADR-040 D2):
+// only the generated proto types are imported, so rekor-tiles' pkg/client
+// (and its docker/otel dependency cluster) stays out of the compile graph.
 func rekorSubmitKeyless(ctx context.Context, ep endpoint.HTTPS, dialer *transport.Dialer, paeDigest, sig, leafCertDER []byte) (*protorekor.TransparencyLogEntry, error) {
 	req := &rekortilespb.CreateEntryRequest{
 		Spec: &rekortilespb.CreateEntryRequest_HashedRekordRequestV002{

@@ -204,7 +204,7 @@ Requirements:
 - All new tests must use table-driven subtests with `t.Run`.
 - Tests must pass with the race detector enabled.
 - Coverage must not decrease. Target: 100% statement coverage for all packages
-  except generated code (`cue_types_lane_gen.go`).
+  except generated code (`*.gen.go`).
 - Container operations are tested via `httptest` mock servers against the
   `container.Engine` interface. Unit tests must not require podman.
 

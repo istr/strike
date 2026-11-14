@@ -95,7 +95,7 @@ func TestValidateAttestation_InvalidEngineConnectionType(t *testing.T) {
 	}
 
 	if err := deploy.ValidateAttestation(att); err == nil {
-		t.Fatal("expected validation error for invalid connection_type")
+		t.Fatal("expected validation error for invalid engine connection type")
 	}
 }
 

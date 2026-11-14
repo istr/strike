@@ -1,6 +1,6 @@
 {
   "boundary": "ValidateAttestation",
-  "description": "pre_state_digest not matching #Digest pattern fails validation",
+  "description": "preStateDigest not matching #Digest pattern fails validation",
   "expected": {
     "error_contains": "digest",
     "valid": false

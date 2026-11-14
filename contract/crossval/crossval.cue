@@ -121,9 +121,9 @@ import (
 	description: string
 	inputs: {
 		// The capture fields carry the grammars the contract already owns. The
-		// Go fixture still decodes name and image as plain strings because
-		// deploy.NewCaptureSnap takes them that way; typing that producer is
-		// item-0080, and the contract leads.
+		// Go fixture decodes name and image as plain strings because
+		// deploy.NewCaptureSnap takes them that way; the schema, not the
+		// fixture, holds every vector to those grammars.
 		captures: [...{
 			name:          primitive.#Identifier
 			image:         primitive.#ImageRef

@@ -44,7 +44,7 @@ func IndexSteps(p *Lane) (map[primitive.Identifier]*Step, error) {
 // and returns a typed Lane instance together with the raw sha256 digest of
 // the file bytes. Hash and parse consume the same single read, so the digest
 // is bound to exactly the bytes the Lane was built from; it is carried into
-// the sealed attestation as lane_digest.
+// the sealed attestation as laneDigest.
 func Parse(fp FilePath) (*Lane, map[primitive.Identifier]*Step, primitive.Digest, error) {
 	raw, err := fp.Read()
 	if err != nil {
@@ -52,7 +52,7 @@ func Parse(fp FilePath) (*Lane, map[primitive.Identifier]*Step, primitive.Digest
 	}
 	// The input is "sha256:" followed by 64 lowercase hex by construction, so it
 	// satisfies #Digest directly; it is bound to exactly the bytes the Lane was
-	// built from and carried into the sealed attestation as lane_digest.
+	// built from and carried into the sealed attestation as laneDigest.
 	sum := sha256.Sum256(raw)
 	dg := primitive.DigestFromHex(hex.EncodeToString(sum[:]))
 

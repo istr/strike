@@ -13,9 +13,10 @@ import (
 // TestExecute_DigestGuard exercises the ADR-045 structural guard in
 // Run.Execute: a step is refused before any engine call unless its image
 // reference carries an @sha256: content digest. The guard covers both the
-// Step.Image path and the image_from ImageRef override, so an execute-by-tag
-// path cannot reappear. A digest-pinned reference passes the guard and reaches
-// the later capsule check, proving the guard does not reject the valid form.
+// Step.Image path and the imageFromStep ImageRef override, so an
+// execute-by-tag path cannot reappear. A digest-pinned reference passes the
+// guard and reaches the later capsule check, proving the guard does not reject
+// the valid form.
 func TestExecute_DigestGuard(t *testing.T) {
 	const digest = "images.example.com/alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000"
 	tests := []struct {
@@ -35,7 +36,7 @@ func TestExecute_DigestGuard(t *testing.T) {
 			wantErr: "non-digest-pinned image",
 		},
 		{
-			name:     "image_from tag override rejected",
+			name:     "imageFromStep tag override rejected",
 			image:    primitive.ImageRefPtr(digest),
 			imageRef: "localhost/strike/lane/step:spechash",
 			wantErr:  "non-digest-pinned image",

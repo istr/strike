@@ -67,8 +67,8 @@ type stepInputs struct {
 }
 
 // gatherInputs resolves every direct-predecessor edge a step declares --
-// image_from, container inputs, and pack files -- from the Runtime's published
-// predecessor records exactly once.
+// imageFromStep, container inputs, and pack files -- from the Runtime's
+// published predecessor records exactly once.
 func (rc *runContext) gatherInputs(step *lane.Step) (stepInputs, error) {
 	in := stepInputs{
 		handles:    map[string]output.Handle{},
@@ -221,9 +221,9 @@ func (rc *runContext) resolveImageDigest(step *lane.Step, safeName string, input
 	return digest, nil
 }
 
-// imageFromRef resolves the producer image reference for a step's image_from
-// edge from the resolved inputs, returning "" when the step declares no
-// image_from edge.
+// imageFromRef resolves the producer image reference for a step's
+// imageFromStep edge from the resolved inputs, returning "" when the step
+// declares no imageFromStep edge.
 // ADR-045: the producer image is executed by its content-addressed digest
 // reference, not the mutable WrapTag (ADR-046).
 func (rc *runContext) imageFromRef(step *lane.Step, inputs stepInputs) (string, error) {

@@ -198,7 +198,7 @@ type Deployer struct {
 	wait            func(ctx context.Context, d clock.Duration) error                                           // test seam; nil selects clock.Wait, the wait between the reads of the read-after-write
 	Keyless         lane.Keyless                                                                                // lane-declared keyless config (ADR-040 D2, ADR-041); .Endpoints dials Fulcio, Rekor v2, TSA; .TrustRoot/.TrustRootRef carry the verify anchor
 	LaneID          primitive.Identifier
-	LaneDigest      primitive.Digest     // prefixed "sha256:<hex>" over the lane file bytes; sealed as lane_digest
+	LaneDigest      primitive.Digest     // prefixed "sha256:<hex>" over the lane file bytes; sealed as laneDigest
 	StepID          primitive.Identifier // deploy step name; method-container port key and capture-key prefix
 	CAVolume        string               // lane-wide CA volume name; mounted r/o at /etc/ssl/certs
 	BaseSBOMSigners []lane.SBOMSigner    // ADR-040 2c: declared base-SBOM signers; lane build requires a Keyless trust root when non-empty
@@ -206,17 +206,17 @@ type Deployer struct {
 	Resolver        ResolverProbe        // declared resolver endpoint + the identity the pre-flight probe observed and verified
 }
 
-// collectObservedPeers builds the sealed-layer observed_peers map and the
-// engine-dependent peer_attribution map for one deploy step's sub-tree, and
+// collectObservedPeers builds the sealed-layer observedPeers map and the
+// engine-dependent peerAttribution map for one deploy step's sub-tree, and
 // folds the deploy step's state-capture declared peers into declaredPeers under
 // the deploy step name (ADR-039 D4). declaredPeers is the CollectPeers result
 // for this deploy step (it already contains the deploy method's own peers under
 // step.ID).
 //
-// observed_peers is deduplicated per "host:port" with no step attribution
+// observedPeers is deduplicated per "host:port" with no step attribution
 // (sealed layer); a second observation of the same endpoint with a different
 // validated identity is a conflict and returns an error -- the deploy is not
-// attested. peer_attribution records, per step, the endpoints that step's
+// attested. peerAttribution records, per step, the endpoints that step's
 // mediated connections reached (engine-dependent layer). Only DecisionAllowed
 // records are ingested; deploy units are HTTPS-only, so their own records yield
 // ObservedTLS.

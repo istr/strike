@@ -195,7 +195,7 @@ import (
 	pack?:       #PackSpec           @go(Pack,optional=nillable)
 	deploy?:     #DeploySpec         @go(Deploy,optional=nillable)
 	provenance?: #ProvenanceSpec     @go(Provenance,optional=nillable)
-	// constraint: exactly one of image, imageFrom, pack, or deploy -- validated in Go
+	// constraint: exactly one of image, imageFromStep, pack, or deploy -- validated in Go
 
 	// D2 (ADR-039): a deploy step is a DAG leaf and declares no output.
 	// Tying deploy presence to an empty outputs list keeps the constraint in
@@ -420,8 +420,8 @@ import (
 
 // ---------------------------------------------------------------------------
 // State recording: pre/post captures are the input to the recording
-// operation. The output carries two digests (pre_state_digest,
-// post_state_digest). No detection, no drift policy -- see ADR-016.
+// operation. The output carries two digests (preStateDigest,
+// postStateDigest). No detection, no drift policy -- see ADR-016.
 // ---------------------------------------------------------------------------
 
 #StateRecording: {

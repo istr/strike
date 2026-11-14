@@ -23,7 +23,7 @@ hardening measures.
 | **L2** Signed provenance     | weak [1]    | yes        | yes        | yes             |
 | **L3** Key isolation         | no [2]      | yes        | yes [3]    | yes             |
 | **L3** Build isolation       | no [4]      | weak [5]   | yes        | yes             |
-| **Hermetic builds**          | no          | yes        | yes        | yes             |
+| **Hermetic builds**          | no          | yes        | yes        | yes [10]        |
 | **Reproducible builds**      | possible    | yes        | possible   | yes [6]         |
 | **Supply chain auditability**| weak [7]    | yes [8]    | weak [9]   | yes             |
 
@@ -38,21 +38,28 @@ Notes:
 4. Binary replacement via PATH hijacking, LD_PRELOAD, or CONTAINER_HOST
    poisoning.
 5. Single process boundary -- a compromised library has full access.
-6. Requires deterministic timestamps (SOURCE_DATE_EPOCH) and elimination of
-   non-deterministic inputs. See "Reproducible builds" below.
+6. Requires deterministic timestamps (fixed in image content,
+   SOURCE_DATE_EPOCH for SBOMs) and elimination of non-deterministic inputs.
+   See "Reproducible builds" below.
 7. No integrity verification of the binary being invoked.
 8. Go module checksum database (sum.golang.org) provides transparent,
    append-only verification of all dependencies.
 9. Socket-level attacks operate below application monitoring, leaving minimal
    forensic traces.
+10. Hermetic except for declared peers: a step that declares no peer has no
+    egress at all, and a declared peer is reached only through strike's
+    mediation, which records the connection (ADR-022, ADR-028, ADR-033).
 
 ### How strike combines the approaches
 
-Security-critical operations use **native Go libraries** within the controller
-process: `go-containerregistry` for OCI image assembly, `sigstore-go` (planned)
-for signing and verification, `cyclonedx-go` and `spdx/tools-golang` for SBOM
-generation (CycloneDX and SPDX 2.3), and `in-toto/attestation` (planned) for
-provenance construction.
+Security-critical operations run as **native Go code** within the controller
+process: `go-containerregistry` for OCI image assembly, `cyclonedx-go` and
+`spdx/tools-golang` for SBOM generation (CycloneDX and SPDX 2.3), strike's own
+Fulcio, Rekor v2, and RFC3161 TSA clients for keyless signing, its own
+verifier for `strike verify`, and the contract's generated types for the
+in-toto statements. `sigstore-go` is a test-only dependency, the
+cross-validation oracle the produced bundles and the verifier are checked
+against (ADR-040 D2).
 
 Build workload execution uses the **container engine API** over Unix socket or
 TLS-secured TCP, treating the engine as an untrusted worker. The controller
@@ -71,13 +78,13 @@ attest as its own, such as the registry push, are API calls it makes directly.
 | TRUSTED: strike controller process                  |
 |                                                     |
 |  +-----------+ +----------+ +-------------------+   |
-|  | go-       | | ECDSA    | | CycloneDX + SPDX  |   |
+|  | go-       | | keyless  | | CycloneDX + SPDX  |   |
 |  | container | | signing  | | SBOM generation   |   |
 |  | registry  | | (P-256)  | | (in-process)      |   |
 |  +-----------+ +----------+ +-------------------+   |
 |                                                     |
 |  +----------------------------------------------+   |
-|  | Attestation construction + Rekor submission  |   |
+|  | In-toto statements + Fulcio, Rekor v2, TSA   |   |
 |  +----------------------------------------------+   |
 +--------------------+--------------------------------+
                      | TLS (TCP) or Unix socket
@@ -86,9 +93,10 @@ attest as its own, such as the registry push, are API calls it makes directly.
 | UNTRUSTED: container engine (podman)                |
 |                                                     |
 |  Build steps run with:                              |
-|    --cap-drop=ALL --read-only --network=none        |
+|    --cap-drop=ALL --read-only                       |
 |    --security-opt=no-new-privileges                 |
-|    --userns=keep-id                                 |
+|    --userns=keep-id --tmpfs=/tmp:noexec,nosuid      |
+|    --network=pasta (egress to declared peers only)  |
 +-----------------------------------------------------+
 ```
 
@@ -102,24 +110,33 @@ verifies them, and produces signed attestations.
 strike supports two connection modes to the container engine:
 
 - **Unix socket** -- acceptable for local and development builds. Authentication
-  relies on filesystem permissions (the socket file's owner and mode). This is
-  the default for rootless podman (`$XDG_RUNTIME_DIR/podman/podman.sock`).
+  relies on filesystem permissions (the socket file's owner and mode). Without
+  `CONTAINER_HOST`, strike connects to the first socket that exists of
+  `$XDG_RUNTIME_DIR/podman.sock` (served by a long-running `podman system
+  service` on the reference endpoint, ADR-055 D8), rootless podman's default
+  `$XDG_RUNTIME_DIR/podman/podman.sock`, `/run/user/<uid>/podman/podman.sock`,
+  and the rootful `/run/podman/podman.sock`.
 
 - **TLS-secured TCP** -- mandatory for connections to remote container engines.
-  TLS (server certificate verification) is always required; mTLS (mutual
-  certificate authentication) is optional. When mTLS is enabled, the controller
-  presents a client certificate and the engine presents a server certificate,
-  both verified against a shared CA. strike refuses to connect over unencrypted
-  TCP.
+  TLS 1.3 with server certificate verification is always required: strike
+  checks the engine's certificate against `CONTAINER_TLS_CA` when it is set,
+  otherwise against the system trust store. mTLS (mutual certificate
+  authentication) is optional: with `CONTAINER_TLS_CERT` and
+  `CONTAINER_TLS_KEY` set, the controller presents a client certificate, which
+  the engine verifies against its own trust configuration. strike refuses to
+  connect over unencrypted TCP.
 
-### TLS metadata in signature annotations
+### Engine connection in the sealed attestation
 
-The connection security context is recorded in the signature annotation payload.
-This includes whether TLS or mTLS was used, certificate fingerprints (when
-available), and the connection type (unix or tcp). This metadata allows
-downstream consumers to verify the security posture under which an artifact was
-built and to enforce policies such as "production images must be built over
-mTLS-secured connections."
+The control plane records how it reached the engine in the sealed layer of the
+deploy attestation (`sealed.engine`, and `externalParameters.engine` of the
+SLSA provenance): the connection type (`unix`, `tls`, or `mtls`), how the
+engine's server certificate was trusted (`pinned` or `system`), that
+certificate's fingerprint, subject, and issuer, and over mTLS the controller's
+own client-certificate fingerprint and subject. The control plane reads these
+facts off the connection itself. They allow downstream consumers to verify the
+security posture under which an artifact was built and to enforce policies such
+as "production images must be built over mTLS-secured connections."
 
 ## AAA on the engine connection
 
@@ -133,34 +150,43 @@ strike restricts what it *asks* the engine to do: every step container, run
 or deploy, receives the same hardened security profile, including the same
 peer-driven network opt-in (see [ADR-022](docs/ADR-022-network-opt-in-as-peer-list.md)).
 
-**Accounting.** Every API request is logged with method, path, container ID,
-image digest, and response status via a `http.RoundTripper` wrapper. This audit
-trail feeds into the attestation record and provides forensic data if the engine
-is compromised.
+**Accounting.** With `STRIKE_AUDIT=1`, an `http.RoundTripper` wrapper logs every
+engine API request to stderr with method, path (which carries the container and
+image identifiers), response status, and duration, never a request body. The
+audit trail is forensic data if the engine is compromised; it is not part of the
+attestation.
 
 ## Reproducible builds
 
 strike achieves reproducible OCI image assembly through four mechanisms:
 
-1. **Deterministic timestamps.** SBOM metadata, OCI config timestamps, and
-   layer modification times use `SOURCE_DATE_EPOCH` when set, otherwise Unix
-   epoch 0. This follows the convention established by Debian, apko, and ko.
+1. **Deterministic timestamps.** No timestamp depends on when strike runs.
+   SBOM metadata uses `SOURCE_DATE_EPOCH` when set, otherwise Unix epoch 0,
+   the convention established by Debian, apko, and ko. Image content carries
+   fixed times instead: every file in a layer strike writes has modification
+   time Unix epoch 0, each history entry strike appends carries the zero time
+   (`0001-01-01T00:00:00Z`, the go-containerregistry default), and an assembled
+   image keeps the creation time of its digest-pinned base image's config. An
+   output wrapped as an image has no base and carries the zero time.
 
 2. **Content-addressed everything.** Base images are digest-pinned. File layers
    are constructed from content, not filesystem metadata. The spec hash is a
-   Merkle tree over image digest, arguments, environment, and input
-   hashes -- fully computable before execution. File sizes in spec
-   hashes and reports are logical byte counts (equivalent to ```du -sb```),
-   not on-disk allocation (plain ```du -s```). This is required for
-   reproducibility across filesystems with different block sizes.
+   Merkle tree over image digest, arguments, environment, and the spec hashes
+   of the producing steps -- fully computable before execution, and free of
+   file sizes. The artifact size strike records (the `dev.strike.content-size`
+   annotation a cache hit restores it from) is a logical byte count (equivalent
+   to ```du -sb```), not on-disk allocation (plain ```du -s```). This is
+   required for reproducibility across filesystems with different block sizes.
 
 3. **No non-deterministic inputs.** Pack steps do not execute commands inside
    the image (no `RUN`). They assemble layers from typed file entries with
    explicit modes, UIDs, and GIDs.
 
-4. **Verification contract.** When `reproducible: true` is set on a pack step,
-   strike verifies reproducibility by re-assembling the image from the same
-   inputs and comparing manifest digests. A mismatch aborts the lane.
+4. **Verification contract.** A registry deploy may name a second pack step in
+   `reproducedBy`, whose image must be byte-identical to the deploy's image
+   arm. The control plane compares the two manifest digests as the first act of
+   the deploy and fails it, before any capture, push, or signature, when they
+   differ (ADR-009).
 
 ## IAN properties and failure modes
 
@@ -170,8 +196,8 @@ IAN = Integrity, Authenticity, Non-Repudiation from the CIAAN model.
 |------------------------------|-----------|--------------|-----------------|---------------|
 | Engine returns wrong digest  | preserved | preserved    | preserved       | Controller re-verifies via go-containerregistry |
 | Engine injects layer         | broken    | broken       | preserved [R]   | Reproducibility check; Rekor log mismatch |
-| Signing key exfiltrated      | preserved | broken       | broken          | No persistent key (keyless, ADR-043); Rekor CT logs every signature [K] |
-| OIDC token intercepted       | preserved | broken       | broken          | Short token lifetime (seconds); Fulcio CT |
+| Signing key exfiltrated      | preserved | broken       | broken          | No persistent key (keyless, ADR-043); Rekor logs every signature [K] |
+| OIDC token intercepted       | preserved | broken       | broken          | Token lifetime at most fifteen minutes, enforced (ADR-058 D4); Fulcio CT |
 | Socket hijacked (Unix)       | broken    | broken       | broken          | Filesystem monitoring; audit log gaps |
 | Socket hijacked (TCP)        | preserved | preserved    | preserved       | TLS prevents connection; mTLS when enabled |
 | Dependency compromise        | broken    | broken       | partial [S]     | govulncheck; sum.golang.org audit trail |
@@ -193,12 +219,16 @@ IAN = Integrity, Authenticity, Non-Repudiation from the CIAAN model.
 The full non-repudiation chain for a strike-produced artifact:
 
 1. **Lane definition** -- committed to Git with a signed commit.
-2. **Source inputs** -- hashed through `os.Root` scoped reads, digests recorded
-   in spec hash. Symlinks in source trees are rejected (both valid and broken)
-   to prevent non-deterministic hashing and implicit references outside the
-   source directory.
-3. **Build execution** -- container create/start/wait/remove logged with
-   timestamps and container IDs.
+2. **Source inputs** -- fetched by a step inside its container; strike hashes
+   no source tree of its own. A later step consumes the fetched source as that
+   step's output, bound through the producer's spec hash, and the step's
+   provenance file records where the source came from (see "Source provenance"
+   below). When strike wraps an output, a symlink whose target escapes the
+   wrapped subtree is an error.
+3. **Build execution** -- each step runs in a hardened container through the
+   engine API, and its result enters the chain as content-addressed outputs
+   bound to its spec hash. strike logs one line per step and, with
+   `STRIKE_AUDIT=1`, every engine call to stderr; neither log is signed.
 4. **Artifact provenance** -- each artifact in the deploy attestation carries a
    full `record.#Artifact`: the content-addressed manifest digest (computed
    by the controller via `go-containerregistry`) and, when one was
@@ -210,30 +240,37 @@ The full non-repudiation chain for a strike-produced artifact:
    CycloneDX and SPDX 2.3 are emitted as OCI referrers bound to the
    artifact's digest. The SBOM is a sealed-layer claim: produced from
    bytes the control plane holds, not from engine-relayed content.
-6. **Signature** -- ECDSA P-256 over manifest digest, recorded in Rekor
-   transparency log. Signing metadata is captured in `#SignatureRecord`.
-7. **Attestation** -- SLSA Provenance predicate with all inputs, parameters,
-   and outputs, signed as a DSSE envelope (Dead Simple Signing Envelope,
-   the in-toto v1 standard) and submitted to the Rekor transparency log
-   as a `dsse` entry. The `att.Rekor` field is unsigned metadata -- it
-   proves the signing event was logged but is not covered by the DSSE
-   signature. Verifiers must strip the `rekor` field before checking
-   the DSSE signature.
-8. **Deploy state** -- pre-state and post-state snapshots with drift detection.
+6. **Attestation and signature** -- the deploy attestation is projected into
+   three in-toto statements (SLSA provenance, engine-context, informational)
+   whose subject names the manifest digest. Each is signed as a DSSE envelope
+   (Dead Simple Signing Envelope, the in-toto v1 standard) by an ephemeral
+   ECDSA P-256 key that Fulcio certifies against the lane's OIDC identity,
+   logged in Rekor v2 as a `hashedrekord` entry over the signed digest, and
+   timestamped by an RFC3161 TSA. The certificate, the log entry, and the
+   timestamp ride in the statement's sigstore bundle, never in a payload
+   (ADR-013), and each bundle is published as an OCI referrer of the artifact.
+7. **Deploy state** -- digests of the pre-state and post-state captures, in
+   the deploy attestation. The raw capture output is not recorded, and strike
+   neither detects drift nor acts on it (ADR-016).
 
 ### End-to-end attestation
 
 Source provenance and attestation signing close the original open ends:
 
-- **Source provenance** enriches deploy attestations with git commit
-  metadata: commit range, signer identities (GPG, SSH, or gitsign),
-  and a boolean `all_signed` flag for policy gates. Git runs in a
-  container (preserving the no-exec.Command invariant).
+- **Source provenance** records where a step's source came from. A step
+  that fetches source declares a provenance file, and strike validates
+  it at step exit against the record of its declared type: the URI and
+  the commit of a git source, or the URI and the digest of a tarball,
+  an OCI artifact or a URL. Git runs in the step's container (preserving
+  the no-exec.Command invariant). The record is container-asserted, so
+  the deploy attestation carries it as informational, and no
+  verification gates on it (ADR-037).
 
 - **Attestation signing** wraps the deploy attestation in DSSE
   envelopes signed keylessly: an ephemeral key certified by Fulcio
-  against the lane's declared OIDC identity, submitted to a Rekor v2
-  transparency log as `dsse` entries and timestamped by an RFC3161 TSA.
+  against the lane's declared OIDC identity, logged in a Rekor v2
+  transparency log as `hashedrekord` entries over the signed digest and
+  timestamped by an RFC3161 TSA.
   The collect-model attestation is projected into three in-toto
   statements -- SLSA provenance, engine-context, and informational --
   along the boundary between the sealed and the engine-dependent layer.

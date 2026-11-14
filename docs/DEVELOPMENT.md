@@ -637,7 +637,7 @@ Examples:
 
 ```
 fix(container): use correct podman info rootless field path
-feat(lane): add image_from step type
+feat(lane): add imageFromStep step type
 test(deploy): add schema-drift integration test
 refactor: remove unused hashDir size buffer allocation
 doc: update CUE schema workflow instructions

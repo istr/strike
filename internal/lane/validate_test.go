@@ -39,7 +39,7 @@ func TestValidateLane_Reject(t *testing.T) {
 	}{
 		{"invalid_unknown_input_step.yaml", "unknown step"},
 		{"invalid_input_output_not_found.yaml", "not found"},
-		{"invalid_image_from_no_image_output.yaml", "declares no image output"},
+		{"invalid_image_from_step_no_image_output.yaml", "declares no image output"},
 		{"invalid_duplicate_output_id.yaml", "duplicate output id"},
 		{"invalid_subpath_on_file_output.yaml", "subpath"},
 		{"invalid_mount_overlap.yaml", "overlap"},

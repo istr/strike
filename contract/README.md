@@ -57,7 +57,8 @@ This produces:
 
 ## Golden test fixtures
 
-Deterministic test vectors live in `internal/executor/testdata/golden/`.
+Deterministic test vectors live in `test/crossval/`, one directory per
+boundary, each vector validated against `contract/crossval`.
 These are the cross-validation anchors: given identical inputs, any
 implementation must produce outputs matching these fixtures.
 
@@ -67,13 +68,19 @@ Generate/update golden files:
 go test ./internal/executor/ -run Golden -update
 ```
 
+The command rewrites the expectations of the three boundaries whose runners
+live in `internal/executor`; the `attestation` and `state_digest`
+expectations are hand-maintained.
+
 Fixtures include:
 
 | Fixture | Input | Output | Cross-validation target |
 |---------|-------|--------|------------------------|
-| `sign_manifest.json` | fixed key + digest | signature + payload | ECDSA P-256 signing |
-| `assemble_image.json` | empty base + file layer | manifest digest | OCI image assembly |
-| `cache_key.txt` | step args + env + inputs | SHA-256 cache key | Digest computation |
+| `assemble/*.json` | base image + pack spec + file contents | layer diff_ids + config blob | OCI image assembly (AssembleImage) |
+| `spechash/*.json` | step args + env + image, input and source digests | spec hash | Step cache key (SpecHash) |
+| `sshknownhosts/*.json` | front host key + declared peers | ssh_known_hosts content | SSH host trust rendering (RenderKnownHosts) |
+| `attestation/*.json` | deploy attestation | valid, or the expected error | Attestation schema (ValidateAttestation) |
+| `state_digest/*.json` | state captures | state digest | Deploy state digest (StateDigest) |
 
 ## Using the schemas for a Rust verifier
 

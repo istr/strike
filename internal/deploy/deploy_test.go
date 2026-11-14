@@ -1216,7 +1216,7 @@ func deployStep(t *testing.T, method lane.DeployMethod) *lane.Step {
 	}
 }
 
-// TestValidateAttestation_InvalidLaneID checks that an invalid lane_id is rejected.
+// TestValidateAttestation_InvalidLaneID checks that an invalid laneId is rejected.
 func TestValidateAttestation_InvalidLaneID(t *testing.T) {
 	att := &deploy.Attestation{
 		Sealed: deploy.Sealed{
@@ -1233,7 +1233,7 @@ func TestValidateAttestation_InvalidLaneID(t *testing.T) {
 	}
 
 	if err := deploy.ValidateAttestation(att); err == nil {
-		t.Fatal("expected validation error for invalid lane_id")
+		t.Fatal("expected validation error for invalid laneId")
 	}
 }
 

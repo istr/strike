@@ -28,7 +28,7 @@ type Run struct {
 	// owns the volume lifecycle (create before, remove after extraction).
 	VolumeName string
 	// ImageRef overrides Step.Image when non-empty. Set by the caller
-	// for image_from steps so that Step.Image remains the parsed YAML
+	// for imageFromStep steps so that Step.Image remains the parsed YAML
 	// value and the executor sees the producer's content-addressed
 	// digest reference (localhost/strike/<lane>/<step>@sha256:<D>).
 	// When empty, Step.Image is used unchanged. ADR-045: the base is
@@ -74,7 +74,7 @@ func (r Run) Execute(ctx context.Context) (string, error) {
 		opts.Image = primitive.ImageRef(r.ImageRef)
 	}
 	// ADR-045: a step executes only a digest-pinned image. External bases
-	// are digest-pinned at the schema boundary (ADR-011); image_from bases
+	// are digest-pinned at the schema boundary (ADR-011); imageFromStep bases
 	// arrive as a content-addressed local reference. Reject anything else
 	// structurally, so an execute-by-tag path cannot reappear.
 	img := string(opts.Image)

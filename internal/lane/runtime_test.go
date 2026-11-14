@@ -169,7 +169,7 @@ func TestRuntimeJSON(t *testing.T) {
 // producer writes its record and the walk publishes it before decrementing the
 // consumer, so the consumer's fire acquire-loads a fully-published record.
 func TestRuntimeRunPublishesToSuccessor(t *testing.T) {
-	// build -> consume (consume declares image_from: build).
+	// build -> consume (consume declares imageFromStep: build).
 	rt := lane.NewRuntime(buildLaneDAG(t, &lane.Lane{Steps: []lane.Step{
 		{ID: "build"},
 		{ID: "consume", ImageFromStep: primitive.IdentifierPtr("build")},

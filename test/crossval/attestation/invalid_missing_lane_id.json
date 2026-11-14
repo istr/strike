@@ -1,6 +1,6 @@
 {
   "boundary": "ValidateAttestation",
-  "description": "missing lane_id fails validation",
+  "description": "missing laneId fails validation",
   "expected": {
     "error_contains": "laneId",
     "valid": false
