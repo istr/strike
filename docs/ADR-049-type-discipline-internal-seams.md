@@ -163,3 +163,46 @@ This supersedes the earlier policy of the type-safety decision forks of
 owning package, and discriminators left as literals. The one method of that
 form, `primitive.FileArtifactType.IsFile`, is removed in the same change;
 its two callers compare with `primitive.FileArtifactTypeFile`.
+
+## Amendment 2026-11-14 -- (6) a required collection is non-empty
+
+This amendment adds rule (6) to the Decision. Rules (1) through (5) and the
+earlier amendments stand unchanged.
+
+### (6) A required collection is non-empty
+
+In CUE an open list (`[...T]`) and a struct made only of pattern constraints
+(`{[K]: V}`) carry an implicit empty default. A regular field of either form
+reads as required, but validation never requires it: a value that omits the
+field validates, the exported JSON Schema leaves it out of `required`, and the
+omission surfaces at run time, if at all. Inside a definition, therefore:
+
+- a list field is either optional (`field?: [...T]`) or non-empty
+  (`field: [T, ...T]`);
+- a map field made only of pattern constraints is optional
+  (`field?: {[K]: V}`);
+- neither carries the required marker `!`, which accepts an empty list as
+  present.
+
+The rule reaches every field inside a definition, nested ones included. A
+field outside a definition carries data, not schema -- the trust-layer
+classification declares the pattern and the entries of each of its maps in two
+declarations -- and the rule does not reach it. The value of a pattern
+constraint (`[K]: [...T]`) is the type of each entry, not a field, and is not
+reached either.
+
+With the rule, the schema carries the protection a runtime guard would
+otherwise repeat, and code after parsing keeps no guard for a shape the schema
+rejects. `go tool lintcue -contract` mechanizes the rule as
+`required-collection`.
+
+Applied when the rule lands: the capture command, the SSH host keys, the four
+lists of the inline trust root, and the certificate chain of a trust-root
+authority are non-empty; the step's args, env, inputs and secrets, the pack
+spec's files, a capture set's captures, the lane's secrets and a step result's
+outputs are optional. The cross-validation vectors follow the boundaries they
+check and make all of theirs optional, since each has a defined empty case.
+`contract/attest` is frozen for the beta line, so each of its nine sites
+changes only as a ratified freeze event; until then each is a deferral the
+lint names field by field, and a deferral that no longer matches a field is a
+finding of its own.
