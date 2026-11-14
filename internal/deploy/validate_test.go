@@ -10,7 +10,6 @@ import (
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/deploy"
 	"github.com/istr/strike/internal/endpoint"
-	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/provenance"
 	"github.com/istr/strike/internal/record"
@@ -27,7 +26,7 @@ func TestValidateAttestation_Valid(t *testing.T) {
 				"image": {Digest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
 			},
 			Resolver: deploy.ResolverRecord{Host: "one.one.one.one:853", DialedIP: "1.1.1.1"},
-			Peers:    map[primitive.Identifier][]lane.Peer{},
+			Peers:    map[primitive.Identifier][]endpoint.Endpoint{},
 		},
 		Informational: &deploy.Informational{
 			Timestamp:       primitive.Timestamp(clock.Reproducible().Format(clock.RFC3339)),
@@ -57,7 +56,7 @@ func TestValidateAttestation_WithEngine(t *testing.T) {
 				ServerCertFingerprint: "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
 			},
 			Resolver: deploy.ResolverRecord{Host: "one.one.one.one:853", DialedIP: "1.1.1.1"},
-			Peers:    map[primitive.Identifier][]lane.Peer{},
+			Peers:    map[primitive.Identifier][]endpoint.Endpoint{},
 		},
 		Informational: &deploy.Informational{
 			Timestamp:       primitive.Timestamp(clock.Reproducible().Format(clock.RFC3339)),
@@ -85,7 +84,7 @@ func TestValidateAttestation_InvalidEngineConnectionType(t *testing.T) {
 				Type: "plaintext", // not in enum
 			},
 			Resolver: deploy.ResolverRecord{Host: "one.one.one.one:853", DialedIP: "1.1.1.1"},
-			Peers:    map[primitive.Identifier][]lane.Peer{},
+			Peers:    map[primitive.Identifier][]endpoint.Endpoint{},
 		},
 		Informational: &deploy.Informational{
 			Timestamp:       primitive.Timestamp(clock.Reproducible().Format(clock.RFC3339)),
@@ -107,7 +106,7 @@ func TestValidateAttestation_EmptyDigestsAllowed(t *testing.T) {
 			LaneDigest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
 			Artifacts:  map[primitive.Identifier]record.Artifact{},
 			Resolver:   deploy.ResolverRecord{Host: "one.one.one.one:853", DialedIP: "1.1.1.1"},
-			Peers:      map[primitive.Identifier][]lane.Peer{},
+			Peers:      map[primitive.Identifier][]endpoint.Endpoint{},
 		},
 		Informational: &deploy.Informational{
 			Timestamp:       primitive.Timestamp(clock.Reproducible().Format(clock.RFC3339)),
@@ -197,7 +196,7 @@ func TestValidateAttestation_WithResolverRecord(t *testing.T) {
 				TLSVersion:            "TLS 1.3",
 				CipherSuite:           "TLS_AES_128_GCM_SHA256",
 			},
-			Peers: map[primitive.Identifier][]lane.Peer{},
+			Peers: map[primitive.Identifier][]endpoint.Endpoint{},
 		},
 		Informational: &deploy.Informational{
 			Timestamp:       primitive.Timestamp(clock.Reproducible().Format(clock.RFC3339)),
@@ -221,7 +220,7 @@ func TestValidateAttestation_WithPeers(t *testing.T) {
 				"image": {Digest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
 			},
 			Resolver: deploy.ResolverRecord{Host: "one.one.one.one:853", DialedIP: "1.1.1.1"},
-			Peers: map[primitive.Identifier][]lane.Peer{
+			Peers: map[primitive.Identifier][]endpoint.Endpoint{
 				"build": {
 					endpoint.TLS{
 						Type:    "https",
@@ -263,7 +262,7 @@ func TestValidateAttestation_InvalidPeer(t *testing.T) {
 			Artifacts: map[primitive.Identifier]record.Artifact{
 				"image": {Digest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
 			},
-			Peers: map[primitive.Identifier][]lane.Peer{
+			Peers: map[primitive.Identifier][]endpoint.Endpoint{
 				"build": {
 					endpoint.TLS{
 						Type:    "https",

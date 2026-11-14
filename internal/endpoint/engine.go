@@ -9,7 +9,7 @@ import (
 // discriminated union over the connection kind. The CUE disjunction
 // (#EngineUnix | #EngineTLS | #EngineMTLS) is annotated @go(-) so the generator
 // skips it; this hand-written interface provides the Go-side union, mirroring
-// Trust. Sealed layer (cpObserved): the control plane reads these facts off
+// Endpoint. Sealed layer (cpObserved): the control plane reads these facts off
 // the TLS handshake itself.
 type Engine interface {
 	// ConnectionType returns the discriminator ("unix", "tls", "mtls").
@@ -27,8 +27,8 @@ func (c EngineMTLS) ConnectionType() EngineType { return c.Type }
 
 // UnmarshalEngine decodes one engine-connection JSON object into the concrete
 // branch named by its "type" discriminator. Exported for internal/deploy, which
-// dispatches sealed.engine through it. Mirrors the peer/observed-identity
-// dispatch helpers.
+// dispatches sealed.engine through it. Mirrors UnmarshalEndpoint and the
+// observed-identity dispatch.
 func UnmarshalEngine(data []byte) (Engine, error) {
 	if len(data) == 0 || string(data) == "null" {
 		return nil, fmt.Errorf("engine connection missing")

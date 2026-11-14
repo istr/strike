@@ -56,7 +56,7 @@ func TestSignStatementsRejectsTokenBeforeFulcio(t *testing.T) {
 					Artifacts: map[primitive.Identifier]record.Artifact{
 						"b-image": {Digest: primitive.DigestFromHex(strings.Repeat("b", 64))},
 					},
-					Peers: map[primitive.Identifier][]lane.Peer{},
+					Peers: map[primitive.Identifier][]endpoint.Endpoint{},
 				},
 			}
 			_, err := d.signStatements(context.Background(), att, "deploy-step")

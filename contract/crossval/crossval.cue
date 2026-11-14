@@ -144,7 +144,7 @@ import (
 		// output is undefined without it and it is an input to the boundary
 		// rather than a property of the harness.
 		front_key: endpoint.#HostKey
-		peers: [...lane.#Peer]
+		peers: [...endpoint.#Endpoint]
 	}
 	expected: {
 		// Empty output is the defined result for a peer set with no ssh peer,

@@ -160,7 +160,7 @@ func syntheticAttestation(laneDigest primitive.Digest) *deploy.Attestation {
 			},
 			LaneID:     "golden-lane",
 			LaneDigest: laneDigest,
-			Peers:      map[primitive.Identifier][]lane.Peer{},
+			Peers:      map[primitive.Identifier][]endpoint.Endpoint{},
 		},
 		EngineDependent: deploy.EngineDependent{
 			PeerAttribution: map[primitive.Identifier][]endpoint.Authority{"deploy": {"registry.example:443"}},

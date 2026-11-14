@@ -10,7 +10,6 @@ import (
 
 	"github.com/istr/strike/internal/capsule"
 	"github.com/istr/strike/internal/endpoint"
-	"github.com/istr/strike/internal/lane"
 )
 
 // RenderKnownHosts renders the container's ssh_known_hosts: one line per
@@ -20,7 +19,7 @@ import (
 // host key is not in the container -- the capsule validates it when it dials
 // the peer. Output is byte-deterministic (hosts sorted). Returns nil when no
 // SSH peers are present. frontKey is the front's public host key.
-func RenderKnownHosts(peers []lane.Peer, frontKey ssh.PublicKey) []byte {
+func RenderKnownHosts(peers []endpoint.Endpoint, frontKey ssh.PublicKey) []byte {
 	var hosts []string
 	for _, p := range peers {
 		if sp, ok := p.(endpoint.SSH); ok {
@@ -48,7 +47,7 @@ func RenderKnownHosts(peers []lane.Peer, frontKey ssh.PublicKey) []byte {
 // (rendered by the step's capsule, which owns the per-peer capability
 // tokens). Returns nil when the step has no SSH peers; caps and frontKey may
 // be nil/zero in that case.
-func SSHTrustContent(peers []lane.Peer, caps *capsule.NetworkCapsule, frontKey ssh.PublicKey) (knownHosts, sshConfig []byte) {
+func SSHTrustContent(peers []endpoint.Endpoint, caps *capsule.NetworkCapsule, frontKey ssh.PublicKey) (knownHosts, sshConfig []byte) {
 	kh := RenderKnownHosts(peers, frontKey)
 	if len(kh) == 0 {
 		return nil, nil

@@ -10,7 +10,7 @@ import (
 // TestUnmarshalEngine exercises the discriminator dispatch of the
 // hand-written engine-connection union: each concrete branch decodes to its
 // type, and the missing/empty/unknown discriminator cases surface an error.
-// Mirrors lane.UnmarshalPeer's table-driven dispatch test.
+// Mirrors TestUnmarshalEndpoint's table-driven dispatch test.
 func TestUnmarshalEngine(t *testing.T) {
 	tests := []struct {
 		name    string

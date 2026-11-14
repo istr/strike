@@ -19,7 +19,7 @@ import (
 // pack step -- and returns the built DAG, its step index and a runtime.
 // The deploy method is irrelevant here: collectObservedPeers reads recorded
 // connections and declared peers, never the method.
-func observedPeersLane(t *testing.T, peers []lane.Peer) (*lane.DAG, map[primitive.Identifier]*lane.Step, *lane.Runtime) {
+func observedPeersLane(t *testing.T, peers []endpoint.Endpoint) (*lane.DAG, map[primitive.Identifier]*lane.Step, *lane.Runtime) {
 	t.Helper()
 	p := &lane.Lane{
 		Name: "test-observed",
@@ -81,7 +81,7 @@ func TestCollectObservedPeers(t *testing.T) {
 		}},
 	}
 
-	dag, index, state := observedPeersLane(t, []lane.Peer{tlsPeer, sshPeer})
+	dag, index, state := observedPeersLane(t, []endpoint.Endpoint{tlsPeer, sshPeer})
 	state.RecordNetwork("build", capsule.Records{
 		Connections: []mediator.ConnectionRecord{{
 			Decision: mediator.DecisionAllowed,
@@ -164,7 +164,7 @@ func TestCollectObservedPeers_HonorsSSHPort(t *testing.T) {
 		}},
 	}
 
-	dag, index, state := observedPeersLane(t, []lane.Peer{sshPeer})
+	dag, index, state := observedPeersLane(t, []endpoint.Endpoint{sshPeer})
 	state.RecordNetwork("build", capsule.Records{
 		SSH: []capsule.SSHConnectionRecord{{
 			Decision:           mediator.DecisionAllowed,
@@ -196,7 +196,7 @@ func TestCollectObservedPeers_ConflictAborts(t *testing.T) {
 		Address: endpoint.MustParseAuthority("api.example.com:443"),
 		Trust:   testutil.AnchorTrust(),
 	}
-	dag, index, state := observedPeersLane(t, []lane.Peer{tlsPeer})
+	dag, index, state := observedPeersLane(t, []endpoint.Endpoint{tlsPeer})
 
 	conflicting := func(fp string) mediator.ConnectionRecord {
 		return mediator.ConnectionRecord{

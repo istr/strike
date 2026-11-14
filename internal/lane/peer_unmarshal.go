@@ -10,82 +10,9 @@ import (
 
 const jsonNull = "null"
 
-// unmarshalPeer decodes a single peer JSON object into the
-// appropriate concrete branch type based on the "type"
-// discriminator. Returns an error for missing or unknown types
-// so that lane.Parse fails at validate time, not at run time.
-func unmarshalPeer(data []byte) (Peer, error) {
-	if len(data) == 0 || string(data) == jsonNull {
-		return nil, fmt.Errorf("peer entry missing")
-	}
-
-	var probe struct {
-		Type endpoint.CarriageType `json:"type"`
-	}
-	if err := json.Unmarshal(data, &probe); err != nil {
-		return nil, fmt.Errorf("peer: %w", err)
-	}
-
-	switch probe.Type {
-	case endpoint.CarriageTypeHttps:
-		ep, err := unmarshalTLS(data)
-		if err != nil {
-			return nil, err
-		}
-		return ep, nil
-	case endpoint.CarriageTypeSsh:
-		return unmarshalSSHPeer(data)
-	case "":
-		return nil, fmt.Errorf("peer missing type discriminator")
-	default:
-		return nil, fmt.Errorf("unknown peer type %q", probe.Type)
-	}
-}
-
-// unmarshalTLS decodes an endpoint in the endpoint TLS shape -- an https peer,
-// or a registry or storage endpoint of the lane's registries -- decoding the
-// trust anchor by field and parsing the packed authority host. Trust is
-// required; missing trust is an error.
-func unmarshalTLS(data []byte) (endpoint.TLS, error) {
-	var aux struct {
-		Trust *endpoint.Certificate `json:"trust"`
-		Type  endpoint.CarriageType `json:"type"`
-		Host  string                `json:"host"`
-	}
-	if err := json.Unmarshal(data, &aux); err != nil {
-		return endpoint.TLS{}, fmt.Errorf("decode https endpoint: %w", err)
-	}
-	if aux.Trust == nil {
-		return endpoint.TLS{}, fmt.Errorf("https endpoint: trust required")
-	}
-	addr, err := endpoint.ParseAuthority(aux.Host)
-	if err != nil {
-		return endpoint.TLS{}, fmt.Errorf("https endpoint: %w", err)
-	}
-	return endpoint.TLS{Type: aux.Type, Address: addr, Trust: *aux.Trust}, nil
-}
-
-// unmarshalSSHPeer decodes an ssh peer into an endpoint.SSH, parsing the
-// packed authority host and carrying the known-hosts set verbatim.
-func unmarshalSSHPeer(data []byte) (Peer, error) {
-	var aux struct {
-		Type       endpoint.CarriageType `json:"type"`
-		Host       string                `json:"host"`
-		KnownHosts []endpoint.HostKey    `json:"knownHosts"`
-	}
-	if err := json.Unmarshal(data, &aux); err != nil {
-		return nil, fmt.Errorf("decode ssh peer: %w", err)
-	}
-	addr, err := endpoint.ParseAuthority(aux.Host)
-	if err != nil {
-		return nil, fmt.Errorf("ssh peer: %w", err)
-	}
-	return endpoint.SSH{Type: aux.Type, Address: addr, KnownHosts: aux.KnownHosts}, nil
-}
-
 // UnmarshalJSON implements json.Unmarshaler for Step. It
-// decodes the peers field as a slice of typed Peer interfaces
-// using the discriminator helper. All other fields fall through
+// decodes the peers field as a slice of endpoint.Endpoint values
+// through endpoint.UnmarshalEndpoint. All other fields fall through
 // to the default decoder via the alias trick.
 func (s *Step) UnmarshalJSON(data []byte) error {
 	type alias Step
@@ -102,9 +29,9 @@ func (s *Step) UnmarshalJSON(data []byte) error {
 		s.Peers = nil
 		return nil
 	}
-	out := make([]Peer, len(aux.Peers))
+	out := make([]endpoint.Endpoint, len(aux.Peers))
 	for i, raw := range aux.Peers {
-		p, err := unmarshalPeer(raw)
+		p, err := endpoint.UnmarshalEndpoint(raw)
 		if err != nil {
 			return fmt.Errorf("step peers[%d]: %w", i, err)
 		}
@@ -131,9 +58,9 @@ func (sc *Capture) UnmarshalJSON(data []byte) error {
 		sc.Peers = nil
 		return nil
 	}
-	out := make([]Peer, len(aux.Peers))
+	out := make([]endpoint.Endpoint, len(aux.Peers))
 	for i, raw := range aux.Peers {
-		p, err := unmarshalPeer(raw)
+		p, err := endpoint.UnmarshalEndpoint(raw)
 		if err != nil {
 			return fmt.Errorf("capture peers[%d]: %w", i, err)
 		}
@@ -301,42 +228,5 @@ func (p *Lane) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("lane: %w", err)
 	}
 	p.OIDC = oidc
-	return nil
-}
-
-// UnmarshalPeer decodes a peer JSON object using the type
-// discriminator. Exported for callers in other packages
-// (e.g. internal/deploy) that need the same dispatch logic
-// when their containing struct declares peers as []lane.Peer.
-func UnmarshalPeer(data []byte) (Peer, error) {
-	return unmarshalPeer(data)
-}
-
-// UnmarshalJSON decodes one entry of the lane's registries: the registry
-// endpoint and its storage endpoints, each through the decoder an https peer
-// uses, because a bare endpoint.Address decodes the URL form, not the packed
-// authority the endpoint TLS shape carries.
-func (r *Registry) UnmarshalJSON(data []byte) error {
-	var aux struct {
-		Registry json.RawMessage   `json:"registry"`
-		Storages []json.RawMessage `json:"storages"`
-	}
-	if err := json.Unmarshal(data, &aux); err != nil {
-		return fmt.Errorf("decode registry: %w", err)
-	}
-	reg, err := unmarshalTLS(aux.Registry)
-	if err != nil {
-		return fmt.Errorf("registry: %w", err)
-	}
-	storages := make([]endpoint.TLS, len(aux.Storages))
-	for i, raw := range aux.Storages {
-		s, sErr := unmarshalTLS(raw)
-		if sErr != nil {
-			return fmt.Errorf("registry %s storages[%d]: %w", reg.Address.Authority(), i, sErr)
-		}
-		storages[i] = s
-	}
-	r.Registry = reg
-	r.Storages = storages
 	return nil
 }

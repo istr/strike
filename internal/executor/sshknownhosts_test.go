@@ -19,7 +19,6 @@ import (
 	"github.com/istr/strike/internal/capsule"
 	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/executor"
-	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/testutil"
 	"github.com/istr/strike/internal/transport"
 	"github.com/istr/strike/test/crossval"
@@ -47,13 +46,13 @@ func TestRenderKnownHosts_nil_peers(t *testing.T) {
 }
 
 func TestRenderKnownHosts_empty_peers(t *testing.T) {
-	if got := executor.RenderKnownHosts([]lane.Peer{}, testFrontKey(t)); got != nil {
+	if got := executor.RenderKnownHosts([]endpoint.Endpoint{}, testFrontKey(t)); got != nil {
 		t.Fatalf("got %q, want nil", got)
 	}
 }
 
 func TestRenderKnownHosts_non_ssh_only(t *testing.T) {
-	peers := []lane.Peer{
+	peers := []endpoint.Endpoint{
 		endpoint.TLS{Type: "https", Address: endpoint.MustParseAuthority("example.com"), Trust: testutil.AnchorTrust()},
 	}
 	if got := executor.RenderKnownHosts(peers, testFrontKey(t)); got != nil {
@@ -63,7 +62,7 @@ func TestRenderKnownHosts_non_ssh_only(t *testing.T) {
 
 func TestRenderKnownHosts_single_peer(t *testing.T) {
 	fk := testFrontKey(t)
-	peers := []lane.Peer{
+	peers := []endpoint.Endpoint{
 		endpoint.SSH{
 			Type:    "ssh",
 			Address: endpoint.MustParseAuthority("git.example.com"),
@@ -86,7 +85,7 @@ func TestRenderKnownHosts_single_peer(t *testing.T) {
 
 func TestRenderKnownHosts_multiple_peers_sorted(t *testing.T) {
 	fk := testFrontKey(t)
-	peers := []lane.Peer{
+	peers := []endpoint.Endpoint{
 		endpoint.SSH{
 			Type: "ssh", Address: endpoint.MustParseAuthority("zeta.example"),
 			KnownHosts: []endpoint.HostKey{{KeyType: "ssh-ed25519", Key: "ZetaKey"}},
@@ -112,7 +111,7 @@ func TestRenderKnownHosts_multiple_peers_sorted(t *testing.T) {
 
 func TestRenderKnownHosts_host_with_port(t *testing.T) {
 	fk := testFrontKey(t)
-	peers := []lane.Peer{
+	peers := []endpoint.Endpoint{
 		endpoint.SSH{
 			Type:    "ssh",
 			Address: endpoint.MustParseAuthority("git.example.com:2222"),
@@ -131,7 +130,7 @@ func TestRenderKnownHosts_host_with_port(t *testing.T) {
 
 func TestRenderKnownHosts_mixed_peer_list(t *testing.T) {
 	fk := testFrontKey(t)
-	peers := []lane.Peer{
+	peers := []endpoint.Endpoint{
 		endpoint.TLS{Type: "https", Address: endpoint.MustParseAuthority("api.example.com"), Trust: testutil.AnchorTrust()},
 		endpoint.SSH{
 			Type: "ssh", Address: endpoint.MustParseAuthority("git.example.com"),
@@ -161,8 +160,8 @@ func TestRenderKnownHosts_order_independence(t *testing.T) {
 		KnownHosts: []endpoint.HostKey{{KeyType: "ssh-ed25519", Key: "GammaKey"}},
 	}
 
-	order1 := executor.RenderKnownHosts([]lane.Peer{c, a, b}, fk)
-	order2 := executor.RenderKnownHosts([]lane.Peer{b, c, a}, fk)
+	order1 := executor.RenderKnownHosts([]endpoint.Endpoint{c, a, b}, fk)
+	order2 := executor.RenderKnownHosts([]endpoint.Endpoint{b, c, a}, fk)
 
 	if string(order1) != string(order2) {
 		t.Fatalf("different orders produced different output:\n  order1: %q\n  order2: %q", order1, order2)
@@ -170,7 +169,7 @@ func TestRenderKnownHosts_order_independence(t *testing.T) {
 }
 
 func TestSSHTrustContent_no_ssh_peers(t *testing.T) {
-	kh, cfg := executor.SSHTrustContent([]lane.Peer{
+	kh, cfg := executor.SSHTrustContent([]endpoint.Endpoint{
 		endpoint.TLS{Type: "https", Address: endpoint.MustParseAuthority("example.com"), Trust: testutil.AnchorTrust()},
 	}, nil, testFrontKey(t))
 	if kh != nil {
@@ -199,7 +198,7 @@ func testSSHHostKey(t *testing.T) (keyType, keyB64, authLine string) {
 func TestSSHTrustContent_with_ssh_peers(t *testing.T) {
 	_, _, authLine := testSSHHostKey(t)
 	fk := testFrontKey(t)
-	peers := []lane.Peer{
+	peers := []endpoint.Endpoint{
 		endpoint.SSH{
 			Type: "ssh", Address: endpoint.MustParseAuthority("git.example.com"),
 			KnownHosts: []endpoint.HostKey{
@@ -344,9 +343,9 @@ func TestRenderKnownHosts_Golden(t *testing.T) {
 				t.Fatalf("parse front key: %v", keyErr)
 			}
 
-			peers := make([]lane.Peer, len(vec.Inputs.Peers))
+			peers := make([]endpoint.Endpoint, len(vec.Inputs.Peers))
 			for i, raw := range vec.Inputs.Peers {
-				p, pErr := lane.UnmarshalPeer(raw)
+				p, pErr := endpoint.UnmarshalEndpoint(raw)
 				if pErr != nil {
 					t.Fatalf("unmarshal peer[%d]: %v", i, pErr)
 				}

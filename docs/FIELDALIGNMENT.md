@@ -57,14 +57,14 @@ The types that appear most often in this codebase:
 
 - `*Lane`, `*Step`, `*AbsPath`, `*Duration` (any pointer) -> P0 (8 bytes)
 - `map[string]string`, `map[primitive.Identifier]SecretSource` -> P0 (8 bytes)
-- `error`, `lane.Peer`, `lane.DeployMethod`, `container.Engine`
+- `error`, `endpoint.Endpoint`, `lane.DeployMethod`, `container.Engine`
   (interfaces) -> P0 (16 bytes)
 - `clock.Time` (an alias of `time.Time`) -> P0 (24 bytes)
 - `endpoint.Address`, `lane.FulcioExtensions` (structs whose last word is a
   pointer) -> P0 (32 and 40 bytes)
 - `string`, `Host`, `AbsPath`, `Identifier`, `Timestamp` (named strings) ->
   P8 (16 bytes)
-- `[]byte`, `[]string`, `[]Step`, `[]Peer` -> P16 (24 bytes)
+- `[]byte`, `[]string`, `[]Step`, `[]endpoint.Endpoint` -> P16 (24 bytes)
 - `int64` -> N8 (8 bytes)
 - `bool` (e.g. `ForceRun`, `Active`) -> N1 (1 byte)
 
@@ -102,7 +102,7 @@ type StepRecord struct {
     Defaults *LaneDefaults           // P0: 8 bytes
     Steps    []Step                  // P16: 24 bytes
     Name     string                  // P8: 16 bytes
-    Peer     lane.Peer               // P0: 16 bytes (interface)
+    Peer     endpoint.Endpoint       // P0: 16 bytes (interface)
 }
 ```
 
@@ -110,7 +110,7 @@ type StepRecord struct {
 
 ```go
 type StepRecord struct {
-    Peer     lane.Peer               // P0: 16 bytes
+    Peer     endpoint.Endpoint       // P0: 16 bytes
     Defaults *LaneDefaults           // P0: 8 bytes
     Name     string                  // P8: 16 bytes
     Steps    []Step                  // P16: 24 bytes, last pointer-containing field

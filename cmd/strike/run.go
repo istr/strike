@@ -968,7 +968,7 @@ func (rc *runContext) stopCapsules() {
 // container unit gets a capsule: peer-less units get an empty allowlist
 // (resolver denies every name, mediator denies every SNI), which
 // replaces the former --network=none.
-func (rc *runContext) startCapsule(ctx context.Context, name, safeName string, peers []lane.Peer) (*capsule.NetworkCapsule, error) {
+func (rc *runContext) startCapsule(ctx context.Context, name, safeName string, peers []endpoint.Endpoint) (*capsule.NetworkCapsule, error) {
 	httpsPeers := httpsPeersOf(peers)
 	peerTrusts := make([]mediator.PeerTrust, len(httpsPeers))
 	for i, p := range httpsPeers {
@@ -988,7 +988,7 @@ func (rc *runContext) startCapsule(ctx context.Context, name, safeName string, p
 }
 
 // httpsPeersOf returns the HTTPS peers from a step's peer list.
-func httpsPeersOf(peers []lane.Peer) []endpoint.TLS {
+func httpsPeersOf(peers []endpoint.Endpoint) []endpoint.TLS {
 	var out []endpoint.TLS
 	for _, p := range peers {
 		if h, ok := p.(endpoint.TLS); ok {
@@ -1000,7 +1000,7 @@ func httpsPeersOf(peers []lane.Peer) []endpoint.TLS {
 
 // sshTargetsOf returns the SSH peers of a step as capsule SSH targets,
 // in peer-list order.
-func sshTargetsOf(peers []lane.Peer) []capsule.SSHTarget {
+func sshTargetsOf(peers []endpoint.Endpoint) []capsule.SSHTarget {
 	var out []capsule.SSHTarget
 	for _, p := range peers {
 		if sp, ok := p.(endpoint.SSH); ok {

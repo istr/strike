@@ -45,8 +45,9 @@ import (
 // concrete arms (ObservedSSH, ObservedTLS) but not Go interface/sum-type
 // machinery for a disjunction.
 //
-// The identity union mirrors lane.Peer: an interface with a type discriminator,
-// concrete branch structs, and a dispatching UnmarshalJSON on the container.
+// The identity union mirrors endpoint.Endpoint: an interface with a type
+// discriminator, concrete branch structs, and a dispatching UnmarshalJSON on
+// the container.
 
 // ObservedIdentity is the validated channel identity of an observed peer,
 // discriminated by IdentityType ("ssh" | "https"). Sealed layer.
@@ -62,7 +63,7 @@ func (o ObservedSSH) IdentityType() endpoint.CarriageType { return o.Type }
 func (o ObservedTLS) IdentityType() endpoint.CarriageType { return o.Type }
 
 // UnmarshalJSON decodes an ObservedPeer, dispatching the identity union on its
-// "type" discriminator. Mirrors lane peer dispatch; the dispatch is kept inline
+// "type" discriminator. Mirrors UnmarshalEndpoint; the dispatch is kept inline
 // because it has a single caller.
 func (p *ObservedPeer) UnmarshalJSON(data []byte) error {
 	var aux struct {
@@ -128,7 +129,7 @@ func HardenedRunOpts() container.RunOpts {
 // (always non-nil on success) for the caller to Stop. Mirrors the
 // run-path dispatch: every container unit runs under pasta with a
 // per-unit allowlist (empty for peer-less units).
-func (d *Deployer) startUnitCapsule(ctx context.Context, name string, peers []lane.Peer) (*capsule.NetworkCapsule, error) {
+func (d *Deployer) startUnitCapsule(ctx context.Context, name string, peers []endpoint.Endpoint) (*capsule.NetworkCapsule, error) {
 	var trusts []mediator.PeerTrust
 	for _, p := range peers {
 		if hp, ok := p.(endpoint.TLS); ok {
@@ -221,7 +222,7 @@ type Deployer struct {
 // ObservedTLS.
 func (d *Deployer) collectObservedPeers(
 	step *lane.Step,
-	declaredPeers map[primitive.Identifier][]lane.Peer,
+	declaredPeers map[primitive.Identifier][]endpoint.Endpoint,
 	state *lane.Runtime,
 ) (map[endpoint.Authority]ObservedPeer, map[primitive.Identifier][]endpoint.Authority, error) {
 	observed := map[endpoint.Authority]ObservedPeer{}
@@ -757,7 +758,7 @@ func (d *Deployer) executeMethod(ctx context.Context, spec lane.DeploySpec, stat
 // no container ssh-agent socket is mounted (ADR-038 D6 -- the front
 // terminates SSH and the capsule drives the host agent, so no container
 // needs an agent socket).
-func rejectSSHPeers(peers []lane.Peer) error {
+func rejectSSHPeers(peers []endpoint.Endpoint) error {
 	for _, p := range peers {
 		if _, ok := p.(endpoint.SSH); ok {
 			return fmt.Errorf("deploy SSH peers not yet implemented")

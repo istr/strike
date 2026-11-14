@@ -7,7 +7,6 @@ import (
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/deploy"
 	"github.com/istr/strike/internal/endpoint"
-	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/provenance"
 	"github.com/istr/strike/internal/schema"
@@ -32,7 +31,7 @@ func TestSLSAProvenanceStatement_Valid(t *testing.T) {
 					LaneID:     "demo",
 					LaneDigest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
 					OIDC:       deploy.ProvenanceOIDC{Issuer: endpoint.MustParseURL("https://idp.example.com"), Identity: "strike@example.com"},
-					Peers:      map[primitive.Identifier][]lane.Peer{},
+					Peers:      map[primitive.Identifier][]endpoint.Endpoint{},
 					Resolver:   deploy.ResolverRecord{Host: "one.one.one.one:853", DialedIP: "1.1.1.1"},
 				},
 			},

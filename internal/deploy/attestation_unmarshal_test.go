@@ -7,7 +7,6 @@ import (
 
 	"github.com/istr/strike/internal/deploy"
 	"github.com/istr/strike/internal/endpoint"
-	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/record"
 	"github.com/istr/strike/internal/testutil"
@@ -21,7 +20,7 @@ func TestStrikeExternalParameters_Unmarshal(t *testing.T) {
 	orig := deploy.StrikeExternalParameters{
 		LaneID: "demo",
 		OIDC:   deploy.ProvenanceOIDC{Issuer: endpoint.MustParseURL("https://idp.example.com"), Identity: "deployer@example.com"},
-		Peers: map[primitive.Identifier][]lane.Peer{
+		Peers: map[primitive.Identifier][]endpoint.Endpoint{
 			"build": {endpoint.TLS{Type: "https", Address: endpoint.MustParseAuthority("localhost:5555"), Trust: testutil.AnchorTrust()}},
 		},
 		Engine: endpoint.EngineUnix{Type: "unix"},
@@ -63,7 +62,7 @@ func TestSealed_UnmarshalEngine(t *testing.T) {
 		LaneID:     "demo",
 		LaneDigest: "",
 		Artifacts:  map[primitive.Identifier]record.Artifact{},
-		Peers:      map[primitive.Identifier][]lane.Peer{},
+		Peers:      map[primitive.Identifier][]endpoint.Endpoint{},
 		Engine: endpoint.EngineMTLS{
 			Type:                  "mtls",
 			CATrustType:           "pinned",

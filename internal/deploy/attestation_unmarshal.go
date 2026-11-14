@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/istr/strike/internal/endpoint"
-	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/primitive"
 )
 
@@ -62,7 +61,7 @@ func (p *StrikeExternalParameters) UnmarshalJSON(data []byte) error {
 // decodeEngineAndPeers dispatches the engine connection and the declared peers
 // through their union decoders. An absent or null engine decodes to nil, and an
 // absent or empty peers map decodes to nil.
-func decodeEngineAndPeers(rawEngine json.RawMessage, rawPeers map[primitive.Identifier][]json.RawMessage) (endpoint.Engine, map[primitive.Identifier][]lane.Peer, error) {
+func decodeEngineAndPeers(rawEngine json.RawMessage, rawPeers map[primitive.Identifier][]json.RawMessage) (endpoint.Engine, map[primitive.Identifier][]endpoint.Endpoint, error) {
 	var engine endpoint.Engine
 	if len(rawEngine) != 0 && string(rawEngine) != "null" {
 		conn, err := endpoint.UnmarshalEngine(rawEngine)
@@ -74,11 +73,11 @@ func decodeEngineAndPeers(rawEngine json.RawMessage, rawPeers map[primitive.Iden
 	if len(rawPeers) == 0 {
 		return engine, nil, nil
 	}
-	out := make(map[primitive.Identifier][]lane.Peer, len(rawPeers))
+	out := make(map[primitive.Identifier][]endpoint.Endpoint, len(rawPeers))
 	for stepID, raws := range rawPeers {
-		peers := make([]lane.Peer, len(raws))
+		peers := make([]endpoint.Endpoint, len(raws))
 		for i, raw := range raws {
-			peer, err := lane.UnmarshalPeer(raw)
+			peer, err := endpoint.UnmarshalEndpoint(raw)
 			if err != nil {
 				return nil, nil, fmt.Errorf("peers[%q][%d]: %w", stepID, i, err)
 			}

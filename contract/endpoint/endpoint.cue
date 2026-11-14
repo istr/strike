@@ -1,14 +1,15 @@
-// TLS and SSH endpoint shapes: a network address paired with the server-trust
-// anchor strike uses to verify the contacted party. Each carries a "type"
-// discriminator so the lane peer union dispatches on one field without parsing
-// the rest of the object (ADR-005, ADR-007). The host field is the packed
-// "host:port" authority wire grammar (#Authority); its Go type is redirected to
-// the representation-neutral Address concept (ADR-048), which ParseAuthority and
-// Address.Authority project in and out at the boundary.
+// TLS and SSH endpoint shapes and #Endpoint, their union: a network address
+// paired with the server-trust anchor strike uses to verify the contacted
+// party. Each shape carries a "type" discriminator so #Endpoint dispatches on
+// one field without parsing the rest of the object (ADR-005, ADR-007). The
+// host field is the packed "host:port" authority wire grammar (#Authority);
+// its Go type is redirected to the representation-neutral Address concept
+// (ADR-048), which ParseAuthority and Address.Authority project in and out at
+// the boundary.
 package endpoint
 
-// #CarriageType is the peer carriage discriminator vocabulary shared by the TLS
-// and SSH peer endpoints and the observed-identity records.
+// #CarriageType is the carriage discriminator vocabulary shared by the two
+// arms of #Endpoint and the observed-identity records.
 #CarriageType: "https" | "ssh"
 
 // TLS is a TLS-carriage endpoint: an address plus a single server-trust
@@ -39,3 +40,11 @@ package endpoint
 	host: #Authority @go(Address,type=Address)
 	knownHosts: [...#HostKey] @go(KnownHosts)
 }
+
+// #Endpoint is a declared endpoint: a TLS or an SSH endpoint with its
+// server-trust anchor, discriminated by type. The type names what the value
+// is; the field that holds it names the role it plays, as the peers of a lane
+// step and of the deploy attestation do. The disjunction is annotated @go(-):
+// internal/endpoint hand-writes the Go interface and the dispatching decode,
+// as it does for #Engine.
+#Endpoint: (#TLS | #SSH) @go(-)

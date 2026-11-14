@@ -17,11 +17,11 @@ validates against it at runtime.
 | Package | Holds |
 |---------|-------|
 | `primitive`   | Irreducible scalar vocabulary: content-addressed digests, identifiers, hashes |
-| `endpoint`    | Host/address, TLS-trust, HTTPS-endpoint, and engine-connection identity types |
+| `endpoint`    | Host/address, TLS-trust, the TLS and SSH endpoints and their `#Endpoint` union, HTTPS-endpoint, and engine-connection identity types |
 | `output`      | Runtime output handles |
 | `provenance`  | Source-fetch provenance records (git, tarball, OCI, URL) |
 | `record`      | Artifact and SBOM provenance records |
-| `lane`        | Operator-authored input wire format: the `#Lane` tree, network peers, trust-root replica |
+| `lane`        | Operator-authored input wire format: the `#Lane` tree with its step and capture peers, trust-root replica |
 | `attest`      | Deploy attestation collect-model (`#Attestation`), published predicates, and the sigstore `#Bundle` |
 | `trustlayers` | Trust-layer classification map (governance data) |
 | `crossval`    | Cross-validation vector schema |

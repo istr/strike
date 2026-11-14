@@ -42,12 +42,12 @@ the same DAG (`.go-arch-lint.yml`).
   against their package (`endpoint.#Address`, `output.#Handle`,
   `provenance.#Git`, `record.#Artifact`), so a qualified call site reads without
   repetition.
-- **lane** -- the operator-authored input wire format: the `#Lane` tree, network
-  peers (over `endpoint.#TLS`/`#SSH`), and the trust-root replica. It composes
-  primitive and concept types.
+- **lane** -- the operator-authored input wire format: the `#Lane` tree, whose
+  step and capture peers are `endpoint.#Endpoint` declarations, and the
+  trust-root replica. It composes primitive and concept types.
 - **attest** -- the deploy attestation contract: the internal collect-model
   (`#Attestation`), the published in-toto / SLSA predicates, and the sigstore
-  `#Bundle`. It composes lane, concept, and primitive types.
+  `#Bundle`. It composes concept and primitive types only, as ADR-048 states.
 - **trustlayers** -- the trust-layer classification map, exported as JSON data
   rather than projected into Go. Depends on nothing.
 - **crossval** -- the cross-validation vector schema. It imports lane and
@@ -72,7 +72,7 @@ Hand-written Go sits beside the generated types wherever a disjunction is
 annotated `@go(-)`. gengotypes emits the concrete arms but no Go interface and
 no dispatching `UnmarshalJSON`, so that sum-type machinery is written by hand
 in the consuming package -- `output.#Handle`, `provenance.#Record`,
-`endpoint.#Trust`, `endpoint.#Engine`, `lane.#Peer`, `lane.#DeployMethod`, and
+`endpoint.#Endpoint`, `endpoint.#Engine`, `lane.#DeployMethod`, and
 `attest.#ObservedIdentity`.
 
 ## One CUE package per directory

@@ -111,8 +111,8 @@ func move(tree *os.Root, name string) error {
 // fixAttest renames the package to deploy and repairs the bare imports
 // gengotypes emits for cross-package @go(,type=map[pkg.K]V) overrides: the
 // endpoint and primitive bare lines duplicate a real import and are dropped;
-// the lane and record bare lines are the only source of their import and are
-// rewritten to the real path. The result is gofmt-normalized.
+// the record bare line is the only source of its import and is rewritten to
+// the real path. The result is gofmt-normalized.
 func fixAttest(b []byte) ([]byte, error) {
 	lines := strings.Split(string(b), "\n")
 	out := make([]string, 0, len(lines))
@@ -124,8 +124,6 @@ func fixAttest(b []byte) ([]byte, error) {
 			renamed = true
 		case ln == "\t\"endpoint\"", ln == "\t\"primitive\"":
 			// drop: duplicates a real import already in the block
-		case ln == "\t\"lane\"":
-			out = append(out, "\t\"github.com/istr/strike/internal/lane\"")
 		case ln == "\t\"record\"":
 			out = append(out, "\t\"github.com/istr/strike/internal/record\"")
 		default:

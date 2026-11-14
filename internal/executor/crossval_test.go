@@ -300,8 +300,8 @@ type renderKnownHostsVector struct {
 }
 
 // renderKnownHostsInputs carries both inputs of the boundary. Peers stay raw
-// because lane.UnmarshalPeer is the discriminated decoder for the peer
-// disjunction.
+// because endpoint.UnmarshalEndpoint is the discriminated decoder for the
+// endpoint disjunction.
 type renderKnownHostsInputs struct {
 	FrontKey endpoint.HostKey  `json:"front_key"`
 	Peers    []json.RawMessage `json:"peers"`

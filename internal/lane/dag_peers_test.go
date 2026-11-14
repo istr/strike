@@ -12,7 +12,7 @@ import (
 )
 
 // httpsPeer returns a minimal valid endpoint.TLS for CollectPeers tests.
-func httpsPeer(host string) lane.Peer {
+func httpsPeer(host string) endpoint.Endpoint {
 	return endpoint.TLS{
 		Type:    "https",
 		Address: endpoint.MustParseAuthority(host),
@@ -22,7 +22,7 @@ func httpsPeer(host string) lane.Peer {
 
 // minStep returns a minimal step with one file-typed output named "out".
 // Caller fills in name and peers.
-func minStep(name string, peers []lane.Peer) lane.Step {
+func minStep(name string, peers []endpoint.Endpoint) lane.Step {
 	return lane.Step{
 		ID:      primitive.Identifier(name),
 		Image:   primitive.ImageRefPtr("alpine:3.20"),
@@ -74,7 +74,7 @@ func TestCollectPeers_SingleStepIncludesSelf(t *testing.T) {
 	p := &lane.Lane{
 		Name: "t",
 		Steps: []lane.Step{
-			minStep("a", []lane.Peer{peer}),
+			minStep("a", []endpoint.Endpoint{peer}),
 		},
 	}
 	index, err := lane.IndexSteps(p)
@@ -89,8 +89,8 @@ func TestCollectPeers_SingleStepIncludesSelf(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("got %d entries, want 1: %v", len(got), got)
 	}
-	if !reflect.DeepEqual(got["a"], []lane.Peer{peer}) {
-		t.Errorf("got[\"a\"] = %v, want %v", got["a"], []lane.Peer{peer})
+	if !reflect.DeepEqual(got["a"], []endpoint.Endpoint{peer}) {
+		t.Errorf("got[\"a\"] = %v, want %v", got["a"], []endpoint.Endpoint{peer})
 	}
 }
 
@@ -105,9 +105,9 @@ func TestCollectPeers_TransitivePredecessors(t *testing.T) {
 	p := &lane.Lane{
 		Name: "t",
 		Steps: []lane.Step{
-			minStep("a", []lane.Peer{peerA}),
-			withInput(minStep("b", []lane.Peer{peerB}), "a", "out", "/in/a"),
-			withInput(minStep("c", []lane.Peer{peerC}), "b", "out", "/in/b"),
+			minStep("a", []endpoint.Endpoint{peerA}),
+			withInput(minStep("b", []endpoint.Endpoint{peerB}), "a", "out", "/in/a"),
+			withInput(minStep("c", []endpoint.Endpoint{peerC}), "b", "out", "/in/b"),
 		},
 	}
 	index, err := lane.IndexSteps(p)
@@ -138,9 +138,9 @@ func TestCollectPeers_OnlyTransitive(t *testing.T) {
 	p := &lane.Lane{
 		Name: "t",
 		Steps: []lane.Step{
-			minStep("a", []lane.Peer{peerA}),
-			minStep("b", []lane.Peer{peerB}),
-			withTwoInputs(minStep("c", []lane.Peer{peerC}),
+			minStep("a", []endpoint.Endpoint{peerA}),
+			minStep("b", []endpoint.Endpoint{peerB}),
+			withTwoInputs(minStep("c", []endpoint.Endpoint{peerC}),
 				"a", "out", "/in/a",
 				"b", "out", "/in/b"),
 		},
@@ -174,10 +174,10 @@ func TestCollectPeers_DiamondDedup(t *testing.T) {
 	p := &lane.Lane{
 		Name: "t",
 		Steps: []lane.Step{
-			minStep("root", []lane.Peer{peerR}),
-			withInput(minStep("left", []lane.Peer{peerL}), "root", "out", "/in/r"),
-			withInput(minStep("right", []lane.Peer{peerRt}), "root", "out", "/in/r"),
-			withTwoInputs(minStep("bottom", []lane.Peer{peerB}),
+			minStep("root", []endpoint.Endpoint{peerR}),
+			withInput(minStep("left", []endpoint.Endpoint{peerL}), "root", "out", "/in/r"),
+			withInput(minStep("right", []endpoint.Endpoint{peerRt}), "root", "out", "/in/r"),
+			withTwoInputs(minStep("bottom", []endpoint.Endpoint{peerB}),
 				"left", "out", "/in/l",
 				"right", "out", "/in/r"),
 		},
@@ -213,9 +213,9 @@ func TestCollectPeers_StepsWithoutPeersOmitted(t *testing.T) {
 	p := &lane.Lane{
 		Name: "t",
 		Steps: []lane.Step{
-			minStep("a", []lane.Peer{peerA}),
+			minStep("a", []endpoint.Endpoint{peerA}),
 			withInput(minStep("b", nil), "a", "out", "/in/a"),
-			withInput(minStep("c", []lane.Peer{peerC}), "b", "out", "/in/b"),
+			withInput(minStep("c", []endpoint.Endpoint{peerC}), "b", "out", "/in/b"),
 		},
 	}
 	index, err := lane.IndexSteps(p)
@@ -254,7 +254,7 @@ func withTwoInputs(s lane.Step, fromA, outA, mountA, fromB, outB, mountB string)
 	return s
 }
 
-func keysOf(m map[primitive.Identifier][]lane.Peer) []string {
+func keysOf(m map[primitive.Identifier][]endpoint.Endpoint) []string {
 	keys := make([]string, 0, len(m))
 	for k := range m {
 		ks := string(k)

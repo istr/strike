@@ -14,9 +14,9 @@
 // mode, so this endpoint's anchor set is a strict subset of a peer's rather
 // than a different mechanism.
 //
-// Unlike #TLS and #SSH this is not a lane peer union member and carries no
-// "type" discriminator; it is decoded by field name at its lane site, as
-// #HTTPS is.
+// #DoT is an endpoint but not a member of #Endpoint: it sits at one fixed lane
+// field, so it carries no "type" discriminator for a union to dispatch on, and
+// it is decoded by field name at that site, as #HTTPS is.
 package endpoint
 
 import "github.com/istr/strike/contract/primitive"

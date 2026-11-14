@@ -200,3 +200,34 @@ column above is the snapshot at ratification.
 > roadmap item and is not listed in this record. Row 14 holds for it as for
 > the listed ones: its one-sentence limitation is in the shipped
 > documentation before the beta tag.
+
+> **2026-11-14, riding the move of the declared-endpoint union into the
+> concept tier under [ADR-048](ADR-048-contract-type-semantics.md):**
+>
+> 1. One change to `contract/attest` after `7c21e8e` was not recorded
+>    here. At `24d4fee` (2026-10-31, item-0085) `#ProvenanceOIDC` typed its
+>    issuer as `endpoint.#URL` and its identity as `primitive.#StringOrURI`.
+>    That narrowed constraints of the attest wire, so it is a freeze event;
+>    like `6b99c0e` and `06ab773` in the amendments of 2026-09-05, it was
+>    ratified through its instruction and not recorded as one. The signed
+>    bytes stayed unchanged, so no conformance golden needed a re-baseline.
+>    It moved the tree of `contract/attest` from
+>    `58b22d269a2dedf85e5f5c120f2ce16823f47d36` to
+>    `a3903960b1694c214b8271be2201c033c89b6c30`.
+> 2. The commit that carries this amendment changes `contract/attest`
+>    without changing its wire, and is not a freeze event. The declared
+>    peers of the sealed record and of the provenance external parameters
+>    name `endpoint.#Endpoint` instead of `lane.#Peer`: the same disjunction
+>    of `endpoint.#TLS` and `endpoint.#SSH` under the same constraints, so
+>    `contract/attest` imports only primitive and concept packages, as
+>    ADR-048 states. The comments of `#StrikeExternalParameters` and
+>    `#EngineContextPredicate` cite ADR-040 D3 and ADR-057 D10 instead of
+>    two chat-only labels; a comment changes no constraint. The signed
+>    goldens, the cross-validation vectors and the attestation fixtures are
+>    unchanged. The exported `contract/attestation.schema.json` names the
+>    definition `Endpoint` instead of `Peer`.
+> 3. The frozen baseline is `contract/attest` as of the commit that carries
+>    this amendment. A verifier of the freeze declaration compares
+>    `git rev-parse <commit>:contract/attest` against that commit's tree.
+>    Every later change to `contract/attest` is the beta-blocking
+>    ratification event the declaration describes.

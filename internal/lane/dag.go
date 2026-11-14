@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/istr/strike/internal/endpoint"
 	"github.com/istr/strike/internal/primitive"
 )
 
@@ -284,8 +285,8 @@ func (d *DAG) predecessors(fromStep primitive.Identifier, includeFrom bool) iter
 // callers may invoke this on a nil receiver and receive a non-nil
 // empty map (matching the schema requirement that Attestation.peers
 // be a present map).
-func (d *DAG) CollectPeers(fromStep primitive.Identifier) map[primitive.Identifier][]Peer {
-	peers := map[primitive.Identifier][]Peer{}
+func (d *DAG) CollectPeers(fromStep primitive.Identifier) map[primitive.Identifier][]endpoint.Endpoint {
+	peers := map[primitive.Identifier][]endpoint.Endpoint{}
 	for name := range d.predecessors(fromStep, true) {
 		if step := d.index[name]; step != nil && len(step.Peers) > 0 {
 			peers[name] = step.Peers

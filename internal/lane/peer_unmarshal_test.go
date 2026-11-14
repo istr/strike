@@ -9,119 +9,6 @@ import (
 	"github.com/istr/strike/internal/lane"
 )
 
-func TestUnmarshalPeer_Discriminator(t *testing.T) {
-	tests := []struct {
-		name    string
-		input   string
-		check   func(t *testing.T, p lane.Peer)
-		wantErr string
-	}{
-		{
-			name: "https with absent mode",
-			input: `{
-				"type": "https",
-				"host": "example.com",
-				"trust": {"cert": "@anchor@"}
-			}`,
-			check: func(t *testing.T, p lane.Peer) {
-				h, ok := p.(endpoint.TLS)
-				if !ok {
-					t.Fatalf("type = %T, want endpoint.TLS", p)
-				}
-				if h.Address.Authority() != "example.com" {
-					t.Errorf("Host = %q, want example.com", h.Address.Authority())
-				}
-				// The default mode is a CUE default arm that Parse materializes
-				// before decoding; this decoder alone leaves an absent mode empty.
-				if h.Trust.Mode != "" {
-					t.Errorf("Trust.Mode = %q, want empty before schema defaults apply", h.Trust.Mode)
-				}
-				if h.Trust.Cert == "" {
-					t.Error("Trust.Cert is empty")
-				}
-			},
-		},
-		{
-			name: "https with leaf mode",
-			input: `{
-				"type": "https",
-				"host": "internal.example",
-				"trust": {"mode": "leaf", "cert": "@anchor@"}
-			}`,
-			check: func(t *testing.T, p lane.Peer) {
-				h, ok := p.(endpoint.TLS)
-				if !ok {
-					t.Fatalf("type = %T, want endpoint.TLS", p)
-				}
-				if h.Trust.Mode != endpoint.CertificateModeLeaf {
-					t.Errorf("Trust.Mode = %q, want leaf", h.Trust.Mode)
-				}
-			},
-		},
-		{
-			name: "ssh with known_hosts",
-			input: `{
-				"type": "ssh",
-				"host": "git.example",
-				"knownHosts": [
-					{"keyType": "ssh-ed25519", "key": "AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl"}
-				]
-			}`,
-			check: func(t *testing.T, p lane.Peer) {
-				s, ok := p.(endpoint.SSH)
-				if !ok {
-					t.Fatalf("type = %T, want endpoint.SSH", p)
-				}
-				if len(s.KnownHosts) != 1 {
-					t.Errorf("KnownHosts len = %d, want 1", len(s.KnownHosts))
-				}
-				if s.KnownHosts[0].KeyType != "ssh-ed25519" {
-					t.Errorf("KnownHosts[0].KeyType = %q, want ssh-ed25519", s.KnownHosts[0].KeyType)
-				}
-			},
-		},
-		{
-			name:    "oci rejected",
-			input:   `{"type": "oci", "registry": "registry.example.com"}`,
-			wantErr: "unknown peer type",
-		},
-		{
-			name:    "unknown type",
-			input:   `{"type": "ftp", "host": "example.com"}`,
-			wantErr: "unknown peer type",
-		},
-		{
-			name:    "missing type",
-			input:   `{"host": "example.com"}`,
-			wantErr: "missing type discriminator",
-		},
-		{
-			name:    "https missing trust",
-			input:   `{"type": "https", "host": "example.com"}`,
-			wantErr: "trust required",
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			p, err := lane.UnmarshalPeer([]byte(withAnchor(tc.input)))
-			if tc.wantErr != "" {
-				if err == nil {
-					t.Fatalf("expected error containing %q, got nil", tc.wantErr)
-				}
-				if !strings.Contains(err.Error(), tc.wantErr) {
-					t.Errorf("error = %v, want substring %q", err, tc.wantErr)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("UnmarshalPeer: %v", err)
-			}
-			tc.check(t, p)
-		})
-	}
-}
-
 // TestStep_UnmarshalJSON_Peers exercises the slice-level
 // dispatch on the Step type, ensuring that all branches in a
 // multi-peer step decode to their concrete types.
@@ -202,9 +89,9 @@ func TestStep_RoundTrip(t *testing.T) {
 	}
 }
 
-// TestUnmarshalPeer_OCIRejected confirms the oci peer type was
+// TestStep_OCIPeerRejected confirms the oci peer type was
 // removed: a step declaring it fails to parse. See ADR-029.
-func TestUnmarshalPeer_OCIRejected(t *testing.T) {
+func TestStep_OCIPeerRejected(t *testing.T) {
 	raw := []byte(`{
 		"name": "fetch",
 		"image": "alpine:3.20",
@@ -227,11 +114,11 @@ func TestUnmarshalPeer_OCIRejected(t *testing.T) {
 	}
 }
 
-// TestRegistry_UnmarshalJSON exercises the decode of one registries entry:
-// the registry and its storages decode to endpoint.TLS through the packed
-// authority, an absent storages list decodes empty, and a malformed entry,
-// registry or storage is an error that names where it failed.
-func TestRegistry_UnmarshalJSON(t *testing.T) {
+// TestRegistry_Decode exercises the decode of one registries entry: the
+// registry and its storages decode to endpoint.TLS through the packed
+// authority, an absent storages list decodes empty, and a malformed registry
+// or storage is an error.
+func TestRegistry_Decode(t *testing.T) {
 	tests := []struct {
 		name         string
 		input        string
@@ -257,14 +144,9 @@ func TestRegistry_UnmarshalJSON(t *testing.T) {
 			wantRegistry: "images.example.com",
 		},
 		{
-			name:    "entry not an object",
-			input:   `["images.example.com"]`,
-			wantErr: "decode registry",
-		},
-		{
 			name:    "registry missing trust",
 			input:   `{"registry": {"type": "https", "host": "images.example.com"}}`,
-			wantErr: "registry: https endpoint: trust required",
+			wantErr: "https endpoint: trust required",
 		},
 		{
 			name:    "registry with empty host",
@@ -277,7 +159,7 @@ func TestRegistry_UnmarshalJSON(t *testing.T) {
 				"registry": {"type": "https", "host": "images.example.com", "trust": {"cert": "@anchor@"}},
 				"storages": [{"type": "https", "host": "blobs.example.com"}]
 			}`,
-			wantErr: "registry images.example.com storages[0]: https endpoint: trust required",
+			wantErr: "https endpoint: trust required",
 		},
 	}
 	for _, tc := range tests {
@@ -294,7 +176,7 @@ func TestRegistry_UnmarshalJSON(t *testing.T) {
 				return
 			}
 			if err != nil {
-				t.Fatalf("Registry UnmarshalJSON: %v", err)
+				t.Fatalf("Registry decode: %v", err)
 			}
 			if got := r.Registry.Address.Authority(); got != tc.wantRegistry {
 				t.Errorf("registry authority = %q, want %q", got, tc.wantRegistry)

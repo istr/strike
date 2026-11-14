@@ -16,13 +16,13 @@
 // Shared types named here resolve two ways: #ObservedPeer,
 // #ResolverRecord, #EngineMetadata, and #Subject are defined in this attest
 // package (attestation.cue and this file); #Timestamp is from the primitive
-// package; the lane declarations are named qualified through the lane import.
+// package; the declared endpoints and the other endpoint types are named
+// qualified through the endpoint import.
 
 package attest
 
 import (
 	"github.com/istr/strike/contract/endpoint"
-	"github.com/istr/strike/contract/lane"
 	"github.com/istr/strike/contract/primitive"
 	provenancepkg "github.com/istr/strike/contract/provenance"
 )
@@ -87,8 +87,8 @@ import (
 }
 
 // #StrikeExternalParameters occupies SLSA's open externalParameters slot with
-// strike's typed Layer-V facts (Fork D). The lane and its anchors, the declared
-// OIDC identity, the declared peers, and the peer / resolver / engine
+// strike's typed Layer-V facts (ADR-040 D3). The lane and its anchors, the
+// declared OIDC identity, the declared peers, and the peer / resolver / engine
 // identities the control plane observed and validated against the declared
 // anchors -- all control-plane-established, sound without engine trust.
 #StrikeExternalParameters: {
@@ -96,8 +96,8 @@ import (
 	laneDigest: primitive.#Digest
 	oidc:       #ProvenanceOIDC @go(OIDC)
 	peers: {
-		[ID=primitive.#Identifier]: [...lane.#Peer]
-	} @go(Peers,type=map[primitive.Identifier][]lane.Peer)
+		[ID=primitive.#Identifier]: [...endpoint.#Endpoint]
+	} @go(Peers,type=map[primitive.Identifier][]endpoint.Endpoint)
 	observedPeers?: {
 		[Endpoint=endpoint.#Authority]: #ObservedPeer
 	} @go(ObservedPeers,type=map[endpoint.Authority]ObservedPeer)
@@ -158,8 +158,9 @@ import (
 // attribution of mediated connections to steps (peerAttribution). The
 // control-plane-observed engine connection (#Engine) is NOT here --
 // it is Layer V and rides in the sealed provenance's externalParameters
-// (Fork C). The engine's self-report (engineMetadata) is NOT here either -- it
-// carries no trust claim and lives in the informational statement.
+// (ADR-057 D10). The engine's self-report (engineMetadata) is NOT here
+// either -- it carries no trust claim and lives in the informational
+// statement.
 #EngineContextPredicate: {
 	peerAttribution?: {
 		[ID=primitive.#Identifier]: [...endpoint.#Authority]

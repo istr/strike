@@ -170,7 +170,20 @@ import (
 	outputs?: [...#FileOutput] @go(Outputs)
 	secrets: [...#SecretRef] @go(Secrets)
 	workdir?: primitive.#AbsPath @go(Workdir,optional=nillable)
-	peers?: [...#Peer] @go(Peers)
+	// peers are the step's container-egress trust contracts (ADR-029): each
+	// declares a destination the step container may reach during execution,
+	// with the trust anchor strike uses to verify that destination's identity.
+	// HTTPS peers are mediated through the per-step TLS mediator (ADR-028), so
+	// the container's egress is restricted to declared peers and their
+	// connections are attested; SSH peers get known_hosts injection and
+	// ssh-agent-proxy forwarding (ADR-024, ADR-025), with egress restricted to
+	// declared peers via per-peer capsule forwards (ADR-033). There is no OCI
+	// peer: the step's own image is pulled controller-side and verified against
+	// its pinned digest, and a container that itself performs registry
+	// operations declares the registry as an HTTPS peer (ADR-029). An absent or
+	// empty list yields an empty-allowlist capsule that permits no egress
+	// (ADR-033). Peers flow into the deploy attestation.
+	peers?: [...endpoint.#Endpoint] @go(Peers)
 	// forceRun: when true, strike bypasses the cache check
 	// and runs the step unconditionally. The explicit escape
 	// hatch for intentionally non-deterministic steps such as
@@ -432,7 +445,9 @@ import (
 	id:    primitive.#Identifier @go(ID)
 	image: primitive.#ImageRef   @go(Image)
 	command: [...string] @go(Command)
-	peers?: [...#Peer] @go(Peers)
+	// peers bound the capture container's egress as #Step.peers bounds a
+	// step's (ADR-029, ADR-033).
+	peers?: [...endpoint.#Endpoint] @go(Peers)
 	mounts?: [...#CaptureMount] @go(Mounts)
 }
 

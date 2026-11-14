@@ -24,7 +24,6 @@ package attest
 
 import (
 	"github.com/istr/strike/contract/endpoint"
-	"github.com/istr/strike/contract/lane"
 	"github.com/istr/strike/contract/primitive"
 	"github.com/istr/strike/contract/record"
 	provenancepkg "github.com/istr/strike/contract/provenance"
@@ -95,8 +94,8 @@ import (
 	// peers maps step name to the network peer declarations attached to
 	// that step. Declared, lane-anchored.
 	peers: {
-		[ID=primitive.#Identifier]: [...lane.#Peer]
-	} @go(Peers,type=map[primitive.Identifier][]lane.Peer)
+		[ID=primitive.#Identifier]: [...endpoint.#Endpoint]
+	} @go(Peers,type=map[primitive.Identifier][]endpoint.Endpoint)
 
 	// engine carries the CP-observed connection facts about the engine.
 	// The engine's self-reports (version, rootless) live in

@@ -549,7 +549,7 @@ func validatePeerPorts(p *Lane) error {
 }
 
 // checkPeerPorts holds each peer to the default port of its own protocol.
-func checkPeerPorts(peers []Peer, where string) error {
+func checkPeerPorts(peers []endpoint.Endpoint, where string) error {
 	for _, peer := range peers {
 		def := primitive.Port(443)
 		if _, ssh := peer.(endpoint.SSH); ssh {
@@ -569,7 +569,7 @@ type canonicalAnchor string
 // peerAnchor returns the canonical anchor for a peer's trust configuration. The
 // protocol discriminator is part of the token, so an HTTPS and an SSH anchor on
 // one endpoint never compare equal (C-1).
-func peerAnchor(peer Peer) canonicalAnchor {
+func peerAnchor(peer endpoint.Endpoint) canonicalAnchor {
 	switch x := peer.(type) {
 	case endpoint.TLS:
 		return canonicalAnchor("https/" + string(x.Trust.Mode) + "/" + x.Trust.Cert.String())
