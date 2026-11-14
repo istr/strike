@@ -30,10 +30,14 @@ contract/
 
 ## Package roles and dependency direction
 
-The contract value types depend inward only: a package may name types from a
-lower layer, never a higher one. Cross-package `import` statements make the
-direction explicit in the CUE, and go-arch-lint enforces the Go projection of
-the same DAG (`.go-arch-lint.yml`).
+The contract packages depend inward only. Each sits in one of four tiers --
+primitive, concept, wire, vector, from the inside out -- and imports only from
+a strictly lower tier, never from its own or a higher one (ADR-048, amendment
+of 2026-11-14). The primitive tier is `primitive`; the concept tier is
+`endpoint`, `output`, `provenance`, `record`; the wire tier is `lane`,
+`attest`, `trustlayers`; the vector tier is `crossval`. Cross-package `import`
+statements make the direction explicit in the CUE, and go-arch-lint enforces
+the Go projection of the same DAG (`.go-arch-lint.yml`).
 
 - **primitive** -- the leaf vocabulary: content-addressed digests, identifiers,
   hashes, and the other irreducible scalar constraints. Depends on nothing.
@@ -49,10 +53,12 @@ the same DAG (`.go-arch-lint.yml`).
   (`#Attestation`), the published in-toto / SLSA predicates, and the sigstore
   `#Bundle`. It composes concept and primitive types only, as ADR-048 states.
 - **trustlayers** -- the trust-layer classification map, exported as JSON data
-  rather than projected into Go. Depends on nothing.
-- **crossval** -- the cross-validation vector schema. It imports lane and
-  endpoint, so that a vector's structured inputs are constrained by the same
-  definitions the boundary under test consumes rather than by an open shape.
+  rather than projected into Go. It imports `record`, which single-sources the
+  trust-layer vocabulary.
+- **crossval** -- the cross-validation vector schema. It imports lane,
+  endpoint and primitive, so that a vector's structured inputs are constrained
+  by the same definitions the boundary under test consumes rather than by an
+  open shape.
 
 ## Generated vs hand-written Go
 

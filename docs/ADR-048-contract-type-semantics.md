@@ -284,3 +284,47 @@ structs, are now single-sourced: the CUE in the record package carries `@go`
 redirects and generates the Go types, and the hand-written structs are deleted.
 The wire form is unchanged across all of this, so the exported JSON Schema and
 the golden attestation fixtures are byte-identical.
+
+## Amendment 2026-11-14 -- the contract tiers, and the vectors above the wire
+
+This amendment corrects what (5) and the third consequence say about the
+cross-validation vectors, and names the tiers of the CUE contract packages.
+Every other clause stands unchanged.
+
+(5) and the third consequence say that the deploy attestation and the
+cross-validation vectors depend only on `primitive` and concept packages. For
+the deploy attestation that holds: since ce50c18 homed the peer union in
+`endpoint`, `attest` imports `primitive`, `endpoint`, `provenance` and `record`,
+and nothing of `lane`. For the vectors it does not hold, and it is not meant
+to: `crossval` imports `lane`.
+
+A vector is a check executed at a boundary (D2). ADR-004 and ADR-017 require
+the vectors to validate against the schemas the boundary consumes, and an open
+shape defeats that without an error. When ADR-042 moved the wire fields to
+camelCase (9b5f804), the rename followed the schema; the RenderKnownHosts peer
+inputs were an open shape outside it, kept their snake_case keys, and decoded
+as peers without host keys. dc26285 bound those peers to the contract's peer
+definition, after vectors were found that contradicted ADR-038 D3 and D5, and
+79a1d59 bound the AssembleImage spec input field-wise to the lane pack-file
+and image-config definitions; the split of that vector's expectations rests on
+the ADR-046 amendment "the round trip re-encodes on export, not on load". A
+vector schema that may not import the input wire has to restate it as an open
+or a duplicated shape, which is the defect these changes removed. The coupling
+the third consequence calls structurally gone is gone for the attestation; for
+the vectors it is the binding the check needs.
+
+The CUE contract packages sit in four tiers, from the inside out:
+
+- **primitive** -- `primitive`, the irreducible vocabulary of (3).
+- **concept** -- `endpoint`, `output`, `provenance`, `record`, the composed
+  values of (4).
+- **wire** -- the serialized contracts: `lane` (the input wire), `attest` (the
+  deploy attestation and its published predicates), and `trustlayers` (the
+  trust-layer classification, exported as data).
+- **vector** -- `crossval`, the checks at boundaries that consume the wire.
+
+A contract package imports only from a strictly lower tier: never from its own
+tier, never from a higher one. Each package's tier is declared and its imports
+are checked against the declaration, the comparison ADR-044 sets out for the
+Go tiers; a package or an import with no declared tier is a defect, not a
+default.
