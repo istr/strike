@@ -403,3 +403,29 @@ path.
 read as: "a write through it creates a tag that every referrer write
 moves and every discovery read resolves, which the digest-only model of
 ADR-057 D6 excludes".
+
+## Amendment 2026-11-14 -- D3: the engine connection the control plane observes is sealed
+
+D3 places the engine identity and the transport fingerprint in the
+engine-context predicate. They are not there as built. Under the rule
+of [ADR-037](ADR-037-two-engine-trust-layers.md) D2 that no record mixes
+provenances unmarked, the engine identity record of
+[ADR-012](ADR-012-engine-identity-capture.md) is split. What the control
+plane observes of the connection itself -- its kind, how the engine's
+server certificate was trusted and that certificate's identity, and over
+mTLS the controller's own client certificate (`endpoint.#Engine`) -- is
+sealed and rides in the SLSA provenance's externalParameters. What the
+engine reports about itself, its version and rootless mode, is
+informational. The engine-context predicate carries the engine-asserted
+attribution of mediated connections to steps (peerAttribution) and
+nothing else. The
+[ADR-057](ADR-057-release-authorization-two-signatures.md) amendment of
+2026-11-02 to D10 records the same placement.
+
+**Supersedes, in D3 above:** "engine identity, transport fingerprint,
+engine-reported actions" is read as: "the engine-asserted attribution of
+mediated connections to steps (peerAttribution)"; "externalParameters
+(the lane plus its digest-pinned inputs, including the declared OIDC
+identity)" is read as: "externalParameters (the lane plus its
+digest-pinned inputs, including the declared OIDC identity, and the
+engine connection the control plane observes)".
