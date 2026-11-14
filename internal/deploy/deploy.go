@@ -658,12 +658,6 @@ func (d *Deployer) captureState(ctx context.Context, spec lane.CaptureSet) ([]ca
 
 // captureOne runs a state capture command inside a container.
 func (d *Deployer) captureOne(ctx context.Context, sc lane.Capture) (captureSnap, error) {
-	if sc.Image == "" {
-		return captureSnap{}, fmt.Errorf("capture %q: image is required", sc.ID)
-	}
-	if len(sc.Command) == 0 {
-		return captureSnap{}, fmt.Errorf("capture %q: command is required", sc.ID)
-	}
 	// The capture image is a lane-declared external image like a step's
 	// (ADR-045): materialized by the control plane when the store does not
 	// resolve it, before the capsule binds and the container is created.

@@ -158,6 +158,11 @@ Why the exactness: `AI-ORCHESTRATION.md#why-the-instruction-file-is-a-contract`.
    where `grep` is a busybox applet without `-P`. An invariant a `make`
    target already checks is gated by that target, not restated as a grep:
    printable ASCII is `make lint-doc`.
+8. **A gate on generated output reads the output.** `*.gen.go` and the
+   exported schemas are gitignored, so `git status` and `git diff` cannot see
+   them. A claim that a schema edit leaves generated code unchanged is gated
+   by diffing `make generate` output at the pin against the output after the
+   edit; even a bare `?` marker changes a generated JSON tag (`omitempty`).
 
 ## The execution profile is part of the contract
 

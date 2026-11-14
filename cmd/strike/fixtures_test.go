@@ -5,6 +5,7 @@ import (
 	"encoding/pem"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -12,10 +13,14 @@ import (
 	"cuelang.org/go/cue/cuecontext"
 	"cuelang.org/go/cue/load"
 
-	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/testutil"
 )
 
+// TestAllFixturesBuild holds every testdata lane to validateLane, the gate
+// every subcommand applies. An invalid_ fixture must be rejected with the
+// error its rejects entry names: a negative that fails for an unrelated
+// reason would otherwise pass unnoticed. A rejects entry whose fixture is
+// gone fails too, so the table cannot outlive the files it describes.
 func TestAllFixturesBuild(t *testing.T) {
 	fixtures, err := filepath.Glob("testdata/*.yaml")
 	if err != nil {
@@ -24,34 +29,29 @@ func TestAllFixturesBuild(t *testing.T) {
 	if len(fixtures) == 0 {
 		t.Fatal("no fixtures found")
 	}
+	rejects := map[string]string{
+		"invalid_capture_no_command.yaml": "captures.0.command",
+	}
+	for name := range rejects {
+		if !slices.Contains(fixtures, filepath.Join("testdata", name)) {
+			t.Errorf("rejects entry %s names no fixture in testdata", name)
+		}
+	}
 	for _, path := range fixtures {
-		t.Run(filepath.Base(path), func(t *testing.T) {
-			fp, fpErr := lane.NewFilePath(path)
-			if fpErr != nil {
-				if strings.HasPrefix(filepath.Base(path), "invalid_") {
-					return
-				}
-				t.Fatalf("NewFilePath: %v", fpErr)
+		name := filepath.Base(path)
+		t.Run(name, func(t *testing.T) {
+			want, invalid := rejects[name]
+			if invalid != strings.HasPrefix(name, "invalid_") {
+				t.Fatal("an invalid_ fixture needs a rejects entry, and only an invalid_ fixture has one")
 			}
-			p, index, _, err := lane.Parse(fp)
-			if err != nil {
-				if strings.HasPrefix(filepath.Base(path), "invalid_") {
-					return
-				}
-				t.Fatalf("parse: %v", err)
-			}
-			dag, err := lane.Build(p, index)
-			if strings.HasPrefix(filepath.Base(path), "invalid_") {
-				if err == nil {
-					t.Fatal("expected build error for invalid fixture")
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("build: %v", err)
-			}
-			if depErr := dag.ValidateDAG(p); depErr != nil {
-				t.Fatalf("leaf topology violated: %v", depErr)
+			_, _, _, _, _, err := validateLane(path)
+			switch {
+			case !invalid && err != nil:
+				t.Fatalf("validate: %v", err)
+			case invalid && err == nil:
+				t.Fatalf("validate accepted the fixture; want an error containing %q", want)
+			case invalid && !strings.Contains(err.Error(), want):
+				t.Fatalf("validate: %v; want an error containing %q", err, want)
 			}
 		})
 	}

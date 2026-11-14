@@ -153,7 +153,7 @@ import (
 	// peer's host, unioned across connections (resolution can vary by
 	// TTL/round-robin; the validated identity below is stable). The resolver's
 	// own identity is anchored in sealed.resolver.
-	resolved: [...string]
+	resolved: [string, ...string]
 
 	// identity is the validated channel identity, discriminated by type.
 	identity: #ObservedIdentity
@@ -227,7 +227,7 @@ import (
 	// predecessor steps. Each record is container-written at step exit
 	// and engine-relayed; recorded for audit and IoC cross-check against
 	// future capsule-observed peer/command records.
-	provenance: [...provenancepkg.#Record]
+	provenance?: [...provenancepkg.#Record]
 }
 
 // ---------------------------------------------------------------------------

@@ -7,6 +7,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/istr/strike/internal/container"
@@ -20,7 +21,10 @@ func TestRunStep_RealLanePatterns_NoPanic(t *testing.T) {
 	}
 	var fixtures []string
 	for _, e := range entries {
-		if !e.IsDir() && filepath.Ext(e.Name()) == ".yaml" {
+		// An invalid_ fixture is one validateLane rejects, so no subcommand
+		// ever runs it; TestAllFixturesBuild owns it.
+		if !e.IsDir() && filepath.Ext(e.Name()) == ".yaml" &&
+			!strings.HasPrefix(e.Name(), "invalid_") {
 			fixtures = append(fixtures, filepath.Join("testdata", e.Name()))
 		}
 	}

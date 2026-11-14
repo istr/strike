@@ -64,25 +64,31 @@ func contractFiles(root string) ([]*ast.File, error) {
 // primitive that already owns it.
 func primitiveConstraints(root string) map[string]string {
 	out := map[string]string{}
-	insts := load.Instances(
-		[]string{"./contract/primitive"}, &load.Config{Dir: root})
-	for _, inst := range insts {
-		if inst.Err != nil {
-			continue
-		}
-		for _, f := range inst.Files {
-			for _, d := range f.Decls {
-				field, ok := d.(*ast.Field)
-				if !ok {
-					continue
-				}
-				name := labelName(field.Label)
-				if !isDefinitionLabel(name) {
-					continue
-				}
-				if c := renderConstraint(field.Value); c != "" {
-					out[c] = name
-				}
+	inst := load.Instances(
+		[]string{"./contract/primitive"}, &load.Config{Dir: root})[0]
+	if inst.Err != nil {
+		return out
+	}
+	for _, f := range inst.Files {
+		for _, d := range f.Decls {
+			field, ok := d.(*ast.Field)
+			if !ok {
+				continue
+			}
+			name := labelName(field.Label)
+			if !isDefinitionLabel(name) {
+				continue
+			}
+			// A bare identifier (e.g. `string`) is not a grammar: the
+			// primitive names a type whose constraint lives in Go's
+			// post-parse Validate, not in CUE syntax (#UserSpec,
+			// #StringOrURI, #URIReference). Mapping it here matched
+			// every plain-string field as a "re-inlined grammar".
+			if _, ok := field.Value.(*ast.Ident); ok {
+				continue
+			}
+			if c := renderConstraint(field.Value); c != "" {
+				out[c] = name
 			}
 		}
 	}
