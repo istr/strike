@@ -11,7 +11,7 @@ import "github.com/istr/strike/contract/primitive"
 #StepResult: {
 	@go(StepResult)
 	startedAt: primitive.#Timestamp @go(StartedAt)
-	outputs: {
+	outputs?: {
 		[string]: string @go(Outputs)
 	}
 	id:       primitive.#Identifier @go(ID)

@@ -20,12 +20,12 @@ import "github.com/istr/strike/contract/primitive"
 #TrustedRootReplica: {
 	@go(TrustedRootReplica)
 	mediaType?: string @go(MediaType)
-	tlogs: [...#TransparencyLogReplica] @go(Tlogs)
+	tlogs: [#TransparencyLogReplica, ...#TransparencyLogReplica] @go(Tlogs)
 	// Required: a trust root with no certificate-transparency log is not
 	// material this verifier can use, and ParseTrustedRoot rejects it.
-	ctlogs: [...#TransparencyLogReplica] @go(Ctlogs)
-	certificateAuthorities: [...#CertAuthorityReplica] @go(CertificateAuthorities)
-	timestampAuthorities: [...#CertAuthorityReplica] @go(TimestampAuthorities)
+	ctlogs: [#TransparencyLogReplica, ...#TransparencyLogReplica] @go(Ctlogs)
+	certificateAuthorities: [#CertAuthorityReplica, ...#CertAuthorityReplica] @go(CertificateAuthorities)
+	timestampAuthorities: [#CertAuthorityReplica, ...#CertAuthorityReplica] @go(TimestampAuthorities)
 }
 
 // One transparency-log instance. tlogs and ctlogs are the same upstream
@@ -47,6 +47,6 @@ import "github.com/istr/strike/contract/primitive"
 #CertAuthorityReplica: {
 	@go(CertAuthorityReplica)
 	uri?: string @go(URI)
-	certChain: {certificates: [...{rawBytes: primitive.#Base64 @go(RawBytes)}] @go(Certificates)} @go(CertChain)
+	certChain: {certificates: [{rawBytes: primitive.#Base64 @go(RawBytes)}, ...{rawBytes: primitive.#Base64 @go(RawBytes)}] @go(Certificates)} @go(CertChain)
 	validFor?: {start?: string @go(Start), end?: string @go(End)} @go(ValidFor)
 }

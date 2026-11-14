@@ -162,9 +162,6 @@ func New(
 		if pErr != nil {
 			return nil, fmt.Errorf("capsule: ssh host keys for %q: %w", t.Host, pErr)
 		}
-		if len(pins) == 0 {
-			return nil, fmt.Errorf("capsule: ssh peer %q has no host keys", t.Host)
-		}
 		sshPins[k] = pins
 	}
 

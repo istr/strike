@@ -38,7 +38,7 @@ package endpoint
 	// host (left of @go) is the packed-authority wire grammar; the Go side is
 	// the Address concept in name and type; see #TLS.host.
 	host: #Authority @go(Address,type=Address)
-	knownHosts: [...#HostKey] @go(KnownHosts)
+	knownHosts: [#HostKey, ...#HostKey] @go(KnownHosts)
 }
 
 // #Endpoint is a declared endpoint: a TLS or an SSH endpoint with its

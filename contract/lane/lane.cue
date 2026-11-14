@@ -31,7 +31,7 @@ import (
 	// CUE-natively in parse.go and rejects non-#Identifier keys in-process; an
 	// external verifier consuming only the exported schema would not. Accepted
 	// until the secrets contract is revisited separately (YAGNI).
-	secrets: {
+	secrets?: {
 		[ID=primitive.#Identifier]: #SecretSource
 	} @go(Secrets,type=map["github.com/istr/strike/contract/primitive".Identifier]SecretSource)
 	steps: [#Step, ...#Step] @go(Steps)
@@ -161,14 +161,14 @@ import (
 	id:             primitive.#Identifier @go(ID)
 	image?:         primitive.#ImageRef   @go(Image,optional=nillable)
 	imageFromStep?: primitive.#Identifier @go(ImageFromStep,optional=nillable)
-	args: [...string] @go(Args)
-	env: {
+	args?: [...string] @go(Args)
+	env?: {
 		[string]: string @go(Env)
 	}
-	inputs: [...#InputRef] @go(Inputs)
+	inputs?: [...#InputRef] @go(Inputs)
 	output?: "image" @go(Output)
 	outputs?: [...#FileOutput] @go(Outputs)
-	secrets: [...#SecretRef] @go(Secrets)
+	secrets?: [...#SecretRef] @go(Secrets)
 	workdir?: primitive.#AbsPath @go(Workdir,optional=nillable)
 	// peers are the step's container-egress trust contracts (ADR-029): each
 	// declares a destination the step container may reach during execution,
@@ -301,7 +301,7 @@ import (
 #PackSpec: {
 	@go(PackSpec)
 	base: primitive.#ImageRef @go(Base)
-	files: [...#PackFile] @go(Files)
+	files?: [...#PackFile] @go(Files)
 	config?: #ImageConfig @go(Config,optional=nillable)
 	annotations?: {
 		[string]: string @go(Annotations)
@@ -437,14 +437,14 @@ import (
 	// valid -- execution success, not a drift reaction. strike takes no action
 	// on state differences (ADR-016); do not add policy fields here.
 	required: *true | bool @go(Required)
-	captures: [...#Capture] @go(Captures)
+	captures?: [...#Capture] @go(Captures)
 }
 
 #Capture: {
 	@go(Capture)
 	id:    primitive.#Identifier @go(ID)
 	image: primitive.#ImageRef   @go(Image)
-	command: [...string] @go(Command)
+	command: [string, ...string] @go(Command)
 	// peers bound the capture container's egress as #Step.peers bounds a
 	// step's (ADR-029, ADR-033).
 	peers?: [...endpoint.#Endpoint] @go(Peers)

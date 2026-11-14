@@ -231,3 +231,23 @@ column above is the snapshot at ratification.
 >    `git rev-parse <commit>:contract/attest` against that commit's tree.
 >    Every later change to `contract/attest` is the beta-blocking
 >    ratification event the declaration describes.
+
+> **2026-11-14, riding rule (6) of
+> [ADR-049](ADR-049-type-discipline-internal-seams.md):**
+>
+> 1. The commit that carries this amendment makes `endpoint.#SSH.knownHosts`
+>    non-empty. `contract/attest` names `endpoint.#Endpoint` for the declared
+>    peers of the sealed record and of the provenance external parameters,
+>    so the narrowing reaches the attest wire: it is a freeze event, ratified
+>    through its instruction. No signed golden, cross-validation vector or
+>    attestation fixture carries an SSH endpoint without host keys, so no
+>    conformance golden needs a re-baseline.
+> 2. The tree of `contract/attest` does not change, so the comparison the
+>    freeze declaration names does not see this event: it compares
+>    `contract/attest` alone, not the packages it imports. That gap is owned
+>    by item-0193. The frozen baseline is still the tree
+>    `ccd3799e3eb0d60d574320892e148d811b4b75a0` of the commit that carries
+>    the amendment riding the move of the declared-endpoint union.
+> 3. Rule (6) defers its nine sites in `contract/attest` to item-0004.
+>    Bringing each into the rule changes the attest wire and is a freeze
+>    event of that item.
