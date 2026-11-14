@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strings"
 	"testing"
 
 	"cuelang.org/go/cue/ast"
@@ -107,5 +108,53 @@ func TestInlineDisjunctionFinding(t *testing.T) {
 	def := firstField(t, `#Kind: "git" | "tarball"`)
 	if fs := appendFieldFindings(nil, def, nil); len(fs) != 0 {
 		t.Errorf("named disjunction: got %d findings, want 0: %v", len(fs), fs)
+	}
+}
+
+func TestPrimitiveConstraintsSkipBareIdentifiers(t *testing.T) {
+	// A primitive whose value is a bare identifier owns no grammar, so it does
+	// not claim the fields of that type; a primitive with a grammar still does.
+	f, err := parser.ParseFile("p.cue", "#UserSpec: string\n#Alias: #Ident\n#Ident: =~\"^[a-z0-9]$\"\n")
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	prims := primitiveConstraints([]*ast.File{f})
+	grammar := renderConstraint(firstField(t, "#Ident: =~\"^[a-z0-9]$\"").Value)
+	if len(prims) != 1 || prims[grammar] != "#Ident" {
+		t.Fatalf("primitiveConstraints = %v, want only the #Ident grammar", prims)
+	}
+	if fs := appendFieldFindings(nil, firstField(t, "user: string"), prims); len(fs) != 0 {
+		t.Errorf("string field: got %d findings, want 0: %v", len(fs), fs)
+	}
+}
+
+func TestTierFindings(t *testing.T) {
+	cases := []struct {
+		name, dir, src, kind string
+	}{
+		{"downward", "lane", `import "` + contractPrefix + `primitive"`, ""},
+		{"vector onto wire", "crossval", `import "` + contractPrefix + `lane"`, ""},
+		{"lateral", "endpoint", `import "` + contractPrefix + `record"`, "tier-direction"},
+		{"upward", "primitive", `import "` + contractPrefix + `lane"`, "tier-direction"},
+		{"undeclared import", "lane", `import "strings"`, "undeclared-tier"},
+		{"undeclared package", "probe", `x: 1`, "undeclared-tier"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			f, err := parser.ParseFile("t.cue", "package "+c.dir+"\n\n"+c.src+"\n")
+			if err != nil {
+				t.Fatalf("parse: %v", err)
+			}
+			fs := appendTierFindings(nil, c.dir, []*ast.File{f})
+			if c.kind == "" {
+				if len(fs) != 0 {
+					t.Fatalf("got %d findings, want 0: %v", len(fs), fs)
+				}
+				return
+			}
+			if len(fs) != 1 || !strings.Contains(fs[0], ": "+c.kind+": ") {
+				t.Fatalf("got %v, want one %s finding", fs, c.kind)
+			}
+		})
 	}
 }

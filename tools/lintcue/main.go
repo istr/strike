@@ -12,9 +12,12 @@
 // package loader reports any error. Packages under tools/ are loaded but not
 // reported: a measuring instrument does not measure itself.
 //
-// It also lints the CUE source under contract/: an inline string disjunction in
-// a field (ADR-049 rule 5), a field that re-inlines a primitive grammar, and a
-// map whose constrained key is redirected to a plain-string Go key.
+// With -contract it lints the CUE source under contract/ instead: an inline
+// string disjunction in a field (ADR-049 rule 5), a field that re-inlines a
+// primitive grammar, a map whose constrained key is redirected to a
+// plain-string Go key, and an import that does not name a contract package of a
+// strictly lower tier (ADR-048). Every contract package must load; a load error
+// aborts the run.
 package main
 
 import (
@@ -40,11 +43,18 @@ const (
 
 func main() {
 	log.SetFlags(0)
-	if len(os.Args) < 2 {
-		log.Print("usage: lintcue <package-pattern>...")
+	args := os.Args[1:]
+	var findings []string
+	var err error
+	switch {
+	case len(args) == 1 && args[0] == "-contract":
+		findings, err = contractSyntaxFindings(".")
+	case len(args) > 0 && args[0] != "-contract":
+		findings, err = run(args)
+	default:
+		log.Print("usage: lintcue <package-pattern>... | lintcue -contract")
 		os.Exit(2)
 	}
-	findings, err := run(os.Args[1:])
 	if err != nil {
 		log.Print(err)
 		os.Exit(2)
@@ -103,11 +113,6 @@ func run(patterns []string) ([]string, error) {
 			findings = appendFindings(findings, p, cueNames, used)
 		}
 	}
-	synFindings, err := contractSyntaxFindings(".")
-	if err != nil {
-		return nil, fmt.Errorf("contract syntax lint: %w", err)
-	}
-	findings = append(findings, synFindings...)
 	sort.Strings(findings)
 	return findings, nil
 }

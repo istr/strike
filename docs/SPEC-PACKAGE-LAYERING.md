@@ -36,8 +36,9 @@ a strictly lower tier, never from its own or a higher one (ADR-048, amendment
 of 2026-11-14). The primitive tier is `primitive`; the concept tier is
 `endpoint`, `output`, `provenance`, `record`; the wire tier is `lane`,
 `attest`, `trustlayers`; the vector tier is `crossval`. Cross-package `import`
-statements make the direction explicit in the CUE, and go-arch-lint enforces
-the Go projection of the same DAG (`.go-arch-lint.yml`).
+statements make the direction explicit in the CUE, `go tool lintcue -contract`
+checks every import against the declared tiers in `make lint`, and go-arch-lint
+enforces the Go projection of the same DAG (`.go-arch-lint.yml`).
 
 - **primitive** -- the leaf vocabulary: content-addressed digests, identifiers,
   hashes, and the other irreducible scalar constraints. Depends on nothing.

@@ -58,6 +58,7 @@ lint-deadcode:
 	if [ -n "$$out" ]; then echo "$$out"; exit 1; fi
 
 lint: lint-ci lint-type lint-arch lint-doc lint-cue-fmt lint-deadcode
+	go tool lintcue -contract
 
 # The race detector needs cgo and a C compiler, which the dev container does
 # not carry. test and integration run go test in a sibling from the race image

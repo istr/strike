@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
+	"strconv"
 	"strings"
 
 	"cuelang.org/go/cue/ast"
@@ -13,36 +15,63 @@ import (
 	"cuelang.org/go/cue/token"
 )
 
+// contractPrefix is the import path every contract package starts with.
+const contractPrefix = modulePrefix + "contract/"
+
+// contractTiers declares the tier of every package under contract/, numbered
+// from the inside out as tierNames names them (ADR-048). A contract package
+// imports only from a strictly lower tier.
+var contractTiers = map[string]int{
+	"primitive":   0,
+	"endpoint":    1,
+	"output":      1,
+	"provenance":  1,
+	"record":      1,
+	"lane":        2,
+	"attest":      2,
+	"trustlayers": 2,
+	"crossval":    3,
+}
+
+var tierNames = []string{"primitive", "concept", "wire", "vector"}
+
 // contractSyntaxFindings runs the CUE-source lints over contract/: inline string
-// disjunctions (ADR-049 rule 5), re-inlined primitive grammars, and lossy @go
-// map-key redirects. These are properties of how the schema is written, so they
-// read the CUE syntax rather than the evaluated value.
+// disjunctions (ADR-049 rule 5), re-inlined primitive grammars, lossy @go
+// map-key redirects, and imports that break the tier order. These are
+// properties of how the schema is written, so they read the CUE syntax rather
+// than the evaluated value.
 func contractSyntaxFindings(root string) ([]string, error) {
-	files, err := contractFiles(root)
+	pkgs, err := contractFiles(root)
 	if err != nil {
 		return nil, err
 	}
-	prims := primitiveConstraints(root)
+	prims := primitiveConstraints(pkgs["primitive"])
 	var findings []string
-	for _, f := range files {
-		ast.Walk(f, func(n ast.Node) bool {
-			if field, ok := n.(*ast.Field); ok {
-				findings = appendFieldFindings(findings, field, prims)
-			}
-			return true
-		}, nil)
+	for dir, files := range pkgs {
+		findings = appendTierFindings(findings, dir, files)
+		for _, f := range files {
+			ast.Walk(f, func(n ast.Node) bool {
+				if field, ok := n.(*ast.Field); ok {
+					findings = appendFieldFindings(findings, field, prims)
+				}
+				return true
+			}, nil)
+		}
 	}
+	sort.Strings(findings)
 	return findings, nil
 }
 
-// contractFiles parses every .cue file under contract/, one load per package
-// directory (mirroring the coverage loader), and returns the syntax trees.
-func contractFiles(root string) ([]*ast.File, error) {
+// contractFiles loads every package directory under contract/ and returns its
+// syntax trees keyed by directory name. A package that fails to load aborts the
+// run: a lint that skips what it cannot read reports a tree it has not seen as
+// clean.
+func contractFiles(root string) (map[string][]*ast.File, error) {
 	entries, err := os.ReadDir(filepath.Join(root, "contract"))
 	if err != nil {
 		return nil, fmt.Errorf("read contract dir: %w", err)
 	}
-	var files []*ast.File
+	pkgs := map[string][]*ast.File{}
 	for _, e := range entries {
 		if !e.IsDir() {
 			continue
@@ -51,42 +80,72 @@ func contractFiles(root string) ([]*ast.File, error) {
 			[]string{"./contract/" + e.Name()}, &load.Config{Dir: root})
 		for _, inst := range insts {
 			if inst.Err != nil {
-				continue
+				return nil, fmt.Errorf("load contract/%s: %w", e.Name(), inst.Err)
 			}
-			files = append(files, inst.Files...)
+			pkgs[e.Name()] = append(pkgs[e.Name()], inst.Files...)
 		}
 	}
-	return files, nil
+	return pkgs, nil
 }
 
 // primitiveConstraints maps the normalized source of each primitive definition
 // constraint to its name, so a re-inlined grammar can be matched back to the
-// primitive that already owns it.
-func primitiveConstraints(root string) map[string]string {
+// primitive that already owns it. A definition whose value is a bare
+// identifier -- string, or another definition -- owns no grammar and is left
+// out; keyed by that identifier, it would claim every field of that type.
+func primitiveConstraints(files []*ast.File) map[string]string {
 	out := map[string]string{}
-	insts := load.Instances(
-		[]string{"./contract/primitive"}, &load.Config{Dir: root})
-	for _, inst := range insts {
-		if inst.Err != nil {
-			continue
-		}
-		for _, f := range inst.Files {
-			for _, d := range f.Decls {
-				field, ok := d.(*ast.Field)
-				if !ok {
-					continue
-				}
-				name := labelName(field.Label)
-				if !isDefinitionLabel(name) {
-					continue
-				}
-				if c := renderConstraint(field.Value); c != "" {
-					out[c] = name
-				}
+	for _, f := range files {
+		for _, d := range f.Decls {
+			field, ok := d.(*ast.Field)
+			if !ok {
+				continue
+			}
+			if _, bare := field.Value.(*ast.Ident); bare {
+				continue
+			}
+			name := labelName(field.Label)
+			if !isDefinitionLabel(name) {
+				continue
+			}
+			if c := renderConstraint(field.Value); c != "" {
+				out[c] = name
 			}
 		}
 	}
 	return out
+}
+
+// appendTierFindings reports a package directory with no declared tier, and
+// every import of a declared package that does not name a contract package of
+// a strictly lower tier.
+func appendTierFindings(fs []string, dir string, files []*ast.File) []string {
+	tier, ok := contractTiers[dir]
+	if !ok {
+		return append(fs, fmt.Sprintf(
+			"contract/%s: undeclared-tier: package directory %q has no declared tier", dir, dir))
+	}
+	for _, f := range files {
+		for spec := range f.ImportSpecs() {
+			path, err := strconv.Unquote(spec.Path.Value)
+			if err != nil {
+				path = spec.Path.Value
+			}
+			name, isContract := strings.CutPrefix(path, contractPrefix)
+			to, declared := contractTiers[name]
+			switch {
+			case !isContract || !declared:
+				fs = append(fs, finding(spec, "undeclared-tier", fmt.Sprintf(
+					"package %s imports %q, which is not a contract package with a declared tier",
+					dir, path)))
+			case to >= tier:
+				fs = append(fs, finding(spec, "tier-direction", fmt.Sprintf(
+					"package %s (%s tier) imports %s (%s tier); a contract package imports only from a strictly lower tier",
+					dir, tierNames[tier], name, tierNames[to])))
+			}
+		}
+	}
+	return fs
 }
 
 func appendFieldFindings(fs []string, field *ast.Field, prims map[string]string) []string {
