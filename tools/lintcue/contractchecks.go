@@ -202,7 +202,11 @@ func collectionFindings(pkgs map[string][]*ast.File, deferrals []collectionDefer
 
 // appendCollectionSites walks one top-level definition and reports every field
 // in it, at any depth, that collectionDefect describes, unless deferrals names
-// the site. The site is the dotted path of labels from the definition down.
+// the site. A field inside the value of a pattern constraint is a field of
+// every entry and is reached like any other. The site is the dotted path of
+// labels from the definition down; a label that is not an identifier -- a
+// pattern constraint, a quoted or a dynamic label -- is spelled as its
+// normalized source.
 func appendCollectionSites(fs []string, dir string, def *ast.Field,
 	deferrals []collectionDeferral, matched map[collectionDeferral]bool,
 ) []string {
@@ -212,7 +216,11 @@ func appendCollectionSites(fs []string, dir string, def *ast.Field,
 		if !ok {
 			return true
 		}
-		path = append(path, labelName(field.Label))
+		segment := labelName(field.Label)
+		if expr, isExpr := field.Label.(ast.Expr); isExpr && segment == "" {
+			segment = renderConstraint(expr)
+		}
+		path = append(path, segment)
 		if defect := collectionDefect(field); defect != "" {
 			site := strings.Join(path, ".")
 			if !deferredSite(deferrals, matched, dir, site) {

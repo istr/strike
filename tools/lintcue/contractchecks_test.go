@@ -188,10 +188,12 @@ func TestCollectionDefect(t *testing.T) {
 
 func TestCollectionFindings(t *testing.T) {
 	// The deferred site is matched by its path from the definition, a nested
-	// site is found and named by its path, a pattern constraint's value and a
+	// site is found and named by its path, a field inside a pattern
+	// constraint's value is a site whose path spells the pattern, a quoted
+	// label is spelled as written, a pattern constraint's value itself and a
 	// field outside any definition are not sites, and a deferral that matches
 	// no site is reported.
-	src := "#Peer: {\n\tresolved: [...string]\n\tspec: {files: [...string]}\n\tm?: {[string]: [...string]}\n}\nfields: [string]: string\n"
+	src := "#Peer: {\n\tresolved: [...string]\n\tspec: {files: [...string]}\n\tm?: {[string]: [...string]}\n\tn?: {[string]: {x: [...string]}}\n\t\"q-x\": [...string]\n}\nfields: [string]: string\n"
 	f, err := parser.ParseFile("t.cue", src)
 	if err != nil {
 		t.Fatalf("parse: %v", err)
@@ -202,9 +204,11 @@ func TestCollectionFindings(t *testing.T) {
 	}
 	fs := collectionFindings(map[string][]*ast.File{"attest": {f}}, deferrals)
 	sort.Strings(fs)
-	if len(fs) != 2 ||
+	if len(fs) != 4 ||
 		!strings.Contains(fs[0], ": stale-deferral: #Peer.gone is deferred to item-x") ||
-		!strings.Contains(fs[1], ": required-collection: #Peer.spec.files is a required open list") {
-		t.Fatalf("collectionFindings = %v, want the stale #Peer.gone and the site #Peer.spec.files", fs)
+		!strings.Contains(fs[1], ": required-collection: #Peer.spec.files is a required open list") ||
+		!strings.Contains(fs[2], ": required-collection: #Peer.n.[string].x is a required open list") ||
+		!strings.Contains(fs[3], ": required-collection: #Peer.\"q-x\" is a required open list") {
+		t.Fatalf("collectionFindings = %v, want the stale #Peer.gone and the sites #Peer.spec.files, #Peer.n.[string].x and #Peer.\"q-x\"", fs)
 	}
 }

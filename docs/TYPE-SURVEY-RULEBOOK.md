@@ -1,6 +1,6 @@
 # Type Survey Rulebook
 
-Version 4. Version 1 was ratified 2026-07-09 against tree `5945d91`; the
+Version 5. Version 1 was ratified 2026-07-09 against tree `5945d91`; the
 amendment log at the end records every later version.
 
 This document is the input handed verbatim to every agent that surveys the tree
@@ -180,7 +180,10 @@ finding. A contract package that fails to load aborts the run.
   depth, that is not optional and whose value is an open list (`[...T]`) or a
   struct of pattern constraints only (`{[K]: V}`). CUE gives both an implicit
   empty default, so validation never requires the field. A field outside a
-  definition and the value of a pattern constraint are not reached.
+  definition is not reached, nor is the value of a pattern constraint itself;
+  a field inside that value is a field of every entry and is reached. A site
+  path spells a label that is not an identifier as its source, as in
+  `#X.m.[string].x`.
 
 The same run checks every import between contract packages against their
 declared tiers ([SPEC-PACKAGE-LAYERING](SPEC-PACKAGE-LAYERING.md)). That check
@@ -188,6 +191,9 @@ is layering, not type discipline, and no survey verdict rests on it.
 
 ## Amendment log
 
+- Version 5, 2026-11-14: required-collection states that a field inside a
+  pattern constraint's value is reached, and how a site path spells a label
+  that is not an identifier.
 - Version 4, 2026-11-14: add required-collection (ADR-049 rule 6), the first
   lint rule with an allowlist; the header names the current version.
 - Version 3, 2026-11-14: the three rules gate in `make lint` through
