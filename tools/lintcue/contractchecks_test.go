@@ -1,6 +1,7 @@
 package main
 
 import (
+	"sort"
 	"strings"
 	"testing"
 
@@ -156,5 +157,54 @@ func TestTierFindings(t *testing.T) {
 				t.Fatalf("got %v, want one %s finding", fs, c.kind)
 			}
 		})
+	}
+}
+
+func TestCollectionDefect(t *testing.T) {
+	cases := []struct {
+		src    string
+		defect bool
+	}{
+		{`args: [...string]`, true},
+		{`args!: [...string]`, true},
+		{`args?: [...string]`, false},
+		{`args: [string, ...string]`, false},
+		{`args: []`, false},
+		{`args: [string]`, false},
+		{`env: [string]: string`, true},
+		{`env: {[string]: string}`, true},
+		{`env?: {[string]: string}`, false},
+		{`env: {[string]: string, x: int}`, false},
+		{`env: {}`, false},
+		{`#Def: [...string]`, false},
+		{`[string]: [...string]`, false},
+	}
+	for _, c := range cases {
+		if got := collectionDefect(firstField(t, c.src)) != ""; got != c.defect {
+			t.Errorf("collectionDefect(%q) reports %v, want %v", c.src, got, c.defect)
+		}
+	}
+}
+
+func TestCollectionFindings(t *testing.T) {
+	// The deferred site is matched by its path from the definition, a nested
+	// site is found and named by its path, a pattern constraint's value and a
+	// field outside any definition are not sites, and a deferral that matches
+	// no site is reported.
+	src := "#Peer: {\n\tresolved: [...string]\n\tspec: {files: [...string]}\n\tm?: {[string]: [...string]}\n}\nfields: [string]: string\n"
+	f, err := parser.ParseFile("t.cue", src)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	deferrals := []collectionDeferral{
+		{dir: "attest", path: "#Peer.resolved", owner: "item-x"},
+		{dir: "attest", path: "#Peer.gone", owner: "item-x"},
+	}
+	fs := collectionFindings(map[string][]*ast.File{"attest": {f}}, deferrals)
+	sort.Strings(fs)
+	if len(fs) != 2 ||
+		!strings.Contains(fs[0], ": stale-deferral: #Peer.gone is deferred to item-x") ||
+		!strings.Contains(fs[1], ": required-collection: #Peer.spec.files is a required open list") {
+		t.Fatalf("collectionFindings = %v, want the stale #Peer.gone and the site #Peer.spec.files", fs)
 	}
 }

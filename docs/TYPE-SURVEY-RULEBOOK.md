@@ -1,6 +1,7 @@
 # Type Survey Rulebook
 
-Version 1. Ratified 2026-07-09 against tree `5945d91`.
+Version 4. Version 1 was ratified 2026-07-09 against tree `5945d91`; the
+amendment log at the end records every later version.
 
 This document is the input handed verbatim to every agent that surveys the tree
 for type-safety findings, and to every agent that verifies such a survey. It
@@ -159,9 +160,10 @@ The codifications of section 8.6, which no register row carries:
 
 ## Lint gates (lintcue)
 
-`go tool lintcue -contract` mechanizes three CUE-source rules over `contract/`
-and gates in `make lint`; none uses an allowlist. A contract package that fails
-to load aborts the run.
+`go tool lintcue -contract` mechanizes four CUE-source rules over `contract/`
+and gates in `make lint`. Only required-collection has an allowlist; each entry
+names the roadmap item that owns it, and an entry that matches no field is a
+finding. A contract package that fails to load aborts the run.
 
 - **inline-string-disjunction** (ADR-049 rule 5): a non-definition field whose
   value is a disjunction of string literals (`field: "a" | "b"`). A named
@@ -174,6 +176,11 @@ to load aborts the run.
   owns no grammar and is not matched.
 - **lossy-map-key**: a map whose CUE key carries a constraint but whose `@go`
   annotation redirects it to `map[string]...`, dropping the key grammar in Go.
+- **required-collection** (ADR-049 rule 6): a field inside a definition, at any
+  depth, that is not optional and whose value is an open list (`[...T]`) or a
+  struct of pattern constraints only (`{[K]: V}`). CUE gives both an implicit
+  empty default, so validation never requires the field. A field outside a
+  definition and the value of a pattern constraint are not reached.
 
 The same run checks every import between contract packages against their
 declared tiers ([SPEC-PACKAGE-LAYERING](SPEC-PACKAGE-LAYERING.md)). That check
@@ -181,11 +188,12 @@ is layering, not type discipline, and no survey verdict rests on it.
 
 ## Amendment log
 
+- Version 4, 2026-11-14: add required-collection (ADR-049 rule 6), the first
+  lint rule with an allowlist; the header names the current version.
 - Version 3, 2026-11-14: the three rules gate in `make lint` through
   `go tool lintcue -contract`, which aborts on a contract package that fails
   to load; primitive-reuse no longer matches a primitive whose value is a bare
   identifier; the section names the tier check that runs alongside.
-
 - Version 2, 2026-07-11: add the Lint gates section (cuelint mechanizes rule 5,
   primitive-reuse, and lossy-map-key).
 - Version 1, 2026-07-09: initial ratification. RB-01 through RB-07, BC-01

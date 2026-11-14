@@ -37,9 +37,10 @@ var tierNames = []string{"primitive", "concept", "wire", "vector"}
 
 // contractSyntaxFindings runs the CUE-source lints over contract/: inline string
 // disjunctions (ADR-049 rule 5), re-inlined primitive grammars, lossy @go
-// map-key redirects, and imports that break the tier order. These are
-// properties of how the schema is written, so they read the CUE syntax rather
-// than the evaluated value.
+// map-key redirects, imports that break the tier order, and required
+// collections that CUE defaults to empty (ADR-049 rule 6). These are properties
+// of how the schema is written, so they read the CUE syntax rather than the
+// evaluated value.
 func contractSyntaxFindings(root string) ([]string, error) {
 	pkgs, err := contractFiles(root)
 	if err != nil {
@@ -58,6 +59,7 @@ func contractSyntaxFindings(root string) ([]string, error) {
 			}, nil)
 		}
 	}
+	findings = append(findings, collectionFindings(pkgs, collectionDeferrals)...)
 	sort.Strings(findings)
 	return findings, nil
 }
@@ -146,6 +148,141 @@ func appendTierFindings(fs []string, dir string, files []*ast.File) []string {
 		}
 	}
 	return fs
+}
+
+// collectionDeferral tolerates one site of ADR-049 rule (6) until its owner
+// settles the field's form. A site is matched on its package directory and on
+// its field path from the enclosing definition, so an entry is not pinned to a
+// line.
+type collectionDeferral struct {
+	dir   string
+	path  string
+	owner string // id of the item that owns the change
+}
+
+// collectionDeferrals are the rule (6) sites of contract/attest. Its wire is
+// frozen for the beta line, so each of them changes only as a ratified freeze
+// event.
+var collectionDeferrals = []collectionDeferral{
+	{dir: "attest", path: "#Sealed.artifacts", owner: "item-0004"},
+	{dir: "attest", path: "#Sealed.peers", owner: "item-0004"},
+	{dir: "attest", path: "#ObservedPeer.resolved", owner: "item-0004"},
+	{dir: "attest", path: "#Informational.provenance", owner: "item-0004"},
+	{dir: "attest", path: "#SLSAProvenanceStatement.subject", owner: "item-0004"},
+	{dir: "attest", path: "#StrikeExternalParameters.peers", owner: "item-0004"},
+	{dir: "attest", path: "#EngineContextStatement.subject", owner: "item-0004"},
+	{dir: "attest", path: "#InformationalStatement.subject", owner: "item-0004"},
+	{dir: "attest", path: "#InformationalPredicate.provenance", owner: "item-0004"},
+}
+
+// collectionFindings reports every site of ADR-049 rule (6) under contract/
+// that deferrals does not name, and every entry of deferrals that names no
+// site, so the list only shrinks.
+func collectionFindings(pkgs map[string][]*ast.File, deferrals []collectionDeferral) []string {
+	matched := make(map[collectionDeferral]bool, len(deferrals))
+	var fs []string
+	for dir, files := range pkgs {
+		for _, f := range files {
+			for _, d := range f.Decls {
+				if def, ok := d.(*ast.Field); ok && isDefinitionLabel(labelName(def.Label)) {
+					fs = appendCollectionSites(fs, dir, def, deferrals, matched)
+				}
+			}
+		}
+	}
+	for _, d := range deferrals {
+		if !matched[d] {
+			fs = append(fs, fmt.Sprintf(
+				"contract/%s: stale-deferral: %s is deferred to %s but is not a required collection",
+				d.dir, d.path, d.owner))
+		}
+	}
+	return fs
+}
+
+// appendCollectionSites walks one top-level definition and reports every field
+// in it, at any depth, that collectionDefect describes, unless deferrals names
+// the site. The site is the dotted path of labels from the definition down.
+func appendCollectionSites(fs []string, dir string, def *ast.Field,
+	deferrals []collectionDeferral, matched map[collectionDeferral]bool,
+) []string {
+	var path []string
+	ast.Walk(def, func(n ast.Node) bool {
+		field, ok := n.(*ast.Field)
+		if !ok {
+			return true
+		}
+		path = append(path, labelName(field.Label))
+		if defect := collectionDefect(field); defect != "" {
+			site := strings.Join(path, ".")
+			if !deferredSite(deferrals, matched, dir, site) {
+				fs = append(fs, finding(field, "required-collection", site+defect))
+			}
+		}
+		return true
+	}, func(n ast.Node) {
+		if _, ok := n.(*ast.Field); ok {
+			path = path[:len(path)-1]
+		}
+	})
+	return fs
+}
+
+// deferredSite reports whether deferrals names site in package dir, and marks
+// the entry it finds as matched.
+func deferredSite(deferrals []collectionDeferral, matched map[collectionDeferral]bool, dir, site string) bool {
+	for _, d := range deferrals {
+		if d.dir == dir && d.path == site {
+			matched[d] = true
+			return true
+		}
+	}
+	return false
+}
+
+// collectionDefect returns the finding text for a field that CUE gives an
+// implicit empty default -- a field that is not optional and whose value is an
+// open list ([...T]) or a struct of pattern constraints only -- and "" for any
+// other field. A definition and a pattern constraint are not fields of the
+// rule (ADR-049 rule 6).
+func collectionDefect(field *ast.Field) string {
+	if field.Constraint == token.OPTION || isDefinitionLabel(labelName(field.Label)) {
+		return ""
+	}
+	if _, pattern := field.Label.(*ast.ListLit); pattern {
+		return ""
+	}
+	switch v := field.Value.(type) {
+	case *ast.ListLit:
+		if len(v.Elts) == 1 {
+			if _, open := v.Elts[0].(*ast.Ellipsis); open {
+				return " is a required open list that CUE defaults to empty; make it optional or non-empty ([T, ...T]) (ADR-049 rule 6)"
+			}
+		}
+	case *ast.StructLit:
+		if patternOnly(v) {
+			return " is a required pattern map that CUE defaults to empty; make it optional (ADR-049 rule 6)"
+		}
+	}
+	return ""
+}
+
+// patternOnly reports whether st holds at least one field and every field it
+// holds is a pattern constraint. Attributes, comments and other declarations
+// do not count either way.
+func patternOnly(st *ast.StructLit) bool {
+	patterns := 0
+	for _, e := range st.Elts {
+		field, ok := e.(*ast.Field)
+		if !ok {
+			continue
+		}
+		if _, pattern := field.Label.(*ast.ListLit); !pattern {
+			return false
+		}
+		patterns++
+	}
+	return patterns > 0
 }
 
 func appendFieldFindings(fs []string, field *ast.Field, prims map[string]string) []string {
