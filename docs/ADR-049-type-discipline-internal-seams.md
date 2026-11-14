@@ -206,3 +206,12 @@ check and make all of theirs optional, since each has a defined empty case.
 changes only as a ratified freeze event; until then each is a deferral the
 lint names field by field, and a deferral that no longer matches a field is a
 finding of its own.
+
+## Amendment 2026-11-14 -- rule (6) reaches the fields of a pattern's entries
+
+Rule (6) says that the value of a pattern constraint is not reached. The
+sentence concerns the value itself, the type of each entry: in `[K]: [...T]`
+the open list is not a field and carries no default of its own. When the value
+is a struct, its fields are fields of every entry, and rule (6) reaches them as
+it reaches any field inside a definition: in `m?: {[string]: {x: [...T]}}`, `x`
+is a required open list. Every other clause of rule (6) stands unchanged.
