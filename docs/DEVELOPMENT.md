@@ -170,32 +170,20 @@ gosec rules to watch for:
 All tests use the table-driven pattern with named subtests:
 
 ```go
-func TestParseRef(t *testing.T) {
+func TestOutputRef_Ref(t *testing.T) {
     tests := []struct {
-        name       string
-        input      string
-        wantStep   string
-        wantOutput string
-        wantErr    bool
+        name string
+        ref  lane.OutputRef
+        want string
     }{
-        {"valid ref", "build.binary", "build", "binary", false},
-        {"empty string", "", "", "", true},
-        {"no dot", "build", "", "", true},
-        {"empty step", ".binary", "", "", true},
-        {"empty output", "build.", "", "", true},
-        {"multiple dots", "a.b.c", "a", "b.c", false},
+        {"simple", lane.OutputRef{Step: "build", Output: "binary"}, "build.binary"},
+        {"hyphens", lane.OutputRef{Step: "npm-install", Output: "node-modules"}, "npm-install.node-modules"},
+        {"numeric", lane.OutputRef{Step: "s1", Output: "a"}, "s1.a"},
     }
     for _, tt := range tests {
         t.Run(tt.name, func(t *testing.T) {
-            step, output, err := ParseRef(tt.input)
-            if (err != nil) != tt.wantErr {
-                t.Fatalf("ParseRef(%q) error = %v, wantErr %v", tt.input, err, tt.wantErr)
-            }
-            if step != tt.wantStep {
-                t.Errorf("step = %q, want %q", step, tt.wantStep)
-            }
-            if output != tt.wantOutput {
-                t.Errorf("output = %q, want %q", output, tt.wantOutput)
+            if got := tt.ref.Ref(); got != tt.want {
+                t.Errorf("Ref() = %q, want %q", got, tt.want)
             }
         })
     }
@@ -320,9 +308,7 @@ mount to the current file.
 
 Add fuzz tests for all input parsers and validators:
 - `lane.Parse` (YAML/CUE validation)
-- `lane.ParseRef` (step.output reference parsing)
 - `registry.SpecHash` (cache key computation)
-- `executor.validateContentType` (magic byte validation)
 
 Fuzz tests must not panic on any input. Failing inputs are saved to
 `testdata/fuzz/` and run as regression tests automatically.

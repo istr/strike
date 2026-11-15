@@ -235,9 +235,13 @@ not find to the operator, never install or fetch one.
 
 Two integration tests additionally need the local sigstore harness under
 `test/sigstore-local`. A harness that exists but is stopped is restarted by
-the tests themselves; creating one is an operator action
-(`make -C test/sigstore-local up`). Detail:
-`docs/DEVELOPMENT.md#25-integration-tests`.
+the tests themselves; creating one is an operator action on the host
+(`make -C test/sigstore-local up`), never an executor step: the dev
+container is restricted on purpose, and its egress control will tighten.
+The Makefile is being retired, every target included. A keyless golden
+regeneration (`go tool gengolden`) also moves the golden digests in
+`tools/lintdoc/derblobs.go`; update them in place in the same commit.
+Detail: `docs/DEVELOPMENT.md#25-integration-tests`.
 
 **After every code change**, run `make lint` and fix all findings before
 moving on -- do not batch lint fixes at the end. Run this gate before any
