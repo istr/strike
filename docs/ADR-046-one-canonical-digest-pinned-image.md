@@ -320,3 +320,29 @@ go-containerregistry's default platform, linux/amd64, whatever the engine
 ran.
 
 ADR-035's rejection of container commit stands unchanged.
+
+## Amendment 2026-11-15 -- the image is the pack step's output; the output field is removed
+
+The wire refinement above splits a step's outputs into a singular id-less
+`output` (image) and plural named `outputs` (file/directory), and the
+amendment of 2026-10-25 admits the image output on a pack step only. From
+that amendment on, the singular field carried no information: a pack step
+always assembles one image and nothing else, no other step kind may
+declare the field, and `"image"` was its only value from the start. The
+schema never required the field on a pack step; a pack step without it
+was rejected only indirectly, by the reference checks of validation, with
+a check at run time behind them.
+
+The field is removed. A pack step's output is the image it assembles, and
+a pack step declares no other output. A reference to an image --
+`imageFromStep`, the image arm of a deploy's artifacts, the
+`reproducedBy` of a registry deploy -- names a pack step, and validation
+rejects one that names any other step. File and directory outputs stay the
+plural `outputs` of a container step. Properties (b) and (c) of the
+Decision and the one-pack-deep boundary of the 2026-10-25 amendment are
+unchanged.
+
+**Supersedes, in the wire refinement above:** "a singular id-less `output`
+(image) versus plural named `outputs` (file/directory)" is read as "a pack
+step, whose output is its image, versus the plural named `outputs`
+(file/directory) of a container step".

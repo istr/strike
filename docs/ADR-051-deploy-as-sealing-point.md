@@ -382,3 +382,33 @@ this date.
 **Supersedes, in the D4 amendment of 2026-11-08 above:** "every write is
 by digest and untagged" is read as: "every write is by digest, and the
 only tag is the retention tag, written once and never moved".
+
+## Amendment 2026-11-15 -- D1: a step that starts no container declares no container field
+
+D1 names the build step as the step that runs a container. A pack step
+assembles its payload in the control plane, and a deploy step is the
+control plane's sealing act; neither starts a container of its own. The
+lane schema still accepted on both the fields a step container consumes.
+On a deploy step the run path dispatches before input resolution, spec
+hashing and the cache check: args, env, secrets, workdir and forceRun were
+read by nothing, inputs became DAG edges only, so the deploy waited on
+producers whose outputs it never received, and peers were collected and
+sealed as declared although nothing dialed them. On a pack step args and
+env entered the spec hash and nothing else, inputs were resolved and
+hashed but never delivered, since D8 confines the pack payload to
+`pack.files`, and secrets, workdir, outputs and peers were read by
+nothing. A sealed declaration that corresponds to no act is the binding by
+convention the Context of this ADR names as the defect, and a field that
+does nothing misleads the author who sets it.
+
+From this date a deploy step and a pack step declare no field that only a
+step container reads. The lane schema rejects, on both kinds, every entry
+of args, env, inputs, outputs, secrets and peers and any workdir, and on a
+deploy step a forceRun other than false, each with the reason at the path
+of the rejected value; an empty list or map stays accepted. A deploy
+step's outputs, which [ADR-039](ADR-039-deploy-step-as-attestation-root.md)
+D2 already excludes, fall under the same rule. The fields a kind consumes
+stay: timeout on both kinds, forceRun on a pack step, and the deploy
+method's own fields. Peers stay container-egress contracts only, as
+[ADR-029](ADR-029-peers-are-container-egress.md) decides; the peers of a
+deploy's state captures are unaffected, since a capture runs a container.
