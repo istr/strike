@@ -166,7 +166,6 @@ import (
 		[string]: string @go(Env)
 	}
 	inputs?: [...#InputRef] @go(Inputs)
-	output?: "image" @go(Output)
 	outputs?: [...#FileOutput] @go(Outputs)
 	secrets?: [...#SecretRef] @go(Secrets)
 	workdir?: primitive.#AbsPath @go(Workdir,optional=nillable)
@@ -203,10 +202,10 @@ import (
 	// the path of the entry; an empty list or map and the default of forceRun
 	// stay accepted. Without outputs a deploy step stays a DAG leaf (ADR-039
 	// D2); the complementary leaf-edge rejection lives in lane.Build
-	// (validateDeployLeaves). Both forms are transparent to
-	// `cue exp gengotypes`.
+	// (validateDeployLeaves). A pack step's only output is the image it
+	// assembles, so the step declares no output field of its own (ADR-046).
+	// Both forms are transparent to `cue exp gengotypes`.
 	if deploy != _|_ {
-		output?:  _|_
 		workdir?: error("a deploy step starts no container; only a step container reads this field")
 		args?: [...error("a deploy step starts no container; only a step container reads this field")]
 		env?: {[string]: error("a deploy step starts no container; only a step container reads this field")}
@@ -215,24 +214,6 @@ import (
 		secrets?: [...error("a deploy step starts no container; only a step container reads this field")]
 		peers?: [...error("a deploy step starts no container; only a step container reads this field")]
 		forceRun: false | error("a deploy step starts no container; only a step container reads this field")
-	}
-
-	// A step declares the singular image output XOR file/directory outputs,
-	// never both (ADR-046). When output is present, outputs must be empty; CUE
-	// reports a conflict ("incompatible list lengths") otherwise. This is
-	// transparent to gengotypes -- the generated Outputs field is unchanged --
-	// and is the same idiom as the deploy-leaf constraint above (ADR-039).
-	//
-	// Only a pack step declares the image output (ADR-046): every image a lane
-	// generates is assembled by the control plane on a digest-pinned base. A
-	// step with output therefore declares neither image nor imageFromStep;
-	// with the deploy constraint above and the exactly-one-kind rule, that
-	// leaves pack. A present image or imageFromStep is reported at its own
-	// path, the same idiom as output on a deploy step.
-	if output != _|_ {
-		outputs: []
-		image?:         error("the image output is declared on a pack step only")
-		imageFromStep?: error("the image output is declared on a pack step only")
 	}
 
 	if pack != _|_ {

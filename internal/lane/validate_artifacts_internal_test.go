@@ -15,8 +15,8 @@ func TestValidateDeployArtifactRefs(t *testing.T) {
 	miss := primitive.Identifier("missing")
 
 	producer := &Step{ID: "web", Outputs: []FileOutput{{ID: "dist"}}}
-	builder := &Step{ID: "build", Output: "image", Pack: &PackSpec{}}
-	packer := &Step{ID: "pack", Output: "image", Pack: &PackSpec{
+	builder := &Step{ID: "build", Pack: &PackSpec{}}
+	packer := &Step{ID: "pack", Pack: &PackSpec{
 		Files: []PackFile{{From: OutputRef{Step: "web", Output: "dist"}}},
 	}}
 	registryDeploy := func(arts map[primitive.Identifier]ArtifactRef) *Step {
@@ -102,7 +102,7 @@ func TestValidateDeployArtifactRefs(t *testing.T) {
 		},
 	}
 
-	barePack := &Step{ID: "barepack", Output: "image", Pack: &PackSpec{}}
+	barePack := &Step{ID: "barepack", Pack: &PackSpec{}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			index := map[primitive.Identifier]*Step{

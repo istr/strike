@@ -45,7 +45,6 @@ steps:
     env: {}
     inputs: []
     secrets: []
-    output: image
   - id: publish
     deploy:
       method:

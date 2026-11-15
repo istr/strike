@@ -94,7 +94,6 @@ _pack: {
 	env: {}
 	inputs: []
 	secrets: []
-	output: "image"
 }
 
 out: lane.#Lane & {

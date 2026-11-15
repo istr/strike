@@ -46,8 +46,6 @@ func TestValidateLane_Reject(t *testing.T) {
 		{"invalid_mount_relative_path.yaml", "mount"},
 		{"invalid_provenance_path_outside_output.yaml", "not within any declared output"},
 		{"invalid_kubernetes_not_implemented.yaml", "not yet implemented"},
-		{"invalid_image_output_on_container_step.yaml", "steps.0.image"},
-		{"invalid_image_output_on_image_from_step.yaml", "steps.1.imageFromStep"},
 		{"invalid_reproduced_by_unknown_step.yaml", "reproducedBy references unknown step"},
 		{"invalid_reproduced_by_no_image_output.yaml", `reproducedBy "compile" is not a pack step`},
 		{"invalid_reproduced_by_image_arm.yaml", `reproducedBy "build" names the image arm`},

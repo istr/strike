@@ -147,7 +147,6 @@ func TestBuild_ImageFromEdge(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				ID: "pack", Pack: &lane.PackSpec{Base: "img"}, Args: []string{}, Env: map[string]string{},
-				Output: "image",
 			},
 			{
 				ID: "run", Env: map[string]string{}, Args: []string{"run"},
@@ -179,7 +178,6 @@ func TestBuild_PackFileEdge(t *testing.T) {
 					Base:  "scratch",
 					Files: []lane.PackFile{{From: lane.OutputRef{Step: "build", Output: "binary"}, Dest: "/app", Mode: 0o755}},
 				},
-				Output: "image",
 			},
 		},
 	}
@@ -199,7 +197,6 @@ func TestBuild_DeployArtifactEdge(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				ID: "pack", Pack: &lane.PackSpec{Base: "img"}, Args: []string{}, Env: map[string]string{},
-				Output: "image",
 			},
 			{
 				ID: "deploy", Env: map[string]string{}, Args: []string{},
@@ -229,11 +226,9 @@ func TestBuild_ReproducedByEdge(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				ID: "build", Pack: &lane.PackSpec{Base: "img"}, Args: []string{}, Env: map[string]string{},
-				Output: "image",
 			},
 			{
 				ID: "rebuild", Pack: &lane.PackSpec{Base: "img"}, Args: []string{}, Env: map[string]string{},
-				Output: "image",
 			},
 			{
 				ID: "publish", Env: map[string]string{}, Args: []string{},
@@ -641,7 +636,6 @@ func TestValidateLeavesAreDeploys_Valid(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				ID: "pack", Pack: &lane.PackSpec{Base: "img"}, Args: []string{}, Env: map[string]string{},
-				Output: "image",
 			},
 			{
 				ID: "deploy", Env: map[string]string{}, Args: []string{},
@@ -697,7 +691,6 @@ func TestValidateLeavesAreDeploys_DanglingLeafRejected(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				ID: "pack", Pack: &lane.PackSpec{Base: "img"}, Args: []string{}, Env: map[string]string{},
-				Output: "image",
 			},
 			{
 				ID: "deploy", Env: map[string]string{}, Args: []string{},

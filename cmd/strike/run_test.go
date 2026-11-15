@@ -776,7 +776,6 @@ func TestResolveImageDigest_ImageFrom(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				ID: "pack", Pack: &lane.PackSpec{Base: "img"}, Args: []string{}, Env: map[string]string{},
-				Output: "image",
 			},
 			{
 				ID: "run", Env: map[string]string{}, Args: []string{"run"},
@@ -816,7 +815,6 @@ func TestResolveImageDigest_ImageFromMissing(t *testing.T) {
 		Steps: []lane.Step{
 			{
 				ID: "pack", Pack: &lane.PackSpec{Base: "img"}, Args: []string{}, Env: map[string]string{},
-				Output: "image",
 			},
 			{
 				ID: "run", Env: map[string]string{}, Args: []string{"run"},
@@ -898,7 +896,6 @@ func TestResolvePackInputs(t *testing.T) {
 					Base:  "scratch",
 					Files: []lane.PackFile{{From: lane.OutputRef{Step: "compile", Output: "bin"}, Dest: "/app"}},
 				},
-				Output: "image",
 			},
 		},
 	}

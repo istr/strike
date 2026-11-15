@@ -59,7 +59,6 @@ steps:
             step: build
             output: bin.ary
           dest: /bin/app
-    output: image
   - id: deploy
     deploy:
       method:

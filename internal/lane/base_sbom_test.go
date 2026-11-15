@@ -26,7 +26,6 @@ func TestPackBaseRefs_CollectsSubtreeBases(t *testing.T) {
 					Base:  base,
 					Files: []lane.PackFile{{From: lane.OutputRef{Step: "compile", Output: "binary"}, Dest: "/app", Mode: 0o755}},
 				},
-				Output: "image",
 			},
 			{
 				ID: "deploy", Args: []string{}, Env: map[string]string{},

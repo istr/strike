@@ -45,7 +45,6 @@ steps:
     env: {}
     inputs: []
     secrets: []
-    output: image
   - id: rebuild
     pack:
       base: images.example.com/library/golang@sha256:abababababababababababababababababababababababababababababababab
@@ -54,7 +53,6 @@ steps:
     env: {}
     inputs: []
     secrets: []
-    output: image
   - id: publish
     deploy:
       method:

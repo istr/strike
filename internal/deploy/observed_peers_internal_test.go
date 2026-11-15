@@ -40,7 +40,6 @@ func observedPeersLane(t *testing.T, peers []endpoint.Endpoint) (*lane.DAG, map[
 					Base:  "alpine:3.20",
 					Files: []lane.PackFile{{From: lane.OutputRef{Step: "build", Output: "tree"}, Dest: "/tree"}},
 				},
-				Output: "image",
 			},
 			{
 				ID: "deploy-prod",
