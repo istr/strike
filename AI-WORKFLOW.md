@@ -158,6 +158,23 @@ Why the exactness: `AI-ORCHESTRATION.md#why-the-instruction-file-is-a-contract`.
    where `grep` is a busybox applet without `-P`. An invariant a `make`
    target already checks is gated by that target, not restated as a grep:
    printable ASCII is `make lint-doc`.
+8. **A gate on generated output clears it first.** `go generate`
+   overwrites but never deletes, and the generated paths are gitignored, so
+   output another commit generated survives into a run where `git status`
+   cannot see it. Every gate that reads generated output -- `make lint`,
+   `make test`, `make check`, and every `go build`, `go test` or `go tool`
+   run that compiles generated code -- runs on output regenerated at the
+   commit it checks, after removing it:
+
+   ```sh
+   git clean -fX -- ':(glob)contract/*.json' ':(glob)contract/**/cue_types_gen.go' ':(glob)internal/**/*.gen.go'
+   go generate ./contract
+   ```
+
+   The three pathspecs are the generated-output lines of `.gitignore`; a
+   change to one changes the other. A claim that an edit leaves generated
+   output unchanged compares two such generations, at the pin and after the
+   edit: even a bare `?` marker changes a generated JSON tag (`omitempty`).
 
 ## The execution profile is part of the contract
 
