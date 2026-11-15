@@ -203,9 +203,9 @@ func (rc *runContext) resolveImageDigest(step *lane.Step, safeName string, input
 	}
 	if step.ImageFromStep != nil {
 		fromStep := *step.ImageFromStep
-		// The image output is id-less; it is registered and resolved by step via
-		// the empty-output key, collision-free because a step that declares an
-		// image output declares no other output (ADR-046).
+		// A pack step's image is id-less; it is registered and resolved by step
+		// via the empty-output key, collision-free because a pack step declares
+		// no other output (ADR-046).
 		ref := lane.OutputRef{Step: fromStep, Output: ""}.Ref()
 		digest, digestErr := output.ManifestDigest(inputs.handles[ref])
 		if digestErr != nil {
@@ -333,7 +333,7 @@ func (rc *runContext) checkCache(ctx context.Context, step *lane.Step, stepID pr
 // cached image: a cache hit means the outputs are byte-identical to a prior run
 // (deterministic, ADR-046), and the producer assembles one layer per output in
 // step.Outputs order (ADR-046 canonical ordering), so config rootfs.diff_ids[i]
-// is output i's layer. The image output (step.Output) has no layer.
+// is output i's layer. A pack step's image has no output layer.
 func (rc *runContext) registerCachedOutputs(ctx context.Context, step *lane.Step, stepID primitive.Identifier, safeName, imageRef string) error {
 	if len(step.Outputs) > 0 {
 		tarBytes, saveErr := registry.SaveImage(ctx, rc.engine, imageRef)
@@ -365,7 +365,7 @@ func (rc *runContext) registerCachedOutputs(ctx context.Context, step *lane.Step
 	// output any deploy artifact names, or whose image a registry deploy
 	// compares through reproducedBy, never reaches this path (see
 	// checkCache).
-	if step.Output != "" {
+	if step.Pack != nil {
 		handle := output.ImageHandle{Ref: imageRef}
 		if regErr := rc.runtime.Register(stepID, "", handle); regErr != nil {
 			return fmt.Errorf("cache hit register %s image: %w", stepID, regErr)
@@ -380,9 +380,6 @@ func (rc *runContext) executePack(ctx context.Context, step *lane.Step, stepID p
 		return err
 	}
 
-	if step.Output == "" {
-		return fmt.Errorf("%s: pack output requires an image output", safeName)
-	}
 	platform, err := registry.EnginePlatform(rc.engine)
 	if err != nil {
 		return fmt.Errorf("%s: pack base: %w", safeName, err)
@@ -547,8 +544,8 @@ func (rc *runContext) executeContainerStep(ctx context.Context, step *lane.Step,
 // annotated layer per output -- and registers a digest-pinned handle for each
 // output. The manifest digest is the single integrity anchor; every consumer
 // pulls the image by that digest and extracts the layer identified by the output id in
-// its handle. A container step declares no image output: the schema admits it
-// on a pack step only.
+// its handle. A container step produces no image: every image a lane
+// generates is assembled by a pack step.
 func (rc *runContext) wrapOutputs(ctx context.Context, step *lane.Step, stepID primitive.Identifier, safeName, containerID string) error {
 	if len(step.Outputs) == 0 {
 		return nil

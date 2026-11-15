@@ -39,7 +39,7 @@ func TestValidateLane_Reject(t *testing.T) {
 	}{
 		{"invalid_unknown_input_step.yaml", "unknown step"},
 		{"invalid_input_output_not_found.yaml", "not found"},
-		{"invalid_image_from_step_no_image_output.yaml", "declares no image output"},
+		{"invalid_image_from_step_no_image_output.yaml", "is not a pack step"},
 		{"invalid_duplicate_output_id.yaml", "duplicate output id"},
 		{"invalid_subpath_on_file_output.yaml", "subpath"},
 		{"invalid_mount_overlap.yaml", "overlap"},
@@ -49,7 +49,7 @@ func TestValidateLane_Reject(t *testing.T) {
 		{"invalid_image_output_on_container_step.yaml", "steps.0.image"},
 		{"invalid_image_output_on_image_from_step.yaml", "steps.1.imageFromStep"},
 		{"invalid_reproduced_by_unknown_step.yaml", "reproducedBy references unknown step"},
-		{"invalid_reproduced_by_no_image_output.yaml", `reproducedBy "compile" declares no image output`},
+		{"invalid_reproduced_by_no_image_output.yaml", `reproducedBy "compile" is not a pack step`},
 		{"invalid_reproduced_by_image_arm.yaml", `reproducedBy "build" names the image arm`},
 		{"invalid_oidc_identity_not_uri.yaml", "oidc identity"},
 		{"invalid_sbom_signer_identity_not_uri.yaml", "baseSbomSigners[0] identity"},

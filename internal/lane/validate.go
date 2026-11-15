@@ -178,7 +178,7 @@ func validateRegistryCredentials(p *Lane) error {
 }
 
 // validateImageFromRefs checks that each step's imageFromStep references a known
-// step that declares an image output.
+// pack step, the only step whose output is an image (ADR-046).
 func validateImageFromRefs(p *Lane, index map[primitive.Identifier]*Step) error {
 	for _, s := range p.Steps {
 		if s.ImageFromStep == nil {
@@ -189,8 +189,8 @@ func validateImageFromRefs(p *Lane, index map[primitive.Identifier]*Step) error 
 		if !ok {
 			return fmt.Errorf("step %q: imageFromStep references unknown step %q", s.ID, from)
 		}
-		if fromStep.Output == "" {
-			return fmt.Errorf("step %q: imageFromStep %q declares no image output", s.ID, from)
+		if fromStep.Pack == nil {
+			return fmt.Errorf("step %q: imageFromStep %q is not a pack step", s.ID, from)
 		}
 	}
 	return nil
@@ -243,7 +243,7 @@ func validatePackFileRefs(p *Lane, index map[primitive.Identifier]*Step) error {
 
 // validateDeployArtifactRefs checks a step's deploy artifacts map (ADR-051
 // D9): every entry references a known step and, per arm, an existing output
-// -- the producing step's image output when output is absent, a declared
+// -- the image of the producing pack step when output is absent, a declared
 // file or directory output when present -- no two entries reference the
 // same output, and the registry-method structural rules hold, the
 // reproduction gate among them. Kubernetes cardinality and containment are
@@ -271,10 +271,9 @@ func validateDeployArtifactRefs(p *Lane, index map[primitive.Identifier]*Step) e
 }
 
 // validateReproducedBy checks the reproduction gate of a registry deploy
-// (ADR-009): reproducedBy, when present, names a known step that declares an
-// image output, and not the step of the deploy's own image arm, which would
-// compare an image with itself. The schema admits the image output on a pack
-// step only, so the named step is a pack step.
+// (ADR-009): reproducedBy, when present, names a known pack step, the only
+// step whose output is an image (ADR-046), and not the step of the deploy's
+// own image arm, which would compare an image with itself.
 func validateReproducedBy(s *Step, reg DeployRegistry, index map[primitive.Identifier]*Step) error {
 	if reg.ReproducedBy == nil {
 		return nil
@@ -284,8 +283,8 @@ func validateReproducedBy(s *Step, reg DeployRegistry, index map[primitive.Ident
 	if !ok {
 		return fmt.Errorf("step %q: reproducedBy references unknown step %q", s.ID, rep)
 	}
-	if repStep.Output == "" {
-		return fmt.Errorf("step %q: reproducedBy %q declares no image output", s.ID, rep)
+	if repStep.Pack == nil {
+		return fmt.Errorf("step %q: reproducedBy %q is not a pack step", s.ID, rep)
 	}
 	for _, ref := range s.Deploy.Artifacts {
 		if ref.Output == nil && ref.Step == rep {
@@ -311,9 +310,9 @@ func validateArtifactEntries(s *Step, index map[primitive.Identifier]*Step) erro
 		}
 		key := string(ref.Step) + "."
 		if ref.Output == nil {
-			if fromStep.Output == "" {
+			if fromStep.Pack == nil {
 				return fmt.Errorf(
-					"step %q: deploy artifact %q: step %q declares no image output", s.ID, name, ref.Step)
+					"step %q: deploy artifact %q: step %q is not a pack step", s.ID, name, ref.Step)
 			}
 		} else {
 			if findOutput(fromStep, *ref.Output) == nil {
@@ -333,8 +332,8 @@ func validateArtifactEntries(s *Step, index map[primitive.Identifier]*Step) erro
 
 // validateRegistryArtifacts enforces the registry-method structure (ADR-051
 // D9): a non-empty map, exactly one image arm (the pushed subject), and every
-// region packed into the pushed image. The pushed image is a pack step's: the
-// schema admits the image output on a pack step only (ADR-046).
+// region packed into the pushed image. The pushed image is a pack step's:
+// validateArtifactEntries admits only a pack step as the image arm (ADR-046).
 func validateRegistryArtifacts(s *Step, index map[primitive.Identifier]*Step) error {
 	if len(s.Deploy.Artifacts) == 0 {
 		return fmt.Errorf("step %q: registry deploy requires a non-empty artifacts map", s.ID)

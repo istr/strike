@@ -50,9 +50,9 @@ func TestValidateDeployArtifactRefs(t *testing.T) {
 			wantErr: "references unknown step",
 		},
 		{
-			name:    "image arm without image output rejected",
+			name:    "image arm on a step that is not a pack step rejected",
 			deploy:  kubeDeploy(map[primitive.Identifier]ArtifactRef{"x": {Step: "web"}}),
-			wantErr: "declares no image output",
+			wantErr: "is not a pack step",
 		},
 		{
 			name:    "region output missing rejected",
