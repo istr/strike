@@ -1,4 +1,4 @@
-# Negative fixture: an input's output-ref component carries a '.', which
+# Negative fixture: a pack file's output-ref component carries a '.', which
 # #Identifier (and thus #OutputRef.output) rejects. This pins the grammar
 # property OutputRef.Ref depends on -- see TestOutputRef_RefRejectsDottedIdentifier.
 name: deploy-lane
@@ -51,6 +51,15 @@ steps:
       - id: binary
         type: file
         path: binary
+  - id: app
+    pack:
+      base: images.example.com/library/golang@sha256:abababababababababababababababababababababababababababababababab
+      files:
+        - from:
+            step: build
+            output: bin.ary
+          dest: /bin/app
+    output: image
   - id: deploy
     deploy:
       method:
@@ -72,10 +81,6 @@ steps:
           captures: []
     args: []
     env: {}
-    inputs:
-      - from:
-          step: build
-          output: bin.ary
-        mount: /in
+    inputs: []
     secrets: []
     outputs: []

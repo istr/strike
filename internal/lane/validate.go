@@ -618,7 +618,7 @@ func ValidatePaths(p *Lane) error {
 
 // validateStepPaths checks one step's output, pack-dest, and workdir paths.
 func validateStepPaths(s Step) error {
-	if len(s.Outputs) > 0 && s.Workdir == nil && s.Pack == nil {
+	if len(s.Outputs) > 0 && s.Workdir == nil {
 		return fmt.Errorf("step %q: declares outputs but no workdir", s.ID)
 	}
 	if err := validateOutputPaths(s); err != nil {

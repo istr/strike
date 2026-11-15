@@ -101,13 +101,14 @@ func TestValidateLane_Reject(t *testing.T) {
 }
 
 // TestValidateLane_RejectOIDCDeclarations derives each case from the valid
-// deploy fixture by one text replacement and asserts the declaration check
+// force-run fixture, whose first step is a container step, by one text
+// replacement and asserts the declaration check
 // that rejects it: the source-pin minimum, the URI-reference grammar of the
 // oidc and base-SBOM signer pins, the builder token's declaration and
 // confinement to the deploy, and the same for the token the registry
 // credential names, which is never the builder token (ADR-058 D3).
 func TestValidateLane_RejectOIDCDeclarations(t *testing.T) {
-	base, err := fs.ReadFile(os.DirFS("testdata"), "valid_deploy_minimal.yaml")
+	base, err := fs.ReadFile(os.DirFS("testdata"), "valid_force_run_minimal.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}

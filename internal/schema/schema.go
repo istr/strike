@@ -119,7 +119,7 @@ func mustBuild(pkg string) cue.Value {
 // FillLaneJSON validates lane JSON (converted from YAML) against #Lane and
 // returns the JSON with every non-optional schema default materialized, so a
 // caller that deserializes the result gets the schema's declared defaults
-// (deploy strategy, capture required, file mode, ...) rather than Go zero
+// (capture required, file mode, forceRun, ...) rather than Go zero
 // values for fields omitted on the wire. The cue.Value never leaves this
 // package.
 func FillLaneJSON(data []byte) ([]byte, error) {

@@ -190,23 +190,31 @@ import (
 	// `git clone` from a moving branch or `npm install` of a
 	// `latest` tag. Strike does not auto-detect
 	// non-determinism; lane authors declare it.
-	forceRun?:   *false | bool       @go(ForceRun)
+	forceRun:    *false | bool       @go(ForceRun)
 	timeout?:    primitive.#Duration @go(Timeout,optional=nillable)
 	pack?:       #PackSpec           @go(Pack,optional=nillable)
 	deploy?:     #DeploySpec         @go(Deploy,optional=nillable)
 	provenance?: #ProvenanceSpec     @go(Provenance,optional=nillable)
 	// constraint: exactly one of image, imageFromStep, pack, or deploy -- validated in Go
 
-	// D2 (ADR-039): a deploy step is a DAG leaf and declares no output.
-	// Tying deploy presence to an empty outputs list keeps the constraint in
-	// the schema (CUE first). It validates as an "incompatible list lengths"
-	// error and is transparent to `cue exp gengotypes` (the generated Outputs
-	// field is unchanged; verified by spike under cue v0.16.1). The
-	// complementary leaf-edge rejection lives in lane.Build
-	// (validateDeployLeaves).
+	// A deploy step and a pack step start no container of their own; the
+	// control plane carries out both (ADR-051 D1). A field that only a step
+	// container reads is rejected on them entry by entry, with the reason at
+	// the path of the entry; an empty list or map and the default of forceRun
+	// stay accepted. Without outputs a deploy step stays a DAG leaf (ADR-039
+	// D2); the complementary leaf-edge rejection lives in lane.Build
+	// (validateDeployLeaves). Both forms are transparent to
+	// `cue exp gengotypes`.
 	if deploy != _|_ {
-		outputs: []
-		output?: _|_
+		output?:  _|_
+		workdir?: error("a deploy step starts no container; only a step container reads this field")
+		args?: [...error("a deploy step starts no container; only a step container reads this field")]
+		env?: {[string]: error("a deploy step starts no container; only a step container reads this field")}
+		inputs?: [...error("a deploy step starts no container; only a step container reads this field")]
+		outputs?: [...error("a deploy step starts no container; only a step container reads this field")]
+		secrets?: [...error("a deploy step starts no container; only a step container reads this field")]
+		peers?: [...error("a deploy step starts no container; only a step container reads this field")]
+		forceRun: false | error("a deploy step starts no container; only a step container reads this field")
 	}
 
 	// A step declares the singular image output XOR file/directory outputs,
@@ -225,6 +233,16 @@ import (
 		outputs: []
 		image?:         error("the image output is declared on a pack step only")
 		imageFromStep?: error("the image output is declared on a pack step only")
+	}
+
+	if pack != _|_ {
+		workdir?: error("a pack step starts no container; only a step container reads this field")
+		args?: [...error("a pack step starts no container; only a step container reads this field")]
+		env?: {[string]: error("a pack step starts no container; only a step container reads this field")}
+		inputs?: [...error("a pack step starts no container; only a step container reads this field")]
+		outputs?: [...error("a pack step starts no container; only a step container reads this field")]
+		secrets?: [...error("a pack step starts no container; only a step container reads this field")]
+		peers?: [...error("a pack step starts no container; only a step container reads this field")]
 	}
 }
 

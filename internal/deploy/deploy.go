@@ -210,8 +210,8 @@ type Deployer struct {
 // engine-dependent peerAttribution map for one deploy step's sub-tree, and
 // folds the deploy step's state-capture declared peers into declaredPeers under
 // the deploy step name (ADR-039 D4). declaredPeers is the CollectPeers result
-// for this deploy step (it already contains the deploy method's own peers under
-// step.ID).
+// for this deploy step; a deploy step declares no peers of its own, so before
+// the fold it holds the declarations of the predecessors only.
 //
 // observedPeers is deduplicated per "host:port" with no step attribution
 // (sealed layer); a second observation of the same endpoint with a different
@@ -228,10 +228,9 @@ func (d *Deployer) collectObservedPeers(
 	observed := map[endpoint.Authority]ObservedPeer{}
 	attribution := map[primitive.Identifier][]endpoint.Authority{}
 
-	// Predecessors and the deploy step's method container: declared-peer steps
-	// of the sub-tree. Only steps with declared peers can have connections; the
-	// deploy step's own method records live in ownRecords (folded below), so the
-	// step.ID lookup here only matches run/build predecessors.
+	// Predecessors: the declared-peer steps of the sub-tree. Only steps with
+	// declared peers can have connections; the deploy step declares none, and
+	// the records of its own units live in ownRecords (folded below).
 	for stepID := range declaredPeers {
 		if recs, ok := state.Network(stepID); ok {
 			if err := ingestRecords(stepID, recs, observed, attribution); err != nil {

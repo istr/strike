@@ -37,7 +37,8 @@ func TestOutputRef_RefRejectsDottedIdentifier(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for output ref with a dotted identifier")
 	}
-	if !strings.Contains(err.Error(), "validation") {
-		t.Errorf("error should mention validation: %v", err)
+	const want = `#Lane.steps.1.pack.files.0.from.output: invalid value "bin.ary"`
+	if !strings.Contains(err.Error(), want) {
+		t.Errorf("error %q does not contain %q", err, want)
 	}
 }
