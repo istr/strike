@@ -33,10 +33,11 @@ type component struct {
 	Ecosystem string // "npm", "deb", or "golang"
 }
 
-// GenerateImageSBOM catalogs an extracted root filesystem and produces
-// canonical CycloneDX and SPDX 2.3 JSON documents. buildTime must come
-// from clock.Reproducible, never clock.Wall. The returned documents are
-// deterministic: byte-identical inputs yield byte-identical outputs.
+// GenerateImageSBOM catalogs an extracted root filesystem and produces a
+// CycloneDX document in the canonical form of ADR-059 D2 and an SPDX 2.3 JSON
+// document. buildTime must come from clock.Reproducible, never clock.Wall. The
+// returned documents are deterministic: byte-identical inputs yield
+// byte-identical outputs.
 func GenerateImageSBOM(fsys fs.FS, subjectDigest primitive.Digest, buildTime clock.Time) (cdxDoc, spdxDoc []byte, err error) {
 	components, err := walkAndCatalog(fsys)
 	if err != nil {
@@ -343,23 +344,26 @@ func sortComponents(cs []component) {
 	})
 }
 
-// deterministicUUID produces a UUIDv5 from the subject digest for the
-// CycloneDX serial number. Uses the URL namespace UUID as base.
-func deterministicUUID(subjectDigest primitive.Digest) string {
-	// UUIDv5 namespace: URL (6ba7b811-9dad-11d1-80b4-00c04fd430c8)
+// contentUUID derives the serial number of a CycloneDX document from the
+// document it names (ADR-059 D7): a name-based UUIDv8 as in RFC 9562 Appendix
+// B.2, the first 128 bits of SHA-256 over the URL namespace ID followed by doc,
+// the canonical document without its serial number, with the version and
+// variant bits set. Identical documents share a serial number.
+func contentUUID(doc []byte) string {
+	// RFC 9562 namespace ID for URLs: 6ba7b811-9dad-11d1-80b4-00c04fd430c8
 	nsURL := [16]byte{
 		0x6b, 0xa7, 0xb8, 0x11, 0x9d, 0xad, 0x11, 0xd1,
 		0x80, 0xb4, 0x00, 0xc0, 0x4f, 0xd4, 0x30, 0xc8,
 	}
 	h := sha256.New()
 	h.Write(nsURL[:])
-	h.Write([]byte(subjectDigest.String()))
+	h.Write(doc)
 	sum := h.Sum(nil)
 
-	// Truncate to 16 bytes, set version 5 and variant bits.
+	// Truncate to 16 bytes, set version 8 and variant bits.
 	var uuid [16]byte
 	copy(uuid[:], sum[:16])
-	uuid[6] = (uuid[6] & 0x0f) | 0x50 // version 5
+	uuid[6] = (uuid[6] & 0x0f) | 0x80 // version 8
 	uuid[8] = (uuid[8] & 0x3f) | 0x80 // variant 10
 	return fmt.Sprintf("urn:uuid:%08x-%04x-%04x-%04x-%012x",
 		uuid[0:4], uuid[4:6], uuid[6:8], uuid[8:10], uuid[10:16])
@@ -378,7 +382,10 @@ func spdxID(purl string) string {
 	return fmt.Sprintf("Package-%x", h[:8])
 }
 
-// renderCycloneDX builds a CycloneDX 1.6 JSON document.
+// renderCycloneDX builds a CycloneDX 1.7 JSON document in the canonical form
+// of ADR-059 D2. The document is rendered once without a serial number, and
+// the serial number derived from those bytes is set before the final
+// rendering (ADR-059 D7).
 func renderCycloneDX(components []component, subjectDigest primitive.Digest, buildTime clock.Time) ([]byte, error) {
 	cdxComponents := make([]cdx.Component, len(components))
 	for i, c := range components {
@@ -392,7 +399,7 @@ func renderCycloneDX(components []component, subjectDigest primitive.Digest, bui
 	}
 
 	bom := cdx.NewBOM()
-	bom.SerialNumber = deterministicUUID(subjectDigest)
+	bom.SpecVersion = cdx.SpecVersion1_7
 	bom.Metadata = &cdx.Metadata{
 		Timestamp: buildTime.Format(clock.RFC3339),
 		Component: &cdx.Component{
@@ -410,13 +417,22 @@ func renderCycloneDX(components []component, subjectDigest primitive.Digest, bui
 	}
 	bom.Components = &cdxComponents
 
-	var buf bytes.Buffer
-	enc := cdx.NewBOMEncoder(&buf, cdx.BOMFileFormatJSON)
-	enc.SetPretty(false)
-	if err := enc.Encode(bom); err != nil {
+	unnamed, err := encodeCanonical(bom)
+	if err != nil {
 		return nil, err
 	}
-	return buf.Bytes(), nil
+	bom.SerialNumber = contentUUID(unnamed)
+	return encodeCanonical(bom)
+}
+
+// encodeCanonical marshals bom with the CycloneDX library and re-serializes
+// the result in canonical form (ADR-059 D2).
+func encodeCanonical(bom *cdx.BOM) ([]byte, error) {
+	var buf bytes.Buffer
+	if err := cdx.NewBOMEncoder(&buf, cdx.BOMFileFormatJSON).Encode(bom); err != nil {
+		return nil, err
+	}
+	return canonicalize(buf.Bytes())
 }
 
 // renderSPDX builds an SPDX 2.3 JSON document.

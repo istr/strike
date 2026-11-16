@@ -8,7 +8,8 @@ import (
 
 // TestCanonicalJSON pins the encoder properties the signing path relies on:
 // key-order independence, RFC 8785 minimal string escaping (no HTML escaping),
-// literal handling, and rejection of numbers.
+// literal handling, the one admitted form of number, and rejection of every
+// other number and of a key outside ASCII.
 func TestCanonicalJSON(t *testing.T) {
 	keyOrder, err := canonicalJSON(map[string]any{"b": "2", "a": "1", "c": "3"})
 	if err != nil {
@@ -34,15 +35,36 @@ func TestCanonicalJSON(t *testing.T) {
 		t.Errorf("literals wrong: %s", got)
 	}
 
-	if _, numErr := canonicalJSON(map[string]any{"n": 1}); numErr == nil {
-		t.Error("expected an error on a numeric value")
+	for _, n := range []string{"0", "7", "123456789012345"} {
+		t.Run("integer_"+n, func(t *testing.T) {
+			got, intErr := canonicalJSON(map[string]any{"n": json.Number(n)})
+			if intErr != nil {
+				t.Fatalf("canonicalJSON: %v", intErr)
+			}
+			if want := `{"n":` + n + `}`; string(got) != want {
+				t.Errorf("got %s, want %s", got, want)
+			}
+		})
+	}
+
+	for _, n := range []string{"-1", "1.5", "1e2", "1234567890123456"} {
+		t.Run("number_"+n, func(t *testing.T) {
+			if _, numErr := canonicalJSON(map[string]any{"n": json.Number(n)}); numErr == nil {
+				t.Errorf("expected an error on the number %s", n)
+			}
+		})
+	}
+
+	if _, keyErr := canonicalJSON(map[string]any{"\u00e9": "x"}); keyErr == nil {
+		t.Error("expected an error on a key outside ASCII")
 	}
 }
 
 // TestSignedGraphNoNumbers asserts the in-toto statements and the internal
-// attestation carry no numeric fields. canonicalJSON rejects numbers, so a
-// numeric field would make the signing path fail closed at runtime; this guard
-// surfaces it at test time as a deliberate decision point. Fields excluded from
+// attestation carry no numeric fields. canonicalJSON admits only a plain
+// non-negative integer, so a numeric field would either fail the signing path
+// closed at runtime or put a number into a statement; this guard surfaces it
+// at test time as a deliberate decision point. Fields excluded from
 // JSON (json:"-") and unexported fields are skipped; a []byte (including
 // json.RawMessage) serializes to a base64 string, not numbers, and is not a
 // violation. Union types reached through an interface are not traversed here;
@@ -52,7 +74,7 @@ func TestCanonicalJSON(t *testing.T) {
 // reaches the signed bytes as a number (endpoint.Address holds a numeric port
 // and marshals to one URL string). Such a type proves its string-only output
 // in its own tests, and canonicalJSON still fails the signing path closed if
-// a MarshalJSON ever emits a number.
+// a MarshalJSON ever emits a number other than that integer.
 func TestSignedGraphNoNumbers(t *testing.T) {
 	roots := []reflect.Type{
 		reflect.TypeOf(SLSAProvenanceStatement{}),

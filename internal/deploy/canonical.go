@@ -5,17 +5,19 @@
 // recorded attestation digest stay stable across field reordering (including
 // the eventual migration from hand-written to generated DTOs) and can be
 // reproduced by a verifier written in any language. It implements the subset of
-// RFC 8785 (JSON Canonicalization Scheme) that strike's signed payloads
-// exercise: objects, arrays, strings, and the literals true/false/null. The
-// payloads carry no numbers -- the signed graph has no numeric fields, asserted
-// by TestSignedGraphNoNumbers, and a type with its own MarshalJSON (such as
+// RFC 8785 (JSON Canonicalization Scheme) that strike's published payloads
+// exercise: objects, arrays, strings, the literals true/false/null, and one form
+// of number, a non-negative integer of at most 15 digits written as its plain
+// digits (ADR-059 D2). That is the RFC 8785 form of such an integer, so the
+// scheme's number formatting is not needed; every other number is a contract
+// violation and is rejected. The integer is the version of a CycloneDX
+// document. strike's own statements carry no numbers -- asserted by
+// TestSignedGraphNoNumbers, and a type with its own MarshalJSON (such as
 // endpoint.Address, whose numeric port marshals inside one URL string) emits
-// none -- so the scheme's number formatting is intentionally absent: a number
-// is a contract violation and is rejected.
-// Object keys are emitted in ascending byte order; every key in the signed
-// graph is ASCII (in-toto and SLSA field names, and primitive.Identifier map
-// keys, which are lowercase ASCII), for which byte order is identical to RFC
-// 8785's UTF-16 code-unit ordering. Strings use the minimal escaping RFC 8785
+// none.
+// Object keys must be ASCII and are emitted in ascending byte order, which for
+// ASCII is identical to RFC 8785's UTF-16 code-unit ordering; a key outside
+// ASCII is rejected. Strings use the minimal escaping RFC 8785
 // mandates: the two mandatory escapes, the five short control escapes, lowercase
 // \u00xx for the remaining C0 controls, and every other rune literal -- no HTML
 // escaping.
@@ -38,6 +40,13 @@ func canonicalJSON(v any) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	return canonicalize(raw)
+}
+
+// canonicalize re-serializes one JSON value in canonical form. It takes bytes
+// a library marshaled, such as a CycloneDX document: the library decides names,
+// structure and omission, and the byte form is strike's (ADR-059 D2).
+func canonicalize(raw []byte) ([]byte, error) {
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.UseNumber()
 	var tree any
@@ -62,7 +71,10 @@ func writeCanonical(buf *bytes.Buffer, v any) error {
 	case string:
 		writeCanonicalString(buf, t)
 	case json.Number:
-		return fmt.Errorf("canonical json: numbers are not supported in the signed payload, got %q", t.String())
+		if !isCanonicalInteger(t.String()) {
+			return fmt.Errorf("canonical json: only a non-negative integer of at most 15 digits is supported, got %q", t.String())
+		}
+		buf.WriteString(t.String())
 	case []any:
 		return writeArray(buf, t)
 	case map[string]any:
@@ -71,6 +83,24 @@ func writeCanonical(buf *bytes.Buffer, v any) error {
 		return fmt.Errorf("canonical json: unsupported type %T", v)
 	}
 	return nil
+}
+
+// isCanonicalInteger reports whether s is a non-negative integer written as its
+// plain digits: "0", or a digit from 1 to 9 followed by at most 14 digits.
+// Every such integer is below 2^53, so these digits are its RFC 8785 form.
+func isCanonicalInteger(s string) bool {
+	if s == "0" {
+		return true
+	}
+	if len(s) == 0 || len(s) > 15 || s[0] < '1' || s[0] > '9' {
+		return false
+	}
+	for i := 1; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func writeBool(buf *bytes.Buffer, b bool) {
@@ -103,6 +133,11 @@ func writeObject(buf *bytes.Buffer, m map[string]any) error {
 	sort.Strings(keys)
 	buf.WriteByte('{')
 	for i, k := range keys {
+		for j := range len(k) {
+			if k[j] > 0x7f {
+				return fmt.Errorf("canonical json: key %q is outside ASCII", k)
+			}
+		}
 		if i > 0 {
 			buf.WriteByte(',')
 		}

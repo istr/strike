@@ -994,3 +994,16 @@ that is missing, and an owner.
 - [The state of play](research/adr-059-sbom-binding-state-of-play.md)
   and [the measurement record](research/adr-059-sbom-measurements.md),
   each with its own source list.
+
+## Amendment 2026-11-16 -- D7: the construction of the serial number
+
+D7 derives a document's serial number from its content. The construction
+is a name-based UUIDv8 as in RFC 9562 Appendix B.2: SHA-256 over the URL
+namespace ID, `6ba7b811-9dad-11d1-80b4-00c04fd430c8`, followed by the
+document's canonical bytes (D2) rendered without `serialNumber`; the
+first 128 bits of the hash, with the version bits set to 8 and the
+variant bits to 10, written as a `urn:uuid:` URN. The document is then
+rendered once more with that serial number. RFC 9562 forbids version 5
+for a name-based UUID over SHA-256, and ADR-008 forbids SHA-1, so
+version 8 is the form left. A recomputation (D6) and any other
+implementation derive the same serial number from the same content.
