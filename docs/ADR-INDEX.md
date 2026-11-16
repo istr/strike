@@ -52,7 +52,7 @@ referenced here at all.
 | 005 | [Hardened container profile, not lane-configurable](ADR-005-hardened-container-profile-non-configurable.md) | Accepted; amended by ADR-022, ADR-033 | No root; Code is liability; Peers are declared; Enforcement is structural |
 | 006 | [Secrets are a typed primitive, not a string](ADR-006-secrets-as-typed-primitive.md)          | Accepted; amended by ADR-058 | Secrets are typed; Code is liability; Enforcement is structural |
 | 007 | [Asymmetric identity for client auth and server trust](ADR-007-asymmetric-identity.md)        | Accepted; amended by ADR-058 | Identity is asymmetric; Peers are declared       |
-| 008 | [Cryptographic primitives -- ECDSA P-256, scrypt + secretbox, crypto/rand](ADR-008-cryptographic-primitives.md) | Accepted; superseded in part by ADR-032; amended by ADR-043 | Digest-pinned references; Code is liability; Identity is asymmetric |
+| 008 | [Cryptographic primitives -- ECDSA P-256, scrypt + secretbox, crypto/rand](ADR-008-cryptographic-primitives.md) | Accepted; superseded in part by ADR-032; amended by ADR-043, ADR-059 | Digest-pinned references; Code is liability; Identity is asymmetric |
 | 009 | [Bootstrap reproducibility proof via stage 2 / stage 3 binary equality](ADR-009-bootstrap-reproducibility-proof.md) | Accepted | Reproducibility is enforced; Digest-pinned references; No shell |
 | 010 | [Typed DAG edges carry resolved references](ADR-010-typed-dag-edges.md)                       | Accepted | Code is liability; CUE first; Reproducibility    |
 | 011 | [Host filesystem cannot enter the DAG](ADR-011-sources-elimination.md)                        | Accepted | Digest-pinned references; Code is liability; Reproducibility |
@@ -63,7 +63,7 @@ referenced here at all.
 | 016 | [State-drift recording, not detection or action](ADR-016-drift-recording-posture.md)          | Accepted; amended by ADR-042, ADR-051 | Code is liability; Runtime is attested; Reproducibility; Digest-pinned references; Secrets are typed |
 | 017 | [Cross-validation through golden vectors and JSON Schema export](ADR-017-cross-validation-vectors.md) | Accepted; amended by ADR-043 | CUE first; Reproducibility; Code is liability; Digest-pinned references |
 | 018 | [Cryptographic test material is ephemeral](ADR-018-ephemeral-test-material.md)                | Accepted; amended by ADR-056 | Secrets are typed; Code is liability; Digest-pinned references |
-| 019 | [SBOMs as OCI 1.1 referrer artifacts](ADR-019-sbom-as-oci-referrer.md)                        | Accepted; superseded in part by ADR-040; amended by ADR-051 | Runtime is attested; Digest-pinned references; Identity is asymmetric; Code is liability |
+| 019 | [SBOMs as OCI 1.1 referrer artifacts](ADR-019-sbom-as-oci-referrer.md)                        | Accepted; superseded in part by ADR-040; amended by ADR-051, ADR-059 | Runtime is attested; Digest-pinned references; Identity is asymmetric; Code is liability |
 | 020 | [Storage driver selection and host environment plumbing](ADR-020-storage-driver-and-host-plumbing.md) | Accepted | No root; Code is liability; Digest-pinned references |
 | 021 | [Deferred extensions](ADR-021-deferred-extensions.md)                                         | Accepted; amended by ADR-040, ADR-043, ADR-051 | Code is liability; Digest-pinned references      |
 | 022 | [Network opt-in as a typed peer list](ADR-022-network-opt-in-as-peer-list.md)                 | Accepted; superseded in part by ADR-054; amended by ADR-028, ADR-029, ADR-033 | Peers are declared; Identity is asymmetric; CUE first; No root; Enforcement is structural |
@@ -84,7 +84,7 @@ referenced here at all.
 | 037 | [Two trust layers toward the engine](ADR-037-two-engine-trust-layers.md) | Accepted; amended by ADR-041 | Runtime is attested; Identity is asymmetric; Code is liability; Reproducibility; Enforcement is structural; Observation over declaration |
 | 038 | [Protocol-mediated SSH via a control-plane front](ADR-038-protocol-mediated-ssh.md) | Accepted | No shell; Peers are declared; Identity is asymmetric; Runtime is attested; Digest-pinned references; Code is liability; Enforcement is structural |
 | 039 | [The deploy step as attestation root](ADR-039-deploy-step-as-attestation-root.md) | Accepted; amended by ADR-042, ADR-051 | Code is liability; CUE first; Reproducibility; Observation over declaration |
-| 040 | [Control-plane SBOM generation and keyless attestation](ADR-040-control-plane-sbom-and-keyless-attestation.md) | Accepted; amended by ADR-051, ADR-057 | Runtime is attested; Identity is asymmetric; Peers are declared; Digest-pinned references; Reproducibility; Code is liability; No exec |
+| 040 | [Control-plane SBOM generation and keyless attestation](ADR-040-control-plane-sbom-and-keyless-attestation.md) | Accepted; superseded in part by ADR-059; amended by ADR-051, ADR-057 | Runtime is attested; Identity is asymmetric; Peers are declared; Digest-pinned references; Reproducibility; Code is liability; No exec |
 | 041 | [The lane as verification policy](ADR-041-lane-as-verification-policy.md) | Accepted; amended by ADR-057 | Runtime is attested; Identity is asymmetric; Digest-pinned references; CUE first; Observation over declaration; Enforcement is structural; Code is liability |
 | 042 | [Field naming: camelCase, matching the attestation ecosystem](ADR-042-field-naming-camelcase.md) | Accepted | Runtime is attested; CUE first; Code is liability |
 | 043 | [Retire keyed image signing and Rekor v1](ADR-043-retire-keyed-image-signing-and-rekor-v1.md) | Accepted | Code is liability; Runtime is attested; Digest-pinned references; Enforcement is structural |
@@ -95,14 +95,15 @@ referenced here at all.
 | 048 | [Contract type semantics: naming by role, representation-neutral concepts, and the primitive/concept layering](ADR-048-contract-type-semantics.md) | Accepted; superseded in part by ADR-044 | CUE first; Meaning is single-sourced; Enforcement is structural; Code is liability |
 | 049 | [Type discipline at internal seams: grammar operations, wire projections, and boundary determination](ADR-049-type-discipline-internal-seams.md) | Accepted | CUE first; Meaning is single-sourced; Enforcement is structural; Code is liability |
 | 050 | [Build-toolchain: the cue CLI as a go.mod tool dependency](ADR-050-cue-cli-as-go-tool-dependency.md) | Accepted | Code is liability; Meaning is single-sourced; CUE first |
-| 051 | [Deploy is the sealing point -- a signed, SBOM'd subject over the deployed payload](ADR-051-deploy-as-sealing-point.md) | Accepted; amended by ADR-054 | Runtime is attested; Digest-pinned references; Reproducibility; Identity is asymmetric; Enforcement is structural; Code is liability |
+| 051 | [Deploy is the sealing point -- a signed, SBOM'd subject over the deployed payload](ADR-051-deploy-as-sealing-point.md) | Accepted; amended by ADR-054, ADR-059 | Runtime is attested; Digest-pinned references; Reproducibility; Identity is asymmetric; Enforcement is structural; Code is liability |
 | 052 | [Execution is completely lock-free](ADR-052-execution-is-completely-lock-free.md) | Accepted | Enforcement is structural; Code is liability; Peers are declared; Runtime is attested |
 | 053 | [Trust-anchor validity is bound to an authenticated time](ADR-053-trust-anchor-validity-authenticated-time.md) | Accepted | Runtime is attested; Enforcement is structural; Observation over declaration |
 | 054 | [The kubernetes deploy is a control-plane API act](ADR-054-kubernetes-deploy-via-cluster-api.md) | Accepted; amended by ADR-058 | Runtime is attested; Identity is asymmetric; Peers are declared; Enforcement is structural; Code is liability |
 | 055 | [The hardened endpoint is the development premise](ADR-055-hardened-endpoint-development-premise.md) | Accepted; amended by ADR-057 | Restricted by default; Digest-pinned references; Reproducibility; No shell; No exec; Enforcement is structural; Code is liability |
 | 056 | [The TLS trust anchor is an inline certificate](ADR-056-tls-trust-anchor-as-inline-certificate.md) | Accepted | Reproducibility; External references are digest-pinned; Peers are declared; Runtime is attested; Observation over declaration; Restricted by default; Enforcement is structural; Code is liability |
-| 057 | [A release is two signatures -- reproducible provenance and an authorizing verified identity](ADR-057-release-authorization-two-signatures.md) | Accepted | Identity is asymmetric; Runtime is attested; Observation over declaration; Enforcement is structural; Digest-pinned references; Reproducibility; Restricted by default; Code is liability; Meaning is single-sourced; No shell; No exec; No root |
+| 057 | [A release is two signatures -- reproducible provenance and an authorizing verified identity](ADR-057-release-authorization-two-signatures.md) | Accepted; amended by ADR-059 | Identity is asymmetric; Runtime is attested; Observation over declaration; Enforcement is structural; Digest-pinned references; Reproducibility; Restricted by default; Code is liability; Meaning is single-sourced; No shell; No exec; No root |
 | 058 | [The registry client identity is a workload-identity token, declared apart from server trust](ADR-058-registry-client-identity-workload-token.md) | Accepted | Identity is asymmetric; Secrets are typed; Peers are declared; No exec; Observation over declaration; Enforcement is structural; Restricted by default; Code is liability |
+| 059 | [Every published SBOM is named by the sealed provenance, and the image SBOM is a signed statement of its own](ADR-059-sbom-sealed-digest-and-signed-statement.md) | Accepted | Runtime is attested; Digest-pinned references; Reproducibility; Observation over declaration; Enforcement is structural; Meaning is single-sourced; CUE first; Code is liability |
 
 ## By principle
 
@@ -118,7 +119,7 @@ ADR-019, ADR-020, ADR-021, ADR-023, ADR-024, ADR-025, ADR-026, ADR-027,
 ADR-028, ADR-029, ADR-030, ADR-031, ADR-032, ADR-033, ADR-034, ADR-035,
 ADR-036, ADR-037, ADR-038, ADR-039, ADR-040, ADR-041, ADR-042, ADR-043,
 ADR-044, ADR-045, ADR-046, ADR-047, ADR-048, ADR-049, ADR-051, ADR-052,
-ADR-054, ADR-055, ADR-056, ADR-057, ADR-058.
+ADR-054, ADR-055, ADR-056, ADR-057, ADR-058, ADR-059.
 
 ### No shell
 
@@ -136,7 +137,7 @@ ADR-031, ADR-033, ADR-057.
 ### CUE first
 
 ADR-004, ADR-010, ADR-015, ADR-017, ADR-022, ADR-027, ADR-035, ADR-039,
-ADR-041, ADR-042, ADR-047, ADR-048, ADR-049.
+ADR-041, ADR-042, ADR-047, ADR-048, ADR-049, ADR-059.
 
 ### Secrets are typed
 
@@ -146,7 +147,7 @@ ADR-006, ADR-014, ADR-016, ADR-018, ADR-058.
 
 ADR-012, ADR-013, ADR-014, ADR-016, ADR-019, ADR-028, ADR-030,
 ADR-033, ADR-037, ADR-038, ADR-040, ADR-041, ADR-042, ADR-043, ADR-045,
-ADR-051, ADR-052, ADR-053, ADR-054, ADR-056, ADR-057.
+ADR-051, ADR-052, ADR-053, ADR-054, ADR-056, ADR-057, ADR-059.
 
 ### Peers are declared
 
@@ -163,13 +164,13 @@ ADR-041, ADR-051, ADR-054, ADR-057, ADR-058.
 
 ADR-008, ADR-009, ADR-011, ADR-012, ADR-013, ADR-016, ADR-017,
 ADR-018, ADR-019, ADR-020, ADR-021, ADR-026, ADR-027, ADR-029,
-ADR-030, ADR-031, ADR-034, ADR-035, ADR-036, ADR-038, ADR-040, ADR-041, ADR-043, ADR-045, ADR-046, ADR-051, ADR-055, ADR-056, ADR-057.
+ADR-030, ADR-031, ADR-034, ADR-035, ADR-036, ADR-038, ADR-040, ADR-041, ADR-043, ADR-045, ADR-046, ADR-051, ADR-055, ADR-056, ADR-057, ADR-059.
 
 ### Reproducibility is enforced, not hoped for
 
 ADR-009, ADR-010, ADR-011, ADR-015, ADR-016, ADR-017, ADR-026, ADR-027,
 ADR-031, ADR-034, ADR-035, ADR-036, ADR-037, ADR-039, ADR-040, ADR-046,
-ADR-051, ADR-055, ADR-056, ADR-057.
+ADR-051, ADR-055, ADR-056, ADR-057, ADR-059.
 
 ### Containers are the only storage
 
@@ -184,15 +185,15 @@ ADR-032, ADR-034, ADR-055, ADR-056, ADR-057, ADR-058.
 ADR-005, ADR-006, ADR-022, ADR-024, ADR-025, ADR-028, ADR-029,
 ADR-031, ADR-033, ADR-034, ADR-035, ADR-036, ADR-037, ADR-038, ADR-041, ADR-043,
 ADR-044, ADR-045, ADR-046, ADR-048, ADR-049, ADR-051, ADR-052, ADR-053,
-ADR-054, ADR-055, ADR-056, ADR-057, ADR-058.
+ADR-054, ADR-055, ADR-056, ADR-057, ADR-058, ADR-059.
 
 ### Meaning is single-sourced
 
-ADR-044, ADR-047, ADR-048, ADR-049, ADR-057.
+ADR-044, ADR-047, ADR-048, ADR-049, ADR-057, ADR-059.
 
 ### Observation over declaration
 
-ADR-028, ADR-030, ADR-037, ADR-039, ADR-041, ADR-053, ADR-056, ADR-057, ADR-058.
+ADR-028, ADR-030, ADR-037, ADR-039, ADR-041, ADR-053, ADR-056, ADR-057, ADR-058, ADR-059.
 
 ## Format
 

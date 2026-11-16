@@ -733,3 +733,35 @@ digits of the subject's sha256 digest.
   operator removes it. Retraction stays the register commit.
 
 "Nothing is moved or re-pushed" stands.
+
+## Amendment 2026-11-16 -- D4 to D7: a release names and checks the SBOM statements; the approver recomputes the SBOM (ADR-059 D5 and D6)
+
+**D4.** The approver's verification runs with the recomputation of the
+image SBOM ([ADR-059](ADR-059-sbom-sealed-digest-and-signed-statement.md)
+D6): every document of the image SBOM is derived again from the image
+the registry serves and compared with the digests the sealed provenance
+names. A mismatch means no signature, as a mismatch of the reproduction
+does.
+
+**D5.** `inputAttestations` names the SBOM statement bundles beside the
+provenance bundles, each by its referrer-manifest digest (ADR-059 D5).
+The predicate stays unmodified SLSA; no field is added, and
+`contract/release` describes `inputAttestations` as covering the SBOM
+statement bundles.
+
+**D6.** The register line lists the digests of the SBOM statement
+bundles with the other bundle digests.
+
+**D7.** The sealed layer includes the SBOM checks of ADR-059 D4, with no
+flag that lowers them. The authorization profile checks
+`inputAttestations` against the attached SBOM statement bundles as it
+does against the provenance bundles.
+
+**Supersedes, in D5 above:** "`inputAttestations`: the provenance
+bundles by referrer-manifest digest" is read as: "`inputAttestations`:
+the provenance bundles and the SBOM statement bundles by
+referrer-manifest digest". **In D6 above:** "as a fourth referrer" is
+read as: "as a further bundle referrer". **In D7 above:**
+"`inputAttestations` naming the provenance bundles actually attached" is
+read as: "`inputAttestations` naming the provenance bundles and the SBOM
+statement bundles actually attached".

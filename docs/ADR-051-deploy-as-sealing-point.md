@@ -412,3 +412,28 @@ stay: timeout on both kinds, forceRun on a pack step, and the deploy
 method's own fields. Peers stay container-egress contracts only, as
 [ADR-029](ADR-029-peers-are-container-egress.md) decides; the peers of a
 deploy's state captures are unaffected, since a capture runs a container.
+
+## Amendment 2026-11-16 -- D2 and D9: every SBOM of a deploy is named by the sealed provenance; D4: the read-after-write covers four bundles (ADR-059)
+
+**D2.** The subject's SBOM is bound by more than the referrer
+relationship. From this date every SBOM document a deploy publishes,
+image and region, is named by its digest in `runDetails.byproducts` of
+the sealed provenance
+([ADR-059](ADR-059-sbom-sealed-digest-and-signed-statement.md) D1), and
+the image SBOM is in addition a signed statement of its own over the
+subject (ADR-059 D2). The image SBOM is published at two levels, a
+top-level document and a delivery item document (ADR-059 D7). Every
+document stays a plain referrer on the subject digest (ADR-059 D3).
+
+**D9.** The decomposition of the D9 amendment above stands, and each
+region keeps a document of its own. A named region is in addition a
+logical component of the image documents (ADR-059 D7). A region document
+stays at one level, has no statement, is not recomputable from the
+registry and is outside the conformance claim. File-level detail,
+recomputation or a claim for it come by a further amendment of D9
+(ADR-059 D9).
+
+**Supersedes, in the D4 amendment of 2026-11-08 above:** "the SBOM
+documents of every artifact and the three statement bundles" is read
+as: "the SBOM documents of every artifact and the four statement
+bundles, the SBOM statement of ADR-059 D2 among them".

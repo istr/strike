@@ -134,3 +134,34 @@ from arbitrary publishers (multiple formats must be tolerated).
 - Code is liability (one generation format, two parse formats,
   matches actual deployment realities without speculative
   symmetry)
+
+## Amendment 2026-11-16 -- steps 3 and 4: the independent SBOM signature is the SBOM statement; generation is CycloneDX only, at 1.7 (ADR-059)
+
+[ADR-059](ADR-059-sbom-sealed-digest-and-signed-statement.md) realizes
+the independent SBOM signature of decision steps 3 and 4 in keyless
+form. It is the SBOM statement of ADR-059 D2: an in-toto statement whose
+subject is the pushed image and whose predicate is the image's top-level
+document, signed with the certificate of the provenance statements,
+logged and timestamped like them, and attached as a referrer of the
+subject. Every document of a deploy, image and region, is in addition
+named by its digest in the sealed provenance (ADR-059 D1). A document
+without a statement of its own, the delivery item document and every
+region document, is signed through that name. The documents themselves
+stay plain referrers on the subject digest, as this record decides
+(ADR-059 D3).
+
+The consequence "The SBOM is content-addressed via its own digest and
+signed independently" is read as: every SBOM is named by its digest in
+the signed sealed provenance, and the image's top-level document is in
+addition signed as a statement of its own.
+
+The generation stance of this record holds again: strike generates
+CycloneDX only. ADR-059 D7 ends the SPDX output that ADR-040 added and
+pins the specification version. The base-SBOM reader keeps accepting a
+base image's SBOM statement in either format.
+
+**Supersedes, in Status:** "the CycloneDX-only generation stance is
+replaced by CycloneDX plus SPDX 2.3 emitted as separate OCI referrers"
+is read as: "the CycloneDX-only generation stance is retained". **In
+the Decision:** "CycloneDX 1.6 JSON format" is read as: "CycloneDX 1.7
+JSON format".

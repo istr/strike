@@ -73,3 +73,18 @@ hardware RNG via `/dev/hwrng`, or `math/rand` (insecure, never).
 - Code is liability (one primitive per role, no algorithm agility)
 - Identity is asymmetric (signing primitive does not encode trust
   policy; trust is in the public key choice, not the algorithm)
+
+## Amendment 2026-11-16 -- the hash clause: a published document may carry the algorithm its specification names (ADR-059 D7)
+
+The hash bullet of the Decision, "SHA-256 as the canonical hash
+everywhere", is read from this date as: SHA-256 is the hash of every
+identity, seal and content address that strike computes, resolves or
+verifies by. A second algorithm is written only where the specification
+that governs a published document names it. The one such case is the
+SHA-512 values that BSI TR-03183-2 requires in the CycloneDX documents
+of [ADR-059](ADR-059-sbom-sealed-digest-and-signed-statement.md) D7.
+They are content of the document: strike never resolves or verifies by
+them, a document is named by its sha256 digest (ADR-059 D1), and no
+caller chooses an algorithm. The consequence that a verifier supports
+exactly one hash stands, and so does rotation as one deliberate schema
+change.

@@ -429,3 +429,56 @@ mediated connections to steps (peerAttribution)"; "externalParameters
 identity)" is read as: "externalParameters (the lane plus its
 digest-pinned inputs, including the declared OIDC identity, and the
 engine connection the control plane observes)".
+
+## Amendment 2026-11-16 -- D1: SPDX is no longer produced, and strike owns a document's byte form; D3: the SBOM statement and the sealed additions (ADR-059)
+
+**D1, superseded in part.**
+[ADR-059](ADR-059-sbom-sealed-digest-and-signed-statement.md) D7 ends
+the SPDX output. The guideline it takes as its measure admits SPDX from
+3.0.1 only, and SPDX 3.0.1 on the pinned module was measured not to be
+byte-identical over runs. strike generates CycloneDX only, at the
+specification version ADR-059 D7 pins. `spdx/tools-golang` leaves
+`go.mod`, and with it the JSON-LD module it imports. The base-SBOM
+reader keeps accepting a base image's SPDX statement.
+
+**D1, amended.** The CycloneDX library keeps the names, the structure
+and the omission of a document. The byte form is strike's: every
+document is the RFC 8785 serialization of what the library marshals,
+written by the canonical serializer of the signing path (ADR-059 D2). A
+document's serial number is derived from its content, and its `version`
+is always 1. What a document carries follows ADR-059 D7: the image SBOM
+is published at two levels, a top-level document and a delivery item
+document, and the named regions and the base image are components of
+both.
+
+**D3, amended.** The SBOM statement of ADR-059 D2 stands beside the
+three statements as a bundle referrer of the same subject, under the
+same certificate. It is no layer of
+[ADR-037](ADR-037-two-engine-trust-layers.md): it carries cosign's
+predicate-type annotation and no `dev.strike.statement` annotation. The
+sealed provenance gains three things in one freeze event:
+
+- `runDetails.byproducts` names every SBOM document by its digest and
+  carries the produced identities of the artifacts, which leave
+  `resolvedDependencies` (ADR-059 D1);
+- the external parameters gain the required `sourceDate` (ADR-059 D6);
+- the builder gains the optional `version`, the commit of the strike
+  source (ADR-059 D6).
+
+**The verify consequence.** "SBOM predicate validation" is realized by
+ADR-059 D4: the verdict checks every document the sealed provenance
+names, every strike-annotated SBOM referrer and the SBOM statement, and
+fails closed.
+
+**Supersedes, in D1 above:** "and SPDX 2.3 is produced as a first-class
+output -- it is a real requirement for certain consumption scenarios,
+not hypothetical" is withdrawn. **In the D1 amendment above:** "emitting
+canonical CycloneDX and first-class SPDX 2.3 as layer-V claims" is read
+as: "emitting canonical CycloneDX as layer-V claims"; "The conformant
+serialization stays in those libraries; strike owns only the field
+mapping" is read as: "The names, the structure and the omission of a
+document stay in the library; strike owns the field mapping and the
+byte form". **In D3 above:** "The informational layer rides as
+byproducts" is read as: "The informational layer rides as a statement
+of its own". **In Consequences:** "SPDX is produced first-class
+alongside CycloneDX" is withdrawn.
