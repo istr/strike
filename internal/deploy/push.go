@@ -339,7 +339,13 @@ func (d *Deployer) regionSBOM(ctx context.Context, repo string, subject v1.Descr
 // the artifact's sealed record (ADR-051 D9) and both referrer descriptors
 // for the read-after-write (ADR-051 amendment 2026-11-08).
 func pushSBOMPair(ctx context.Context, repo string, subject v1.Descriptor, client registryClient, artName primitive.Identifier, fsys fs.FS, subjectDigest primitive.Digest) (record.SBOMSet, []v1.Descriptor, error) {
-	cdxBytes, spdxBytes, err := GenerateImageSBOM(fsys, subjectDigest, clock.Reproducible())
+	// A run checks the source date before its first step (ADR-059 D7). The
+	// value is read again here, where it is stamped, and is not carried.
+	buildTime, err := clock.Reproducible()
+	if err != nil {
+		return record.SBOMSet{}, nil, err
+	}
+	cdxBytes, spdxBytes, err := GenerateImageSBOM(fsys, subjectDigest, buildTime)
 	if err != nil {
 		return record.SBOMSet{}, nil, fmt.Errorf("sbom: %w", err)
 	}

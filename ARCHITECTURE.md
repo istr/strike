@@ -162,7 +162,8 @@ strike achieves reproducible OCI image assembly through four mechanisms:
 
 1. **Deterministic timestamps.** No timestamp depends on when strike runs.
    SBOM metadata uses `SOURCE_DATE_EPOCH` when set, otherwise Unix epoch 0,
-   the convention established by Debian, apko, and ko. Image content carries
+   the convention established by Debian, apko, and ko; a set value that is
+   malformed fails the run before its first step. Image content carries
    fixed times instead: every file in a layer strike writes has modification
    time Unix epoch 0, each history entry strike appends carries the zero time
    (`0001-01-01T00:00:00Z`, the go-containerregistry default), and an assembled

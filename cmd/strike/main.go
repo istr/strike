@@ -194,6 +194,13 @@ func cmdDAG(path string) {
 // stop, trust-volume removal, front and CA close -- runs on every path,
 // including a failed run. The caller turns the error into the exit code.
 func cmdRun(ctx context.Context, path string, engine container.Engine) error {
+	// The source date is a property of the run's environment, not of the
+	// lane, so it is checked first: a malformed SOURCE_DATE_EPOCH fails the
+	// run before the lane is read, any step starts or any deploy pushes
+	// (ADR-059 D7). The deploy reads the value again where it stamps it.
+	if _, err := clock.Reproducible(); err != nil {
+		return err
+	}
 	fp, p, laneDigest, idx, dag, err := validateLane(path)
 	if err != nil {
 		return err

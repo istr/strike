@@ -99,3 +99,39 @@ semantics.
 - CUE first (where time values appear in schemas, the schema
   enforces the format; the dispatch ensures the value at runtime
   comes from a reviewed source)
+
+## Amendment 2026-11-17 -- `clock.Reproducible` rejects a malformed `SOURCE_DATE_EPOCH` (ADR-059 D7)
+
+The Decision gives `clock.Reproducible()` one answer for two cases: the
+epoch when `SOURCE_DATE_EPOCH` is unset, and the epoch when it is
+malformed. A mistyped value was thereby indistinguishable from none, and
+the run went on to stamp 1970 into what it published.
+[ADR-059](ADR-059-sbom-sealed-digest-and-signed-statement.md) D7 rules
+that no malformed value becomes the epoch. From this date:
+
+- `clock.Reproducible()` returns a time and an error. An unset or empty
+  `SOURCE_DATE_EPOCH` is the Unix epoch in UTC, as before. A set value
+  is valid when it is written as `date +%s` prints it, in decimal digits
+  without sign or leading zero, the form the SOURCE_DATE_EPOCH
+  specification requires, and counts from 0 to 253402300799 seconds
+  (9999-12-31T23:59:59Z): non-negative and within the range of RFC 3339,
+  as ADR-059 D7 rules. Every other value is an error.
+- `strike run` calls it before it reads the lane, so a malformed value
+  fails the run before any step starts and any deploy pushes. The one
+  consumer, the timestamp of an SBOM document, calls it again and cannot
+  ignore the error. No value is carried from the first call to the
+  second.
+- A test fixture that needs a fixed timestamp uses
+  `clock.Unix(0, 0).UTC()` and no longer reads the environment of the
+  test process.
+
+The surface of the package gains no symbol.
+
+**Supersedes, in the Decision above:** "defaults to Unix epoch zero in
+UTC when unset or malformed" is read as: "is Unix epoch zero in UTC when
+unset or empty, and an error when malformed"; "Test fixtures that need
+fixed calendar timestamps use `clock.Reproducible()` (epoch zero by
+default), not a separate `Date` constructor: tests that do not assert on
+a specific calendar moment use the same time source as production." is
+read as: "Test fixtures that need a fixed timestamp use
+`clock.Unix(0, 0).UTC()`, not a separate `Date` constructor."

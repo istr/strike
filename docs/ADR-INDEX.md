@@ -59,7 +59,7 @@ referenced here at all.
 | 012 | [Engine identity captured in every attestation](ADR-012-engine-identity-capture.md)           | Accepted; superseded in part by ADR-040; amended by ADR-037, ADR-042 | Runtime is attested; Identity is asymmetric; Digest-pinned references |
 | 013 | [DSSE envelope shape and Rekor submission](ADR-013-dsse-envelope-and-rekor.md)                | Accepted; superseded in part by ADR-040; amended by ADR-043 | Runtime is attested; Code is liability; Digest-pinned references; Identity is asymmetric |
 | 014 | [Audit transport for forensic accountability](ADR-014-audit-transport.md)                     | Accepted | Runtime is attested; Secrets are typed; Code is liability |
-| 015 | [All time access dispatched through internal/clock](ADR-015-internal-clock-dispatch.md)       | Accepted | Reproducibility is enforced; Code is liability; CUE first |
+| 015 | [All time access dispatched through internal/clock](ADR-015-internal-clock-dispatch.md)       | Accepted; amended by ADR-059 | Reproducibility is enforced; Code is liability; CUE first |
 | 016 | [State-drift recording, not detection or action](ADR-016-drift-recording-posture.md)          | Accepted; amended by ADR-042, ADR-051 | Code is liability; Runtime is attested; Reproducibility; Digest-pinned references; Secrets are typed |
 | 017 | [Cross-validation through golden vectors and JSON Schema export](ADR-017-cross-validation-vectors.md) | Accepted; amended by ADR-043 | CUE first; Reproducibility; Code is liability; Digest-pinned references |
 | 018 | [Cryptographic test material is ephemeral](ADR-018-ephemeral-test-material.md)                | Accepted; amended by ADR-056 | Secrets are typed; Code is liability; Digest-pinned references |

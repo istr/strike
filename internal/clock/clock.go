@@ -12,6 +12,7 @@ package clock
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strconv"
 	"time"
@@ -55,17 +56,27 @@ func Wall() Time {
 	return time.Now()
 }
 
+// maxSourceDateEpoch is 9999-12-31T23:59:59Z in seconds since the Unix
+// epoch, the last second RFC 3339 can express.
+const maxSourceDateEpoch int64 = 253402300799
+
 // Reproducible returns the time to stamp into reproducible artifact
-// content. Reads SOURCE_DATE_EPOCH; defaults to Unix epoch 0 in UTC
-// when unset or malformed. The return value never depends on when
-// strike runs, only on its input environment.
-func Reproducible() Time {
-	if s := os.Getenv("SOURCE_DATE_EPOCH"); s != "" {
-		if n, err := strconv.ParseInt(s, 10, 64); err == nil {
-			return Unix(n, 0).UTC()
-		}
+// content: SOURCE_DATE_EPOCH in UTC, or Unix epoch 0 in UTC when the
+// variable is unset or empty. A set value must be a count of seconds
+// from 0 to maxSourceDateEpoch, written in decimal digits without sign
+// or leading zero, as "date +%s" prints it. Every other value is an
+// error: no malformed value becomes the epoch (ADR-059 D7). The return
+// value never depends on when strike runs, only on its input environment.
+func Reproducible() (Time, error) {
+	s := os.Getenv("SOURCE_DATE_EPOCH")
+	if s == "" {
+		return Unix(0, 0).UTC(), nil
 	}
-	return Unix(0, 0).UTC()
+	n, err := strconv.ParseInt(s, 10, 64)
+	if err != nil || n < 0 || n > maxSourceDateEpoch || strconv.FormatInt(n, 10) != s {
+		return Time{}, fmt.Errorf("SOURCE_DATE_EPOCH is set and is not a count of seconds from 0 to %d in decimal digits without sign or leading zero", maxSourceDateEpoch)
+	}
+	return Unix(n, 0).UTC(), nil
 }
 
 // Since returns the wall-clock duration elapsed since t. Thin wrapper

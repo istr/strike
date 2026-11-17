@@ -57,6 +57,19 @@ func TestPushSBOMPairRefusesTagFallback(t *testing.T) {
 	}
 }
 
+// TestPushSBOMPairRejectsMalformedSourceDate pins that the SBOM path takes
+// the source date from the reproducible clock and returns its error: with a
+// malformed SOURCE_DATE_EPOCH nothing is cataloged and nothing is pushed, and
+// no malformed value becomes the epoch (ADR-059 D7). The registry named here
+// is never dialed. A run fails on the same value before its first step.
+func TestPushSBOMPairRejectsMalformedSourceDate(t *testing.T) {
+	t.Setenv("SOURCE_DATE_EPOCH", "tomorrow")
+	_, _, err := pushSBOMPair(context.Background(), "registry.invalid/app", v1.Descriptor{}, registryClient{}, "image", fstest.MapFS{}, primitive.DigestFromHex(strings.Repeat("ab", 32)))
+	if err == nil || !strings.Contains(err.Error(), "SOURCE_DATE_EPOCH") {
+		t.Fatalf("err = %v, want an error naming SOURCE_DATE_EPOCH", err)
+	}
+}
+
 // TestReadRegistryTokensChecksBeforeUse proves the fail-closed checks on the
 // registry token at run start (ADR-058 D3, D4, amendment 2026-11-08): a token
 // that cannot be read, is malformed, carries no lifetime, outlives the bound,

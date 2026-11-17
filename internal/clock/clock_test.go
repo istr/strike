@@ -3,39 +3,64 @@ package clock_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/istr/strike/internal/clock"
 )
 
-func TestReproducibleReturnsEpochZeroWhenUnset(t *testing.T) {
-	t.Setenv("SOURCE_DATE_EPOCH", "")
-	got := clock.Reproducible()
-	want := time.Unix(0, 0).UTC()
-	if !got.Equal(want) {
-		t.Errorf("Reproducible() = %v, want %v", got, want)
+// TestReproducible pins the contract of the reproducible clock: an empty
+// SOURCE_DATE_EPOCH is the Unix epoch, a count of seconds written as
+// "date +%s" prints it is that second, both in UTC, and every other value is
+// an error that names the variable -- no malformed value becomes the epoch
+// (ADR-059 D7). An unset variable reads as an empty one, so the empty case
+// covers both.
+func TestReproducible(t *testing.T) {
+	tests := []struct {
+		name    string
+		value   string
+		want    int64
+		wantErr bool
+	}{
+		{name: "empty", value: "", want: 0},
+		{name: "zero", value: "0", want: 0},
+		{name: "seconds", value: "1700000000", want: 1700000000},
+		{name: "last second of RFC 3339", value: "253402300799", want: 253402300799},
+		{name: "first second past RFC 3339", value: "253402300800", wantErr: true},
+		{name: "past int64", value: "9223372036854775808", wantErr: true},
+		{name: "negative", value: "-1", wantErr: true},
+		{name: "negative zero", value: "-0", wantErr: true},
+		{name: "plus sign", value: "+1", wantErr: true},
+		{name: "leading zero", value: "01", wantErr: true},
+		{name: "double zero", value: "00", wantErr: true},
+		{name: "fraction", value: "1.5", wantErr: true},
+		{name: "exponent", value: "1e9", wantErr: true},
+		{name: "hexadecimal", value: "0x10", wantErr: true},
+		{name: "underscore", value: "1_000", wantErr: true},
+		{name: "surrounding space", value: " 1 ", wantErr: true},
+		{name: "word", value: "tomorrow", wantErr: true},
 	}
-}
-
-func TestReproducibleParsesSourceDateEpoch(t *testing.T) {
-	t.Setenv("SOURCE_DATE_EPOCH", "1700000000")
-	got := clock.Reproducible()
-	want := time.Unix(1700000000, 0).UTC()
-	if !got.Equal(want) {
-		t.Errorf("Reproducible() = %v, want %v", got, want)
-	}
-	if got.Location() != time.UTC {
-		t.Errorf("Reproducible() location = %v, want UTC", got.Location())
-	}
-}
-
-func TestReproducibleFallsBackOnMalformed(t *testing.T) {
-	t.Setenv("SOURCE_DATE_EPOCH", "not-a-number")
-	got := clock.Reproducible()
-	want := time.Unix(0, 0).UTC()
-	if !got.Equal(want) {
-		t.Errorf("Reproducible() = %v, want %v", got, want)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("SOURCE_DATE_EPOCH", tt.value)
+			got, err := clock.Reproducible()
+			if tt.wantErr {
+				if err == nil || !strings.Contains(err.Error(), "SOURCE_DATE_EPOCH") {
+					t.Fatalf("Reproducible() = %v, %v, want an error naming SOURCE_DATE_EPOCH", got, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Reproducible(): %v", err)
+			}
+			if want := time.Unix(tt.want, 0); !got.Equal(want) {
+				t.Errorf("Reproducible() = %v, want %v", got, want)
+			}
+			if got.Location() != time.UTC {
+				t.Errorf("Reproducible() location = %v, want UTC", got.Location())
+			}
+		})
 	}
 }
 
