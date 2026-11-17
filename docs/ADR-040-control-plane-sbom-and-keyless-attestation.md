@@ -482,3 +482,23 @@ byte form". **In D3 above:** "The informational layer rides as
 byproducts" is read as: "The informational layer rides as a statement
 of its own". **In Consequences:** "SPDX is produced first-class
 alongside CycloneDX" is withdrawn.
+
+## Amendment 2026-11-17 -- D3: the sealed provenance gains the byproducts and the builder version (ADR-059, ADR-060)
+
+The amendment of 2026-11-16 lists three things the sealed provenance
+gains in one freeze event.
+[ADR-059](ADR-059-sbom-sealed-digest-and-signed-statement.md) withdrew
+the source date on 2026-11-17, before any statement carried it, and
+[ADR-060](ADR-060-version-as-constant-of-the-source.md) decided the
+builder version anew: the external parameters gain no `sourceDate`, and
+the builder gains the required `version`, the version of strike. D1 is
+unaffected: a document's timestamp is still the source date. A document
+also names the version of its tool (ADR-060 D7).
+
+**Supersedes, in the amendment of 2026-11-16:** "The sealed provenance
+gains three things in one freeze event" is read as: "The sealed
+provenance gains two things in one freeze event"; the entry "the
+external parameters gain the required `sourceDate` (ADR-059 D6);" is
+withdrawn; the entry "the builder gains the optional `version`, the
+commit of the strike source (ADR-059 D6)." is read as: "the builder
+gains the required `version`, the version of strike (ADR-060 D5)."

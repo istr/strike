@@ -765,3 +765,32 @@ read as: "as a further bundle referrer". **In D7 above:**
 "`inputAttestations` naming the provenance bundles actually attached" is
 read as: "`inputAttestations` naming the provenance bundles and the SBOM
 statement bundles actually attached".
+
+## Amendment 2026-11-17 -- D4 and D6: the release commit, the name of the tag, and the strike an approver recomputes with (ADR-060)
+
+**D4.** The signed tag names the release commit of
+[ADR-060](ADR-060-version-as-constant-of-the-source.md) D4 and is `v`
+followed by its version. Before the build, the release procedure checks
+with git, on the full history, that the tag names a commit whose parent
+is on main and which changes the version file alone, to the version of
+the tag. The check reads history and belongs to the procedure;
+`strike verify` does not perform it.
+
+The approver recomputes the image SBOM (amendment of 2026-11-16) with
+the release of strike that the sealed statement of the build names in
+`builder.version`. A mismatch is then conclusive
+([ADR-059](ADR-059-sbom-sealed-digest-and-signed-statement.md) D6 as
+amended). From the second release on that is the earlier release, the
+control plane ADR-009 C2 puts on the forge. Where the statement names
+the version being released, as in the first release, it is the control
+plane of the approver's own bootstrap run of the release commit. The
+reproduction stays what D4 states.
+
+**D6.** The order of a release begins with the release commit and the
+signed tag.
+
+**Supersedes, in D6 above:** "the order is forge build and push,
+reproduction on the endpoint, authorization and attach, register commit"
+is read as: "the order is release commit and signed tag, forge build and
+push, reproduction on the endpoint, authorization and attach, register
+commit".

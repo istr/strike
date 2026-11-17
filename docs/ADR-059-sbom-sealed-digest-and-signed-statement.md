@@ -1007,3 +1007,149 @@ rendered once more with that serial number. RFC 9562 forbids version 5
 for a name-based UUID over SHA-256, and ADR-008 forbids SHA-1, so
 version 8 is the form left. A recomputation (D6) and any other
 implementation derive the same serial number from the same content.
+
+## Amendment 2026-11-17 -- D6 and D7: the source date is not sealed, and the builder version is the version of strike (ADR-060)
+
+D6 added two things to the sealed statement: the required external
+parameter `sourceDate` and the optional `builder.version`, the commit of
+the strike source. No statement carried either. The first is withdrawn.
+The second stays, with another value and as a required field:
+[ADR-060](ADR-060-version-as-constant-of-the-source.md) decides the
+version of strike. Of the changes to the sealed statement that this
+record decides, the freeze event carries the entries under `byproducts`
+(D1) and the builder version.
+
+**The source date is not sealed.** D6 argued that the bytes of the
+sealed statement depend on the source date, through the document
+digests, and that nothing sealed recorded it. The premise behind the
+argument, that an input of sealed bytes must itself be sealed, proves
+too much: a digest binds the content it is taken over without repeating
+it. The source date is the timestamp of every document, D1 seals the
+digest of every document, and a second copy in the statement would bind
+nothing further. It would also claim more than the control plane can
+back. The value is read from the environment of the deploy process. By
+the definitions of the
+[soundness note](ATTESTATION-SOUNDNESS-AND-THE-TRUST-BOUNDARY.md) it is
+host-asserted, and the rule table there places a host-asserted value in
+the informational layer, never in the sealed one. Inside a document it
+stays what it is, the timestamp the producer chose; the trusted time is
+the RFC 3161 token (D7). Nor does the withdrawal leave a gap in the
+external parameters, which SLSA requires to be complete at Build L3: the
+source date reaches no byte of the image, whose content carries fixed
+times. It reaches only the timestamp of the documents the sealing act
+generates, and each of them is bound by its digest.
+
+**The builder version is the version of strike.** D6 named the
+cataloging code by the commit of its source, learned at link time. A
+commit set at link time makes the binary a function of its commit: two
+commits whose compiled files are equal yield two binaries, and only a
+build that is told the commit reproduces one. The project reads
+reproducibility the stricter way: the same source, built the same way,
+yields the same binary, whatever commit holds it. ADR-060 makes the
+version a constant of the source (D1) and requires it in the sealed
+statement as `{"strike": "<version>"}` (D5). Every build knows it, so
+the field is never absent.
+
+**Every document names the version of its tool.** D6 kept the strike
+source out of the documents, so that documents of two sources could be
+equal. ADR-060 D7 places the version in the tool entry of every
+document. A document now changes with the release that produced it, once
+per release; documents of two sources that state one version can still
+be equal.
+
+**The recomputation.** It renders a document with the timestamp the
+published document states and with the version the sealed statement
+names, never with its own. A document that names another version than
+the sealed statement therefore fails the comparison. Beyond that the two
+versions decide nothing by themselves:
+
+- a match passes, whatever strike verifies;
+- a mismatch fails the verdict, whatever strike verifies;
+- a mismatch is conclusive only when the verifying strike states the
+  release version the sealed statement names. When the two differ, or
+  either is the development version (ADR-060 D3), the catalogs may
+  differ: the verdict says so and names both versions, and a run with
+  the release the statement names decides.
+
+For a release the approver recomputes with the release of strike the
+sealed statement names, so a mismatch is conclusive (ADR-057 D4 as
+amended).
+
+**Known limitations.** A build from changed source that states a release
+version is not told apart by its version; only the digest of a release
+does that. The list gains one more, on the version of a file. D7 step 3
+takes it from the file's modification time, as the guideline rules where
+no version is assigned (5.2.2). Where an image carries fixed times, as
+every layer strike writes does, that time does not follow the file's
+content: an altered file keeps its version, while the guideline asks
+that an altered component be assigned a new one (3.1). Only the file's
+hash tells the two apart. Like the others it is a candidate for row 14
+of the Beta Definition of Done, and step 3 is where it is resolved or
+kept.
+
+This amendment is mirrored by dated amendments of
+[ADR-040](ADR-040-control-plane-sbom-and-keyless-attestation.md), whose
+amendment of 2026-11-16 lists the sealed additions, and of
+[ADR-057](ADR-057-release-authorization-two-signatures.md) (D4, D6).
+
+**Supersedes, in Status above:** "the entries under `byproducts`, the
+source date and the builder version" is read as: "the entries under
+`byproducts` and the builder version". **In D6 above:** the heading's
+", and every input of it is sealed" is withdrawn; the entry of the
+source date is read as: "**the source date**, which the document states
+as its timestamp"; the entry of the cataloging code is read as: "**the
+cataloging code**, which the sealed statement names from this record on:
+the version of strike, in SLSA's `builder.version` as
+`{"strike": "<version>"}` (ADR-060 D5). The version is a constant of the
+source, so every build knows it and the field is required"; "The last
+two are new. With D1 the bytes of the sealed statement depend on the
+source date, through the document digests, and nothing sealed recorded
+it. The commit is in the sealed statement and not in the documents, so a
+document changes only when the catalog's output changes, and documents
+of two strike sources can still be equal." is read as: "The last is new.
+The version is in the sealed statement and in every document, so a
+document changes when the catalog's output or the version changes, and
+documents of two strike sources that state one version can still be
+equal."; "A mismatch is conclusive only when the verifying strike is
+built from the sealed commit; when the two differ, or either is unknown,
+the verdict says so and names both." is read as: "A mismatch is
+conclusive only when the verifying strike states the release version the
+sealed statement names; when the two differ, or either is the
+development version, the verdict says so and names both." **In D7
+above:** ", which D6 seals" and ", seals the epoch as `sourceDate`" are
+withdrawn. **In Consequences:** ", and adds the source date to the
+external parameters and the strike commit to `builder.version`" is read
+as: ", and adds the version of strike to `builder.version`"; "the
+external parameters gain the required `sourceDate`; the builder gains
+the optional `version`, a closed struct with the one field `strike`;" is
+read as: "the builder gains the required `version`, a closed struct with
+the one field `strike`, whose value is a version by ADR-060;"; "The
+bootstrap lane and the stage_0 build pass their commit to the linker."
+is withdrawn; "The verdict does not compare a document's timestamp with
+the sealed source date: the recomputation renders the document from it,
+so a difference shows as a digest mismatch." is read as: "The
+recomputation renders a document with the timestamp the published
+document states and with the version the sealed statement names."; ",
+the external parameters gain the source date and the builder its
+version" is read as: ", and the builder gains its version"; "A mismatch
+of the recomputation is conclusive only under the sealed commit." is
+read as: "A mismatch of the recomputation is conclusive only when the
+verifying strike states the release version the sealed statement names.
+A build from changed source that states a release version is not told
+apart by its version. A file whose version is its modification time
+keeps that version when its content changes, wherever the image carries
+fixed times." **In Alternatives considered:** of the entry "Leave the
+source date unsealed, or name the strike source in the documents.", both
+alternatives are decisions now, the second for the version of strike and
+not for its commit; "The first leaves an input of sealed bytes
+unrecorded." is withdrawn; "The second changes every document with every
+strike source, so that no two sources could yield equal documents." is
+read as: "A commit in the documents would change every document with
+every strike source; the version changes a document once per release.";
+sealing the source date and the commit of the strike source at link time
+join the alternatives, with the reasons above. **In Principles:** ", and
+the sealed statement names the source date and the strike source that
+produced it" is read as: ", and the sealed statement names the version
+of the strike that produced it"; "every input of a document is sealed,"
+is read as: "every input of a document is sealed or stated by the
+document,".
