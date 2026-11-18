@@ -515,7 +515,6 @@ Direct dependencies:
 | `github.com/CycloneDX/cyclonedx-go` | CycloneDX SBOM generation |
 | `github.com/google/go-containerregistry` | OCI image manipulation |
 | `github.com/package-url/packageurl-go` | PURL construction for SBOM components |
-| `github.com/spdx/tools-golang` | SPDX 2.3 SBOM generation (model + JSON) |
 | `golang.org/x/crypto` | scrypt KDF, NaCl secretbox |
 | `golang.org/x/net` | HTTP/2, network utilities |
 | `golang.org/x/sync` | Concurrency primitives |

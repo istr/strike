@@ -10,6 +10,10 @@
 // is a strike-defined engine-context statement; the informational layer is a
 // strike-defined informational statement. Each is signed as its own referrer.
 //
+// The image SBOM is published as a fourth statement, #SBOMStatement, which is
+// none of the layer statements: its predicate is the CycloneDX document
+// (ADR-059 D2). It is signed and attached like the three.
+//
 // Rekor inclusion lives in the sigstore bundle, never in a predicate payload
 // (ADR-013 satisfied structurally): no predicate here carries a rekor field.
 //
@@ -119,17 +123,42 @@ import (
 	identity: primitive.#StringOrURI @go(Identity)
 }
 
+// #SLSARunDetails.byproducts lists what the sealing act generated beside its
+// subject, sorted by name (ADR-059 D1): the produced identity of every
+// artifact, and every SBOM document of the deploy with its media type and the
+// sha256 of its bytes.
 #SLSARunDetails: {
 	builder:   #SLSABuilder
 	metadata?: #SLSABuildMetadata @go(Metadata,optional=nillable)
-	byproducts?: [...#ResourceDescriptor]
+	byproducts?: [...#ResourceDescriptor & {name: #ByproductName}]
 }
 
+// #ByproductName is the name grammar of a byproduct (ADR-059 D1). The bare
+// name of an artifacts entry names the produced identity of that artifact. A
+// document is named by the entry it belongs to and its level: "<artifact>/sbom"
+// for the document of a file or directory region, "<artifact>/sbom/top-level"
+// and "<artifact>/sbom/delivery-item" for the documents of the image. The
+// top-level document is the one the SBOM statement carries as its predicate
+// (#SBOMStatement), so the sealed statement alone tells a verifier which
+// statement to expect.
+#ByproductName: =~"^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(/sbom(/(top-level|delivery-item))?)?$" @go(-)
+
 // #SLSABuilder.id is the control-plane builder identity. builderDependencies
-// and version are optional in the spec and omitted here (the open version map
-// would violate the no-map rule); add them only on a concrete need.
+// is optional in the spec and omitted here; add it only on a concrete need.
+// version is optional in the spec and required here (ADR-060 D5). The spec
+// defines it as an open map, which the no-map rule excludes, so it is a
+// closed struct with the one key.
 #SLSABuilder: {
 	id: string @go(ID)
+	// version names the strike that produced the statement.
+	version: #SLSABuilderVersion
+}
+
+// #SLSABuilderVersion carries the version of the control plane and nothing
+// else, no date and no commit (ADR-060 D5).
+#SLSABuilderVersion: {
+	// strike is the version the source of the control plane states.
+	strike: primitive.#SemVer
 }
 
 // #SLSABuildMetadata carries only reproducible fields. Wall-clock timestamps
@@ -209,3 +238,35 @@ import (
 	// engine asserting facts about something else, e.g. peerAttribution.)
 	engineMetadata?: #EngineMetadata @go(EngineMetadata,optional=nillable)
 }
+
+// ---------------------------------------------------------------------------
+// SBOM statement: the image SBOM as a signed statement of its own.
+// predicateType https://cyclonedx.org/bom
+// None of the layer statements (ADR-037): its referrer carries cosign's
+// predicate-type annotation and no dev.strike.statement annotation
+// (ADR-059 D2).
+// ---------------------------------------------------------------------------
+
+// #SBOMStatement names the pushed image as its subject, like the provenance
+// statements, and carries the top-level document of the image as its
+// predicate. The producer hands the canonical document bytes to the statement
+// unchanged, as raw JSON, so the predicate hashes to the digest the sealed
+// statement names for "<artifact>/sbom/top-level" (#ByproductName).
+#SBOMStatement: {
+	"_type": "https://in-toto.io/Statement/v1" @go(Type)
+	subject: [#Subject, ...#Subject]
+	predicateType: "https://cyclonedx.org/bom"
+	predicate:     #CycloneDXDocument @go(Predicate,type="encoding/json".RawMessage)
+}
+
+// #CycloneDXDocument pins what strike fixes of a CycloneDX document: the
+// format, the specification version, the document version and the form of the
+// serial number (ADR-059 D2 and D7). Everything else is left to the standard,
+// whose library produces it.
+#CycloneDXDocument: {
+	bomFormat:    "CycloneDX"
+	specVersion:  "1.7"
+	version:      1
+	serialNumber: =~"^urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+	...
+} @go(-)

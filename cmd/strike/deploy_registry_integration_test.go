@@ -50,14 +50,19 @@ const (
 	// against the declared identity before contacting Fulcio.
 	itestIssuer = "https://keycloak.127.0.0.1.sslip.io:8443/realms/sigstore"
 	// itestStatementAnnotation is the wire annotation key the deploy path
-	// writes onto each statement-bundle referrer. The producing constant is
-	// unexported; the test asserts the published wire value.
+	// writes onto the referrer of each layer statement bundle. The producing
+	// constant is unexported; the test asserts the published wire value.
 	itestStatementAnnotation = "dev.strike.statement"
-	// itestSBOMReferrers is the number of SBOM referrers a registry deploy
-	// attaches (CycloneDX and SPDX), and itestBundleReferrers the number of
-	// projected statement bundles (sealed, engine-dependent, informational).
-	itestSBOMReferrers   = 2
-	itestBundleReferrers = 3
+	// itestPredicateTypeAnnotation is the wire annotation key the deploy path
+	// writes onto the referrer of the SBOM statement bundle, the key cosign
+	// writes. The producing constant is unexported as well.
+	itestPredicateTypeAnnotation = "dev.sigstore.bundle.predicateType"
+	// itestSBOMReferrers is the number of SBOM document referrers a registry
+	// deploy of one image attaches, and itestBundleReferrers the number of
+	// statement bundles (sealed, engine-dependent, informational, and the
+	// SBOM statement).
+	itestSBOMReferrers   = 1
+	itestBundleReferrers = 4
 	// itestBundleLimit bounds the bundle document read back from the registry.
 	itestBundleLimit = 8 << 20
 	// itestFulcioURL is the harness Fulcio behind Caddy, the source of the
@@ -177,7 +182,7 @@ steps:
 //
 // The harness is a prerequisite: the test runs by default and fails fast when
 // it is down; set STRIKE_INTEGRATION=0 to skip. The repository name carries a
-// per-run suffix, because the three statement bundles are freshly signed on
+// per-run suffix, because the statement bundles are freshly signed on
 // every run and would otherwise accumulate as extra referrers of the same
 // reproducible subject digest. The test also publishes the running harness's
 // trusted root as a digest-pinned single-layer image and reads it back.
@@ -584,20 +589,30 @@ func assertBundleArtifactForm(ctx context.Context, t *testing.T, caddyRoot, repo
 }
 
 // assertReferrerSet checks the published referrer set of a sealed registry
-// deploy: two SBOMs and the three projected statement bundles.
+// deploy: the SBOM document, the three layer statement bundles, and the
+// bundle of the SBOM statement, which carries cosign's predicate-type
+// annotation and no layer annotation (ADR-059 D2).
 func assertReferrerSet(t *testing.T, descs []v1.Descriptor) {
 	t.Helper()
 	if len(descs) != itestSBOMReferrers+itestBundleReferrers {
 		t.Fatalf("got %d referrers, want %d", len(descs), itestSBOMReferrers+itestBundleReferrers)
 	}
 	statements := map[string]bool{}
-	sbomTypes := map[string]bool{}
+	sbomStatements := 0
+	sbomDocuments := 0
 	for _, d := range descs {
 		switch d.ArtifactType {
 		case registry.SigstoreBundleMediaType:
-			statements[d.Annotations[itestStatementAnnotation]] = true
-		case "application/vnd.cyclonedx+json", "application/spdx+json":
-			sbomTypes[d.ArtifactType] = true
+			if d.Annotations[itestPredicateTypeAnnotation] != registry.PredicateTypeCycloneDX {
+				statements[d.Annotations[itestStatementAnnotation]] = true
+				continue
+			}
+			if layer, layered := d.Annotations[itestStatementAnnotation]; layered {
+				t.Errorf("the SBOM statement bundle carries %s=%s, want no layer annotation", itestStatementAnnotation, layer)
+			}
+			sbomStatements++
+		case "application/vnd.cyclonedx+json":
+			sbomDocuments++
 		default:
 			t.Errorf("unexpected referrer artifactType %q", d.ArtifactType)
 		}
@@ -607,8 +622,11 @@ func assertReferrerSet(t *testing.T, descs []v1.Descriptor) {
 			t.Errorf("no referrer annotated %s=%s", itestStatementAnnotation, want)
 		}
 	}
-	if len(sbomTypes) != itestSBOMReferrers {
-		t.Errorf("got %d distinct SBOM artifact types, want %d", len(sbomTypes), itestSBOMReferrers)
+	if sbomStatements != 1 {
+		t.Errorf("got %d SBOM statement bundles, want 1", sbomStatements)
+	}
+	if sbomDocuments != itestSBOMReferrers {
+		t.Errorf("got %d SBOM document referrers, want %d", sbomDocuments, itestSBOMReferrers)
 	}
 }
 

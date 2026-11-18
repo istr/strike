@@ -11,7 +11,8 @@
 // digits (ADR-059 D2). That is the RFC 8785 form of such an integer, so the
 // scheme's number formatting is not needed; every other number is a contract
 // violation and is rejected. The integer is the version of a CycloneDX
-// document. strike's own statements carry no numbers -- asserted by
+// document, which reaches a statement only as the predicate of the SBOM
+// statement. The fields strike defines carry no numbers -- asserted by
 // TestSignedGraphNoNumbers, and a type with its own MarshalJSON (such as
 // endpoint.Address, whose numeric port marshals inside one URL string) emits
 // none.

@@ -472,14 +472,16 @@ func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.Run
 		return nil, fmt.Errorf("step %q: attestation invalid: %w", step.ID, err)
 	}
 
-	// 8. Project into the three output statements and produce one keyless
-	// sigstore bundle per statement (ADR-040 D2/D3), fail-closed.
-	signed, err := d.signStatements(ctx, att, step.ID)
+	// 8. Project into the output statements -- the three layer statements
+	// and, for a registry deploy, the SBOM statement (ADR-059 D2) -- and
+	// produce one keyless sigstore bundle per statement (ADR-040 D2/D3),
+	// fail-closed.
+	signed, err := d.signStatements(ctx, att, step.ID, attach)
 	if err != nil {
 		return nil, err
 	}
 
-	// 8b. Attach the three statement bundles as OCI 1.1 referrers of the
+	// 8b. Attach the statement bundles as OCI 1.1 referrers of the
 	// pushed manifest digest (ADR-040 D3) and confirm that the registry
 	// serves everything the deploy pushed (ADR-051 amendment 2026-11-08),
 	// registry deploys only. Fail-closed: a deploy whose transparency
@@ -499,16 +501,19 @@ func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.Run
 	return att, nil
 }
 
-// attachAndConfirm attaches the three statement bundles as referrers of the
-// pushed subject, then confirms by read-after-write that the registry serves
-// the payload and every referrer the deploy attached (ADR-051 amendment
-// 2026-11-08). Nothing is rolled back when the confirmation fails: every
-// write is by digest and untagged. Errors are scrubbed of the token.
+// attachAndConfirm attaches the statement bundles as referrers of the pushed
+// subject -- the three layer statements under their layer annotation, the
+// SBOM statement under cosign's predicate-type annotation (ADR-059 D2) --
+// then confirms by read-after-write that the registry serves the payload and
+// every referrer the deploy attached (ADR-051 amendment 2026-11-08). Nothing
+// is rolled back when the confirmation fails: every write is by digest and
+// untagged. Errors are scrubbed of the token.
 func (d *Deployer) attachAndConfirm(ctx context.Context, attach *attachTarget, signed *SignedStatements) error {
 	bundles, err := registry.AttachStatementBundles(ctx, attach.ref, attach.subject, []registry.StatementBundle{
 		{Statement: record.TrustLayerSealed, Bundle: signed.Sealed.Bundle},
 		{Statement: record.TrustLayerEngineDependent, Bundle: signed.EngineContext.Bundle},
 		{Statement: record.TrustLayerInformational, Bundle: signed.Informational.Bundle},
+		{PredicateType: registry.PredicateTypeCycloneDX, Bundle: signed.SBOM.Bundle},
 	}, remote.WithTransport(attach.client.rt))
 	if err != nil {
 		return fmt.Errorf("attach statement bundles: %w", scrub(err, attach.client.token))
@@ -524,11 +529,15 @@ func (d *Deployer) attachAndConfirm(ctx context.Context, attach *attachTarget, s
 	return nil
 }
 
-// signStatements projects the attestation into the three output in-toto
-// statements (ADR-040 D3) and produces one keyless sigstore bundle per
-// statement (ADR-040 D2): one ephemeral key and one Fulcio certificate per
-// deploy, then per statement DSSE -> RFC3161 timestamp -> Rekor v2
-// inclusion -> v0.3 bundle. Fail-closed (D-3b-2): a deploy that cannot obtain
+// signStatements projects the attestation into the output in-toto statements
+// -- the three layer statements (ADR-040 D3) and, where attach carries the
+// document of the image arm, the SBOM statement over it (ADR-059 D2) -- and
+// produces one keyless sigstore bundle per statement (ADR-040 D2): one
+// ephemeral key and one Fulcio certificate per deploy, then per statement
+// DSSE -> RFC3161 timestamp -> Rekor v2 inclusion -> v0.3 bundle. A deploy
+// signs no statement that its own reader would refuse: a statement above
+// registry.MaxStatementBytes fails the deploy before the first signature
+// (ADR-059 D2). Fail-closed (D-3b-2): a deploy that cannot obtain
 // a certificate, a timestamp, or an inclusion proof fails; there is no
 // unsigned fallback. The bundle carries the transparency proof, so no Rekor
 // entry is mirrored into the collect-model. For registry deploys, the
@@ -537,22 +546,26 @@ func (d *Deployer) attachAndConfirm(ctx context.Context, attach *attachTarget, s
 // record itself (json:"-" territory before the migration, and out of the
 // contract/attest schema entirely now): they are ephemeral producer-side
 // output, threaded back to the caller directly.
-func (d *Deployer) signStatements(ctx context.Context, att *Attestation, stepID primitive.Identifier) (*SignedStatements, error) {
+func (d *Deployer) signStatements(ctx context.Context, att *Attestation, stepID primitive.Identifier, attach *attachTarget) (*SignedStatements, error) {
 	baseSBOMDeps, err := d.verifyBaseSBOMs(ctx, stepID)
 	if err != nil {
 		return nil, err
 	}
-	slsa, engineCtx, info, err := ProjectStatements(att, d.OIDC, baseSBOMDeps)
-	if err != nil {
-		return nil, fmt.Errorf("step %q: project statements: %w", stepID, err)
+	var image primitive.Identifier
+	var document []byte
+	if attach != nil {
+		image, document = attach.image, attach.document
 	}
-	statements := make([][]byte, 0, 3)
-	for _, stmt := range []any{slsa, engineCtx, info} {
-		stmtJSON, mErr := canonicalJSON(stmt)
-		if mErr != nil {
-			return nil, fmt.Errorf("step %q: marshal statement: %w", stepID, mErr)
+	statements, err := StatementPayloads(att, d.OIDC, baseSBOMDeps, image, document)
+	if err != nil {
+		return nil, fmt.Errorf("step %q: %w", stepID, err)
+	}
+	names := [...]string{"sealed", "engine-context", "informational", "SBOM"}
+	for i, stmt := range statements {
+		if len(stmt) > registry.MaxStatementBytes {
+			return nil, fmt.Errorf("step %q: the %s statement has %d bytes, and a deploy signs at most %d: a reader would refuse the bundle of a larger one (ADR-059 D2)",
+				stepID, names[i], len(stmt), registry.MaxStatementBytes)
 		}
-		statements = append(statements, stmtJSON)
 	}
 	produce := d.produceBundles
 	if produce == nil {
@@ -571,11 +584,15 @@ func (d *Deployer) signStatements(ctx context.Context, att *Attestation, stepID 
 	if len(bundles) != len(statements) {
 		return nil, fmt.Errorf("step %q: keyless: got %d bundles, want %d", stepID, len(bundles), len(statements))
 	}
-	return &SignedStatements{
+	signed := &SignedStatements{
 		Sealed:        SignedStatement{Bundle: bundles[0]},
 		EngineContext: SignedStatement{Bundle: bundles[1]},
 		Informational: SignedStatement{Bundle: bundles[2]},
-	}, nil
+	}
+	if len(bundles) == 4 {
+		signed.SBOM = SignedStatement{Bundle: bundles[3]}
+	}
+	return signed, nil
 }
 
 // resolveArtifactDigests resolves every deploy artifacts entry to its
@@ -719,9 +736,10 @@ func (d *Deployer) captureOne(ctx context.Context, sc lane.Capture) (captureSnap
 // after signing: the pushed manifest descriptor within the deploy target
 // repository (ADR-040 D3), the trust-anchored transport and the declared
 // credential every referrer write reuses, the validated push-connection
-// identity for Sealed.ObservedPeers, and the SBOM referrers already pushed,
-// which the read-after-write confirms with the statement bundles. Nil for
-// deploy methods without a registry push.
+// identity for Sealed.ObservedPeers, the name and the document of the image
+// arm, from which the SBOM statement is made (ADR-059 D2), and the SBOM
+// referrers already pushed, which the read-after-write confirms with the
+// statement bundles. Nil for deploy methods without a registry push.
 type attachTarget struct {
 	subject    v1.Descriptor                           // pushed manifest descriptor (the referrer subject)
 	client     registryClient                          // trust-anchored transport and declared credential for referrer writes
@@ -730,6 +748,8 @@ type attachTarget struct {
 	ref        string                                  // deploy target repository (authority/name)
 	authority  endpoint.Authority                      // declared target authority (ObservedPeers key)
 	repository primitive.OCIName                       // declared target repository name (Sealed.Pushed)
+	image      primitive.Identifier                    // artifacts name of the image arm, whose document is the top-level document (ADR-059 D1)
+	document   []byte                                  // canonical document of the image arm, the predicate of the SBOM statement (ADR-059 D2)
 	referrers  []v1.Descriptor                         // SBOM referrers already pushed, confirmed with the statement bundles (ADR-051 amendment 2026-11-08)
 	resolved   []netip.Addr                            // DoT answers for the target across the push connections
 }

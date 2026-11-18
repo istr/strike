@@ -120,3 +120,16 @@ _sha256Hex: "[a-f0-9]{64}"
 // alphanumeric words joined by '-', such as "github-hosted" or
 // "self-hosted".
 #RunnerEnvironment: =~"^[a-z0-9]+(-[a-z0-9]+)*$"
+
+// _semverNumber is a numeric identifier of Semantic Versioning 2.0.0: zero,
+// or digits without a leading zero.
+_semverNumber: "(0|[1-9][0-9]*)"
+
+// _semverIdentifier is a pre-release identifier of Semantic Versioning 2.0.0:
+// a numeric identifier, or an alphanumeric one, which holds at least one
+// letter or hyphen.
+_semverIdentifier: "(0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*)"
+
+// #SemVer is a version by Semantic Versioning 2.0.0: the core and an
+// optional pre-release, without build metadata (ADR-060 D2).
+#SemVer: =~"^\(_semverNumber)\\.\(_semverNumber)\\.\(_semverNumber)(-\(_semverIdentifier)(\\.\(_semverIdentifier))*)?$"

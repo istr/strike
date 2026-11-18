@@ -10,6 +10,7 @@ import (
 	"github.com/istr/strike/internal/lane"
 	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/record"
+	"github.com/istr/strike/internal/registry"
 )
 
 // fakeIDToken builds an unsigned JWT whose payload is the given claims JSON.
@@ -59,10 +60,62 @@ func TestSignStatementsRejectsTokenBeforeFulcio(t *testing.T) {
 					Peers: map[primitive.Identifier][]endpoint.Endpoint{},
 				},
 			}
-			_, err := d.signStatements(context.Background(), att, "deploy-step")
+			_, err := d.signStatements(context.Background(), att, "deploy-step", nil)
 			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 				t.Fatalf("err = %v, want an error containing %q", err, tt.wantErr)
 			}
 		})
+	}
+}
+
+// TestSignStatementsRefusesOversizedStatement proves the bound a deploy
+// applies before it signs (ADR-059 D2): a statement of exactly
+// registry.MaxStatementBytes is signed, and a statement one byte larger fails
+// the deploy before a bundle is produced. The document decides the size of
+// the SBOM statement, so the document is what grows here.
+func TestSignStatementsRefusesOversizedStatement(t *testing.T) {
+	att := &Attestation{
+		Sealed: Sealed{
+			LaneID: "demo",
+			Artifacts: map[primitive.Identifier]record.Artifact{
+				"image": {Digest: primitive.DigestFromHex(strings.Repeat("b", 64))},
+			},
+			Pushed: &PushedArtifact{Registry: "registry.example.com", Repository: "demo/app", Digest: primitive.DigestFromHex(strings.Repeat("c", 64))},
+			Peers:  map[primitive.Identifier][]endpoint.Endpoint{},
+		},
+	}
+	document := func(n int) []byte {
+		return []byte(`{"pad":"` + strings.Repeat("a", n) + `"}`)
+	}
+	smallest, err := StatementPayloads(att, lane.OIDCConfig{}, nil, "image", document(0))
+	if err != nil {
+		t.Fatalf("StatementPayloads: %v", err)
+	}
+	if len(smallest) != 4 {
+		t.Fatalf("statements = %d, want 4", len(smallest))
+	}
+	pad := registry.MaxStatementBytes - len(smallest[3])
+
+	var produced [][]byte
+	d := &Deployer{}
+	d.produceBundles = func(_ context.Context, _ lane.KeylessEndpoints, statements [][]byte) ([][]byte, error) {
+		produced = statements
+		return make([][]byte, len(statements)), nil
+	}
+
+	if _, signErr := d.signStatements(context.Background(), att, "deploy-step", &attachTarget{image: "image", document: document(pad)}); signErr != nil {
+		t.Fatalf("a statement of exactly %d bytes was refused: %v", registry.MaxStatementBytes, signErr)
+	}
+	if len(produced) != 4 || len(produced[3]) != registry.MaxStatementBytes {
+		t.Fatalf("produced %d statements, want 4 with an SBOM statement of %d bytes", len(produced), registry.MaxStatementBytes)
+	}
+
+	produced = nil
+	_, err = d.signStatements(context.Background(), att, "deploy-step", &attachTarget{image: "image", document: document(pad + 1)})
+	if err == nil || !strings.Contains(err.Error(), "the SBOM statement has") {
+		t.Fatalf("err = %v, want an error naming the SBOM statement", err)
+	}
+	if produced != nil {
+		t.Error("a bundle was produced for a deploy that signs an oversized statement")
 	}
 }

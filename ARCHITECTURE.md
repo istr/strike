@@ -53,8 +53,8 @@ Notes:
 ### How strike combines the approaches
 
 Security-critical operations run as **native Go code** within the controller
-process: `go-containerregistry` for OCI image assembly, `cyclonedx-go` and
-`spdx/tools-golang` for SBOM generation (CycloneDX and SPDX 2.3), strike's own
+process: `go-containerregistry` for OCI image assembly, `cyclonedx-go` for
+CycloneDX SBOM generation, strike's own
 Fulcio, Rekor v2, and RFC3161 TSA clients for keyless signing, its own
 verifier for `strike verify`, and the contract's generated types for the
 in-toto statements. `sigstore-go` is a test-only dependency, the
@@ -78,7 +78,7 @@ attest as its own, such as the registry push, are API calls it makes directly.
 | TRUSTED: strike controller process                  |
 |                                                     |
 |  +-----------+ +----------+ +-------------------+   |
-|  | go-       | | keyless  | | CycloneDX + SPDX  |   |
+|  | go-       | | keyless  | | CycloneDX         |   |
 |  | container | | signing  | | SBOM generation   |   |
 |  | registry  | | (P-256)  | | (in-process)      |   |
 |  +-----------+ +----------+ +-------------------+   |
@@ -233,17 +233,23 @@ The full non-repudiation chain for a strike-produced artifact:
 4. **Artifact provenance** -- each artifact in the deploy attestation carries a
    full `record.#Artifact`: the content-addressed manifest digest (computed
    by the controller via `go-containerregistry`) and, when one was
-   generated, the SBOM record (format + digest). The signature, certificate,
+   generated, the digest of its SBOM document. The signature, certificate,
    and Rekor entry live in the keyless DSSE bundle, not in this record.
    Schema: `contract/record/record.cue`.
 5. **SBOM** -- generated in-process by cataloging the assembled image's
-   flattened filesystem (npm lockfiles, dpkg status, Go buildinfo). Both
-   CycloneDX and SPDX 2.3 are emitted as OCI referrers bound to the
-   artifact's digest. The SBOM is a sealed-layer claim: produced from
-   bytes the control plane holds, not from engine-relayed content.
+   flattened filesystem (npm lockfiles, dpkg status, Go buildinfo), as a
+   CycloneDX document in canonical form. Every document is attached as a
+   plain OCI referrer of the pushed image, and the sealed provenance
+   statement names it by the sha256 of its bytes, so a registry can
+   withhold a document but not exchange it. The document of the image is
+   also published as a signed in-toto statement of its own, with the
+   CycloneDX predicate type (ADR-059 D1 to D3). The SBOM is a sealed-layer
+   claim: produced from bytes the control plane holds, not from
+   engine-relayed content.
 6. **Attestation and signature** -- the deploy attestation is projected into
    three in-toto statements (SLSA provenance, engine-context, informational)
-   whose subject names the manifest digest. Each is signed as a DSSE envelope
+   whose subject names the manifest digest, and a registry deploy adds the
+   SBOM statement of item 5 as a fourth. Each is signed as a DSSE envelope
    (Dead Simple Signing Envelope, the in-toto v1 standard) by an ephemeral
    ECDSA P-256 key that Fulcio certifies against the lane's OIDC identity,
    logged in Rekor v2 as a `hashedrekord` entry over the signed digest, and
@@ -275,6 +281,8 @@ Source provenance and attestation signing close the original open ends:
   The collect-model attestation is projected into three in-toto
   statements -- SLSA provenance, engine-context, and informational --
   along the boundary between the sealed and the engine-dependent layer.
+  A registry deploy signs the SBOM statement beside them, under the same
+  certificate (ADR-059 D2).
   Verification is offline, without contacting strike or the original engine
   (ADR-039, ADR-040).
 

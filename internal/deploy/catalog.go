@@ -19,10 +19,6 @@ import (
 
 	cdx "github.com/CycloneDX/cyclonedx-go"
 	packageurl "github.com/package-url/packageurl-go"
-	"github.com/spdx/tools-golang/spdx/v2/common"
-	spdx "github.com/spdx/tools-golang/spdx/v2/v2_3"
-
-	spdxjson "github.com/spdx/tools-golang/json"
 )
 
 // component is an internal package record produced by the native parsers.
@@ -34,14 +30,13 @@ type component struct {
 }
 
 // GenerateImageSBOM catalogs an extracted root filesystem and produces a
-// CycloneDX document in the canonical form of ADR-059 D2 and an SPDX 2.3 JSON
-// document. buildTime must come from clock.Reproducible, never clock.Wall. The
-// returned documents are deterministic: byte-identical inputs yield
-// byte-identical outputs.
-func GenerateImageSBOM(fsys fs.FS, subjectDigest primitive.Digest, buildTime clock.Time) (cdxDoc, spdxDoc []byte, err error) {
+// CycloneDX document in the canonical form of ADR-059 D2. buildTime must come
+// from clock.Reproducible, never clock.Wall. The returned document is
+// deterministic: byte-identical inputs yield a byte-identical output.
+func GenerateImageSBOM(fsys fs.FS, subjectDigest primitive.Digest, buildTime clock.Time) ([]byte, error) {
 	components, err := walkAndCatalog(fsys)
 	if err != nil {
-		return nil, nil, fmt.Errorf("catalog filesystem: %w", err)
+		return nil, fmt.Errorf("catalog filesystem: %w", err)
 	}
 
 	if len(components) == 0 {
@@ -50,17 +45,11 @@ func GenerateImageSBOM(fsys fs.FS, subjectDigest primitive.Digest, buildTime clo
 
 	sortComponents(components)
 
-	cdxDoc, err = renderCycloneDX(components, subjectDigest, buildTime)
+	doc, err := renderCycloneDX(components, subjectDigest, buildTime)
 	if err != nil {
-		return nil, nil, fmt.Errorf("render cyclonedx: %w", err)
+		return nil, fmt.Errorf("render cyclonedx: %w", err)
 	}
-
-	spdxDoc, err = renderSPDX(components, subjectDigest, buildTime)
-	if err != nil {
-		return nil, nil, fmt.Errorf("render spdx: %w", err)
-	}
-
-	return cdxDoc, spdxDoc, nil
+	return doc, nil
 }
 
 // walkAndCatalog walks the filesystem collecting components from known
@@ -375,15 +364,9 @@ func bomRef(purl string) string {
 	return fmt.Sprintf("%x", h[:8])
 }
 
-// spdxID produces a deterministic SPDX identifier from a PURL.
-// The result is safe for use as an ElementID (alphanumeric + hyphen + dot).
-func spdxID(purl string) string {
-	h := sha256.Sum256([]byte(purl))
-	return fmt.Sprintf("Package-%x", h[:8])
-}
-
 // renderCycloneDX builds a CycloneDX 1.7 JSON document in the canonical form
-// of ADR-059 D2. The document is rendered once without a serial number, and
+// of ADR-059 D2. Its tool entry names strike and the version of strike
+// (ADR-060 D7). The document is rendered once without a serial number, and
 // the serial number derived from those bytes is set before the final
 // rendering (ADR-059 D7).
 func renderCycloneDX(components []component, subjectDigest primitive.Digest, buildTime clock.Time) ([]byte, error) {
@@ -410,8 +393,9 @@ func renderCycloneDX(components []component, subjectDigest primitive.Digest, bui
 		},
 		Tools: &cdx.ToolsChoice{
 			Components: &[]cdx.Component{{
-				Type: cdx.ComponentTypeApplication,
-				Name: "strike",
+				Type:    cdx.ComponentTypeApplication,
+				Name:    "strike",
+				Version: string(strikeVersion),
 			}},
 		},
 	}
@@ -433,56 +417,4 @@ func encodeCanonical(bom *cdx.BOM) ([]byte, error) {
 		return nil, err
 	}
 	return canonicalize(buf.Bytes())
-}
-
-// renderSPDX builds an SPDX 2.3 JSON document.
-func renderSPDX(components []component, subjectDigest primitive.Digest, buildTime clock.Time) ([]byte, error) {
-	h := sha256.Sum256([]byte(subjectDigest.String()))
-	namespace := fmt.Sprintf("https://strike.dev/spdx/%x", h[:16])
-
-	packages := make([]*spdx.Package, len(components))
-	relationships := make([]*spdx.Relationship, len(components))
-
-	for i, c := range components {
-		id := common.ElementID(spdxID(c.PURL))
-		packages[i] = &spdx.Package{
-			PackageName:             c.Name,
-			PackageSPDXIdentifier:   id,
-			PackageVersion:          c.Version,
-			PackageDownloadLocation: "NOASSERTION",
-			FilesAnalyzed:           false,
-			PackageExternalReferences: []*spdx.PackageExternalReference{{
-				Category: common.CategoryPackageManager,
-				RefType:  "purl",
-				Locator:  c.PURL,
-			}},
-		}
-		relationships[i] = &spdx.Relationship{
-			RefA:         common.MakeDocElementID("", "DOCUMENT"),
-			RefB:         common.MakeDocElementID("", string(id)),
-			Relationship: common.TypeRelationshipDescribe,
-		}
-	}
-
-	doc := &spdx.Document{
-		SPDXVersion:       spdx.Version,
-		DataLicense:       spdx.DataLicense,
-		SPDXIdentifier:    "DOCUMENT",
-		DocumentName:      subjectDigest.String(),
-		DocumentNamespace: namespace,
-		CreationInfo: &spdx.CreationInfo{
-			Created: buildTime.Format(clock.RFC3339),
-			Creators: []common.Creator{
-				{CreatorType: "Tool", Creator: "strike"},
-			},
-		},
-		Packages:      packages,
-		Relationships: relationships,
-	}
-
-	var buf bytes.Buffer
-	if err := spdxjson.Write(doc, &buf); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
 }

@@ -33,10 +33,10 @@ func TestNewRegistryTransport_RejectsNilDialer(t *testing.T) {
 	}
 }
 
-// TestPushSBOMPairRefusesTagFallback pins that an SBOM referrer push to a
+// TestPushSBOMDocumentRefusesTagFallback pins that an SBOM referrer push to a
 // registry without the referrers API fails with an error naming the registry
 // and the subject digest, instead of maintaining a referrers fallback tag.
-func TestPushSBOMPairRefusesTagFallback(t *testing.T) {
+func TestPushSBOMDocumentRefusesTagFallback(t *testing.T) {
 	srv := httptest.NewTLSServer(regtest.Registry(t, false))
 	t.Cleanup(srv.Close)
 	host := srv.Listener.Addr().String()
@@ -46,7 +46,7 @@ func TestPushSBOMPairRefusesTagFallback(t *testing.T) {
 		Digest:    v1.Hash{Algorithm: "sha256", Hex: subjectHex},
 		Size:      2,
 	}
-	_, _, err := pushSBOMPair(context.Background(), host+"/app", subject, registryClient{rt: srv.Client().Transport}, "image", fstest.MapFS{}, primitive.DigestFromHex(subjectHex))
+	_, _, err := pushSBOMDocument(context.Background(), host+"/app", subject, registryClient{rt: srv.Client().Transport}, "image", fstest.MapFS{}, primitive.DigestFromHex(subjectHex))
 	if err == nil {
 		t.Fatal("expected an error for a registry without the referrers API, got nil")
 	}
@@ -57,14 +57,15 @@ func TestPushSBOMPairRefusesTagFallback(t *testing.T) {
 	}
 }
 
-// TestPushSBOMPairRejectsMalformedSourceDate pins that the SBOM path takes
-// the source date from the reproducible clock and returns its error: with a
-// malformed SOURCE_DATE_EPOCH nothing is cataloged and nothing is pushed, and
-// no malformed value becomes the epoch (ADR-059 D7). The registry named here
-// is never dialed. A run fails on the same value before its first step.
-func TestPushSBOMPairRejectsMalformedSourceDate(t *testing.T) {
+// TestPushSBOMDocumentRejectsMalformedSourceDate pins that the SBOM path
+// takes the source date from the reproducible clock and returns its error:
+// with a malformed SOURCE_DATE_EPOCH nothing is cataloged and nothing is
+// pushed, and no malformed value becomes the epoch (ADR-059 D7). The registry
+// named here is never dialed. A run fails on the same value before its first
+// step.
+func TestPushSBOMDocumentRejectsMalformedSourceDate(t *testing.T) {
 	t.Setenv("SOURCE_DATE_EPOCH", "tomorrow")
-	_, _, err := pushSBOMPair(context.Background(), "registry.invalid/app", v1.Descriptor{}, registryClient{}, "image", fstest.MapFS{}, primitive.DigestFromHex(strings.Repeat("ab", 32)))
+	_, _, err := pushSBOMDocument(context.Background(), "registry.invalid/app", v1.Descriptor{}, registryClient{}, "image", fstest.MapFS{}, primitive.DigestFromHex(strings.Repeat("ab", 32)))
 	if err == nil || !strings.Contains(err.Error(), "SOURCE_DATE_EPOCH") {
 		t.Fatalf("err = %v, want an error naming SOURCE_DATE_EPOCH", err)
 	}

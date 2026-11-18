@@ -65,21 +65,25 @@ func TestCanonicalJSON(t *testing.T) {
 // non-negative integer, so a numeric field would either fail the signing path
 // closed at runtime or put a number into a statement; this guard surfaces it
 // at test time as a deliberate decision point. Fields excluded from
-// JSON (json:"-") and unexported fields are skipped; a []byte (including
-// json.RawMessage) serializes to a base64 string, not numbers, and is not a
-// violation. Union types reached through an interface are not traversed here;
-// their concrete records marshal to string-only JSON. A type that implements
-// json.Marshaler is not traversed either: its MarshalJSON, not its field
-// layout, decides the JSON it emits, so a numeric field inside it never
-// reaches the signed bytes as a number (endpoint.Address holds a numeric port
-// and marshals to one URL string). Such a type proves its string-only output
-// in its own tests, and canonicalJSON still fails the signing path closed if
-// a MarshalJSON ever emits a number other than that integer.
+// JSON (json:"-") and unexported fields are skipped; a []byte serializes to
+// a base64 string, not numbers, and is not a violation. Union types reached
+// through an interface are not traversed here; their concrete records
+// marshal to string-only JSON. A type that implements json.Marshaler is not
+// traversed either: its MarshalJSON, not its field layout, decides the JSON
+// it emits, so a numeric field inside it never reaches the signed bytes as a
+// number (endpoint.Address holds a numeric port and marshals to one URL
+// string). Such a type proves its string-only output in its own tests, and
+// canonicalJSON still fails the signing path closed if a MarshalJSON ever
+// emits a number other than that integer. json.RawMessage is such a type:
+// the predicate of the SBOM statement is a CycloneDX document carried as raw
+// JSON, and its number is the document version, the integer canonicalJSON
+// admits (ADR-059 D2).
 func TestSignedGraphNoNumbers(t *testing.T) {
 	roots := []reflect.Type{
 		reflect.TypeOf(SLSAProvenanceStatement{}),
 		reflect.TypeOf(EngineContextStatement{}),
 		reflect.TypeOf(InformationalStatement{}),
+		reflect.TypeOf(SBOMStatement{}),
 		reflect.TypeOf(Attestation{}),
 	}
 	seen := map[reflect.Type]bool{}
@@ -106,7 +110,7 @@ func assertNoNumeric(t *testing.T, typ reflect.Type, path string, seen map[refle
 		assertNoNumeric(t, typ.Elem(), path, seen)
 	case reflect.Slice, reflect.Array:
 		if typ.Elem().Kind() == reflect.Uint8 {
-			return // []byte / json.RawMessage -> JSON string, not numbers
+			return // []byte -> base64 JSON string, not numbers
 		}
 		assertNoNumeric(t, typ.Elem(), path+"[]", seen)
 	case reflect.Map:

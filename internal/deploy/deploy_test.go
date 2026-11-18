@@ -563,30 +563,13 @@ func TestDeployerExecuteRegistryAttachesReferrers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("IndexManifest: %v", err)
 	}
-	if len(manifest.Manifests) != 7 {
-		t.Fatalf("referrers = %d, want 7 (3 statement bundles, 2 image SBOMs, 2 region SBOMs)", len(manifest.Manifests))
+	if len(manifest.Manifests) != 6 {
+		t.Fatalf("referrers = %d, want 6 (4 statement bundles, 1 image SBOM, 1 region SBOM)", len(manifest.Manifests))
 	}
 	wantStatements := map[string]bool{"sealed": false, "engine-dependent": false, "informational": false}
-	wantSBOM := map[string]int{"application/vnd.cyclonedx+json": 0, "application/spdx+json": 0}
-	sbomArtifacts := map[string]bool{}
+	sbomStatements := 0
+	sbomDocuments := map[string]string{}
 	for _, desc := range manifest.Manifests {
-		if _, sbom := wantSBOM[string(desc.ArtifactType)]; sbom {
-			wantSBOM[string(desc.ArtifactType)]++
-			sref, srefErr := name.NewDigest(authority + "/app@" + desc.Digest.String())
-			if srefErr != nil {
-				t.Fatalf("sbom referrer digest ref: %v", srefErr)
-			}
-			simg, simgErr := remote.Image(sref, remote.WithTransport(rt))
-			if simgErr != nil {
-				t.Fatalf("fetch sbom referrer %s: %v", desc.Digest, simgErr)
-			}
-			smfst, smErr := simg.Manifest()
-			if smErr != nil {
-				t.Fatalf("sbom referrer manifest %s: %v", desc.Digest, smErr)
-			}
-			sbomArtifacts[smfst.Annotations["dev.strike.artifact"]] = true
-			continue
-		}
 		dref, refErr := name.NewDigest(authority + "/app@" + desc.Digest.String())
 		if refErr != nil {
 			t.Fatalf("referrer digest ref: %v", refErr)
@@ -598,6 +581,20 @@ func TestDeployerExecuteRegistryAttachesReferrers(t *testing.T) {
 		rimgMfst, mErr := rimg.Manifest()
 		if mErr != nil {
 			t.Fatalf("referrer manifest %s: %v", desc.Digest, mErr)
+		}
+		if desc.ArtifactType == "application/vnd.cyclonedx+json" {
+			if len(rimgMfst.Layers) != 1 {
+				t.Fatalf("SBOM referrer %s carries %d layers, want 1", desc.Digest, len(rimgMfst.Layers))
+			}
+			sbomDocuments[rimgMfst.Annotations["dev.strike.artifact"]] = rimgMfst.Layers[0].Digest.String()
+			continue
+		}
+		if rimgMfst.Annotations["dev.sigstore.bundle.predicateType"] == "https://cyclonedx.org/bom" {
+			if layer, layered := rimgMfst.Annotations["dev.strike.statement"]; layered {
+				t.Errorf("the SBOM statement bundle carries dev.strike.statement=%q, want no layer annotation", layer)
+			}
+			sbomStatements++
+			continue
 		}
 		stmt := rimgMfst.Annotations["dev.strike.statement"]
 		if _, known := wantStatements[stmt]; !known {
@@ -611,15 +608,11 @@ func TestDeployerExecuteRegistryAttachesReferrers(t *testing.T) {
 			t.Errorf("missing referrer for statement %q", stmt)
 		}
 	}
-	for mt, count := range wantSBOM {
-		if count != 2 {
-			t.Errorf("SBOM referrers for %q = %d, want 2 (image + region)", mt, count)
-		}
+	if sbomStatements != 1 {
+		t.Errorf("SBOM statement bundles = %d, want 1", sbomStatements)
 	}
-	for _, want := range []string{"image", "web"} {
-		if !sbomArtifacts[want] {
-			t.Errorf("no SBOM referrer annotated dev.strike.artifact=%q", want)
-		}
+	if len(sbomDocuments) != 2 {
+		t.Errorf("SBOM document referrers name %d artifacts, want 2 (image and region)", len(sbomDocuments))
 	}
 
 	webArt, ok := att.Sealed.Artifacts["web"]
@@ -632,18 +625,18 @@ func TestDeployerExecuteRegistryAttachesReferrers(t *testing.T) {
 	if webArt.SBOM == nil {
 		t.Fatal("region record carries no SBOM set")
 	}
-	if _, pErr := primitive.ParseDigest(webArt.SBOM.CycloneDX); pErr != nil {
-		t.Errorf("region cyclonedx digest: %v", pErr)
-	}
-	if _, pErr := primitive.ParseDigest(webArt.SBOM.SPDX); pErr != nil {
-		t.Errorf("region spdx digest: %v", pErr)
+	if got := sbomDocuments["web"]; got != webArt.SBOM.CycloneDX.String() {
+		t.Errorf("region SBOM referrer carries the document %q, want the one its sealed record names, %s", got, webArt.SBOM.CycloneDX)
 	}
 	imgArt, ok := att.Sealed.Artifacts["image"]
 	if !ok {
 		t.Fatal("Sealed.Artifacts missing image entry \"image\"")
 	}
 	if imgArt.SBOM == nil {
-		t.Error("image record carries no SBOM set")
+		t.Fatal("image record carries no SBOM set")
+	}
+	if got := sbomDocuments["image"]; got != imgArt.SBOM.CycloneDX.String() {
+		t.Errorf("image SBOM referrer carries the document %q, want the one its sealed record names, %s", got, imgArt.SBOM.CycloneDX)
 	}
 }
 
@@ -735,7 +728,7 @@ func TestDeployerExecuteRegistryRejectsUnverifiedExport(t *testing.T) {
 // TestDeployerExecuteRegistryPresentsTheBearer proves the declared credential
 // on the wire (ADR-058 D2, amendment 2026-11-08): every request to the
 // target, the ping included, carries the registry token -- the payload push,
-// the image SBOM referrers and the statement-bundle referrers alike -- so
+// the image SBOM referrer and the statement-bundle referrers alike -- so
 // the target never has to challenge and nothing is sent to a token realm.
 func TestDeployerExecuteRegistryPresentsTheBearer(t *testing.T) {
 	inner := regtest.Registry(t, true)
@@ -775,7 +768,7 @@ func TestDeployerExecuteRegistryPresentsTheBearer(t *testing.T) {
 		t.Fatalf("Execute: %v", err)
 	}
 	if got := manifests.Load(); got != 6 {
-		t.Errorf("manifest pushes under the registry token = %d, want 6 (payload, two image SBOMs, three statement bundles)", got)
+		t.Errorf("manifest pushes under the registry token = %d, want 6 (payload, one image SBOM, four statement bundles)", got)
 	}
 }
 
@@ -1128,23 +1121,118 @@ func TestDeployerExecute_KeylessBundles(t *testing.T) {
 		t.Fatalf("Execute: %v", err)
 	}
 
-	if len(producedBundles) != 3 {
-		t.Fatalf("expected 3 signed bundles (sealed, engine-context, informational), got %d", len(producedBundles))
+	if len(producedBundles) != 4 {
+		t.Fatalf("expected 4 signed bundles (sealed, engine-context, informational, SBOM), got %d", len(producedBundles))
 	}
 	got := map[string][]byte{
 		"sealed":         producedBundles[0],
 		"engine-context": producedBundles[1],
 		"informational":  producedBundles[2],
+		"sbom":           producedBundles[3],
 	}
 	want := map[string][]byte{
 		"sealed":         []byte(`{"stub":"bundle-0"}`),
 		"engine-context": []byte(`{"stub":"bundle-1"}`),
 		"informational":  []byte(`{"stub":"bundle-2"}`),
+		"sbom":           []byte(`{"stub":"bundle-3"}`),
 	}
 	for name, wantBundle := range want {
 		if !bytes.Equal(got[name], wantBundle) {
 			t.Errorf("%s bundle = %s, want %s", name, got[name], wantBundle)
 		}
+	}
+}
+
+// TestDeployerExecute_BindsTheImageSBOM proves what a registry deploy signs
+// about the SBOM of the image it pushed (ADR-059 D1 and D2): the sealed
+// statement names the top-level document by the sha256 of its bytes, the SBOM
+// statement carries exactly those bytes as its predicate and names the
+// subject of the sealed statement, and the sealed record of the image arm
+// names the same digest. The sealed statement also states the version of
+// strike (ADR-060 D5).
+func TestDeployerExecute_BindsTheImageSBOM(t *testing.T) {
+	fx := newRegistryDeployFixture(t)
+
+	state := newRuntime(t, "build", "deploy-prod")
+	if err := state.Register("build", "", fx.handle); err != nil {
+		t.Fatal(err)
+	}
+	ca, dialer, caPath := deployCapsuleFields(t)
+	d := &deploy.Deployer{
+		Engine:         fx.engine,
+		LaneDigest:     "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+		ArtifactRefs:   map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
+		LaneID:         "test-lane",
+		CA:             ca,
+		Dialer:         dialer,
+		CAVolume:       caPath,
+		StepID:         "deploy-prod",
+		Resolver:       probedResolver(),
+		RegistryTokens: fx.tokens,
+	}
+	var payloads [][]byte
+	stub := stubProduceBundles()
+	deploy.SetProduceBundles(d, func(ctx context.Context, eps lane.KeylessEndpoints, statements [][]byte) ([][]byte, error) {
+		payloads = statements
+		return stub(ctx, eps, statements)
+	})
+	att, err := d.Execute(context.Background(), deployStep(t, fx.method), state)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if len(payloads) != 4 {
+		t.Fatalf("signed statements = %d, want 4 (sealed, engine-context, informational, SBOM)", len(payloads))
+	}
+
+	var sealed struct {
+		Subject   json.RawMessage `json:"subject"`
+		Predicate struct {
+			RunDetails deploy.SLSARunDetails `json:"runDetails"`
+		} `json:"predicate"`
+	}
+	if uErr := json.Unmarshal(payloads[0], &sealed); uErr != nil {
+		t.Fatalf("decode the sealed statement: %v", uErr)
+	}
+	var sbom struct {
+		Subject   json.RawMessage `json:"subject"`
+		Predicate json.RawMessage `json:"predicate"`
+	}
+	if uErr := json.Unmarshal(payloads[3], &sbom); uErr != nil {
+		t.Fatalf("decode the SBOM statement: %v", uErr)
+	}
+	validateAgainstDef(t, payloads[3], "#SBOMStatement")
+	if !bytes.Equal(sbom.Subject, sealed.Subject) {
+		t.Errorf("SBOM statement subject = %s, want the subject of the sealed statement, %s", sbom.Subject, sealed.Subject)
+	}
+
+	imgArt := att.Sealed.Artifacts["image"]
+	if imgArt.SBOM == nil {
+		t.Fatal("image record carries no SBOM set")
+	}
+	docSum := sha256.Sum256(sbom.Predicate)
+	if want := "sha256:" + hex.EncodeToString(docSum[:]); imgArt.SBOM.CycloneDX.String() != want {
+		t.Errorf("image record names the document %s, want the sha256 of the predicate of the SBOM statement, %s", imgArt.SBOM.CycloneDX, want)
+	}
+
+	run := sealed.Predicate.RunDetails
+	if len(run.Byproducts) != 2 {
+		t.Fatalf("byproducts = %d entries, want 2 (the produced identity of the image and its top-level document)", len(run.Byproducts))
+	}
+	identity, document := run.Byproducts[0], run.Byproducts[1]
+	if identity.Name != "image" || identity.MediaType != "" {
+		t.Errorf("first byproduct = name %q, media type %q, want the produced identity \"image\" without a media type", identity.Name, identity.MediaType)
+	}
+	if identity.Digest == nil || identity.Digest.SHA256 != imgArt.Digest.Hex() {
+		t.Errorf("produced identity = %+v, want the sha256 of the image record, %s", identity.Digest, imgArt.Digest)
+	}
+	if document.Name != "image/sbom/top-level" || document.MediaType != "application/vnd.cyclonedx+json" {
+		t.Errorf("second byproduct = name %q, media type %q, want \"image/sbom/top-level\" with the CycloneDX media type", document.Name, document.MediaType)
+	}
+	if document.Digest == nil || document.Digest.SHA256 != imgArt.SBOM.CycloneDX.Hex() {
+		t.Errorf("top-level document = %+v, want the sha256 the image record names, %s", document.Digest, imgArt.SBOM.CycloneDX)
+	}
+	if run.Builder.Version.Strike != deploy.StrikeVersion {
+		t.Errorf("builder.version.strike = %q, want the version of strike, %q", run.Builder.Version.Strike, deploy.StrikeVersion)
 	}
 }
 

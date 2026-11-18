@@ -11,9 +11,9 @@ import "github.com/istr/strike/contract/primitive"
 #Artifact: {
 	@go(Artifact)
 
-	// sbom holds the digests of the SBOM documents generated over this
-	// artifact, both formats together (ADR-051 D3/D9). Absent when the
-	// deploy generated no SBOM for it (a kubernetes deploy today).
+	// sbom holds the digest of the SBOM document generated over this
+	// artifact (ADR-051 D3/D9, ADR-059 D1). Absent when the deploy generated
+	// no SBOM for it (a kubernetes deploy today).
 	sbom?: #SBOMSet @go(SBOM,optional=nillable)
 
 	// digest is the artifact's content identity, computed by the control
@@ -23,18 +23,15 @@ import "github.com/istr/strike/contract/primitive"
 	digest: primitive.#Digest @go(Digest)
 }
 
-// #SBOMSet carries the content digests of the two SBOM documents strike
-// generates together over one artifact: CycloneDX and SPDX 2.3 JSON. The
-// producer emits the pair, so both fields are required whenever the block
-// is present (ADR-051 D3).
+// #SBOMSet carries the content digest of the SBOM document strike generates
+// over one artifact: a CycloneDX JSON document in canonical form (ADR-051
+// D3, ADR-059 D2). The sealed statement names the document by this digest
+// (ADR-059 D1).
 #SBOMSet: {
 	@go(SBOMSet)
 
 	// cyclonedx is the sha256 content digest of the CycloneDX JSON document.
 	cyclonedx: primitive.#Digest @go(CycloneDX)
-
-	// spdx is the sha256 content digest of the SPDX JSON document.
-	spdx: primitive.#Digest @go(SPDX)
 }
 
 // #TrustLayer is the trust a verifier must supply to rely on an attested fact,

@@ -39,11 +39,22 @@ const statementAnnotation = "dev.strike.statement"
 // cap on the keyless HTTP clients.
 const maxBundleBytes = 8 << 20 // 8 MiB
 
-// StatementBundle pairs one projected statement's trust layer with its
-// sigstore bundle bytes for referrer attachment.
+// MaxStatementBytes bounds a statement a deploy signs, so that no deploy
+// signs a statement whose bundle its own reader would refuse (ADR-059 D2). A
+// bundle carries the statement in base64, four bytes for three, beside the
+// certificate, the log entry and the timestamp, for which 64 KiB are
+// reserved; measured, they take about 6 KiB.
+const MaxStatementBytes = (maxBundleBytes - 64<<10) / 4 * 3
+
+// StatementBundle pairs one signed statement with its sigstore bundle bytes
+// for referrer attachment. A layer statement names its trust layer in
+// Statement (ADR-037). A statement that is none of the layer statements, the
+// SBOM statement (ADR-059 D2), leaves Statement empty and names its in-toto
+// predicate type in PredicateType.
 type StatementBundle struct {
-	Statement record.TrustLayer
-	Bundle    []byte
+	Statement     record.TrustLayer
+	PredicateType string
+	Bundle        []byte
 }
 
 // ArtifactImage builds a push-ready OCI 1.1 referrer of subject in the
@@ -95,6 +106,10 @@ func ArtifactImage(content []byte, artifactType string, subject v1.Descriptor, a
 // subject manifest within the repository of target, in the caller's order,
 // and returns the descriptor of every referrer it pushed, in the same order,
 // for the read-after-write that follows (ADR-051 amendment 2026-11-08). The
+// referrer of a layer statement carries the layer under strike's statement
+// annotation. The referrer of a bundle that names a predicate type carries
+// that type under cosign's predicate-type annotation and no statement
+// annotation, so cosign and the base-SBOM reader select it (ADR-059 D2). The
 // registry must serve the referrers API: the referrers tag fallback is
 // refused, so a registry without the API fails the push instead of receiving
 // a tag (ADR-058). ArtifactImage owns the referrer wrapping, including how
@@ -113,30 +128,35 @@ func AttachStatementBundles(ctx context.Context, target string, subject v1.Descr
 	}, opts...)
 	attached := make([]v1.Descriptor, 0, len(bundles))
 	for _, b := range bundles {
-		img, err := ArtifactImage(b.Bundle, SigstoreBundleMediaType, subject, map[string]string{
-			statementAnnotation: string(b.Statement),
-		})
+		label := string(b.Statement)
+		annotations := map[string]string{statementAnnotation: label}
+		if b.PredicateType != "" {
+			label = b.PredicateType
+			annotations = map[string]string{bundlePredicateTypeAnnotation: label}
+		}
+		img, err := ArtifactImage(b.Bundle, SigstoreBundleMediaType, subject, annotations)
 		if err != nil {
-			return nil, fmt.Errorf("referrer %s: %w", b.Statement, err)
+			return nil, fmt.Errorf("referrer %s: %w", label, err)
 		}
 		desc, err := partial.Descriptor(img)
 		if err != nil {
-			return nil, fmt.Errorf("referrer %s: digest: %w", b.Statement, err)
+			return nil, fmt.Errorf("referrer %s: digest: %w", label, err)
 		}
 		if err := remote.Write(repo.Digest(desc.Digest.String()), img, writeOpts...); err != nil {
-			return nil, fmt.Errorf("referrer %s of %s: push: %w", b.Statement, subject.Digest, err)
+			return nil, fmt.Errorf("referrer %s of %s: push: %w", label, subject.Digest, err)
 		}
 		attached = append(attached, *desc)
 	}
 	return attached, nil
 }
 
-// FetchStatementBundles is the consumer counterpart to AttachStatementBundles:
-// given a digest-pinned subject image, it discovers the sigstore statement
-// bundles attached as OCI 1.1 referrers, fetches each bundle's bytes, and
-// returns them paired with the trust layer from the referrer's
-// dev.strike.statement annotation, in registry-listed order. A referrer whose
-// annotation names no trust layer is skipped and reported.
+// FetchStatementBundles is the consumer counterpart to AttachStatementBundles
+// for the layer statements: given a digest-pinned subject image, it discovers
+// the sigstore statement bundles attached as OCI 1.1 referrers, fetches each
+// bundle's bytes, and returns them paired with the trust layer from the
+// referrer's dev.strike.statement annotation, in registry-listed order. A
+// referrer whose annotation names no trust layer, the SBOM statement bundle
+// among them, is skipped and reported.
 //
 // This is a sealed-layer read: the bytes come from the registry at the subject's
 // own digest, independently of any engine, so a downstream verifier checks the
@@ -199,12 +219,13 @@ func absentLayers(bundles []StatementBundle, required []record.TrustLayer) []str
 // subject -- the same artifactType filter both producers (strike's own and
 // cosign) are indexed under -- maps each referrer manifest through fetch, and
 // drops the nil results fetch returns for referrers it skips. It is shared by
-// FetchStatementBundles (strike's own bundles) and FetchBaseSBOMReferrers
-// (cosign base SBOMs), which differ only in the per-referrer reader. The
-// registry must serve the referrers API: the referrers tag fallback is
-// refused, so a registry without the API fails the read (ADR-058). Every
-// read is anonymous, over the transport rt the caller hands in; no ambient
-// credential is consulted (ADR-058 D6).
+// FetchStatementBundles (the bundles of the layer statements) and
+// FetchBaseSBOMReferrers (the SBOM attestations in cosign's form), which
+// differ only in the per-referrer reader. The registry must serve the
+// referrers API: the referrers tag fallback is refused, so a registry without
+// the API fails the read (ADR-058). Every read is anonymous, over the
+// transport rt the caller hands in; no ambient credential is consulted
+// (ADR-058 D6).
 func fetchReferrers[T any](ctx context.Context, ref name.Digest, rt http.RoundTripper, fetch func(context.Context, name.Digest, http.RoundTripper) (*T, error)) ([]T, error) {
 	repo := ref.Context()
 	idx, err := remote.Referrers(ref,
@@ -361,6 +382,9 @@ func FetchTrustRoot(ctx context.Context, ref primitive.ImageRef, src Transports)
 // attestations; they are read from an unsigned manifest annotation and are
 // therefore scope only, never trust. Trust is the signer identity and subject
 // binding the verifying caller checks over the returned bundle.
+// PredicateTypeCycloneDX is also the predicate type of the SBOM statement a
+// deploy signs, and the value of the annotation its referrer carries (ADR-059
+// D2).
 const (
 	PredicateTypeCycloneDX = "https://cyclonedx.org/bom"
 	PredicateTypeSPDX      = "https://spdx.dev/Document"

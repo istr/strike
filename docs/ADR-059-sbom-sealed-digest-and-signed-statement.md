@@ -1153,3 +1153,25 @@ produced it" is read as: ", and the sealed statement names the version
 of the strike that produced it"; "every input of a document is sealed,"
 is read as: "every input of a document is sealed or stated by the
 document,".
+
+## Amendment 2026-11-18 -- D2: the bound a deploy applies before it signs
+
+D2 lets a deploy sign no statement that its own reader would refuse and
+names the reader's bound, 8 MiB for a bundle. A bundle exists only once
+the signature, the log entry and the timestamp exist, so a deploy cannot
+hold a bundle against that bound before it signs. It bounds the
+statement instead, and the reader's bound follows from it.
+
+A bundle carries its statement in base64, four bytes for every three,
+beside the certificate, the log entry with its proof and the timestamp.
+Measured on 2026-11-18 on the three statement bundles of the golden
+fixtures, a bundle is 6,023 to 6,066 bytes larger than the base64 form
+of its statement. A deploy reserves 64 KiB for that part and signs a
+statement of at most 6,242,304 bytes: three quarters of what the
+reader's 8 MiB leave beside the reserve. The bound holds for each of the
+four statements. A deploy with a larger statement fails before its first
+signature, so no certificate is requested and nothing is logged for it.
+
+**Supersedes, in D2 above:** "A statement document above the reader's
+bound fails the deploy;" is read as: "A statement of more than 6,242,304
+bytes fails the deploy before it signs;".

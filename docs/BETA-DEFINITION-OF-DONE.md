@@ -251,3 +251,32 @@ column above is the snapshot at ratification.
 > 3. Rule (6) defers its nine sites in `contract/attest` to item-0004.
 >    Bringing each into the rule changes the attest wire and is a freeze
 >    event of that item.
+
+> **2026-11-18, riding
+> [ADR-059](ADR-059-sbom-sealed-digest-and-signed-statement.md) and
+> [ADR-060](ADR-060-version-as-constant-of-the-source.md):**
+>
+> 1. The commit that carries this amendment is the freeze event the
+>    amendment of 2026-09-05 announced for item-0128, ratified with
+>    ADR-059 and ADR-060. In `contract/attest` the elements of
+>    `runDetails.byproducts` carry the name grammar of ADR-059 D1, the
+>    builder gains the required `version` (ADR-060 D5), and
+>    `#SBOMStatement` joins the statements (ADR-059 D2). The signed bytes
+>    change with it: the produced identities move from
+>    `resolvedDependencies` to `byproducts`, which also list every SBOM
+>    document, and a registry deploy signs a fourth statement.
+> 2. Two further changes reach the attest wire through packages it
+>    imports and belong to the same event: `primitive.#SemVer` is new,
+>    and `record.#SBOMSet` loses its SPDX digest. The comparison the
+>    freeze declaration names does not see them, because it compares
+>    `contract/attest` alone; that gap is owned by item-0193.
+> 3. The frozen baseline is `contract/attest` as of the commit that
+>    carries this amendment. A verifier of the freeze declaration compares
+>    `git rev-parse <commit>:contract/attest` against that commit's tree.
+>    Every later change to `contract/attest` is the beta-blocking
+>    ratification event the declaration describes.
+> 4. The signed goldens are re-baselined once, in the commit that follows
+>    this one: the three statement bundles are regenerated, and the bundle
+>    of the SBOM statement joins them. The cross-validation vectors and
+>    the attestation fixtures carry no SBOM record and no published
+>    statement, and are unchanged.

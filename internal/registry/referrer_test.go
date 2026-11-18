@@ -180,6 +180,66 @@ func TestAttachStatementBundles(t *testing.T) {
 	}
 }
 
+// TestAttachStatementBundlesPredicateType: a bundle that names a predicate
+// type is attached under cosign's predicate-type annotation and without the
+// statement annotation (ADR-059 D2). The base-SBOM reader selects exactly
+// that referrer, and the reader of the layer statements returns only the
+// layer statement beside it.
+func TestAttachStatementBundlesPredicateType(t *testing.T) {
+	host := localRegistry(t, true)
+	target := host + "/app:v1"
+	subject := pushSubject(t, target)
+
+	attached, err := registry.AttachStatementBundles(context.Background(), target, subject, []registry.StatementBundle{
+		{Statement: record.TrustLayerSealed, Bundle: []byte(`{"bundle":"sealed"}`)},
+		{PredicateType: registry.PredicateTypeCycloneDX, Bundle: []byte(`{"bundle":"sbom"}`)},
+	})
+	if err != nil {
+		t.Fatalf("AttachStatementBundles: %v", err)
+	}
+	if len(attached) != 2 {
+		t.Fatalf("attached = %d descriptors, want 2", len(attached))
+	}
+
+	ref, err := name.NewDigest(host + "/app@" + attached[1].Digest.String())
+	if err != nil {
+		t.Fatalf("referrer digest ref: %v", err)
+	}
+	img, err := remote.Image(ref)
+	if err != nil {
+		t.Fatalf("fetch referrer: %v", err)
+	}
+	mfst, err := img.Manifest()
+	if err != nil {
+		t.Fatalf("referrer manifest: %v", err)
+	}
+	if mfst.ArtifactType != registry.SigstoreBundleMediaType {
+		t.Errorf("artifactType = %q, want %q", mfst.ArtifactType, registry.SigstoreBundleMediaType)
+	}
+	if got := mfst.Annotations["dev.sigstore.bundle.predicateType"]; got != registry.PredicateTypeCycloneDX {
+		t.Errorf("predicate-type annotation = %q, want %q", got, registry.PredicateTypeCycloneDX)
+	}
+	if layer, ok := mfst.Annotations["dev.strike.statement"]; ok {
+		t.Errorf("statement annotation = %q, want none on a bundle that names a predicate type", layer)
+	}
+
+	subjectRef := host + "/app@" + subject.Digest.String()
+	sboms, err := registry.FetchBaseSBOMReferrers(context.Background(), primitive.NewImageRef(subjectRef), registry.SystemTransports{})
+	if err != nil {
+		t.Fatalf("FetchBaseSBOMReferrers: %v", err)
+	}
+	if len(sboms) != 1 || sboms[0].PredicateType != registry.PredicateTypeCycloneDX || !bytes.Equal(sboms[0].Bundle, []byte(`{"bundle":"sbom"}`)) {
+		t.Fatalf("base-SBOM reader returned %d referrers, want the one bundle that names the CycloneDX predicate type", len(sboms))
+	}
+	statements, err := registry.FetchStatementBundles(context.Background(), subjectRef, registry.SystemTransports{}, nil, mustNotWait(t))
+	if err != nil {
+		t.Fatalf("FetchStatementBundles: %v", err)
+	}
+	if len(statements) != 1 || statements[0].Statement != record.TrustLayerSealed {
+		t.Fatalf("layer reader returned %d bundles, want only the sealed one", len(statements))
+	}
+}
+
 // TestAttachStatementBundlesRefusesTagFallback: a registry without the
 // referrers API fails the push with an error naming the registry and the
 // subject digest, and no referrers fallback tag is written.
@@ -478,12 +538,13 @@ func TestFetchBaseSBOMReferrers(t *testing.T) {
 	}
 }
 
-func TestFetchBaseSBOMReferrersSkipsStrikeOwnBundle(t *testing.T) {
+func TestFetchBaseSBOMReferrersSkipsLayerStatementBundle(t *testing.T) {
 	host := localRegistry(t, true)
 	target := host + "/base:v1"
 	subject := pushSubject(t, target)
-	// strike's own producer convention: discoverable, but no SBOM predicate-type
-	// annotation, so it is not a base SBOM and must be skipped.
+	// A layer statement bundle is discoverable under the bundle type, but it
+	// carries no SBOM predicate-type annotation, so it is not a base SBOM and
+	// must be skipped.
 	if _, err := registry.AttachStatementBundles(context.Background(), target, subject, []registry.StatementBundle{
 		{Statement: record.TrustLayerSealed, Bundle: []byte("strike-bundle")},
 	}); err != nil {
@@ -494,7 +555,7 @@ func TestFetchBaseSBOMReferrersSkipsStrikeOwnBundle(t *testing.T) {
 		t.Fatalf("FetchBaseSBOMReferrers: %v", err)
 	}
 	if len(got) != 0 {
-		t.Fatalf("fetched %d, want 0 (strike's own bundle is not a base SBOM)", len(got))
+		t.Fatalf("fetched %d, want 0 (a layer statement bundle is not a base SBOM)", len(got))
 	}
 }
 

@@ -138,7 +138,11 @@ spawning.
 **A08 Software and Data Integrity Failures** -- strike's core mission.
 Unsigned container images must not leave the local store (enforced by the
 unsigned-OCI-blocks-network guard). All external images must be digest-pinned.
-SBOMs are attached as signed OCI 1.1 referrer artifacts. The bootstrap proves
+Every SBOM document is attached as an OCI 1.1 referrer and named by its
+digest in the signed provenance statement, and the SBOM of the pushed image
+is also a signed statement of its own
+([ADR-059](docs/ADR-059-sbom-sealed-digest-and-signed-statement.md) D1 to
+D3). The bootstrap proves
 reproducibility through three checks: a second build in the same run with the
 cache bypassed, whose image must be byte-identical to the first; a digest
 equality between the bootstrap and the released strike rebuilding the same
@@ -316,6 +320,11 @@ produces `[REDACTED]` instead of the plaintext.
   network-enabled step gets its own resolver and mediator listeners in
   its capsule context; they are not centralized on the run-level front
   of [ADR-038](docs/ADR-038-protocol-mediated-ssh.md) D2.
+- **`strike verify` does not read the SBOM yet.** A registry deploy signs
+  the digest of every SBOM document into the provenance statement and
+  publishes the SBOM statement, but the verdict of `strike verify` covers
+  neither: it checks no document against the digest the sealed statement
+  names, and it skips the bundle of the SBOM statement (ADR-059 D4).
 
 ## Security toolchain
 

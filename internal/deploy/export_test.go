@@ -55,6 +55,9 @@ func DeployRegistryForTest() lane.DeployRegistry {
 // FakeIDToken exposes fakeIDToken for the external test package.
 var FakeIDToken = fakeIDToken
 
+// StrikeVersion exposes strikeVersion for the external test package.
+const StrikeVersion = strikeVersion
+
 // RegistryTokensForTest delivers a registry token for the deploy target at
 // authority the way the run start hands it to the Deployer, and through
 // REGISTRY_ID_TOKEN for a test handler that compares against it. The token

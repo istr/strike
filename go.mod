@@ -13,7 +13,6 @@ require (
 	github.com/sigstore/protobuf-specs v0.5.2
 	github.com/sigstore/rekor-tiles/v2 v2.4.2
 	github.com/sigstore/sigstore-go v1.4.0
-	github.com/spdx/tools-golang v0.6.0-rc4
 	golang.org/x/crypto v0.59.0
 	golang.org/x/mod v0.43.0
 	golang.org/x/net v0.62.0
@@ -26,9 +25,7 @@ require (
 require (
 	cuelabs.dev/go/oci/ociregistry v0.0.0-20261026160121-545c0455168d // indirect
 	github.com/ProtonMail/go-crypto v1.5.2 // indirect
-	github.com/anchore/go-struct-converter v0.2.1 // indirect
 	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 // indirect
-	github.com/cayleygraph/quad v1.3.0 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cloudflare/circl v1.6.5 // indirect
@@ -74,9 +71,7 @@ require (
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/pelletier/go-toml/v2 v2.4.3 // indirect
-	github.com/piprate/json-gold v0.9.1 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
-	github.com/pquerna/cachecontrol v0.2.0 // indirect
 	github.com/protocolbuffers/txtpbfmt v0.0.0-20261013103202-7c8a61a7a736 // indirect
 	github.com/rogpeppe/go-internal v1.16.0 // indirect
 	github.com/sassoftware/relic/v8 v8.2.0 // indirect

@@ -26,8 +26,10 @@ records what was built, from which digest-pinned inputs, in what runtime, and
 under which declared identity -- a record a consumer can check offline,
 without trusting strike or the engine that ran the work. In an increasingly
 containerized world the artifact's own contents are the input that matters,
-so strike catalogs the image it assembled in-process and emits it as a
-first-class CycloneDX and SPDX 2.3 SBOM bound to the artifact's digest.
+so strike catalogs the image it assembled in-process and publishes the
+catalog as a CycloneDX SBOM. The signed provenance names the document by its
+digest, and the document is also a signed statement of its own about the
+pushed image.
 
 The execution model exists to keep that attestation sound. Every step runs in
 a pinned, digest-verified OCI image with no shell, no privilege escalation,
@@ -84,7 +86,7 @@ first (`make -C test/sigstore-local up`), then build stage_1 from the clone's
 root:
 
 ```sh
-GIT_COMMIT=36374b5828d38be15d26ec2c328ad6d948e1c997
+GIT_COMMIT=43b9033035a1d099dbd9bc9cd4bacd0bb3ba9adf
 
 podman build -t strike:stage_1 \
   --build-arg GIT_COMMIT=${GIT_COMMIT} \
