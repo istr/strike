@@ -111,7 +111,7 @@ linters:
         # Build payload never transits the controller filesystem: OCI layouts
         # and step content are assembled and read in memory (ADR-035).
         - pattern: 'os\.(MkdirTemp|CreateTemp|TempDir|WriteFile|OpenFile|MkdirAll|Mkdir|Create)\b'
-          msg: "no host scratch and no host file write -- assemble and read in memory (ADR-035)"
+          msg: "no host scratch and no host file write -- assemble and read in memory"
     depguard:
       rules:
         all:

@@ -774,6 +774,55 @@ or inline the now-missing context so the comment stands alone.
 
 ---
 
+## Output cites no ADR; the comment above the check does `adr-in-comments-only`
+
+**Rule.** A string that strike or one of its gates prints -- an error, a log
+line, a lint finding, a linter message configured in `.golangci.yml` -- does
+not cite an ADR. The reference belongs in the comment above the check that
+produces the string, the one durable cross-reference
+`self-contained-comments` allows. A gate message may still cite a pattern of
+this document by anchor, as the head of this document permits.
+
+**Bad.**
+
+```go
+for i, stmt := range statements {
+    if len(stmt) > registry.MaxStatementBytes {
+        return nil, fmt.Errorf("the %s statement has %d bytes (ADR-059 D2)", names[i], len(stmt))
+    }
+}
+```
+
+**Good.**
+
+```go
+// Every statement is bounded before the first signature (ADR-059 D2).
+for i, stmt := range statements {
+    if len(stmt) > registry.MaxStatementBytes {
+        return nil, fmt.Errorf("the %s statement has %d bytes, and a deploy signs at most %d",
+            names[i], len(stmt), registry.MaxStatementBytes)
+    }
+}
+```
+
+**Rationale.** An output is read where the tree is not: in a terminal, a CI
+log, a ticket. A decision number there is a pointer its reader cannot follow,
+so the text states what went wrong and what bounds it. The reader who wants
+the why reads the code, and the comment above the check is where the code
+keeps it.
+
+**Discovery.**
+
+```
+git grep -n -E '"[^"]*ADR-[0-9]' -- '*.go' ':!*_test.go' .golangci.yml \
+  | grep -v -E ':[0-9]+:[[:space:]]*(//|#)'
+```
+
+The search prints nothing. A match inside a comment that follows code on the
+same line is not a violation.
+
+---
+
 ## See also
 
 - `DESIGN-PRINCIPLES.md` -- the principles these patterns operationalize.

@@ -264,12 +264,12 @@ func collectionDefect(field *ast.Field) string {
 	case *ast.ListLit:
 		if len(v.Elts) == 1 {
 			if _, open := v.Elts[0].(*ast.Ellipsis); open {
-				return " is a required open list that CUE defaults to empty; make it optional or non-empty ([T, ...T]) (ADR-049 rule 6)"
+				return " is a required open list that CUE defaults to empty; make it optional or non-empty ([T, ...T])"
 			}
 		}
 	case *ast.StructLit:
 		if patternOnly(v) {
-			return " is a required pattern map that CUE defaults to empty; make it optional (ADR-049 rule 6)"
+			return " is a required pattern map that CUE defaults to empty; make it optional"
 		}
 	}
 	return ""

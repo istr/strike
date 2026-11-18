@@ -561,9 +561,10 @@ func (d *Deployer) signStatements(ctx context.Context, att *Attestation, stepID 
 		return nil, fmt.Errorf("step %q: %w", stepID, err)
 	}
 	names := [...]string{"sealed", "engine-context", "informational", "SBOM"}
+	// Every statement is bounded before the first signature (ADR-059 D2).
 	for i, stmt := range statements {
 		if len(stmt) > registry.MaxStatementBytes {
-			return nil, fmt.Errorf("step %q: the %s statement has %d bytes, and a deploy signs at most %d: a reader would refuse the bundle of a larger one (ADR-059 D2)",
+			return nil, fmt.Errorf("step %q: the %s statement has %d bytes, and a deploy signs at most %d: a reader would refuse the bundle of a larger one",
 				stepID, names[i], len(stmt), registry.MaxStatementBytes)
 		}
 	}
