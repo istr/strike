@@ -1,15 +1,19 @@
 package verify_test
 
 import (
+	"bytes"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	protobundle "github.com/sigstore/protobuf-specs/gen/pb-go/bundle/v1"
@@ -28,7 +32,7 @@ const (
 	goldenIssuer   = "https://keycloak.127.0.0.1.sslip.io:8443/realms/sigstore"
 )
 
-var goldenNames = []string{"sealed", "engine-dependent", "informational"}
+var goldenNames = []string{"sealed", "engine-dependent", "informational", "sbom"}
 
 func goldenDir(t *testing.T) string {
 	t.Helper()
@@ -119,6 +123,64 @@ func TestGoldenDifferentialAccept(t *testing.T) {
 				t.Errorf("sigstore-go rejected a valid golden: %v", err)
 			}
 		})
+	}
+}
+
+// TestGoldenSBOMBinding proves that the golden set is bound the way a registry
+// deploy binds it (ADR-059 D1 and D2): the sealed statement names the
+// top-level document of the image by the sha256 of its bytes, the SBOM
+// statement carries that document as its predicate under the CycloneDX
+// predicate type, and both statements name one subject.
+func TestGoldenSBOMBinding(t *testing.T) {
+	sv := strikeVerifier(t)
+	sealedPayload, err := sv.Verify(readGolden(t, "sealed"))
+	if err != nil {
+		t.Fatalf("verify the sealed golden: %v", err)
+	}
+	sbomPayload, err := sv.Verify(readGolden(t, "sbom"))
+	if err != nil {
+		t.Fatalf("verify the sbom golden: %v", err)
+	}
+	var sealed struct {
+		Subject   json.RawMessage `json:"subject"`
+		Predicate struct {
+			RunDetails struct {
+				Byproducts []struct {
+					Name   string `json:"name"`
+					Digest struct {
+						SHA256 string `json:"sha256"`
+					} `json:"digest"`
+				} `json:"byproducts"`
+			} `json:"runDetails"`
+		} `json:"predicate"`
+	}
+	if uErr := json.Unmarshal(sealedPayload, &sealed); uErr != nil {
+		t.Fatalf("decode the sealed statement: %v", uErr)
+	}
+	var sbom struct {
+		PredicateType string          `json:"predicateType"`
+		Subject       json.RawMessage `json:"subject"`
+		Predicate     json.RawMessage `json:"predicate"`
+	}
+	if uErr := json.Unmarshal(sbomPayload, &sbom); uErr != nil {
+		t.Fatalf("decode the SBOM statement: %v", uErr)
+	}
+	if sbom.PredicateType != "https://cyclonedx.org/bom" {
+		t.Errorf("SBOM statement predicateType = %q, want the CycloneDX predicate type", sbom.PredicateType)
+	}
+	if !bytes.Equal(sbom.Subject, sealed.Subject) {
+		t.Errorf("SBOM statement subject = %s, want the subject of the sealed statement, %s", sbom.Subject, sealed.Subject)
+	}
+	docSum := sha256.Sum256(sbom.Predicate)
+	want := hex.EncodeToString(docSum[:])
+	var named []string
+	for _, b := range sealed.Predicate.RunDetails.Byproducts {
+		if strings.HasSuffix(b.Name, "/sbom/top-level") {
+			named = append(named, b.Digest.SHA256)
+		}
+	}
+	if len(named) != 1 || named[0] != want {
+		t.Errorf("sealed statement names the top-level documents %v, want the one document whose sha256 is that of the predicate of the SBOM statement, %s", named, want)
 	}
 }
 

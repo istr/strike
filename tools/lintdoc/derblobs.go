@@ -63,7 +63,7 @@ type derBlob struct {
 // sigstore harness mints fresh material on every rebuild, so regenerating the
 // goldens replaces them and this list has to be updated in the same commit. If
 // the golden chain is ever rebased onto RFC 9500 material the way the fixture
-// anchors are, those eight entries disappear and the list stops moving.
+// anchors are, those nine entries disappear and the list stops moving.
 var derBlobs = []derBlob{
 	// Fixture material over the RFC 9500 testECCP256 key (ADR-056 D8),
 	// recorded verbatim in docs/FIXTURE-TRUST-ANCHOR.md.
@@ -100,32 +100,36 @@ var derBlobs = []derBlob{
 		label:  "golden trusted root: harness Fulcio CA",
 	},
 	{
-		digest: "37ca836b765b058de736fbb2e72d82af5c398090dcc1eb6dfc6e0e3330f03922",
+		digest: "bbc03be22a9fbdf5967d749c703199a029621e352d7aef10923c1721a1ed92a7",
 		label:  "golden trusted root: harness TSA root",
 	},
 	{
-		digest: "6f0529b1054684e7c204d450133a8d916bfd227bfaffe2bbcad7911732a4fcd3",
+		digest: "b162ce30904b0d75f8c239ce3f93de2044218645cc1470831811051059836e78",
 		label:  "golden trusted root: harness TSA intermediate",
 	},
 	{
-		digest: "a2d7f47280aa33179615d2f5725e8595db95512989e424735f515969cbe88534",
+		digest: "6c0f92cda5f81909a317d8524d59b816bb683be0a90384861c7eb84259fc28c6",
 		label:  "golden trusted root: harness TSA timestamping leaf",
 	},
 	{
-		digest: "1f78342a5d9fb2f46ab4c7939a4847e46c307eee38d1864eeaa58956dcee8c6e",
+		digest: "c1a85c925374fd391f50c6cbe0f8d48b40681fb0082a488f195a23159f03d901",
 		label:  "golden bundles: Fulcio leaf for the harness builder identity",
 	},
 	{
-		digest: "f805deb19836c36dcaaca6453975c346d62295c8d19126ff4187e30cbcbae847",
+		digest: "c7edbd9e112ece706b072f57a3223cc51c4ef4898546c9c8ee136fc08a59f6cf",
 		label:  "golden sealed bundle: RFC3161 timestamp token",
 	},
 	{
-		digest: "7efaae7ceaa5d69769302c4b02f63afecb70b06ad8529c8861834c31639da9fe",
+		digest: "140f53d249bd6f86019a1292e741ba378839c2573b24fbdfc235b3142dc181de",
 		label:  "golden engine-dependent bundle: RFC3161 timestamp token",
 	},
 	{
-		digest: "deebf5f59d0494f2a67a2f195081a8337fc2ab5b8c40de3030cdb6f29171e0ea",
+		digest: "9bc19f93c131bfdd41d0d6c0bf6eeab9f2dd8647e2170b68ce5b2048271e4362",
 		label:  "golden informational bundle: RFC3161 timestamp token",
+	},
+	{
+		digest: "c1b9c85b5cb48ab25387ce5aeafa3edaa3f5a6f437daa0689be43b9ad2f58e72",
+		label:  "golden sbom bundle: RFC3161 timestamp token",
 	},
 
 	// Sigstore material in internal/deploy/testdata/base-sbom. Checked in from

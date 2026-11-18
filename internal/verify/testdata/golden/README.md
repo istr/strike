@@ -1,9 +1,14 @@
 # Keyless verifier golden fixtures
 
-Five files that must verify together: `sealed.sigstore.json`,
+Six files that must verify together: `sealed.sigstore.json`,
 `engine-dependent.sigstore.json`, `informational.sigstore.json`,
-`trusted_root.json`, and `lane.yaml`. The first four are generated; `lane.yaml`
-is hand-maintained input, not output.
+`sbom.sigstore.json`, `trusted_root.json`, and `lane.yaml`. The first five are
+generated; `lane.yaml` is hand-maintained input, not output.
+
+The four bundles are the statements a registry deploy signs. The first three
+carry the statements of the trust layers. `sbom.sigstore.json` carries the
+SBOM statement: its predicate is a CycloneDX document over one package, and
+the sealed statement names that document by its digest.
 
 ## Regenerating
 
@@ -14,8 +19,8 @@ module:
     cd test/sigstore-local && make up && make tsa-certchain
     cd - && go tool gengolden
 
-The generator contacts the harness, produces three real statement bundles and
-the matching trust root, and writes all four files at once. It asserts nothing
+The generator contacts the harness, produces four real statement bundles and
+the matching trust root, and writes all five files at once. It asserts nothing
 and fails loudly: if the harness is down or a material is missing, it exits
 non-zero and the checked-in fixtures are left untouched.
 
@@ -34,7 +39,7 @@ certificate on every start, so `trusted_root.json` changes whenever the harness
 is restarted, even when nothing in strike changed. The other anchors persist:
 Fulcio runs against a file-based root under `pki/`, and the CT log and Rekor
 keys sit beside it, all reused until `make clean` removes them. Do not gate on
-`trusted_root.json` being byte-identical; gate on the five files verifying
+`trusted_root.json` being byte-identical; gate on the six files verifying
 together.
 
 ## Commit shape
@@ -46,5 +51,6 @@ hides the part a reviewer can actually read.
 
 ## Verifying independently
 
-`make conformance` in `test/sigstore-local` verifies the committed bundles with
-cosign as an independent verifier, offline, against `trusted_root.json`.
+`make conformance` in `test/sigstore-local` verifies the three bundles of the
+trust layers with cosign as an independent verifier, offline, against
+`trusted_root.json`. It does not read `sbom.sigstore.json`.
