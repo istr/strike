@@ -215,3 +215,153 @@ the open list is not a field and carries no default of its own. When the value
 is a struct, its fields are fields of every entry, and rule (6) reaches them as
 it reaches any field inside a definition: in `m?: {[string]: {x: [...T]}}`, `x`
 is a required open list. Every other clause of rule (6) stands unchanged.
+
+## Amendment 2026-11-20 -- (6) and (7): no field holds an empty value, and one statement has one form
+
+This amendment generalizes rule (6) of the amendment of 2026-11-14, adds
+rule (7) and sharpens rule (1) for the values it governs. Rules (2)
+through (5) and the earlier amendments stand unchanged.
+
+Rule (6) closed one half of a confusion and left the other. A required
+collection had to be non-empty, but an optional one could still be empty,
+so "nothing" kept two forms: an absent field and an empty one. A string
+field accepted the empty string beside its absence, and the value of a
+pattern constraint was not reached at all. Each such pair leaves a reader
+of the wire to guess what an empty value was meant to say.
+
+### (6) No field holds an empty value
+
+A field is a named member of a struct, whether declared or matched by a
+pattern: a key of a map is a field. A list element is not a field. Inside
+a definition:
+
+- no field holds the empty string, `null`, the empty list or the empty
+  struct;
+- a required field holds a non-empty value, and an optional field is
+  either absent or holds a non-empty value.
+
+The rule reaches every field at every depth, the entries of a pattern
+included: in `env?: {[string]: string}` the key `FOO` of `{FOO: ""}` is a
+field that holds the empty string, and the value is invalid. A variable
+that must be empty is not declared. A list element is free within its
+type: `["", ""]` is a non-empty list.
+
+The rule judges the value as the author writes it, not the value that
+evaluation produces once defaults are filled in: no author can write the
+evaluated value. Rule (7) closes the one place where the two differ.
+
+Each admissible choice has exactly one form, whether the field is
+required or optional (`?`):
+
+| Kind | Form |
+|---|---|
+| string | `string & !=""`, or a grammar that excludes the empty string |
+| list | `[T, ...T]` |
+| map made only of pattern constraints | `{[K]: V} & struct.MinFields(1)` |
+| struct whose fields are all optional | `#T & struct.MinFields(1)` at the field that uses it |
+
+`struct.MinFields` stands at the field, never in the definition of the
+struct: there it makes the generated Go type `any` and drops the
+closedness of the exported schema. A field that carries it names its Go
+type explicitly, `@go(Name,type=map[K]V)` for a map and
+`@go(Name,type=*T)` for an optional struct; `optional=nillable` combined
+with `type=` drops the pointer. The required marker `!` is no form of
+non-emptiness: it accepts an empty list as present.
+
+### (7) One statement, one form
+
+Every statement a value makes has exactly one form, and the validator
+rejects every other form.
+
+- **A field with a default** is a regular field whose default arm is
+  explicit and whose type follows the default: `forceRun: *false | bool`.
+  An optional field never carries a default, and no default is resolved
+  in Go behind an optional field. In an input such a field has three
+  forms, and they are three statements: omitted, the default applies;
+  the default written, the value is pinned against a later change of the
+  default; any other value. This is the form the amendment of 2026-09-06
+  to [ADR-056](ADR-056-tls-trust-anchor-as-inline-certificate.md) chose
+  for the certificate mode.
+- **No struct-valued field accepts `{}`.** Written `{}`, a struct whose
+  fields are all optional, or whose fields evaluate without input, would
+  be empty as written and non-empty as evaluated, and rule (6) could not
+  be kept in a form the validator checks. A struct whose fields are all
+  optional therefore carries `struct.MinFields(1)` where it is used. That
+  validator counts the evaluated fields, defaults and constants included,
+  so a struct with a defaulted or a constant field holds at least one
+  field the instance must write. A field typed with a union of named
+  definitions already rejects `{}`.
+- **A discriminator is written.** A field typed with a discriminator
+  vocabulary -- the deploy method, carriage, engine and credential types
+  -- carries the required marker, as in `type!: "registry"`, in the arm
+  of a union and in a single struct that seeds a later union alike. A
+  constant that discriminates nothing stays without the marker and
+  follows the rule for a field with a default.
+- **A grammar with an implied default writes it implied.** An authority
+  or URL never spells out the default port of its scheme. `#Address`, the
+  Go projection of that grammar, keeps its port optional: there, absence
+  is the one form of the default port, not a default resolved behind a
+  field of an input.
+
+### What the rules do not reach
+
+Two values of type `_` stand for content the contract does not own. They
+are exempt by this closed list:
+
+- the open remainder (`...`) of `#CycloneDXDocument`, the predicate of
+  the SBOM statement of
+  [ADR-059](ADR-059-sbom-sealed-digest-and-signed-statement.md), whose
+  content the CycloneDX specification governs;
+- `#AttestationVector.inputs.attestation`, the input of a
+  cross-validation vector, which must also carry invalid attestations to
+  show that they are rejected.
+
+Any other value of type `_` is a defect.
+
+### (1), sharpened: an entry parser rejects a set but empty value
+
+The owning parser of rule (1) holds the input it parses to rule (6). A
+value that is set but empty -- an environment variable set to the empty
+string, an empty flag value, an empty secret source -- is malformed and
+is rejected with the name of its source. A value that must be absent is
+left unset.
+
+### Mechanization and application
+
+The contract mode of `go tool lintcue` checks rules (6) and (7) by
+evaluation, not by syntax: every field of every definition, the entries
+of a pattern included, is unified with each of the four empty values, and
+a value the validator accepts is a finding. This replaces the syntactic
+check of the amendment of 2026-11-14. A union is not entered: each of its
+arms must be a named definition and is checked as one, and the field
+that uses the union is checked like any other field. The tier check
+admits one import from outside the contract, the standard package
+`struct`. A site that does not yet hold the rules is a deferral the lint
+names field by field, and a deferral that no longer matches a field is a
+finding of its own.
+
+Applied when the rules land, beyond the forms above: the lane's timeout
+is a field of the lane with the default `"10m"`, and the separate block
+of lane defaults and its fallback in Go go; the state recording of a
+deploy is optional, absent meaning no recording, its pre-state and
+post-state are optional, and a capture set that is present holds at
+least one capture; the port of the DoT resolver is a field with the
+default 853. `contract/attest` is frozen for the beta line: its sites
+change only as a ratified freeze event, and until then each is a
+deferral. A narrowing in a package that `contract/attest` imports reaches
+the attest wire as well and is a freeze event of its own.
+
+**Supersedes, in rule (6) of the amendment of 2026-11-14:** "a list field
+is either optional (`field?: [...T]`) or non-empty (`field: [T, ...T]`)"
+is read as: "a list field is non-empty (`[T, ...T]`), optional or not";
+"a map field made only of pattern constraints is optional
+(`field?: {[K]: V}`)" is read as: "a map field made only of pattern
+constraints is non-empty (`{[K]: V} & struct.MinFields(1)`), optional or
+not"; "The value of a pattern constraint (`[K]: [...T]`) is the type of
+each entry, not a field, and is not reached either." is read as: "Each
+entry of a pattern constraint is a field and is reached."; and "make all
+of theirs optional, since each has a defined empty case" is read as:
+"express each defined empty case as an absent field". **In the second
+amendment of 2026-11-14,** the reading that the value of a pattern
+constraint is not reached is withdrawn; its reading that the fields of
+an entry's struct are reached stands.

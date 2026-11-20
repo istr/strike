@@ -158,3 +158,32 @@ length-prefixed fields, `ValidateAttestation` schema unification.
 Key material in vectors follows the fake-digest convention already used here:
 form exact, content visibly synthetic. The ssh host keys are 68-character
 ssh-ed25519 wire blobs whose 32-byte body is one repeated ASCII character.
+
+## Amendment 2026-11-20 -- strike completes its JSON Schema export (ADR-049)
+
+The Decision makes the JSON Schema export one of the two contracts a
+second implementation builds against, and Consequences accept that the
+export is lossy for some CUE features, with the vectors closing the gap.
+One loss is not accepted. Rule (6) of
+[ADR-049](ADR-049-type-discipline-internal-seams.md), as amended on
+2026-11-20, makes a map field and a struct field whose fields are all
+optional non-empty through `struct.MinFields`, and `cue export --out
+jsonschema` drops that validator. The exported schemas would accept the
+empty map and the empty struct that the CUE validator rejects, and a
+verifier built against them would accept a lane that strike rejects.
+JSON Schema represents the constraint as `minProperties`, so the export
+is completed rather than left to the vectors, and it does not wait for an
+upstream change.
+
+A strike tool post-processes the two exported schemas in the same
+`go generate ./contract` run, directly after the export. For every field
+whose CUE value carries `struct.MinFields(N)` it writes `minProperties: N`
+at the field's place in the schema, beside the `$ref` where the field
+refers to a definition. A site it cannot place fails the generation. The
+tool is part of the CUE codegen, as the enum generator is.
+
+**Supersedes, in Consequences:** "The schema-export path (CUE -> JSON
+Schema) is lossy for some CUE features" is read as: "The schema-export
+path (CUE -> JSON Schema) is lossy for some CUE features; where JSON
+Schema can represent a constraint the export drops, strike completes the
+export".

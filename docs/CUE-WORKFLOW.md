@@ -63,6 +63,52 @@ Changes that introduce or alter a data structure follow this order:
 5. **Update golden fixtures** with `make golden` and review the diffs to
    confirm the change produces the expected JSON.
 
+## Field forms
+
+Every field of a definition has one form per choice, and the validator
+rejects every other form
+(`docs/ADR-049-type-discipline-internal-seams.md`, rules (6) and (7) of
+the amendment of 2026-11-20). A field is a named member of a struct,
+declared or matched by a pattern; a list element is not a field. No field
+holds `""`, `null`, `[]` or `{}`: a required field holds a non-empty
+value, and an optional field is absent or holds one.
+
+| Kind | Form, required or optional (`?`) |
+|---|---|
+| string | `string & !=""`, or a grammar that excludes `""` |
+| list | `[T, ...T]` |
+| map of pattern constraints | `{[K]: V} & struct.MinFields(1)` and `@go(Name,type=map[K]V)` |
+| struct whose fields are all optional | `#T & struct.MinFields(1)` at the field that uses it, and `@go(Name,type=*T)` when optional |
+| discriminator (`type`) | the required marker, as in `type!: "https"` |
+
+A field with a default is a regular field with an explicit default arm
+whose type follows the default, as in `forceRun: *false | bool`; it is
+never optional. In an input it has three forms: omitted (the default
+applies), the default written (pinned), and any other value.
+`struct.MinFields` stands at the field, never in the definition, and a
+struct whose fields carry defaults or constants holds a field the
+instance must write.
+
+The two levels of the solution space; below level 1 the same holds
+recursively.
+
+| Value of a field `f` | required | optional |
+|---|---|---|
+| absent | invalid | valid |
+| `""`, `null`, `[]` or `{}` | invalid | invalid |
+| a non-empty value | valid | valid |
+
+| Content of a non-empty `f` | list element | map entry | struct field |
+|---|---|---|---|
+| a non-empty value | valid | valid | valid |
+| `""`, `[]` or `{}` | free; the element type decides | invalid | invalid |
+| `null` | invalid by every type in the contract | invalid | invalid |
+| absent, optional | -- | -- | valid |
+| absent, required | -- | -- | invalid |
+
+Two values of type `_` are exempt by a closed list in ADR-049; any other
+is a defect.
+
 ## What `make generate` does
 
 ```sh

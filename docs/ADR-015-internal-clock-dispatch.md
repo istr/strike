@@ -135,3 +135,23 @@ default), not a separate `Date` constructor: tests that do not assert on
 a specific calendar moment use the same time source as production." is
 read as: "Test fixtures that need a fixed timestamp use
 `clock.Unix(0, 0).UTC()`, not a separate `Date` constructor."
+
+## Amendment 2026-11-20 -- a set but empty `SOURCE_DATE_EPOCH` is malformed (ADR-049)
+
+The amendment of 2026-11-17 reads an unset and an empty
+`SOURCE_DATE_EPOCH` alike, as the Unix epoch. An empty value is a set
+value, and the SOURCE_DATE_EPOCH specification requires a set value to be
+the ASCII representation of an integer, which the empty string is not.
+Rule (1) of [ADR-049](ADR-049-type-discipline-internal-seams.md), as
+amended on 2026-11-20, has the owning parser reject a set but empty
+value. From this date an unset `SOURCE_DATE_EPOCH` is the Unix epoch in
+UTC, and a set but empty one is an error like every other malformed
+value. A run that wants the epoch leaves the variable unset or sets it to
+`0`. The surface of the package gains no symbol.
+
+**Supersedes, in the amendment of 2026-11-17 above:** "An unset or empty
+`SOURCE_DATE_EPOCH` is the Unix epoch in UTC, as before." is read as: "An
+unset `SOURCE_DATE_EPOCH` is the Unix epoch in UTC, as before; a set but
+empty one is malformed."; and "is Unix epoch zero in UTC when unset or
+empty, and an error when malformed" is read as: "is Unix epoch zero in
+UTC when unset, and an error when set but empty or malformed".
