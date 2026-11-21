@@ -365,3 +365,41 @@ of theirs optional, since each has a defined empty case" is read as:
 amendment of 2026-11-14,** the reading that the value of a pattern
 constraint is not reached is withdrawn; its reading that the fields of
 an entry's struct are reached stands.
+
+## Amendment 2026-11-21 -- no definition reaches itself or carries a default
+
+This amendment adds two rules to rule (7) of the amendment of
+2026-11-20 and states which rules the lint checks on the written form.
+The earlier amendments stand unchanged.
+
+### No definition reaches itself
+
+CUE admits a definition that names itself when the recursion ends in a
+branch that does not recur, as in `#List: {head: _, tail: null | #List}`.
+The contract has no use for one, and over a recursive definition the
+walk of the lint through the evaluated value would not end. No
+definition of the contract reaches itself, by a reference, a composition
+(`#T & {...}`) or an embedding, directly or through other definitions.
+
+### No definition carries a default
+
+The one form of a value with a default is the default arm at a regular
+field (rule (7)). A definition whose own value carries a default arm, as
+in `#Port: *443 | int`, would hand the default to every field that names
+it: a second form of the same statement, and at an optional field a
+default the field does not show. No definition carries a default arm of
+its own.
+
+### What the lint checks on the written form
+
+Rule (6) judges the value as the author writes it, and the lint checks
+it by evaluation. Three rules it checks on the written form, because the
+evaluated value does not show them: an optional field carries no
+default, no definition carries one, and no definition reaches itself.
+Evaluation gives every open list an implied default and drops a default
+arm that another arm subsumes, so it cannot tell a written default from
+none. The reference that closes a cycle is an identifier that names a
+definition of its own package; an identifier qualified by an import
+names a package of a lower tier, which cannot name the first one back.
+While any definition reaches itself, the lint reports it and does not
+walk the evaluated value, so the walk always ends.

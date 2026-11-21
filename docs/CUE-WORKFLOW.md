@@ -87,7 +87,9 @@ never optional. In an input it has three forms: omitted (the default
 applies), the default written (pinned), and any other value.
 `struct.MinFields` stands at the field, never in the definition, and a
 struct whose fields carry defaults or constants holds a field the
-instance must write.
+instance must write. A definition carries no default of its own, and no
+definition reaches itself, by a reference, a composition or an
+embedding (amendment of 2026-11-21).
 
 The two levels of the solution space; below level 1 the same holds
 recursively.
