@@ -77,7 +77,9 @@ takes exactly one of two paths:
 - **Delegate the measurement** when the outcome is generator-internal or
   otherwise unreadable. The agent runs the operation in a throwaway worktree
   and reports the result; the byte-exact steps that depend on it are authored
-  only afterward. The measurement is scratch and is never committed.
+  only afterward. The measurement is scratch and is never committed. A
+  measuring program records every case it sets aside instead of folding it
+  into a default, so its report shows what it did not examine.
 
 The discriminator is whether the byte-exact *content* depends on the measured
 value (delegate) or only the *gating* does (predict). Confidence is not the
@@ -145,6 +147,14 @@ Why the exactness: `AI-ORCHESTRATION.md#why-the-instruction-file-is-a-contract`.
    restricted so its value cannot depend on whether generated or ignored
    artifacts are present on disk: a bare checkout and a working tree must
    agree.
+
+   The same holds for what a gate depends on. A condition that can fail a
+   run -- a fail-closed abort, a premise of a dictated test -- is measured
+   over the whole tree before a gate rests on it; a claim that something
+   occurs once or never names the search behind it; a premise derived by
+   analogy is read against the source it concerns, and one that stays
+   unmeasured is checked by the dictated test itself. Why:
+   `docs/retrospectives/2026-11-22-item-0198-part2-evaluation-lint.md`.
 6. **Dictated Markdown sits in a fence.** Every block of Markdown an
    instruction dictates -- a before-snippet, an after-snippet, an appended
    section, a whole new file -- sits inside a fence, with its extraction
