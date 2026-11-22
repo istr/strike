@@ -187,3 +187,25 @@ Schema) is lossy for some CUE features" is read as: "The schema-export
 path (CUE -> JSON Schema) is lossy for some CUE features; where JSON
 Schema can represent a constraint the export drops, strike completes the
 export".
+
+## Amendment 2026-11-22 -- the export of an embedding is not satisfiable
+
+`cue export --out jsonschema` writes a definition that embeds another
+definition as an object closed with `additionalProperties: false`,
+holding its own properties and a `$ref` to the embedded definition,
+which is closed in turn. Measured on 2026-11-22 for `endpoint.#TLS`
+embedding `endpoint.#ServerTLS`: the outer object holds the type, and
+`#ServerTLS` requires host and trust. `additionalProperties` reads only
+the properties of its own schema object (JSON Schema 2020-12, section
+10.3.2.3), so the outer object rejects host and trust and `#ServerTLS`
+rejects the type. No instance satisfies the exported definition, and a
+verifier built against the export rejects every value of it.
+
+This is a defect of the export, not a rule for the contract. Until it is
+repaired, in the post-processing of the amendment of 2026-11-20 or in how
+the definitions are written:
+
+- `endpoint.#TLS` restates the fields of `endpoint.#ServerTLS` instead of
+  embedding it;
+- `#EngineTLS` and `#EngineMTLS` embed `#EngineServerTLS` and are
+  exported in the same form.

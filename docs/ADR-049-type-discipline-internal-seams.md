@@ -403,3 +403,22 @@ definition of its own package; an identifier qualified by an import
 names a package of a lower tier, which cannot name the first one back.
 While any definition reaches itself, the lint reports it and does not
 walk the evaluated value, so the walk always ends.
+
+## Amendment 2026-11-22 -- the discriminators, and a role that fixes the carriage
+
+This amendment extends the bullet "A discriminator is written" of rule
+(7) of the amendment of 2026-11-20. The earlier amendments stand
+unchanged.
+
+- The discriminator vocabularies are the deploy method, carriage, engine,
+  credential and provenance source types. A provenance source writes its
+  type with the required marker, as in `type!: "git"`.
+- A field whose role fixes the carriage writes no discriminator: the role
+  makes the statement, and a written type would be a second form of it.
+  Such a field holds a definition without one. The registry of a lane and
+  its storages, which the amendment of 2026-11-06 to
+  [ADR-029](ADR-029-peers-are-container-egress.md) declares as endpoints
+  with a server-trust anchor, hold `endpoint.#ServerTLS`, host and trust.
+  A single struct that seeds a later union, as `#DeployRegistryTarget`
+  does, is not such a field: it keeps its discriminator, which carries
+  the marker.

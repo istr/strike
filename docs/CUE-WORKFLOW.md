@@ -79,7 +79,7 @@ value, and an optional field is absent or holds one.
 | list | `[T, ...T]` |
 | map of pattern constraints | `{[K]: V} & struct.MinFields(1)` and `@go(Name,type=map[K]V)` |
 | struct whose fields are all optional | `#T & struct.MinFields(1)` at the field that uses it, and `@go(Name,type=*T)` when optional |
-| discriminator (`type`) | the required marker, as in `type!: "https"` |
+| discriminator (`type`) | the required marker, as in `type!: "https"`; none where the role fixes the carriage, as in `endpoint.#ServerTLS` |
 
 A field with a default is a regular field with an explicit default arm
 whose type follows the default, as in `forceRun: *false | bool`; it is
