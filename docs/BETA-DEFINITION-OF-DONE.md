@@ -280,3 +280,28 @@ column above is the snapshot at ratification.
 >    of the SBOM statement joins them. The cross-validation vectors and
 >    the attestation fixtures carry no SBOM record and no published
 >    statement, and are unchanged.
+
+> **2026-11-22, riding rules (6) and (7) of
+> [ADR-049](ADR-049-type-discipline-internal-seams.md):**
+>
+> 1. The commit that carries this amendment narrows packages that
+>    `contract/attest` imports: `primitive.#StringOrURI`, which
+>    `#ProvenanceOIDC.identity` names, is non-empty; the engine records
+>    and the arms of the declared peers, `endpoint.#TLS` and
+>    `endpoint.#SSH`, write their type with the required marker, and the
+>    certificate names of the engine records are non-empty; the
+>    provenance sources write their type with the marker, their uri as a
+>    URI reference and the ref of a git source as a git ref. The narrowing
+>    reaches the attest wire, so it is a freeze event, ratified through
+>    its instruction. No signed golden, cross-validation vector or
+>    attestation fixture carries a value it rejects, and no conformance
+>    golden needs a re-baseline.
+> 2. The tree of `contract/attest` does not change, so the comparison the
+>    freeze declaration names does not see this event: it compares
+>    `contract/attest` alone, not the packages it imports. That gap is
+>    owned by item-0193. The frozen baseline is still the tree
+>    `96b6822a6c7f9eb9f2ea427d2b51a711827173f2` of the commit that carries
+>    the amendment of 2026-11-18.
+> 3. One deferral of rule (6) in `contract/attest` goes with the
+>    narrowing: `#ProvenanceOIDC.identity` no longer accepts the empty
+>    string. The other sites stay deferrals of item-0004.

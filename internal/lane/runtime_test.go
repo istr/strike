@@ -48,7 +48,7 @@ func buildLaneDAG(t *testing.T, p *lane.Lane) *lane.DAG {
 func TestRegisterAndResolve(t *testing.T) {
 	s := newRuntime(t, "build")
 
-	imageRef := "localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000"
+	imageRef := primitive.NewImageRef("localhost/test/build@sha256:abc1230000000000000000000000000000000000000000000000000000000000")
 	h := output.ImageHandle{Ref: imageRef}
 
 	if err := s.Register("build", "binary", h); err != nil {

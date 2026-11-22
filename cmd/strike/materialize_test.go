@@ -35,7 +35,7 @@ func TestRunStep_CacheHitMaterializesNothing(t *testing.T) {
 	if buildErr != nil {
 		t.Fatalf("BuildLayeredImageTar: %v", buildErr)
 	}
-	eng.saveTars = map[string][]byte{registry.WrapDigest(rc.lane.ID, "step1", digest): tarBytes}
+	eng.saveTars = map[string][]byte{string(registry.WrapDigest(rc.lane.ID, "step1", digest)): tarBytes}
 
 	if err := rc.runStep("step1"); err != nil {
 		t.Fatalf("runStep: %v", err)

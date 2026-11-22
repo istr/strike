@@ -43,7 +43,7 @@ func TestResolver_MissingRejected(t *testing.T) {
 }
 
 // TestResolver_ValidNoPort verifies that a resolver without an explicit
-// port is accepted.
+// port is accepted and carries the default port 853 (RFC 7858).
 func TestResolver_ValidNoPort(t *testing.T) {
 	yaml := []byte(withAnchor(`
 name: resolver-ipv4
@@ -130,8 +130,12 @@ steps:
 	if fpErr != nil {
 		t.Fatalf("NewFilePath: %v", fpErr)
 	}
-	if _, _, _, err := lane.Parse(fp); err != nil {
+	p, _, _, err := lane.Parse(fp)
+	if err != nil {
 		t.Fatalf("Parse must accept a resolver without an explicit port: %v", err)
+	}
+	if p.Resolver.Port != 853 {
+		t.Errorf("resolver port = %d, want the default 853", p.Resolver.Port)
 	}
 }
 

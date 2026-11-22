@@ -13,7 +13,7 @@ import "github.com/istr/strike/contract/primitive"
 // is no per-output layer.
 #ImageHandle: {
 	@go(ImageHandle)
-	imageRef: string @go(Ref)
+	imageRef: primitive.#ImageRef @go(Ref)
 
 	// configDigest is the OCI image-config blob digest of the produced image:
 	// the round-trip-stable content anchor. A container engine re-encodes layer
@@ -30,7 +30,7 @@ import "github.com/istr/strike/contract/primitive"
 // selected by its diff_id.
 #FileHandle: {
 	@go(FileHandle)
-	imageRef: string @go(Ref)
+	imageRef: primitive.#ImageRef @go(Ref)
 
 	// outputID identifies the content layer for this output at the lane level: it
 	// is the output id (ADR-046). It addresses the output across steps.

@@ -226,7 +226,7 @@ func (rc *runContext) resolveImageDigest(step *lane.Step, safeName string, input
 // declares no imageFromStep edge.
 // ADR-045: the producer image is executed by its content-addressed digest
 // reference, not the mutable WrapTag (ADR-046).
-func (rc *runContext) imageFromRef(step *lane.Step, inputs stepInputs) (string, error) {
+func (rc *runContext) imageFromRef(step *lane.Step, inputs stepInputs) (primitive.ImageRef, error) {
 	if step.ImageFromStep == nil {
 		return "", nil
 	}
@@ -334,7 +334,7 @@ func (rc *runContext) checkCache(ctx context.Context, step *lane.Step, stepID pr
 // (deterministic, ADR-046), and the producer assembles one layer per output in
 // step.Outputs order (ADR-046 canonical ordering), so config rootfs.diff_ids[i]
 // is output i's layer. A pack step's image has no output layer.
-func (rc *runContext) registerCachedOutputs(ctx context.Context, step *lane.Step, stepID primitive.Identifier, safeName, imageRef string) error {
+func (rc *runContext) registerCachedOutputs(ctx context.Context, step *lane.Step, stepID primitive.Identifier, safeName string, imageRef primitive.ImageRef) error {
 	if len(step.Outputs) > 0 {
 		tarBytes, saveErr := registry.SaveImage(ctx, rc.engine, imageRef)
 		if saveErr != nil {
@@ -427,7 +427,7 @@ func (rc *runContext) executePack(ctx context.Context, step *lane.Step, stepID p
 // most once per reference across all pack files of the step.
 func (rc *runContext) resolvePackInputs(ctx context.Context, step *lane.Step, safeName string, inputs stepInputs) (map[string][]byte, error) {
 	inputTars := make(map[string][]byte)
-	exported := make(map[string][]byte)
+	exported := make(map[primitive.ImageRef][]byte)
 
 	for f := range rc.lane.PackFiles(step.ID) {
 		fromStep := f.From.Step
@@ -638,7 +638,7 @@ func (rc *runContext) buildInputDelivery(ctx context.Context, step *lane.Step, i
 	var (
 		seeds      []container.Seed
 		mounts     []container.ImageVolume
-		imageCache = make(map[string][]byte) // keyed by producer image ref (digest)
+		imageCache = make(map[primitive.ImageRef][]byte) // keyed by producer image ref (digest)
 	)
 	for inp := range rc.lane.Inputs(step.ID) {
 		out := rc.lane.Output(inp.From.Step, inp.From.Output)
@@ -683,7 +683,7 @@ func (rc *runContext) buildInputDelivery(ctx context.Context, step *lane.Step, i
 // buildImageMount validates and constructs a read-only image-volume mount for
 // an input delivered outside the workdir. A single-file selection is rejected
 // in lane terms, statically for a type:file output, by walk otherwise.
-func buildImageMount(ctx context.Context, engine container.Engine, cache map[string][]byte, h output.FileHandle, inp lane.InputRef, out *lane.FileOutput) (container.ImageVolume, error) {
+func buildImageMount(ctx context.Context, engine container.Engine, cache map[primitive.ImageRef][]byte, h output.FileHandle, inp lane.InputRef, out *lane.FileOutput) (container.ImageVolume, error) {
 	if out.Type == primitive.FileArtifactTypeFile && inp.Subpath == nil {
 		return container.ImageVolume{}, singleFileOutsideErr(inp)
 	}
@@ -700,7 +700,7 @@ func buildImageMount(ctx context.Context, engine container.Engine, cache map[str
 		return container.ImageVolume{}, singleFileOutsideErr(inp)
 	}
 	return container.ImageVolume{
-		Source:      h.Ref,
+		Source:      string(h.Ref),
 		Destination: inp.Mount.String(),
 		SubPath:     subPath,
 		ReadWrite:   false,
@@ -709,7 +709,7 @@ func buildImageMount(ctx context.Context, engine container.Engine, cache map[str
 
 // producerTar returns the producer image's OCI-layout tar, exporting it
 // from the engine at most once per ref across all input edges of a step.
-func producerTar(ctx context.Context, engine container.Engine, cache map[string][]byte, ref string, inp lane.InputRef) ([]byte, error) {
+func producerTar(ctx context.Context, engine container.Engine, cache map[primitive.ImageRef][]byte, ref primitive.ImageRef, inp lane.InputRef) ([]byte, error) {
 	if tarBytes, ok := cache[ref]; ok {
 		return tarBytes, nil
 	}

@@ -121,8 +121,9 @@ func syntaxFindings(insts map[string]*build.Instance) ([]string, bool) {
 // primitiveConstraints maps the normalized source of each primitive definition
 // constraint to its name, so a re-inlined grammar can be matched back to the
 // primitive that already owns it. A definition whose value is a bare
-// identifier -- string, or another definition -- owns no grammar and is left
-// out; keyed by that identifier, it would claim every field of that type.
+// identifier -- string, or another definition -- or the non-empty form
+// string & !="" owns no grammar and is left out: it is a nominal type, and
+// keyed by its value it would claim every field of that type.
 func primitiveConstraints(files []*ast.File) map[string]string {
 	out := map[string]string{}
 	for _, f := range files {
@@ -138,7 +139,7 @@ func primitiveConstraints(files []*ast.File) map[string]string {
 			if !isDefinitionLabel(name) {
 				continue
 			}
-			if c := renderConstraint(field.Value); c != "" {
+			if c := renderConstraint(field.Value); c != "" && c != `string & !=""` {
 				out[c] = name
 			}
 		}

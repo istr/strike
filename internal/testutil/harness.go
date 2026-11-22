@@ -48,7 +48,7 @@ func HarnessDialer(harnessDir string) (*transport.Dialer, error) {
 	return transport.NewDialer(endpoint.DoT{
 		ADN:   harnessResolverADN,
 		IP:    harnessResolverIP,
-		Port:  &port,
+		Port:  port,
 		Trust: trust,
 	})
 }

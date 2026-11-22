@@ -33,7 +33,7 @@ type Run struct {
 	// digest reference (localhost/strike/<lane>/<step>@sha256:<D>).
 	// When empty, Step.Image is used unchanged. ADR-045: the base is
 	// always a digest-pinned reference.
-	ImageRef  string
+	ImageRef  primitive.ImageRef
 	CAVolume  string // lane-wide CA volume name; mounted r/o at /etc/ssl/certs; required when Capsule != nil
 	SSHVolume string // per-step SSH trust volume name; mounted r/o at /etc/ssh; empty when step has no SSH peers
 	// Seeds carry input content into the workdir volume before start
@@ -71,7 +71,7 @@ func (r Run) Execute(ctx context.Context) (string, error) {
 		opts.Image = *r.Step.Image
 	}
 	if r.ImageRef != "" {
-		opts.Image = primitive.ImageRef(r.ImageRef)
+		opts.Image = r.ImageRef
 	}
 	// ADR-045: a step executes only a digest-pinned image. External bases
 	// are digest-pinned at the schema boundary (ADR-011); imageFromStep bases

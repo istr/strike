@@ -88,6 +88,35 @@ func (e *TLS) UnmarshalJSON(data []byte) error {
 }
 
 // MarshalJSON projects the host to its packed authority wire form.
+func (e ServerTLS) MarshalJSON() ([]byte, error) {
+	return json.Marshal(struct {
+		Trust Certificate `json:"trust"`
+		Host  string      `json:"host"`
+	}{Host: string(e.Address.Authority()), Trust: e.Trust})
+}
+
+// UnmarshalJSON parses the packed authority host into the address and decodes
+// the trust anchor by field. Trust is required; a missing trust is an error.
+func (e *ServerTLS) UnmarshalJSON(data []byte) error {
+	var aux struct {
+		Trust *Certificate `json:"trust"`
+		Host  string       `json:"host"`
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return fmt.Errorf("decode https endpoint: %w", err)
+	}
+	if aux.Trust == nil {
+		return fmt.Errorf("https endpoint: trust required")
+	}
+	addr, err := ParseAuthority(aux.Host)
+	if err != nil {
+		return fmt.Errorf("https endpoint: %w", err)
+	}
+	*e = ServerTLS{Address: addr, Trust: *aux.Trust}
+	return nil
+}
+
+// MarshalJSON projects the host to its packed authority wire form.
 func (e SSH) MarshalJSON() ([]byte, error) {
 	return json.Marshal(struct {
 		Type       CarriageType `json:"type"`

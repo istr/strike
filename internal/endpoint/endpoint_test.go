@@ -1,6 +1,7 @@
 package endpoint_test
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -156,6 +157,75 @@ func TestUnmarshalEndpoint(t *testing.T) {
 				t.Fatalf("UnmarshalEndpoint: %v", err)
 			}
 			tc.check(t, e)
+		})
+	}
+}
+
+// TestServerTLSJSON exercises the codec of the server shape a field holds when
+// its role fixes the carriage: it decodes host and trust without a type
+// discriminator, rejects a missing trust, a malformed trust and an empty host,
+// and encodes back to host and trust without a type.
+func TestServerTLSJSON(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		wantErr string
+	}{
+		{
+			name:  "host and trust",
+			input: `{"host": "registry.example.com:5000", "trust": {"cert": "@anchor@"}}`,
+		},
+		{
+			name:    "missing trust",
+			input:   `{"host": "registry.example.com"}`,
+			wantErr: "https endpoint: trust required",
+		},
+		{
+			name:    "trust not an object",
+			input:   `{"host": "registry.example.com", "trust": 5}`,
+			wantErr: "decode https endpoint",
+		},
+		{
+			name:    "empty host",
+			input:   `{"host": "", "trust": {"cert": "@anchor@"}}`,
+			wantErr: "https endpoint: invalid authority",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			input := strings.ReplaceAll(tc.input, "@anchor@", testutil.AnchorCertB64)
+			var s endpoint.ServerTLS
+			err := json.Unmarshal([]byte(input), &s)
+			if tc.wantErr != "" {
+				if err == nil {
+					t.Fatalf("expected error containing %q, got nil", tc.wantErr)
+				}
+				if !strings.Contains(err.Error(), tc.wantErr) {
+					t.Errorf("error = %v, want substring %q", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Unmarshal: %v", err)
+			}
+			if s.Address.Authority() != "registry.example.com:5000" {
+				t.Errorf("host = %q, want registry.example.com:5000", s.Address.Authority())
+			}
+			out, err := json.Marshal(s)
+			if err != nil {
+				t.Fatalf("Marshal: %v", err)
+			}
+			if strings.Contains(string(out), `"type"`) {
+				t.Errorf("wire form = %s, want no type discriminator", out)
+			}
+			var back endpoint.ServerTLS
+			if err = json.Unmarshal(out, &back); err != nil {
+				t.Fatalf("round trip: %v", err)
+			}
+			if back.Address.Authority() != s.Address.Authority() || back.Trust != s.Trust {
+				t.Errorf("round trip = %+v, want %+v", back, s)
+			}
 		})
 	}
 }

@@ -39,7 +39,7 @@ func (e *stubSaveEngine) ImageSave(_ context.Context, _ string) (io.ReadCloser, 
 func TestSaveImage_ReturnsTarBytes(t *testing.T) {
 	want := []byte("oci-tar-bytes")
 	eng := &stubSaveEngine{data: want}
-	got, err := registry.SaveImage(context.Background(), eng, "test:tag")
+	got, err := registry.SaveImage(context.Background(), eng, "localhost/test/save@sha256:0000000000000000000000000000000000000000000000000000000000000000")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,7 +50,7 @@ func TestSaveImage_ReturnsTarBytes(t *testing.T) {
 
 func TestSaveImage_PropagatesError(t *testing.T) {
 	eng := &stubSaveEngine{err: fmt.Errorf("engine down")}
-	_, err := registry.SaveImage(context.Background(), eng, "test:tag")
+	_, err := registry.SaveImage(context.Background(), eng, "localhost/test/save@sha256:0000000000000000000000000000000000000000000000000000000000000000")
 	if err == nil {
 		t.Fatal("expected error")
 	}

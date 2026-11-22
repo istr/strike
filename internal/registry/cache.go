@@ -69,8 +69,8 @@ func WrapTag(laneID, stepID primitive.Identifier, specHash primitive.Digest) str
 // is executed against (ADR-045): localhost/strike/{laneID}/{stepID}@{D}. libpod
 // records this exact RepoDigest at ImageTag time (see WrapTag), so it resolves
 // the locally-loaded image with no registry pull.
-func WrapDigest(laneID, stepID primitive.Identifier, digest primitive.Digest) string {
-	return fmt.Sprintf("%s@%s", wrapRepo(laneID, stepID), digest.String())
+func WrapDigest(laneID, stepID primitive.Identifier, digest primitive.Digest) primitive.ImageRef {
+	return primitive.NewImageRef(fmt.Sprintf("%s@%s", wrapRepo(laneID, stepID), digest.String()))
 }
 
 func sortedKeys(m map[string]string) []string {

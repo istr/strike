@@ -32,9 +32,9 @@ import "github.com/istr/strike/contract/primitive"
 	// ip is the address the dial connects to. It routes; it authenticates
 	// nothing. Lax here, binding in Go (see primitive.#IP).
 	ip: primitive.#IP @go(IP)
-	// port is the DoT port. Absent means 853 (RFC 7858), defaulted in Go
-	// rather than in a CUE default arm.
-	port?: primitive.#Port @go(Port,optional=nillable)
+	// port is the DoT port, 853 (RFC 7858) unless the declaration names
+	// another.
+	port: *853 | primitive.#Port @go(Port,type="github.com/istr/strike/contract/primitive".Port)
 	// trust is the root certificate the presented chain is verified against,
 	// narrowed to the rootca mode: unifying the mode here is what makes a leaf
 	// pin a parse error on this endpoint and valid on every other. Certificate

@@ -287,7 +287,7 @@ func pushImageSBOM(ctx context.Context, repo string, subject v1.Descriptor, img 
 func (d *Deployer) regionSBOMs(ctx context.Context, repo string, subject v1.Descriptor, client registryClient, state *lane.Runtime) (map[primitive.Identifier]record.SBOMSet, []v1.Descriptor, error) {
 	sets := map[primitive.Identifier]record.SBOMSet{}
 	var referrers []v1.Descriptor
-	exported := map[string][]byte{}
+	exported := map[primitive.ImageRef][]byte{}
 	for _, artName := range slices.Sorted(maps.Keys(d.ArtifactRefs)) {
 		ref := d.ArtifactRefs[artName]
 		if ref.Output == nil {
@@ -308,7 +308,7 @@ func (d *Deployer) regionSBOMs(ctx context.Context, repo string, subject v1.Desc
 // exported), select and content-check the layer, read it at the output's own
 // coordinates, and push the SBOM document under the region's diff_id subject.
 // It returns what pushSBOMDocument returns.
-func (d *Deployer) regionSBOM(ctx context.Context, repo string, subject v1.Descriptor, client registryClient, state *lane.Runtime, artName primitive.Identifier, ref lane.ArtifactRef, exported map[string][]byte) ([]byte, v1.Descriptor, error) {
+func (d *Deployer) regionSBOM(ctx context.Context, repo string, subject v1.Descriptor, client registryClient, state *lane.Runtime, artName primitive.Identifier, ref lane.ArtifactRef, exported map[primitive.ImageRef][]byte) ([]byte, v1.Descriptor, error) {
 	handle, err := state.Resolve(lane.OutputRef{Step: ref.Step, Output: *ref.Output})
 	if err != nil {
 		return nil, v1.Descriptor{}, err

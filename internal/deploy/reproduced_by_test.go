@@ -88,11 +88,11 @@ func TestDeployerExecute_ReproducedBy(t *testing.T) {
 			}))
 
 			state := newRuntime(t, "build", "rebuild", "publish")
-			if err := state.Register("build", "", output.ImageHandle{Ref: tc.armRef, ConfigDigest: reproConfig}); err != nil {
+			if err := state.Register("build", "", output.ImageHandle{Ref: primitive.NewImageRef(tc.armRef), ConfigDigest: reproConfig}); err != nil {
 				t.Fatal(err)
 			}
 			if tc.againRef != "" {
-				if err := state.Register("rebuild", "", output.ImageHandle{Ref: tc.againRef, ConfigDigest: tc.againCfg}); err != nil {
+				if err := state.Register("rebuild", "", output.ImageHandle{Ref: primitive.NewImageRef(tc.againRef), ConfigDigest: tc.againCfg}); err != nil {
 					t.Fatal(err)
 				}
 			}

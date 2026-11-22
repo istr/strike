@@ -112,10 +112,11 @@ func TestInlineDisjunctionFinding(t *testing.T) {
 	}
 }
 
-func TestPrimitiveConstraintsSkipBareIdentifiers(t *testing.T) {
-	// A primitive whose value is a bare identifier owns no grammar, so it does
-	// not claim the fields of that type; a primitive with a grammar still does.
-	f, err := parser.ParseFile("p.cue", "#UserSpec: string\n#Alias: #Ident\n#Ident: =~\"^[a-z0-9]$\"\n")
+func TestPrimitiveConstraintsSkipNominalTypes(t *testing.T) {
+	// A primitive whose value is a bare identifier or the non-empty form owns
+	// no grammar, so it does not claim the fields of that type; a primitive
+	// with a grammar still does.
+	f, err := parser.ParseFile("p.cue", "#UserSpec: string\n#URIReference: string & !=\"\"\n#Alias: #Ident\n#Ident: =~\"^[a-z0-9]$\"\n")
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
@@ -124,8 +125,10 @@ func TestPrimitiveConstraintsSkipBareIdentifiers(t *testing.T) {
 	if len(prims) != 1 || prims[grammar] != "#Ident" {
 		t.Fatalf("primitiveConstraints = %v, want only the #Ident grammar", prims)
 	}
-	if fs := appendFieldFindings(nil, firstField(t, "user: string"), prims); len(fs) != 0 {
-		t.Errorf("string field: got %d findings, want 0: %v", len(fs), fs)
+	for _, src := range []string{"user: string", "uri: string & !=\"\""} {
+		if fs := appendFieldFindings(nil, firstField(t, src), prims); len(fs) != 0 {
+			t.Errorf("%s: got %d findings, want 0: %v", src, len(fs), fs)
+		}
 	}
 }
 

@@ -84,7 +84,7 @@ func NewReads(dialer *transport.Dialer, p *lane.Lane, tokens map[string]lane.Sec
 		if reg, ok := s.Deploy.Method.(lane.DeployRegistry); ok {
 			t := reg.Target
 			registries[string(t.Address.Authority())] = lane.Registry{
-				Registry: endpoint.TLS{Type: t.Type, Address: t.Address, Trust: t.Trust},
+				Registry: endpoint.ServerTLS{Address: t.Address, Trust: t.Trust},
 			}
 		}
 	}
@@ -119,7 +119,7 @@ func (r *Reads) Transport(ref primitive.ImageRef) (http.RoundTripper, error) {
 		storages[string(s.Address.Authority())] = true
 	}
 	var rt http.RoundTripper = readPolicy{
-		inner:    r.dialTransport(authority, append([]endpoint.TLS{reg.Registry}, reg.Storages...)),
+		inner:    r.dialTransport(authority, append([]endpoint.ServerTLS{reg.Registry}, reg.Storages...)),
 		storages: storages,
 		registry: authority,
 	}
@@ -132,8 +132,8 @@ func (r *Reads) Transport(ref primitive.ImageRef) (http.RoundTripper, error) {
 // dialTransport opens every connection through the run's dialer: the dialed
 // authority must be one of hosts, and the connection verifies against that
 // host's declared anchor. A plaintext dial is rejected outright.
-func (r *Reads) dialTransport(authority string, hosts []endpoint.TLS) *http.Transport {
-	anchors := make(map[string]endpoint.TLS, len(hosts))
+func (r *Reads) dialTransport(authority string, hosts []endpoint.ServerTLS) *http.Transport {
+	anchors := make(map[string]endpoint.ServerTLS, len(hosts))
 	for _, h := range hosts {
 		if h.Address.Port == nil {
 			port := primitive.Port(443)

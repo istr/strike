@@ -47,7 +47,7 @@ func resolverEndpoint(t *testing.T, addr string, anchor endpoint.Certificate) en
 	return endpoint.DoT{
 		ADN:   testResolverADN,
 		IP:    primitive.IPFromAddr(ap.Addr()),
-		Port:  &port,
+		Port:  port,
 		Trust: anchor,
 	}
 }
@@ -69,14 +69,14 @@ func TestNewDialer_RejectsEmptyResolverADN(t *testing.T) {
 func TestNewDialer_RejectsUnusableResolverIP(t *testing.T) {
 	zero := primitive.Port(0)
 	tests := []struct {
-		port    *primitive.Port
 		name    string
 		ip      primitive.IP
 		wantErr string
+		port    primitive.Port
 	}{
 		{name: "ip is a name", ip: "resolver.example", wantErr: "ip"},
 		{name: "ip not canonical", ip: "::0001", wantErr: "not canonical"},
-		{name: "port out of range", ip: "127.0.0.1", port: &zero, wantErr: "out of range"},
+		{name: "port out of range", ip: "127.0.0.1", port: zero, wantErr: "out of range"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

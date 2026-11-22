@@ -17,16 +17,17 @@ import (
 	"github.com/istr/strike/internal/primitive"
 )
 
-// SaveImage exports an image from the engine as an OCI archive tar.
-func SaveImage(ctx context.Context, engine container.Engine, tag string) ([]byte, error) {
-	rc, err := engine.ImageSave(ctx, tag)
+// SaveImage exports the image ref names from the engine as an OCI archive tar.
+func SaveImage(ctx context.Context, engine container.Engine, ref primitive.ImageRef) ([]byte, error) {
+	name := string(ref)
+	rc, err := engine.ImageSave(ctx, name)
 	if err != nil {
-		return nil, fmt.Errorf("save image %s: %w", tag, err)
+		return nil, fmt.Errorf("save image %s: %w", ref, err)
 	}
 	defer closer.Warn(rc, "save image")
 	data, err := io.ReadAll(rc)
 	if err != nil {
-		return nil, fmt.Errorf("save image %s: read: %w", tag, err)
+		return nil, fmt.Errorf("save image %s: read: %w", ref, err)
 	}
 	return data, nil
 }

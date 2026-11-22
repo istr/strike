@@ -17,7 +17,7 @@ import "github.com/istr/strike/contract/primitive"
 #EngineType: "unix" | "tls" | "mtls"
 
 #EngineUnix: {
-	type: "unix" @go(Type,type=EngineType)
+	type!: "unix" @go(Type,type=EngineType)
 }
 
 // #CATrustType is how an engine's server certificate was trusted.
@@ -34,20 +34,20 @@ import "github.com/istr/strike/contract/primitive"
 	serverCertFingerprint: primitive.#Digest
 	// serverCertSubject / serverCertIssuer are the Subject CN and Issuer CN
 	// of that leaf certificate, observed in the same handshake.
-	serverCertSubject?: string
-	serverCertIssuer?:  string
+	serverCertSubject?: string & !=""
+	serverCertIssuer?:  string & !=""
 }
 
 #EngineTLS: {
 	#EngineServerTLS
-	type: "tls" @go(Type,type=EngineType)
+	type!: "tls" @go(Type,type=EngineType)
 }
 
 #EngineMTLS: {
 	#EngineServerTLS
-	type: "mtls" @go(Type,type=EngineType)
+	type!: "mtls" @go(Type,type=EngineType)
 	// clientCertFingerprint is sha256:<hex> of the controller's own cert;
 	// clientCertSubject is its Subject CN.
 	clientCertFingerprint: primitive.#Digest
-	clientCertSubject?:    string
+	clientCertSubject?:    string & !=""
 }

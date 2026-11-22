@@ -12,11 +12,11 @@ package endpoint
 // arms of #Endpoint and the observed-identity records.
 #CarriageType: "https" | "ssh"
 
-// TLS is a TLS-carriage endpoint: an address plus a single server-trust
-// anchor.
-#TLS: {
-	@go(TLS)
-	type: "https" @go(Type,type=CarriageType)
+// ServerTLS is a TLS server: an address plus a single server-trust anchor.
+// Not an endpoint on its own (no discriminator): a field whose role fixes the
+// carriage, as a lane registry and its storages do, holds it directly, and
+// #TLS restates its fields as the https arm of #Endpoint.
+#ServerTLS: {
 	// host (left of @go) is the packed-authority wire grammar; the Go side
 	// (inside @go) is the Address concept in both name and type, since the wire
 	// diverges from the concept and a diverging field maps fully, not half.
@@ -30,13 +30,25 @@ package endpoint
 	trust: #Certificate @go(Trust,type=Certificate)
 }
 
+// TLS is a TLS-carriage endpoint: an address plus a single server-trust
+// anchor. The field set restates #ServerTLS rather than embedding it: the
+// JSON Schema export of an embedding is not satisfiable (ADR-017 amendment
+// 2026-11-22).
+#TLS: {
+	@go(TLS)
+	type!: "https" @go(Type,type=CarriageType)
+	// host and trust are the fields of #ServerTLS; see #ServerTLS.host.
+	host:  #Authority   @go(Address,type=Address)
+	trust: #Certificate @go(Trust,type=Certificate)
+}
+
 // SSH is an SSH-carriage endpoint: an address plus the set of host keys
 // the server is permitted to present.
 #SSH: {
 	@go(SSH)
-	type: "ssh" @go(Type,type=CarriageType)
+	type!: "ssh" @go(Type,type=CarriageType)
 	// host (left of @go) is the packed-authority wire grammar; the Go side is
-	// the Address concept in name and type; see #TLS.host.
+	// the Address concept in name and type; see #ServerTLS.host.
 	host: #Authority @go(Address,type=Address)
 	knownHosts: [#HostKey, ...#HostKey] @go(KnownHosts)
 }

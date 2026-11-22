@@ -97,24 +97,25 @@ _sha256Hex: "[a-f0-9]{64}"
 #Port: int & >=1 & <=65535
 
 // #UserSpec is the OCI image-config user: a uid, uid:gid, user, or user:group
-// string. Left unconstrained because all of these forms are valid; it is a
-// named type so the field is carried as primitive.UserSpec end to end.
-#UserSpec: string
+// string. It is non-empty and otherwise unconstrained, because all of these
+// forms are valid; it is a named type so the field is carried as
+// primitive.UserSpec end to end.
+#UserSpec: string & !=""
 
 // #StringOrURI is the RFC 7519 (section 2) StringOrURI: an arbitrary string,
 // except that a value containing ':' must be a URI (RFC 3986); values are
 // compared case-sensitively and verbatim. It types a signer identity, the SAN
 // a Fulcio certificate carries: an email address (colon-free) or a URI of any
-// scheme. The colon-implies-URI rule and non-emptiness are not encoded here;
-// StringOrURI.Validate enforces them after parse.
-#StringOrURI: string
+// scheme. It is non-empty; the colon-implies-URI rule is not encoded here,
+// and StringOrURI.Validate enforces it after parse.
+#StringOrURI: string & !=""
 
 // #URIReference is an RFC 3986 URI-reference, absolute or relative: the form
 // a Fulcio source-repository or build-config extension carries, which SHOULD
-// be a fully qualified URL but may omit the scheme. Non-emptiness, the
-// absence of whitespace and control characters, and parseability are not
-// encoded here; URIReference.Validate enforces them after parse.
-#URIReference: string
+// be a fully qualified URL but may omit the scheme. It is non-empty; the
+// absence of whitespace and control characters and parseability are not
+// encoded here, and URIReference.Validate enforces them after parse.
+#URIReference: string & !=""
 
 // #RunnerEnvironment is a Fulcio runner-environment value: lowercase
 // alphanumeric words joined by '-', such as "github-hosted" or

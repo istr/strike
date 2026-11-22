@@ -12,6 +12,7 @@ import (
 	"github.com/istr/strike/internal/clock"
 	"github.com/istr/strike/internal/container"
 	"github.com/istr/strike/internal/lane"
+	"github.com/istr/strike/internal/primitive"
 	"github.com/istr/strike/internal/registry"
 	"github.com/istr/strike/internal/testutil"
 )
@@ -116,7 +117,7 @@ func TestWholeWorkdirOutput_Integration(t *testing.T) {
 	}
 	t.Logf("wrapped: digest=%s size=%d tag=%s", result.Digest, result.Size, tag)
 
-	saved, saveErr := registry.SaveImage(ctx, eng, tag)
+	saved, saveErr := registry.SaveImage(ctx, eng, primitive.NewImageRef("localhost/strike/workdir-itest@"+result.Digest.String()))
 	if saveErr != nil {
 		t.Fatalf("save image: %v", saveErr)
 	}

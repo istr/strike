@@ -313,9 +313,6 @@ steps:
 	if got := reg.Registry.Address.Authority(); got != "images.example.com" {
 		t.Errorf("registry authority = %q, want images.example.com", got)
 	}
-	if reg.Registry.Type != endpoint.CarriageTypeHttps {
-		t.Errorf("registry type = %q, want https", reg.Registry.Type)
-	}
 	if reg.Registry.Trust.Mode != endpoint.CertificateModeRootca {
 		t.Errorf("registry trust mode = %q, want rootca", reg.Registry.Trust.Mode)
 	}

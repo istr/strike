@@ -19,7 +19,7 @@ import (
 // the shared behaviour to them.
 type Handle interface {
 	// ImageRef is the digest-pinned local reference, common to both variants.
-	ImageRef() string
+	ImageRef() primitive.ImageRef
 	// HandleKind returns the discriminator: "image" or "file".
 	HandleKind() string
 }
@@ -31,13 +31,13 @@ var (
 )
 
 // ImageRef implements Handle.
-func (h ImageHandle) ImageRef() string { return h.Ref }
+func (h ImageHandle) ImageRef() primitive.ImageRef { return h.Ref }
 
 // HandleKind implements Handle.
 func (ImageHandle) HandleKind() string { return "image" }
 
 // ImageRef implements Handle.
-func (h FileHandle) ImageRef() string { return h.Ref }
+func (h FileHandle) ImageRef() primitive.ImageRef { return h.Ref }
 
 // HandleKind implements Handle.
 func (FileHandle) HandleKind() string { return "file" }
@@ -46,9 +46,10 @@ func (FileHandle) HandleKind() string { return "file" }
 // imageRef has the form "repo@algorithm:hex"; the digest is everything after
 // the "@".
 func ManifestDigest(h Handle) (primitive.Digest, error) {
-	_, d, ok := strings.Cut(h.ImageRef(), "@")
+	ref := string(h.ImageRef())
+	_, d, ok := strings.Cut(ref, "@")
 	if !ok {
-		return "", fmt.Errorf("output handle: no digest in image ref %q", h.ImageRef())
+		return "", fmt.Errorf("output handle: no digest in image ref %q", ref)
 	}
 	digest := primitive.Digest(d)
 	return primitive.ParseDigest(digest)

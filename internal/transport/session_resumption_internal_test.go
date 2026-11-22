@@ -42,7 +42,7 @@ func TestDialer_ResumesResolverSession(t *testing.T) {
 	d, err := NewDialer(endpoint.DoT{
 		ADN:   resumptionADN,
 		IP:    primitive.IPFromAddr(target.Addr()),
-		Port:  &port,
+		Port:  port,
 		Trust: anchor,
 	})
 	if err != nil {

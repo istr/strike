@@ -90,7 +90,7 @@ func TestBuildInputDelivery_Single(t *testing.T) {
 		t.Fatalf("BuildLayeredImageTar: %v", err)
 	}
 	if err := rc.runtime.Register("compile", "bin", output.FileHandle{
-		Ref:         compileRef,
+		Ref:         primitive.NewImageRef(compileRef),
 		OutputID:    "bin",
 		LayerDiffID: diffID,
 	}); err != nil {
@@ -154,10 +154,10 @@ func TestBuildInputDelivery_Multiple(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildLayeredImageTar s2: %v", err)
 	}
-	if err := rc.runtime.Register("s1", "a", output.FileHandle{Ref: ref1, OutputID: "a", LayerDiffID: diff1}); err != nil {
+	if err := rc.runtime.Register("s1", "a", output.FileHandle{Ref: primitive.NewImageRef(ref1), OutputID: "a", LayerDiffID: diff1}); err != nil {
 		t.Fatal(err)
 	}
-	if err := rc.runtime.Register("s2", "b", output.FileHandle{Ref: ref2, OutputID: "b", LayerDiffID: diff2}); err != nil {
+	if err := rc.runtime.Register("s2", "b", output.FileHandle{Ref: primitive.NewImageRef(ref2), OutputID: "b", LayerDiffID: diff2}); err != nil {
 		t.Fatal(err)
 	}
 	rc.runtime.RecordSpecHash("s1", primitive.DigestFromHex("2222222222222222000000000000000000000000000000000000000000000000"))
@@ -206,7 +206,7 @@ func TestBuildInputDelivery_MissingSubpath(t *testing.T) {
 		t.Fatalf("BuildLayeredImageTar: %v", err)
 	}
 	if err := rc.runtime.Register("src", "tree", output.FileHandle{
-		Ref:         srcRef,
+		Ref:         primitive.NewImageRef(srcRef),
 		OutputID:    "tree",
 		LayerDiffID: diffID,
 	}); err != nil {
@@ -257,7 +257,7 @@ func TestBuildInputDelivery_OutsideWorkdir_DirectoryMount(t *testing.T) {
 		t.Fatalf("BuildLayeredImageTar: %v", err)
 	}
 	if err := rc.runtime.Register("src", "tree", output.FileHandle{
-		Ref:         srcRef,
+		Ref:         primitive.NewImageRef(srcRef),
 		OutputID:    "tree",
 		LayerDiffID: diffID,
 	}); err != nil {
@@ -322,7 +322,7 @@ func TestBuildInputDelivery_NoWorkdir_Mounts(t *testing.T) {
 		t.Fatalf("BuildLayeredImageTar: %v", err)
 	}
 	if err := rc.runtime.Register("src", "tree", output.FileHandle{
-		Ref:         srcRef,
+		Ref:         primitive.NewImageRef(srcRef),
 		OutputID:    "tree",
 		LayerDiffID: diffID,
 	}); err != nil {
@@ -419,7 +419,7 @@ func TestBuildInputDelivery_ExportsProducerOnce(t *testing.T) {
 		t.Fatalf("BuildLayeredImageTar: %v", err)
 	}
 	if err := rc.runtime.Register("src", "tree", output.FileHandle{
-		Ref:         srcRef,
+		Ref:         primitive.NewImageRef(srcRef),
 		OutputID:    "tree",
 		LayerDiffID: diffID,
 	}); err != nil {
@@ -568,7 +568,7 @@ func TestCheckCache_Hit(t *testing.T) {
 	if buildErr != nil {
 		t.Fatalf("BuildLayeredImageTar: %v", buildErr)
 	}
-	eng.saveTars = map[string][]byte{imageRef: tarBytes}
+	eng.saveTars = map[string][]byte{string(imageRef): tarBytes}
 
 	hit, err := rc.checkCache(context.Background(), step, "step1", "step1", primitive.DigestFromHex("abc0000000000000000000000000000000000000000000000000000000000000"))
 	if err != nil {
@@ -847,7 +847,7 @@ func TestImageFromRef(t *testing.T) {
 	tests := []struct {
 		step    *lane.Step
 		name    string
-		wantRef string
+		wantRef primitive.ImageRef
 	}{
 		{
 			name:    "resolves imageFromStep edge",
@@ -908,7 +908,7 @@ func TestResolvePackInputs(t *testing.T) {
 		t.Fatalf("BuildLayeredImageTar: %v", err)
 	}
 	if err := rc.runtime.Register("compile", "bin", output.FileHandle{
-		Ref:         compileRef,
+		Ref:         primitive.NewImageRef(compileRef),
 		OutputID:    "bin",
 		LayerDiffID: diffID,
 	}); err != nil {

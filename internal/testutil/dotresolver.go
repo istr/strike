@@ -73,7 +73,7 @@ func StartDoTResolver(t *testing.T, answer netip.Addr) *transport.Dialer {
 	dialer, err := transport.NewDialer(endpoint.DoT{
 		ADN:   TestResolverADN,
 		IP:    primitive.IPFromAddr(listen.Addr()),
-		Port:  &port,
+		Port:  port,
 		Trust: anchor,
 	})
 	if err != nil {

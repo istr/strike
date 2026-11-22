@@ -101,7 +101,7 @@ func runStep(t *testing.T, eng *orderEngine, image primitive.ImageRef, imageRef 
 		Engine:   eng,
 		Capsule:  caps,
 		CAVolume: caVolume,
-		ImageRef: imageRef,
+		ImageRef: primitive.NewImageRef(imageRef),
 		Reads:    registry.SystemTransports{},
 		Step:     &lane.Step{ID: "step", Image: &image, Args: []string{"true"}},
 	}

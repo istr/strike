@@ -71,7 +71,7 @@ func TestImageFromStep_RunsByDigestRef(t *testing.T) {
 	// 3. Run a held container whose base is that ref. The packed entrypoint is
 	//    /app; it must create AND start (the 405 regression failed at start).
 	opts := container.DefaultSecureOpts()
-	opts.Image = primitive.ImageRef(imageRef)
+	opts.Image = imageRef
 	opts.Entrypoint = []string{"/app"}
 	opts.Cmd = nil
 

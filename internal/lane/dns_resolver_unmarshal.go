@@ -9,7 +9,7 @@ import (
 )
 
 // unmarshalDNSResolver decodes a DNS resolver JSON object into endpoint.DoT:
-// an authentication domain name, the IP the dial routes to, an optional port,
+// an authentication domain name, the IP the dial routes to, the port,
 // and the root certificate the presented chain is verified against. The anchor
 // is the same shape a peer declares, narrowed to the rootca mode: a
 // certificate pinned as a leaf authenticates nothing here (RFC 8310 section
@@ -20,10 +20,10 @@ import (
 // wire and the directional dependency is lane -> endpoint, never the reverse.
 func unmarshalDNSResolver(data []byte) (endpoint.DoT, error) {
 	var aux struct {
-		Port  *primitive.Port       `json:"port"`
 		Trust *endpoint.Certificate `json:"trust"`
 		ADN   string                `json:"adn"`
 		IP    string                `json:"ip"`
+		Port  primitive.Port        `json:"port"`
 	}
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return endpoint.DoT{}, fmt.Errorf("decode resolver: %w", err)

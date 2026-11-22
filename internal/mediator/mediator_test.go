@@ -173,7 +173,7 @@ func unreachableDialer(t *testing.T) *transport.Dialer {
 	d, err := transport.NewDialer(endpoint.DoT{
 		ADN:   "resolver.test",
 		IP:    "127.0.0.1",
-		Port:  &deadPort,
+		Port:  deadPort,
 		Trust: testutil.AnchorTrust(),
 	})
 	if err != nil {

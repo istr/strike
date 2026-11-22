@@ -22,7 +22,7 @@ func TestExecute_DigestGuard(t *testing.T) {
 	tests := []struct {
 		image       *primitive.ImageRef
 		name        string
-		imageRef    string
+		imageRef    primitive.ImageRef
 		wantErr     string
 		wantNoGuard bool
 	}{

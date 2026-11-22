@@ -131,9 +131,9 @@ func newReadFixture(t *testing.T, behavior string) readFixture {
 // and resolves every name through a hermetic DoT resolver to the loopback.
 func (f readFixture) reads(t *testing.T, withStorage bool) *registry.Reads {
 	t.Helper()
-	reg := lane.Registry{Registry: endpoint.TLS{Type: "https", Address: endpoint.MustParseAuthority(f.registry), Trust: f.trust}}
+	reg := lane.Registry{Registry: endpoint.ServerTLS{Address: endpoint.MustParseAuthority(f.registry), Trust: f.trust}}
 	if withStorage {
-		reg.Storages = []endpoint.TLS{{Type: "https", Address: endpoint.MustParseAuthority(f.storage), Trust: f.trust}}
+		reg.Storages = []endpoint.ServerTLS{{Address: endpoint.MustParseAuthority(f.storage), Trust: f.trust}}
 	}
 	dialer := testutil.StartDoTResolver(t, netip.MustParseAddr("127.0.0.1"))
 	return registry.NewReads(dialer, &lane.Lane{Registries: []lane.Registry{reg}}, nil)
