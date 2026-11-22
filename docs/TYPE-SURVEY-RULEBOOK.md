@@ -1,6 +1,6 @@
 # Type Survey Rulebook
 
-Version 5. Version 1 was ratified 2026-07-09 against tree `5945d91`; the
+Version 6. Version 1 was ratified 2026-07-09 against tree `5945d91`; the
 amendment log at the end records every later version.
 
 This document is the input handed verbatim to every agent that surveys the tree
@@ -160,10 +160,21 @@ The codifications of section 8.6, which no register row carries:
 
 ## Lint gates (lintcue)
 
-`go tool lintcue -contract` mechanizes four CUE-source rules over `contract/`
-and gates in `make lint`. Only required-collection has an allowlist; each entry
-names the roadmap item that owns it, and an entry that matches no field is a
-finding. A contract package that fails to load aborts the run.
+`go tool lintcue -contract` mechanizes eight rules over `contract/` and gates
+in `make lint`: six read the CUE source, two the evaluated value. Only
+empty-value has allowlists. A deferral names a site, the empty values it
+accepts exactly as the finding spells them, and the roadmap item that owns
+it; an exemption is one of the two values ADR-049 exempts by name. A deferral
+that matches no finding is a stale-deferral finding and an exemption that
+matches none a stale-exemption finding, so neither list outlives its sites. A
+contract package that fails to load aborts the run, and so does a value the
+walk of the evaluated value cannot classify: one of no kind that no conjunct
+makes a scalar and that lists no field, a struct whose fields cannot be
+listed, or one of struct and list kind outside a union. A value of no kind
+that lists a field is entered as a struct, as a struct under
+`struct.MinFields(1)` is. A field that a comprehension adds under a
+condition the schema leaves open is not listed, and the lint does not see
+it.
 
 - **inline-string-disjunction** (ADR-049 rule 5): a non-definition field whose
   value is a disjunction of string literals (`field: "a" | "b"`). A named
@@ -176,14 +187,28 @@ finding. A contract package that fails to load aborts the run.
   owns no grammar and is not matched.
 - **lossy-map-key**: a map whose CUE key carries a constraint but whose `@go`
   annotation redirects it to `map[string]...`, dropping the key grammar in Go.
-- **required-collection** (ADR-049 rule 6): a field inside a definition, at any
-  depth, that is not optional and whose value is an open list (`[...T]`) or a
-  struct of pattern constraints only (`{[K]: V}`). CUE gives both an implicit
-  empty default, so validation never requires the field. A field outside a
-  definition is not reached, nor is the value of a pattern constraint itself;
-  a field inside that value is a field of every entry and is reached. A site
-  path spells a label that is not an identifier as its source, as in
-  `#X.m.[string].x`.
+- **empty-value** (ADR-049 rules 6 and 7, in the evaluated value): every field
+  of every definition, at every depth, is unified with `""`, `null`, `[]` and
+  `{}`, and a value the validator accepts is a finding, spelled
+  `<site> accepts <values>`. The walk reaches the entries of a pattern of any
+  key, the open remainder (`...`) and the fields of a struct that is a list
+  element; a list element itself is not checked. It enters a composition
+  (`#T & {...}`), since a composition can make a field accept `{}` that its
+  definition rejects, and does not enter a bare reference: the referenced
+  definition is walked as itself. A site is the path from the definition,
+  labels without `?` and `!`; every entry beyond the declared fields and every
+  list element is spelled `[_]`, as in `#X.m.[_].x`.
+- **union-arm** (in the evaluated value): a union, or a conjunction that holds
+  one, with an arm that is not a reference to a named definition. A union is
+  not entered; its arms are walked as the definitions they name.
+- **optional-default** and **definition-default** (ADR-049 rule 7, in the
+  source): an optional field whose value carries a default arm, and a
+  definition whose own value carries one.
+- **recursive-definition** (ADR-049, in the source): a definition that
+  reaches itself through the definitions its value names unqualified, by a
+  reference, a composition or an embedding. While a definition reaches
+  itself the evaluated value is not walked, so empty-value and union-arm
+  report once the recursion is gone.
 
 The same run checks every import between contract packages against their
 declared tiers ([SPEC-PACKAGE-LAYERING](SPEC-PACKAGE-LAYERING.md)). That check
@@ -191,6 +216,11 @@ is layering, not type discipline, and no survey verdict rests on it.
 
 ## Amendment log
 
+- Version 6, 2026-11-21: empty-value, checked in the evaluated value,
+  replaces required-collection, with deferrals and exemptions matched on the
+  site and the accepted values; union-arm, optional-default,
+  definition-default and recursive-definition join; the opening paragraph
+  names the allowlists and what aborts the run.
 - Version 5, 2026-11-14: required-collection states that a field inside a
   pattern constraint's value is reached, and how a site path spells a label
   that is not an identifier.

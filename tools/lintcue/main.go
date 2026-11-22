@@ -12,13 +12,17 @@
 // package loader reports any error. Packages under tools/ are loaded but not
 // reported: a measuring instrument does not measure itself.
 //
-// With -contract it lints the CUE source under contract/ instead: an inline
-// string disjunction in a field (ADR-049 rule 5), a field that re-inlines a
-// primitive grammar, a map whose constrained key is redirected to a
-// plain-string Go key, an import that does not name a contract package of a
-// strictly lower tier (ADR-048), and a required list or pattern map that CUE
-// defaults to empty (ADR-049 rule 6). Every contract package must load; a load
-// error aborts the run.
+// With -contract it lints the contract under contract/ instead. In the CUE
+// source: an inline string disjunction in a field (ADR-049 rule 5), a field
+// that re-inlines a primitive grammar, a map whose constrained key is
+// redirected to a plain-string Go key, an import that does not name a contract
+// package of a strictly lower tier (ADR-048), a default arm at an optional
+// field or in a definition of its own, and a definition that reaches itself.
+// In the evaluated value, unless a definition reaches itself: a field that
+// accepts an empty value and that no deferral or exemption names, and a union
+// with an arm that is not a named definition (ADR-049 rules 6 and 7). Every
+// contract package must load, and a value the walk cannot classify aborts the
+// run.
 package main
 
 import (
@@ -49,7 +53,7 @@ func main() {
 	var err error
 	switch {
 	case len(args) == 1 && args[0] == "-contract":
-		findings, err = contractSyntaxFindings(".")
+		findings, err = contractFindings(".", emptyDeferrals, emptyExemptions)
 	case len(args) > 0 && args[0] != "-contract":
 		findings, err = run(args)
 	default:

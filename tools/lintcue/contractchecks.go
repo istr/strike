@@ -5,11 +5,13 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
 
 	"cuelang.org/go/cue/ast"
+	"cuelang.org/go/cue/build"
 	"cuelang.org/go/cue/format"
 	"cuelang.org/go/cue/load"
 	"cuelang.org/go/cue/token"
@@ -35,22 +37,73 @@ var contractTiers = map[string]int{
 
 var tierNames = []string{"primitive", "concept", "wire", "vector"}
 
-// contractSyntaxFindings runs the CUE-source lints over contract/: inline string
-// disjunctions (ADR-049 rule 5), re-inlined primitive grammars, lossy @go
-// map-key redirects, imports that break the tier order, and required
-// collections that CUE defaults to empty (ADR-049 rule 6). These are properties
-// of how the schema is written, so they read the CUE syntax rather than the
-// evaluated value.
-func contractSyntaxFindings(root string) ([]string, error) {
-	pkgs, err := contractFiles(root)
+// contractFindings runs the contract lints over root/contract: the lints that
+// read the CUE source and, unless a definition reaches itself, the lints that
+// read the evaluated value, with the deferrals and exemptions of the
+// empty-value check. While a definition reaches itself the evaluation does not
+// run, so its walk always ends.
+func contractFindings(root string, deferrals map[string][]string, exemptions []string) ([]string, error) {
+	insts, err := contractInstances(root)
 	if err != nil {
 		return nil, err
 	}
-	prims := primitiveConstraints(pkgs["primitive"])
+	findings, recursive := syntaxFindings(insts)
+	if !recursive {
+		var vfs []string
+		vfs, err = valueFindings(insts, deferrals, exemptions)
+		if err != nil {
+			return nil, err
+		}
+		findings = append(findings, vfs...)
+	}
+	sort.Strings(findings)
+	return slices.Compact(findings), nil
+}
+
+// contractInstances loads every package directory under root/contract and
+// returns its build instance keyed by directory name. A directory that does not
+// load as exactly one package aborts the run: a lint that skips what it cannot
+// read reports a tree it has not seen as clean.
+func contractInstances(root string) (map[string]*build.Instance, error) {
+	entries, err := os.ReadDir(filepath.Join(root, "contract"))
+	if err != nil {
+		return nil, fmt.Errorf("read contract dir: %w", err)
+	}
+	insts := map[string]*build.Instance{}
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		loaded := load.Instances(
+			[]string{"./contract/" + e.Name()}, &load.Config{Dir: root})
+		if len(loaded) != 1 {
+			return nil, fmt.Errorf("load contract/%s: %d instances, want 1", e.Name(), len(loaded))
+		}
+		if loaded[0].Err != nil {
+			return nil, fmt.Errorf("load contract/%s: %w", e.Name(), loaded[0].Err)
+		}
+		insts[e.Name()] = loaded[0]
+	}
+	return insts, nil
+}
+
+// syntaxFindings runs the lints that read the CUE source of every contract
+// package: inline string disjunctions (ADR-049 rule 5), re-inlined primitive
+// grammars, lossy @go map-key redirects, imports that break the tier order, a
+// default arm outside a regular field (ADR-049 rule 7), and definitions that
+// reach themselves. These are properties of how the schema is written, so they
+// read the syntax rather than the evaluated value. It also reports whether any
+// definition reaches itself.
+func syntaxFindings(insts map[string]*build.Instance) ([]string, bool) {
+	var prims map[string]string
+	if p, ok := insts["primitive"]; ok {
+		prims = primitiveConstraints(p.Files)
+	}
 	var findings []string
-	for dir, files := range pkgs {
-		findings = appendTierFindings(findings, dir, files)
-		for _, f := range files {
+	recursive := false
+	for dir, inst := range insts {
+		findings = appendTierFindings(findings, dir, inst.Files)
+		for _, f := range inst.Files {
 			ast.Walk(f, func(n ast.Node) bool {
 				if field, ok := n.(*ast.Field); ok {
 					findings = appendFieldFindings(findings, field, prims)
@@ -58,36 +111,11 @@ func contractSyntaxFindings(root string) ([]string, error) {
 				return true
 			}, nil)
 		}
+		cycles := recursionFindings(inst.Files)
+		recursive = recursive || len(cycles) > 0
+		findings = append(findings, cycles...)
 	}
-	findings = append(findings, collectionFindings(pkgs, collectionDeferrals)...)
-	sort.Strings(findings)
-	return findings, nil
-}
-
-// contractFiles loads every package directory under contract/ and returns its
-// syntax trees keyed by directory name. A package that fails to load aborts the
-// run: a lint that skips what it cannot read reports a tree it has not seen as
-// clean.
-func contractFiles(root string) (map[string][]*ast.File, error) {
-	entries, err := os.ReadDir(filepath.Join(root, "contract"))
-	if err != nil {
-		return nil, fmt.Errorf("read contract dir: %w", err)
-	}
-	pkgs := map[string][]*ast.File{}
-	for _, e := range entries {
-		if !e.IsDir() {
-			continue
-		}
-		insts := load.Instances(
-			[]string{"./contract/" + e.Name()}, &load.Config{Dir: root})
-		for _, inst := range insts {
-			if inst.Err != nil {
-				return nil, fmt.Errorf("load contract/%s: %w", e.Name(), inst.Err)
-			}
-			pkgs[e.Name()] = append(pkgs[e.Name()], inst.Files...)
-		}
-	}
-	return pkgs, nil
+	return findings, recursive
 }
 
 // primitiveConstraints maps the normalized source of each primitive definition
@@ -133,15 +161,21 @@ func appendTierFindings(fs []string, dir string, files []*ast.File) []string {
 			if err != nil {
 				path = spec.Path.Value
 			}
+			// The one import from outside the contract: the standard package
+			// struct, for the field forms of ADR-049 that need
+			// struct.MinFields.
+			if path == "struct" {
+				continue
+			}
 			name, isContract := strings.CutPrefix(path, contractPrefix)
 			to, declared := contractTiers[name]
 			switch {
 			case !isContract || !declared:
-				fs = append(fs, finding(spec, "undeclared-tier", fmt.Sprintf(
+				fs = append(fs, finding(spec.Pos(), "undeclared-tier", fmt.Sprintf(
 					"package %s imports %q, which is not a contract package with a declared tier",
 					dir, path)))
 			case to >= tier:
-				fs = append(fs, finding(spec, "tier-direction", fmt.Sprintf(
+				fs = append(fs, finding(spec.Pos(), "tier-direction", fmt.Sprintf(
 					"package %s (%s tier) imports %s (%s tier); a contract package imports only from a strictly lower tier",
 					dir, tierNames[tier], name, tierNames[to])))
 			}
@@ -150,168 +184,146 @@ func appendTierFindings(fs []string, dir string, files []*ast.File) []string {
 	return fs
 }
 
-// collectionDeferral tolerates one site of ADR-049 rule (6) until its owner
-// settles the field's form. A site is matched on its package directory and on
-// its field path from the enclosing definition, so an entry is not pinned to a
-// line.
-type collectionDeferral struct {
-	dir   string
-	path  string
-	owner string // id of the item that owns the change
-}
-
-// collectionDeferrals are the rule (6) sites of contract/attest. Its wire is
-// frozen for the beta line, so each of them changes only as a ratified freeze
-// event.
-var collectionDeferrals = []collectionDeferral{
-	{dir: "attest", path: "#Sealed.artifacts", owner: "item-0004"},
-	{dir: "attest", path: "#Sealed.peers", owner: "item-0004"},
-	{dir: "attest", path: "#ObservedPeer.resolved", owner: "item-0004"},
-	{dir: "attest", path: "#Informational.provenance", owner: "item-0004"},
-	{dir: "attest", path: "#SLSAProvenanceStatement.subject", owner: "item-0004"},
-	{dir: "attest", path: "#StrikeExternalParameters.peers", owner: "item-0004"},
-	{dir: "attest", path: "#EngineContextStatement.subject", owner: "item-0004"},
-	{dir: "attest", path: "#InformationalStatement.subject", owner: "item-0004"},
-	{dir: "attest", path: "#InformationalPredicate.provenance", owner: "item-0004"},
-}
-
-// collectionFindings reports every site of ADR-049 rule (6) under contract/
-// that deferrals does not name, and every entry of deferrals that names no
-// site, so the list only shrinks.
-func collectionFindings(pkgs map[string][]*ast.File, deferrals []collectionDeferral) []string {
-	matched := make(map[collectionDeferral]bool, len(deferrals))
-	var fs []string
-	for dir, files := range pkgs {
-		for _, f := range files {
-			for _, d := range f.Decls {
-				if def, ok := d.(*ast.Field); ok && isDefinitionLabel(labelName(def.Label)) {
-					fs = appendCollectionSites(fs, dir, def, deferrals, matched)
-				}
+// recursionFindings reports every definition of one package that reaches
+// itself through the definitions its value names, by a reference, a
+// composition or an embedding (ADR-049). An identifier qualified by an import
+// names a package of a lower tier, which cannot name this one back, so only an
+// unqualified identifier can close a cycle.
+func recursionFindings(files []*ast.File) []string {
+	decls := map[string]*ast.Field{}
+	for _, f := range files {
+		for _, d := range f.Decls {
+			if field, ok := d.(*ast.Field); ok && isDefinitionLabel(labelName(field.Label)) {
+				decls[labelName(field.Label)] = field
 			}
 		}
 	}
-	for _, d := range deferrals {
-		if !matched[d] {
-			fs = append(fs, fmt.Sprintf(
-				"contract/%s: stale-deferral: %s is deferred to %s but is not a required collection",
-				d.dir, d.path, d.owner))
+	refs := make(map[string][]string, len(decls))
+	for name, field := range decls {
+		refs[name] = localDefinitionRefs(field.Value, decls)
+	}
+	var fs []string
+	for name, field := range decls {
+		if chain := cycleFrom(name, refs); chain != nil {
+			fs = append(fs, finding(field.Pos(), "recursive-definition", fmt.Sprintf(
+				"definition %s reaches itself: %s", name, strings.Join(chain, " -> "))))
 		}
 	}
 	return fs
 }
 
-// appendCollectionSites walks one top-level definition and reports every field
-// in it, at any depth, that collectionDefect describes, unless deferrals names
-// the site. A field inside the value of a pattern constraint is a field of
-// every entry and is reached like any other. The site is the dotted path of
-// labels from the definition down; a label that is not an identifier -- a
-// pattern constraint, a quoted or a dynamic label -- is spelled as its
-// normalized source.
-func appendCollectionSites(fs []string, dir string, def *ast.Field,
-	deferrals []collectionDeferral, matched map[collectionDeferral]bool,
-) []string {
-	var path []string
-	ast.Walk(def, func(n ast.Node) bool {
-		field, ok := n.(*ast.Field)
-		if !ok {
-			return true
-		}
-		segment := labelName(field.Label)
-		if expr, isExpr := field.Label.(ast.Expr); isExpr && segment == "" {
-			segment = renderConstraint(expr)
-		}
-		path = append(path, segment)
-		if defect := collectionDefect(field); defect != "" {
-			site := strings.Join(path, ".")
-			if !deferredSite(deferrals, matched, dir, site) {
-				fs = append(fs, finding(field, "required-collection", site+defect))
+// localDefinitionRefs returns, sorted and without repeats, every definition of
+// decls that an unqualified identifier in e names. The label of a field and the
+// selector of a qualified identifier are not references.
+func localDefinitionRefs(e ast.Expr, decls map[string]*ast.Field) []string {
+	seen := map[string]bool{}
+	var visit func(ast.Node) bool
+	visit = func(n ast.Node) bool {
+		switch v := n.(type) {
+		case *ast.Field:
+			if _, ident := v.Label.(*ast.Ident); !ident {
+				ast.Walk(v.Label, visit, nil)
+			}
+			if v.Value != nil {
+				ast.Walk(v.Value, visit, nil)
+			}
+			return false
+		case *ast.SelectorExpr:
+			ast.Walk(v.X, visit, nil)
+			return false
+		case *ast.Ident:
+			if _, ok := decls[v.Name]; ok {
+				seen[v.Name] = true
 			}
 		}
 		return true
-	}, func(n ast.Node) {
-		if _, ok := n.(*ast.Field); ok {
+	}
+	ast.Walk(e, visit, nil)
+	out := make([]string, 0, len(seen))
+	for name := range seen {
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// cycleFrom returns a chain of definitions along refs from start back to
+// start, or nil when start does not reach itself.
+func cycleFrom(start string, refs map[string][]string) []string {
+	seen := map[string]bool{start: true}
+	path := []string{start}
+	var reach func(string) bool
+	reach = func(name string) bool {
+		for _, next := range refs[name] {
+			if next == start {
+				path = append(path, next)
+				return true
+			}
+			if seen[next] {
+				continue
+			}
+			seen[next] = true
+			path = append(path, next)
+			if reach(next) {
+				return true
+			}
 			path = path[:len(path)-1]
 		}
-	})
-	return fs
-}
-
-// deferredSite reports whether deferrals names site in package dir, and marks
-// the entry it finds as matched.
-func deferredSite(deferrals []collectionDeferral, matched map[collectionDeferral]bool, dir, site string) bool {
-	for _, d := range deferrals {
-		if d.dir == dir && d.path == site {
-			matched[d] = true
-			return true
-		}
+		return false
 	}
-	return false
-}
-
-// collectionDefect returns the finding text for a field that CUE gives an
-// implicit empty default -- a field that is not optional and whose value is an
-// open list ([...T]) or a struct of pattern constraints only -- and "" for any
-// other field. A definition and a pattern constraint are not fields of the
-// rule (ADR-049 rule 6).
-func collectionDefect(field *ast.Field) string {
-	if field.Constraint == token.OPTION || isDefinitionLabel(labelName(field.Label)) {
-		return ""
+	if reach(start) {
+		return path
 	}
-	if _, pattern := field.Label.(*ast.ListLit); pattern {
-		return ""
-	}
-	switch v := field.Value.(type) {
-	case *ast.ListLit:
-		if len(v.Elts) == 1 {
-			if _, open := v.Elts[0].(*ast.Ellipsis); open {
-				return " is a required open list that CUE defaults to empty; make it optional or non-empty ([T, ...T])"
-			}
-		}
-	case *ast.StructLit:
-		if patternOnly(v) {
-			return " is a required pattern map that CUE defaults to empty; make it optional"
-		}
-	}
-	return ""
-}
-
-// patternOnly reports whether st holds at least one field and every field it
-// holds is a pattern constraint. Attributes, comments and other declarations
-// do not count either way.
-func patternOnly(st *ast.StructLit) bool {
-	patterns := 0
-	for _, e := range st.Elts {
-		field, ok := e.(*ast.Field)
-		if !ok {
-			continue
-		}
-		if _, pattern := field.Label.(*ast.ListLit); !pattern {
-			return false
-		}
-		patterns++
-	}
-	return patterns > 0
+	return nil
 }
 
 func appendFieldFindings(fs []string, field *ast.Field, prims map[string]string) []string {
 	name := labelName(field.Label)
 	// ADR-049 rule 5: a string disjunction is a named type, never inline.
 	if !isDefinitionLabel(name) && isStringDisjunction(field.Value) {
-		fs = append(fs, finding(field, "inline-string-disjunction", fmt.Sprintf(
+		fs = append(fs, finding(field.Pos(), "inline-string-disjunction", fmt.Sprintf(
 			"field %q inlines a string disjunction; define a named type and reference it",
 			name)))
 	}
 	if !isDefinitionLabel(name) {
 		if prim, ok := prims[renderConstraint(field.Value)]; ok && prim != name {
-			fs = append(fs, finding(field, "primitive-reuse", fmt.Sprintf(
+			fs = append(fs, finding(field.Pos(), "primitive-reuse", fmt.Sprintf(
 				"field %q re-inlines the grammar of primitive %s; reference %s instead",
 				name, prim, prim)))
 		}
 	}
 	if msg, ok := lossyMapKey(field); ok {
-		fs = append(fs, finding(field, "lossy-map-key", msg))
+		fs = append(fs, finding(field.Pos(), "lossy-map-key", msg))
+	}
+	// ADR-049 rule 7: a default arm stands at a regular field, never at an
+	// optional field and never in a definition of its own.
+	if hasDefaultArm(field.Value) {
+		switch {
+		case field.Constraint == token.OPTION:
+			fs = append(fs, finding(field.Pos(), "optional-default", fmt.Sprintf(
+				"field %q is optional and carries a default; make it a regular field with the default arm",
+				name)))
+		case isDefinitionLabel(name):
+			fs = append(fs, finding(field.Pos(), "definition-default", fmt.Sprintf(
+				"definition %s carries a default; write the default arm at the field that uses it",
+				name)))
+		}
 	}
 	return fs
+}
+
+// hasDefaultArm reports whether e marks a default (*v), as itself or in an arm
+// of the disjunctions and conjunctions it is made of.
+func hasDefaultArm(e ast.Expr) bool {
+	switch v := e.(type) {
+	case *ast.UnaryExpr:
+		return v.Op == token.MUL
+	case *ast.BinaryExpr:
+		return (v.Op == token.OR || v.Op == token.AND) && (hasDefaultArm(v.X) || hasDefaultArm(v.Y))
+	case *ast.ParenExpr:
+		return hasDefaultArm(v.X)
+	}
+	return false
 }
 
 // isStringDisjunction reports whether e is a disjunction whose every arm is a
@@ -400,7 +412,7 @@ func isDefinitionLabel(name string) bool {
 	return strings.HasPrefix(name, "#") || strings.HasPrefix(name, "_#")
 }
 
-func finding(n ast.Node, kind, msg string) string {
-	p := n.Pos()
+// finding spells one finding at position p.
+func finding(p token.Pos, kind, msg string) string {
 	return fmt.Sprintf("%s:%d: %s: %s", p.Filename(), p.Line(), kind, msg)
 }

@@ -138,6 +138,7 @@ func TestTierFindings(t *testing.T) {
 		{"lateral", "endpoint", `import "` + contractPrefix + `record"`, "tier-direction"},
 		{"upward", "primitive", `import "` + contractPrefix + `lane"`, "tier-direction"},
 		{"undeclared import", "lane", `import "strings"`, "undeclared-tier"},
+		{"struct", "lane", `import "struct"`, ""},
 		{"undeclared package", "probe", `x: 1`, "undeclared-tier"},
 	}
 	for _, c := range cases {
@@ -160,55 +161,94 @@ func TestTierFindings(t *testing.T) {
 	}
 }
 
-func TestCollectionDefect(t *testing.T) {
+func TestHasDefaultArm(t *testing.T) {
 	cases := []struct {
-		src    string
-		defect bool
+		src  string
+		want bool
 	}{
-		{`args: [...string]`, true},
-		{`args!: [...string]`, true},
-		{`args?: [...string]`, false},
-		{`args: [string, ...string]`, false},
-		{`args: []`, false},
-		{`args: [string]`, false},
-		{`env: [string]: string`, true},
-		{`env: {[string]: string}`, true},
-		{`env?: {[string]: string}`, false},
-		{`env: {[string]: string, x: int}`, false},
-		{`env: {}`, false},
-		{`#Def: [...string]`, false},
-		{`[string]: [...string]`, false},
+		{`x: *"a" | string`, true},
+		{`x: string | *"a"`, true},
+		{`x: (*1 | int) & >0`, true},
+		{`x: "a" | string`, false},
+		{`x: 2 * 3`, false},
+		{`x: string`, false},
 	}
 	for _, c := range cases {
-		if got := collectionDefect(firstField(t, c.src)) != ""; got != c.defect {
-			t.Errorf("collectionDefect(%q) reports %v, want %v", c.src, got, c.defect)
+		if got := hasDefaultArm(firstField(t, c.src).Value); got != c.want {
+			t.Errorf("hasDefaultArm(%q) = %v, want %v", c.src, got, c.want)
 		}
 	}
 }
 
-func TestCollectionFindings(t *testing.T) {
-	// The deferred site is matched by its path from the definition, a nested
-	// site is found and named by its path, a field inside a pattern
-	// constraint's value is a site whose path spells the pattern, a quoted
-	// label is spelled as written, a pattern constraint's value itself and a
-	// field outside any definition are not sites, and a deferral that matches
-	// no site is reported.
-	src := "#Peer: {\n\tresolved: [...string]\n\tspec: {files: [...string]}\n\tm?: {[string]: [...string]}\n\tn?: {[string]: {x: [...string]}}\n\t\"q-x\": [...string]\n}\nfields: [string]: string\n"
-	f, err := parser.ParseFile("t.cue", src)
-	if err != nil {
-		t.Fatalf("parse: %v", err)
+func TestDefaultFindings(t *testing.T) {
+	// A default arm stands at a regular field; at an optional field or in a
+	// definition of its own it is a finding.
+	cases := []struct {
+		src, kind string
+	}{
+		{`port?: *1 | int`, "optional-default"},
+		{`#Port: *443 | int`, "definition-default"},
+		{`port: *1 | int`, ""},
+		{`port?: int`, ""},
 	}
-	deferrals := []collectionDeferral{
-		{dir: "attest", path: "#Peer.resolved", owner: "item-x"},
-		{dir: "attest", path: "#Peer.gone", owner: "item-x"},
+	for _, c := range cases {
+		fs := appendFieldFindings(nil, firstField(t, c.src), nil)
+		if c.kind == "" {
+			if len(fs) != 0 {
+				t.Errorf("%q: got %v, want no finding", c.src, fs)
+			}
+			continue
+		}
+		if len(fs) != 1 || !strings.Contains(fs[0], ": "+c.kind+": ") {
+			t.Errorf("%q: got %v, want one %s finding", c.src, fs, c.kind)
+		}
 	}
-	fs := collectionFindings(map[string][]*ast.File{"attest": {f}}, deferrals)
-	sort.Strings(fs)
-	if len(fs) != 4 ||
-		!strings.Contains(fs[0], ": stale-deferral: #Peer.gone is deferred to item-x") ||
-		!strings.Contains(fs[1], ": required-collection: #Peer.spec.files is a required open list") ||
-		!strings.Contains(fs[2], ": required-collection: #Peer.n.[string].x is a required open list") ||
-		!strings.Contains(fs[3], ": required-collection: #Peer.\"q-x\" is a required open list") {
-		t.Fatalf("collectionFindings = %v, want the stale #Peer.gone and the sites #Peer.spec.files, #Peer.n.[string].x and #Peer.\"q-x\"", fs)
+}
+
+func TestRecursionFindings(t *testing.T) {
+	cases := []struct {
+		name, src string
+		want      []string
+	}{
+		{"reference", "#L: {head: string, next?: #L}", []string{
+			"definition #L reaches itself: #L -> #L",
+		}},
+		{"composition", "#T: {children?: [...#T & {x?: int}]}", []string{
+			"definition #T reaches itself: #T -> #T",
+		}},
+		{"embedding", "#E: {next?: {#E, y?: int}}", []string{
+			"definition #E reaches itself: #E -> #E",
+		}},
+		{"indirect", "#A: {b?: #B}\n#B: {a?: #A}", []string{
+			"definition #A reaches itself: #A -> #B -> #A",
+			"definition #B reaches itself: #B -> #A -> #B",
+		}},
+		{"field of a definition", "#A: {b?: #B.c}\n#B: {c?: #A}", []string{
+			"definition #A reaches itself: #A -> #B -> #A",
+			"definition #B reaches itself: #B -> #A -> #B",
+		}},
+		{"acyclic", "#A: {b?: #B, c?: #B}\n#B: {d?: string}", nil},
+		{"qualified", "#A: {b?: other.#A}", nil},
+		{"label", "#A: {\"#A\"?: string}", nil},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			f, err := parser.ParseFile("t.cue", c.src)
+			if err != nil {
+				t.Fatalf("parse: %v", err)
+			}
+			var got []string
+			for _, fnd := range recursionFindings([]*ast.File{f}) {
+				_, msg, ok := strings.Cut(fnd, ": recursive-definition: ")
+				if !ok {
+					t.Fatalf("not a recursive-definition finding: %q", fnd)
+				}
+				got = append(got, msg)
+			}
+			sort.Strings(got)
+			if strings.Join(got, "\n") != strings.Join(c.want, "\n") {
+				t.Fatalf("recursionFindings = %q, want %q", got, c.want)
+			}
+		})
 	}
 }
