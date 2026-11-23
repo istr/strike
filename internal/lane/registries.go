@@ -3,7 +3,6 @@ package lane
 import (
 	"errors"
 	"fmt"
-	"slices"
 	"strings"
 
 	"github.com/google/go-containerregistry/pkg/name"
@@ -148,7 +147,7 @@ func (h registryHosts) checkReferences(p *Lane) error {
 		if s.Deploy == nil {
 			continue
 		}
-		for _, c := range slices.Concat(s.Deploy.Recording.PreState.Captures, s.Deploy.Recording.PostState.Captures) {
+		for _, c := range s.Deploy.Captures() {
 			if err := h.checkReference(c.Image, fmt.Sprintf("step %q capture %q image", s.ID, c.ID)); err != nil {
 				return err
 			}

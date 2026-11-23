@@ -8,6 +8,8 @@
 package lane
 
 import (
+	"struct"
+
 	"github.com/istr/strike/contract/endpoint"
 	"github.com/istr/strike/contract/primitive"
 	"github.com/istr/strike/contract/provenance"
@@ -331,7 +333,7 @@ import (
 }
 
 // ---------------------------------------------------------------------------
-// Deploy -- apply to target, mandatory state recording
+// Deploy -- apply to target, optional state recording
 // ---------------------------------------------------------------------------
 
 #DeploySpec: {
@@ -343,7 +345,7 @@ import (
 	artifacts?: {
 		[Name=primitive.#Identifier]: #ArtifactRef
 	} @go(Artifacts,type=map["github.com/istr/strike/contract/primitive".Identifier]ArtifactRef)
-	recording: #StateRecording @go(Recording)
+	recording?: #StateRecording & struct.MinFields(1) @go(Recording,type=*StateRecording)
 }
 
 #DeployMethod: (#DeployKubernetes | #DeployRegistry) @go(-)
@@ -425,8 +427,8 @@ import (
 
 #StateRecording: {
 	@go(StateRecording)
-	preState:  #CaptureSet @go(PreState)
-	postState: #CaptureSet @go(PostState)
+	preState?:  #CaptureSet @go(PreState,optional=nillable)
+	postState?: #CaptureSet @go(PostState,optional=nillable)
 }
 
 #CaptureSet: {

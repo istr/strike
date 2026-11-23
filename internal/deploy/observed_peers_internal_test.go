@@ -46,7 +46,6 @@ func observedPeersLane(t *testing.T, peers []endpoint.Endpoint) (*lane.DAG, map[
 				Deploy: &lane.DeploySpec{
 					Method:    DeployRegistryForTest(),
 					Artifacts: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "pack"}},
-					Recording: lane.StateRecording{},
 				},
 			},
 		},

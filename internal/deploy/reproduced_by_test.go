@@ -105,10 +105,6 @@ func TestDeployerExecute_ReproducedBy(t *testing.T) {
 				Deploy: &lane.DeploySpec{
 					Method:    method,
 					Artifacts: artifacts,
-					Recording: lane.StateRecording{
-						PreState:  lane.CaptureSet{Captures: []lane.Capture{}},
-						PostState: lane.CaptureSet{Captures: []lane.Capture{}},
-					},
 				},
 			}
 			d := &deploy.Deployer{

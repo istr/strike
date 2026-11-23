@@ -246,10 +246,7 @@ func (d *Deployer) collectObservedPeers(
 			return nil, nil, err
 		}
 	}
-	for _, sc := range step.Deploy.Recording.PreState.Captures {
-		declaredPeers[step.ID] = append(declaredPeers[step.ID], sc.Peers...)
-	}
-	for _, sc := range step.Deploy.Recording.PostState.Captures {
+	for _, sc := range step.Deploy.Captures() {
 		declaredPeers[step.ID] = append(declaredPeers[step.ID], sc.Peers...)
 	}
 
@@ -425,10 +422,12 @@ func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.Run
 		return nil, fmt.Errorf("step %q: %w", step.ID, gateErr)
 	}
 
-	// 1. Capture pre-state -> canonical digest.
-	preCaptures, err := d.captureState(ctx, spec.Recording.PreState)
+	// 1. Capture pre-state -> canonical digest. A side the recording does not
+	// declare captures nothing, and its digest is that of no captures.
+	pre, post := spec.CaptureSets()
+	preCaptures, err := d.captureState(ctx, pre)
 	if err != nil {
-		if spec.Recording.PreState.Required {
+		if pre.Required {
 			return nil, fmt.Errorf("step %q: pre-state capture failed: %w", step.ID, err)
 		}
 		log.Printf("WARN   deploy %s: pre-state capture failed: %v", step.ID, err)
@@ -452,9 +451,9 @@ func (d *Deployer) Execute(ctx context.Context, step *lane.Step, state *lane.Run
 	}
 
 	// 5. Capture post-state -> canonical digest.
-	postCaptures, err := d.captureState(ctx, spec.Recording.PostState)
+	postCaptures, err := d.captureState(ctx, post)
 	if err != nil {
-		if spec.Recording.PostState.Required {
+		if post.Required {
 			return nil, fmt.Errorf("step %q: post-state capture failed: %w", step.ID, err)
 		}
 		log.Printf("WARN   deploy %s: post-state capture failed: %v", step.ID, err)
@@ -661,10 +660,14 @@ func (d *Deployer) recordAttestation(att *Attestation, step *lane.Step, state *l
 	return nil
 }
 
-// captureState runs all state capture commands and returns the raw captures.
-func (d *Deployer) captureState(ctx context.Context, spec lane.CaptureSet) ([]captureSnap, error) {
+// captureState runs the capture commands of one side of the recording and
+// returns the raw captures. A side the recording does not declare runs none.
+func (d *Deployer) captureState(ctx context.Context, set *lane.CaptureSet) ([]captureSnap, error) {
+	if set == nil {
+		return nil, nil
+	}
 	var captures []captureSnap
-	for _, sc := range spec.Captures {
+	for _, sc := range set.Captures {
 		snap, err := d.captureOne(ctx, sc)
 		if err != nil {
 			return captures, fmt.Errorf("capture %q: %w", sc.ID, err)

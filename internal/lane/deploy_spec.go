@@ -8,6 +8,29 @@ import (
 	"github.com/istr/strike/internal/primitive"
 )
 
+// CaptureSets returns the pre-state and post-state capture sets of the
+// deploy's recording. A side the recording does not declare is nil, and both
+// are nil for a deploy that records no state.
+func (s *DeploySpec) CaptureSets() (pre, post *CaptureSet) {
+	if s.Recording == nil {
+		return nil, nil
+	}
+	return s.Recording.PreState, s.Recording.PostState
+}
+
+// Captures returns every capture of the deploy's recording, the pre-state
+// captures first.
+func (s *DeploySpec) Captures() []Capture {
+	pre, post := s.CaptureSets()
+	var all []Capture
+	for _, set := range []*CaptureSet{pre, post} {
+		if set != nil {
+			all = append(all, set.Captures...)
+		}
+	}
+	return all
+}
+
 // UnmarshalJSON implements json.Unmarshaler for DeploySpec. It reads
 // the method.type discriminator and unmarshals method into the
 // appropriate concrete branch type (DeployKubernetes, DeployRegistry).

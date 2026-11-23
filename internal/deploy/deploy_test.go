@@ -343,8 +343,8 @@ func TestDeployerExecute(t *testing.T) {
 		Deploy: &lane.DeploySpec{
 			Method:    fx.method,
 			Artifacts: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
-			Recording: lane.StateRecording{
-				PreState: lane.CaptureSet{
+			Recording: &lane.StateRecording{
+				PreState: &lane.CaptureSet{
 					Captures: []lane.Capture{{
 						ID:      "version",
 						Image:   "images.example.com/alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
@@ -352,7 +352,7 @@ func TestDeployerExecute(t *testing.T) {
 						Peers:   []endpoint.Endpoint{endpoint.TLS{Type: "https", Address: endpoint.MustParseAuthority("localhost:5555"), Trust: testutil.AnchorTrust()}},
 					}},
 				},
-				PostState: lane.CaptureSet{
+				PostState: &lane.CaptureSet{
 					Captures: []lane.Capture{{
 						ID:      "version",
 						Image:   "images.example.com/alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
@@ -490,10 +490,6 @@ func TestDeployerExecuteRegistryAttachesReferrers(t *testing.T) {
 			Artifacts: map[primitive.Identifier]lane.ArtifactRef{
 				"image": {Step: "build"},
 				"web":   {Step: "web", Output: &distOut},
-			},
-			Recording: lane.StateRecording{
-				PreState:  lane.CaptureSet{Captures: []lane.Capture{}},
-				PostState: lane.CaptureSet{Captures: []lane.Capture{}},
 			},
 		},
 	}
@@ -701,10 +697,6 @@ func TestDeployerExecuteRegistryRejectsUnverifiedExport(t *testing.T) {
 				},
 			},
 			Artifacts: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
-			Recording: lane.StateRecording{
-				PreState:  lane.CaptureSet{Captures: []lane.Capture{}},
-				PostState: lane.CaptureSet{Captures: []lane.Capture{}},
-			},
 		},
 	}
 
@@ -836,7 +828,6 @@ func TestDeployerExecute_MissingArtifact(t *testing.T) {
 		Deploy: &lane.DeploySpec{
 			Method:    deploy.DeployRegistryForTest(),
 			Artifacts: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
-			Recording: lane.StateRecording{},
 		},
 	}
 
@@ -911,8 +902,8 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 		Deploy: &lane.DeploySpec{
 			Method:    fx.method,
 			Artifacts: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
-			Recording: lane.StateRecording{
-				PreState: lane.CaptureSet{
+			Recording: &lane.StateRecording{
+				PreState: &lane.CaptureSet{
 					Captures: []lane.Capture{{
 						ID:      "version",
 						Image:   "images.example.com/alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
@@ -920,7 +911,7 @@ func TestAttestationContainsEngineRecord(t *testing.T) {
 						Peers:   []endpoint.Endpoint{endpoint.TLS{Type: "https", Address: endpoint.MustParseAuthority("localhost:5555"), Trust: testutil.AnchorTrust()}},
 					}},
 				},
-				PostState: lane.CaptureSet{
+				PostState: &lane.CaptureSet{
 					Captures: []lane.Capture{{
 						ID:      "version",
 						Image:   "images.example.com/alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
@@ -1034,8 +1025,8 @@ func TestDeployerExecute_RequiredPreStateFails(t *testing.T) {
 		ID: "deploy-fail-pre",
 		Deploy: &lane.DeploySpec{
 			Method: deploy.DeployRegistryForTest(),
-			Recording: lane.StateRecording{
-				PreState: lane.CaptureSet{
+			Recording: &lane.StateRecording{
+				PreState: &lane.CaptureSet{
 					Required: true,
 					Captures: []lane.Capture{{
 						ID:      "version",
@@ -1282,8 +1273,8 @@ func deployStep(t *testing.T, method lane.DeployMethod) *lane.Step {
 		Deploy: &lane.DeploySpec{
 			Method:    method,
 			Artifacts: map[primitive.Identifier]lane.ArtifactRef{"image": {Step: "build"}},
-			Recording: lane.StateRecording{
-				PreState: lane.CaptureSet{
+			Recording: &lane.StateRecording{
+				PreState: &lane.CaptureSet{
 					Captures: []lane.Capture{{
 						ID:      "version",
 						Image:   "images.example.com/alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
@@ -1291,7 +1282,7 @@ func deployStep(t *testing.T, method lane.DeployMethod) *lane.Step {
 						Peers:   []endpoint.Endpoint{endpoint.TLS{Type: "https", Address: endpoint.MustParseAuthority("localhost:5555"), Trust: testutil.AnchorTrust()}},
 					}},
 				},
-				PostState: lane.CaptureSet{
+				PostState: &lane.CaptureSet{
 					Captures: []lane.Capture{{
 						ID:      "version",
 						Image:   "images.example.com/alpine@sha256:0000000000000000000000000000000000000000000000000000000000000000",
@@ -1415,8 +1406,8 @@ func TestDeployExecute_StepTimeoutWithMediatedConnection(t *testing.T) {
 		ID: "timeout-step",
 		Deploy: &lane.DeploySpec{
 			Method: deploy.DeployRegistryForTest(),
-			Recording: lane.StateRecording{
-				PreState: lane.CaptureSet{
+			Recording: &lane.StateRecording{
+				PreState: &lane.CaptureSet{
 					Required: true,
 					Captures: []lane.Capture{{
 						ID:      "probe",

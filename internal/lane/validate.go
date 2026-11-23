@@ -539,7 +539,7 @@ func validatePeerPorts(p *Lane) error {
 		if s.Deploy == nil {
 			continue
 		}
-		for _, c := range slices.Concat(s.Deploy.Recording.PreState.Captures, s.Deploy.Recording.PostState.Captures) {
+		for _, c := range s.Deploy.Captures() {
 			if err := checkPeerPorts(c.Peers, fmt.Sprintf("step %q capture %q peer", s.ID, c.ID)); err != nil {
 				return err
 			}
