@@ -437,3 +437,27 @@ recomputation or a claim for it come by a further amendment of D9
 documents of every artifact and the three statement bundles" is read
 as: "the SBOM documents of every artifact and the four statement
 bundles, the SBOM statement of ADR-059 D2 among them".
+
+## Amendment 2026-11-23 -- D1: a container field is rejected at the field, whatever its value
+
+The D1 amendment of 2026-11-15 above rejects the fields that only a step
+container reads entry by entry and leaves an empty list or map accepted.
+Rule (6) of the amendment of 2026-11-20 to
+[ADR-049](ADR-049-type-discipline-internal-seams.md) rejects an empty
+value at every field. Rejected entry by entry under both rules, an empty
+list left a second error, at an element it does not have.
+
+From this date the lane schema rejects args, env, inputs, outputs,
+secrets and peers on a deploy step and a pack step at the field itself,
+whatever its value, as it already rejects workdir, with the reason at the
+path of the field. A forceRun other than false on a deploy step stays
+rejected, and the fields a kind consumes stay as the amendment of
+2026-11-15 names them.
+
+**Supersedes, in the D1 amendment of 2026-11-15 above:** "every entry of
+args, env, inputs, outputs, secrets and peers and any workdir, and on a
+deploy step a forceRun other than false, each with the reason at the path
+of the rejected value; an empty list or map stays accepted" is read as:
+"args, env, inputs, outputs, secrets, peers and workdir, whatever their
+value, and on a deploy step a forceRun other than false, each with the
+reason at the path of the rejected field".

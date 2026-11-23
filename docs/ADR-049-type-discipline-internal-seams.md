@@ -422,3 +422,23 @@ unchanged.
   A single struct that seeds a later union, as `#DeployRegistryTarget`
   does, is not such a field: it keeps its discriminator, which carries
   the marker.
+
+## Amendment 2026-11-23 -- the default port of a keyless endpoint, and the issuer
+
+This amendment applies the bullet "A grammar with an implied default
+writes it implied" of rule (7) of the amendment of 2026-11-20 to the
+URLs of the keyless endpoints of a lane and to the issuers it names. The
+earlier amendments stand unchanged.
+
+- The URLs of the keyless endpoints, Fulcio, Rekor and the timestamp
+  authority, never spell out 443, the default port of https. The lane
+  validation checks it in Go, as it checks the hosts of the deploy
+  targets, the registries and their storages, and the peers of the
+  steps and of the state captures.
+- An issuer is not held to the rule. strike dials no issuer: an issuer
+  is an identifier, compared byte for byte with the issuer an identity
+  provider writes into its tokens and Fulcio into its certificates, and
+  the identity provider chooses how it is spelled. Held to the rule, a
+  lane could not name an issuer spelled with the default port. The
+  issuer of the OIDC configuration and of a base SBOM signer stays
+  opaque until a later decision gives it a type of its own.
