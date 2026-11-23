@@ -117,6 +117,8 @@ is a defect.
 make generate     # go generate ./contract, which runs:
                   #   cue export ./lane ./attest --out jsonschema
                   #     -> contract/*.schema.json
+                  #   tools/genschema: write minProperties where a field
+                  #     carries struct.MinFields, which the export drops
                   #   cue export ./trustlayers --out json
                   #     -> contract/trust-layers.json
                   #   cue exp gengotypes over lane, primitive, endpoint,
