@@ -23,7 +23,7 @@ import (
 
 #Lane: {
 	@go(Lane)
-	name: string @go(Name)
+	name: string & !="" @go(Name)
 	// Stable identifier assigned at authoring time. Used by external
 	// verifiers to pair attestations against the same lane across runs.
 	// Distinct from `name`, which is human-display.
@@ -35,7 +35,7 @@ import (
 	// until the secrets contract is revisited separately (YAGNI).
 	secrets?: {
 		[ID=primitive.#Identifier]: #SecretSource
-	} @go(Secrets,type=map["github.com/istr/strike/contract/primitive".Identifier]SecretSource)
+	} & struct.MinFields(1) @go(Secrets,type=map["github.com/istr/strike/contract/primitive".Identifier]SecretSource)
 	steps: [#Step, ...#Step] @go(Steps)
 	resolver: endpoint.#DoT @go(Resolver)
 	oidc:     #OIDCConfig   @go(OIDC)
@@ -46,16 +46,13 @@ import (
 	// one, and -- forward-constraint for verify -- absence here means the
 	// anchor MUST come from --trust-root-ref, with NO implicit default.
 	keyless: #Keyless @go(Keyless)
-	baseSbomSigners?: [...#SBOMSigner] @go(BaseSBOMSigners,optional=nillable)
+	baseSbomSigners?: [#SBOMSigner, ...#SBOMSigner] @go(BaseSBOMSigners,optional=nillable)
 	// registries declares every registry the controller reads from inside a
 	// lane run, each with the storage hosts it redirects blob reads to. A
 	// deploy target's host counts as declared and is not repeated here.
-	registries?: [...#Registry] @go(Registries)
-	defaults?: #LaneDefaults @go(Defaults,optional=nillable)
-}
-
-#LaneDefaults: {
-	@go(LaneDefaults)
+	registries?: [#Registry, ...#Registry] @go(Registries)
+	// timeout is the step timeout of the lane: a step that declares none runs
+	// under it.
 	timeout: *"10m" | primitive.#Duration @go(Timeout,type="github.com/istr/strike/contract/primitive".Duration)
 }
 
@@ -69,7 +66,7 @@ import (
 #Registry: {
 	@go(Registry)
 	registry: endpoint.#ServerTLS @go(Registry)
-	storages?: [...endpoint.#ServerTLS] @go(Storages)
+	storages?: [endpoint.#ServerTLS, ...endpoint.#ServerTLS] @go(Storages)
 }
 
 // OIDCConfig declares the lane-wide keyless signing identity (ADR-040 D5).
@@ -85,12 +82,12 @@ import (
 #OIDCConfig: {
 	@go(OIDCConfig)
 
-	issuer:     endpoint.#URL          @go(Issuer,type="github.com/istr/strike/contract/endpoint".Address) // iss / issuer-url; config only, no IdP contact at validate/dag
-	audience:   string                 @go(Audience)                                                       // aud
-	identity:   primitive.#StringOrURI @go(Identity)                                                       // expected SAN subject Fulcio writes into the cert
-	extensions: #FulcioExtensions      @go(Extensions)                                                     // sourceRepositoryRef or sourceRepositoryDigest required
-	token:      primitive.#Identifier  @go(Token)                                                          // lane.secrets key of the builder token
-	trust:      endpoint.#Certificate  @go(Trust,type="github.com/istr/strike/contract/endpoint".Certificate)
+	issuer:     endpoint.#URL                           @go(Issuer,type="github.com/istr/strike/contract/endpoint".Address) // iss / issuer-url; config only, no IdP contact at validate/dag
+	audience:   string & !=""                           @go(Audience)                                                       // aud
+	identity:   primitive.#StringOrURI                  @go(Identity)                                                       // expected SAN subject Fulcio writes into the cert
+	extensions: #FulcioExtensions & struct.MinFields(1) @go(Extensions,type=FulcioExtensions)                               // sourceRepositoryRef or sourceRepositoryDigest required
+	token:      primitive.#Identifier                   @go(Token)                                                          // lane.secrets key of the builder token
+	trust:      endpoint.#Certificate                   @go(Trust,type="github.com/istr/strike/contract/endpoint".Certificate)
 }
 
 // FulcioExtensions pins source facts of a Fulcio certificate (ADR-057 D2):
@@ -138,8 +135,8 @@ import (
 // A base SBOM referrer is lifted to the sealed layer only if its sigstore
 // signature verifies against one of the lane's declared signers: the Fulcio
 // certificate's OIDC issuer equals issuer, its SAN equals identity, and every
-// extension it pins matches. The extensions block is optional and has no
-// minimum: it admits a provider's SBOMs rather than binding one build.
+// extension it pins matches. The extensions block is optional, and no pin
+// is required: it admits a provider's SBOMs rather than binding one build.
 // Declaring a provider once covers every base SBOM that provider signs -- no
 // per-SBOM digest pinning. The list is optional: a lane whose bases are fully
 // catalogable in-process needs none. Fail-closed: a base SBOM matching no
@@ -149,9 +146,9 @@ import (
 #SBOMSigner: {
 	@go(SBOMSigner)
 
-	issuer:      endpoint.#URL          @go(Issuer,type="github.com/istr/strike/contract/endpoint".Address) // expected Fulcio cert OIDC issuer
-	identity:    primitive.#StringOrURI @go(Identity)                                                       // expected cert SAN (exact match)
-	extensions?: #FulcioExtensions      @go(Extensions,optional=nillable)                                   // optional extension pins, no minimum
+	issuer:      endpoint.#URL                           @go(Issuer,type="github.com/istr/strike/contract/endpoint".Address) // expected Fulcio cert OIDC issuer
+	identity:    primitive.#StringOrURI                  @go(Identity)                                                       // expected cert SAN (exact match)
+	extensions?: #FulcioExtensions & struct.MinFields(1) @go(Extensions,type=*FulcioExtensions)                              // optional extension pins
 }
 
 // ---------------------------------------------------------------------------
@@ -163,13 +160,13 @@ import (
 	id:             primitive.#Identifier @go(ID)
 	image?:         primitive.#ImageRef   @go(Image,optional=nillable)
 	imageFromStep?: primitive.#Identifier @go(ImageFromStep,optional=nillable)
-	args?: [...string] @go(Args)
+	args?: [string, ...string] @go(Args)
 	env?: {
-		[string]: string @go(Env)
-	}
-	inputs?: [...#InputRef] @go(Inputs)
-	outputs?: [...#FileOutput] @go(Outputs)
-	secrets?: [...#SecretRef] @go(Secrets)
+		[string]: string & !=""
+	} & struct.MinFields(1) @go(Env,type=map[string]string)
+	inputs?: [#InputRef, ...#InputRef] @go(Inputs)
+	outputs?: [#FileOutput, ...#FileOutput] @go(Outputs)
+	secrets?: [#SecretRef, ...#SecretRef] @go(Secrets)
 	workdir?: primitive.#AbsPath @go(Workdir,optional=nillable)
 	// peers are the step's container-egress trust contracts (ADR-029): each
 	// declares a destination the step container may reach during execution,
@@ -181,10 +178,10 @@ import (
 	// declared peers via per-peer capsule forwards (ADR-033). There is no OCI
 	// peer: the step's own image is pulled controller-side and verified against
 	// its pinned digest, and a container that itself performs registry
-	// operations declares the registry as an HTTPS peer (ADR-029). An absent or
-	// empty list yields an empty-allowlist capsule that permits no egress
-	// (ADR-033). Peers flow into the deploy attestation.
-	peers?: [...endpoint.#Endpoint] @go(Peers)
+	// operations declares the registry as an HTTPS peer (ADR-029). An absent
+	// list yields an empty-allowlist capsule that permits no egress (ADR-033).
+	// Peers flow into the deploy attestation.
+	peers?: [endpoint.#Endpoint, ...endpoint.#Endpoint] @go(Peers)
 	// forceRun: when true, strike bypasses the cache check
 	// and runs the step unconditionally. The explicit escape
 	// hatch for intentionally non-deterministic steps such as
@@ -200,32 +197,31 @@ import (
 
 	// A deploy step and a pack step start no container of their own; the
 	// control plane carries out both (ADR-051 D1). A field that only a step
-	// container reads is rejected on them entry by entry, with the reason at
-	// the path of the entry; an empty list or map and the default of forceRun
-	// stay accepted. Without outputs a deploy step stays a DAG leaf (ADR-039
-	// D2); the complementary leaf-edge rejection lives in lane.Build
-	// (validateDeployLeaves). A pack step's only output is the image it
-	// assembles, so the step declares no output field of its own (ADR-046).
-	// Both forms are transparent to `cue exp gengotypes`.
+	// container reads is rejected on them, whatever its value, with the reason
+	// at the field; the default of forceRun stays accepted. Without outputs a
+	// deploy step stays a DAG leaf (ADR-039 D2); the complementary leaf-edge
+	// rejection lives in lane.Build (validateDeployLeaves). A pack step's only
+	// output is the image it assembles, so the step declares no output field of
+	// its own (ADR-046). Both forms are transparent to `cue exp gengotypes`.
 	if deploy != _|_ {
 		workdir?: error("a deploy step starts no container; only a step container reads this field")
-		args?: [...error("a deploy step starts no container; only a step container reads this field")]
-		env?: {[string]: error("a deploy step starts no container; only a step container reads this field")}
-		inputs?: [...error("a deploy step starts no container; only a step container reads this field")]
-		outputs?: [...error("a deploy step starts no container; only a step container reads this field")]
-		secrets?: [...error("a deploy step starts no container; only a step container reads this field")]
-		peers?: [...error("a deploy step starts no container; only a step container reads this field")]
+		args?:    error("a deploy step starts no container; only a step container reads this field")
+		env?:     error("a deploy step starts no container; only a step container reads this field")
+		inputs?:  error("a deploy step starts no container; only a step container reads this field")
+		outputs?: error("a deploy step starts no container; only a step container reads this field")
+		secrets?: error("a deploy step starts no container; only a step container reads this field")
+		peers?:   error("a deploy step starts no container; only a step container reads this field")
 		forceRun: false | error("a deploy step starts no container; only a step container reads this field")
 	}
 
 	if pack != _|_ {
 		workdir?: error("a pack step starts no container; only a step container reads this field")
-		args?: [...error("a pack step starts no container; only a step container reads this field")]
-		env?: {[string]: error("a pack step starts no container; only a step container reads this field")}
-		inputs?: [...error("a pack step starts no container; only a step container reads this field")]
-		outputs?: [...error("a pack step starts no container; only a step container reads this field")]
-		secrets?: [...error("a pack step starts no container; only a step container reads this field")]
-		peers?: [...error("a pack step starts no container; only a step container reads this field")]
+		args?:    error("a pack step starts no container; only a step container reads this field")
+		env?:     error("a pack step starts no container; only a step container reads this field")
+		inputs?:  error("a pack step starts no container; only a step container reads this field")
+		outputs?: error("a pack step starts no container; only a step container reads this field")
+		secrets?: error("a pack step starts no container; only a step container reads this field")
+		peers?:   error("a pack step starts no container; only a step container reads this field")
 	}
 }
 
@@ -292,7 +288,7 @@ import (
 #SecretRef: {
 	@go(SecretRef)
 	name: primitive.#Identifier @go(Name)
-	env:  string                @go(Env)
+	env:  string & !=""         @go(Env)
 }
 
 // ---------------------------------------------------------------------------
@@ -302,11 +298,11 @@ import (
 #PackSpec: {
 	@go(PackSpec)
 	base: primitive.#ImageRef @go(Base)
-	files?: [...#PackFile] @go(Files)
-	config?: #ImageConfig @go(Config,optional=nillable)
+	files?: [#PackFile, ...#PackFile] @go(Files)
+	config?: #ImageConfig & struct.MinFields(1) @go(Config,type=*ImageConfig)
 	annotations?: {
-		[string]: string @go(Annotations)
-	}
+		[string]: string & !=""
+	} & struct.MinFields(1) @go(Annotations,type=map[string]string)
 }
 
 #PackFile: {
@@ -321,15 +317,15 @@ import (
 #ImageConfig: {
 	@go(ImageConfig)
 	env?: {
-		[string]: string @go(Env)
-	}
-	entrypoint?: [...string] @go(Entrypoint)
-	cmd?: [...string] @go(Cmd)
+		[string]: string & !=""
+	} & struct.MinFields(1) @go(Env,type=map[string]string)
+	entrypoint?: [string, ...string] @go(Entrypoint)
+	cmd?: [string, ...string] @go(Cmd)
 	workdir?: primitive.#AbsPath  @go(Workdir,optional=nillable)
 	user?:    primitive.#UserSpec @go(User,optional=nillable)
 	labels?: {
-		[string]: string @go(Labels)
-	}
+		[string]: string & !=""
+	} & struct.MinFields(1) @go(Labels,type=map[string]string)
 }
 
 // ---------------------------------------------------------------------------
@@ -344,7 +340,7 @@ import (
 	// region includes it in the SBOM set; omitting it excludes it.
 	artifacts?: {
 		[Name=primitive.#Identifier]: #ArtifactRef
-	} @go(Artifacts,type=map["github.com/istr/strike/contract/primitive".Identifier]ArtifactRef)
+	} & struct.MinFields(1) @go(Artifacts,type=map["github.com/istr/strike/contract/primitive".Identifier]ArtifactRef)
 	recording?: #StateRecording & struct.MinFields(1) @go(Recording,type=*StateRecording)
 }
 
@@ -361,12 +357,12 @@ import (
 // until the method exists.
 #DeployKubernetes: {
 	@go(DeployKubernetes)
-	type: "kubernetes" @go(Type,type=DeployMethodType)
+	type!: "kubernetes" @go(Type,type=DeployMethodType)
 }
 
 #DeployRegistry: {
 	@go(DeployRegistry)
-	type: "registry" @go(Type,type=DeployMethodType)
+	type!: "registry" @go(Type,type=DeployMethodType)
 	// reproducedBy names a second pack step whose image must be
 	// byte-identical to the image of this deploy's image arm (ADR-009). The
 	// control plane compares the two manifest digests it computed as the
@@ -395,7 +391,7 @@ import (
 // the result of the push, bound afterward in the attestation.
 #DeployRegistryTarget: {
 	@go(DeployRegistryTarget)
-	type: "https" @go(Type,type="github.com/istr/strike/contract/endpoint".CarriageType)
+	type!: "https" @go(Type,type="github.com/istr/strike/contract/endpoint".CarriageType)
 	// host (left of @go) is the packed-authority wire grammar; the Go side is
 	// the Address concept in name and type; see endpoint.#TLS.host.
 	host:  endpoint.#Authority   @go(Address,type="github.com/istr/strike/contract/endpoint".Address)
@@ -415,7 +411,7 @@ import (
 // it is not the oidc token.
 #RegistryCredential: {
 	@go(RegistryCredential)
-	type:  "bearer"              @go(Type,type=CredentialType)
+	type!: "bearer"              @go(Type,type=CredentialType)
 	token: primitive.#Identifier @go(Token)
 }
 
@@ -438,7 +434,7 @@ import (
 	// valid -- execution success, not a drift reaction. strike takes no action
 	// on state differences (ADR-016); do not add policy fields here.
 	required: *true | bool @go(Required)
-	captures?: [...#Capture] @go(Captures)
+	captures: [#Capture, ...#Capture] @go(Captures)
 }
 
 #Capture: {
@@ -448,8 +444,8 @@ import (
 	command: [string, ...string] @go(Command)
 	// peers bound the capture container's egress as #Step.peers bounds a
 	// step's (ADR-029, ADR-033).
-	peers?: [...endpoint.#Endpoint] @go(Peers)
-	mounts?: [...#CaptureMount] @go(Mounts)
+	peers?: [endpoint.#Endpoint, ...endpoint.#Endpoint] @go(Peers)
+	mounts?: [#CaptureMount, ...#CaptureMount] @go(Mounts)
 }
 
 #CaptureMount: {
@@ -458,7 +454,7 @@ import (
 	// source is an engine mount source -- the produced image or named
 	// storage the engine resolves -- not a host path. target is the
 	// absolute mount point inside the capture container.
-	source: string             @go(Source)
+	source: string & !=""      @go(Source)
 	target: primitive.#AbsPath @go(Target)
 }
 

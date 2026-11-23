@@ -39,9 +39,6 @@ steps:
   - id: build
     image: images.example.com/library/golang@sha256:abababababababababababababababababababababababababababababababab
     args: ["build"]
-    env: {}
-    inputs: []
-    secrets: []
     outputs:
       - id: binary
         type: file

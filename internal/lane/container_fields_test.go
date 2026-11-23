@@ -30,9 +30,9 @@ type containerFieldCase struct {
 }
 
 // containerFieldCases builds the cases for the pack step (steps.1) and the
-// deploy step (steps.2) of the valid force-run fixture: one non-empty and
-// one empty value of each list and map field a step container reads, a
-// workdir, a timeout, and forceRun on both kinds.
+// deploy step (steps.2) of the valid force-run fixture: a value of each list
+// and map field a step container reads, a workdir, a timeout, and forceRun on
+// both kinds.
 func containerFieldCases() []containerFieldCase {
 	nonEmpty := map[string]any{
 		"args":    []any{"x"},
@@ -50,12 +50,10 @@ func containerFieldCases() []containerFieldCase {
 		at := fmt.Sprintf("#Lane.steps.%d.", kind.step)
 		for _, field := range []string{"args", "inputs", "outputs", "secrets", "peers"} {
 			cases = append(cases,
-				containerFieldCase{nonEmpty[field], kind.name + " " + field, field, at + field + ".0: " + kind.reason, kind.step},
-				containerFieldCase{[]any{}, kind.name + " " + field + " empty", field, "", kind.step})
+				containerFieldCase{nonEmpty[field], kind.name + " " + field, field, at + field + ": " + kind.reason, kind.step})
 		}
 		cases = append(cases,
-			containerFieldCase{map[string]any{"K": "v"}, kind.name + " env", "env", at + "env.K: " + kind.reason, kind.step},
-			containerFieldCase{map[string]any{}, kind.name + " env empty", "env", "", kind.step},
+			containerFieldCase{map[string]any{"K": "v"}, kind.name + " env", "env", at + "env: " + kind.reason, kind.step},
 			containerFieldCase{"/w", kind.name + " workdir", "workdir", at + "workdir: " + kind.reason, kind.step},
 			containerFieldCase{"5m", kind.name + " timeout", "timeout", "", kind.step})
 	}
@@ -68,10 +66,10 @@ func containerFieldCases() []containerFieldCase {
 // TestParse_ContainerFieldsOnDeployAndPack derives each case from the valid
 // force-run fixture, whose steps are a container step, a pack step and a
 // deploy step, by setting one field of the pack or the deploy step. A deploy
-// step and a pack step start no container (ADR-051 D1): every entry of a
-// field only a step container reads is rejected by the schema at its path,
-// with the reason, while an empty value, a timeout, a pack step's forceRun
-// and a deploy step's forceRun false are accepted.
+// step and a pack step start no container (ADR-051 D1): a field only a step
+// container reads is rejected by the schema at the field, with the reason,
+// whatever its value, while a timeout, a pack step's forceRun and a deploy
+// step's forceRun false are accepted.
 func TestParse_ContainerFieldsOnDeployAndPack(t *testing.T) {
 	raw, err := os.ReadFile("testdata/valid_force_run_minimal.yaml")
 	if err != nil {

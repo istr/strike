@@ -39,11 +39,6 @@ steps:
   - id: build
     pack:
       base: images.example.com/library/golang@sha256:abababababababababababababababababababababababababababababababab
-      files: []
-    args: []
-    env: {}
-    inputs: []
-    secrets: []
   - id: deploy
     deploy:
       method:
@@ -51,15 +46,3 @@ steps:
       artifacts:
         app:
           step: build
-      recording:
-        preState:
-          required: false
-          captures: []
-        postState:
-          required: false
-          captures: []
-    args: []
-    env: {}
-    inputs: []
-    secrets: []
-    outputs: []

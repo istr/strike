@@ -34,9 +34,6 @@ steps:
   - id: build
     image: golang:1.22
     args: [go, build]
-    env: {}
-    inputs: []
-    secrets: []
     outputs:
       - id: binary
         type: file

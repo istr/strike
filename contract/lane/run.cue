@@ -3,7 +3,11 @@
 // internal/lane/lane.gen.go.
 package lane
 
-import "github.com/istr/strike/contract/primitive"
+import (
+	"struct"
+
+	"github.com/istr/strike/contract/primitive"
+)
 
 // #StepResult is the execution metadata one completed step contributes to the
 // serialized run status. Debug/CI state-dump shape only; never attestation-
@@ -12,10 +16,10 @@ import "github.com/istr/strike/contract/primitive"
 	@go(StepResult)
 	startedAt: primitive.#Timestamp @go(StartedAt)
 	outputs?: {
-		[string]: string @go(Outputs)
-	}
+		[string]: string & !=""
+	} & struct.MinFields(1) @go(Outputs,type=map[string]string)
 	id:       primitive.#Identifier @go(ID)
-	stepType: string                @go(StepType)
+	stepType: string & !=""         @go(StepType)
 	duration: primitive.#Duration   @go(Duration)
 	exitCode: int                   @go(ExitCode)
 }

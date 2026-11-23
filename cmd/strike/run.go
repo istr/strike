@@ -105,17 +105,14 @@ func (rc *runContext) runStep(stepID primitive.Identifier) error {
 	sid := string(stepID)
 	safeName := sanitizeForLog(sid)
 
-	// Timeout resolution: explicit step value > lane-wide default > hard floor.
-	var rawTimeout *primitive.Duration
-	switch {
-	case step.Timeout != nil:
-		rawTimeout = step.Timeout
-	case rc.lane.Defaults != nil:
-		rawTimeout = &rc.lane.Defaults.Timeout
+	// Timeout resolution: the step's own value, else the lane's.
+	rawTimeout := rc.lane.Timeout
+	if step.Timeout != nil {
+		rawTimeout = *step.Timeout
 	}
-	timeout, err := lane.ParseDuration(rawTimeout, 10*clock.Minute)
+	timeout, err := lane.ParseDuration(rawTimeout)
 	if err != nil {
-		return fmt.Errorf("%s: invalid timeout %q: %w", safeName, *rawTimeout, err)
+		return fmt.Errorf("%s: invalid timeout %q: %w", safeName, rawTimeout, err)
 	}
 	ctx, cancel := context.WithTimeout(rc.ctx, timeout)
 	defer cancel()

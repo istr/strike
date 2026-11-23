@@ -34,9 +34,6 @@ resolver:
 steps:
   - id: build
     image: img@sha256:` + strings.Repeat("a", 64) + `
-    args: []
-    env: {}
-    inputs: []
     sources:
       - { path: ".", mount: /src }
     outputs:

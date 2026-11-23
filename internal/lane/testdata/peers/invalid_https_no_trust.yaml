@@ -40,9 +40,6 @@ steps:
     image: images.example.com/library/alpine@sha256:abababababababababababababababababababababababababababababababab
     args: [echo, ok]
     workdir: /out
-    env: {}
-    inputs: []
-    secrets: []
     outputs:
       - id: ok
         type: file

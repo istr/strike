@@ -40,9 +40,3 @@ steps:
     image: images.example.com/library/golang@sha256:abababababababababababababababababababababababababababababababab
     pack:
       base: "images.example.com/library/scratch@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-      files: []
-    args: []
-    env: {}
-    inputs: []
-    secrets: []
-    outputs: []

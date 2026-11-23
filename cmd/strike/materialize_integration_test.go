@@ -92,9 +92,6 @@ steps:
     args: ["true"]
     workdir: /work
     forceRun: true
-    env: {}
-    inputs: []
-    secrets: []
     outputs:
       - id: tree
         type: directory
@@ -106,15 +103,12 @@ steps:
             step: run
             output: tree
           dest: /tree
-    args: []
-    env: {}
-    inputs: []
-    secrets: []
   - id: deploy
     deploy:
       method:
         type: registry
         target:
+          type: https
           host: registry.127.0.0.1.sslip.io:5443
           trust:
             cert: "__CADDY_ROOT__"
@@ -125,18 +119,6 @@ steps:
       artifacts:
         app:
           step: pack
-      recording:
-        preState:
-          required: false
-          captures: []
-        postState:
-          required: false
-          captures: []
-    args: []
-    env: {}
-    inputs: []
-    secrets: []
-    outputs: []
 `
 
 // materializeEngineClient returns an HTTP client to the engine socket named

@@ -47,7 +47,7 @@ func ValidateLane(p *Lane, index map[primitive.Identifier]*Step) error {
 	if err := validateMountDisjointness(p); err != nil {
 		return err
 	}
-	if err := validatePeerPorts(p); err != nil {
+	if err := validateDefaultPorts(p); err != nil {
 		return err
 	}
 	if err := validatePeerAnchors(p); err != nil {
@@ -527,11 +527,24 @@ func validatePeerAnchors(p *Lane) error {
 	return nil
 }
 
-// validatePeerPorts refuses a step or deploy capture peer that spells out the
-// default port of its protocol: 443 for https, 22 for ssh. Peers are keyed by
+// validateDefaultPorts refuses an address strike dials that spells out the
+// default port of its protocol: a keyless endpoint, 443 for https, and a step
+// or deploy capture peer, 443 for https and 22 for ssh. Peers are keyed by
 // host:port as written, so one endpoint has one spelling, and two spellings
-// of one endpoint cannot slip past the anchor comparison.
-func validatePeerPorts(p *Lane) error {
+// of one endpoint cannot slip past the anchor comparison. An issuer is not
+// held to it: strike dials none, and each is an identifier compared byte for
+// byte with the one its identity provider writes.
+func validateDefaultPorts(p *Lane) error {
+	k := p.Keyless.Endpoints
+	if err := checkDefaultPort(k.Fulcio.Address, 443, "keyless fulcio url"); err != nil {
+		return err
+	}
+	if err := checkDefaultPort(k.Rekor.Address, 443, "keyless rekor url"); err != nil {
+		return err
+	}
+	if err := checkDefaultPort(k.TSA.Address, 443, "keyless tsa url"); err != nil {
+		return err
+	}
 	for _, s := range p.Steps {
 		if err := checkPeerPorts(s.Peers, fmt.Sprintf("step %q peer", s.ID)); err != nil {
 			return err

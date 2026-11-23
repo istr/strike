@@ -41,9 +41,6 @@ steps:
     image: images.example.com/library/golang@sha256:abababababababababababababababababababababababababababababababab
     args: ["go", "build"]
     workdir: /out
-    env: {}
-    inputs: []
-    secrets: []
     outputs:
       - id: binary
         type: file
@@ -56,16 +53,13 @@ steps:
             step: compile
             output: binary
           dest: /usr/bin/app
-    args: []
-    env: {}
-    inputs: []
-    secrets: []
   - id: publish
     deploy:
       method:
         type: registry
         reproducedBy: compile
         target:
+          type: https
           host: registry.example.com
           trust:
             cert: "MIIBuzCCAWGgAwIBAgIBATAKBggqhkjOPQQDAjBEMR0wGwYDVQQKDBRzdHJpa2UgdGVzdCBtYXRlcmlhbDEjMCEGA1UEAwwac3RyaWtlIGZpeHR1cmUgdGVzdCBhbmNob3IwIBcNMjYwMTAxMDAwMDAwWhgPOTk5OTEyMzEyMzU5NTlaMEQxHTAbBgNVBAoMFHN0cmlrZSB0ZXN0IG1hdGVyaWFsMSMwIQYDVQQDDBpzdHJpa2UgZml4dHVyZSB0ZXN0IGFuY2hvcjBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABEIlSPiPt4L/teyjdERSxyoeVY+9b3O+XkjpMjLMRcWxbEzRDEy41bihcTnpSILImSVymTQl9BQZq36QpCpJQnKjQjBAMA8GA1UdEwEB/wQFMAMBAf8wDgYDVR0PAQH/BAQDAgEGMB0GA1UdDgQWBBRbcKeYF/ef9jfS9+PcRGwhCde71DAKBggqhkjOPQQDAgNIADBFAiEAgS0Tvd1/A38U+EpMiaA1GtTjXCX11rqbLgUQf5iRhhgCIDnuZnbVCpcQjNQLMsrhhzlFRTlAWOVNlS0apM4uHD/E"
@@ -76,15 +70,3 @@ steps:
       artifacts:
         app:
           step: build
-      recording:
-        preState:
-          required: false
-          captures: []
-        postState:
-          required: false
-          captures: []
-    args: []
-    env: {}
-    inputs: []
-    secrets: []
-    outputs: []

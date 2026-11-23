@@ -137,16 +137,12 @@ steps:
   - id: pack
     pack:
       base: cgr.dev/chainguard/static@sha256:fc42af33e643f20d08baf03cddcc1c02ba57052dfb02edb0d79f3fc47bcea8d9
-      files: []
-    args: []
-    env: {}
-    inputs: []
-    secrets: []
   - id: deploy
     deploy:
       method:
         type: registry
         target:
+          type: https
           host: registry.127.0.0.1.sslip.io:5443
           trust:
             cert: "__CADDY_ROOT__"
@@ -157,18 +153,6 @@ steps:
       artifacts:
         app:
           step: pack
-      recording:
-        preState:
-          required: false
-          captures: []
-        postState:
-          required: false
-          captures: []
-    args: []
-    env: {}
-    inputs: []
-    secrets: []
-    outputs: []
 `
 
 // TestRegistryDeployLive_Integration is the end-to-end sealing test. Bring-up:

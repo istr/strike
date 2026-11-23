@@ -80,7 +80,6 @@ _build: {
 		{from: {step: "generate", output: "tree"}, mount: "/work/src/tree"},
 		_modcacheInput,
 	]
-	secrets: []
 	outputs: [{id: "binary", type: "file", path: "src/strike"}]
 }
 
@@ -90,10 +89,6 @@ _pack: {
 		base: _staticImage
 		files: [{from: {step: _from, output: "binary"}, dest: "/usr/bin/strike", mode: 0o755}]
 	}
-	args: []
-	env: {}
-	inputs: []
-	secrets: []
 }
 
 out: lane.#Lane & {
@@ -141,8 +136,6 @@ out: lane.#Lane & {
 				GIT_AUTHOR_NAME:     "strike"
 				GIT_AUTHOR_EMAIL:    "strike@invalid"
 			}
-			inputs: []
-			secrets: []
 			peers: [{type: "https", host: "github.com", trust: cert: _rootGitHub}]
 			outputs: [{id: "tree", type: "directory", path: "tree"}]
 		},
@@ -163,7 +156,6 @@ out: lane.#Lane & {
 				GOTMPDIR:    "/work/src"
 			}
 			inputs: [{from: {step: "source", output: "tree"}, mount: "/work/src/tree"}]
-			secrets: []
 			peers: [
 				{type: "https", host: "proxy.golang.org", trust: cert: _rootGTSR4},
 				{type: "https", host: "storage.googleapis.com", trust: cert: _rootGTSR4},
@@ -180,7 +172,6 @@ out: lane.#Lane & {
 				{from: {step: "source", output: "tree"}, mount: "/work/src/tree"},
 				_modcacheInput,
 			]
-			secrets: []
 			outputs: [{id: "tree", type: "directory", path: "src/tree"}]
 		},
 		_build & {id: "build-binary"},
@@ -194,6 +185,7 @@ out: lane.#Lane & {
 					type:         "registry"
 					reproducedBy: "build-image-2"
 					target: {
+						type: "https"
 						host: "registry.127.0.0.1.sslip.io:5443"
 						trust: cert: _caddyRoot
 						name: "istr/strike"
@@ -201,16 +193,7 @@ out: lane.#Lane & {
 					}
 				}
 				artifacts: strike: step: "build-image"
-				recording: {
-					preState: {required: false, captures: []}
-					postState: {required: false, captures: []}
-				}
 			}
-			args: []
-			env: {}
-			inputs: []
-			secrets: []
-			outputs: []
 		},
 	]
 }

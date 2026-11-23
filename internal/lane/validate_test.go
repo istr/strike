@@ -121,9 +121,9 @@ func TestValidateLane_RejectOIDCDeclarations(t *testing.T) {
 		{"oidc uri pin with space", refPin, refPin + "    sourceRepositoryURI: \"https://forge.example/a b\"\n", "oidc extensions sourceRepositoryURI"},
 		{"oidc build config pin with space", refPin, refPin + "    sourceRepositoryURI: \"https://forge.example/o/r\"\n    buildConfigURI: \"https://forge.example/a b\"\n", "oidc extensions buildConfigURI"},
 		{"undeclared token", "  token: builder-token\n", "  token: other-token\n", "oidc token \"other-token\" is not declared"},
-		{"token reaches a step", "    secrets: []\n", "    secrets: [{name: builder-token, env: TOKEN}]\n", "is the oidc token"},
+		{"token reaches a step", "    forceRun: true\n", "    forceRun: true\n    secrets: [{name: builder-token, env: TOKEN}]\n", "is the oidc token"},
 		{"undeclared registry token", "            token: registry-token\n", "            token: other-token\n", "registry token \"other-token\" is not declared"},
-		{"registry token reaches a step", "    secrets: []\n", "    secrets: [{name: registry-token, env: TOKEN}]\n", "is the registry token"},
+		{"registry token reaches a step", "    forceRun: true\n", "    forceRun: true\n    secrets: [{name: registry-token, env: TOKEN}]\n", "is the registry token"},
 		{"registry credential names the oidc token", "            token: registry-token\n", "            token: builder-token\n", "names the oidc token \"builder-token\""},
 		{"signer uri pin with space", "steps:\n", "baseSbomSigners:\n  - issuer: \"https://accounts.google.com\"\n    identity: \"sbom@example.com\"\n    extensions:\n      sourceRepositoryURI: \"https://forge.example/a b\"\nsteps:\n", "baseSbomSigners[0] extensions sourceRepositoryURI"},
 	}
@@ -203,6 +203,49 @@ func TestParse_RegistryCredentialGrammar(t *testing.T) {
 	}
 }
 
+// TestValidateLane_RejectKeylessDefaultPort pins that a keyless endpoint URL
+// spelling out 443, the default port of https, is rejected, and that an issuer
+// spelling it out is accepted: strike dials no issuer, and each is compared
+// byte for byte with the one its identity provider writes.
+func TestValidateLane_RejectKeylessDefaultPort(t *testing.T) {
+	base, err := fs.ReadFile(os.DirFS("testdata"), "valid_force_run_minimal.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		name         string
+		old          string
+		new          string
+		wantContains string
+	}{
+		{"fulcio", `"https://fulcio.example:5555"`, `"https://fulcio.example:443"`, "keyless fulcio url: write fulcio.example, not fulcio.example:443"},
+		{"rekor", `"https://rekor.example:3003"`, `"https://rekor.example:443"`, "keyless rekor url: write rekor.example, not rekor.example:443"},
+		{"tsa", `"https://tsa.example:3004"`, `"https://tsa.example:443"`, "keyless tsa url: write tsa.example, not tsa.example:443"},
+		{"issuer", `"https://idp.example.com"`, `"https://idp.example.com:443"`, ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if !strings.Contains(string(base), tc.old) {
+				t.Fatalf("fixture does not contain %q", tc.old)
+			}
+			path := filepath.Join(t.TempDir(), "lane.yaml")
+			if err := os.WriteFile(path, []byte(strings.Replace(string(base), tc.old, tc.new, 1)), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			err := parseAndValidate(t, path)
+			if tc.wantContains == "" {
+				if err != nil {
+					t.Fatalf("lane rejected: %v", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tc.wantContains) {
+				t.Fatalf("err = %v, want an error containing %q", err, tc.wantContains)
+			}
+		})
+	}
+}
+
 // TestValidateLane_RejectPeerDefaultPort pins that a step or deploy capture
 // peer spelling out the default port of its protocol is rejected: 443 for
 // https, 22 for ssh.
@@ -212,7 +255,7 @@ func TestValidateLane_RejectPeerDefaultPort(t *testing.T) {
 		t.Fatal(err)
 	}
 	const forceRun = "    forceRun: true\n"
-	const preState = "        preState:\n          required: false\n          captures: []\n"
+	const artifacts = "      artifacts:\n        app:\n          step: app\n"
 	cert := "\"" + testutil.AnchorCertB64 + "\"\n"
 	tests := []struct {
 		name         string
@@ -231,8 +274,8 @@ func TestValidateLane_RejectPeerDefaultPort(t *testing.T) {
 			`step "clone" peer: write git.example.com, not git.example.com:22`,
 		},
 		{
-			"https capture peer on 443", preState,
-			"        preState:\n          required: false\n          captures:\n            - id: version\n              image: images.example.com/library/busybox@sha256:" + strings.Repeat("ab", 32) + "\n              command: [\"version\"]\n              peers:\n                - type: https\n                  host: example.com:443\n                  trust:\n                    cert: " + cert,
+			"https capture peer on 443", artifacts,
+			artifacts + "      recording:\n        preState:\n          captures:\n            - id: version\n              image: images.example.com/library/busybox@sha256:" + strings.Repeat("ab", 32) + "\n              command: [\"version\"]\n              peers:\n                - type: https\n                  host: example.com:443\n                  trust:\n                    cert: " + cert,
 			`step "deploy" capture "version" peer: write example.com, not example.com:443`,
 		},
 	}

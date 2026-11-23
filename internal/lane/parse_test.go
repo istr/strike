@@ -32,21 +32,19 @@ func withAnchor(src string) string {
 
 func TestParseDuration(t *testing.T) {
 	tests := []struct {
-		input   *primitive.Duration
+		input   primitive.Duration
 		name    string
-		def     clock.Duration
 		want    clock.Duration
 		wantErr bool
 	}{
-		{input: primitive.DurationPtr("30s"), name: "seconds", def: clock.Minute, want: 30 * clock.Second},
-		{input: primitive.DurationPtr("5m"), name: "minutes", def: clock.Minute, want: 5 * clock.Minute},
-		{input: primitive.DurationPtr("1h"), name: "hours", def: clock.Minute, want: clock.Hour},
-		{input: nil, name: "nil uses default", def: clock.Minute, want: clock.Minute},
-		{input: primitive.DurationPtr("invalid"), name: "invalid", def: clock.Minute, wantErr: true},
+		{input: "30s", name: "seconds", want: 30 * clock.Second},
+		{input: "5m", name: "minutes", want: 5 * clock.Minute},
+		{input: "1h", name: "hours", want: clock.Hour},
+		{input: "invalid", name: "invalid", wantErr: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := lane.ParseDuration(tt.input, tt.def)
+			got, err := lane.ParseDuration(tt.input)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ParseDuration(%v) error = %v, wantErr %v", tt.input, err, tt.wantErr)
 			}
@@ -121,6 +119,7 @@ steps:
       method:
         type: registry
         target:
+          type: https
           host: registry.example.com
           trust:
             cert: "@anchor@"
@@ -128,18 +127,6 @@ steps:
           credential:
             type: bearer
             token: registry-token
-      recording:
-        preState:
-          required: false
-          captures: []
-        postState:
-          required: false
-          captures: []
-    args: []
-    env: {}
-    inputs: []
-    secrets: []
-    outputs: []
 `))
 	dir := t.TempDir()
 	path := filepath.Join(dir, "lane.yaml")
@@ -202,6 +189,7 @@ steps:
       method:
         type: registry
         target:
+          type: https
           host: registry.example.com
           trust:
             cert: "@anchor@"
@@ -209,18 +197,6 @@ steps:
           credential:
             type: bearer
             token: registry-token
-      recording:
-        preState:
-          required: false
-          captures: []
-        postState:
-          required: false
-          captures: []
-    args: []
-    env: {}
-    inputs: []
-    secrets: []
-    outputs: []
 `))
 	dir := t.TempDir()
 	path := filepath.Join(dir, "lane.yaml")
@@ -292,10 +268,6 @@ registries:
 steps:
   - id: build
     image: images.example.com/library/golang@sha256:abababababababababababababababababababababababababababababababab
-    args: []
-    env: {}
-    inputs: []
-    secrets: []
 `))
 	dir := t.TempDir()
 	path := filepath.Join(dir, "lane.yaml")
@@ -649,9 +621,6 @@ steps:
     image: images.example.com/img@sha256:abababababababababababababababababababababababababababababababab
     args: ["true"]
     workdir: /work
-    env: {}
-    inputs: []
-    secrets: []
     outputs:
       - id: tree
         type: directory
@@ -659,20 +628,18 @@ steps:
   - id: consumer
     image: images.example.com/img@sha256:cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd
     args: ["true"]
-    env: {}
     inputs:
       - from:
           step: src
           output: tree
         subpath: %s
         mount: /in/x
-    secrets: []
-    outputs: []
   - id: deploy
     deploy:
       method:
         type: registry
         target:
+          type: https
           host: registry.example.com
           trust:
             cert: "@anchor@"
@@ -680,18 +647,6 @@ steps:
           credential:
             type: bearer
             token: registry-token
-      recording:
-        preState:
-          required: false
-          captures: []
-        postState:
-          required: false
-          captures: []
-    args: []
-    env: {}
-    inputs: []
-    secrets: []
-    outputs: []
 `
 
 	tests := []struct {

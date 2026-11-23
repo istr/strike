@@ -89,9 +89,6 @@ steps:
     image: images.example.com/library/alpine@sha256:abababababababababababababababababababababababababababababababab
     args: ["true"]
     workdir: /work
-    env: {}
-    inputs: []
-    secrets: []
     outputs:
       - id: out
         type: file
@@ -101,6 +98,7 @@ steps:
       method:
         type: registry
         target:
+          type: https
           host: registry.example.com
           trust:
             cert: "@anchor@"
@@ -108,18 +106,6 @@ steps:
           credential:
             type: bearer
             token: registry-token
-      recording:
-        preState:
-          required: false
-          captures: []
-        postState:
-          required: false
-          captures: []
-    args: []
-    env: {}
-    inputs: []
-    secrets: []
-    outputs: []
 `))
 	dir := t.TempDir()
 	path := filepath.Join(dir, "lane.yaml")
@@ -187,9 +173,6 @@ steps:
     image: images.example.com/library/alpine@sha256:abababababababababababababababababababababababababababababababab
     args: ["true"]
     workdir: /work
-    env: {}
-    inputs: []
-    secrets: []
     outputs:
       - id: out
         type: file
@@ -199,6 +182,7 @@ steps:
       method:
         type: registry
         target:
+          type: https
           host: registry.example.com
           trust:
             cert: "@anchor@"
@@ -206,18 +190,6 @@ steps:
           credential:
             type: bearer
             token: registry-token
-      recording:
-        preState:
-          required: false
-          captures: []
-        postState:
-          required: false
-          captures: []
-    args: []
-    env: {}
-    inputs: []
-    secrets: []
-    outputs: []
 `))
 	dir := t.TempDir()
 	path := filepath.Join(dir, "lane.yaml")

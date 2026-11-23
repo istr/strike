@@ -19,7 +19,7 @@ import "github.com/istr/strike/contract/primitive"
 
 #TrustedRootReplica: {
 	@go(TrustedRootReplica)
-	mediaType?: string @go(MediaType)
+	mediaType?: string & !="" @go(MediaType)
 	tlogs: [#TransparencyLogReplica, ...#TransparencyLogReplica] @go(Tlogs)
 	// Required: a trust root with no certificate-transparency log is not
 	// material this verifier can use, and ParseTrustedRoot rejects it.
@@ -31,22 +31,23 @@ import "github.com/istr/strike/contract/primitive"
 // One transparency-log instance. tlogs and ctlogs are the same upstream
 // message, so both project from this definition. Both validity bounds are
 // carried: the replica is closed, so omitting the upper bound would reject a
-// legitimate trusted root on the inline path.
+// legitimate trusted root on the inline path. As in the upstream TimeRange, a
+// validity window has a start and may have no end.
 #TransparencyLogReplica: {
 	@go(TransparencyLogReplica)
-	baseUrl?:       string @go(BaseURL)
-	hashAlgorithm?: string @go(HashAlgorithm)
+	baseUrl?:       string & !="" @go(BaseURL)
+	hashAlgorithm?: string & !="" @go(HashAlgorithm)
 	publicKey: {
 		rawBytes:    primitive.#Base64 @go(RawBytes)
-		keyDetails?: string            @go(KeyDetails)
-		validFor?: {start?: string @go(Start), end?: string @go(End)} @go(ValidFor)
+		keyDetails?: string & !=""     @go(KeyDetails)
+		validFor?: {start: string & !="" @go(Start), end?: string & !="" @go(End)} @go(ValidFor)
 	} @go(PublicKey)
 	logId: {keyId: primitive.#Base64 @go(KeyID)}
 }
 
 #CertAuthorityReplica: {
 	@go(CertAuthorityReplica)
-	uri?: string @go(URI)
+	uri?: string & !="" @go(URI)
 	certChain: {certificates: [{rawBytes: primitive.#Base64 @go(RawBytes)}, ...{rawBytes: primitive.#Base64 @go(RawBytes)}] @go(Certificates)} @go(CertChain)
-	validFor?: {start?: string @go(Start), end?: string @go(End)} @go(ValidFor)
+	validFor?: {start: string & !="" @go(Start), end?: string & !="" @go(End)} @go(ValidFor)
 }

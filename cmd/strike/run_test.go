@@ -48,7 +48,7 @@ func newTestRC(t *testing.T, engine *mockEngine) *runContext {
 	})
 	return &runContext{
 		ctx:       context.Background(),
-		lane:      &lane.Lane{},
+		lane:      &lane.Lane{Timeout: "10m"},
 		dag:       &lane.DAG{},
 		stepIndex: map[primitive.Identifier]*lane.Step{},
 		regClient: &registry.Client{Engine: engine},
@@ -969,9 +969,9 @@ func TestRunStep_InvalidTimeout(t *testing.T) {
 	}
 }
 
-func TestRunStep_TimeoutFromLaneDefaults(t *testing.T) {
+func TestRunStep_TimeoutFromLane(t *testing.T) {
 	rc := newTestRC(t, &mockEngine{})
-	rc.lane.Defaults = &lane.LaneDefaults{Timeout: "invalid"}
+	rc.lane.Timeout = "invalid"
 	rc.stepIndex["bad"] = &lane.Step{
 		Image: primitive.ImageRefPtr("images.example.com/img@sha256:abc0000000000000000000000000000000000000000000000000000000000000"),
 		Args:  []string{"run"},
@@ -980,7 +980,7 @@ func TestRunStep_TimeoutFromLaneDefaults(t *testing.T) {
 
 	err := rc.runStep("bad")
 	if err == nil {
-		t.Fatal("expected error for invalid lane-defaults timeout")
+		t.Fatal("expected error for invalid lane timeout")
 	}
 	if !strings.Contains(err.Error(), "invalid timeout") {
 		t.Errorf("error should mention 'invalid timeout': %v", err)

@@ -40,9 +40,6 @@ steps:
     image: images.example.com/library/alpine@sha256:abababababababababababababababababababababababababababababababab
     args: [git, clone, "git@git.example.com:org/repo"]
     workdir: /out
-    env: {}
-    inputs: []
-    secrets: []
     outputs:
       - id: tree
         type: directory

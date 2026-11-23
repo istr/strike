@@ -13,13 +13,9 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// ParseDuration converts a lane duration pointer to clock.Duration.
-// Returns defaultVal if d is nil.
-func ParseDuration(d *primitive.Duration, defaultVal clock.Duration) (clock.Duration, error) {
-	if d == nil {
-		return defaultVal, nil
-	}
-	s := string(*d)
+// ParseDuration converts a lane duration to clock.Duration.
+func ParseDuration(d primitive.Duration) (clock.Duration, error) {
+	s := string(d)
 	return clock.ParseDuration(s)
 }
 
